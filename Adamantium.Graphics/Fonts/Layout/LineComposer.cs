@@ -1458,7 +1458,13 @@ internal sealed class LineComposer
                         var glyphsForLine = glyphsData.Where(x => x.LineIndex == i).ToArray();
                         if (glyphsForLine.Length == 0) break;
 
-                        maxX = glyphsForLine.Where(x=>!IsBlank(x.Symbol)).Max(x => x.Rect.Right);
+                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
+                        if (ink.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        maxX = ink.Max(x => x.Rect.Right);
                         var diff = (AlignRight(i) - maxX);
                         foreach (var glyphWordData in glyphsForLine)
                         {

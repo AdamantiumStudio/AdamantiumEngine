@@ -327,6 +327,9 @@ All packages share one version.
 
 ### Fixed
 
+- Text aligned right threw when a line held only spaces: leading spaces before a word too long to follow them on the
+  first line. A line with nothing to draw is left where it is.
+
 - A retired GPU resource waited for every render device to begin new frames, so one device that stopped drawing - an
   off-screen one between two bakes - kept every resource retired after it, and everything those referenced, for the
   life of the application. A device with no frame in flight (`IGraphicsDevice.HasNoFramesInFlight`) no longer holds

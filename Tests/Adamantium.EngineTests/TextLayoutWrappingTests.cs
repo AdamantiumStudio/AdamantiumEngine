@@ -56,6 +56,21 @@ public class TextLayoutWrappingTests
         Assert.That(stops[4].X, Is.EqualTo(0).Within(1e-6));
     }
 
+    // Leading spaces and a word too long to follow them: the spaces are a line of their own, which has no ink to align.
+    [TestCase(HorizontalTextAlignment.Right)]
+    [TestCase(HorizontalTextAlignment.Center)]
+    public void ALineOfOnlySpaces_IsAlignedWithoutThrowing(HorizontalTextAlignment alignment)
+    {
+        var width = Width("Supercalifragilistic") + 2;
+        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf");
+        var typeface = Typeface.LoadFont(path);
+        var layout = new TextLayout(typeface, typeface.Fonts[0]);
+
+        Assert.DoesNotThrow(() => layout.ProcessText("      Supercalifragilistic", 20, new Size(width, double.NaN),
+            TextWrapping.WrapByWords, TextTrimming.None, alignment, VerticalTextAlignment.Top));
+        Assert.That(layout.LineCount, Is.EqualTo(2), "the word goes down to a line of its own");
+    }
+
     [Test]
     public void ClosingPunctuation_NeverStartsALine()
     {
