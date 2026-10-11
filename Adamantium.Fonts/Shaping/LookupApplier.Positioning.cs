@@ -262,7 +262,7 @@ internal sealed partial class LookupApplier
             return false;
         }
 
-        var baseIndex = FindBase(j => AcceptsBase(j) || table.BaseCoverage.FindPosition((ushort)_buffer.Info[j].Glyph) >= 0);
+        var baseIndex = FindMarkBase(table.BaseCoverage);
         if (baseIndex < 0)
         {
             return false;
@@ -279,6 +279,9 @@ internal sealed partial class LookupApplier
         return AttachMark(table.MarkArrayTable.GetAnchorPoint(markIndex), markClass < anchors.Length ? anchors[markClass] : null,
             baseIndex);
     }
+
+    private int FindMarkBase(CoverageTable baseCoverage) =>
+        FindBase(j => AcceptsBase(j) || baseCoverage.FindPosition((ushort)_buffer.Info[j].Glyph) >= 0);
 
     private bool AcceptsBase(int index)
     {

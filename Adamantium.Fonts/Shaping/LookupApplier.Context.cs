@@ -39,7 +39,12 @@ internal sealed partial class LookupApplier
             return false;
         }
 
-        foreach (var rule in ruleSets[glyphClass].Rules)
+        return ApplyClassRules(classDef, ruleSets[glyphClass].Rules);
+    }
+
+    private bool ApplyClassRules(ClassDefTable classDef, ClassSequenceRuleTable[] rules)
+    {
+        foreach (var rule in rules)
         {
             var input = rule.InputSequence;
             if (ApplyContext(input.Length + 1, (i, info) => classDef.GetClassValue((ushort)info.Glyph) == input[i - 1],
@@ -59,6 +64,11 @@ internal sealed partial class LookupApplier
             return false;
         }
 
+        return ApplyCoverageRule(coverages, records);
+    }
+
+    private bool ApplyCoverageRule(CoverageTable[] coverages, SequenceLookupRecord[] records)
+    {
         return ApplyContext(coverages.Length, (i, info) => coverages[i].FindPosition((ushort)info.Glyph) >= 0, 0, null,
             0, null, records);
     }
@@ -101,7 +111,13 @@ internal sealed partial class LookupApplier
             return false;
         }
 
-        foreach (var rule in ruleSets[glyphClass].Rules)
+        return ApplyClassChainRules(backtrackClasses, inputClasses, lookaheadClasses, ruleSets[glyphClass].Rules);
+    }
+
+    private bool ApplyClassChainRules(ClassDefTable backtrackClasses, ClassDefTable inputClasses,
+        ClassDefTable lookaheadClasses, ChainedSequenceRuleTable[] rules)
+    {
+        foreach (var rule in rules)
         {
             var backtrack = rule.BacktrackSequence;
             var input = rule.InputSequence;
@@ -126,6 +142,12 @@ internal sealed partial class LookupApplier
             return false;
         }
 
+        return ApplyCoverageChainRule(backtrack, input, lookahead, records);
+    }
+
+    private bool ApplyCoverageChainRule(CoverageTable[] backtrack, CoverageTable[] input, CoverageTable[] lookahead,
+        SequenceLookupRecord[] records)
+    {
         return ApplyContext(input.Length, (i, info) => input[i].FindPosition((ushort)info.Glyph) >= 0,
             backtrack.Length, (i, info) => backtrack[i].FindPosition((ushort)info.Glyph) >= 0,
             lookahead.Length, (i, info) => lookahead[i].FindPosition((ushort)info.Glyph) >= 0, records);

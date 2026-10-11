@@ -327,6 +327,7 @@ internal sealed class ShapePlan
                 Mask = mask,
                 AutoZwnj = autoZwnj,
                 AutoZwj = autoZwj,
+                Coverage = LookupCoverage.Of(table.LookupList[index]),
             });
         }
     }
