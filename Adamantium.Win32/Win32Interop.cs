@@ -519,5 +519,40 @@ namespace Adamantium.Win32
 
         [DllImport("kernel32.dll")]
         public static extern IntPtr GlobalFree(IntPtr mem);
+
+        // --- Pointer input (WM_POINTER*): touch and pen ---
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool GetPointerType(uint pointerId, out PointerInputType pointerType);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool GetPointerInfo(uint pointerId, out POINTER_INFO pointerInfo);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool GetPointerTouchInfo(uint pointerId, out POINTER_TOUCH_INFO touchInfo);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool GetPointerPenInfo(uint pointerId, out POINTER_PEN_INFO penInfo);
+
+        /// <summary>Switches one of the system's touch or pen visuals off (or on) for a window. <paramref name="enabled"/>
+        /// is a BOOL; its size goes in <paramref name="size"/>.</summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowFeedbackSetting(IntPtr hwnd, FeedbackType feedback, uint flags, uint size,
+            ref int enabled);
+
+        /// <summary>A touch or pen device that exists only to inject input through: real WM_POINTER messages without
+        /// the hardware. <paramref name="maxCount"/> is how many contacts it carries at once (a pen carries one).</summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr CreateSyntheticPointerDevice(PointerInputType pointerType, uint maxCount,
+            PointerFeedbackMode mode);
+
+        /// <summary>Hands the contacts of one frame to the system, which raises them as WM_POINTER at their screen
+        /// points, in whatever window is there.</summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool InjectSyntheticPointerInput(IntPtr device, [In] POINTER_TYPE_INFO[] pointerInfo,
+            uint count);
+
+        [DllImport("user32.dll")]
+        public static extern void DestroySyntheticPointerDevice(IntPtr device);
     }
 }

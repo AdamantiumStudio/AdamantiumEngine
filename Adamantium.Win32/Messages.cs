@@ -53,6 +53,9 @@ namespace Adamantium.Win32
          return delta;
       }
 
+      /// <summary>GET_POINTERID_WPARAM: the id of the pointer a WM_POINTER message is about.</summary>
+      public static uint GetPointerId(IntPtr wParam) => (uint)(wParam.ToInt64() & 0xFFFF);
+
       public static MouseModifiers GetXButton(WindowMessages msg, IntPtr wParam)
       {
          switch (msg)

@@ -718,6 +718,42 @@ namespace Adamantium.Win32
       /// </summary>
       Mdirefreshmenu = 0x0234,
       /// <summary>
+      /// WM_POINTERUPDATE: a pointer that is in range or in contact moved, or its buttons or pressure changed.
+      /// </summary>
+      PointerUpdate = 0x0245,
+      /// <summary>
+      /// WM_POINTERDOWN: a pointer made contact (a finger or a pen tip touched) or a button went down.
+      /// </summary>
+      PointerDown = 0x0246,
+      /// <summary>
+      /// WM_POINTERUP: a pointer left contact or a button went up.
+      /// </summary>
+      PointerUp = 0x0247,
+      /// <summary>
+      /// WM_POINTERENTER: a pointer came over the window (a pen hovering, a finger landing).
+      /// </summary>
+      PointerEnter = 0x0249,
+      /// <summary>
+      /// WM_POINTERLEAVE: a pointer left the window or went out of range.
+      /// </summary>
+      PointerLeave = 0x024A,
+      /// <summary>
+      /// WM_POINTERACTIVATE: a pointer pressed an inactive window, which may decline to be activated.
+      /// </summary>
+      PointerActivate = 0x024B,
+      /// <summary>
+      /// WM_POINTERCAPTURECHANGED: the window lost the capture of a pointer.
+      /// </summary>
+      PointerCaptureChanged = 0x024C,
+      /// <summary>
+      /// WM_POINTERWHEEL: the wheel of a pointer turned.
+      /// </summary>
+      PointerWheel = 0x024E,
+      /// <summary>
+      /// WM_POINTERHWHEEL: the horizontal wheel of a pointer turned.
+      /// </summary>
+      PointerHwheel = 0x024F,
+      /// <summary>
       /// Sent to an application when a window is activated. A window receives this message through its WindowProc function. 
       /// </summary>
       ImeSetcontext = 0x0281,

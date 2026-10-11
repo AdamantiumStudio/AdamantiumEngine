@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- Windows pointer input in `Adamantium.Win32`, for touch and pen:
+  - the `WM_POINTER*` messages in `WindowMessages` and `Messages.GetPointerId`;
+  - `Win32Interop.GetPointerType`, `GetPointerInfo`, `GetPointerTouchInfo` and `GetPointerPenInfo`, with
+    `POINTER_INFO`, `POINTER_TOUCH_INFO`, `POINTER_PEN_INFO` and their flags and masks;
+  - `SetWindowFeedbackSetting` to switch off the system's touch and pen visuals for a window;
+  - `CreateSyntheticPointerDevice`, `InjectSyntheticPointerInput` (`POINTER_TYPE_INFO`) and
+    `DestroySyntheticPointerDevice`, which raise real `WM_POINTER` messages without the hardware.
+
 - `TextLayout.Update(device, window)`: builds the quads of only the glyphs that touch a window in the layout's units,
   and asks the atlas for only theirs, so a long text shown through a viewport costs what the viewport shows;
   `QuadWindow` tells which window the last build was for (`RefreshGlyphs` keeps it), `GlyphCount` how many glyphs the
