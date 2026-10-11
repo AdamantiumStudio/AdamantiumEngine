@@ -327,6 +327,19 @@ All packages share one version.
 
 ### Fixed
 
+- A retired GPU resource waited for every render device to begin new frames, so one device that stopped drawing - an
+  off-screen one between two bakes - kept every resource retired after it, and everything those referenced, for the
+  life of the application. A device with no frame in flight (`IGraphicsDevice.HasNoFramesInFlight`) no longer holds
+  them back; one in the middle of recording a frame still does.
+
+- Decoding an animated GIF threw away about a gigabyte for a 200-frame 960x540 animation: the LZW decoder grew a list
+  for every frame and a list for every code, every frame kept its index stream until all of them were done, and every
+  frame drawn over a part of the one before copied the whole picture's indices first. The decoder writes each frame's
+  indices once, at their final size, the newest frame's stream is the only one kept, and the next frame is laid over
+  it in place. The pixels are the same, to the byte. `IRawBitmap.CopyFrame` writes a frame into the caller's buffer
+  without the decoder keeping it, so an animation read frame by frame (`GifImage` does it in one pass) needs one
+  frame's worth of memory instead of all of them.
+
 - `THIRD-PARTY-NOTICES.md` lists `EmojiPresentation.ucd` among the Unicode data `Adamantium.Fonts` embeds. The
   `.ucd` files are checked out with LF, the line endings they are written with, so git no longer shows them changed
   once a tool has touched them.

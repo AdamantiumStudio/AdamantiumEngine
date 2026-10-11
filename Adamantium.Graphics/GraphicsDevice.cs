@@ -26,6 +26,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
 {
     private object _locker = new object();
     private bool _withheld;
+    private volatile bool _recordingFrame;
     public Guid DeviceId { get; private set; }
 
     private CommandBuffer[] commandBuffers;
@@ -657,6 +658,32 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         return LogicalDevice.DeviceWaitIdle();
     }
 
+    public bool HasNoFramesInFlight
+    {
+        get
+        {
+            if (_recordingFrame)
+            {
+                return false;
+            }
+
+            if (InFlightFences == null)
+            {
+                return true;
+            }
+
+            foreach (var fence in InFlightFences)
+            {
+                if (LogicalDevice.GetFenceStatus(fence) != Result.Success)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
     public Result WaitForFramesInFlight(ulong timeout)
     {
         if (InFlightFences == null || InFlightFences.Length == 0) return Result.Success;
@@ -956,6 +983,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public bool BeginDraw(float depth = 1.0f, uint stencil = 0, Action<CommandBuffer> beforeRenderPass = null)
     {
+        _recordingFrame = true;
         CanPresent = false;
         LastFrameError = null;
         _withheld = false;
@@ -1341,6 +1369,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
 
         result = GraphicsQueue.QueueSubmit2(1, submitInfo, renderFence);
+        _recordingFrame = false;
 
         if (result != Result.Success)
         {

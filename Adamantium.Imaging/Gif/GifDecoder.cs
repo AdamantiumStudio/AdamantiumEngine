@@ -104,7 +104,7 @@ namespace Adamantium.Imaging.Gif
             4. containing every odd line of image (1/2 of size)
             http://www.fileformat.info/format/gif/egff.htm
          */
-        internal static int[] Deinterlace(GifFrame frame)
+        internal static int[] Deinterlace(GifFrame frame, int[] indexData)
         {
             var width = frame.Descriptor.Width;
             var height = frame.Descriptor.Height;
@@ -139,7 +139,7 @@ namespace Adamantium.Imaging.Gif
             {
                 var srcIndex = deinterlacedTable[i] * width;
                 var dstIndex = i * width;
-                Array.Copy(frame.IndexData, srcIndex, deinterlacedIndexData, dstIndex, width);
+                Array.Copy(indexData, srcIndex, deinterlacedIndexData, dstIndex, width);
             }
 
             return deinterlacedIndexData;

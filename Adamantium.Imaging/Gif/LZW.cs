@@ -194,105 +194,100 @@ namespace Adamantium.Imaging.Gif
             return outData.ToArray();
         }
 
-        public static int[] Decompress(byte[] compressedData, int minimumCodeSize)
+        public static int[] Decompress(ReadOnlySpan<byte> compressedData, int minimumCodeSize, int pixelCount)
         {
-            uint mask = 0x01;
-            int inputLength = compressedData.Length;
-
-            var pos = 0;
-            int readCode(int size)
-            {
-                int code = 0x0;
-                for (var i = 0; i < size; i++)
-                {
-                    var val = compressedData[pos];
-                    int bit = (val & mask) != 0 ? 1 : 0;
-                    mask <<= 1;
-
-                    if (mask == 0x100)
-                    {
-                        mask = 0x01;
-                        pos++;
-                        inputLength--;
-                        if (inputLength == 0)
-                        {
-                            //break here if there is the end of data and still no EOI code (maybe because of buggy encoder)
-                            break;
-                        }
-                    }
-
-                    code |= (bit << i);
-                }
-                return code;
-            };
-
-            var indexStream = new List<int>();
+            const int maxCodes = 4096;
+            var output = new int[pixelCount];
+            Span<short> prefix = stackalloc short[maxCodes];
+            Span<byte> suffix = stackalloc byte[maxCodes];
+            Span<byte> stack = stackalloc byte[maxCodes + 1];
 
             var clearCode = 1 << minimumCodeSize;
             var eoiCode = clearCode + 1;
-
-            var codeSize = minimumCodeSize + 1;
-
-            var dict = new List<List<int>>();
-
-            void Clear()
+            for (var i = 0; i < clearCode; i++)
             {
-                dict.Clear();
-                codeSize = minimumCodeSize + 1;
-                for (int i = 0; i < clearCode; i++)
-                {
-                    dict.Add(new List<int>() { i });
-                }
-                dict.Add(new List<int>());
-                dict.Add(null);
+                suffix[i] = (byte)i;
             }
 
-            int code = 0x0;
-            while (inputLength > 0)
+            var codeSize = minimumCodeSize + 1;
+            var available = clearCode + 2;
+            var previous = -1;
+            var first = 0;
+            var datum = 0;
+            var bits = 0;
+            var position = 0;
+            var written = 0;
+
+            while (written < pixelCount)
             {
-                int last = code;
-                code = readCode(codeSize);
+                while (bits < codeSize)
+                {
+                    if (position >= compressedData.Length) return output;
+                    datum |= compressedData[position++] << bits;
+                    bits += 8;
+                }
+
+                var code = datum & ((1 << codeSize) - 1);
+                datum >>= codeSize;
+                bits -= codeSize;
 
                 if (code == clearCode)
                 {
-                    Clear();
+                    codeSize = minimumCodeSize + 1;
+                    available = clearCode + 2;
+                    previous = -1;
                     continue;
                 }
-                if (code == eoiCode)
-                {
-                    break;
-                }
 
-                if (code < dict.Count)
+                if (code == eoiCode) break;
+
+                var top = 0;
+                if (previous == -1)
                 {
-                    if (last != clearCode)
-                    {
-                        var lst = new List<int>(dict[last]);
-                        lst.Add(dict[code][0]);
-                        dict.Add(lst);
-                    }
+                    if (code >= clearCode) break;
+                    first = code;
+                    stack[top++] = (byte)code;
                 }
                 else
                 {
-                    //if (last != clearCode)
+                    var entry = code;
+                    if (entry >= available)
                     {
-                        var lst = new List<int>(dict[last]);
-                        lst.Add(dict[last][0]);
-                        dict.Add(lst);
+                        if (entry > available) break;
+                        stack[top++] = (byte)first;
+                        entry = previous;
+                    }
+
+                    while (entry >= clearCode)
+                    {
+                        stack[top++] = suffix[entry];
+                        entry = prefix[entry];
+                    }
+
+                    first = suffix[entry];
+                    stack[top++] = (byte)first;
+
+                    if (available < maxCodes)
+                    {
+                        prefix[available] = (short)previous;
+                        suffix[available] = (byte)first;
+                        available++;
                     }
                 }
 
-                indexStream.AddRange(dict[code]);
-
-                if (dict.Count == (1 << codeSize) && codeSize < 12)
+                while (top > 0 && written < pixelCount)
                 {
-                    // If we're at the last code and codeSize is 12, the next code will be a clearCode, and it'll be 12 bits long.
+                    output[written++] = stack[--top];
+                }
+
+                previous = code;
+                if (available == (1 << codeSize) && codeSize < 12)
+                {
                     codeSize++;
                 }
             }
 
-            return indexStream.ToArray();
-
+            return output;
         }
     }
 }
