@@ -14,6 +14,8 @@ internal sealed class GlyphQuadBuilder
     private int _atlasVersion = -1;
     private bool _vertexBufferDirty;
 
+    public RectangleF? Window { get; private set; }
+
     public uint ElementsCount { get; private set; }
 
     public FontAtlas FontAtlas { get; private set; }
@@ -53,7 +55,8 @@ internal sealed class GlyphQuadBuilder
 
         foreach (var word in data)
         {
-            if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null)
+            if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null
+                || !InWindow(word))
             {
                 continue;
             }
@@ -96,8 +99,9 @@ internal sealed class GlyphQuadBuilder
         }
     }
 
-    public void Build(IGraphicsDevice graphicsDevice, LaidOutText text)
+    public void Build(IGraphicsDevice graphicsDevice, LaidOutText text, RectangleF? window)
     {
+        Window = window;
         // Asked for, not waited for: glyphs land over the next frames and bump the atlas version (NeedsGlyphRefresh).
         var atlas = EnsureAtlas(graphicsDevice);
         atlas.RequestAsync(GetGlyphs(text));
@@ -110,7 +114,8 @@ internal sealed class GlyphQuadBuilder
         for (int i = 0; i < glyphs.Count; ++i)
         {
             var word = glyphs[i];
-            if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null)
+            if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null
+                || !InWindow(word))
             {
                 continue;
             }
@@ -205,6 +210,18 @@ internal sealed class GlyphQuadBuilder
             Right = full.Right - halfTexelU,
             Bottom = full.Bottom - halfTexelV,
         };
+    }
+
+    private bool InWindow(GlyphWordData word)
+    {
+        if (Window is not { } window)
+        {
+            return true;
+        }
+
+        var drawn = DrawnRect(word);
+        return drawn.Right >= window.Left && drawn.Left <= window.Right
+               && drawn.Bottom >= window.Top && drawn.Top <= window.Bottom;
     }
 
     private void EnsureItemCapacity(int needed)

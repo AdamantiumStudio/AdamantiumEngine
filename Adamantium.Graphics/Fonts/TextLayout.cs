@@ -335,23 +335,37 @@ public class TextLayout : DisposableObject
     /// <summary>Glyphs have landed in the atlas since this block built its quads; the render side rebuilds on this.</summary>
     public bool NeedsGlyphRefresh => _quads.NeedsGlyphRefresh;
 
-    /// <summary>Re-run the quad build against the atlas as it stands now (see <see cref="NeedsGlyphRefresh"/>).</summary>
+    /// <summary>Re-run the quad build against the atlas as it stands now (see <see cref="NeedsGlyphRefresh"/>), for the
+    /// same <see cref="QuadWindow"/>.</summary>
     public void RefreshGlyphs(IGraphicsDevice graphicsDevice)
     {
         _textUpdated = true;
-        Update(graphicsDevice);
+        Update(graphicsDevice, QuadWindow);
     }
+
+    /// <summary>The part of the layout, in its own units, the last <see cref="Update(IGraphicsDevice, RectangleF?)"/>
+    /// built quads for; null when it built them for all of it.</summary>
+    public RectangleF? QuadWindow => _quads.Window;
+
+    /// <summary>How many glyphs the text last laid out takes, drawn or not.</summary>
+    public int GlyphCount => _laid?.Glyphs?.Count ?? 0;
 
     /// <summary>This block's atlas, created on first use and again when its device is gone.</summary>
     public FontAtlas EnsureAtlas(IGraphicsDevice graphicsDevice) => _quads.EnsureAtlas(graphicsDevice);
 
-    public void Update(IGraphicsDevice graphicsDevice)
+    /// <summary>Builds the quads of every glyph the text draws.</summary>
+    public void Update(IGraphicsDevice graphicsDevice) => Update(graphicsDevice, null);
+
+    /// <summary>Builds the quads of only the glyphs that touch <paramref name="window"/>, in the layout's units, and asks
+    /// the atlas for only theirs: a long text scrolled through a viewport costs what the viewport shows. Null builds them
+    /// all.</summary>
+    public void Update(IGraphicsDevice graphicsDevice, RectangleF? window)
     {
         // Built before its first measure (a popup built ahead of its layout pass): retried next frame.
         var laid = _laid;
         if (!_textUpdated || laid?.Glyphs == null) return;
 
-        _quads.Build(graphicsDevice, laid);
+        _quads.Build(graphicsDevice, laid, window);
         _textUpdated = true;
     }
 
@@ -369,6 +383,17 @@ public class TextLayout : DisposableObject
     /// <summary>A frozen copy of the shaped glyphs (call after <see cref="Update"/>), so the render thread never reads
     /// this layout while it is reshaped.</summary>
     public FrozenGlyphRun SnapshotGlyphs() => _quads.Snapshot(FontSize);
+
+    /// <summary><see cref="Update(IGraphicsDevice, RectangleF?)"/> and <see cref="SnapshotGlyphs"/> as one step, so two
+    /// callers building different windows of this layout on different threads never freeze each other's.</summary>
+    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window)
+    {
+        lock (_quads)
+        {
+            Update(graphicsDevice, window);
+            return SnapshotGlyphs();
+        }
+    }
 
     /// <summary>Where the caret stands before each UTF-16 character of <see cref="Text"/>, and after the last one.
     /// Characters drawn by one glyph, such as a ligature, share its width.</summary>

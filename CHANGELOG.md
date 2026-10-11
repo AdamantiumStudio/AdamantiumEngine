@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.Update(device, window)`: builds the quads of only the glyphs that touch a window in the layout's units,
+  and asks the atlas for only theirs, so a long text shown through a viewport costs what the viewport shows;
+  `QuadWindow` tells which window the last build was for (`RefreshGlyphs` keeps it), `GlyphCount` how many glyphs the
+  text takes, drawn or not. `BuildGlyphRun(device, window)` builds and freezes them in one step, so two callers building
+  different windows of one layout on different threads never freeze each other's.
+
 - `IGraphicsDevice.WithholdFrame`: a frame asked to be held back before `EndDraw` acquires no swapchain image, so nothing
   is submitted or presented and the window keeps showing the last frame - for a frame drawn incomplete that the next
   one draws whole. A render-target presenter keeps its frame.
