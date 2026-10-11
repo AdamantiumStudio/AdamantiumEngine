@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.Update(device, window)`: builds the quads of only the glyphs that touch a window in the layout's units,
+  and asks the atlas for only theirs, so a long text shown through a viewport costs what the viewport shows;
+  `QuadWindow` tells which window the last build was for (`RefreshGlyphs` keeps it), `GlyphCount` how many glyphs the
+  text takes, drawn or not. `BuildGlyphRun(device, window)` builds and freezes them in one step, so two callers building
+  different windows of one layout on different threads never freeze each other's.
+
 - `IGraphicsDevice.WithholdFrame`: a frame asked to be held back before `EndDraw` acquires no swapchain image, so nothing
   is submitted or presented and the window keeps showing the last frame - for a frame drawn incomplete that the next
   one draws whole. A render-target presenter keeps its frame.
@@ -327,6 +333,9 @@ All packages share one version.
 
 ### Fixed
 
+- Text aligned right threw when a line held only spaces: leading spaces before a word too long to follow them on the
+  first line. A line with nothing to draw is left where it is.
+
 - A retired GPU resource waited for every render device to begin new frames, so one device that stopped drawing - an
   off-screen one between two bakes - kept every resource retired after it, and everything those referenced, for the
   life of the application. A device with no frame in flight (`IGraphicsDevice.HasNoFramesInFlight`) no longer holds
@@ -460,6 +469,12 @@ All packages share one version.
 - 32-bit deltas of an item variation store (long words) were read as 16-bit ones.
 
 ### Changed
+
+- `TextLayout` is split by stage, its public API unchanged: shaping (`GlyphRunShaper`), composing lines
+  (`LineComposer`), the glyph quads (`GlyphQuadBuilder`) and caret, hit and selection queries (`TextNavigator`), over
+  one immutable result per layout (`LaidOutText`) and a snapshot of the settings it was laid out with. Laid out the
+  same, to the bit, across 14,688 combinations of text, script, wrapping, trimming and alignment and every special
+  setting. `GetTextData` before the first layout returns no glyphs instead of throwing.
 
 - Justified text keeps its spaces within InDesign's word spacing by default: 80% to 133% of the space. Before,
   spaces could squeeze to two thirds and stretch without limit; the paragraph composer weighed them at two thirds to
