@@ -348,6 +348,12 @@ namespace Adamantium.Fonts
 
         private bool TryGetOutlineGlyph(uint index, out Glyph glyph)
         {
+            if (index < Typeface.GlyphCount)
+            {
+                glyph = null;
+                return false;
+            }
+
             lock (outlineGlyphs)
             {
                 return outlineGlyphs.TryGetValue(index, out glyph);

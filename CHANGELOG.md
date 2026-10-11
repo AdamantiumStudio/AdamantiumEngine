@@ -470,6 +470,11 @@ All packages share one version.
 
 ### Changed
 
+- Text lays out two to three times faster and allocates a third as much, the result unchanged: a lookup skips the
+  glyphs none of its subtables covers, a contextual rule allocates only for a glyph it covers, a font no longer locks
+  to look up a glyph it has, the Latin range of the Unicode tables is read from an array, and centered, right-aligned
+  and justified text groups its glyphs by line once instead of scanning them all for every line.
+
 - `TextLayout` is split by stage, its public API unchanged: shaping (`GlyphRunShaper`), composing lines
   (`LineComposer`), the glyph quads (`GlyphQuadBuilder`) and caret, hit and selection queries (`TextNavigator`), over
   one immutable result per layout (`LaidOutText`) and a snapshot of the settings it was laid out with. Laid out the

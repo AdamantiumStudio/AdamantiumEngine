@@ -101,7 +101,7 @@ internal sealed class LineComposer
         double height = textArea.Y;
         double cursorPosition = 0;
         double wordStartPosition = 0;
-        var glyphsData = new List<GlyphWordData>();
+        var glyphsData = new List<GlyphWordData>(items.Count);
         var leaders = new Dictionary<GlyphWordData, string>();
         int wordIndex = 0;
         int lineIndex = 0;
@@ -238,12 +238,13 @@ internal sealed class LineComposer
         var _b3 = System.GC.GetAllocatedBytesForCurrentThread();
 
 
+        double inkRight = 0;
         if (glyphsData.Count > 0)
         {
-            CalculateRealTextDimensions(glyphsData);
+            inkRight = CalculateRealTextDimensions(glyphsData);
         }
 
-        var maxX = Math.Max(glyphsData.Count > 0 ? glyphsData.Max(InkRight) : 0, dropIndent);
+        var maxX = Math.Max(inkRight, dropIndent);
         var finalRect = new Size(Math.Ceiling(maxX), Math.Ceiling(height));
         if (renderingParameters.TextArea.Width != Int32.MaxValue)
         {
@@ -346,13 +347,31 @@ internal sealed class LineComposer
         bool IsRightToLeftParagraph(int index) =>
             TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, index);
 
-        void CalculateRealTextDimensions(List<GlyphWordData> glyphs)
+        double CalculateRealTextDimensions(List<GlyphWordData> glyphs)
         {
-            var minX = glyphs.Min(InkLeft);
-            var maxInk = glyphs.Max(InkRight);
-            var minY = glyphs.Min(x => x.Rect.Top);
-            var maxY = glyphs.Max(x => x.Rect.Bottom);
+            var minX = double.PositiveInfinity;
+            var maxInk = double.NaN;
+            var minY = float.PositiveInfinity;
+            var maxY = float.NaN;
+            foreach (var glyph in glyphs)
+            {
+                minX = Math.Min(minX, InkLeft(glyph));
+                minY = Math.Min(minY, glyph.Rect.Top);
+                var right = InkRight(glyph);
+                if (double.IsNaN(maxInk) || right > maxInk)
+                {
+                    maxInk = right;
+                }
+
+                var bottom = glyph.Rect.Bottom;
+                if (float.IsNaN(maxY) || bottom > maxY)
+                {
+                    maxY = bottom;
+                }
+            }
+
             realTextDimensions = new Size(maxInk - minX, maxY - minY);
+            return maxInk;
         }
 
         TabStop NextTabStop(double x)
@@ -1417,9 +1436,6 @@ internal sealed class LineComposer
         void ArrangeText()
         {
             var hung = new HashSet<int>();
-            var minX = glyphsData.Min(x => x.Rect.Left);
-            var maxX = glyphsData.Max(x => x.Rect.Right);
-            var minY = glyphsData.Min(x => x.Rect.Top);
             switch (renderingParameters.HorizontalTextAlignment)
             {
                 case HorizontalTextAlignment.Left or HorizontalTextAlignment.Right when paragraphs != null:
@@ -1428,16 +1444,17 @@ internal sealed class LineComposer
                 case HorizontalTextAlignment.Center:
                 {
                     var maxLines = glyphsData.Max(x => x.LineIndex);
+                    var byLine = GlyphsByLine(maxLines + 1);
                     for (int i = 0; i <= maxLines; ++i)
                     {
-                        var glyphsForLine = glyphsData.Where(x => x.LineIndex == i).ToArray();
+                        var glyphsForLine = byLine[i];
                         if (glyphsForLine.Length == 0) break;
 
                         // By the ink, so leading/trailing spaces don't pull the line off-center.
                         var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
                         if (ink.Length == 0) continue;
-                        minX = ink.Min(x => x.Rect.Left);
-                        maxX = ink.Max(x => x.Rect.Right);
+                        var minX = ink.Min(x => x.Rect.Left);
+                        var maxX = ink.Max(x => x.Rect.Right);
                         var lineWidth = maxX - minX;
                         var diff = LineIndent(i) + (AlignRight(i) - LineIndent(i) - lineWidth) / 2 - minX;
                         foreach (var glyphWordData in glyphsForLine)
@@ -1453,9 +1470,10 @@ internal sealed class LineComposer
                 case HorizontalTextAlignment.Right:
                 {
                     var maxLines = glyphsData.Max(x => x.LineIndex);
+                    var byLine = GlyphsByLine(maxLines + 1);
                     for (int i = 0; i <= maxLines; ++i)
                     {
-                        var glyphsForLine = glyphsData.Where(x => x.LineIndex == i).ToArray();
+                        var glyphsForLine = byLine[i];
                         if (glyphsForLine.Length == 0) break;
 
                         var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
@@ -1464,7 +1482,7 @@ internal sealed class LineComposer
                             continue;
                         }
 
-                        maxX = ink.Max(x => x.Rect.Right);
+                        var maxX = ink.Max(x => x.Rect.Right);
                         var diff = (AlignRight(i) - maxX);
                         foreach (var glyphWordData in glyphsForLine)
                         {
@@ -1490,10 +1508,11 @@ internal sealed class LineComposer
                         }
                     }
 
+                    var byLine = GlyphsByLine(maxLines + 1);
                     for (int i = 0; i <= maxLines; ++i)
                     {
                         // Only the gaps between words change; glyphs are shifted, never re-laid, so kerning and bearings stay.
-                        var lineGlyphs = glyphsData.Where(x => x.LineIndex == i).OrderBy(x => x.Rect.X).ToArray();
+                        var lineGlyphs = byLine[i].OrderBy(x => x.Rect.X).ToArray();
                         if (lineGlyphs.Length == 0) continue;
                         var stretches = JustifiesLastLine()
                                         || (i < maxLines
@@ -1510,7 +1529,7 @@ internal sealed class LineComposer
                         if (firstInk < 0) continue;
 
                         var lastTab = Array.FindLastIndex(lineGlyphs, lastInk, lastInk + 1, glyph => glyph.Symbol == '\t');
-                        var clusters = VisualClusters(i);
+                        var clusters = VisualClusters(byLine[i]);
                         var lastInkCluster = clusters.FindLastIndex(IsInk);
                         var fromCluster = lastInkCluster < 0 ? 0 : Math.Max(clusters.FindIndex(IsInk),
                             clusters.FindLastIndex(lastInkCluster, lastInkCluster + 1, cluster => cluster[0].Symbol == '\t'));
@@ -1832,17 +1851,35 @@ internal sealed class LineComposer
             return false;
         }
 
-        List<GlyphWordData[]> VisualClusters(int line)
+        GlyphWordData[][] GlyphsByLine(int lines)
+        {
+            var counts = new int[lines];
+            foreach (var glyph in glyphsData)
+            {
+                counts[glyph.LineIndex]++;
+            }
+
+            var byLine = new GlyphWordData[lines][];
+            for (var i = 0; i < lines; i++)
+            {
+                byLine[i] = new GlyphWordData[counts[i]];
+                counts[i] = 0;
+            }
+
+            foreach (var glyph in glyphsData)
+            {
+                byLine[glyph.LineIndex][counts[glyph.LineIndex]++] = glyph;
+            }
+
+            return byLine;
+        }
+
+        List<GlyphWordData[]> VisualClusters(GlyphWordData[] lineGlyphs)
         {
             var groups = new List<GlyphWordData[]>();
             var current = new List<GlyphWordData>();
-            foreach (var glyph in glyphsData)
+            foreach (var glyph in lineGlyphs)
             {
-                if (glyph.LineIndex != line)
-                {
-                    continue;
-                }
-
                 var joins = glyph.Advance == 0 && glyph.Symbol != '\n' && !IsBlank(glyph.Symbol)
                             && glyph.PositionInString >= 0;
                 if (current.Count > 0 && !joins

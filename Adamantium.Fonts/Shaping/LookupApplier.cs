@@ -86,7 +86,8 @@ internal sealed partial class LookupApplier
             for (_index = _buffer.Length - 1; _index >= 0; _index--)
             {
                 ref var info = ref _buffer.Info[_index];
-                if ((info.Mask & _lookupMask) != 0 && CheckGlyphProperty(info, _lookupProps))
+                if ((info.Mask & _lookupMask) != 0 && LookupCoverage.Covers(lookup.Coverage, info.Glyph)
+                    && CheckGlyphProperty(info, _lookupProps))
                 {
                     ApplySubtables(lookup.Table);
                 }
@@ -99,7 +100,8 @@ internal sealed partial class LookupApplier
         while (_index < _buffer.Length)
         {
             ref var info = ref _buffer.Info[_index];
-            if ((info.Mask & _lookupMask) != 0 && CheckGlyphProperty(info, _lookupProps) && ApplySubtables(lookup.Table))
+            if ((info.Mask & _lookupMask) != 0 && LookupCoverage.Covers(lookup.Coverage, info.Glyph)
+                && CheckGlyphProperty(info, _lookupProps) && ApplySubtables(lookup.Table))
             {
                 continue;
             }

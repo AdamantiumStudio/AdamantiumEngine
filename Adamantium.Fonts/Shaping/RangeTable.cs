@@ -10,6 +10,7 @@ internal sealed class RangeTable<T>
     private readonly int[] _ends;
     private readonly T[] _values;
     private readonly T _missing;
+    private readonly T[] _latin = new T[256];
 
     private RangeTable(int[] starts, int[] ends, T[] values, T missing)
     {
@@ -17,25 +18,28 @@ internal sealed class RangeTable<T>
         _ends = ends;
         _values = values;
         _missing = missing;
+        for (var codepoint = 0; codepoint < _latin.Length; codepoint++)
+        {
+            _latin[codepoint] = Search(codepoint);
+        }
     }
 
-    public T this[int codepoint]
+    public T this[int codepoint] => (uint)codepoint < (uint)_latin.Length ? _latin[codepoint] : Search(codepoint);
+
+    private T Search(int codepoint)
     {
-        get
+        var index = Array.BinarySearch(_starts, codepoint);
+        if (index < 0)
         {
-            var index = Array.BinarySearch(_starts, codepoint);
-            if (index < 0)
-            {
-                index = ~index - 1;
-            }
-
-            if (index < 0 || codepoint > _ends[index])
-            {
-                return _missing;
-            }
-
-            return _values[index];
+            index = ~index - 1;
         }
+
+        if (index < 0 || codepoint > _ends[index])
+        {
+            return _missing;
+        }
+
+        return _values[index];
     }
 
     public static RangeTable<T> Load(string resource, Func<string, T> parse, T missing)
