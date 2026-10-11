@@ -461,6 +461,12 @@ All packages share one version.
 
 ### Changed
 
+- `TextLayout` is split by stage, its public API unchanged: shaping (`GlyphRunShaper`), composing lines
+  (`LineComposer`), the glyph quads (`GlyphQuadBuilder`) and caret, hit and selection queries (`TextNavigator`), over
+  one immutable result per layout (`LaidOutText`) and a snapshot of the settings it was laid out with. Laid out the
+  same, to the bit, across 14,688 combinations of text, script, wrapping, trimming and alignment and every special
+  setting. `GetTextData` before the first layout returns no glyphs instead of throwing.
+
 - Justified text keeps its spaces within InDesign's word spacing by default: 80% to 133% of the space. Before,
   spaces could squeeze to two thirds and stretch without limit; the paragraph composer weighed them at two thirds to
   one and a half.

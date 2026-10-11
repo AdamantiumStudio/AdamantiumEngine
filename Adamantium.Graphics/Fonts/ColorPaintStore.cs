@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Adamantium.Fonts;
 using Adamantium.Graphics.Core;
+using Adamantium.Graphics.Fonts.Layout;
 using Adamantium.Mathematics;
 using Adamantium.Vulkan.Core;
 
@@ -236,7 +237,7 @@ internal sealed class ColorPaintStore : IDisposable
         var axisU = Linear(transform, new Vector2(bounds.Width + 2 * marginX, 0));
         var axisV = Linear(transform, new Vector2(0, -(bounds.Height + 2 * marginY)));
         var quad = new Matrix3x2(axisU.X, axisU.Y, axisV.X, axisV.Y, origin.X, origin.Y);
-        var source = TextLayout.CellSource(cell);
+        var source = GlyphQuadBuilder.CellSource(cell);
         if (Math.Abs(quad.Determinant()) < 1e-12)
         {
             ClipToNothing(steps);
