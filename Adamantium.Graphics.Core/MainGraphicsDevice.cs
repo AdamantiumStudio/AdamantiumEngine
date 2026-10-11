@@ -41,6 +41,7 @@ public class MainGraphicsDevice : DisposableBase
     // the frames in flight at hand-over: the wrappers share one VkDevice and share resources.
     private readonly List<(IDisposable Resource, IGraphicsDevice[] Devices, ulong[] Due)> _retired = [];
     private readonly object _retireSync = new();
+    private readonly HashSet<IGraphicsDevice> _idle = [];
 
     /// <summary>Hand a GPU resource over for disposal once no submitted work can still reference it.</summary>
     public void RetireResource(IDisposable resource)
@@ -70,6 +71,20 @@ public class MainGraphicsDevice : DisposableBase
         List<IDisposable> due = null;
         lock (_retireSync)
         {
+            if (_retired.Count == 0)
+            {
+                return;
+            }
+
+            _idle.Clear();
+            foreach (var device in graphicsDevices)
+            {
+                if (device.HasNoFramesInFlight)
+                {
+                    _idle.Add(device);
+                }
+            }
+
             for (var i = _retired.Count - 1; i >= 0; i--)
             {
                 if (!IsDue(_retired[i].Devices, _retired[i].Due))
@@ -115,12 +130,12 @@ public class MainGraphicsDevice : DisposableBase
         }
     }
 
-    // A wrapper that is gone cannot be executing anything, so its vote is dropped.
+    // A wrapper that is gone, or one with no frame in flight, cannot be executing anything, so its vote is dropped.
     private bool IsDue(IGraphicsDevice[] devices, ulong[] due)
     {
         for (var i = 0; i < devices.Length; i++)
         {
-            if (graphicsDevices.Contains(devices[i]) && devices[i].FrameTicket < due[i])
+            if (graphicsDevices.Contains(devices[i]) && !_idle.Contains(devices[i]) && devices[i].FrameTicket < due[i])
             {
                 return false;
             }
@@ -234,18 +249,27 @@ public class MainGraphicsDevice : DisposableBase
 
     public void RemoveDevice(IGraphicsDevice device)
     {
-        deviceMap.Remove(device.DeviceId);
-        graphicsDevices.Remove(device);
+        lock (_retireSync)
+        {
+            deviceMap.Remove(device.DeviceId);
+            graphicsDevices.Remove(device);
+        }
+
         device?.Dispose();
     }
 
     public void RemoveDeviceById(Guid deviceId)
     {
-        if (!deviceMap.TryGetValue(deviceId, out var device)) return;
+        IGraphicsDevice device;
+        lock (_retireSync)
+        {
+            if (!deviceMap.TryGetValue(deviceId, out device)) return;
+
+            deviceMap.Remove(deviceId);
+            graphicsDevices.Remove(device);
+        }
 
         device?.Dispose();
-        deviceMap.Remove(deviceId);
-        graphicsDevices.Remove(device);
     }
 
     public IGraphicsDevice GetDeviceById(Guid deviceId)
@@ -255,14 +279,23 @@ public class MainGraphicsDevice : DisposableBase
 
     public IGraphicsDevice UpdateDevice(Guid deviceId)
     {
-        if (!deviceMap.TryGetValue(deviceId, out var device)) return null;
+        IGraphicsDevice device;
+        lock (_retireSync)
+        {
+            if (!deviceMap.TryGetValue(deviceId, out device)) return null;
+
+            deviceMap.Remove(deviceId);
+            graphicsDevices.Remove(device);
+        }
 
         device?.Dispose();
-        deviceMap.Remove(deviceId);
-        graphicsDevices.Remove(device);
         var newDevice = CreateRenderDevice();
-        deviceMap.Add(deviceId, newDevice);
-        graphicsDevices.Add(newDevice);
+        lock (_retireSync)
+        {
+            deviceMap.Add(deviceId, newDevice);
+            graphicsDevices.Add(newDevice);
+        }
+
         return newDevice;
     }
 
@@ -449,8 +482,12 @@ public class MainGraphicsDevice : DisposableBase
     public IGraphicsDevice CreateRenderDevice()
     {
         var renderDevice = _graphicsDeviceFactory.Create(this, GraphicsDeviceType.Rendering);
-        deviceMap.Add(renderDevice.DeviceId, renderDevice);
-        graphicsDevices.Add(renderDevice);
+        lock (_retireSync)
+        {
+            deviceMap.Add(renderDevice.DeviceId, renderDevice);
+            graphicsDevices.Add(renderDevice);
+        }
+
         return renderDevice;
     }
 
@@ -526,8 +563,11 @@ public class MainGraphicsDevice : DisposableBase
 
         // What the devices retired as they went.
         FlushRetiredAfterIdle();
-        graphicsDevices.Clear();
-        deviceMap.Clear();
+        lock (_retireSync)
+        {
+            graphicsDevices.Clear();
+            deviceMap.Clear();
+        }
 
         // The heap's buffers were allocated through the resource-loader device, so they go first.
         DescriptorHeapManager?.Dispose();

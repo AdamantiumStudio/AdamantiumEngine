@@ -22,6 +22,16 @@ public interface IRawBitmap
         
     public byte[] GetRawPixels(uint frameIndex);
 
+    /// <summary>Writes one frame's pixels into <paramref name="destination"/> (<see cref="TotalSizeInBytes"/> long). A
+    /// decoder that can lay frames out without keeping them does so here, so frames read in order share one buffer.
+    /// </summary>
+    public void CopyFrame(uint frameIndex, System.Span<byte> destination)
+    {
+        var pixels = GetRawPixels(frameIndex);
+        new System.ReadOnlySpan<byte>(pixels).CopyTo(destination);
+        destination[pixels.Length..].Clear();
+    }
+
     public FrameData GetMipLevelData(uint mipLevel);
 
     public ImageDescription GetImageDescription();

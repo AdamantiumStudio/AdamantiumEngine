@@ -139,6 +139,10 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// when whatever was in flight at hand-over time has certainly retired. Zero on a device that never draws.</summary>
     ulong FrameTicket { get; }
 
+    /// <summary>Whether every frame this device has submitted has finished on the GPU, so nothing it recorded can still
+    /// be read. A device that is not drawing - an off-screen one between two bakes - answers true.</summary>
+    bool HasNoFramesInFlight { get; }
+
     void AddResource(GraphicsResource resource);
 
     /// <summary>Unregisters a resource (called from its Dispose) so it stops being rooted by the device.</summary>
