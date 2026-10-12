@@ -6,6 +6,7 @@
 
   <PropertyGroup>
     <AdamantiumContentCompiler>$(MSBuildThisFileDirectory)..\artifacts\bin\$(Configuration)\net10.0\Adamantium.Engine.ContentCompiler.CLI.dll</AdamantiumContentCompiler>
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
   </PropertyGroup>
 
   <ItemGroup>

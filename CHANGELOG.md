@@ -381,6 +381,10 @@ All packages share one version.
 
 ### Fixed
 
+- A content project built from the engine's source in another repository's solution cooks with the compiler of its
+  configuration. The solution, not listing the compiler, handed it no configuration: it was built into
+  `artifacts\bin\<tfm>`, and the cook ran a stale compiler from `artifacts\bin\<configuration>\<tfm>`, or found none.
+
 - `ContentManager.Exists` finds an asset by a relative path. With no `RootDirectory` it looked for `/<path>`, at the
   root of the drive, and said every asset was missing.
 
