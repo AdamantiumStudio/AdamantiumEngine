@@ -289,14 +289,7 @@ public class MainGraphicsDevice : DisposableBase
         }
 
         device?.Dispose();
-        var newDevice = CreateRenderDevice();
-        lock (_retireSync)
-        {
-            deviceMap.Add(deviceId, newDevice);
-            graphicsDevices.Add(newDevice);
-        }
-
-        return newDevice;
+        return CreateRenderDevice();
     }
 
     private void CreateLogicalDevice()
@@ -488,7 +481,21 @@ public class MainGraphicsDevice : DisposableBase
             graphicsDevices.Add(renderDevice);
         }
 
+        if (renderDevice is DisposableObject disposable)
+        {
+            disposable.Disposing += (_, _) => Unregister(renderDevice);
+        }
+
         return renderDevice;
+    }
+
+    private void Unregister(IGraphicsDevice device)
+    {
+        lock (_retireSync)
+        {
+            deviceMap.Remove(device.DeviceId);
+            graphicsDevices.Remove(device);
+        }
     }
 
     private IGraphicsDevice CreateResourceLoaderDevice()

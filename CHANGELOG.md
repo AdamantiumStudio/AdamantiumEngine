@@ -388,6 +388,17 @@ All packages share one version.
 - `ContentManager.Exists` finds an asset by a relative path. With no `RootDirectory` it looked for `/<path>`, at the
   root of the drive, and said every asset was missing.
 
+- A universe hosted in an application that keeps running can be shut down.
+  - **Its render devices leave the main device.** A device disposed by whoever holds it, as a universe output disposes
+    its own, used to stay in the main device's list with its fences destroyed. The next frame start read those fences
+    and the process crashed. A render device now takes itself off the list as it is disposed.
+  - **Nothing shared holds it any longer.** `RenderingProcessor` no longer subscribes to the graphics device service; its
+    handlers did nothing. `RenderingService` unsubscribes when it is removed or its universe shuts down
+    (`UnloadContent`), and `UniversePlatform` when it is disposed. Each of the three kept a shut-down universe in memory,
+    with its scene and meshes, for as long as the application ran.
+  - `MainGraphicsDevice.UpdateDevice` lists the new device once. It used to be listed twice, and also under the old
+    device's id.
+
 - A graphics device's registry of its resources is locked. Resources made or disposed on two threads at once, such as
   textures built by a background task while the render thread works, could corrupt it. A corrupted registry miscounted
   `RegisteredResourceCount` and could crash the process when the device was disposed.

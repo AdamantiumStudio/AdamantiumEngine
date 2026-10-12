@@ -48,8 +48,6 @@ public class RenderingProcessor : EntityProcessor<RenderingService>, IDisposable
         EntityWorld = AssociatedService.EntityWorld;
         GraphicsDeviceService = AssociatedService.GraphicsDeviceService;
         GraphicsDevice = AssociatedService.GraphicsDevice;
-        GraphicsDeviceService.DeviceChangeBegin += DeviceChangeBegin;
-        GraphicsDeviceService.DeviceChangeEnd += DeviceChangeEnd;
         Content = EntityWorld.Satellites.Get<IContentManager>();
         Window = AssociatedService.Window;
         CreateDeviceResources();
@@ -66,14 +64,6 @@ public class RenderingProcessor : EntityProcessor<RenderingService>, IDisposable
     {
         GraphicsDevice = AssociatedService.GraphicsDevice;
         CreateDeviceResources();
-    }
-
-    private void DeviceChangeEnd(object sender, EventArgs e)
-    {
-    }
-
-    private void DeviceChangeBegin(object sender, EventArgs e)
-    {
     }
 
     protected virtual void OnDeviceChangeBegin()

@@ -37,6 +37,26 @@ public class RetireIdleDeviceTests
         Assert.That(resource.Disposed, Is.True);
     }
 
+    // A device disposed by whoever holds it - a universe output going with its universe - destroys its fences. Left in
+    // the registry, the next frame start polled them and took the process down.
+    [Test]
+    public void ADeviceDisposedByItsHolder_LeavesTheRegistry()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        var resource = new Retired();
+        GpuFixture.Main.RetireResource(resource);
+
+        device.Dispose();
+        GpuFixture.Main.OnFrameStarted();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(GpuFixture.Main.GraphicsDevices, Does.Not.Contain(device));
+            Assert.That(GpuFixture.Main.GetDeviceById(device.DeviceId), Is.Null);
+            Assert.That(resource.Disposed, Is.True);
+        });
+    }
+
     // ...but a device in the middle of a frame may already have recorded the resource: its fences say nothing about a
     // command buffer it has not submitted yet.
     [Test]

@@ -39,6 +39,15 @@ public class RenderingService : EntityService
         Window.ParametersChanged += OnWindowParametersChanged;
     }
 
+    /// <summary>Unloads the processors and lets go of the shared graphics device service. Called once the service is
+    /// removed, or when its universe shuts down.</summary>
+    public override void UnloadContent()
+    {
+        base.UnloadContent();
+        GraphicsDeviceService.DeviceChangeBegin -= DeviceChangeBegin;
+        GraphicsDeviceService.DeviceChangeEnd -= DeviceChangeEnd;
+    }
+
     private void OnWindowParametersChanged(UniverseOutputParametersPayload payload)
     {
         // A full update gives the output a new device: the service and its processors move to it.
