@@ -399,6 +399,15 @@ All packages share one version.
   - `MainGraphicsDevice.UpdateDevice` lists the new device once. It used to be listed twice, and also under the old
     device's id.
 
+- Opening a window no longer loses the device after many windows have been opened and closed.
+  - **The cause.** Graphics queues were handed out in turn and never given back. After sixteen windows (the queues of
+    the family) the next window drew on the queue of a window still open, from another thread, and the device was
+    lost.
+  - **Queues are leased.** A render device takes the queue the fewest devices hold and gives it back when disposed, so
+    a queue is shared only when every one is taken.
+  - **A shared queue is used in turn.** Every submit and present on a queue goes under its lock. A device's uploads go
+    to its own graphics queue.
+
 - A graphics device's registry of its resources is locked. Resources made or disposed on two threads at once, such as
   textures built by a background task while the render thread works, could corrupt it. A corrupted registry miscounted
   `RegisteredResourceCount` and could crash the process when the device was disposed.
@@ -540,6 +549,9 @@ All packages share one version.
 
 ### Changed
 
+- `IGraphicsDevice` has `GraphicsQueueLock`, the lock every submit and present on its queue goes under; an implementer
+  adds it.
+
 - `FileSystemContentResolver` takes a relative asset path from the application's folder, not from the working
   directory, and `CookedContentResolver` looks for a cooked model beside the application under the model's own path
   (`Content/Game/Models/ship.dae` → `Content/Game/Models/ship.dae.aemf`), where a content project puts it. An app
@@ -608,6 +620,9 @@ All packages share one version.
 - Every new memory block is logged at the Debug level with its type, heap and the heap's total in blocks.
 
 ### Removed
+
+- `MainGraphicsDevice.GetAvailableGraphicsQueue`, `GetAvailableTransferQueue` and `UsedGraphicsQueues`: a queue is
+  leased with `LeaseGraphicsQueue` and given back with `ReturnGraphicsQueue`.
 
 - The assets generator of `Adamantium.Engine.Generators`, which gave a project a constant for each model, image and
   font among its additional files (`{Project}Assets`). Assets live in a content project now, whose

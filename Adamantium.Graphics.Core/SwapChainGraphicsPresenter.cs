@@ -12,6 +12,7 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
     private SurfaceKHR surface;
     private ITexture[] swapchainTextures;
     private readonly Queue presentQueue;
+    private readonly object _presentQueueLock;
     private readonly SwapchainKHR[] _swapchains;
     private Semaphore[] _waitSemaphores;
     private uint[] _imageIndicesArray;
@@ -49,6 +50,7 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
     {
         BackBuffers = new ITexture[BuffersCount];
         presentQueue = graphicsDevice.GraphicsQueue;
+        _presentQueueLock = graphicsDevice.GraphicsQueueLock;
         _swapchains = new SwapchainKHR[1];
         _waitSemaphores = new Semaphore[1];
         _imageIndicesArray = new uint[1];
@@ -517,8 +519,12 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
             
         //GraphicsDevice.LogicalDevice.WaitForFences(1U, fence, true, ulong.MaxValue);
         var presentInfo = FillPresentInfo(CurrentImageIndex);
-        var result = presentQueue.QueuePresentKHR(presentInfo);
-            
+        Result result;
+        lock (_presentQueueLock)
+        {
+            result = presentQueue.QueuePresentKHR(presentInfo);
+        }
+
         if (result != Result.Success && result != Result.SuboptimalKhr)
         {
             Log.Logger.Error($"Failed to present swap chain image. Operation result was: {result}");

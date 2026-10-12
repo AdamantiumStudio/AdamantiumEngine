@@ -11,11 +11,13 @@ namespace Adamantium.Graphics.Core;
 
 public class MainGraphicsDevice : DisposableBase
 {
-    private uint _availableGraphicsQueueIndex;
-
     private uint _availableComputeQueueIndex;
 
-    private uint _availableTransferQueueIndex;
+    private int[] _graphicsQueueHolders;
+
+    private object[] _graphicsQueueLocks;
+
+    private readonly object _queueLeaseLock = new();
 
     private readonly List<IGraphicsDevice> graphicsDevices;
 
@@ -184,8 +186,6 @@ public class MainGraphicsDevice : DisposableBase
 
     public uint CurrentFrame { get; private set; }
 
-    public Dictionary<uint, Queue> UsedGraphicsQueues { get; }
-
     public IReadOnlyList<IGraphicsDevice> GraphicsDevices => graphicsDevices.AsReadOnly();
 
     private IGraphicsDeviceFactory _graphicsDeviceFactory;
@@ -227,7 +227,6 @@ public class MainGraphicsDevice : DisposableBase
         _graphicsDeviceFactory = deviceFactory;
         graphicsDevices = new List<IGraphicsDevice>();
         deviceMap = new Dictionary<Guid, IGraphicsDevice>();
-        UsedGraphicsQueues = new Dictionary<uint, Queue>();
         EnableDynamicRendering = true;
         VulkanInstance = VulkanInstance.Create(name, enableDebug);
         GraphicsAdapter = VulkanInstance.MainGraphicsAdapter;
@@ -310,9 +309,12 @@ public class MainGraphicsDevice : DisposableBase
         Console.WriteLine($"{AvailableQueuesCount} queues available for graphics");
         Console.WriteLine($"{computeQueuesCount} queues available for compute");
         var queuePriorities = new float[AvailableQueuesCount];
+        _graphicsQueueHolders = new int[AvailableQueuesCount];
+        _graphicsQueueLocks = new object[AvailableQueuesCount];
         for (var i = 0; i < queuePriorities.Length; i++)
         {
             queuePriorities[i] = 1.0f;
+            _graphicsQueueLocks[i] = new object();
         }
 
         var graphicsFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
@@ -509,18 +511,37 @@ public class MainGraphicsDevice : DisposableBase
         return new(deviceFactory, buffersCount, name, enableDebug);
     }
 
-    public Queue GetAvailableGraphicsQueue()
+    /// <summary>Leases the graphics queue the fewest devices hold, so a queue is shared only once every one is taken.
+    /// Vulkan leaves a queue's synchronization to its users: every submit and present on it goes under
+    /// <paramref name="queueLock"/>. Give it back with <see cref="ReturnGraphicsQueue"/>.</summary>
+    public Queue LeaseGraphicsQueue(out uint index, out object queueLock)
     {
-        var graphicsFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
-        var queue = LogicalDevice.GetDeviceQueue(graphicsFamily.FamilyIndex, _availableGraphicsQueueIndex);
-        UsedGraphicsQueues[_availableGraphicsQueueIndex] = queue;
-        _availableGraphicsQueueIndex++;
-        if (_availableGraphicsQueueIndex >= graphicsFamily.Count)
+        lock (_queueLeaseLock)
         {
-            _availableGraphicsQueueIndex = 0;
+            index = 0;
+            for (var i = 1u; i < _graphicsQueueHolders.Length; i++)
+            {
+                if (_graphicsQueueHolders[i] < _graphicsQueueHolders[index])
+                {
+                    index = i;
+                }
+            }
+
+            _graphicsQueueHolders[index]++;
         }
 
-        return queue;
+        queueLock = _graphicsQueueLocks[index];
+        var graphicsFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
+        return LogicalDevice.GetDeviceQueue(graphicsFamily.FamilyIndex, index);
+    }
+
+    /// <summary>Gives back a queue leased with <see cref="LeaseGraphicsQueue"/>.</summary>
+    public void ReturnGraphicsQueue(uint index)
+    {
+        lock (_queueLeaseLock)
+        {
+            _graphicsQueueHolders[index]--;
+        }
     }
 
     public Queue GetAvailableComputeQueue()
@@ -532,20 +553,6 @@ public class MainGraphicsDevice : DisposableBase
         if (_availableComputeQueueIndex >= computeFamily.Count)
         {
             _availableComputeQueueIndex = 0;
-        }
-
-        return queue;
-    }
-
-    public Queue GetAvailableTransferQueue()
-    {
-        var transferFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.TransferBit);
-
-        var queue = LogicalDevice.GetDeviceQueue(transferFamily.FamilyIndex, _availableTransferQueueIndex);
-        _availableTransferQueueIndex++;
-        if (_availableTransferQueueIndex >= transferFamily.Count)
-        {
-            _availableTransferQueueIndex = 0;
         }
 
         return queue;
@@ -597,9 +604,7 @@ public class MainGraphicsDevice : DisposableBase
         LogicalDevice = null;
         VulkanInstance?.Dispose();
         VulkanInstance = null;
-        _availableTransferQueueIndex = 0;
         _availableComputeQueueIndex = 0;
-        _availableGraphicsQueueIndex = 0;
         Log.Logger.Debug("End disposing main device");
     }
 
