@@ -10,5 +10,6 @@ public enum InputControlKind
     MouseButton,
     MouseAxis,
     GamepadButton,
-    GamepadAxis
+    GamepadAxis,
+    GestureAxis
 }

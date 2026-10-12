@@ -15,6 +15,7 @@ namespace Adamantium.Engine.EntityServices;
 public class InputService : EntityService
 {
     private const double ZoomNotchesPerMeter = 8;
+    private const float PinchNotchesPerDoubling = 4;
 
     private Entity userControlledEntity;
     //private AudioManager audioManager;
@@ -26,6 +27,7 @@ public class InputService : EntityService
     private readonly InputAction roll;
     private readonly InputAction look;
     private readonly InputAction zoom;
+    private readonly InputAction twist;
     private readonly InputAction slowerTurn;
     private readonly InputAction fasterTurn;
     private readonly InputAction faster;
@@ -63,9 +65,13 @@ public class InputService : EntityService
             InputBinding.Axis(Pad(GamepadAxis.RightTrigger), Pad(GamepadAxis.LeftTrigger)));
         look = CameraActions.Add("Look", InputActionType.Vector,
             InputBinding.Stick(InputControl.Mouse(MouseAxis.DeltaX), InputControl.Mouse(MouseAxis.DeltaY),
-                modifiers: InputControl.Mouse(MouseButton.Right)));
+                modifiers: InputControl.Mouse(MouseButton.Right)),
+            InputBinding.Stick(InputControl.Gesture(GestureAxis.PanX), InputControl.Gesture(GestureAxis.PanY)));
         zoom = CameraActions.Add("Zoom", InputActionType.Axis,
-            InputBinding.Control(InputControl.Mouse(MouseAxis.Wheel)));
+            InputBinding.Control(InputControl.Mouse(MouseAxis.Wheel)),
+            InputBinding.Control(InputControl.Gesture(GestureAxis.Pinch), PinchNotchesPerDoubling));
+        twist = CameraActions.Add("Twist", InputActionType.Axis,
+            InputBinding.Control(InputControl.Gesture(GestureAxis.Rotate)));
         slowerTurn = Button("SlowerTurn", Keys.Divide);
         fasterTurn = Button("FasterTurn", Keys.Multiply);
         faster = Button("Faster", Keys.Add);
@@ -143,6 +149,11 @@ public class InputService : EntityService
         if (zoom.Value != 0)
         {
             currentCamera.Zoom(zoom.Value);
+        }
+
+        if (twist.Value != 0)
+        {
+            currentCamera.RotateForward(-twist.Value);
         }
     }
 

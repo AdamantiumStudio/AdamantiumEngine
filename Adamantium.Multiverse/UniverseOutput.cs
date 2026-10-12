@@ -275,6 +275,11 @@ namespace Adamantium.Multiverse
             Input?.OnMouseInput(args);
         }
 
+        protected void OnGestureInput(GestureInput args)
+        {
+            Input?.OnGestureInput(args);
+        }
+
         protected void UpdateViewportAndScissor(uint width, uint height)
         {
             Viewport.Width = width;

@@ -60,6 +60,11 @@ public class TestOutput : UniverseOutput
         OnMouseInput(new MouseInput { InputType = InputType.Wheel, WheelDelta = delta });
     }
 
+    public void Gesture(Vector2F translation, float scale, float rotation)
+    {
+        OnGestureInput(new GestureInput { Translation = translation, Scale = scale, Rotation = rotation });
+    }
+
     public void Button(MouseButton button, InputType type, int clickCount = 1)
     {
         OnMouseInput(new MouseInput { Button = button, InputType = type, ClickCount = clickCount });
