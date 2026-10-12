@@ -4,8 +4,11 @@
        the generator and the compiler built from here. Imported in the project's body, before its own items. -->
   <Import Project="build\Adamantium.Content.Build.props" />
 
+  <!-- The compiler is not in the content project's solution: without this a solution build hands it no configuration,
+       it lands in artifacts\bin\<tfm> and the compiler named here is a stale build or none. -->
   <PropertyGroup>
     <AdamantiumContentCompiler>$(MSBuildThisFileDirectory)..\artifacts\bin\$(Configuration)\net10.0\Adamantium.Engine.ContentCompiler.CLI.dll</AdamantiumContentCompiler>
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
   </PropertyGroup>
 
   <ItemGroup>
