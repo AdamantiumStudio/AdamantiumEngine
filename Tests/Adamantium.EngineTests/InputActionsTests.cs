@@ -110,6 +110,36 @@ public class InputActionsTests
         Assert.That(zoom.Value, Is.EqualTo(2f));
     }
 
+    // Fingers moved side by side turn the camera as the mouse does, a pinch zooms as the wheel does, and a turn of them is
+    // read in degrees - from the output under the fingers, unbounded.
+    [Test]
+    public void AGesture_IsReadFromTheOutputUnderTheFingers_AndIsNotBounded()
+    {
+        var look = Map().Add("Look", InputActionType.Vector,
+            InputBinding.Stick(InputControl.Gesture(GestureAxis.PanX), InputControl.Gesture(GestureAxis.PanY)));
+        var zoom = Map().Add("Zoom", InputActionType.Axis,
+            InputBinding.Control(InputControl.Gesture(GestureAxis.Pinch), 4));
+        var twist = Map().Add("Twist", InputActionType.Axis, InputBinding.Control(InputControl.Gesture(GestureAxis.Rotate)));
+
+        keyboard.Gesture(new Vector2F(30, 0), 2, 15);
+        Frame();
+        Assert.That(look.IsDown, Is.False);
+
+        pointer.Gesture(new Vector2F(30, -12), 2, 15);
+        pointer.Gesture(new Vector2F(10, 0), 2, 5);
+        Frame();
+        Assert.Multiple(() =>
+        {
+            Assert.That(look.Vector.X, Is.EqualTo(40f));
+            Assert.That(look.Vector.Y, Is.EqualTo(-12f));
+            Assert.That(zoom.Value, Is.EqualTo(8f), "spread twice, each time twice as far apart: two doublings, four notches each");
+            Assert.That(twist.Value, Is.EqualTo(20f));
+        });
+
+        Frame();
+        Assert.That(look.IsDown || zoom.Value != 0 || twist.Value != 0, Is.False, "a frame with no gesture moves nothing");
+    }
+
     [Test]
     public void AModifiedBinding_CountsOnlyWhileTheModifierIsHeld()
     {
@@ -208,7 +238,8 @@ public class InputActionsTests
         InputControl[] controls =
         [
             InputControl.Key(Keys.W), InputControl.Mouse(MouseButton.Right), InputControl.Mouse(MouseAxis.Wheel),
-            InputControl.Gamepad(GamepadButton.Paddle1), InputControl.Gamepad(GamepadAxis.LeftTrigger)
+            InputControl.Gamepad(GamepadButton.Paddle1), InputControl.Gamepad(GamepadAxis.LeftTrigger),
+            InputControl.Gesture(GestureAxis.Pinch)
         ];
 
         foreach (var control in controls)

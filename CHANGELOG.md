@@ -7,6 +7,16 @@ All packages share one version.
 
 ### Added
 
+- Gestures of fingers as input. A host hands an output a recognized gesture step with
+  `UniverseOutput.OnGestureInput` (`GestureInput`: translation, scale and rotation).
+  - **Reading it.** `InputWormhole` adds up a frame's steps: `GesturePan`, `GesturePinch` (in doublings) and
+    `GestureRotation` (in degrees). They are taken while the output takes the pointer.
+  - **Binding it.** `GestureAxis` (`PanX`, `PanY`, `Pinch`, `Rotate`) is a control like the mouse's axes and the
+    gamepad's: `InputControl.Gesture`, written as `Gesture:Pinch`.
+  - **The camera.** Two fingers moved side by side turn the camera as the mouse with its right button does (`Look`). A
+    pinch zooms as the wheel does, four notches a doubling (`Zoom`). A turn of the fingers rolls the camera by the
+    same angle (`Twist`, a new action). All three can be rebound in `CameraActions`.
+
 - Windows pointer input in `Adamantium.Win32`, for touch and pen:
   - the `WM_POINTER*` messages in `WindowMessages` and `Messages.GetPointerId`;
   - `Win32Interop.GetPointerType`, `GetPointerInfo`, `GetPointerTouchInfo` and `GetPointerPenInfo`, with
