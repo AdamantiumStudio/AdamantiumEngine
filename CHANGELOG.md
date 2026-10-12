@@ -356,6 +356,10 @@ All packages share one version.
 
 ### Fixed
 
+- A graphics device's registry of its resources is locked. Resources made or disposed on two threads at once, such as
+  textures built by a background task while the render thread works, could corrupt it. A corrupted registry miscounted
+  `RegisteredResourceCount` and could crash the process when the device was disposed.
+
 - Text aligned right threw when a line held only spaces: leading spaces before a word too long to follow them on the
   first line. A line with nothing to draw is left where it is.
 
