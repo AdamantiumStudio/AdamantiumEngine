@@ -4,30 +4,31 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
-namespace Adamantium.Engine.Generators;
+namespace Adamantium.Content.Build;
 
-/// <summary>Emits <c>{RootNamespace}.{Project}Assets</c>: a <c>const string</c> per content asset in nested classes mirroring
-/// folders, so assets load by a checked member instead of a hand-typed path.</summary>
+/// <summary>Emits <c>{RootNamespace}.{Name}Assets</c> for a content project: a <c>const string</c> per content file, in
+/// nested classes mirroring its folders, so an asset loads by a checked member instead of a hand-typed path. Each
+/// constant is the file's path from the application's folder, <c>Content/{Name}/...</c>, where the build puts it. A file
+/// linked in from outside the project goes under its <c>Link</c>.
+/// </summary>
 [Generator]
-public class AssetsGenerator : IIncrementalGenerator
+public class ContentAssetsGenerator : IIncrementalGenerator
 {
-    private static readonly HashSet<string> AssetExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // models
-        ".dae", ".obj", ".3ds", ".fbx",
-        // textures
-        ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif", ".dds", ".ico",
-        // fonts
-        ".ttf", ".otf", ".woff", ".woff2"
-    };
+    private const string ContentMetadata = "build_metadata.AdditionalFiles.AdamantiumContent";
+    private const string LinkMetadata = "build_metadata.AdditionalFiles.Link";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var assetPaths = context.AdditionalTextsProvider
-            .Where(file => AssetExtensions.Contains(Path.GetExtension(file.Path)))
-            .Select((file, _) => file.Path)
+            .Combine(context.AnalyzerConfigOptionsProvider)
+            .Where(pair => IsContent(pair.Left, pair.Right))
+            .Select((pair, _) => pair.Right.GetOptions(pair.Left).TryGetValue(LinkMetadata, out var link)
+                                 && !string.IsNullOrWhiteSpace(link)
+                ? (Path: pair.Left.Path, Link: link)
+                : (Path: pair.Left.Path, Link: null))
             .Collect();
 
         var source = assetPaths.Combine(context.AnalyzerConfigOptionsProvider);
@@ -35,45 +36,54 @@ public class AssetsGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(source, (spc, pair) =>
         {
             var (paths, config) = pair;
-            if (paths.IsDefaultOrEmpty) return;
-
             config.GlobalOptions.TryGetValue("build_property.RootNamespace", out var rootNamespace);
-            config.GlobalOptions.TryGetValue("build_property.MSBuildProjectName", out var projectName);
             config.GlobalOptions.TryGetValue("build_property.ProjectDir", out var projectDir);
+            config.GlobalOptions.TryGetValue("build_property.AdamantiumContentName", out var contentName);
 
-            if (string.IsNullOrEmpty(rootNamespace) || string.IsNullOrEmpty(projectDir))
+            if (paths.IsDefaultOrEmpty || string.IsNullOrEmpty(rootNamespace) || string.IsNullOrEmpty(projectDir)
+                || string.IsNullOrWhiteSpace(contentName))
+            {
                 return;
+            }
 
-            var root = BuildTree(paths, projectDir);
-            var className = Capitalize(Sanitize(LastSegment(projectName))) + "Assets";
+            var root = BuildTree(paths, projectDir, "Content/" + contentName + "/");
+            var className = Capitalize(Sanitize(contentName)) + "Assets";
             spc.AddSource("Assets.g.cs", SourceText.From(Emit(root, rootNamespace, className), Encoding.UTF8));
         });
     }
 
-    private static FolderNode BuildTree(IEnumerable<string> paths, string projectDir)
+    private static bool IsContent(AdditionalText file, AnalyzerConfigOptionsProvider config)
     {
-        var root = new FolderNode("");
-        foreach (var path in paths)
+        return config.GetOptions(file).TryGetValue(ContentMetadata, out var marked)
+               && string.Equals(marked, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FolderNode BuildTree(IEnumerable<(string Path, string Link)> files, string projectDir, string prefix)
+    {
+        var root = new FolderNode(string.Empty);
+        foreach (var file in files)
         {
-            var relative = ToRelative(path, projectDir);
-            if (relative is null) continue;
+            var relative = file.Link?.Replace('\\', '/') ?? ToRelative(file.Path, projectDir);
+            if (relative == null)
+            {
+                continue;
+            }
 
             var segments = relative.Split('/');
             var node = root;
             for (var i = 0; i < segments.Length - 1; i++)
             {
-                var folder = segments[i];
-                if (!node.Children.TryGetValue(folder, out var child))
+                if (!node.Children.TryGetValue(segments[i], out var child))
                 {
-                    child = new FolderNode(folder);
-                    node.Children[folder] = child;
+                    child = new FolderNode(segments[i]);
+                    node.Children[segments[i]] = child;
                 }
 
                 node = child;
             }
 
             var fileName = segments[segments.Length - 1];
-            node.Files.Add((Path.GetFileNameWithoutExtension(fileName), Path.GetExtension(fileName), relative));
+            node.Files.Add((Path.GetFileNameWithoutExtension(fileName), Path.GetExtension(fileName), prefix + relative));
         }
 
         return root;
@@ -86,7 +96,7 @@ public class AssetsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>Compile-checked registry of this project's content resources.</summary>");
+        sb.AppendLine("/// <summary>The content of this project: each file's path from the application's folder.</summary>");
         sb.AppendLine($"public static class {className}");
         sb.AppendLine("{");
         EmitBody(sb, root, className, 1);
@@ -99,14 +109,11 @@ public class AssetsGenerator : IIncrementalGenerator
         var pad = new string(' ', indent * 4);
         var used = new HashSet<string>(StringComparer.Ordinal) { containingClassName };
 
-        // Nested folder classes first (reserve their names so members can't shadow them).
         var childClasses = node.Children.Values
             .Select(child => (name: Unique(used, Capitalize(Sanitize(child.RawName))), node: child))
             .OrderBy(c => c.name, StringComparer.Ordinal)
             .ToList();
 
-        // Member name = file name; the format is appended only when the base name would clash with another
-        // file in the folder or with the containing class (a member can't share its enclosing type's name).
         var members = node.Files
             .Select(file =>
             {
@@ -120,10 +127,15 @@ public class AssetsGenerator : IIncrementalGenerator
             .ToList();
 
         foreach (var member in members)
-            sb.AppendLine($"{pad}public const string {member.name} = \"{member.value}\";");
+        {
+            var literal = member.value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            sb.AppendLine($"{pad}public const string {member.name} = \"{literal}\";");
+        }
 
         if (members.Count > 0 && childClasses.Count > 0)
+        {
             sb.AppendLine();
+        }
 
         for (var i = 0; i < childClasses.Count; i++)
         {
@@ -131,7 +143,10 @@ public class AssetsGenerator : IIncrementalGenerator
             sb.AppendLine($"{pad}{{");
             EmitBody(sb, childClasses[i].node, childClasses[i].name, indent + 1);
             sb.AppendLine($"{pad}}}");
-            if (i < childClasses.Count - 1) sb.AppendLine();
+            if (i < childClasses.Count - 1)
+            {
+                sb.AppendLine();
+            }
         }
     }
 
@@ -139,15 +154,7 @@ public class AssetsGenerator : IIncrementalGenerator
     {
         var full = path.Replace('\\', '/');
         var root = projectDir.Replace('\\', '/').TrimEnd('/') + "/";
-        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return null;
-        return full.Substring(root.Length);
-    }
-
-    private static string LastSegment(string name)
-    {
-        if (string.IsNullOrEmpty(name)) return "Project";
-        var dot = name.LastIndexOf('.');
-        return dot >= 0 && dot < name.Length - 1 ? name.Substring(dot + 1) : name;
+        return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full.Substring(root.Length) : null;
     }
 
     private static string Unique(HashSet<string> used, string name)
@@ -155,41 +162,51 @@ public class AssetsGenerator : IIncrementalGenerator
         var candidate = name;
         var suffix = 2;
         while (!used.Add(candidate))
+        {
             candidate = name + "_" + suffix++;
+        }
+
         return candidate;
     }
 
     private static string Sanitize(string name)
     {
-        if (string.IsNullOrEmpty(name)) return "_";
-        var sb = new StringBuilder(name.Length);
-        foreach (var ch in name)
-            sb.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
-        var result = sb.ToString();
-        if (char.IsDigit(result[0])) result = "_" + result;
-        return result;
+        if (string.IsNullOrEmpty(name))
+        {
+            return "_";
+        }
+
+        var result = SanitizeExtension(name);
+        return char.IsDigit(result[0]) ? "_" + result : result;
     }
 
-    // Like Sanitize but for a trailing format suffix: keeps a leading digit (e.g. "3ds"), since it is appended
-    // after an existing identifier and underscore, so "F_15C_Eagle_3ds" rather than "F_15C_Eagle__3ds".
-    private static string SanitizeExtension(string ext)
+    private static string SanitizeExtension(string extension)
     {
-        if (string.IsNullOrEmpty(ext)) return "_";
-        var sb = new StringBuilder(ext.Length);
-        foreach (var ch in ext)
+        if (string.IsNullOrEmpty(extension))
+        {
+            return "_";
+        }
+
+        var sb = new StringBuilder(extension.Length);
+        foreach (var ch in extension)
+        {
             sb.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
+        }
+
         return sb.ToString();
     }
 
     private static string Capitalize(string name)
     {
-        if (string.IsNullOrEmpty(name)) return name;
-        return char.ToUpperInvariant(name[0]) + name.Substring(1);
+        return string.IsNullOrEmpty(name) ? name : char.ToUpperInvariant(name[0]) + name.Substring(1);
     }
 
     private sealed class FolderNode
     {
-        public FolderNode(string rawName) => RawName = rawName;
+        public FolderNode(string rawName)
+        {
+            RawName = rawName;
+        }
 
         public string RawName { get; }
 

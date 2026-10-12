@@ -11,8 +11,8 @@
 		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <IsPackable>true</IsPackable>
-        <Description>Source generators of the Adamantium engine: compiles the project's effects (.fx) into typed effect classes at build time, and emits a checked constant for every content asset.</Description>
-        <PackageTags>adamantium;sourcegenerator;shader;effects;assets</PackageTags>
+        <Description>Source generators of the Adamantium engine: compiles the project's effects (.fx) into typed effect classes at build time.</Description>
+        <PackageTags>adamantium;sourcegenerator;shader;effects</PackageTags>
     </PropertyGroup>
 
     <!-- An analyzer, not a library: the generator and every assembly it loads go to analyzers/dotnet/cs, nothing goes to

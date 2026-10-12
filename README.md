@@ -29,8 +29,10 @@ drawn by one renderer in one process.
 | `Adamantium.MacOS` | Application, windows and cursors through a native app wrapper (not yet verified, see below) |
 | `Adamantium.XInput` | XInput gamepads |
 | `Adamantium.GameInput` | Microsoft GameInput gamepads, with the native shim they need |
-| `Adamantium.Engine.Generators` | Source generators: a typed class for every `.fx` in the project, a constant for every content asset |
+| `Adamantium.Engine.Generators` | Source generator: a typed class for every `.fx` in the project |
 | `Adamantium.MVVM.Generators` | Source generator for `Adamantium.MVVM`: bindable properties and commands from attributes |
+| `Adamantium.Content.Build` | The content project: a library of assets, cooked at build and copied to every project that references it |
+| `Adamantium.Engine.Templates` | `dotnet new` templates: `adamantium-content`, a content project |
 
 All packages share one version and are released together.
 
@@ -82,6 +84,40 @@ Slang compiler is:
 ```
 
 A shader that does not compile fails the build with the compiler's message.
+
+### Your own content
+
+Assets live in a content project of their own, as in XNA: a library whose files are its assets. Every project that
+references it, directly or through another, gets them in its output.
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Adamantium.Content.Build" Version="0.1.0-alpha" />
+  </ItemGroup>
+</Project>
+```
+
+- **What is content.** Every file of the project but its code, its build files and hidden files. Leave one out with
+  `<AdamantiumContent Remove="..." />`; bring one in from elsewhere with
+  `<AdamantiumContent Include="..\Shared\logo.png" Link="Textures\logo.png" />`.
+- **The build.** Models (Collada, OBJ, 3DS) are cooked into the engine's own format, with their textures beside them;
+  the rest is copied as it is. Only what changed is built again.
+- **Where it goes.** To `Content/{Name}/` of the application's folder, where `{Name}` is the last segment of the
+  project's name (`MyGame.ShipContent` gives `ShipContent`), or `AdamantiumContentName`. Two content projects an
+  application references need different names.
+- **Finding it.** The class `{Name}Assets` has a constant for each file: its path from the application's folder.
+  `ContentManager` loads by it, taking the cooked model when there is one:
+
+```csharp
+var scene = await universe.Content.LoadAsync<SceneData>(ShipContentAssets.Models.Ship.Ship_dae);
+```
+
+`dotnet new adamantium-content` (from `Adamantium.Engine.Templates`) creates such a project; Rider and Visual Studio
+list it in New Project.
 
 ## Building from source
 

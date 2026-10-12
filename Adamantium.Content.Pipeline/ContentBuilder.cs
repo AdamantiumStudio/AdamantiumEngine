@@ -79,7 +79,8 @@ public sealed class ContentBuilder
         }
     }
 
-    /// <summary>Cooks every asset in the manifest that is stale, writing artifacts under the output directory.</summary>
+    /// <summary>Cooks every asset in the manifest that is stale, writing artifacts under the output directory. An asset
+    /// no importer takes is copied there as it is. What was built from an asset no longer listed is deleted.</summary>
     public BuildResult Build(ContentManifest manifest, string projectDirectory, Action<string> log = null)
     {
         log ??= _ => { };
@@ -90,7 +91,7 @@ public sealed class ContentBuilder
         Directory.CreateDirectory(intermediateDirectory);
 
         var cachePath = Path.Combine(intermediateDirectory, ".acache");
-        var cache = BuildCache.Load(cachePath);
+        var cache = BuildCache.LoadFor(cachePath, outputDirectory);
         var result = new BuildResult();
 
         foreach (var asset in manifest.Assets)
@@ -98,21 +99,10 @@ public sealed class ContentBuilder
             var sourceFull = Path.GetFullPath(Path.Combine(projectDirectory, asset.Source));
             if (!File.Exists(sourceFull))
             {
-                log($"  [skip] missing source: {asset.Source}");
+                log($"{sourceFull} : error ACB001: the source file is missing");
                 result.Failed++;
                 continue;
             }
-
-            var importer = ResolveImporter(asset, sourceFull);
-            if (importer == null)
-            {
-                log($"  [skip] no importer for: {asset.Source}");
-                result.Failed++;
-                continue;
-            }
-
-            var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
-            var writer = writersByImporter[importerName];
 
             // The source extension is kept in the logical name so two models that share a base name in
             // different formats (e.g. foo.dae and foo.3ds — which may be entirely different models) don't
@@ -120,6 +110,30 @@ public sealed class ContentBuilder
             var logicalName = string.IsNullOrEmpty(asset.LogicalName)
                 ? Normalize(asset.Source)
                 : Normalize(asset.LogicalName);
+
+            if (!BuildCache.IsInside(outputDirectory, Path.Combine(outputDirectory, logicalName)))
+            {
+                log($"{sourceFull} : error ACB008: the file lies outside the project; link it under a path inside");
+                result.Failed++;
+                continue;
+            }
+
+            var importer = ResolveImporter(asset, sourceFull);
+            if (importer == null && !string.IsNullOrEmpty(asset.Importer))
+            {
+                log($"{sourceFull} : error ACB002: no importer is named '{asset.Importer}'");
+                result.Failed++;
+                continue;
+            }
+
+            if (importer == null)
+            {
+                Copy(asset, sourceFull, logicalName, outputDirectory, cache, result, log);
+                continue;
+            }
+
+            var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
+            var writer = writersByImporter[importerName];
             var cookedRelative = logicalName + writer.OutputExtension;
             var cookedFull = Path.Combine(outputDirectory, cookedRelative);
 
@@ -153,25 +167,57 @@ public sealed class ContentBuilder
                     writer.Write(stream, content);
                 }
 
+                List<string> written = [];
                 foreach (var (from, to) in companions)
                 {
                     var destination = Path.GetFullPath(Path.Combine(cookedDirectory, to));
+                    if (!BuildCache.IsInside(outputDirectory, destination))
+                    {
+                        log($"{sourceFull} : warning ACB003: the texture {to} lies outside the model's folder and is not carried with it");
+                        continue;
+                    }
+
                     Directory.CreateDirectory(Path.GetDirectoryName(destination));
                     File.Copy(from, destination, true);
+                    written.Add(Normalize(Path.GetRelativePath(outputDirectory, destination)));
                 }
 
-                cache.Update(asset.Source, sourceFull, asset.Parameters, cookedRelative);
+                cache.Update(asset.Source, sourceFull, asset.Parameters, cookedRelative, written);
                 result.Cooked++;
             }
             catch (Exception ex)
             {
-                log($"  [error] {asset.Source}: {ex.Message}");
+                if (File.Exists(cookedFull))
+                {
+                    File.Delete(cookedFull);
+                }
+
+                log($"{sourceFull} : error ACB004: {ex.Message}");
                 result.Failed++;
             }
         }
 
+        cache.Prune(manifest.Assets.Select(asset => asset.Source), outputDirectory);
         cache.Save(cachePath);
         return result;
+    }
+
+    private static void Copy(ContentAsset asset, string sourceFull, string logicalName, string outputDirectory,
+        BuildCache cache, BuildResult result, Action<string> log)
+    {
+        var copyFull = Path.Combine(outputDirectory, logicalName);
+        if (!cache.IsStale(asset.Source, sourceFull, asset.Parameters, copyFull))
+        {
+            log($"  [up-to-date] {asset.Source}");
+            result.Skipped++;
+            return;
+        }
+
+        log($"  [copy] {asset.Source}");
+        Directory.CreateDirectory(Path.GetDirectoryName(copyFull));
+        File.Copy(sourceFull, copyFull, true);
+        cache.Update(asset.Source, sourceFull, asset.Parameters, logicalName);
+        result.Copied++;
     }
 
     private IContentImporter ResolveImporter(ContentAsset asset, string sourceFull)

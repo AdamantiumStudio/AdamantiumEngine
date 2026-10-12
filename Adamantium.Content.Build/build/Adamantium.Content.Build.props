@@ -1,0 +1,16 @@
+<Project>
+
+  <!-- The name the content goes under: its class is {Name}Assets and its files land in Content/{Name}/ of every project
+       that references it. By default the last segment of the project's name. -->
+  <PropertyGroup>
+    <AdamantiumContentName Condition="'$(AdamantiumContentName)' == ''">$(MSBuildProjectName.Substring($([MSBuild]::Add($(MSBuildProjectName.LastIndexOf('.')), 1))))</AdamantiumContentName>
+  </PropertyGroup>
+
+  <!-- Every file of the project is content, but its code, its build files, hidden files and the manifest of asset
+       settings. Here, before the project's own items, so the project can Remove what it does not want. -->
+  <ItemGroup>
+    <AdamantiumContent Include="**\*"
+                       Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);**\*.cs;**\*.acontent;**\.*" />
+  </ItemGroup>
+
+</Project>

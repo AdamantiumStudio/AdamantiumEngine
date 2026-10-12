@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Adamantium.Content.Pipeline;
 using Adamantium.Graphics.Core.Models;
 
@@ -46,6 +47,7 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                 }
                 case "build":
                 {
+                    var files = GetOption(args, "--files");
                     ContentManifest manifest;
                     if (File.Exists(manifestPath))
                     {
@@ -54,9 +56,45 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                     else
                     {
                         manifest = new ContentManifest();
-                        builder.ScanInto(manifest, projectDirectory);
-                        Console.WriteLine($"No manifest at {manifestPath}; scanned {manifest.Assets.Count} asset(s) by convention.");
+                        if (files == null)
+                        {
+                            builder.ScanInto(manifest, projectDirectory);
+                            Console.WriteLine($"No manifest at {manifestPath}; scanned {manifest.Assets.Count} asset(s) by convention.");
+                        }
                     }
+
+                    if (files != null)
+                    {
+                        var listed = File.ReadAllLines(files)
+                            .Where(line => line.Length > 0)
+                            .Select(line => line.Split('\t'))
+                            .Select(parts => (
+                                Source: Path.GetRelativePath(projectDirectory, parts[0]).Replace('\\', '/'),
+                                Link: parts.Length > 1 ? parts[1].Replace('\\', '/') : string.Empty))
+                            .ToList();
+                        manifest.SetSources(listed.Select(file => file.Source));
+
+                        foreach (var asset in manifest.Assets.Where(asset => !string.IsNullOrEmpty(asset.LogicalName)))
+                        {
+                            Console.WriteLine($"{manifestPath} : warning ACB007: the LogicalName '{asset.LogicalName}' of {asset.Source} is ignored, a listed file keeps its path");
+                            asset.LogicalName = null;
+                        }
+
+                        var links = listed
+                            .Where(file => file.Link.Length > 0)
+                            .DistinctBy(file => file.Source, StringComparer.OrdinalIgnoreCase)
+                            .ToDictionary(file => file.Source, file => file.Link, StringComparer.OrdinalIgnoreCase);
+                        foreach (var asset in manifest.Assets)
+                        {
+                            if (links.TryGetValue(asset.Source, out var link))
+                            {
+                                asset.LogicalName = link;
+                            }
+                        }
+                    }
+
+                    manifest.OutputDirectory = GetOption(args, "--out") ?? manifest.OutputDirectory;
+                    manifest.IntermediateDirectory = GetOption(args, "--cache") ?? manifest.IntermediateDirectory;
 
                     Console.WriteLine($"Building content for {projectDirectory}");
                     var result = builder.Build(manifest, projectDirectory, Console.WriteLine);
@@ -133,6 +171,9 @@ namespace Adamantium.Engine.ContentCompiler.CLI
             Console.WriteLine("Adamantium content compiler");
             Console.WriteLine("  scan  <projectDir> [--manifest <path>]   add new assets to the manifest by convention");
             Console.WriteLine("  build <projectDir> [--manifest <path>]   cook all stale assets into the output directory");
+            Console.WriteLine("        [--files <list>]                   the assets are the files listed, one a line; the");
+            Console.WriteLine("                                           manifest, if any, only gives their settings");
+            Console.WriteLine("        [--out <dir>] [--cache <dir>]      where the output and the build cache go");
             Console.WriteLine("  verify <aemfPath>                        deserialize a cooked .aemf and print its stats");
         }
     }

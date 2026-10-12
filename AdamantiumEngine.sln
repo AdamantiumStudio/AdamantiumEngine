@@ -55,6 +55,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameInput", "Ada
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameInput.Generator", "Adamantium.GameInput.Generator\Adamantium.GameInput.Generator.csproj", "{00346E03-85BE-428A-8B14-589768F90843}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Content.Build", "Adamantium.Content.Build\Adamantium.Content.Build.csproj", "{66477FCB-61BB-4CD4-AF88-9F961FC85E24}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Engine.ContentCompiler.CLI", "Adamantium.Engine.ContentCompiler.CLI\Adamantium.Engine.ContentCompiler.CLI.csproj", "{01B6EA2B-4F72-4950-9F51-528D3E22ED3E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Engine.Templates", "Adamantium.Engine.Templates\Adamantium.Engine.Templates.csproj", "{4467B6EF-3169-4EFD-9CD0-51473135386F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -153,6 +159,18 @@ Global
 		{00346E03-85BE-428A-8B14-589768F90843}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{00346E03-85BE-428A-8B14-589768F90843}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{00346E03-85BE-428A-8B14-589768F90843}.Release|Any CPU.Build.0 = Release|Any CPU
+		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Release|Any CPU.Build.0 = Release|Any CPU
+		{01B6EA2B-4F72-4950-9F51-528D3E22ED3E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{01B6EA2B-4F72-4950-9F51-528D3E22ED3E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{01B6EA2B-4F72-4950-9F51-528D3E22ED3E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{01B6EA2B-4F72-4950-9F51-528D3E22ED3E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

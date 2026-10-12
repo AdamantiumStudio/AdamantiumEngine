@@ -48,7 +48,7 @@ public class ContentManager : DisposableObject, IContentManager
 
     private String CombinePath(String assetPath)
     {
-        return RootDirectory + "/" + assetPath;
+        return Path.Combine(RootDirectory ?? string.Empty, assetPath);
     }
 
     public bool Exists(string assetName)
