@@ -1,3 +1,4 @@
+using Adamantium.Mathematics;
 using Adamantium.Multiverse.Input;
 using NUnit.Framework;
 
@@ -18,6 +19,41 @@ public class InputWormholeTests
         Assert.That(output.Input.IsMouseButtonPressed(MouseButton.Left), Is.True);
         Assert.That(output.Input.IsMouseButtonReleased(MouseButton.Left), Is.True);
         Assert.That(output.Input.IsMouseButtonDown(MouseButton.Left), Is.False);
+    }
+
+    [Test]
+    public void GesturesOfAFrame_AddUp_AndAreGoneTheNextFrame()
+    {
+        var output = new TestOutput();
+
+        output.Gesture(new Vector2F(5, 1), 2, 10);
+        output.Gesture(new Vector2F(3, 2), 0.5f, -4);
+        output.Gesture(new Vector2F(0, 0), 4, 0);
+        output.Frame();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(output.Input.GesturePan, Is.EqualTo(new Vector2F(8, 3)));
+            Assert.That(output.Input.GesturePinch, Is.EqualTo(2f), "x2, x0.5, x4: two doublings");
+            Assert.That(output.Input.GestureRotation, Is.EqualTo(6f));
+        });
+
+        output.Frame();
+        Assert.That((output.Input.GesturePan, output.Input.GesturePinch, output.Input.GestureRotation),
+            Is.EqualTo((Vector2F.Zero, 0f, 0f)));
+    }
+
+    [Test]
+    public void Gestures_AreNotTaken_WhileThePointerIsOff()
+    {
+        var output = new TestOutput();
+        output.Input.IsMouseEnabled = false;
+
+        output.Gesture(new Vector2F(5, 1), 2, 10);
+        output.Frame();
+
+        Assert.That((output.Input.GesturePan, output.Input.GesturePinch, output.Input.GestureRotation),
+            Is.EqualTo((Vector2F.Zero, 0f, 0f)));
     }
 
     [Test]

@@ -29,9 +29,28 @@ internal readonly struct InputReader
                 return keyboard != null && keyboard.IsGamepadButtonDown(gamepadSlot, (GamepadButton)control.Code) ? 1 : 0;
             case InputControlKind.GamepadAxis:
                 return ReadGamepadAxis((GamepadAxis)control.Code);
+            case InputControlKind.GestureAxis:
+                return ReadGestureAxis((GestureAxis)control.Code);
             default:
                 return 0;
         }
+    }
+
+    private float ReadGestureAxis(GestureAxis axis)
+    {
+        if (pointer == null)
+        {
+            return 0;
+        }
+
+        return axis switch
+        {
+            GestureAxis.PanX => pointer.GesturePan.X,
+            GestureAxis.PanY => pointer.GesturePan.Y,
+            GestureAxis.Pinch => pointer.GesturePinch,
+            GestureAxis.Rotate => pointer.GestureRotation,
+            _ => 0
+        };
     }
 
     public bool Pressed(InputControl control)

@@ -1,14 +1,15 @@
 namespace Adamantium.Multiverse.Input;
 
 /// <summary>
-/// One control of one device: a key, a mouse button or axis, a gamepad button or axis. Written as text it reads
-/// "Key:W", "Mouse:Right", "Mouse:Wheel", "Gamepad:A", "Gamepad:LeftStickX".
+/// One control of one device: a key, a mouse button or axis, a gamepad button or axis, an axis of a gesture of fingers.
+/// Written as text it reads "Key:W", "Mouse:Right", "Mouse:Wheel", "Gamepad:A", "Gamepad:LeftStickX", "Gesture:Pinch".
 /// </summary>
 public readonly record struct InputControl(InputControlKind Kind, uint Code)
 {
     private const string KeyDevice = "Key";
     private const string MouseDevice = "Mouse";
     private const string GamepadDevice = "Gamepad";
+    private const string GestureDevice = "Gesture";
 
     public static InputControl Key(Keys key)
     {
@@ -35,8 +36,13 @@ public readonly record struct InputControl(InputControlKind Kind, uint Code)
         return new InputControl(InputControlKind.GamepadAxis, (uint)axis);
     }
 
-    /// <summary>Whether the value stays within -1..1. Mouse motion and wheel do not.</summary>
-    public bool IsBounded => Kind != InputControlKind.MouseAxis;
+    public static InputControl Gesture(GestureAxis axis)
+    {
+        return new InputControl(InputControlKind.GestureAxis, (uint)axis);
+    }
+
+    /// <summary>Whether the value stays within -1..1. Mouse motion and wheel do not, nor do gestures.</summary>
+    public bool IsBounded => Kind is not (InputControlKind.MouseAxis or InputControlKind.GestureAxis);
 
     public override string ToString()
     {
@@ -47,6 +53,7 @@ public readonly record struct InputControl(InputControlKind Kind, uint Code)
             InputControlKind.MouseAxis => $"{MouseDevice}:{(MouseAxis)Code}",
             InputControlKind.GamepadButton => $"{GamepadDevice}:{(GamepadButton)Code}",
             InputControlKind.GamepadAxis => $"{GamepadDevice}:{(GamepadAxis)Code}",
+            InputControlKind.GestureAxis => $"{GestureDevice}:{(GestureAxis)Code}",
             _ => string.Empty
         };
     }
@@ -60,7 +67,8 @@ public readonly record struct InputControl(InputControlKind Kind, uint Code)
             return control;
         }
 
-        throw new FormatException($"'{text}' is not an input control: expected Key:W, Mouse:Right, Gamepad:A and the like.");
+        throw new FormatException(
+            $"'{text}' is not an input control: expected Key:W, Mouse:Right, Gamepad:A, Gesture:Pinch and the like.");
     }
 
     public static bool TryParse(string text, out InputControl control)
@@ -91,6 +99,9 @@ public readonly record struct InputControl(InputControlKind Kind, uint Code)
                 return true;
             case GamepadDevice when Enum.TryParse<GamepadAxis>(name, out var gamepadAxis) && Enum.IsDefined(gamepadAxis):
                 control = Gamepad(gamepadAxis);
+                return true;
+            case GestureDevice when Enum.TryParse<GestureAxis>(name, out var gestureAxis) && Enum.IsDefined(gestureAxis):
+                control = Gesture(gestureAxis);
                 return true;
             default:
                 return false;

@@ -25,6 +25,9 @@ public class InputWormhole
     private bool isPointerHeld;
     private Vector2F rawMouseDelta;
     private int mouseWheelDelta;
+    private Vector2F gesturePan;
+    private float gesturePinch;
+    private float gestureRotation;
 
     public InputWormhole(UniverseOutput output, GamepadHub gamepads)
     {
@@ -48,6 +51,14 @@ public class InputWormhole
         }
     }
 
+    internal void OnGestureInput(GestureInput e)
+    {
+        lock (GestureInputs)
+        {
+            GestureInputs.Add(e);
+        }
+    }
+
     internal void OnTextInput(string value)
     {
         lock (textInputs)
@@ -60,13 +71,15 @@ public class InputWormhole
 
     internal List<MouseInput> MouseInputs { get; } = [];
 
+    internal List<GestureInput> GestureInputs { get; } = [];
+
     /// <summary>
     /// Whether the output takes the keyboard. Keys are still tracked while it is off, so none sticks when it comes back.
     /// </summary>
     public bool IsKeyboardEnabled { get; set; } = true;
 
     /// <summary>
-    /// Whether the output takes the mouse: buttons, wheel and motion.
+    /// Whether the output takes the pointer: the mouse's buttons, wheel and motion, and gestures of fingers.
     /// </summary>
     public bool IsMouseEnabled { get; set; } = true;
 
@@ -148,6 +161,15 @@ public class InputWormhole
 
     public int MouseWheelDelta => IsMouseEnabled ? mouseWheelDelta : 0;
 
+    /// <summary>How far gestures of fingers moved this frame, in the output's units.</summary>
+    public Vector2F GesturePan => IsMouseEnabled ? gesturePan : Vector2F.Zero;
+
+    /// <summary>How much gestures of fingers spread this frame, in doublings: 1 twice as far apart, -1 to half.</summary>
+    public float GesturePinch => IsMouseEnabled ? gesturePinch : 0;
+
+    /// <summary>How far gestures of fingers turned this frame, in degrees, clockwise on screen.</summary>
+    public float GestureRotation => IsMouseEnabled ? gestureRotation : 0;
+
     public Vector2F AbsolutePosition => absolutePosition;
 
     public Vector2F RelativePosition => output.PointToSurface(absolutePosition);
@@ -195,6 +217,30 @@ public class InputWormhole
         UpdateKeyboard();
         UpdateText();
         UpdateMouse();
+        UpdateGestures();
+    }
+
+    private void UpdateGestures()
+    {
+        gesturePan = Vector2F.Zero;
+        gesturePinch = 0;
+        gestureRotation = 0;
+
+        lock (GestureInputs)
+        {
+            foreach (var gesture in GestureInputs)
+            {
+                gesturePan += gesture.Translation;
+                if (gesture.Scale > 0)
+                {
+                    gesturePinch += MathF.Log2(gesture.Scale);
+                }
+
+                gestureRotation += gesture.Rotation;
+            }
+
+            GestureInputs.Clear();
+        }
     }
 
     private void UpdateText()
