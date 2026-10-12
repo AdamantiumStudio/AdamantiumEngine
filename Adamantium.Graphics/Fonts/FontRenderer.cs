@@ -61,6 +61,7 @@ public class FontRenderer : GraphicsResource
     private EffectParameter effectGlyphFade;
     private EffectParameter effectDirectClipBox;
     private EffectParameter effectDirectClipRadii;
+    private EffectParameter effectTargetOrigin;
     private EffectParameter effectGlyphInstances;   // BDA address of the per-instance GlyphItem storage buffer (instanced batch)
     private EffectParameter effectTransforms;       // BDA address of the transform table the glyph VS indexes by slot
     private EffectParameter effectPaintPrograms;
@@ -98,6 +99,7 @@ public class FontRenderer : GraphicsResource
         effectGlyphFade = fontEffect.GlyphFade;
         effectDirectClipBox = fontEffect.DirectClipBox;
         effectDirectClipRadii = fontEffect.DirectClipRadii;
+        effectTargetOrigin = fontEffect.TargetOrigin;
         effectGlyphInstances = fontEffect.GlyphInstancesAddress;
         effectTransforms = fontEffect.TransformsAddress;
         effectPaintPrograms = fontEffect.PaintProgramsAddress;
@@ -245,6 +247,7 @@ public class FontRenderer : GraphicsResource
         effectSdfBlendHi.SetValue(SdfBlendHi);
         effectDirectClipBox.SetValue(clipBox);       // zero size = no rounded clip
         effectDirectClipRadii.SetValue(clipRadii);
+        SetTargetOrigin();
         SetPaints(atlas);
         GraphicsDevice.VertexType = vertexType;
         GraphicsDevice.SetVertexBuffer(glyphs);   // the component's own buffer, uploaded from the FROZEN glyph run (no live layout)
@@ -279,11 +282,18 @@ public class FontRenderer : GraphicsResource
         effectSdfBlendHi.SetValue(SdfBlendHi);
         effectGlyphInstances.SetValue(instancesAddress);
         effectTransforms.SetValue(transformsAddress);
+        SetTargetOrigin();
         SetPaints(atlas);
         GraphicsDevice.VertexType = null;
         GraphicsDevice.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
         fontEffect.FontBatchRenderMsdfBatchInstancedPass.Apply();
         GraphicsDevice.Draw(4, glyphCount, 0, 0);   // 4 strip verts x glyphCount instances; address already at this segment
+    }
+
+    private void SetTargetOrigin()
+    {
+        var origin = GraphicsDevice.TargetOrigin;
+        effectTargetOrigin.SetValue(new Vector2F(origin.X, origin.Y));
     }
 
     private void SetPaints(FontAtlas atlas)

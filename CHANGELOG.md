@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `IGraphicsDevice.TargetOrigin`: where the target being drawn into lies in the coordinates viewports and scissors are
+  given in, for a target that holds one region of the surface. Callers keep setting viewports and scissors in the
+  surface's coordinates; the device moves what it sends to the GPU, and a new command buffer starts at zero. The text
+  shader adds it to the fragment, so a rounded clip still cuts text drawn into such a target in the right place.
+
 - Gestures of fingers as input. A host hands an output a recognized gesture step with
   `UniverseOutput.OnGestureInput` (`GestureInput`: translation, scale and rotation).
   - **Reading it.** `InputWormhole` adds up a frame's steps: `GesturePan`, `GesturePinch` (in doublings) and

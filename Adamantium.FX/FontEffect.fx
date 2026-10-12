@@ -92,6 +92,10 @@ float GlyphFade;
 float4 DirectClipBox;
 float4 DirectClipRadii;
 
+// Where the target's top-left corner lies in device pixels of the surface (GraphicsDevice.TargetOrigin): non-zero when
+// the target holds one region of it, so a fragment plus this is in the space the clip boxes are given in.
+float2 TargetOrigin;
+
 // Instanced glyph batch: per-instance GlyphData, and the transform table indexed by slot (0 = identity), so node-local
 // glyphs move with one matrix write instead of a CPU re-bake.
 uint64_t GlyphInstancesAddress;
@@ -149,7 +153,7 @@ float ClipCoverage(float2 fragment, float4 box, float4 radii)
 {
     if (box.z <= 0.0) return 1.0;
     float2 halfSize = max(box.zw * 0.5, float2(1.0, 1.0));
-    float2 local = fragment - (box.xy + halfSize);
+    float2 local = fragment + TargetOrigin - (box.xy + halfSize);
     float lim = min(halfSize.x, halfSize.y);
     float d = TextClipDistance(local, halfSize, min(radii, float4(lim, lim, lim, lim)));
     float aa = fwidth(d) + 1e-4;

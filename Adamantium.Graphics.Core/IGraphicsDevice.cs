@@ -110,6 +110,10 @@ public interface IDynamicStateDevice
     
     public void SetScissors(params System.ReadOnlySpan<Rect2D> scissors);
 
+    /// <summary>Where the top-left corner of the target being drawn into lies in the coordinates viewports and scissors
+    /// are given in; zero unless the target holds one region of the surface.</summary>
+    NativePoint TargetOrigin { get; set; }
+
     void SetRenderTargets(params IRenderTarget[] renderTargets);
 
     void SetDepthBuffer(IDepthStencilBuffer depthBuffer);
