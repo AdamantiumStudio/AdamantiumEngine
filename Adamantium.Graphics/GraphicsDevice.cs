@@ -498,16 +498,31 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public void AddResource(GraphicsResource resource)
     {
-        _graphicsResources.Add(resource);
+        lock (_graphicsResources)
+        {
+            _graphicsResources.Add(resource);
+        }
     }
 
     public void RemoveResource(GraphicsResource resource)
     {
-        _graphicsResources.Remove(resource);
+        lock (_graphicsResources)
+        {
+            _graphicsResources.Remove(resource);
+        }
     }
 
     /// <summary>Number of live (registered) graphics resources. Used by leak regression tests.</summary>
-    public int RegisteredResourceCount => _graphicsResources.Count;
+    public int RegisteredResourceCount
+    {
+        get
+        {
+            lock (_graphicsResources)
+            {
+                return _graphicsResources.Count;
+            }
+        }
+    }
 
     /// <summary>Hand a GPU resource over for disposal. Held by the LOGICAL device (see
     /// <see cref="MainGraphicsDevice.RetireResource"/>) until every drawing wrapper has retired the frames it had in
@@ -1925,7 +1940,13 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
 
         // Snapshot: each Dispose() now calls RemoveResource, which mutates the set.
-        foreach (var disposableObject in _graphicsResources.ToArray())
+        GraphicsResource[] resources;
+        lock (_graphicsResources)
+        {
+            resources = _graphicsResources.ToArray();
+        }
+
+        foreach (var disposableObject in resources)
         {
             if (disposableObject.IsDisposed) continue;
 
@@ -1935,7 +1956,10 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         // The device-memory allocator is SHARED and owned by the main device (disposed with it) - a render/resource
         // device must not dispose it here.
         _submissionSync?.Dispose();
-        _graphicsResources?.Clear();
+        lock (_graphicsResources)
+        {
+            _graphicsResources.Clear();
+        }
     }
 
     internal static IGraphicsDevice Create(MainGraphicsDevice device, GraphicsDeviceType deviceType)
