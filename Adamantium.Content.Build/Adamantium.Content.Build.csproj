@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <Configurations>Debug;Release</Configurations>
+        <Platforms>AnyCPU</Platforms>
+        <LangVersion>latest</LangVersion>
+        <Nullable>disable</Nullable>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsPackable>true</IsPackable>
+        <Description>The content project of the Adamantium engine, as in XNA: a library whose files are its assets. The build cooks its models, copies the rest, carries all of it into the output of every project that references it, under Content/{Name}/, and generates a checked constant for each file.</Description>
+        <PackageTags>adamantium;content;assets;pipeline</PackageTags>
+    </PropertyGroup>
+
+    <!-- A build package, not a library: the generator goes to analyzers/dotnet/cs, the content compiler to tools/compiler,
+         the rules to build; nothing goes to lib, and nothing is a package dependency. -->
+    <PropertyGroup>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <DevelopmentDependency>true</DevelopmentDependency>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackContentBuild</TargetsForTfmSpecificContentInPackage>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="build\**" Pack="true" PackagePath="build\" />
+    </ItemGroup>
+
+    <!-- The compiler is published beside the rules that run it: framework-dependent, with everything it loads. -->
+    <Target Name="PackContentBuild">
+        <PropertyGroup>
+            <_ContentCompilerDir>$([MSBuild]::NormalizeDirectory($(MSBuildProjectDirectory), $(IntermediateOutputPath), 'compiler'))</_ContentCompilerDir>
+        </PropertyGroup>
+        <MSBuild Projects="..\Adamantium.Engine.ContentCompiler.CLI\Adamantium.Engine.ContentCompiler.CLI.csproj"
+                 Targets="Publish"
+                 Properties="Configuration=$(Configuration);PublishDir=$(_ContentCompilerDir)"
+                 RemoveProperties="TargetFramework;RuntimeIdentifier" />
+        <ItemGroup>
+            <_ContentCompilerFile Include="$(_ContentCompilerDir)**\*" />
+            <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers/dotnet/cs" />
+            <TfmSpecificPackageFile Include="@(_ContentCompilerFile)" PackagePath="tools/compiler/%(_ContentCompilerFile.RecursiveDir)" />
+        </ItemGroup>
+    </Target>
+
+</Project>

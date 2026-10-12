@@ -1,0 +1,24 @@
+<Project>
+
+  <!-- A content project built against the engine's source instead of the Adamantium.Content.Build package: the same rules,
+       the generator and the compiler built from here. Imported in the project's body, before its own items. -->
+  <Import Project="build\Adamantium.Content.Build.props" />
+
+  <PropertyGroup>
+    <AdamantiumContentCompiler>$(MSBuildThisFileDirectory)..\artifacts\bin\$(Configuration)\net10.0\Adamantium.Engine.ContentCompiler.CLI.dll</AdamantiumContentCompiler>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Adamantium.Content.Build.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\Adamantium.Engine.ContentCompiler.CLI\Adamantium.Engine.ContentCompiler.CLI.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <Import Project="build\Adamantium.Content.Build.targets" />
+
+</Project>

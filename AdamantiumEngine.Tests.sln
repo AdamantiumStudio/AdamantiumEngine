@@ -63,6 +63,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Multiverse", "Ad
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameInput", "Adamantium.GameInput\Adamantium.GameInput.csproj", "{40F5F94B-2F11-4396-BB30-6F381BC5F819}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.ContentTests", "Tests\Adamantium.ContentTests\Adamantium.ContentTests.csproj", "{5D3F9D89-E978-4D58-B906-5EA388D626D8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Content.Pipeline", "Adamantium.Content.Pipeline\Adamantium.Content.Pipeline.csproj", "{DABE8D1E-6BC0-44EC-879F-919764554BAE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Content.Build", "Adamantium.Content.Build\Adamantium.Content.Build.csproj", "{306CC45C-3A96-4BB3-8D31-A33CEE1879AD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -185,11 +191,24 @@ Global
 		{40F5F94B-2F11-4396-BB30-6F381BC5F819}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{40F5F94B-2F11-4396-BB30-6F381BC5F819}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{40F5F94B-2F11-4396-BB30-6F381BC5F819}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D3F9D89-E978-4D58-B906-5EA388D626D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D3F9D89-E978-4D58-B906-5EA388D626D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D3F9D89-E978-4D58-B906-5EA388D626D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D3F9D89-E978-4D58-B906-5EA388D626D8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DABE8D1E-6BC0-44EC-879F-919764554BAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DABE8D1E-6BC0-44EC-879F-919764554BAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DABE8D1E-6BC0-44EC-879F-919764554BAE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DABE8D1E-6BC0-44EC-879F-919764554BAE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{306CC45C-3A96-4BB3-8D31-A33CEE1879AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{306CC45C-3A96-4BB3-8D31-A33CEE1879AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{306CC45C-3A96-4BB3-8D31-A33CEE1879AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{306CC45C-3A96-4BB3-8D31-A33CEE1879AD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{5D3F9D89-E978-4D58-B906-5EA388D626D8} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{89649CEF-0D9B-4294-A6FC-3CB8D59BE3C1} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{DA707A12-4080-4D9F-90E2-BA848466BB21} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{BE412E10-8899-4C19-9E9E-6F7C36BDBBF4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}

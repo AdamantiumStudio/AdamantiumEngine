@@ -1,0 +1,86 @@
+<Project>
+
+  <PropertyGroup>
+    <AdamantiumContentCompiler Condition="'$(AdamantiumContentCompiler)' == ''">$(MSBuildThisFileDirectory)..\tools\compiler\Adamantium.Engine.ContentCompiler.CLI.dll</AdamantiumContentCompiler>
+  </PropertyGroup>
+
+  <!-- In a target, so the intermediate folder is the final one wherever these rules are imported. No trailing separator:
+       one before a closing quote would escape it on the command line. -->
+  <Target Name="_AdamantiumContentPaths">
+    <PropertyGroup>
+      <_AdamantiumContentOutput>$([MSBuild]::NormalizePath($(MSBuildProjectDirectory), $(IntermediateOutputPath), 'content'))</_AdamantiumContentOutput>
+      <_AdamantiumContentCache>$([MSBuild]::NormalizePath($(MSBuildProjectDirectory), $(IntermediateOutputPath), 'content-cache'))</_AdamantiumContentCache>
+      <_AdamantiumContentList>$(_AdamantiumContentCache)\files.txt</_AdamantiumContentList>
+      <_AdamantiumContentSettings>$(_AdamantiumContentCache)\settings.txt</_AdamantiumContentSettings>
+      <_AdamantiumContentStamp>$(_AdamantiumContentCache)\cooked.stamp</_AdamantiumContentStamp>
+      <_AdamantiumDotnet>$(DOTNET_HOST_PATH)</_AdamantiumDotnet>
+      <_AdamantiumDotnet Condition="'$(_AdamantiumDotnet)' == ''">dotnet</_AdamantiumDotnet>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AdamantiumContentManifest Include="$(MSBuildProjectDirectory)\Content.acontent"
+                                  Condition="Exists('$(MSBuildProjectDirectory)\Content.acontent')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The generator sees the content as additional files marked as such, and the name to emit its class under. -->
+  <ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="AdamantiumContent" />
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="Link" />
+    <CompilerVisibleProperty Include="AdamantiumContentName" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="ProjectDir" />
+    <UpToDateCheckInput Include="@(AdamantiumContent)" />
+    <UpToDateCheckInput Include="$(MSBuildProjectDirectory)\Content.acontent"
+                        Condition="Exists('$(MSBuildProjectDirectory)\Content.acontent')" />
+  </ItemGroup>
+
+  <!-- In a target, so the content is taken after every Remove of the project, wherever these rules are imported. -->
+  <Target Name="_MarkAdamantiumContent" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun;CoreCompile">
+    <ItemGroup>
+      <AdditionalFiles Include="@(AdamantiumContent)" AdamantiumContent="true" />
+    </ItemGroup>
+  </Target>
+
+  <!-- A line a file: its full path, and after a tab the path it goes under when it is linked from outside the project. -->
+  <Target Name="_ListAdamantiumContent" DependsOnTargets="_AdamantiumContentPaths">
+    <MakeDir Directories="$(_AdamantiumContentCache)" />
+    <WriteLinesToFile File="$(_AdamantiumContentList)"
+                      Lines="@(AdamantiumContent->'%(FullPath)&#09;%(Link)')"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(_AdamantiumContentSettings)"
+                      Lines="@(_AdamantiumContentManifest->Count())"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <!-- Cooks the models and copies the rest into the intermediate folder. Skipped while no file, the list, the settings or
+       the compiler changed; the compiler keeps its own cache besides, so a run only does what is stale. -->
+  <Target Name="CookAdamantiumContent"
+          DependsOnTargets="ResolveProjectReferences;_ListAdamantiumContent"
+          Inputs="@(AdamantiumContent);@(_AdamantiumContentManifest);$(_AdamantiumContentList);$(_AdamantiumContentSettings);$(AdamantiumContentCompiler)"
+          Outputs="$(_AdamantiumContentStamp)"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="&quot;$(_AdamantiumDotnet)&quot; &quot;$(AdamantiumContentCompiler)&quot; build &quot;$(MSBuildProjectDirectory)&quot; --files &quot;$(_AdamantiumContentList)&quot; --out &quot;$(_AdamantiumContentOutput)&quot; --cache &quot;$(_AdamantiumContentCache)&quot;" />
+    <Touch Files="$(_AdamantiumContentStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <!-- What was cooked becomes content copied to the output, under Content/{Name}/ - and so to the output of every project
+       that references this one. Taken from the folder when the target runs, so a project that only asks for the files to
+       copy finds them as well. -->
+  <Target Name="CollectAdamantiumContent"
+          BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="_AdamantiumContentPaths;CookAdamantiumContent">
+    <ItemGroup>
+      <_AdamantiumCooked Include="$(_AdamantiumContentOutput)\**\*" />
+      <Content Include="@(_AdamantiumCooked)"
+               Link="Content\$(AdamantiumContentName)\%(_AdamantiumCooked.RecursiveDir)%(_AdamantiumCooked.Filename)%(_AdamantiumCooked.Extension)"
+               CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CleanAdamantiumContent" AfterTargets="Clean" DependsOnTargets="_AdamantiumContentPaths">
+    <RemoveDir Directories="$(_AdamantiumContentOutput);$(_AdamantiumContentCache)" />
+  </Target>
+
+</Project>

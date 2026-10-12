@@ -7,6 +7,31 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.Content.Build`: the content project, as in XNA - a library whose files are its assets.
+  - **What is content.** Every file of the project but its code, its build files and hidden files
+    (`AdamantiumContent`, trimmed with `Remove` as any item). A file from outside the project comes in under its
+    `Link`; without one it is an error rather than a file written outside the output.
+  - **The build.** Models are cooked into `.aemf` with their textures beside them, the rest is copied as it is, by
+    the content compiler the package carries; a file that did not change is not built again, and what was built from a
+    file taken out of the project is deleted.
+  - **Where it goes.** Into `Content/{Name}/` of every project that references the content project, directly or
+    through another. `{Name}` is the last segment of the project's name, or `AdamantiumContentName`.
+  - **Finding it.** A generated class `{Name}Assets` has a constant for each file: its path from the application's
+    folder, which `ContentManager` loads by.
+
+- `Adamantium.Engine.Templates`: `dotnet new adamantium-content` creates a content project; Rider and Visual Studio
+  list it in New Project once the templates are installed.
+
+- The content compiler takes the assets as a list: `build <projectDir> --files <list>`, the manifest then giving only
+  their settings, and `--out` and `--cache` for where the output and the build cache go. A file no importer takes is
+  copied to the output (`BuildResult.Copied`) instead of failing.
+
+- The content compiler cleans up after itself, building from a manifest as well: what it built from an asset no longer
+  listed is deleted, and a build by another version of the compiler cooks everything again. It deletes only what its
+  cache says it wrote, inside the output folder. A model's texture outside the model's folder is left behind with a
+  warning instead of being copied out of the output folder; an absolute reference to one inside it is made relative.
+  Its warnings and errors are in MSBuild's form (`ACB001`-`ACB008`), so an IDE lists them.
+
 - `IGraphicsDevice.TargetOrigin`: where the target being drawn into lies in the coordinates viewports and scissors are
   given in, for a target that holds one region of the surface. Callers keep setting viewports and scissors in the
   surface's coordinates; the device moves what it sends to the GPU, and a new command buffer starts at zero. The text
@@ -356,6 +381,9 @@ All packages share one version.
 
 ### Fixed
 
+- `ContentManager.Exists` finds an asset by a relative path. With no `RootDirectory` it looked for `/<path>`, at the
+  root of the drive, and said every asset was missing.
+
 - A graphics device's registry of its resources is locked. Resources made or disposed on two threads at once, such as
   textures built by a background task while the render thread works, could corrupt it. A corrupted registry miscounted
   `RegisteredResourceCount` and could crash the process when the device was disposed.
@@ -497,6 +525,13 @@ All packages share one version.
 
 ### Changed
 
+- `FileSystemContentResolver` takes a relative asset path from the application's folder, not from the working
+  directory, and `CookedContentResolver` looks for a cooked model beside the application under the model's own path
+  (`Content/Game/Models/ship.dae` → `Content/Game/Models/ship.dae.aemf`), where a content project puts it. An app
+  started from another folder finds its content all the same. **Migrating:** cooked models copied by hand into the
+  application's `Content/` folder under their source path (`Content/Models/ship.dae.aemf` for `Models/ship.dae`) are
+  no longer found there; the source is loaded instead. Move the assets into a content project.
+
 - Text lays out two to three times faster and allocates a third as much, the result unchanged: a lookup skips the
   glyphs none of its subtables covers, a contextual rule allocates only for a glyph it covers, a font no longer locks
   to look up a glyph it has, the Latin range of the Unicode tables is read from an array, and centered, right-aligned
@@ -558,6 +593,10 @@ All packages share one version.
 - Every new memory block is logged at the Debug level with its type, heap and the heap's total in blocks.
 
 ### Removed
+
+- The assets generator of `Adamantium.Engine.Generators`, which gave a project a constant for each model, image and
+  font among its additional files (`{Project}Assets`). Assets live in a content project now, whose
+  `Adamantium.Content.Build` generates `{Name}Assets` for all of its files.
 
 - `IFont.Baseline`: a made-up metric (`UnitsPerEm - Ascender + LineGap + CapsHeight`); the baseline of a line is
   `LineGap / 2 + LineAscent` below its top.

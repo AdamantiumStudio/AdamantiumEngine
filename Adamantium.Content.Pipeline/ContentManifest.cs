@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -31,6 +33,23 @@ public sealed class ContentManifest
 
     public List<ContentAsset> Assets { get; set; } = [];
 
+    /// <summary>Makes the asset list exactly <paramref name="sources"/>, paths relative to the project directory,
+    /// keeping the settings of those already listed.</summary>
+    public void SetSources(IEnumerable<string> sources)
+    {
+        var listed = new Dictionary<string, ContentAsset>(StringComparer.OrdinalIgnoreCase);
+        foreach (var asset in Assets)
+        {
+            listed[Normalize(asset.Source)] = asset;
+        }
+
+        Assets = sources
+            .Select(Normalize)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(source => listed.TryGetValue(source, out var asset) ? asset : new ContentAsset { Source = source })
+            .ToList();
+    }
+
     public static ContentManifest Load(string path)
     {
         return JsonSerializer.Deserialize<ContentManifest>(File.ReadAllText(path), JsonOptions)
@@ -47,4 +66,6 @@ public sealed class ContentManifest
 
         File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
     }
+
+    private static string Normalize(string path) => path.Replace('\\', '/');
 }

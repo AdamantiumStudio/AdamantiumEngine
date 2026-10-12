@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Adamantium Studio",
+  "classifications": [ "Game", "Adamantium", "Content", "Library" ],
+  "identity": "Adamantium.Engine.Content.CSharp",
+  "groupIdentity": "Adamantium.Engine.Content",
+  "name": "Adamantium Content Project",
+  "description": "A content project, as in XNA: a library whose files are its assets. Models are cooked at build, the rest is copied, and all of it goes to Content/{Name}/ of every project that references it, with a constant for each file in {Name}Assets.",
+  "shortName": "adamantium-content",
+  "sourceName": "AdamantiumContent",
+  "defaultName": "GameContent",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "primaryOutputs": [
+    { "path": "AdamantiumContent.csproj" }
+  ]
+}
