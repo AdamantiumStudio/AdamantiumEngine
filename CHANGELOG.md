@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `IGraphicsDevice.TargetOrigin`: where the target being drawn into lies in the coordinates viewports and scissors are
+  given in, for a target that holds one region of the surface. Callers keep setting viewports and scissors in the
+  surface's coordinates; the device moves what it sends to the GPU, and a new command buffer starts at zero. The text
+  shader adds it to the fragment, so a rounded clip still cuts text drawn into such a target in the right place.
+
 - Windows pointer input in `Adamantium.Win32`, for touch and pen:
   - the `WM_POINTER*` messages in `WindowMessages` and `Messages.GetPointerId`;
   - `Win32Interop.GetPointerType`, `GetPointerInfo`, `GetPointerTouchInfo` and `GetPointerPenInfo`, with

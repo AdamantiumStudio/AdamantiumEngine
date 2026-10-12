@@ -45,6 +45,10 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     // Cached snapshots so SetDrawingState doesn't allocate a fresh array on every draw.
     private Viewport[] viewportsArray = Array.Empty<Viewport>();
     private Rect2D[] scissorsArray = Array.Empty<Rect2D>();
+    private int _originX;
+    private int _originY;
+    private Viewport[] _sentViewports = [];
+    private Rect2D[] _sentScissors = [];
 
     // Dynamic-state cache: last value emitted per state, so a draw only re-emits what changed.
     // Invalidated (_stateInitialized=false) at BeginDraw - a fresh command buffer has undefined dynamic state.
@@ -1054,6 +1058,8 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         // Fresh command buffer => dynamic state is undefined, so the state cache must re-emit everything next draw.
         _stateInitialized = false;
         _boundShaderPass = null;
+        _originX = 0;
+        _originY = 0;
 
         //Log.Logger.Information($"Begin Command buffer on {DeviceType} device {DeviceId}");
         result = commandBuffer.BeginCommandBuffer(beginInfo);
@@ -1427,7 +1433,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         if (viewportsArray.Length != viewports.Length) viewportsArray = new Viewport[viewports.Length];
         viewports.CopyTo(viewportsArray);
 
-        CurrentCommandBuffer.SetViewport(0, (uint)viewports.Length, viewports);
+        CurrentCommandBuffer.SetViewport(0, (uint)viewports.Length, InTarget(viewportsArray));
     }
 
     public void SetScissors(params ReadOnlySpan<Rect2D> scissors)
@@ -1442,7 +1448,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         if (scissorsArray.Length != scissors.Length) scissorsArray = new Rect2D[scissors.Length];
         scissors.CopyTo(scissorsArray);
 
-        CurrentCommandBuffer.SetScissor(0, (uint)scissors.Length, scissors);
+        CurrentCommandBuffer.SetScissor(0, (uint)scissors.Length, InTarget(scissorsArray));
     }
 
     // The most recently set viewport/scissor, so code that interrupts the pass to render to another target (the font
@@ -1450,6 +1456,95 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     // to the full attachment (which left the resumed pass drawing unclipped).
     public Rect2D[] CurrentScissors => scissorsArray;
     public Viewport[] CurrentViewports => viewportsArray;
+
+    /// <summary>Where the top-left corner of the target being drawn into lies in the coordinates viewports and scissors
+    /// are given in. Zero for a target that is the whole surface; a target that holds one region of it (a layer) sets the
+    /// region's corner, and everything keeps drawing in the surface's coordinates. <see cref="CurrentViewports"/> and
+    /// <see cref="CurrentScissors"/> stay in those coordinates; only what reaches the GPU is moved. A shader that compares
+    /// its fragment position with surface coordinates adds this to the fragment.</summary>
+    public NativePoint TargetOrigin
+    {
+        get => new(_originX, _originY);
+        set
+        {
+            if (value.X == _originX && value.Y == _originY)
+            {
+                return;
+            }
+
+            _originX = value.X;
+            _originY = value.Y;
+            _cViewportCount = 0;
+            _cScissorCount = 0;
+        }
+    }
+
+    private ReadOnlySpan<Viewport> InTarget(Viewport[] viewports)
+    {
+        if (_originX == 0 && _originY == 0)
+        {
+            return viewports;
+        }
+
+        if (_sentViewports.Length != viewports.Length)
+        {
+            _sentViewports = new Viewport[viewports.Length];
+        }
+
+        for (var i = 0; i < viewports.Length; i++)
+        {
+            var sent = _sentViewports[i] ??= new Viewport();
+            var viewport = viewports[i];
+            sent.X = viewport.X - _originX;
+            sent.Y = viewport.Y - _originY;
+            sent.Width = viewport.Width;
+            sent.Height = viewport.Height;
+            sent.MinDepth = viewport.MinDepth;
+            sent.MaxDepth = viewport.MaxDepth;
+        }
+
+        return _sentViewports;
+    }
+
+    private ReadOnlySpan<Rect2D> InTarget(Rect2D[] scissors)
+    {
+        if (_originX == 0 && _originY == 0)
+        {
+            return scissors;
+        }
+
+        if (_sentScissors.Length != scissors.Length)
+        {
+            _sentScissors = new Rect2D[scissors.Length];
+        }
+
+        for (var i = 0; i < scissors.Length; i++)
+        {
+            long x = scissors[i].Offset.X - _originX;
+            long y = scissors[i].Offset.Y - _originY;
+            long width = scissors[i].Extent.Width;
+            long height = scissors[i].Extent.Height;
+            if (x < 0)
+            {
+                width += x;
+                x = 0;
+            }
+
+            if (y < 0)
+            {
+                height += y;
+                y = 0;
+            }
+
+            var sent = _sentScissors[i] ??= new Rect2D { Offset = new Offset2D(), Extent = new Extent2D() };
+            sent.Offset.X = (int)x;
+            sent.Offset.Y = (int)y;
+            sent.Extent.Width = (uint)Math.Max(0, width);
+            sent.Extent.Height = (uint)Math.Max(0, height);
+        }
+
+        return _sentScissors;
+    }
 
     public void SetRenderTargets(params IRenderTarget[] renderTargets)
     {
@@ -1502,14 +1597,14 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         // region, but a run of draws under ONE clip - which is what a batch segment is - re-sent the same rect every time.
         if (!_stateInitialized || viewportsArray.Length != _cViewportCount || (viewportsArray.Length == 1 && !SameViewport(viewportsArray[0], _cViewport)) || viewportsArray.Length > 1)
         {
-            commandBuffer.SetViewportWithCount((uint)viewportsArray.Length, viewportsArray);
+            commandBuffer.SetViewportWithCount((uint)viewportsArray.Length, InTarget(viewportsArray));
             _cViewportCount = (uint)viewportsArray.Length;
             if (viewportsArray.Length == 1) _cViewport = viewportsArray[0];
         }
 
         if (!_stateInitialized || scissorsArray.Length != _cScissorCount || (scissorsArray.Length == 1 && !SameScissor(scissorsArray[0], _cScissor)) || scissorsArray.Length > 1)
         {
-            commandBuffer.SetScissorWithCount((uint)scissorsArray.Length, scissorsArray);
+            commandBuffer.SetScissorWithCount((uint)scissorsArray.Length, InTarget(scissorsArray));
             _cScissorCount = (uint)scissorsArray.Length;
             if (scissorsArray.Length == 1) _cScissor = scissorsArray[0];
         }
