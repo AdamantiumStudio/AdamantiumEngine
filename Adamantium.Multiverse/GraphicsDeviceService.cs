@@ -11,6 +11,8 @@ public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDevice
 
     private bool isInDebugMode;
 
+    private volatile bool _deviceUpdateNeeded;
+
     public MainGraphicsDevice MainGraphicsDevice { get; private set; }
 
     // Owned and created by the main device itself; just expose it.
@@ -18,7 +20,11 @@ public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDevice
 
     public IReadOnlyList<IGraphicsDevice> GraphicsDevices => MainGraphicsDevice.GraphicsDevices;
         
-    public bool DeviceUpdateNeeded { get; set; }
+    public bool DeviceUpdateNeeded
+    {
+        get => _deviceUpdateNeeded;
+        set => _deviceUpdateNeeded = value;
+    }
 
     public GraphicsDeviceService(IGraphicsDeviceFactory deviceFactory, bool isInDebug)
     {
@@ -29,7 +35,7 @@ public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDevice
     void IGraphicsDeviceService.CreateMainDevice(string name)
     {
         CreateMainDevice(name, IsInDebugMode);
-        DeviceUpdateNeeded = false;
+        DeviceUpdateNeeded = MainGraphicsDevice.IsLost;
         DeviceCreated?.Invoke(this, EventArgs.Empty);
     }
 
@@ -53,8 +59,8 @@ public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDevice
             OnDeviceChangeBegin();
             // The old resource-loader device is disposed when the old main device is disposed inside CreateMainDevice.
             CreateMainDevice(name, IsInDebugMode);
-                
-            DeviceUpdateNeeded = false;
+
+            DeviceUpdateNeeded = MainGraphicsDevice.IsLost;
             OnDeviceChangeEnd();
         }
     }
@@ -103,15 +109,27 @@ public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDevice
 
     internal void CreateMainDevice(string name, bool debugEnabled = true)
     {
-        MainGraphicsDevice?.Dispose();
+        if (MainGraphicsDevice != null)
+        {
+            MainGraphicsDevice.Lost -= MainDeviceLost;
+            MainGraphicsDevice.Dispose();
+        }
+
         // TEMP knob for the in-flight depth measurement (ADAM_FRAMES_IN_FLIGHT). This is what MaxFramesInFlight is taken
         // from, i.e. how far the CPU may run ahead of the GPU before it blocks on a slot's fence.
         var inFlight = Environment.GetEnvironmentVariable("ADAM_FRAMES_IN_FLIGHT") is { } f && uint.TryParse(f, out var n) ? n : 3;
         MainGraphicsDevice = MainGraphicsDevice.Create(GraphicsDeviceFactory, inFlight, name, debugEnabled);
         // The main device now creates and owns its resource-loader device + shared descriptor heap; we only read them.
         MainGraphicsDevice.Disposing += GraphicsDeviceDisposing;
+        MainGraphicsDevice.Lost += MainDeviceLost;
 
         OnDeviceCreated();
+    }
+
+    private void MainDeviceLost()
+    {
+        DeviceUpdateNeeded = true;
+        OnDeviceLost();
     }
 
     private void GraphicsDeviceDisposing(object sender, EventArgs e)

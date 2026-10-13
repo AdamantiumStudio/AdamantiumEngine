@@ -160,11 +160,6 @@ public sealed class EntityManager
         if (root == null)
             return;
 
-        if (root.Owner == null && rootEntities.Contains(root))
-        {
-            rootEntities.Remove(root);
-        }
-
         lock (syncObject)
         {
             if (!availableEntities.ContainsKey(root.Uid)) return;

@@ -125,7 +125,11 @@ public interface IDynamicStateDevice
     void SetVertexBuffers(params IBuffer[] vertexBuffers);
     
     Queue GraphicsQueue { get; }
-    
+
+    /// <summary>The lock every submit and present on <see cref="GraphicsQueue"/> goes under: another device may hold the
+    /// same queue.</summary>
+    object GraphicsQueueLock { get; }
+
     IRenderTarget CurrentRenderTarget { get; }
     
     IDepthStencilBuffer CurrentDepthStencilBuffer { get; }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using Adamantium.Core;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Vulkan.Core;
@@ -11,11 +12,15 @@ namespace Adamantium.Graphics.Core;
 
 public class MainGraphicsDevice : DisposableBase
 {
-    private uint _availableGraphicsQueueIndex;
-
     private uint _availableComputeQueueIndex;
 
-    private uint _availableTransferQueueIndex;
+    private int[] _graphicsQueueHolders;
+
+    private object[] _graphicsQueueLocks;
+
+    private readonly object _queueLeaseLock = new();
+
+    private int _lost;
 
     private readonly List<IGraphicsDevice> graphicsDevices;
 
@@ -184,8 +189,6 @@ public class MainGraphicsDevice : DisposableBase
 
     public uint CurrentFrame { get; private set; }
 
-    public Dictionary<uint, Queue> UsedGraphicsQueues { get; }
-
     public IReadOnlyList<IGraphicsDevice> GraphicsDevices => graphicsDevices.AsReadOnly();
 
     private IGraphicsDeviceFactory _graphicsDeviceFactory;
@@ -227,7 +230,6 @@ public class MainGraphicsDevice : DisposableBase
         _graphicsDeviceFactory = deviceFactory;
         graphicsDevices = new List<IGraphicsDevice>();
         deviceMap = new Dictionary<Guid, IGraphicsDevice>();
-        UsedGraphicsQueues = new Dictionary<uint, Queue>();
         EnableDynamicRendering = true;
         VulkanInstance = VulkanInstance.Create(name, enableDebug);
         GraphicsAdapter = VulkanInstance.MainGraphicsAdapter;
@@ -289,14 +291,7 @@ public class MainGraphicsDevice : DisposableBase
         }
 
         device?.Dispose();
-        var newDevice = CreateRenderDevice();
-        lock (_retireSync)
-        {
-            deviceMap.Add(deviceId, newDevice);
-            graphicsDevices.Add(newDevice);
-        }
-
-        return newDevice;
+        return CreateRenderDevice();
     }
 
     private void CreateLogicalDevice()
@@ -317,9 +312,12 @@ public class MainGraphicsDevice : DisposableBase
         Console.WriteLine($"{AvailableQueuesCount} queues available for graphics");
         Console.WriteLine($"{computeQueuesCount} queues available for compute");
         var queuePriorities = new float[AvailableQueuesCount];
+        _graphicsQueueHolders = new int[AvailableQueuesCount];
+        _graphicsQueueLocks = new object[AvailableQueuesCount];
         for (var i = 0; i < queuePriorities.Length; i++)
         {
             queuePriorities[i] = 1.0f;
+            _graphicsQueueLocks[i] = new object();
         }
 
         var graphicsFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
@@ -474,9 +472,44 @@ public class MainGraphicsDevice : DisposableBase
         InFlightFences ??= LogicalDevice.CreateFences(fenceInfo, BuffersCount);
     }
 
+    /// <summary>True once the GPU has lost this device: nothing it is asked to do runs any more, and only a new device
+    /// draws again.</summary>
+    public bool IsLost => Volatile.Read(ref _lost) != 0;
+
+    /// <summary>Raised once, on whichever thread first finds the device lost.</summary>
+    public event Action Lost;
+
+    /// <summary>Hands back <paramref name="result"/> of a call to this device, reporting the device lost the first time a
+    /// call says so.</summary>
+    public Result Observe(Result result)
+    {
+        if (result == Result.ErrorDeviceLost && Interlocked.Exchange(ref _lost, 1) == 0)
+        {
+            Log.Logger.Error("The GPU lost the device; a new one has to be made.");
+            Lost?.Invoke();
+        }
+
+        return result;
+    }
+
+    /// <summary>Waits until the device has finished all its work. Vulkan has every queue of the device externally
+    /// synchronized meanwhile, so each queue's lock is held, taken in queue order.</summary>
     public Result DeviceWaitIdle()
     {
-        return LogicalDevice?.DeviceWaitIdle() ?? Result.Success;
+        return LogicalDevice == null ? Result.Success : Observe(WaitIdleHoldingQueuesFrom(0));
+    }
+
+    private Result WaitIdleHoldingQueuesFrom(int index)
+    {
+        if (index == _graphicsQueueLocks.Length)
+        {
+            return LogicalDevice.DeviceWaitIdle();
+        }
+
+        lock (_graphicsQueueLocks[index])
+        {
+            return WaitIdleHoldingQueuesFrom(index + 1);
+        }
     }
 
     public IGraphicsDevice CreateRenderDevice()
@@ -488,7 +521,21 @@ public class MainGraphicsDevice : DisposableBase
             graphicsDevices.Add(renderDevice);
         }
 
+        if (renderDevice is DisposableObject disposable)
+        {
+            disposable.Disposing += (_, _) => Unregister(renderDevice);
+        }
+
         return renderDevice;
+    }
+
+    private void Unregister(IGraphicsDevice device)
+    {
+        lock (_retireSync)
+        {
+            deviceMap.Remove(device.DeviceId);
+            graphicsDevices.Remove(device);
+        }
     }
 
     private IGraphicsDevice CreateResourceLoaderDevice()
@@ -502,18 +549,37 @@ public class MainGraphicsDevice : DisposableBase
         return new(deviceFactory, buffersCount, name, enableDebug);
     }
 
-    public Queue GetAvailableGraphicsQueue()
+    /// <summary>Leases the graphics queue the fewest devices hold, so a queue is shared only once every one is taken.
+    /// Vulkan leaves a queue's synchronization to its users: every submit and present on it goes under
+    /// <paramref name="queueLock"/>. Give it back with <see cref="ReturnGraphicsQueue"/>.</summary>
+    public Queue LeaseGraphicsQueue(out uint index, out object queueLock)
     {
-        var graphicsFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
-        var queue = LogicalDevice.GetDeviceQueue(graphicsFamily.FamilyIndex, _availableGraphicsQueueIndex);
-        UsedGraphicsQueues[_availableGraphicsQueueIndex] = queue;
-        _availableGraphicsQueueIndex++;
-        if (_availableGraphicsQueueIndex >= graphicsFamily.Count)
+        lock (_queueLeaseLock)
         {
-            _availableGraphicsQueueIndex = 0;
+            index = 0;
+            for (var i = 1u; i < _graphicsQueueHolders.Length; i++)
+            {
+                if (_graphicsQueueHolders[i] < _graphicsQueueHolders[index])
+                {
+                    index = i;
+                }
+            }
+
+            _graphicsQueueHolders[index]++;
         }
 
-        return queue;
+        queueLock = _graphicsQueueLocks[index];
+        var graphicsFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
+        return LogicalDevice.GetDeviceQueue(graphicsFamily.FamilyIndex, index);
+    }
+
+    /// <summary>Gives back a queue leased with <see cref="LeaseGraphicsQueue"/>.</summary>
+    public void ReturnGraphicsQueue(uint index)
+    {
+        lock (_queueLeaseLock)
+        {
+            _graphicsQueueHolders[index]--;
+        }
     }
 
     public Queue GetAvailableComputeQueue()
@@ -530,20 +596,6 @@ public class MainGraphicsDevice : DisposableBase
         return queue;
     }
 
-    public Queue GetAvailableTransferQueue()
-    {
-        var transferFamily = QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.TransferBit);
-
-        var queue = LogicalDevice.GetDeviceQueue(transferFamily.FamilyIndex, _availableTransferQueueIndex);
-        _availableTransferQueueIndex++;
-        if (_availableTransferQueueIndex >= transferFamily.Count)
-        {
-            _availableTransferQueueIndex = 0;
-        }
-
-        return queue;
-    }
-
     public static implicit operator PhysicalDevice(MainGraphicsDevice device)
     {
         return device.GraphicsAdapter;
@@ -553,7 +605,7 @@ public class MainGraphicsDevice : DisposableBase
     {
         Log.Logger.Debug("Start disposing main device");
         ShaderHotReload.Dispose();
-        LogicalDevice?.DeviceWaitIdle();
+        DeviceWaitIdle();
         FlushRetiredAfterIdle();
         // A copy: a device takes itself off this list as it is disposed.
         foreach (var device in graphicsDevices.ToArray())
@@ -590,9 +642,7 @@ public class MainGraphicsDevice : DisposableBase
         LogicalDevice = null;
         VulkanInstance?.Dispose();
         VulkanInstance = null;
-        _availableTransferQueueIndex = 0;
         _availableComputeQueueIndex = 0;
-        _availableGraphicsQueueIndex = 0;
         Log.Logger.Debug("End disposing main device");
     }
 

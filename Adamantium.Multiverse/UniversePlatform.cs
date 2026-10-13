@@ -285,6 +285,12 @@ namespace Adamantium.Multiverse
         {
             lock (this)
             {
+                if (GraphicsDeviceService != null)
+                {
+                    GraphicsDeviceService.DeviceChangeBegin -= DeviceChangeBegin;
+                    GraphicsDeviceService.DeviceChangeEnd -= DeviceChangeEnd;
+                }
+
                 for (int i = 0; i < Outputs.Count; i++)
                 {
                     Outputs[i].Dispose();

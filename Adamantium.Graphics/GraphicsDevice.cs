@@ -30,7 +30,8 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     public Guid DeviceId { get; private set; }
 
     private CommandBuffer[] commandBuffers;
-    private Queue resourceQueue;
+    private uint _graphicsQueueIndex;
+    private bool _holdsGraphicsQueue;
 
     private uint frame;
         
@@ -114,6 +115,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     public GraphicsPresenter Presenter { get; set; }
 
     public Queue GraphicsQueue { get; private set; }
+    public object GraphicsQueueLock { get; private set; }
     public IRenderTarget CurrentRenderTarget { get; private set; }
     public IDepthStencilBuffer CurrentDepthStencilBuffer { get; private set; }
 
@@ -616,7 +618,6 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     private void CreateCommandPool()
     {
         var graphicsFamily = MainDevice.QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit);
-        var resourceFamily = MainDevice.QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.TransferBit);
 
         var poolInfo = new CommandPoolCreateInfo
         {
@@ -624,21 +625,21 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
             Flags = CommandPoolCreateFlagBits.ResetCommandBufferBit
         };
         GraphicsCommandPool = LogicalDevice.CreateCommandPool(poolInfo);
-        
+
         poolInfo = new CommandPoolCreateInfo
         {
-            QueueFamilyIndex = resourceFamily.FamilyIndex,
+            QueueFamilyIndex = graphicsFamily.FamilyIndex,
             Flags = CommandPoolCreateFlagBits.TransientBit
         };
-        
+
         TransferCommandPool = LogicalDevice.CreateCommandPool(poolInfo);
-        GraphicsQueue = MainDevice.GetAvailableGraphicsQueue();
+        GraphicsQueue = MainDevice.LeaseGraphicsQueue(out _graphicsQueueIndex, out var queueLock);
+        GraphicsQueueLock = queueLock;
+        _holdsGraphicsQueue = true;
         unsafe
         {
             Log.Logger.Information($"Graphics Queue address of Logical device {new IntPtr(LogicalDevice.NativePointer)}: 0x{new IntPtr(GraphicsQueue.NativePointer).ToString("X2")}");
         }
-            
-        resourceQueue = MainDevice.GetAvailableTransferQueue();
     }
 
     private void CreateCommandBuffers()
@@ -675,7 +676,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public Result DeviceWaitIdle()
     {
-        return LogicalDevice.DeviceWaitIdle();
+        return MainDevice.DeviceWaitIdle();
     }
 
     public bool HasNoFramesInFlight
@@ -708,7 +709,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     {
         if (InFlightFences == null || InFlightFences.Length == 0) return Result.Success;
 
-        return LogicalDevice.WaitForFences((uint)InFlightFences.Length, InFlightFences, true, timeout);
+        return MainDevice.Observe(LogicalDevice.WaitForFences((uint)InFlightFences.Length, InFlightFences, true, timeout));
     }
 
     public void InsertImageMemoryBarrier(
@@ -1012,7 +1013,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         // TEMP: the CPU blocks HERE until the GPU is done with this slot. Timed on its own because "BeginDraw is a third
         // of the frame" does not say whether we are waiting for the GPU or doing work - and those have opposite fixes.
         var fenceStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        var result = LogicalDevice.WaitForFences(1, renderFence, true, ulong.MaxValue);
+        var result = MainDevice.Observe(LogicalDevice.WaitForFences(1, renderFence, true, ulong.MaxValue));
         LastFenceWaitMs = System.Diagnostics.Stopwatch.GetElapsedTime(fenceStart).TotalMilliseconds;
 
         FrameTicket++;
@@ -1390,7 +1391,11 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
             //throw new Exception($"failed to reset fences. Result: {result}");
         }
 
-        result = GraphicsQueue.QueueSubmit2(1, submitInfo, renderFence);
+        lock (GraphicsQueueLock)
+        {
+            result = GraphicsQueue.QueueSubmit2(1, submitInfo, renderFence);
+        }
+
         _recordingFrame = false;
 
         if (result != Result.Success)
@@ -1401,6 +1406,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         CanPresent = !FrameWithheld;
 
         _submissionSync?.Release();
+        MainDevice.Observe(result);
     }
 
     public void FrameEnded()
@@ -1823,11 +1829,18 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
             CommandBufferInfoCount = 1,
             PCommandBufferInfos = new[] { new CommandBufferSubmitInfo { CommandBuffer = commandBuffer } }
         };
-        resourceQueue.QueueSubmit2(1, submitInfo, fence);
-        LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue);
+        Result submitted;
+        lock (GraphicsQueueLock)
+        {
+            submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
+        }
+
+        var waited = LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue);
         LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
         LogicalDevice.DestroyFence(fence);
         _submissionSync?.Release();
+        MainDevice.Observe(submitted);
+        MainDevice.Observe(waited);
     }
 
     public void AddEffectPool(EffectPool pool)
@@ -1911,6 +1924,12 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     protected override void Dispose(bool disposeManagedResources)
     {
         base.Dispose(disposeManagedResources);
+
+        if (_holdsGraphicsQueue)
+        {
+            _holdsGraphicsQueue = false;
+            MainDevice.ReturnGraphicsQueue(_graphicsQueueIndex);
+        }
 
         if (IsResourceLoaderDevice)
         {
