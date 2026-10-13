@@ -106,6 +106,8 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     /// <inheritdoc />
     public bool ResourcesBound { get; private set; } = true;
 
+    private HashSet<EffectParameter> _reportedUnbound;
+
     private unsafe void ApplyHeap()
     {
         Effect.CurrentTechnique = Technique;
@@ -193,9 +195,17 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                     _ => resourceLinker.GetUAVs(link.ResourceParamDescription),
                 };
                 uint basePushOffset = parameterPushOffsets[link.Parameter];
-                for (int resIdx = 0; resIdx < resources.Length; resIdx++)
+
+                // Every element a texture or sampler parameter DECLARES. One never set has no entry at all, and its index
+                // stayed 0 - heap slot 0, whatever holds it, or a texture freed since, which loses the device. Buffers
+                // keep what they had: there is no buffer stand-in, and an image descriptor read as one is no better.
+                var isBuffer = kind == HeapResourceKind.Uav || link.IsStorageBuffer;
+                var declared = isBuffer ? resources.Length : Math.Max(resources.Length, (int)link.Parameter.ElementCount);
+                for (int resIdx = 0; resIdx < declared; resIdx++)
                 {
-                    var slot = resources[resIdx]?.GlobalHeapOffset ?? uint.MaxValue;
+                    var resource = resIdx < resources.Length ? resources[resIdx] : null;
+                    var slot = isBuffer ? resource?.GlobalHeapOffset ?? uint.MaxValue
+                        : resource is { HasLiveSlot: true } ? resource.GlobalHeapOffset : uint.MaxValue;
                     // Nothing bound. An out-of-heap index would sample whatever the driver finds there - in practice
                     // another effect's live descriptor - so hand over the stand-in instead: the worst case becomes a
                     // red square (DEBUG) or a transparent one, both of which are honest, rather than someone else's
@@ -203,7 +213,9 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                     if (slot == uint.MaxValue)
                     {
                         ResourcesBound = false;
-                        UnboundResource.ReportOnce(Effect.Name, link.Parameter?.Name);
+                        // Once per parameter of this pass: a resource left unset on purpose meets this on every draw.
+                        if ((_reportedUnbound ??= []).Add(link.Parameter))
+                            UnboundResource.ReportOnce(Effect.Name, link.Parameter?.Name);
                         var heap = ((GraphicsDevice)graphicsDevice).DescriptorHeapManager;
                         if (heap != null)
                             slot = kind == HeapResourceKind.Sampler ? heap.FallbackSamplerOffset : heap.FallbackTextureOffset;

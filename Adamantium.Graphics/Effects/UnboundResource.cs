@@ -18,7 +18,7 @@ internal static class UnboundResource
         }
 
         Log.Logger.Warning(
-            "{Key} was never bound: the pass would sample an out-of-heap descriptor, so the draw is skipped. " +
+            "{Key} is not bound to a live resource: the pass reads the stand-in descriptor instead. " +
             "Bind it before applying the pass, or stop declaring it.", key);
     }
 }

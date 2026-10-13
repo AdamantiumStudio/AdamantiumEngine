@@ -13,6 +13,9 @@ namespace Adamantium.Graphics.Effects;
 internal interface IHeapResource
 {
     uint GlobalHeapOffset { get; }
+
+    // A slot to read from: set, and its resource not disposed since - a disposed one's slot is retired or reused.
+    bool HasLiveSlot { get; }
 }
 
 internal class ResourceInfo<T> : PropertyChangedBase, IHeapResource where T : class
@@ -49,6 +52,16 @@ internal class ResourceInfo<T> : PropertyChangedBase, IHeapResource where T : cl
     public bool IsDirty { get; internal set; }
     
     public uint GlobalHeapOffset { get; internal set; } = uint.MaxValue;
+
+    public bool HasLiveSlot =>
+        GlobalHeapOffset != uint.MaxValue && resource is not DisposableObject { IsDisposed: true };
+
+    // Bound to nothing: what SetResource(null) means.
+    internal void Clear()
+    {
+        Resource = null;
+        GlobalHeapOffset = uint.MaxValue;
+    }
 }
 
 internal class EffectResourceLinker : IEffectResourceLinker
@@ -261,13 +274,16 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     states[index] = new ResourceInfo<SamplerState>();
                 }
 
-                states[index].Resource = state;
-
                 // Each sampler gets its OWN stable heap slot instead of sharing one per-parameter slot, which made the
                 // last-bound sampler apply to every draw.
                 if (state != null)
                 {
+                    states[index].Resource = state;
                     states[index].GlobalHeapOffset = DescriptorHeapManager.GetOrAllocateSamplerOffset(state);
+                }
+                else
+                {
+                    states[index].Clear();
                 }
             }
                 break;
@@ -289,6 +305,12 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     srvBufs[index].Resource = srvBuffer;
                     srvBufs[index].GlobalHeapOffset =
                         DescriptorHeapManager.GetOrAllocateBufferOffset(srvBuffer, DescriptorType.StorageBuffer);
+                    break;
+                }
+
+                if (value == null && ShaderResourceBuffers.TryGetValue(parameter, out var bound))
+                {
+                    bound[index]?.Clear();
                     break;
                 }
 
@@ -314,6 +336,12 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     views[index].GlobalHeapOffset =
                         DescriptorHeapManager.GetOrAllocateTextureOffset(texture, DescriptorType.SampledImage);
                 }
+                else
+                {
+                    // Setting null used to leave the last texture's slot in place, which then went on being sampled
+                    // after that texture was gone.
+                    views[index].Clear();
+                }
             }
                 break;
             case EffectResourceType.UnorderedAccessView:
@@ -337,6 +365,10 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     // This buffer's OWN stable heap slot - same per-resource rule as textures and samplers.
                     uavs[index].GlobalHeapOffset =
                         DescriptorHeapManager.GetOrAllocateBufferOffset(buffer, DescriptorType.StorageBuffer);
+                }
+                else
+                {
+                    uavs[index]?.Clear();
                 }
             }
                 break;
