@@ -381,6 +381,12 @@ All packages share one version.
 
 ### Fixed
 
+- A texture or sampler an effect declares but has no live resource for reads the stand-in descriptor, not heap slot 0
+  or a freed slot. A parameter never set wrote no index at all, so its shader read slot 0; once the texture
+  there was freed, the next draw lost the device. Setting a parameter to null kept the slot of what it held before, as
+  did a resource disposed while still set. `SetResource(null)` now unbinds. The warning about an unbound resource says
+  the pass reads the stand-in; it no longer claims the draw is skipped.
+
 - A content project built from the engine's source in another repository's solution cooks with the compiler of its
   configuration. The solution, not listing the compiler, handed it no configuration: it was built into
   `artifacts\bin\<tfm>`, and the cook ran a stale compiler from `artifacts\bin\<configuration>\<tfm>`, or found none.

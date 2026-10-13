@@ -4,6 +4,9 @@ using Adamantium.EffectsCompiler;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
+using Adamantium.Graphics.Core.Presentation;
+using Adamantium.Imaging;
+using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Engine.GraphicsTests
 {
@@ -52,6 +55,58 @@ namespace Adamantium.Engine.GraphicsTests
 
             Assert.That(second.Page != first.Page || second.Offset >= first.Offset + 64, Is.True,
                 "the second constants landed on the first ones");
+        }
+
+        // A texture a pass declares but nobody bound reads the stand-in. One never set wrote no index at all, so the shader
+        // read heap slot 0 - and once the texture there was freed, the device was lost. One set to null, or whose texture
+        // was disposed, kept pointing at that texture's slot.
+        [TestCase("never set")]
+        [TestCase("set to null")]
+        [TestCase("disposed")]
+        public void ATextureNotBoundToALiveOne_ReadsTheStandIn(string how)
+        {
+            const string source = @"
+Texture2D Source;
+uint64_t OutputAddress;
+[shader(""compute"")]
+[numthreads(1, 1, 1)]
+void CS(uint3 tid : SV_DispatchThreadID) { float4* o = (float4*)OutputAddress; o[0] = Source.Load(int3(0, 0, 0)); }
+technique T { pass P { EffectName = ""UnboundSource""; ComputeShader = CS; } }
+";
+            var compiled = EffectCompiler.Compile(source, "UnboundSource.fx");
+            Assert.That(compiled.HasErrors, Is.False);
+            var device = GpuFixture.CreateRenderDevice();
+            using var effect = new Effect(device, compiled.EffectData);
+            var pass = effect.Techniques[0].Passes[0];
+
+            var texture = device.CreateTexture(new TextureDescription
+            {
+                Width = 1, Height = 1, Depth = 1, ArrayLayers = 1, MipLevels = 1, Samples = MSAALevel.None,
+                Format = Format.R8G8B8A8_UNORM, InitialLayout = ImageLayout.Undefined,
+                DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal, ImageType = ImageType._2d,
+                ImageAspect = ImageAspectFlagBits.ColorBit, ImageTiling = ImageTiling.Optimal,
+                Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit,
+                Dimension = TextureDimension.Texture2D
+            }, [0, 255, 0, 255]);
+
+            if (how != "never set") effect.Parameters["Source"].SetResource(texture);
+            if (how == "set to null") effect.Parameters["Source"].SetResource<ITexture>((ITexture)null);
+            if (how == "disposed") texture.Dispose();
+
+            var prms = new PresentationParameters(PresenterType.RenderTarget, 16, 16, System.IntPtr.Zero);
+            using var presenter = GraphicsPresenter.Create(device, prms, "unbound_source");
+            device.SetRenderTargets(presenter.RenderTarget);
+            device.SetDepthBuffer(presenter.DepthBuffer);
+            device.Presenter = presenter;
+
+            Assert.That(device.BeginDraw(beforeRenderPass: _ => pass.Apply()), Is.True);
+            device.EndDraw();
+            device.Submit();
+            device.FrameEnded();
+            device.DeviceWaitIdle();
+            if (how != "disposed") texture.Dispose();
+
+            Assert.That(pass.ResourcesBound, Is.False, "the pass has to know it read the stand-in");
         }
 
         // The pool keeps one copy of a stage two effects share word for word. It used to refuse the second effect: every
