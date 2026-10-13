@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using Adamantium.Core;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Vulkan.Core;
@@ -18,6 +19,8 @@ public class MainGraphicsDevice : DisposableBase
     private object[] _graphicsQueueLocks;
 
     private readonly object _queueLeaseLock = new();
+
+    private int _lost;
 
     private readonly List<IGraphicsDevice> graphicsDevices;
 
@@ -469,9 +472,44 @@ public class MainGraphicsDevice : DisposableBase
         InFlightFences ??= LogicalDevice.CreateFences(fenceInfo, BuffersCount);
     }
 
+    /// <summary>True once the GPU has lost this device: nothing it is asked to do runs any more, and only a new device
+    /// draws again.</summary>
+    public bool IsLost => Volatile.Read(ref _lost) != 0;
+
+    /// <summary>Raised once, on whichever thread first finds the device lost.</summary>
+    public event Action Lost;
+
+    /// <summary>Hands back <paramref name="result"/> of a call to this device, reporting the device lost the first time a
+    /// call says so.</summary>
+    public Result Observe(Result result)
+    {
+        if (result == Result.ErrorDeviceLost && Interlocked.Exchange(ref _lost, 1) == 0)
+        {
+            Log.Logger.Error("The GPU lost the device; a new one has to be made.");
+            Lost?.Invoke();
+        }
+
+        return result;
+    }
+
+    /// <summary>Waits until the device has finished all its work. Vulkan has every queue of the device externally
+    /// synchronized meanwhile, so each queue's lock is held, taken in queue order.</summary>
     public Result DeviceWaitIdle()
     {
-        return LogicalDevice?.DeviceWaitIdle() ?? Result.Success;
+        return LogicalDevice == null ? Result.Success : Observe(WaitIdleHoldingQueuesFrom(0));
+    }
+
+    private Result WaitIdleHoldingQueuesFrom(int index)
+    {
+        if (index == _graphicsQueueLocks.Length)
+        {
+            return LogicalDevice.DeviceWaitIdle();
+        }
+
+        lock (_graphicsQueueLocks[index])
+        {
+            return WaitIdleHoldingQueuesFrom(index + 1);
+        }
     }
 
     public IGraphicsDevice CreateRenderDevice()
@@ -567,7 +605,7 @@ public class MainGraphicsDevice : DisposableBase
     {
         Log.Logger.Debug("Start disposing main device");
         ShaderHotReload.Dispose();
-        LogicalDevice?.DeviceWaitIdle();
+        DeviceWaitIdle();
         FlushRetiredAfterIdle();
         // A copy: a device takes itself off this list as it is disposed.
         foreach (var device in graphicsDevices.ToArray())

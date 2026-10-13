@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using Adamantium.Graphics;
+using Adamantium.Graphics.Core;
+using Adamantium.Vulkan.Core;
 using NUnit.Framework;
 
 namespace Adamantium.Engine.GraphicsTests;
@@ -35,5 +39,46 @@ public class GraphicsQueueLeaseTests
         }
 
         Assert.That(shared, Is.Zero);
+    }
+
+    // A lost device is reported once, by whichever call first finds it lost, so its owner replaces it once.
+    [Test]
+    public void ALostDevice_IsReportedOnce()
+    {
+        var main = MainGraphicsDevice.Create(new GraphicsDeviceFactory(), 3, "LostDevice", false);
+        try
+        {
+            var reports = 0;
+            main.Lost += () => reports++;
+
+            main.Observe(Result.Success);
+            main.Observe(Result.ErrorDeviceLost);
+            main.Observe(Result.ErrorDeviceLost);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(main.IsLost, Is.True);
+                Assert.That(reports, Is.EqualTo(1));
+            });
+        }
+        finally
+        {
+            main.Dispose();
+        }
+    }
+
+    // Waiting for the device to idle is a use of every queue: it waits its turn behind a submit or a present in progress.
+    [Test]
+    public void WaitingForTheDeviceToIdle_WaitsForAQueueInUse()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        Task<Result> waiting;
+        lock (device.GraphicsQueueLock)
+        {
+            waiting = Task.Run(() => GpuFixture.Main.DeviceWaitIdle());
+            Assert.That(waiting.Wait(300), Is.False, "it must not idle the device while the queue is in use");
+        }
+
+        Assert.That(waiting.Wait(5000), Is.True, "and goes on once the queue is free");
     }
 }

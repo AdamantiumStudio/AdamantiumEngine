@@ -46,6 +46,22 @@ public class LightManagerTests
         Assert.That(universe.EntityWorld.RootEntities, Does.Not.Contain(point));
     }
 
+    // The frame already running keeps its entities, as it keeps its lights: a light deleted from the application's thread
+    // left the world at once, while the render thread was going through it, and the frame failed.
+    [Test]
+    public void ARemovedLight_StaysInTheWorldUntilTheFrameEnds()
+    {
+        var universe = new TestUniverse();
+        var lights = new LightManager(universe, universe.EntityWorld);
+        var point = new LightTemplate().BuildEntity(null, "Point", LightType.Point);
+        lights.AddLight(point);
+        NextFrame(universe);
+
+        lights.RemoveLight(point);
+
+        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(point));
+    }
+
     [Test]
     public void AnEntityWithoutALight_IsNotTakenIn()
     {

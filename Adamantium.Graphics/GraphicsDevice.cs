@@ -676,7 +676,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public Result DeviceWaitIdle()
     {
-        return LogicalDevice.DeviceWaitIdle();
+        return MainDevice.DeviceWaitIdle();
     }
 
     public bool HasNoFramesInFlight
@@ -709,7 +709,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
     {
         if (InFlightFences == null || InFlightFences.Length == 0) return Result.Success;
 
-        return LogicalDevice.WaitForFences((uint)InFlightFences.Length, InFlightFences, true, timeout);
+        return MainDevice.Observe(LogicalDevice.WaitForFences((uint)InFlightFences.Length, InFlightFences, true, timeout));
     }
 
     public void InsertImageMemoryBarrier(
@@ -1013,7 +1013,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         // TEMP: the CPU blocks HERE until the GPU is done with this slot. Timed on its own because "BeginDraw is a third
         // of the frame" does not say whether we are waiting for the GPU or doing work - and those have opposite fixes.
         var fenceStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        var result = LogicalDevice.WaitForFences(1, renderFence, true, ulong.MaxValue);
+        var result = MainDevice.Observe(LogicalDevice.WaitForFences(1, renderFence, true, ulong.MaxValue));
         LastFenceWaitMs = System.Diagnostics.Stopwatch.GetElapsedTime(fenceStart).TotalMilliseconds;
 
         FrameTicket++;
@@ -1406,6 +1406,7 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         CanPresent = !FrameWithheld;
 
         _submissionSync?.Release();
+        MainDevice.Observe(result);
     }
 
     public void FrameEnded()
@@ -1828,15 +1829,18 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
             CommandBufferInfoCount = 1,
             PCommandBufferInfos = new[] { new CommandBufferSubmitInfo { CommandBuffer = commandBuffer } }
         };
+        Result submitted;
         lock (GraphicsQueueLock)
         {
-            GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
+            submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
         }
 
-        LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue);
+        var waited = LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue);
         LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
         LogicalDevice.DestroyFence(fence);
         _submissionSync?.Release();
+        MainDevice.Observe(submitted);
+        MainDevice.Observe(waited);
     }
 
     public void AddEffectPool(EffectPool pool)

@@ -407,6 +407,21 @@ All packages share one version.
     a queue is shared only when every one is taken.
   - **A shared queue is used in turn.** Every submit and present on a queue goes under its lock. A device's uploads go
     to its own graphics queue.
+  - **Waiting for the device to idle waits its turn on every queue**, as Vulkan requires. `GraphicsDevice.DeviceWaitIdle`
+    and the swapchain's rebuild go through `MainGraphicsDevice.DeviceWaitIdle`, which holds each queue's lock while it
+    waits. They called the device directly, while other windows submitted and presented.
+
+- A lost device is reported, so its host can replace it. `MainGraphicsDevice.IsLost` turns true and `Lost` is raised,
+  once, as soon as a frame's submit or fence wait, an upload, an idle wait, an acquire or a present reports
+  `ErrorDeviceLost` (`MainGraphicsDevice.Observe`). `GraphicsDeviceService` then raises `DeviceLost`, which it never did
+  before, and sets `DeviceUpdateNeeded`, which a host acts on with `ChangeOrCreateMainDevice` - as the UI application
+  does. Before, nothing heard of the loss: every window went on drawing on the lost device and stayed blank until the
+  application was restarted.
+
+- A root entity removed while a frame is drawn stays in the world until the frame ends, as an added one only joins it
+  then. `EntityManager.RemoveEntity` took it out of `RootEntities` at once, from whichever thread removed it, while the
+  render thread was going through the list. Deleting a light on the sandbox's Scene page failed the frame
+  (`Collection was modified`).
 
 - A graphics device's registry of its resources is locked. Resources made or disposed on two threads at once, such as
   textures built by a background task while the render thread works, could corrupt it. A corrupted registry miscounted
@@ -551,6 +566,9 @@ All packages share one version.
 
 - `IGraphicsDevice` has `GraphicsQueueLock`, the lock every submit and present on its queue goes under; an implementer
   adds it.
+
+- `EntityManager.RemoveEntity` takes a root entity out of `RootEntities` when the frame ends, no longer at once. Code that
+  needs it gone sooner calls `EntityWorld.ForceUpdate`.
 
 - `FileSystemContentResolver` takes a relative asset path from the application's folder, not from the working
   directory, and `CookedContentResolver` looks for a cooked model beside the application under the model's own path

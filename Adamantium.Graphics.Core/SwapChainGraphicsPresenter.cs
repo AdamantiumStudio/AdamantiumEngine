@@ -465,12 +465,12 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
         // Finite timeout (1s), NOT UINT64_MAX: the spec forbids an infinite timeout when forward progress cannot be
         // guaranteed (VUID-vkAcquireNextImageKHR-surface-07783), and an infinite wait turned a transient swapchain
         // stall into a HARD freeze - the render thread blocked in AcquireNextImage forever.
-        var result =
+        var result = GraphicsDevice.MainDevice.Observe(
             GraphicsDevice.LogicalDevice.AcquireNextImageKHR(
                 this,
                 1_000_000_000UL,   // 1 second, in nanoseconds
                 semaphore, null,
-                ref currentImageIndex);
+                ref currentImageIndex));
 
         if (result == Result.ErrorOutOfDateKhr)
         {
@@ -525,6 +525,8 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
             result = presentQueue.QueuePresentKHR(presentInfo);
         }
 
+        GraphicsDevice.MainDevice.Observe(result);
+
         if (result != Result.Success && result != Result.SuboptimalKhr)
         {
             Log.Logger.Error($"Failed to present swap chain image. Operation result was: {result}");
@@ -570,7 +572,7 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
             // the wait is a formality that costs nothing, and it is what makes renderFinishedSemaphores[imageIndex]
             // safe to hand to the queue again.
             var fence = presentFences[imageIndex];
-            GraphicsDevice.LogicalDevice.WaitForFences(1, fence, true, 1_000_000_000UL);
+            GraphicsDevice.MainDevice.Observe(GraphicsDevice.LogicalDevice.WaitForFences(1, fence, true, 1_000_000_000UL));
             GraphicsDevice.LogicalDevice.ResetFences(1, fence);
 
             _presentFenceArray[0] = fence;
@@ -689,7 +691,7 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
     {
         if (!UsePresentFences)
         {
-            GraphicsDevice.LogicalDevice.DeviceWaitIdle();
+            GraphicsDevice.DeviceWaitIdle();
             return;
         }
 
@@ -697,15 +699,15 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
         // device's own frame fences cover a frame that rendered into an image and never reached its present.
         // Between them nothing is left reading the images - and neither wait stops the OTHER windows, which share
         // this VkDevice and were all being stalled by the DeviceWaitIdle this replaces.
-        var result = GraphicsDevice.LogicalDevice.WaitForFences(
-            (uint)presentFences.Length, presentFences, true, 1_000_000_000UL);
+        var result = GraphicsDevice.MainDevice.Observe(GraphicsDevice.LogicalDevice.WaitForFences(
+            (uint)presentFences.Length, presentFences, true, 1_000_000_000UL));
 
         if (result != Result.Success)
         {
             // A fence that never signaled leaves the images' state unknown, and destroying a fence still in use is
             // invalid - so fall back to the blunt wait rather than carry on with a guess.
             Log.Logger.Error($"Present fences did not settle before a swapchain rebuild ({result}); idling the device.");
-            GraphicsDevice.LogicalDevice.DeviceWaitIdle();
+            GraphicsDevice.DeviceWaitIdle();
             return;
         }
 
