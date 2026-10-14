@@ -176,6 +176,32 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
         }
     }
 
+    // Two saves within one tick of the file clock share a write time, and the second was taken for the first and lost.
+    [Test]
+    public void ASaveWithTheWriteTimeOfTheOneBefore_IsStillCompiled()
+    {
+        var (device, effect, pass, output, header, source) = Bumping();
+        using (effect)
+        using (output)
+        {
+            Manually(() =>
+            {
+                File.WriteAllText(header, "uint Bump() { return 5; }\n");
+                Reload.ApplyAsync([header]).GetAwaiter().GetResult();
+                var applied = File.GetLastWriteTimeUtc(header);
+
+                File.WriteAllText(header, "uint Bump() { return 6; }\n");
+                File.SetLastWriteTimeUtc(header, applied);
+                Reload.NotifyChanged(header);
+
+                Assert.That(Changed(header), Is.True, "the second save is gathered");
+                var reports = Reload.ApplyAsync().GetAwaiter().GetResult();
+                Assert.That(ReportOn(reports, source).Compiled, Is.True);
+                Assert.That(Run(device, pass, output)[0], Is.EqualTo(6));
+            });
+        }
+    }
+
     [Test]
     public void AnApplyThatDoesNotCompile_ReportsTheErrors_AndTheRunningVersionStays()
     {
