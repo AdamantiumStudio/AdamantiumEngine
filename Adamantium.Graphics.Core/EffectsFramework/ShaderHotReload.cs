@@ -22,7 +22,9 @@ public sealed class ShaderHotReload : IDisposable
     private readonly List<WeakReference<Effect>> tracked = [];
     private readonly Dictionary<string, FileSystemWatcher> watchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> changed = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTime> takenAt = new(StringComparer.OrdinalIgnoreCase);
+    // The hash of each file's content as last taken to compile. A save is told apart by what it says, not by when: two
+    // saves within one tick of the file clock share a write time, and the second was lost.
+    private readonly Dictionary<string, string> taken = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(WeakReference<Effect> Effect, EffectData Data)> pending = [];
     private readonly HashSet<string> compiling = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> compileAgain = new(StringComparer.OrdinalIgnoreCase);
@@ -92,9 +94,13 @@ public sealed class ShaderHotReload : IDisposable
     public void NotifyChanged(string path)
     {
         var fullPath = Path.GetFullPath(path);
+
+        // Read outside the lock, compared inside it: a save taken to compile meanwhile is not gathered again. Unread
+        // counts as new - a file the save still holds is looked at again once it settles.
+        var content = ContentHash(fullPath);
         lock (sync)
         {
-            if (takenAt.TryGetValue(fullPath, out var taken) && taken == File.GetLastWriteTimeUtc(fullPath))
+            if (content != null && taken.TryGetValue(fullPath, out var last) && last == content)
             {
                 return;
             }
@@ -242,10 +248,22 @@ public sealed class ShaderHotReload : IDisposable
             changed.Clear();
             foreach (var file in files)
             {
-                takenAt[file] = File.GetLastWriteTimeUtc(file);
+                taken[file] = ContentHash(file);
             }
 
             return files;
+        }
+    }
+
+    private static string ContentHash(string path)
+    {
+        try
+        {
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
