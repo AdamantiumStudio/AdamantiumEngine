@@ -95,12 +95,14 @@ public sealed class ShaderHotReload : IDisposable
     {
         var fullPath = Path.GetFullPath(path);
 
-        // Read outside the lock, compared inside it: a save taken to compile meanwhile is not gathered again. Unread
-        // counts as new - a file the save still holds is looked at again once it settles.
+        // Read outside the lock, compared inside it; and what looks new is read again inside it, since the first read may
+        // be older than a save taken to compile meanwhile - a write reports itself as soon as it empties the file. Unread
+        // counts as new: a file the save still holds is looked at again once it settles.
         var content = ContentHash(fullPath);
         lock (sync)
         {
-            if (content != null && taken.TryGetValue(fullPath, out var last) && last == content)
+            if (taken.TryGetValue(fullPath, out var last) && last != null
+                && (content == last || ContentHash(fullPath) == last))
             {
                 return;
             }

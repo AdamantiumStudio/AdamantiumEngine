@@ -383,7 +383,8 @@ All packages share one version.
 
 - Shader hot reload no longer loses a save that lands within one tick of the file clock after the one compiled before:
   a save is told apart by its content, not its write time, and the second one shared the first one's time and was
-  skipped - the running effect stayed on the older version without a word.
+  skipped - the running effect stayed on the older version without a word. A report of the watcher that read the file
+  before a save was taken to compile no longer puts that save back on the list.
 - A texture or sampler an effect declares but has no live resource for reads the stand-in descriptor, not heap slot 0
   or a freed slot. A parameter never set wrote no index at all, so its shader read slot 0; once the texture
   there was freed, the next draw lost the device. Setting a parameter to null kept the slot of what it held before, as
