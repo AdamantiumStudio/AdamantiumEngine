@@ -278,12 +278,14 @@ public class Universe : PropertyChangedBase, IUniverse
     }
 
     /// <summary>
-    /// Runs one frame on the host's tick; nothing while paused. Its own clock resumes where it stopped.
+    /// Runs one frame on the host's tick. While paused it only frees the outputs taken out meanwhile, and its own clock
+    /// resumes where it stopped.
     /// </summary>
     public void RunOnce(AppTime time)
     {
         if (IsPaused)
         {
+            platform.RemoveWindowsInternal();
             return;
         }
 
