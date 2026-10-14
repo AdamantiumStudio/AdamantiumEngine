@@ -19,6 +19,7 @@ public class InputWormhole
 
     private readonly UniverseOutput output;
     private readonly GamepadHub gamepads;
+    private readonly IUniverse universe;
 
     private string text = string.Empty;
     private Vector2F absolutePosition;
@@ -29,10 +30,15 @@ public class InputWormhole
     private float gesturePinch;
     private float gestureRotation;
 
-    public InputWormhole(UniverseOutput output, GamepadHub gamepads)
+    public InputWormhole(UniverseOutput output, GamepadHub gamepads) : this(output, gamepads, null)
+    {
+    }
+
+    public InputWormhole(UniverseOutput output, GamepadHub gamepads, IUniverse universe)
     {
         this.output = output;
         this.gamepads = gamepads;
+        this.universe = universe;
     }
 
     internal void OnKeyboardInput(KeyboardInput e)
@@ -77,6 +83,12 @@ public class InputWormhole
     /// Whether the output takes the keyboard. Keys are still tracked while it is off, so none sticks when it comes back.
     /// </summary>
     public bool IsKeyboardEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Whether keys typed into the output go to the game now: the keyboard is on and the simulation is not paused. A host
+    /// that also uses keys for its own interface asks this before keeping one from it.
+    /// </summary>
+    public bool TakesKeyboard => IsKeyboardEnabled && universe is not { IsSimulationPaused: true };
 
     /// <summary>
     /// Whether the output takes the pointer: the mouse's buttons, wheel and motion, and gestures of fingers.

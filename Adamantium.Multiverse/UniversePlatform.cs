@@ -135,7 +135,7 @@ namespace Adamantium.Multiverse
                     
                     var device = GraphicsDeviceService.CreateRenderDevice();
                     wnd.SetGraphicsDevice(device);
-                    wnd.Input = new InputWormhole(wnd, gamepads);
+                    wnd.Input = new InputWormhole(wnd, gamepads, Universe);
                     SubscribeToEvents(wnd);
                     
                     outputs.Add(wnd);

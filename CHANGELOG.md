@@ -19,6 +19,9 @@ All packages share one version.
   - **Finding it.** A generated class `{Name}Assets` has a constant for each file: its path from the application's
     folder, which `ContentManager` loads by.
 
+- `InputWormhole.TakesKeyboard`: whether keys typed into an output go to the game now - its keyboard is on and the
+  simulation is not paused - for a host that also uses keys for its own interface.
+
 - `Adamantium.Engine.Templates`: `dotnet new adamantium-content` creates a content project; Rider and Visual Studio
   list it in New Project once the templates are installed.
 
