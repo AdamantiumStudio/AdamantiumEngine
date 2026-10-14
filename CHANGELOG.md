@@ -21,7 +21,6 @@ All packages share one version.
 
 - `InputWormhole.TakesKeyboard`: whether keys typed into an output go to the game now - its keyboard is on and the
   simulation is not paused - for a host that also uses keys for its own interface.
-
 - `Adamantium.Engine.Templates`: `dotnet new adamantium-content` creates a content project; Rider and Visual Studio
   list it in New Project once the templates are installed.
 
@@ -384,6 +383,11 @@ All packages share one version.
 
 ### Fixed
 
+- An output taken out of a universe is freed - its presenter, its device and a render target's shared surfaces -
+  once the device has finished the frames that used it, and a paused universe takes its removed outputs out too. They
+  were kept until the universe shut down, and while it was paused they stayed in it, holding their host's controls.
+  Taking the main output out hands `MainOutput` to the next one, or to none. A pause with nothing taken out touches no
+  output: resuming goes on with the same outputs and their resources.
 - Shader hot reload no longer loses a save that lands within one tick of the file clock after the one compiled before:
   a save is told apart by its content, not its write time, and the second one shared the first one's time and was
   skipped - the running effect stayed on the older version without a word. A report of the watcher that read the file

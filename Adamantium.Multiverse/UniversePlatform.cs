@@ -154,23 +154,45 @@ namespace Adamantium.Multiverse
 
         private void Wnd_Closed(object sender, EventArgs e)
         {
-            windowsToRemove.Add((UniverseOutput)sender);
+            lock (syncObject)
+            {
+                windowsToRemove.Add((UniverseOutput)sender);
+            }
         }
 
         internal void RemoveWindowsInternal()
         {
-            if (windowsToRemove.Count > 0)
+            UniverseOutput[] removed;
+            lock (syncObject)
             {
-                for (int i = 0; i < windowsToRemove.Count; i++)
+                if (windowsToRemove.Count == 0)
                 {
-                    var wnd = windowsToRemove[i];
-                    outputs.Remove(wnd);
-                    UnsubscribeFromEvents(wnd);
-
-                    WindowId--;
-                    OnOutputRemoved(wnd);
+                    return;
                 }
+
+                removed = [.. windowsToRemove];
                 windowsToRemove.Clear();
+            }
+
+            for (int i = 0; i < removed.Length; i++)
+            {
+                var wnd = removed[i];
+                outputs.Remove(wnd);
+                if (ReferenceEquals(MainWindow, wnd))
+                {
+                    MainWindow = outputs.Count > 0 ? outputs[0] : null;
+                }
+
+                UnsubscribeFromEvents(wnd);
+
+                WindowId--;
+                OnOutputRemoved(wnd);
+            }
+
+            GraphicsDeviceService?.MainGraphicsDevice?.DeviceWaitIdle();
+            for (int i = 0; i < removed.Length; i++)
+            {
+                removed[i].Dispose();
             }
         }
 
@@ -250,7 +272,10 @@ namespace Adamantium.Multiverse
         {
             if (contextToWindow.Remove(context, out var window))
             {
-                windowsToRemove.Add(window);
+                lock (syncObject)
+                {
+                    windowsToRemove.Add(window);
+                }
             }
         }
 

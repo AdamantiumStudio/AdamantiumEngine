@@ -18,6 +18,7 @@ public class TestOutput : UniverseOutput
         gamepads = new GamepadHub(backend ?? new NoGamepadBackend(), EventAggregator);
         Input = new InputWormhole(this, gamepads);
         Description = new UniverseOutputDescription(PresenterType.RenderTarget) { Width = 800, Height = 600 };
+        OutputContext = new OutputContext(this);
     }
 
     public bool KeyboardFocused { get; set; } = true;
