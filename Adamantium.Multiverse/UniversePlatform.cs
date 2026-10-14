@@ -178,6 +178,11 @@ namespace Adamantium.Multiverse
             {
                 var wnd = removed[i];
                 outputs.Remove(wnd);
+                if (ReferenceEquals(MainWindow, wnd))
+                {
+                    MainWindow = outputs.Count > 0 ? outputs[0] : null;
+                }
+
                 UnsubscribeFromEvents(wnd);
 
                 WindowId--;

@@ -59,6 +59,12 @@ public class TestUniverse : IUniverse
         OutputsSettled?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Says the universe is initialized, as a real one does once its services exist.</summary>
+    public void RaiseInitialized()
+    {
+        Initialized?.Invoke(this, EventArgs.Empty);
+    }
+
     public void InitializeUniverse()
     {
     }
@@ -93,7 +99,7 @@ public class TestUniverse : IUniverse
 
     public event EventHandler OutputsSettled;
 
-    public event EventHandler Initialized { add { } remove { } }
+    public event EventHandler Initialized;
 
     public event EventHandler FrameFinished { add { } remove { } }
 
