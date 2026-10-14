@@ -56,6 +56,22 @@ public class InputWormholeTests
             Is.EqualTo((Vector2F.Zero, 0f, 0f)));
     }
 
+    [TestCase(false, true, ExpectedResult = true)]
+    [TestCase(true, true, ExpectedResult = false)]
+    [TestCase(false, false, ExpectedResult = false)]
+    [TestCase(true, false, ExpectedResult = false)]
+    [TestCase(null, true, ExpectedResult = true)]
+    public bool TheKeyboard_IsTakenWhileOnAndTheSimulationRuns(bool? paused, bool keyboardEnabled)
+    {
+        var universe = paused == null ? null : new TestUniverse { IsSimulationPaused = paused.Value };
+        var input = new InputWormhole(new TestOutput(), new GamepadHub(new NoGamepadBackend(), null), universe)
+        {
+            IsKeyboardEnabled = keyboardEnabled
+        };
+
+        return input.TakesKeyboard;
+    }
+
     [Test]
     public void AKeyTappedWithinOneFrame_IsPressedAndReleased()
     {
