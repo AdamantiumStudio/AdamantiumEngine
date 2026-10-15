@@ -581,6 +581,10 @@ All packages share one version.
 
 ### Changed
 
+- `AdamantiumViewModel` implements `INotifyPropertyChanged` itself instead of deriving from `PropertyChangedBase`; it
+  keeps `SetProperty` and the virtual `RaisePropertyChanged`. The MVVM generator knows a base that raises the change by
+  what it can do - a `RaisePropertyChanged(string)` the class can call - not by the name `PropertyChangedBase`, so a
+  `[Bindable]` field under any notifying base is generated.
 - `IGraphicsDevice` has `GraphicsQueueLock`, the lock every submit and present on its queue goes under; an implementer
   adds it.
 
