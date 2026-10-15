@@ -8,6 +8,10 @@ public partial class PartialPropertyViewModel : AdamantiumViewModel
 {
     [Bindable] public partial string Title { get; set; }
 
+    [Bindable, Affects(nameof(Caption))] public partial string Subtitle { get; set; }
+
+    public string Caption => Subtitle;
+
     public string LastChanged;
 
     partial void OnTitleChanged(string value) => LastChanged = value;
