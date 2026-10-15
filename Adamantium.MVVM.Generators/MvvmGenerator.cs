@@ -17,7 +17,6 @@ public sealed class MvvmGenerator : IIncrementalGenerator
     private const string AffectsAttr = "Adamantium.MVVM.AffectsAttribute";
     private const string CommandAttr = "Adamantium.MVVM.CommandAttribute";
     private const string ViewModelAttr = "Adamantium.MVVM.ViewModelAttribute";
-    private const string PropertyChangedBaseName = "Adamantium.Core.PropertyChangedBase";
     private const string InpcName = "System.ComponentModel.INotifyPropertyChanged";
 
     private static readonly SymbolDisplayFormat FqnFormat = SymbolDisplayFormat.FullyQualifiedFormat
@@ -29,7 +28,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor MissingInpc = new(
         "AMVVM001",
         "[Bindable] needs an INPC host",
-        "Field '{0}' uses [Bindable] but its class neither derives from AdamantiumViewModel nor is marked [ViewModel]; no property was generated",
+        "Field '{0}' uses [Bindable] but its class has no RaisePropertyChanged(string) to call and is not marked [ViewModel]; no property was generated",
         "Adamantium.MVVM",
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
@@ -452,19 +451,25 @@ public sealed class MvvmGenerator : IIncrementalGenerator
     private static string TypeNameWithGenerics(INamedTypeSymbol type) =>
         type.TypeParameters.Length == 0 ? type.Name : $"{type.Name}<{string.Join(", ", type.TypeParameters.Select(p => p.Name))}>";
 
-    // Where a change is raised from: an ancestor that supplies it, or [ViewModel] on this class or an ancestor, whose
-    // generated base this pass cannot see yet.
+    // Where a change is raised from: a RaisePropertyChanged(string) the class can call, its own or an ancestor's, or
+    // [ViewModel] on this class or an ancestor, whose generated part this pass cannot see yet.
     private static bool HasInpcHost(INamedTypeSymbol type)
     {
-        if (DerivesFrom(type, PropertyChangedBaseName)) return true;
-
         for (var at = type; at is not null; at = at.BaseType)
         {
             if (at.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ViewModelAttr)) return true;
+            if (DeclaresRaise(at, ReferenceEquals(at, type))) return true;
         }
 
         return false;
     }
+
+    private static bool DeclaresRaise(INamedTypeSymbol at, bool own) =>
+        at.GetMembers("RaisePropertyChanged").OfType<IMethodSymbol>().Any(m =>
+            !m.IsStatic
+            && m.Parameters.Length == 1
+            && m.Parameters[0].Type.SpecialType == SpecialType.System_String
+            && (own || m.DeclaredAccessibility != Accessibility.Private));
 
     private static bool DerivesFrom(INamedTypeSymbol type, string baseFqn)
     {
