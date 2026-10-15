@@ -183,6 +183,18 @@ public class MvvmFunctionalTests
     }
 
     [Test]
+    public void PartialProperty_NotifiesWhatItAffects()
+    {
+        var vm = new PartialPropertyViewModel();
+        var raised = new List<string>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.Subtitle = "Below";
+
+        Assert.That(raised, Is.EqualTo(new[] { "Subtitle", "Caption" }));
+    }
+
+    [Test]
     public void OverridableHooks_ReachTheDerivedClass()
     {
         var vm = new DerivedHooksViewModel();

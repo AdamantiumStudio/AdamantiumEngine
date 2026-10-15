@@ -383,6 +383,8 @@ All packages share one version.
 
 ### Fixed
 
+- `[Affects]` can be put on a `[Bindable]` partial property. The generator read it there, but the attribute was allowed
+  on fields only, so it did not compile.
 - An output taken out of a universe is freed - its presenter, its device and a render target's shared surfaces -
   once the device has finished the frames that used it, and a paused universe takes its removed outputs out too. They
   were kept until the universe shut down, and while it was paused they stayed in it, holding their host's controls.
