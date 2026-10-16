@@ -87,7 +87,7 @@ internal sealed class TextNavigator
         }
 
         var options = _laid.Options;
-        if (text[text.Length - 1] is '\n' or LineSeparator
+        if (text[text.Length - 1] is '\n' or LineSeparator or ParagraphSeparator
             && _laid.OversetIndex >= text.Length && (options.MaxLines <= 0 || endLine + 1 < options.MaxLines))
         {
             var rightToLeft = options.Direction == TextDirection.RightToLeft
@@ -98,16 +98,22 @@ internal sealed class TextNavigator
                 right = filled[k] ? Math.Max(right, stops[k].Right) : right;
             }
 
-            var width = _laid.Size.Width;
-            var alignment = _laid.RenderingParameters?.HorizontalTextAlignment;
+            // The empty last line stands as its paragraph says: between its margins, and its indent at its start when
+            // a paragraph separator opened it; after a line break it goes on with the last paragraph.
+            var opens = text[text.Length - 1] == ParagraphSeparator;
+            var paragraph = _laid.Attributed?.ParagraphAt(opens ? text.Length : text.Length - 1)?.Attributes;
+            var indent = opens ? Finite(paragraph?.TextIndent) : 0;
+            var left = Math.Max(0, Finite(paragraph?.MarginLeft) + (rightToLeft ? 0 : indent));
+            var edge = _laid.Size.Width - Math.Max(0, Finite(paragraph?.MarginRight) + (rightToLeft ? indent : 0));
+            var alignment = paragraph?.Alignment ?? _laid.RenderingParameters?.HorizontalTextAlignment;
             var last = _laid.RenderingParameters?.JustifyLastLine == true
                 ? HorizontalTextAlignment.Left
                 : options.LastLineAlignment;
             var x = (alignment == HorizontalTextAlignment.Justify ? last : alignment) switch
             {
-                HorizontalTextAlignment.Center => width / 2,
-                HorizontalTextAlignment.Right => rightToLeft ? 0 : width,
-                _ => right,
+                HorizontalTextAlignment.Center => (left + edge) / 2,
+                HorizontalTextAlignment.Right => rightToLeft ? left : edge,
+                _ => rightToLeft ? (paragraph != null ? edge : right) : left,
             };
             stops[text.Length] = new CaretStop(x, endLine + 1);
             filled[text.Length] = true;
@@ -378,7 +384,7 @@ internal sealed class TextNavigator
         var lineRight = double.MinValue;
         for (var g = line.Start; g < line.End && g < text.Length; g = TextBoundaries.Next(graphemes, g))
         {
-            if (text[g] is '\n' or '\r' or LineSeparator)
+            if (text[g] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
             {
                 newline = newline < 0 ? g : newline;
                 continue;
@@ -451,7 +457,7 @@ internal sealed class TextNavigator
         }
 
         var line = stops[index].LineIndex;
-        if (_laid.Paragraphs != null && index < text.Length && text[index] is '\n' or '\r' or LineSeparator)
+        if (_laid.Paragraphs != null && index < text.Length && text[index] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
         {
             var boxes = LineBoxes(line);
             if (boxes.Count > 0)
@@ -743,7 +749,7 @@ internal sealed class TextNavigator
     private int HeldCharacter(int index)
     {
         var text = Text ?? string.Empty;
-        if (index <= 0 || index > text.Length || text[index - 1] is '\n' or '\r' or LineSeparator)
+        if (index <= 0 || index > text.Length || text[index - 1] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
         {
             return -1;
         }
@@ -763,7 +769,7 @@ internal sealed class TextNavigator
         var boxes = new List<(int Start, int End, double Left, double Right)>();
         for (var g = line.Start; g < line.End && g < text.Length; g = TextBoundaries.Next(graphemes, g))
         {
-            if (text[g] is '\n' or '\r' or LineSeparator)
+            if (text[g] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
             {
                 continue;
             }
@@ -821,7 +827,7 @@ internal sealed class TextNavigator
         var text = Text ?? string.Empty;
         for (var c = line.Start; c < line.End && c < text.Length; c++)
         {
-            if (text[c] is '\n' or '\r' or LineSeparator)
+            if (text[c] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
             {
                 return c;
             }

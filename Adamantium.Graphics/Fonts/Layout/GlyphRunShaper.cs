@@ -11,9 +11,9 @@ namespace Adamantium.Graphics.Fonts.Layout;
 
 internal sealed class GlyphRunShaper
 {
-    private static readonly char[] LineEnds = ['\n', LineSeparator];
+    private static readonly char[] LineEnds = ['\n', LineSeparator, ParagraphSeparator];
 
-    private static readonly char[] LineEndsAndObjects = ['\n', LineSeparator, ObjectReplacement];
+    private static readonly char[] LineEndsAndObjects = ['\n', LineSeparator, ParagraphSeparator, ObjectReplacement];
 
     private readonly IFont _font;
     private readonly Dictionary<(IFont Font, int Codepoint), bool> _verticalForms = new();
@@ -471,7 +471,7 @@ internal sealed class GlyphRunShaper
             index += step;
         }
 
-        if (index < 0 || index >= text.Length || text[index] is '\n' or LineSeparator)
+        if (index < 0 || index >= text.Length || text[index] is '\n' or LineSeparator or ParagraphSeparator)
         {
             return true;
         }

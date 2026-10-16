@@ -7,6 +7,7 @@ namespace Adamantium.Graphics.Fonts;
 public sealed class AttributedText
 {
     private readonly List<AttributeRun> _runs = [];
+    private readonly List<ParagraphRun> _paragraphs = [];
 
     public AttributedText(string text, TextAttributes defaults = null)
     {
@@ -62,6 +63,59 @@ public sealed class AttributedText
         _runs.Clear();
         _runs.AddRange(result);
         return this;
+    }
+
+    /// <summary>The paragraphs given their own <see cref="ParagraphAttributes"/>, in text order, not overlapping. Text
+    /// outside them stands as the layout says.</summary>
+    public IReadOnlyList<ParagraphRun> Paragraphs => _paragraphs;
+
+    /// <summary>Makes a range a paragraph of its own, from its first character to the U+2029 that ends it (or the end
+    /// of the text); a paragraph starts at the start of the text or after a U+2029. An empty range at the end of the
+    /// text is the empty paragraph after a closing U+2029. It replaces any paragraph it overlaps.</summary>
+    public AttributedText SetParagraph(int start, int length, ParagraphAttributes attributes)
+    {
+        var end = Math.Min(start + length, Text.Length);
+        start = Math.Max(start, 0);
+        if (attributes == null || (end <= start && start != Text.Length))
+        {
+            return this;
+        }
+
+        _paragraphs.RemoveAll(run => (run.Start < end && run.End > start) || run.Start == start);
+        var at = _paragraphs.FindIndex(run => run.Start > start);
+        _paragraphs.Insert(at < 0 ? _paragraphs.Count : at, new ParagraphRun(start, end - start, attributes));
+        return this;
+    }
+
+    /// <summary>The paragraph a UTF-16 index is in, or null when it is in none set.</summary>
+    public ParagraphRun? ParagraphAt(int index)
+    {
+        if (index == Text.Length)
+        {
+            return _paragraphs.Count > 0 && _paragraphs[^1] is { Length: 0 } last && last.Start == index ? last : null;
+        }
+
+        var low = 0;
+        var high = _paragraphs.Count - 1;
+        while (low <= high)
+        {
+            var middle = (low + high) / 2;
+            var run = _paragraphs[middle];
+            if (index < run.Start)
+            {
+                high = middle - 1;
+            }
+            else if (index >= run.End)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                return run;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The attributes at a UTF-16 index.</summary>

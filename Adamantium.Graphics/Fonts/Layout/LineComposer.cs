@@ -75,6 +75,7 @@ internal sealed class LineComposer
         var oversetIndex = text.Length;
         var tabStops = options.TabStops.OrderBy(stop => stop.Position).ToArray();
         var paragraphs = TextParagraphs.Resolve(text, options.Direction);
+        var paragraphRuns = attributed is { Paragraphs.Count: > 0 } ? attributed : null;
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
                                               && !TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0)
                                               && !vertical
@@ -92,7 +93,6 @@ internal sealed class LineComposer
         var lineHeight = options.LineHeight > 0 && double.IsFinite(options.LineHeight) ? options.LineHeight : naturalHeight;
         var baseLine = BaselineInLine(_font, scale) + (lineHeight - naturalHeight) / 2;
         var lineSpacing = double.IsFinite(options.LineSpacing) ? Math.Max(options.LineSpacing, 1 - lineHeight) : 0;
-        var linePitch = lineHeight + lineSpacing;
 
         var dotGlyphsWidth = _font.GetAdvanceWidth(_dotGlyph.Index) * scale * 3 * options.GlyphScaling.Desired;
 
@@ -105,6 +105,11 @@ internal sealed class LineComposer
         var leaders = new Dictionary<GlyphWordData, string>();
         int wordIndex = 0;
         int lineIndex = 0;
+        var lineParagraph = ParagraphOf(0);
+        var paragraphOpenLine = 0;
+        var lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
+        double pendingGap = 0;
+        var lineStates = new List<(ParagraphAttributes Paragraph, bool Opens, bool RightToLeft, double Gap)>();
         double verticalShift = 0;
         Size? realTextDimensions = null;
         int[] laidOutLineFrames = null;
@@ -112,10 +117,14 @@ internal sealed class LineComposer
             ? TextBoundaries.LineBreaks(text)
             : null;
         var slots = lineBreaks != null && frames is { Count: > 0 }
-            ? LineSlots(frames, exclusions, lineHeight, lineSpacing, 2 * fontSize, text.Length + 1)
+            ? new List<(int Frame, double Left, double Right, double Top)>()
             : null;
+        // Per slot: where the next one is looked for (frame, top, rows tried in it), and the room above and the height
+        // it was found for, so a line that turns out otherwise finds its slot again.
+        var slotCursors = new List<(int Frame, double Top, int Rows)>();
+        var slotBases = new List<(double Gap, double Height)>();
         var frameRects = slots != null ? frames.ToArray() : null;
-        if (slots is { Count: 0 })
+        if (slots != null && !HasSlot(0))
         {
             return new LaidOutText
             {
@@ -165,8 +174,13 @@ internal sealed class LineComposer
                                && (slots != null || textArea.Width < Int32.MaxValue))
         {
             Compose();
+            lineParagraph = ParagraphOf(0);
+            paragraphOpenLine = 0;
+            lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
+            pendingGap = 0;
         }
 
+        NoteLine(0, 0);
         var wordStart = dropItems;
         while (wordStart <= items.Count)
         {
@@ -244,7 +258,27 @@ internal sealed class LineComposer
             inkRight = CalculateRealTextDimensions(glyphsData);
         }
 
-        var maxX = Math.Max(inkRight, dropIndent);
+        // Each line keeps its own paragraph's room on the right.
+        var reservedRight = inkRight;
+        if (paragraphRuns != null && glyphsData.Count > 0)
+        {
+            var lineRights = new double[lineCount];
+            Array.Fill(lineRights, double.NegativeInfinity);
+            foreach (var glyph in glyphsData)
+            {
+                lineRights[glyph.LineIndex] = Math.Max(lineRights[glyph.LineIndex], InkRight(glyph));
+            }
+
+            for (var i = 0; i < lineCount; i++)
+            {
+                if (!double.IsNegativeInfinity(lineRights[i]))
+                {
+                    reservedRight = Math.Max(reservedRight, lineRights[i] + RightReserve(i));
+                }
+            }
+        }
+
+        var maxX = Math.Max(reservedRight, dropIndent);
         var finalRect = new Size(Math.Ceiling(maxX), Math.Ceiling(height));
         if (renderingParameters.TextArea.Width != Int32.MaxValue)
         {
@@ -477,9 +511,30 @@ internal sealed class LineComposer
             return end;
         }
 
-        double DropBaseline() => dropLines - 1 < lineTops.Length
-            ? lineTops[dropLines - 1] + lineBaselines[dropLines - 1]
-            : lineTops[lineTops.Length - 1] + lineBaselines[lineTops.Length - 1] + (dropLines - lineTops.Length) * linePitch;
+        // On the baseline of the cap's last line; one that a paragraph's room, its own line height or a frame moved
+        // away does not move it.
+        double DropBaseline()
+        {
+            var moved = false;
+            for (var line = 1; line < Math.Min(dropLines, lineTops.Length); line++)
+            {
+                moved |= LineGap(line) > 0 || OwnLineHeight(line) != OwnLineHeight(0)
+                         || (laidOutLineFrames != null && laidOutLineFrames[line] != laidOutLineFrames[0]);
+            }
+
+            if (moved)
+            {
+                return lineTops[0] + lineBaselines[0] + (dropLines - 1) * DropPitch();
+            }
+
+            return dropLines - 1 < lineTops.Length
+                ? lineTops[dropLines - 1] + lineBaselines[dropLines - 1]
+                : lineTops[lineTops.Length - 1] + lineBaselines[lineTops.Length - 1]
+                                                + (dropLines - lineTops.Length) * DropPitch();
+        }
+
+        // A drop cap spans lines of the first paragraph, as far apart as its lines are.
+        double DropPitch() => OwnLineHeight(0) + SpacingAfter(0);
 
         List<GlyphWordData> DropCapGlyphs()
         {
@@ -487,7 +542,7 @@ internal sealed class LineComposer
             var shift = attributes?.BaselineShift ?? 0;
             var baseline = DropBaseline() - shift;
             List<GlyphWordData> glyphs = [];
-            double pen = slots != null ? frames[slots[0].Frame].Left + slots[0].Left : 0;
+            double pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Left : 0) + EdgeReserve(0, false);
             foreach (var shaped in dropGlyphs)
             {
                 var glyph = dropFont.GetGlyphByIndex(shaped.GlyphIndex);
@@ -515,14 +570,15 @@ internal sealed class LineComposer
             var dropCap = options.DropCap;
             if (slots != null)
             {
-                if (slots.Count < dropCap.Lines)
+                if (!HasSlot(dropCap.Lines - 1))
                 {
                     return;
                 }
 
                 for (var line = 1; line < dropCap.Lines; line++)
                 {
-                    if (slots[line].Frame != slots[0].Frame || Math.Abs(slots[line].Top - slots[line - 1].Top - linePitch) > 0.5)
+                    if (slots[line].Frame != slots[0].Frame
+                        || Math.Abs(slots[line].Top - slots[line - 1].Top - DropPitch()) > 0.5)
                     {
                         return;
                     }
@@ -563,7 +619,7 @@ internal sealed class LineComposer
                 return;
             }
 
-            var capScale = (cap + (dropCap.Lines - 1) * linePitch) / top;
+            var capScale = (cap + (dropCap.Lines - 1) * DropPitch()) / top;
             var indent = Math.Max(pen * capScale, inkRight * capScale + 0.1 * first.FontSize);
             if ((slots != null || textArea.Width < Int32.MaxValue) && indent > LineRight(0) - LineIndent(0) - 2 * first.FontSize)
             {
@@ -583,20 +639,204 @@ internal sealed class LineComposer
 
         void NewLine()
         {
+            height += OwnLineHeight(lineIndex) + SpacingAfter(lineIndex) + pendingGap;
             lineIndex++;
-            height += linePitch;
+            NoteLine(lineIndex, pendingGap);
+            pendingGap = 0;
             cursorPosition = LineIndent(lineIndex);
         }
 
-        double LineIndent(int line) =>
-            (slots != null ? slots[Math.Min(line, slots.Count - 1)].Left : 0) + (line < dropLines ? dropIndent : 0);
+        ParagraphAttributes ParagraphOf(int index) => paragraphRuns?.ParagraphAt(index)?.Attributes;
 
-        double LineRight(int line) => slots != null ? slots[Math.Min(line, slots.Count - 1)].Right : textArea.Width;
+        void NoteLine(int line, double gap)
+        {
+            while (lineStates.Count <= line)
+            {
+                lineStates.Add((lineParagraph, lineStates.Count == paragraphOpenLine, lineRightToLeft,
+                    lineStates.Count == line ? gap : 0));
+            }
+
+            ForgetSlotsFrom(line, gap);
+        }
+
+        // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
+        void ForgetSlotsFrom(int line, double gap)
+        {
+            if (slots != null && line < slots.Count && slotBases[line] != (gap, OwnLineHeight(line)))
+            {
+                slots.RemoveRange(line, slots.Count - line);
+                slotCursors.RemoveRange(line, slotCursors.Count - line);
+                slotBases.RemoveRange(line, slotBases.Count - line);
+            }
+        }
+
+        double OwnSetHeight(int line) => LineState(line).Paragraph?.LineHeight ?? double.NaN;
+
+        // A paragraph's own line height, or the layout's.
+        double OwnLineHeight(int line)
+        {
+            var own = OwnSetHeight(line);
+            return own > 0 && double.IsFinite(own) ? own : lineHeight;
+        }
+
+        // The spacing after a line, never so negative that the next line starts above it.
+        double SpacingAfter(int line) =>
+            double.IsFinite(options.LineSpacing) ? Math.Max(options.LineSpacing, 1 - OwnLineHeight(line)) : 0;
+
+        (int Frame, double Left, double Right, double Top) SlotOf(int line)
+        {
+            HasSlot(line);
+            return slots[Math.Min(line, slots.Count - 1)];
+        }
+
+        bool HasSlot(int line)
+        {
+            if (line >= lineStates.Count)
+            {
+                ForgetSlotsFrom(line, line == paragraphOpenLine ? pendingGap : 0);
+            }
+
+            while (slots.Count <= line)
+            {
+                if (!AddSlot())
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // The next line's slot: below the line before by the room its paragraph keeps (none at the top of a frame), as
+        // tall as its own lines, in the widest stretch the exclusions leave if it is wide enough.
+        bool AddSlot()
+        {
+            var line = slots.Count;
+            var gap = line < lineStates.Count ? lineStates[line].Gap : line == paragraphOpenLine ? pendingGap : 0;
+            var rowHeight = OwnLineHeight(line);
+            var (f, top, rows) = line == 0 ? (0, (double)frames[0].Top, 0) : slotCursors[line - 1];
+            if (rows > 0)
+            {
+                top += gap;
+            }
+
+            while (f < frames.Count)
+            {
+                var frame = frames[f];
+                if ((rows > 0 && top + rowHeight > frame.Bottom + 1e-6) || rows >= 4 * (text.Length + 1))
+                {
+                    f++;
+                    rows = 0;
+                    top = f < frames.Count ? frames[f].Top : 0;
+                    continue;
+                }
+
+                rows++;
+                var rowTop = top;
+                top += rowHeight + SpacingAfter(line);
+                if (WidestSpan(frame, rowTop, rowHeight) is { } widest)
+                {
+                    slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, rowTop));
+                    slotCursors.Add((f, top, rows));
+                    slotBases.Add((gap, rowHeight));
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        (double Left, double Right)? WidestSpan(RectangleF frame, double top, double rowHeight)
+        {
+            List<(double Left, double Right)> spans = [(frame.Left, frame.Right)];
+            foreach (var exclusion in exclusions ?? [])
+            {
+                if (exclusion.Top >= top + rowHeight || exclusion.Bottom <= top)
+                {
+                    continue;
+                }
+
+                List<(double Left, double Right)> rest = [];
+                foreach (var (left, right) in spans)
+                {
+                    if (exclusion.Left > left)
+                    {
+                        rest.Add((left, Math.Min(right, exclusion.Left)));
+                    }
+
+                    if (exclusion.Right < right)
+                    {
+                        rest.Add((Math.Max(left, exclusion.Right), right));
+                    }
+                }
+
+                spans = rest;
+            }
+
+            var widest = spans.OrderByDescending(span => span.Right - span.Left).FirstOrDefault();
+            return spans.Count > 0 && widest.Right - widest.Left >= 2 * fontSize ? widest : null;
+        }
+
+        (ParagraphAttributes Paragraph, bool Opens, bool RightToLeft) LineState(int line) => line < lineStates.Count
+            ? (lineStates[line].Paragraph, lineStates[line].Opens, lineStates[line].RightToLeft)
+            : (lineParagraph, line == paragraphOpenLine, lineRightToLeft);
+
+        double LineGap(int line) => line < lineStates.Count ? lineStates[line].Gap : 0;
+
+        HorizontalTextAlignment AlignmentOf(int line) =>
+            LineState(line).Paragraph?.Alignment ?? renderingParameters.HorizontalTextAlignment;
+
+        // A paragraph starting at next: the room between it and the one before, and its lines from openLine on. The
+        // empty line after the text's last break starts one only after a paragraph separator.
+        void BreakInto(int next, int openLine)
+        {
+            var paragraph = ParagraphOf(next);
+            var startsHere = paragraphRuns?.ParagraphAt(next)?.Start == next;
+            if (paragraphRuns == null || next > text.Length
+                || (!startsHere && paragraph == lineParagraph)
+                || (!startsHere && next == text.Length && text[next - 1] != ParagraphSeparator))
+            {
+                return;
+            }
+
+            pendingGap = Math.Max(Math.Max(0, Finite(lineParagraph?.SpaceAfter ?? 0)),
+                Finite(paragraph?.SpaceBefore ?? 0));
+            lineParagraph = paragraph;
+            paragraphOpenLine = openLine;
+            lineRightToLeft = next < text.Length ? IsRightToLeftParagraph(next) : lineRightToLeft;
+            ForgetSlotsFrom(openLine, pendingGap);
+        }
+
+        // The margins stand at their own sides; the first line's indent at the side its lines start from, unless a drop
+        // cap takes its place. A line never starts past the block's edges.
+        double EdgeReserve(int line, bool right)
+        {
+            var (paragraph, opens, rightToLeft) = LineState(line);
+            if (paragraph == null)
+            {
+                return 0;
+            }
+
+            var indent = opens && rightToLeft == right && line >= dropLines ? Finite(paragraph.TextIndent) : 0;
+            return Math.Max(0, Finite(right ? paragraph.MarginRight : paragraph.MarginLeft) + indent);
+        }
+
+        double RightReserve(int line) => EdgeReserve(line, true);
+
+        double LineIndent(int line) => (slots != null ? SlotOf(line).Left : 0)
+                                       + EdgeReserve(line, false) + (line < dropLines ? dropIndent : 0);
+
+        double LineRight(int line) => (slots != null ? SlotOf(line).Right : textArea.Width) - RightReserve(line);
 
         bool LineHasContent() => cursorPosition > LineIndent(lineIndex) + 1e-9;
 
+        // The next line's top stays inside the area: below this line by its height and the room a paragraph starting
+        // there keeps.
         bool HasRoomBelow() => (options.MaxLines <= 0 || lineIndex + 1 < options.MaxLines)
-                               && (slots != null ? lineIndex + 1 < slots.Count : height + linePitch < textArea.Height);
+                               && (slots != null
+                                   ? HasSlot(lineIndex + 1)
+                                   : height + OwnLineHeight(lineIndex) + SpacingAfter(lineIndex) + pendingGap
+                                     < textArea.Height);
 
         bool CutsOverflow() => slots != null || options.MaxLines > 0;
 
@@ -713,6 +953,17 @@ internal sealed class LineComposer
             var start = dropItems;
             while (start < items.Count)
             {
+                if (paragraph.Count == 0 && items[start].Cluster >= 0)
+                {
+                    if (start > dropItems && items[start - 1].Symbol == '\n')
+                    {
+                        BreakInto(items[start].Cluster, composedLines);
+                    }
+
+                    justified = (lineParagraph?.Alignment ?? renderingParameters.HorizontalTextAlignment)
+                                == HorizontalTextAlignment.Justify;
+                }
+
                 var end = WordEnd(start);
                 var newline = end > start && items[end - 1].Symbol == '\n' ? end - 1 : end;
                 List<int> points = options.Hyphens == Hyphens.None ? [] : HyphenationPoints(start, newline);
@@ -782,8 +1033,16 @@ internal sealed class LineComposer
                 return;
             }
 
+            // From the paragraph's first line on: it may be indented, a drop cap or a frame may narrow a few more.
             List<double> widths = [];
-            var distinct = Math.Min(Math.Max(dropLines, slots?.Count ?? 0), composedLines + paragraph.Count + 1);
+            var last = composedLines + paragraph.Count + 1;
+            var distinct = Math.Min(Math.Max(Math.Max(dropLines, composedLines + 1), slots != null ? last : 0), last);
+            if (slots != null)
+            {
+                HasSlot(distinct);
+                distinct = Math.Min(distinct, Math.Max(slots.Count, composedLines + 1));
+            }
+
             for (var line = composedLines; line < distinct; line++)
             {
                 widths.Add(LineRight(line) - LineIndent(line));
@@ -1000,7 +1259,9 @@ internal sealed class LineComposer
         bool Overflows(double width) =>
             cursorPosition + width > LineRight(lineIndex) && cursorPosition + width > LineRight(lineIndex) + LineShrink();
 
-        double AlignRight(int line) => slots != null ? LineRight(line) : finalRect.Width;
+        double AlignRight(int line) => slots != null
+            ? LineRight(line)
+            : finalRect.Width - RightReserve(line);
 
         void PlaceInFrames()
         {
@@ -1009,7 +1270,7 @@ internal sealed class LineComposer
             var shiftsY = new double[lineCount];
             for (var i = 0; i < lineCount; i++)
             {
-                var slot = slots[Math.Min(i, slots.Count - 1)];
+                var slot = SlotOf(i);
                 lineFrames[i] = slot.Frame;
                 shiftsX[i] = frames[slot.Frame].Left;
                 shiftsY[i] = slot.Top - lineTops[i];
@@ -1075,7 +1336,7 @@ internal sealed class LineComposer
 
         double LineShrink()
         {
-            if (renderingParameters.HorizontalTextAlignment != HorizontalTextAlignment.Justify)
+            if (AlignmentOf(lineIndex) != HorizontalTextAlignment.Justify)
             {
                 return 0;
             }
@@ -1333,6 +1594,7 @@ internal sealed class LineComposer
                 switch (item.Symbol)
                 {
                     case '\n':
+                        BreakInto(item.Cluster + 1, lineIndex + 1);
                         if (renderingParameters.TextWrapping == TextWrapping.WrapByWords
                             && renderingParameters.TextTrimming != TextTrimming.None
                             && !HasRoomBelow()
@@ -1390,7 +1652,7 @@ internal sealed class LineComposer
                         switch (renderingParameters.TextWrapping)
                         {
                             case TextWrapping.NoWrap:
-                                if (cursorPosition > textArea.Width)
+                                if (cursorPosition > LineRight(lineIndex))
                                 {
                                     if (i < items.Count - 1)
                                     {
@@ -1402,15 +1664,17 @@ internal sealed class LineComposer
                                 break;
                             case TextWrapping.WrapBySymbols:
                                 {
-                                    if (cursorPosition > textArea.Width)
+                                    var right = LineRight(lineIndex);
+                                    if (cursorPosition > right)
                                     {
                                         var glyphsDataCopy = glyphsData.ToArray();
                                         if (HasRoomBelow())
                                         {
+                                            height += OwnLineHeight(lineIndex) + SpacingAfter(lineIndex);
                                             lineIndex++;
-                                            height += linePitch;
+                                            NoteLine(lineIndex, 0);
                                             glyphBase = height + baseLine;
-                                            RearrangeData(glyphsDataCopy, glyphBase);
+                                            RearrangeData(glyphsDataCopy, glyphBase, right);
                                         }
                                         else if (i < items.Count - 1)
                                         {
@@ -1436,19 +1700,24 @@ internal sealed class LineComposer
         void ArrangeText()
         {
             var hung = new HashSet<int>();
-            switch (renderingParameters.HorizontalTextAlignment)
+            var lastLine = glyphsData.Max(x => x.LineIndex);
+            foreach (var alignment in Enumerable.Range(0, lastLine + 1).Select(AlignmentOf).Distinct().ToList())
             {
-                case HorizontalTextAlignment.Left or HorizontalTextAlignment.Right when paragraphs != null:
-                    AlignToEachLinesStart();
-                    break;
-                case HorizontalTextAlignment.Center:
+                if (alignment is HorizontalTextAlignment.Left or HorizontalTextAlignment.Right && paragraphs != null)
+                {
+                    AlignToEachLinesStart(alignment);
+                }
+                else if (alignment == HorizontalTextAlignment.Center)
                 {
                     var maxLines = glyphsData.Max(x => x.LineIndex);
                     var byLine = GlyphsByLine(maxLines + 1);
                     for (int i = 0; i <= maxLines; ++i)
                     {
                         var glyphsForLine = byLine[i];
-                        if (glyphsForLine.Length == 0) break;
+                        if (glyphsForLine.Length == 0 || AlignmentOf(i) != alignment)
+                        {
+                            continue;
+                        }
 
                         // By the ink, so leading/trailing spaces don't pull the line off-center.
                         var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
@@ -1466,15 +1735,17 @@ internal sealed class LineComposer
                         }
                     }
                 }
-                break;
-                case HorizontalTextAlignment.Right:
+                else if (alignment == HorizontalTextAlignment.Right)
                 {
                     var maxLines = glyphsData.Max(x => x.LineIndex);
                     var byLine = GlyphsByLine(maxLines + 1);
                     for (int i = 0; i <= maxLines; ++i)
                     {
                         var glyphsForLine = byLine[i];
-                        if (glyphsForLine.Length == 0) break;
+                        if (glyphsForLine.Length == 0 || AlignmentOf(i) != alignment)
+                        {
+                            continue;
+                        }
 
                         var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
                         if (ink.Length == 0)
@@ -1493,8 +1764,7 @@ internal sealed class LineComposer
                         }
                     }
                 }
-                break;
-                case HorizontalTextAlignment.Justify:
+                else if (alignment == HorizontalTextAlignment.Justify)
                 {
                     var maxLines = glyphsData.Max(x => x.LineIndex);
                     List<(GlyphWordData After, GlyphWordData Extender)> extenders = [];
@@ -1513,7 +1783,10 @@ internal sealed class LineComposer
                     {
                         // Only the gaps between words change; glyphs are shifted, never re-laid, so kerning and bearings stay.
                         var lineGlyphs = byLine[i].OrderBy(x => x.Rect.X).ToArray();
-                        if (lineGlyphs.Length == 0) continue;
+                        if (lineGlyphs.Length == 0 || AlignmentOf(i) != alignment)
+                        {
+                            continue;
+                        }
                         var stretches = JustifiesLastLine()
                                         || (i < maxLines
                                             ? !EndsParagraph(lineGlyphs, firstClusters[i + 1])
@@ -1729,10 +2002,9 @@ internal sealed class LineComposer
                         glyphsData.AddRange(laid);
                     }
                 }
-                break;
             }
 
-            if (options.OpticalMarginAlignment && renderingParameters.HorizontalTextAlignment != HorizontalTextAlignment.Center)
+            if (options.OpticalMarginAlignment)
             {
                 HangMargins(hung);
             }
@@ -1788,13 +2060,15 @@ internal sealed class LineComposer
 
         void HangMargins(HashSet<int> hung)
         {
-            var toRight = renderingParameters.HorizontalTextAlignment == HorizontalTextAlignment.Right;
             foreach (var line in glyphsData.GroupBy(glyph => glyph.LineIndex))
             {
-                if (hung.Contains(line.Key))
+                var alignment = AlignmentOf(line.Key);
+                if (hung.Contains(line.Key) || alignment == HorizontalTextAlignment.Center)
                 {
                     continue;
                 }
+
+                var toRight = alignment == HorizontalTextAlignment.Right;
 
                 var glyphs = line.OrderBy(glyph => glyph.PenX).ToArray();
                 if (IsRightToLeftLine(glyphs))
@@ -2028,7 +2302,7 @@ internal sealed class LineComposer
 
             for (var c = last + 1; last >= 0 && c < nextLineStart; c++)
             {
-                if (text[c] is '\n' or LineSeparator)
+                if (text[c] is '\n' or LineSeparator or ParagraphSeparator)
                 {
                     return true;
                 }
@@ -2037,7 +2311,7 @@ internal sealed class LineComposer
             return false;
         }
 
-        void AlignToEachLinesStart()
+        void AlignToEachLinesStart(HorizontalTextAlignment alignment)
         {
             var lineStart = 0;
             while (lineStart < glyphsData.Count)
@@ -2055,10 +2329,10 @@ internal sealed class LineComposer
                 }
 
                 var rightToLeft = first >= 0 && (paragraphs.ParagraphAt(first).Paragraph.BaseLevel & 1) == 1;
-                var toRight = rightToLeft == (renderingParameters.HorizontalTextAlignment == HorizontalTextAlignment.Left);
+                var toRight = rightToLeft == (alignment == HorizontalTextAlignment.Left);
                 var ink = Enumerable.Range(lineStart, lineEnd - lineStart).Select(k => glyphsData[k])
                     .Where(g => !IsBlank(g.Symbol)).ToArray();
-                if (toRight && ink.Length > 0)
+                if (toRight && ink.Length > 0 && AlignmentOf(glyphsData[lineStart].LineIndex) == alignment)
                 {
                     var shift = AlignRight(glyphsData[lineStart].LineIndex) - ink.Max(g => g.Rect.Right);
                     for (var k = lineStart; k < lineEnd; k++)
@@ -2075,32 +2349,44 @@ internal sealed class LineComposer
         void PlaceLines()
         {
             var mixed = false;
+            var setHeights = new bool[lineCount];
+            var ownBaselines = new double[lineCount];
             for (var i = 0; i < lineCount; i++)
             {
+                var own = OwnLineHeight(i);
+                var setsOwn = OwnSetHeight(i) is > 0 and var set && double.IsFinite(set);
                 lineAscents[i] = _font.Ascender * scale;
-                lineHeights[i] = lineHeight;
-                lineBaselines[i] = baseLine;
+                lineHeights[i] = own;
+                lineBaselines[i] = setsOwn ? BaselineInLine(_font, scale) + (own - naturalHeight) / 2 : baseLine;
+                ownBaselines[i] = lineBaselines[i];
+                setHeights[i] = setsOwn || (options.LineHeight > 0 && double.IsFinite(options.LineHeight));
+                mixed |= setsOwn;
             }
 
+            var paragraphHeights = mixed;
             foreach (var glyph in glyphsData)
             {
                 mixed |= glyph.FontSize != fontSize || !ReferenceEquals(glyph.Font, _font)
                                                     || ObjectSizeOf(glyph.Symbol, glyph.Attributes) != null;
             }
 
-            mixed &= options.LineStacking == LineStackingStrategy.MaxHeight;
-            if (mixed)
+            if (mixed && options.LineStacking == LineStackingStrategy.MaxHeight)
             {
                 var below = new double[lineCount];
-                Array.Fill(below, lineHeight - baseLine);
-                var setHeight = options.LineHeight > 0 && double.IsFinite(options.LineHeight);
+                for (var i = 0; i < lineCount; i++)
+                {
+                    below[i] = lineHeights[i] - lineBaselines[i];
+                }
+
                 foreach (var glyph in glyphsData)
                 {
                     var line = glyph.LineIndex;
                     var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
-                    var ownSize = setHeight && glyph.FontSize == fontSize;
-                    var glyphBaseline = ownSize ? baseLine : BaselineInLine(glyph.Font, glyphScale);
-                    var glyphBelow = ownSize ? lineHeight - baseLine : LineAdvance(glyph.Font, glyph.FontSize) - glyphBaseline;
+                    var ownSize = setHeights[line] && glyph.FontSize == fontSize;
+                    var glyphBaseline = ownSize ? ownBaselines[line] : BaselineInLine(glyph.Font, glyphScale);
+                    var glyphBelow = ownSize
+                        ? lineHeights[line] - ownBaselines[line]
+                        : LineAdvance(glyph.Font, glyph.FontSize) - glyphBaseline;
                     var glyphAscent = glyph.Font.Ascender * glyphScale;
                     lineBaselines[line] = Math.Max(lineBaselines[line], glyphBaseline);
                     below[line] = Math.Max(below[line], glyphBelow);
@@ -2118,11 +2404,15 @@ internal sealed class LineComposer
                     lineHeights[i] = lineBaselines[i] + below[i];
                 }
             }
+            else
+            {
+                mixed = paragraphHeights;
+            }
 
             lineTops[0] = textArea.Y;
             for (var i = 1; i < lineCount; i++)
             {
-                lineTops[i] = lineTops[i - 1] + lineHeights[i - 1] + lineSpacing;
+                lineTops[i] = lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i);
             }
 
             var aligned = false;
@@ -2170,7 +2460,8 @@ internal sealed class LineComposer
             }
         }
 
-        void RearrangeData(GlyphWordData[] glyphsDataCopy, double glyphBase)
+        // Moves the glyphs past the right edge of the line they left onto the new line.
+        void RearrangeData(GlyphWordData[] glyphsDataCopy, double glyphBase, double right)
         {
             var rearrangeList = new List<GlyphWordData>();
             for (int k = glyphsDataCopy.Length - 1; k >= 0; k--)
@@ -2180,19 +2471,19 @@ internal sealed class LineComposer
                 var wordsLeft = glyphsDataCopy.Take(k).Count(x => IsBlank(x.Symbol)) + 1;
                 rearrangeList.Add(data);
                 if (wordIndex > 0 &&
-                    cursorPosition <= textArea.Width &&
+                    cursorPosition <= right &&
                     renderingParameters.TextWrapping == TextWrapping.WrapByWords &&
                     IsBlank(data.Symbol))
                 {
                     break;
                 }
-                else if (cursorPosition <= textArea.Width &&
+                else if (cursorPosition <= right &&
                          renderingParameters.TextWrapping == TextWrapping.WrapBySymbols)
                 {
                     break;
                 }
                 else if (wordsLeft == 1 &&
-                         cursorPosition > textArea.Width &&
+                         cursorPosition > right &&
                          renderingParameters.TextWrapping == TextWrapping.WrapByWords)
                 {
                     break;
@@ -2200,7 +2491,7 @@ internal sealed class LineComposer
             }
 
             rearrangeList.Reverse();
-            cursorPosition = 0;
+            cursorPosition = LineIndent(lineIndex);
 
             for (var index = 0; index < rearrangeList.Count; index++)
             {
@@ -2299,7 +2590,7 @@ internal sealed class LineComposer
         var end = 0;
         var letters = 0;
         while (end < text.Length && letters < dropCap.Characters
-                                 && text[end] is not ('\n' or LineSeparator or ObjectReplacement))
+                                 && text[end] is not ('\n' or LineSeparator or ParagraphSeparator or ObjectReplacement))
         {
             if (CharUnicodeInfo.GetUnicodeCategory(text, end) is not (UnicodeCategory.OpenPunctuation
                 or UnicodeCategory.InitialQuotePunctuation))
@@ -2311,55 +2602,6 @@ internal sealed class LineComposer
         }
 
         return end;
-    }
-
-    private static List<(int Frame, double Left, double Right, double Top)> LineSlots(IReadOnlyList<RectangleF> frames,
-        IReadOnlyList<RectangleF> exclusions, double lineHeight, double spacing, double narrowest, int mostLines)
-    {
-        List<(int Frame, double Left, double Right, double Top)> slots = [];
-        var pitch = lineHeight + spacing;
-        for (var f = 0; f < frames.Count && slots.Count < mostLines; f++)
-        {
-            var frame = frames[f];
-            var rows = (int)Math.Max(1, Math.Min(Math.Floor((frame.Height + spacing) / pitch), 4.0 * mostLines));
-            for (var row = 0; row < rows && slots.Count < mostLines; row++)
-            {
-                var top = frame.Top + row * pitch;
-                List<(double Left, double Right)> spans = [(frame.Left, frame.Right)];
-                foreach (var exclusion in exclusions ?? [])
-                {
-                    if (exclusion.Top >= top + lineHeight || exclusion.Bottom <= top)
-                    {
-                        continue;
-                    }
-
-                    List<(double Left, double Right)> rest = [];
-                    foreach (var (left, right) in spans)
-                    {
-                        if (exclusion.Left > left)
-                        {
-                            rest.Add((left, Math.Min(right, exclusion.Left)));
-                        }
-
-                        if (exclusion.Right < right)
-                        {
-                            rest.Add((Math.Max(left, exclusion.Right), right));
-                        }
-                    }
-
-                    spans = rest;
-                }
-
-                var widest = spans.Where(span => span.Right - span.Left >= narrowest)
-                    .OrderByDescending(span => span.Right - span.Left).FirstOrDefault();
-                if (widest.Right - widest.Left >= narrowest)
-                {
-                    slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, top));
-                }
-            }
-        }
-
-        return slots;
     }
 
     private static double Hang(GlyphWordData glyph, bool left)

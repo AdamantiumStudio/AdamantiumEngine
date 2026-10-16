@@ -57,6 +57,15 @@ All packages share one version.
   - `CreateSyntheticPointerDevice`, `InjectSyntheticPointerInput` (`POINTER_TYPE_INFO`) and
     `DestroySyntheticPointerDevice`, which raise real `WM_POINTER` messages without the hardware.
 
+- Paragraphs of their own in one layout, as a page has them. U+2029 (PARAGRAPH SEPARATOR) ends a line and a paragraph;
+  `AttributedText.SetParagraph` gives a range its `ParagraphAttributes`: its alignment, its margins from the left and
+  right edges, the room above and below it (between two only the larger is kept, none above the first nor at the top
+  of a frame), its first line's indent (negative hangs it out into the margin; at the right in a right-to-left
+  paragraph; a drop cap takes its place) and the height of its lines (larger text may still grow one). What it leaves
+  unset comes from the layout, and a value that is no number counts as none. Line breaking by paragraph,
+  justification, optical margins, wrapping by symbols, trimming, frames and the caret follow each paragraph's own.
+  Frames find each line's place from where the line before ended.
+
 - `TextLayout.Update(device, window)`: builds the quads of only the glyphs that touch a window in the layout's units,
   and asks the atlas for only theirs, so a long text shown through a viewport costs what the viewport shows;
   `QuadWindow` tells which window the last build was for (`RefreshGlyphs` keeps it), `GlyphCount` how many glyphs the
@@ -385,6 +394,8 @@ All packages share one version.
 
 - `[Affects]` can be put on a `[Bindable]` partial property. The generator read it there, but the attribute was allowed
   on fields only, so it did not compile.
+- Centered and right-aligned lines after an empty line are aligned too: the alignment stopped at the first empty
+  line, so `"\n\ntext"` centered stood at the left.
 - An output taken out of a universe is freed - its presenter, its device and a render target's shared surfaces -
   once the device has finished the frames that used it, and a paused universe takes its removed outputs out too. They
   were kept until the universe shut down, and while it was paused they stayed in it, holding their host's controls.
