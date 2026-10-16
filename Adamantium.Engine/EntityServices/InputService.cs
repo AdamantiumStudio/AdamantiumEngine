@@ -134,7 +134,18 @@ public class InputService : EntityService
         for (int i = 0; i < cameras.Count; i++)
         {
             cameras[i].Update(appTime);
+            TakeOffWhenFree(cameras[i]);
         }
+    }
+
+    // A camera free again - its travel over, its subject gone, the user's choice - comes off its subject where it stands.
+    private void TakeOffWhenFree(CameraBase camera)
+    {
+        var entity = camera.Owner;
+        if (entity?.Owner == null || camera.Type.IsThirdPerson()) return;
+
+        entity.Transform.Position = entity.Transform.WorldPosition;
+        EntityWorld.EntityManager.SetOwner(entity, null);
     }
 
     private void HandlePointer(Camera currentCamera, AppTime appTime)
@@ -335,6 +346,7 @@ public class InputService : EntityService
             return;
         }
 
+        EntityWorld.EntityManager.SetOwner(camera.Owner, subject);
         camera.SetThirdPersonCamera(subject, relativeRotation, type);
     }
 

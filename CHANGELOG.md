@@ -399,12 +399,14 @@ All packages share one version.
 
 ### Fixed
 
-- `RootEntities` are the roots of the world's tree: an entity given an owner - a camera set to follow a model - becomes
-  a branch of its owner's tree and leaves them, and comes back once it has none. It stayed among the roots while being
-  its owner's child too, so it was walked twice and a hierarchy showed it twice. The roots change on the world's
-  thread, whichever thread gave the owner, from the next frame. An entity taken out of the world takes its tree along:
-  a camera following it leaves the world with it.
-- `Entity.Owner` is set before `OwnerChanged` is raised, so a listener reads the new owner.
+- An entity changes owner only through `EntityManager.SetOwner`; `Entity.Owner` can no longer be set from outside, nor
+  `AddDependency`/`RemoveDependency` called. `RootEntities` are the roots of the world's tree: an entity given an
+  owner - a camera set to follow a model - leaves them and comes back once taken off, from the next frame. It stayed
+  among the roots while being its owner's child too, so it was walked twice and a hierarchy showed it twice. An entity
+  taken out of the world takes its tree along; `RemoveAllEntities` removes the roots, each with its tree.
+- The camera no longer hangs itself under its subject or takes itself off: `InputService` does it through the manager
+  when it follows a subject, and takes a camera off once it is free again. Whoever calls `SetThirdPersonCamera` hangs
+  the camera first. `EntityExtentions.BringIntoView`, which could not, is removed.
 - MessagePack 3.1.12, past the advisory GHSA-qhrr-8q5h-9q3h (nested arrays could run past the buffer length limits);
   3.1.7 failed every build that treats warnings as errors once the advisory was published.
 - `[Affects]` can be put on a `[Bindable]` partial property. The generator read it there, but the attribute was allowed

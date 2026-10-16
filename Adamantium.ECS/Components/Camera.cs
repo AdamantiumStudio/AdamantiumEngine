@@ -600,9 +600,6 @@ namespace Adamantium.ECS.Components
             }
             if (hostObject != null)
             {
-                // Transforms are relative to the parent, so this link is what turns the offset below into "behind it".
-                Owner.Owner = hostObject;
-
                 HostUpVector = EntityRotationMatrix.Up;
 
                 LookAt = lookAt;
@@ -715,11 +712,6 @@ namespace Adamantium.ECS.Components
             }
 
             Type = CameraType.Free;
-            if (Owner?.Owner != null)
-            {
-                Owner.Transform.Position = Owner.Transform.WorldPosition;
-                Owner.Owner = null;
-            }
         }
     }
 }

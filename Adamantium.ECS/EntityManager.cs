@@ -17,7 +17,7 @@ public sealed class EntityManager
     private readonly Dictionary<String, EntityGroup> entitiesByGroup;
     private readonly List<Entity> entitiesToAdd;
     private readonly List<Entity> entitiesToRemove;
-    private bool ownersChanged;
+    private readonly List<Entity> entitiesReowned;
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
 
@@ -29,6 +29,7 @@ public sealed class EntityManager
         entitiesByGroup = new Dictionary<String, EntityGroup>();
         entitiesToAdd = new List<Entity>();
         entitiesToRemove = new List<Entity>();
+        entitiesReowned = new List<Entity>();
         entityParametersMap = new Dictionary<UInt128, EntityParameters>();
         availableProjectionTypes = new List<CameraProjectionType>();
 
@@ -70,13 +71,14 @@ public sealed class EntityManager
                 entitiesToAdd.Clear();
             }
 
-            if (ownersChanged)
+            if (entitiesReowned.Count > 0)
             {
-                ownersChanged = false;
-                foreach (var entity in availableEntities.Values)
+                foreach (var entity in entitiesReowned)
                 {
                     PlaceByOwner(entity);
                 }
+
+                entitiesReowned.Clear();
             }
         }
     }
@@ -85,18 +87,22 @@ public sealed class EntityManager
     {
         if (availableEntities.TryAdd(entity.Uid, entity))
         {
-            entity.OwnerChanged += OnOwnerChanged;
             PlaceByOwner(entity);
             OnEntityAdded(entity);
         }
     }
 
-    // An owner can be given on any thread; the roots change on the world's, with the rest of what changes in it.
-    private void OnOwnerChanged(object sender, OwnerChangedEventArgs e)
+    /// <summary>Hangs <paramref name="entity"/> under <paramref name="owner"/>, or takes it off its owner with null - the
+    /// one way an entity changes owner. A root given an owner leaves <see cref="RootEntities"/>, one taken off comes
+    /// back: from the next frame, on the world's thread.</summary>
+    public void SetOwner(Entity entity, Entity owner)
     {
+        if (entity == null || entity.Owner == owner) return;
+
         lock (syncObject)
         {
-            ownersChanged = true;
+            entity.Owner = owner;
+            entitiesReowned.Add(entity);
         }
     }
 
@@ -131,7 +137,6 @@ public sealed class EntityManager
     {
         if (!availableEntities.Remove(entity.Uid)) return;
 
-        entity.OwnerChanged -= OnOwnerChanged;
         rootEntities.Remove(entity);
         OnEntityRemoved(entity);
 
@@ -496,12 +501,7 @@ public sealed class EntityManager
     {
         lock (syncObject)
         {
-            foreach (var entity in availableEntities.Values)
-            {
-                entity.OwnerChanged -= OnOwnerChanged;
-            }
-
-            ownersChanged = false;
+            entitiesReowned.Clear();
             rootEntities.Clear();
             availableEntities.Clear();
             entitiesByGroup.Clear();

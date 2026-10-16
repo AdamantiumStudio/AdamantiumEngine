@@ -40,14 +40,14 @@ public class EntityManagerTests
         manager.AddEntity(camera);
         NextFrame(universe);
 
-        camera.Owner = model;
+        manager.SetOwner(camera, model);
         NextFrame(universe);
 
         Assert.That(manager.RootEntities, Is.EqualTo(new[] { model }));
         Assert.That(model.Dependencies, Does.Contain(camera));
         Assert.That(manager.FindEntity(camera.Uid), Is.SameAs(camera), "still in the world");
 
-        camera.Owner = null;
+        manager.SetOwner(camera, null);
         NextFrame(universe);
 
         Assert.That(manager.RootEntities, Is.EquivalentTo(new[] { model, camera }));
@@ -63,7 +63,7 @@ public class EntityManagerTests
         var camera = new Entity(null, "Camera");
         manager.AddEntity(model);
         manager.AddEntity(camera);
-        camera.Owner = model;
+        manager.SetOwner(camera, model);
         NextFrame(universe);
 
         manager.RemoveEntity(model);
@@ -82,7 +82,7 @@ public class EntityManagerTests
         var camera = new Entity(null, "Camera");
         manager.AddEntity(model);
         manager.AddEntity(camera);
-        camera.Owner = model;
+        manager.SetOwner(camera, model);
         NextFrame(universe);
 
         manager.RemoveAllEntities();
@@ -90,20 +90,6 @@ public class EntityManagerTests
 
         Assert.That(manager.FindEntity(camera.Uid), Is.Null);
         Assert.That(manager.RootEntities, Is.Empty);
-    }
-
-    // Whoever hears of a new owner - on another thread, a frame later - reads that owner, not the one it replaced.
-    [Test]
-    public void AnOwnerIsSetBeforeItIsAnnounced()
-    {
-        var model = new Entity(null, "Model");
-        var camera = new Entity(null, "Camera");
-        Entity heard = null;
-        camera.OwnerChanged += (_, _) => heard = camera.Owner;
-
-        camera.Owner = model;
-
-        Assert.That(heard, Is.SameAs(model));
     }
 
     private static void NextFrame(TestUniverse universe)
