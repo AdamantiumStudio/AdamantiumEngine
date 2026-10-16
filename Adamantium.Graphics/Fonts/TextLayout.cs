@@ -382,16 +382,22 @@ public class TextLayout : DisposableObject
 
     /// <summary>A frozen copy of the shaped glyphs (call after <see cref="Update"/>), so the render thread never reads
     /// this layout while it is reshaped.</summary>
-    public FrozenGlyphRun SnapshotGlyphs() => _quads.Snapshot(FontSize);
+    public FrozenGlyphRun SnapshotGlyphs() => _quads.Snapshot(FontSize, null);
 
     /// <summary><see cref="Update(IGraphicsDevice, RectangleF?)"/> and <see cref="SnapshotGlyphs"/> as one step, so two
     /// callers building different windows of this layout on different threads never freeze each other's.</summary>
-    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window)
+    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window) =>
+        BuildGlyphRun(graphicsDevice, window, null);
+
+    /// <summary><see cref="BuildGlyphRun(IGraphicsDevice, RectangleF?)"/>, the snapshot's glyphs drawn with
+    /// <paramref name="effects"/>; the layout itself is left as it is.</summary>
+    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window,
+        IReadOnlyList<GlyphEffect> effects)
     {
         lock (_quads)
         {
             Update(graphicsDevice, window);
-            return SnapshotGlyphs();
+            return _quads.Snapshot(FontSize, effects);
         }
     }
 

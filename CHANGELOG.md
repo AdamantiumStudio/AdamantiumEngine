@@ -13,6 +13,14 @@ All packages share one version.
   camera template, the primitives, a model's import - its root and its meshes - and a `Light` itself, on whatever entity
   it is put and whenever its `Type` changes. `Duplicate` keeps the key.
 
+- `GlyphEffect` and `TextLayout.BuildGlyphRun(device, window, effects)`: a range of the text drawn apart from the rest -
+  its glyphs turned, scaled, slanted, moved or tipped in perspective (a 3×3 `Transform`), each about its own center or
+  about the layout's origin, moved after that in sizes of each glyph (`Shift`), and in a color of their own (a glyph's own
+  colors, an emoji's, stay). Only the snapshot is drawn so: the lines, the caret and hit testing stay where the layout
+  put them; a glyph the layout adds - an ellipsis, a hyphen - moves with the character before it. `FontItem.Effect`,
+  `EffectOffset` and `EffectPerspective` carry it to both glyph shaders, which read the atlas in perspective, and
+  `FrozenGlyphRun.EffectPadding` grows by how far the glyphs moved (`EffectReach`), so a drawn-apart glyph is not cut at
+  the block's edge.
 - `AdamantiumCollection<T>` is an `ICollection`, so `ReadOnlyTrackingCollection<T>` hands out the collection's own
   `SyncRoot` - the lock every change is made and announced under. A view on another thread - the UI showing a world's
   entities - reads the items under it and so never sees them halfway through a change.

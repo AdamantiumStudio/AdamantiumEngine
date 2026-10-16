@@ -22,6 +22,12 @@ struct FontItem
     // for a glyph drawn from one field), and its layer (x) and how far the glyph is from the first key to it (y).
     float4 SecondSource : TEXCOORD4;
     float2 Second : TEXCOORD5;
+    // A GlyphEffect on the glyph: its matrix less the identity (m11 - 1, m12, m21, m22 - 1) and its move, the pivot
+    // folded in. Zero draws the glyph where it is laid.
+    float4 Effect : TEXCOORD6;
+    float2 EffectOffset : TEXCOORD7;
+    // Its perspective: the corner is divided by w = 1 + Z + x * X + y * Y, left to the rasterizer, sign and all.
+    float4 EffectPerspective : TEXCOORD8;
 };
 
 // The atlas layer is a runtime index, so glyphs the packer spills to layers 1+ are sampled from their own layer.
@@ -50,6 +56,18 @@ struct PSInput
     float2 SecondUV : TEXCOORD8;
     nointerpolation float2 Second : TEXCOORD9;
 };
+
+// A corner moved by a glyph's effect, as FontItem.Effect and FontItem.EffectOffset hold it (row vectors).
+float2 GlyphEffectPoint(float2 p, float4 effect, float2 offset)
+{
+    return p + float2(p.x * effect.x + p.y * effect.z, p.x * effect.y + p.y * effect.w) + offset;
+}
+
+// The homogeneous w of that corner: the point drawn is GlyphEffectPoint / w, and the atlas is read in perspective.
+float GlyphEffectW(float2 p, float2 perspective)
+{
+    return 1.0 + p.x * perspective.x + p.y * perspective.y;
+}
 
 // Where a glyph is drawn between two key instances, the second field's place for this corner and its layer and share;
 // a negative layer for a glyph drawn from one field.
@@ -446,14 +464,16 @@ PSInput ExpandGlyphCorner(FontItem item, int corner)
         position = pivot + float2(arm.x * rotation.x - arm.y * rotation.y, arm.x * rotation.y + arm.y * rotation.x);
     }
 
+    float effectW = GlyphEffectW(position, item.EffectPerspective.xy) + item.EffectPerspective.z;
+    position = GlyphEffectPoint(position, item.Effect, item.EffectOffset);
     vertex.Position.xy = position;
 
     vertex.PaintProgram = item.Paint.x;
     vertex.PaintPoint = paintPoint;
     vertex.OwnFade = GlyphFade;
 
-    vertex.Position.z = item.Depth;
-    vertex.Position.w = 1;
+    vertex.Position.z = item.Depth * effectW;
+    vertex.Position.w = effectW;
     vertex.Color = item.Color;
 
     float2 uvCorner = TextureCornerCoords[corner ^ item.SpriteEffect];
@@ -713,10 +733,13 @@ struct GlyphData
     float4 Color;       // straight RGBA, element/brush opacity folded into .w
     float4 Paint;       // .x = a 'COLR' version 1 glyph's paint program plus one, or 0 (LocalRect is then the pen and
                         // baseline, xy, and pixels per font unit, zw); .y = the element's opacity raised to 2.2, for the
-                        // glyph's own colors
+                        // glyph's own colors; .zw = the move of Effect
     float4 SecondSource; // a glyph between two key instances: the second key's cell over the same quad, or zero
     float4 Second;      // .x = that cell's layer; .y = its share; .z = the glyph's turn, radians clockwise about
                         // LocalRect.xy
+    float4 Effect;      // a GlyphEffect in node-local space, as FontItem.Effect holds it; zero for none
+    float4 Perspective; // .xy = its perspective; .z = its w at the origin less one (not divided out, so w keeps its
+                        // sign far from the node's origin); .w reserved
 };
 
 [shader("vertex")]
@@ -742,10 +765,12 @@ PSInput FontBatchInstancedVS(uint vertexId : SV_VertexID, uint instanceId : SV_I
         float2 arm = localPos - g.LocalRect.xy;
         localPos = g.LocalRect.xy + float2(arm.x * turn.x - arm.y * turn.y, arm.x * turn.y + arm.y * turn.x);
     }
+    float effectW = GlyphEffectW(localPos, g.Perspective.xy) + g.Perspective.z;
+    localPos = GlyphEffectPoint(localPos, g.Effect, g.Paint.zw);
     // Node-local -> world via the instance's transform-table matrix (slot 0 = identity for legacy world bakes).
     NodeSlot* nodes = (NodeSlot*)TransformsAddress;
     float4x4 nodeWorld = nodes[(uint)g.Params.x].World;
-    float4 worldPos = mul(float4(localPos, g.Params.z, 1.0), nodeWorld);
+    float4 worldPos = mul(float4(localPos, g.Params.z * effectW, effectW), nodeWorld);
     o.Position = mul(worldPos, MatrixTransform);   // MatrixTransform = the (transposed-on-upload) projection
     o.UV = g.Source.xy + corner * g.Source.zw;     // SpriteEffect == 0 for batched glyphs
     SecondField(g.SecondSource, g.Second.xy, corner, o.SecondUV, o.Second);
