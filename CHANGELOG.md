@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `EntityManager.RootEntities` and `EntityWorld.RootEntities` are a `ReadOnlyTrackingCollection<Entity>`: a view - an
+  editor's hierarchy - binds to them and follows entities as they are added and removed, as it follows an entity's
+  `Dependencies`. The changes come on the world's thread.
 - `Adamantium.Content.Build`: the content project, as in XNA - a library whose files are its assets.
   - **What is content.** Every file of the project but its code, its build files and hidden files
     (`AdamantiumContent`, trimmed with `Remove` as any item). A file from outside the project comes in under its

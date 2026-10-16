@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Adamantium.Core;
+using Adamantium.Core.Collections;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS.Templates;
 
@@ -18,7 +19,7 @@ namespace Adamantium.ECS
             ServiceManager.FrameEnded += FrameEnded;
         }
 
-        public IReadOnlyList<Entity> RootEntities => EntityManager.RootEntities;
+        public ReadOnlyTrackingCollection<Entity> RootEntities => EntityManager.RootEntities;
         public EntityManager EntityManager { get; }
         public EntityServiceManager ServiceManager { get; }
         public IDependencyResolver DependencyResolver { get; }
