@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Fonts;
@@ -44,36 +43,4 @@ public readonly record struct GlyphEffect(int Start, int Length, Matrix3x3F Tran
             Shift.X, Shift.Y, (AroundGlyph ? 1 : 0) + (Color.HasValue ? 2 : 0), clipSlot);
         color = Color ?? default;
     }
-
-    /// <summary>What <paramref name="effects"/> do to a glyph drawing <paramref name="position"/> in
-    /// <paramref name="cell"/> (x, y, width, height), in their order, as the font shaders do it; false when none reaches
-    /// it.</summary>
-    public static bool Compose(IReadOnlyList<GlyphEffect> effects, float position, Vector4F cell, out Matrix3x3F total)
-    {
-        total = Matrix3x3F.Identity;
-        var touched = false;
-        if (position < 0)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < effects.Count; i++)
-        {
-            var effect = effects[i];
-            if (position < effect.Start || position >= effect.End)
-            {
-                continue;
-            }
-
-            touched = true;
-            var pivotX = effect.AroundGlyph ? cell.X + cell.Z / 2 : 0;
-            var pivotY = effect.AroundGlyph ? cell.Y + cell.W / 2 : 0;
-            total *= Move(-pivotX, -pivotY) * effect.Transform
-                     * Move(pivotX + effect.Shift.X * cell.Z, pivotY + effect.Shift.Y * cell.W);
-        }
-
-        return touched;
-    }
-
-    private static Matrix3x3F Move(float x, float y) => new(1, 0, 0, 0, 1, 0, x, y, 1);
 }

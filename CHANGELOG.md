@@ -20,10 +20,9 @@ All packages share one version.
   caret and hit testing stay where the layout put them; a glyph the layout adds - an ellipsis, a hyphen - goes with the
   character before it. The glyph run does not carry the effects: each `FontItem` says which character it draws, in which
   cell (`Place`, `Cell`), and both glyph shaders read the effects from a table of slots the caller keeps - written by
-  `GlyphEffect.ToSlot` and `GlyphClip.ToSlot`, a chain per text, passed to `FontRenderer.DrawLayout` and
-  `DrawLayoutDirect` - so a changed effect is a slot write, not a new run. The atlas is read in perspective, and the clip
-  is right under it. `GlyphEffect.Compose` does on the CPU what the shaders do; `FrozenGlyphRun.ReachOf` and `PaddingFor`
-  say how far effects take a glyph, so a drawn-apart glyph is not cut at the block's edge.
+  `GlyphEffect.ToSlot` and `GlyphClip.ToSlot`, a chain per text, passed to `FontRenderer.DrawLayoutDirect` - so a
+  changed effect is a slot write, not a new run. The atlas is read in perspective, and the clip
+  is right under it.
 - `AdamantiumCollection<T>` is an `ICollection`, so `ReadOnlyTrackingCollection<T>` hands out the collection's own
   `SyncRoot` - the lock every change is made and announced under. A view on another thread - the UI showing a world's
   entities - reads the items under it and so never sees them halfway through a change.
@@ -719,6 +718,9 @@ All packages share one version.
 
 ### Removed
 
+- `FontRenderer.UseDirectTextDraw`, `DrawLayout`, `SetState`, `RestoreState` and `RenderScale`: the old way of drawing a
+  text block into a target of its own and laying that over the element. Nothing turned it on; text is drawn straight
+  into the pass (`DrawLayoutDirect`) or in the batch (`DrawBatch`).
 - `MainGraphicsDevice.GetAvailableGraphicsQueue`, `GetAvailableTransferQueue` and `UsedGraphicsQueues`: a queue is
   leased with `LeaseGraphicsQueue` and given back with `ReturnGraphicsQueue`.
 

@@ -43,10 +43,34 @@ public class GlyphEffectTests
     private static GlyphEffect Effect(int start, int length, Matrix3x2F transform, bool aroundGlyph, Vector4F? color = null,
         Vector2F shift = default) => new(start, length, GlyphEffect.Flat(transform), aroundGlyph, color, shift);
 
+    // What the shaders' GlyphEffectsAt does to a glyph drawing `position` in `cell`: the effects that reach it, in order.
+    private static bool Compose(GlyphEffect[] effects, float position, Vector4F cell, out Matrix3x3F total)
+    {
+        total = Matrix3x3F.Identity;
+        var touched = false;
+        foreach (var effect in effects)
+        {
+            if (position < 0 || position < effect.Start || position >= effect.End)
+            {
+                continue;
+            }
+
+            touched = true;
+            var pivotX = effect.AroundGlyph ? cell.X + cell.Z / 2 : 0;
+            var pivotY = effect.AroundGlyph ? cell.Y + cell.W / 2 : 0;
+            total *= Translate(-pivotX, -pivotY) * effect.Transform
+                     * Translate(pivotX + effect.Shift.X * cell.Z, pivotY + effect.Shift.Y * cell.W);
+        }
+
+        return touched;
+    }
+
+    private static Matrix3x3F Translate(float x, float y) => new(1, 0, 0, 0, 1, 0, x, y, 1);
+
     // Where the shaders put a point of the glyph.
     private static Vector2F Moved(FontItem glyph, Vector2F p, params GlyphEffect[] effects)
     {
-        GlyphEffect.Compose(effects, glyph.Place.X, glyph.Cell, out var m);
+        Compose(effects, glyph.Place.X, glyph.Cell, out var m);
         var w = p.X * m.M13 + p.Y * m.M23 + m.M33;
         return new Vector2F((p.X * m.M11 + p.Y * m.M21 + m.M31) / w, (p.X * m.M12 + p.Y * m.M22 + m.M32) / w);
     }
@@ -84,9 +108,9 @@ public class GlyphEffectTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(GlyphEffect.Compose(effects, run.Glyphs[0].Place.X, run.Glyphs[0].Cell, out _), Is.False);
-            Assert.That(GlyphEffect.Compose(effects, run.Glyphs[1].Place.X, run.Glyphs[1].Cell, out _), Is.True);
-            Assert.That(GlyphEffect.Compose(effects, run.Glyphs[2].Place.X, run.Glyphs[2].Cell, out _), Is.False);
+            Assert.That(Compose(effects, run.Glyphs[0].Place.X, run.Glyphs[0].Cell, out _), Is.False);
+            Assert.That(Compose(effects, run.Glyphs[1].Place.X, run.Glyphs[1].Cell, out _), Is.True);
+            Assert.That(Compose(effects, run.Glyphs[2].Place.X, run.Glyphs[2].Cell, out _), Is.False);
         });
     }
 
@@ -173,7 +197,7 @@ public class GlyphEffectTests
         var tip = new GlyphEffect(last, 1, new Matrix3x3F(1, 0, 0.01f, 0, 1, 0, 0, 0, 1), true, null);
         var center = CenterOf(layout, last);
         var glyph = run.Glyphs[run.Count - 1];
-        GlyphEffect.Compose([tip], glyph.Place.X, glyph.Cell, out var m);
+        Compose([tip], glyph.Place.X, glyph.Cell, out var m);
         var w = center.X * m.M13 + center.Y * m.M23 + m.M33;
 
         var stays = Moved(glyph, center, tip);
@@ -196,29 +220,6 @@ public class GlyphEffectTests
             Effect(0, 3, Matrix3x2F.Translation(10, 0), false), Effect(0, 3, Matrix3x2F.Scaling(2f), false));
 
         Assert.That(moved.X, Is.EqualTo(20).Within(1e-3), "moved first, then scaled");
-    }
-
-    [Test]
-    public void TheRun_HasRoomForWhatAnEffectMoves()
-    {
-        var run = Run(Layout());
-        GlyphEffect[] lift = [Effect(2, 1, Matrix3x2F.Translation(0, -30), true)];
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(run.ReachOf([]), Is.Zero);
-            Assert.That(run.ReachOf(lift), Is.EqualTo(30).Within(1e-3));
-            Assert.That(run.PaddingFor(lift), Is.EqualTo(run.PaddingFor([]) + 30).Within(1));
-        });
-    }
-
-    [Test]
-    public void AGlyphTippedBehindTheViewer_ReachesAsFarAsCanBeSaid()
-    {
-        var run = Run(Layout());
-        GlyphEffect[] behind = [new(0, 1, new Matrix3x3F(1, 0, 0, 0, 1, 0, 0, 0, -1), true, null)];
-
-        Assert.That(run.ReachOf(behind), Is.EqualTo(FrozenGlyphRun.MaxReach));
     }
 
     [Test]
