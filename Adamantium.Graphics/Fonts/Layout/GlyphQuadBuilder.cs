@@ -10,15 +10,8 @@ namespace Adamantium.Graphics.Fonts.Layout;
 
 internal sealed class GlyphQuadBuilder
 {
-    private const float MinPerspectiveW = 0.05f;
-    private const float MaxReach = 4096;
-
     private FontItem[] _items = Array.Empty<FontItem>();
-    private int[] _positions = [];
-    private RectangleF[] _cells = [];
-    private bool[] _textColored = [];
     private int _atlasVersion = -1;
-    private bool _vertexBufferDirty;
 
     public RectangleF? Window { get; private set; }
 
@@ -26,13 +19,7 @@ internal sealed class GlyphQuadBuilder
 
     public FontAtlas FontAtlas { get; private set; }
 
-    public Buffer<FontItem> VertexBuffer { get; private set; }
-
     public bool NeedsGlyphRefresh => FontAtlas != null && (FontAtlas.IsDisposed || FontAtlas.Version != _atlasVersion);
-
-    public int EffectPadding(float fontSize) => FontAtlas == null
-        ? 0
-        : (int)Math.Ceiling(FontAtlas.GlyphMargin * fontSize / FontAtlas.MSDFTextureSize);
 
     public FontAtlas EnsureAtlas(IGraphicsDevice graphicsDevice)
     {
@@ -48,7 +35,6 @@ internal sealed class GlyphQuadBuilder
     public void Clear()
     {
         ElementsCount = 0;
-        _vertexBufferDirty = true;
     }
 
     public IEnumerable<(IFont Font, Glyph Glyph)> GetGlyphs(LaidOutText text)
@@ -113,8 +99,6 @@ internal sealed class GlyphQuadBuilder
         atlas.RequestAsync(GetGlyphs(text));
         _atlasVersion = atlas.Version;
         ElementsCount = 0;
-        // No vertex buffer here: only the direct draw path needs one (EnsureVertexBuffer), and one per block ran the BAR
-        // heap out of memory.
 
         var glyphs = text.Glyphs;
         var lastPosition = -1;
@@ -139,168 +123,22 @@ internal sealed class GlyphQuadBuilder
                 TurnItems(first, DrawnRect(word));
             }
 
+            var cell = new Vector4F(word.Rect.X, word.Rect.Y, word.Rect.Width, word.Rect.Height);
             for (var k = first; k < ElementsCount; k++)
             {
-                _positions[k] = word.PositionInString >= 0 ? word.PositionInString : lastPosition;
-                _cells[k] = word.Rect;
+                _items[k].Cell = cell;
+                _items[k].Place.X = word.PositionInString >= 0 ? word.PositionInString : lastPosition;
             }
-        }
-
-        _vertexBufferDirty = true;
-    }
-
-    public void EnsureVertexBuffer(IGraphicsDevice graphicsDevice)
-    {
-        if (VertexBuffer == null || VertexBuffer.ElementCount < ElementsCount)
-        {
-            if (VertexBuffer != null)
-            {
-                graphicsDevice.AddToDeferDisposeQueue(VertexBuffer);
-            }
-
-            VertexBuffer = Adamantium.Graphics.Buffer.Vertex.New<FontItem>(graphicsDevice,
-                (uint)Math.Max(_items.Length, 1), Adamantium.Graphics.BufferMemoryUsage.UploadFromCpuToGpu);
-            _vertexBufferDirty = true;
-        }
-
-        if (_vertexBufferDirty)
-        {
-            VertexBuffer.SetData((ReadOnlySpan<FontItem>)_items.AsSpan(0, (int)ElementsCount));
-            _vertexBufferDirty = false;
         }
     }
 
-    public bool TryBakeWorldGlyphs(FontItem[] dest, ref int count, Matrix4x4F world, Vector2F textAreaOffset, Vector4F color)
-    {
-        if (ElementsCount == 0) return true;
-
-        const float eps = 1e-4f;
-        if (Math.Abs(world.M12) > eps || Math.Abs(world.M21) > eps) return false;
-        if (count + (int)ElementsCount > dest.Length) return false;
-
-        var sx = world.M11;
-        var sy = world.M22;
-        var tx = world.M41;
-        var ty = world.M42;
-        for (var i = 0; i < ElementsCount && Math.Abs(sx - sy) > eps; i++)
-        {
-            if (_items[i].Rotation != 0)
-            {
-                return false;
-            }
-        }
-
-        for (int i = 0; i < ElementsCount; i++)
-        {
-            var item = _items[i];
-            var d = item.ArrangeRect;
-            item.ArrangeRect = new Vector4F(
-                (d.X + textAreaOffset.X) * sx + tx,
-                (d.Y + textAreaOffset.Y) * sy + ty,
-                d.Z * sx,
-                d.W * sy);
-            if (!item.HasOwnColor)
-            {
-                item.Color = color;
-            }
-            dest[count++] = item;
-        }
-        return true;
-    }
-
-    public FrozenGlyphRun Snapshot(float fontSize, IReadOnlyList<GlyphEffect> effects)
+    public FrozenGlyphRun Snapshot(float fontSize)
     {
         var n = (int)ElementsCount;
         var copy = new FontItem[n];
         Array.Copy(_items, copy, n);
-        var reach = 0f;
-        if (effects is { Count: > 0 })
-        {
-            for (var i = 0; i < n; i++)
-            {
-                reach = Math.Max(reach, ApplyEffects(ref copy[i], i, effects));
-            }
-        }
-
-        return new FrozenGlyphRun(copy, n, FontAtlas, fontSize, reach);
+        return new FrozenGlyphRun(copy, n, FontAtlas, fontSize);
     }
-
-    private float ApplyEffects(ref FontItem item, int index, IReadOnlyList<GlyphEffect> effects)
-    {
-        var position = _positions[index];
-        if (position < 0)
-        {
-            return 0;
-        }
-
-        var cell = _cells[index];
-        var total = Matrix3x3F.Identity;
-        var touched = false;
-        for (var e = 0; e < effects.Count; e++)
-        {
-            var effect = effects[e];
-            if (position < effect.Start || position >= effect.End)
-            {
-                continue;
-            }
-
-            touched = true;
-            var transform = effect.Transform;
-            if (effect.AroundGlyph)
-            {
-                var pivotX = cell.X + cell.Width / 2;
-                var pivotY = cell.Y + cell.Height / 2;
-                transform = Move(-pivotX, -pivotY) * transform * Move(pivotX, pivotY);
-            }
-
-            if (effect.Shift != default)
-            {
-                transform *= Move(effect.Shift.X * cell.Width, effect.Shift.Y * cell.Height);
-            }
-
-            total *= transform;
-            if (effect.Color is { } color && _textColored[index])
-            {
-                item.Color = color;
-            }
-        }
-
-        if (!touched || total.IsIdentity)
-        {
-            return 0;
-        }
-
-        item.Effect = new Vector4F(total.M11 - 1, total.M12, total.M21, total.M22 - 1);
-        item.EffectOffset = new Vector2F(total.M31, total.M32);
-        item.EffectPerspective = new Vector4F(total.M13, total.M23, total.M33 - 1, 0);
-        if (item.Paint.X == 0)
-        {
-            var quad = item.ArrangeRect;
-            cell = RectangleF.Union(cell, new RectangleF(quad.X, quad.Y, quad.Z, quad.W));
-        }
-
-        var reach = 0f;
-        Span<Vector2F> corners =
-        [
-            new(cell.Left, cell.Top), new(cell.Right, cell.Top), new(cell.Left, cell.Bottom), new(cell.Right, cell.Bottom)
-        ];
-        foreach (var corner in corners)
-        {
-            var w = corner.X * total.M13 + corner.Y * total.M23 + total.M33;
-            if (w < MinPerspectiveW)
-            {
-                return MaxReach;
-            }
-
-            var x = (corner.X * total.M11 + corner.Y * total.M21 + total.M31) / w;
-            var y = (corner.X * total.M12 + corner.Y * total.M22 + total.M32) / w;
-            reach = Math.Max(reach, Math.Max(Math.Abs(x - corner.X), Math.Abs(y - corner.Y)));
-        }
-
-        return Math.Min(reach, MaxReach);
-    }
-
-    private static Matrix3x3F Move(float x, float y) => new(1, 0, 0, 0, 1, 0, x, y, 1);
 
     internal static RectangleF CellSource(GlyphTextureData cell)
     {
@@ -335,9 +173,6 @@ internal sealed class GlyphQuadBuilder
         var size = Math.Max(16, _items.Length);
         while (size < needed) size *= 2;
         Array.Resize(ref _items, size);
-        Array.Resize(ref _positions, size);
-        Array.Resize(ref _cells, size);
-        Array.Resize(ref _textColored, size);
     }
 
     private void AddWordItems(GlyphWordData word)
@@ -413,9 +248,9 @@ internal sealed class GlyphQuadBuilder
                 scale),
             Depth = 1.0f,
             Color = GlyphColor(word),
-            Paint = new Vector4F(program + 1, 0, 0, 0)
+            Paint = new Vector4F(program + 1, 0, 0, 0),
+            Place = new Vector2F(-1, 1)
         };
-        _textColored[ElementsCount] = true;
         ElementsCount++;
     }
 
@@ -458,9 +293,9 @@ internal sealed class GlyphQuadBuilder
             Color = color,
             Synthesis = GlyphSynthesis(word, quad),
             SecondSource = SourceOver(second.Value, quad),
-            Second = new Vector2F(second.Value.Layer, amount)
+            Second = new Vector2F(second.Value.Layer, amount),
+            Place = new Vector2F(-1, 1)
         };
-        _textColored[ElementsCount] = true;
         ElementsCount++;
     }
 
@@ -539,9 +374,9 @@ internal sealed class GlyphQuadBuilder
             return;
         }
 
+        item.Place = new Vector2F(-1, textColored ? 1 : 0);
         EnsureItemCapacity((int)ElementsCount + 1);
         _items[ElementsCount] = item;
-        _textColored[ElementsCount] = textColored;
         ElementsCount++;
     }
 

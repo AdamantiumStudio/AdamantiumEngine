@@ -8,7 +8,8 @@ using NUnit.Framework;
 
 namespace Adamantium.Engine.GraphicsTests;
 
-// Effects move and recolor the glyphs of a range in the snapshot the renderer draws; the layout stays as it was laid.
+// Effects move and recolor the glyphs of a range where the font shaders draw them; the snapshot only says which
+// character each glyph draws and in which cell, and the layout stays as it was laid.
 [TestFixture]
 public class GlyphEffectTests
 {
@@ -22,35 +23,56 @@ public class GlyphEffectTests
         GpuFixture.ReleaseRenderDevices();
     }
 
-    private static TextLayout Layout()
+    private static TextLayout Layout(string text = Text, double width = double.NaN,
+        TextTrimming trimming = TextTrimming.None)
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText(Text, 40, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 40, new Size(width, double.NaN), TextWrapping.NoWrap, trimming,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
 
-    private static FrozenGlyphRun Run(params GlyphEffect[] effects)
+    private static FrozenGlyphRun Run(TextLayout layout)
     {
         var device = GpuFixture.CreateRenderDevice();
         FontAtlasStore.SynchronousFill = true;
-        var layout = Layout();
-        var run = layout.BuildGlyphRun(device, null, effects);
-        Assume.That(run.Count, Is.EqualTo(Text.Length), "one glyph a letter");
-        return run;
+        return layout.BuildGlyphRun(device, null);
     }
 
-    private static GlyphEffect Effect(int start, int length, Matrix3x2F transform, bool aroundGlyph, Vector4F? color,
+    private static GlyphEffect Effect(int start, int length, Matrix3x2F transform, bool aroundGlyph, Vector4F? color = null,
         Vector2F shift = default) => new(start, length, GlyphEffect.Flat(transform), aroundGlyph, color, shift);
 
-    // Where the shader puts a point of the glyph.
-    private static Vector2F Moved(FontItem item, Vector2F p)
+    // What the shaders' GlyphEffectsAt does to a glyph drawing `position` in `cell`: the effects that reach it, in order.
+    private static bool Compose(GlyphEffect[] effects, float position, Vector4F cell, out Matrix3x3F total)
     {
-        var w = 1 + item.EffectPerspective.Z + p.X * item.EffectPerspective.X + p.Y * item.EffectPerspective.Y;
-        return new Vector2F(
-            (p.X + p.X * item.Effect.X + p.Y * item.Effect.Z + item.EffectOffset.X) / w,
-            (p.Y + p.X * item.Effect.Y + p.Y * item.Effect.W + item.EffectOffset.Y) / w);
+        total = Matrix3x3F.Identity;
+        var touched = false;
+        foreach (var effect in effects)
+        {
+            if (position < 0 || position < effect.Start || position >= effect.End)
+            {
+                continue;
+            }
+
+            touched = true;
+            var pivotX = effect.AroundGlyph ? cell.X + cell.Z / 2 : 0;
+            var pivotY = effect.AroundGlyph ? cell.Y + cell.W / 2 : 0;
+            total *= Translate(-pivotX, -pivotY) * effect.Transform
+                     * Translate(pivotX + effect.Shift.X * cell.Z, pivotY + effect.Shift.Y * cell.W);
+        }
+
+        return touched;
+    }
+
+    private static Matrix3x3F Translate(float x, float y) => new(1, 0, 0, 0, 1, 0, x, y, 1);
+
+    // Where the shaders put a point of the glyph.
+    private static Vector2F Moved(FontItem glyph, Vector2F p, params GlyphEffect[] effects)
+    {
+        Compose(effects, glyph.Place.X, glyph.Cell, out var m);
+        var w = p.X * m.M13 + p.Y * m.M23 + m.M33;
+        return new Vector2F((p.X * m.M11 + p.Y * m.M21 + m.M31) / w, (p.X * m.M12 + p.Y * m.M22 + m.M32) / w);
     }
 
     private static Vector2F CenterOf(TextLayout layout, int character)
@@ -60,31 +82,49 @@ public class GlyphEffectTests
     }
 
     [Test]
-    public void AnEffect_MovesTheGlyphsOfItsRange_AndNoOthers()
+    public void EachGlyph_KnowsTheCharacterItDraws_AndItsCell()
     {
-        var run = Run(Effect(1, 1, Matrix3x2F.Rotation(0.5f), true, null));
+        var layout = Layout();
+        var run = Run(layout);
+        var laid = layout.GetTextData().Where(g => g.PositionInString >= 0).ToArray();
 
         Assert.Multiple(() =>
         {
-            Assert.That(run.Glyphs[0].Effect, Is.EqualTo(default(Vector4F)));
-            Assert.That(run.Glyphs[0].EffectOffset, Is.EqualTo(default(Vector2F)));
-            Assert.That(run.Glyphs[1].Effect, Is.Not.EqualTo(default(Vector4F)));
-            Assert.That(run.Glyphs[2].Effect, Is.EqualTo(default(Vector4F)));
+            Assert.That(run.Count, Is.EqualTo(Text.Length), "one glyph a letter");
+            for (var i = 0; i < run.Count; i++)
+            {
+                Assert.That(run.Glyphs[i].Place, Is.EqualTo(new Vector2F(i, 1)), "drawn in the text's color");
+                Assert.That(run.Glyphs[i].Cell,
+                    Is.EqualTo(new Vector4F(laid[i].Rect.X, laid[i].Rect.Y, laid[i].Rect.Width, laid[i].Rect.Height)));
+            }
+        });
+    }
+
+    [Test]
+    public void AnEffect_ReachesTheGlyphsOfItsRange_AndNoOthers()
+    {
+        var run = Run(Layout());
+        GlyphEffect[] effects = [Effect(1, 1, Matrix3x2F.Rotation(0.5f), true)];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Compose(effects, run.Glyphs[0].Place.X, run.Glyphs[0].Cell, out _), Is.False);
+            Assert.That(Compose(effects, run.Glyphs[1].Place.X, run.Glyphs[1].Cell, out _), Is.True);
+            Assert.That(Compose(effects, run.Glyphs[2].Place.X, run.Glyphs[2].Cell, out _), Is.False);
         });
     }
 
     [Test]
     public void AroundTheGlyph_ItsCenterStays_WhileItTurns()
     {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
         var layout = Layout();
-        var run = layout.BuildGlyphRun(device, null, [Effect(1, 1, Matrix3x2F.Rotation(1f), true, null)]);
+        var run = Run(layout);
+        var turn = Effect(1, 1, Matrix3x2F.Rotation(1f), true);
         var center = CenterOf(layout, 1);
         var corner = center + new Vector2F(5, 0);
 
-        var moved = Moved(run.Glyphs[1], center);
-        var turned = Moved(run.Glyphs[1], corner);
+        var moved = Moved(run.Glyphs[1], center, turn);
+        var turned = Moved(run.Glyphs[1], corner, turn);
 
         Assert.Multiple(() =>
         {
@@ -98,13 +138,11 @@ public class GlyphEffectTests
     [Test]
     public void AboutTheOrigin_TheTransformIsTheLayouts()
     {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
         var layout = Layout();
-        var run = layout.BuildGlyphRun(device, null, [Effect(0, 3, Matrix3x2F.Scaling(2f), false, null)]);
+        var run = Run(layout);
         var center = CenterOf(layout, 2);
 
-        var moved = Moved(run.Glyphs[2], center);
+        var moved = Moved(run.Glyphs[2], center, Effect(0, 3, Matrix3x2F.Scaling(2f), false));
 
         Assert.That(moved.X, Is.EqualTo(center.X * 2).Within(1e-3));
         Assert.That(moved.Y, Is.EqualTo(center.Y * 2).Within(1e-3));
@@ -113,18 +151,17 @@ public class GlyphEffectTests
     [Test]
     public void AShift_MovesEachGlyphByItsOwnSize()
     {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
         var layout = Layout();
-        var run = layout.BuildGlyphRun(device, null,
-            [Effect(0, 3, Matrix3x2F.Identity, true, null, new Vector2F(0, -1))]);
+        var run = Run(layout);
+        var raise = Effect(0, 3, Matrix3x2F.Identity, true, shift: new Vector2F(0, -1));
         var heights = layout.GetTextData().Where(g => g.PositionInString >= 0).Select(g => g.Rect.Height).ToArray();
 
         Assert.Multiple(() =>
         {
             for (var i = 0; i < 3; i++)
             {
-                Assert.That(run.Glyphs[i].EffectOffset.Y, Is.EqualTo(-heights[i]).Within(1e-3));
+                var center = CenterOf(layout, i);
+                Assert.That(Moved(run.Glyphs[i], center, raise).Y, Is.EqualTo(center.Y - heights[i]).Within(1e-3));
             }
         });
     }
@@ -132,46 +169,38 @@ public class GlyphEffectTests
     [Test]
     public void APerspective_NarrowsTheFarSide_AboutTheGlyphsCenter()
     {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
         var layout = Layout();
-        var perspective = new Matrix3x3F(1, 0, 0.01f, 0, 1, 0, 0, 0, 1);
-        var run = layout.BuildGlyphRun(device, null, [new GlyphEffect(1, 1, perspective, true, null)]);
+        var run = Run(layout);
+        var tip = new GlyphEffect(1, 1, new Matrix3x3F(1, 0, 0.01f, 0, 1, 0, 0, 0, 1), true, null);
         var center = CenterOf(layout, 1);
-        var nearTop = Moved(run.Glyphs[1], center + new Vector2F(-10, -10));
-        var nearBottom = Moved(run.Glyphs[1], center + new Vector2F(-10, 10));
-        var farTop = Moved(run.Glyphs[1], center + new Vector2F(10, -10));
-        var farBottom = Moved(run.Glyphs[1], center + new Vector2F(10, 10));
-        var stays = Moved(run.Glyphs[1], center);
+        var nearTop = Moved(run.Glyphs[1], center + new Vector2F(-10, -10), tip);
+        var nearBottom = Moved(run.Glyphs[1], center + new Vector2F(-10, 10), tip);
+        var farTop = Moved(run.Glyphs[1], center + new Vector2F(10, -10), tip);
+        var farBottom = Moved(run.Glyphs[1], center + new Vector2F(10, 10), tip);
+        var stays = Moved(run.Glyphs[1], center, tip);
 
         Assert.Multiple(() =>
         {
-            Assert.That(run.Glyphs[1].EffectPerspective, Is.Not.EqualTo(default(Vector4F)));
             Assert.That(stays.X, Is.EqualTo(center.X).Within(1e-3), "the center stays");
             Assert.That(stays.Y, Is.EqualTo(center.Y).Within(1e-3));
             Assert.That(farBottom.Y - farTop.Y, Is.LessThan(nearBottom.Y - nearTop.Y), "the far side is shorter");
-            Assert.That(run.Glyphs[0].EffectPerspective, Is.EqualTo(default(Vector4F)), "the others stay flat");
         });
     }
 
     [Test]
     public void APerspective_FarFromTheLayoutsOrigin_KeepsTheGlyphInFront()
     {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
-        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
-        var layout = new TextLayout(typeface, typeface.Fonts[0]);
         const string text = "abcdefghijklmnopqrstuvwxyz";
-        layout.ProcessText(text, 40, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
-            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var layout = Layout(text);
+        var run = Run(layout);
         var last = text.Length - 1;
-        var perspective = new Matrix3x3F(1, 0, 0.01f, 0, 1, 0, 0, 0, 1);
-        var run = layout.BuildGlyphRun(device, null, [new GlyphEffect(last, 1, perspective, true, null)]);
+        var tip = new GlyphEffect(last, 1, new Matrix3x3F(1, 0, 0.01f, 0, 1, 0, 0, 0, 1), true, null);
         var center = CenterOf(layout, last);
         var glyph = run.Glyphs[run.Count - 1];
-        var w = 1 + glyph.EffectPerspective.Z + center.X * glyph.EffectPerspective.X + center.Y * glyph.EffectPerspective.Y;
+        Compose([tip], glyph.Place.X, glyph.Cell, out var m);
+        var w = center.X * m.M13 + center.Y * m.M23 + m.M33;
 
-        var stays = Moved(glyph, center);
+        var stays = Moved(glyph, center, tip);
 
         Assume.That(center.X * 0.01f, Is.GreaterThan(1), "far enough that w at the origin is below zero");
         Assert.Multiple(() =>
@@ -183,67 +212,55 @@ public class GlyphEffectTests
     }
 
     [Test]
-    public void ScaledToNothing_IsAnEffect_NotNone()
-    {
-        var run = Run(Effect(0, 1, Matrix3x2F.Scaling(0f), true, null));
-
-        Assert.That(run.Glyphs[0].Effect, Is.EqualTo(new Vector4F(-1, 0, 0, -1)));
-    }
-
-    [Test]
     public void EffectsOverOneGlyph_ApplyInTheirOrder()
     {
-        var run = Run(
-            Effect(0, 3, Matrix3x2F.Translation(10, 0), false, null),
-            Effect(0, 3, Matrix3x2F.Scaling(2f), false, null));
+        var run = Run(Layout());
 
-        var moved = Moved(run.Glyphs[0], new Vector2F(0, 0));
+        var moved = Moved(run.Glyphs[0], new Vector2F(0, 0),
+            Effect(0, 3, Matrix3x2F.Translation(10, 0), false), Effect(0, 3, Matrix3x2F.Scaling(2f), false));
 
         Assert.That(moved.X, Is.EqualTo(20).Within(1e-3), "moved first, then scaled");
     }
 
     [Test]
-    public void AColor_RecolorsTheRange_AndTheRunHasRoomForWhatMoved()
+    public void AnEllipsisTheLayoutAdds_MovesWithTheCharacterBeforeIt()
+    {
+        var layout = Layout("abcdefghijklmnop", 120, TextTrimming.CharEllipses);
+        Assume.That(layout.GetTextData().Any(g => g.PositionInString < 0), "the layout added glyphs of its own");
+
+        var run = Run(layout);
+
+        Assert.That(run.Glyphs.Take(run.Count).Select(g => g.Place.X), Is.All.GreaterThanOrEqualTo(0));
+    }
+
+    [Test]
+    public void ASlot_HoldsTheEffect_TheWayTheShadersReadIt()
     {
         var red = new Vector4F(1, 0, 0, 1);
-        var plain = Run();
-        var run = Run(Effect(2, 1, Matrix3x2F.Translation(0, -30), true, red));
+        var effect = new GlyphEffect(2, 3, new Matrix3x3F(1, 2, 3, 4, 5, 6, 7, 8, 9), true, red, new Vector2F(0.5f, -1));
+
+        effect.ToSlot(7, 9, out var rows, out var color);
+        new GlyphEffect(0, 1, Matrix3x3F.Identity, false, null).ToSlot(-1, -1, out var plain, out var none);
 
         Assert.Multiple(() =>
         {
-            Assert.That(run.Glyphs[2].Color, Is.EqualTo(red));
-            Assert.That(run.Glyphs[1].Color, Is.EqualTo(plain.Glyphs[1].Color));
-            Assert.That(run.EffectReach, Is.EqualTo(30).Within(1e-3));
-            Assert.That(run.EffectPadding, Is.EqualTo(plain.EffectPadding + 30).Within(1));
+            Assert.That(rows, Is.EqualTo(new Matrix4x4F(1, 2, 3, 2, 4, 5, 6, 5, 7, 8, 9, 7, 0.5f, -1, 3, 9)));
+            Assert.That(color, Is.EqualTo(red));
+            Assert.That(plain.M34, Is.EqualTo(-1), "the last of its chain");
+            Assert.That(plain.M43, Is.Zero, "about the layout's origin, no color of its own");
+            Assert.That(plain.M44, Is.EqualTo(-1), "no clip");
+            Assert.That(none, Is.EqualTo(default(Vector4F)));
         });
     }
 
     [Test]
-    public void AnEllipsisTheLayoutAdds_MovesWithTheCharacterBeforeIt()
+    public void AClipsSlot_HoldsItsShape_AndWhereItIsTakenFrom()
     {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
-        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
-        var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText("abcdefghijklmnop", 40, new Size(120, double.NaN), TextWrapping.NoWrap,
-            TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
-        Assume.That(layout.GetTextData().Any(g => g.PositionInString < 0), "the layout added glyphs of its own");
+        var clip = new GlyphClip(new RectangleF(1, 2, 30, 40), new Vector4F(3, 4, 5, 6),
+            Matrix3x2F.Translation(-7, -8), AfterTransform: true);
 
-        var run = layout.BuildGlyphRun(device, null, [Effect(0, 16, Matrix3x2F.Translation(0, -30), true, null)]);
+        clip.ToSlot(out var rows, out _);
 
-        Assert.That(run.Glyphs.Take(run.Count).Select(g => g.EffectOffset.Y), Is.All.EqualTo(-30).Within(1e-3));
-    }
-
-    [Test]
-    public void TheLayout_StaysAsItWasLaid()
-    {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
-        var layout = Layout();
-        layout.BuildGlyphRun(device, null, [Effect(0, 3, Matrix3x2F.Rotation(1f), true, null)]);
-
-        var after = layout.SnapshotGlyphs();
-
-        Assert.That(after.Glyphs.Take(after.Count).All(g => g.Effect == default && g.EffectOffset == default), Is.True);
+        Assert.That(rows, Is.EqualTo(new Matrix4x4F(1, 2, 30, 40, 3, 4, 5, 6, 1, 0, 0, 1, -7, -8, 1, 0)));
     }
 }

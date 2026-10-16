@@ -220,19 +220,11 @@ public class TextLayout : DisposableObject
 
     public TextRenderingParameters RenderingParameters { get; private set; }
 
-    public Buffer<FontItem> VertexBuffer => _quads.VertexBuffer;
-
     public FontAtlas FontAtlas => _quads.FontAtlas;
 
     public string Text { get; private set; }
 
     public float FontSize { get; private set; }
-
-    /// <summary>
-    /// How far (screen px) a glyph's effect (outline/glow/shadow) reaches beyond its body: the atlas margin at the
-    /// current font size. 0 before the atlas is built.
-    /// </summary>
-    public int EffectPadding => _quads.EffectPadding(FontSize);
 
     public Size RealTextDimensions { get; private set; }
 
@@ -369,35 +361,18 @@ public class TextLayout : DisposableObject
         _textUpdated = true;
     }
 
-    /// <summary>
-    /// Creates and uploads the per-block vertex buffer on demand, larger when the block has outgrown it; only the direct
-    /// draw path (rotated/sheared text) uses it.
-    /// </summary>
-    public void EnsureVertexBuffer(IGraphicsDevice graphicsDevice) => _quads.EnsureVertexBuffer(graphicsDevice);
-
-    /// <summary>Copies this block's glyphs into a shared batch, baked to world space with its color, so many blocks draw
-    /// in one call. False for a rotated/sheared world (direct path instead) or when <paramref name="dest"/> is full.</summary>
-    public bool TryBakeWorldGlyphs(FontItem[] dest, ref int count, Matrix4x4F world, Vector2F textAreaOffset, Vector4F color) =>
-        _quads.TryBakeWorldGlyphs(dest, ref count, world, textAreaOffset, color);
-
     /// <summary>A frozen copy of the shaped glyphs (call after <see cref="Update"/>), so the render thread never reads
     /// this layout while it is reshaped.</summary>
-    public FrozenGlyphRun SnapshotGlyphs() => _quads.Snapshot(FontSize, null);
+    public FrozenGlyphRun SnapshotGlyphs() => _quads.Snapshot(FontSize);
 
     /// <summary><see cref="Update(IGraphicsDevice, RectangleF?)"/> and <see cref="SnapshotGlyphs"/> as one step, so two
     /// callers building different windows of this layout on different threads never freeze each other's.</summary>
-    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window) =>
-        BuildGlyphRun(graphicsDevice, window, null);
-
-    /// <summary><see cref="BuildGlyphRun(IGraphicsDevice, RectangleF?)"/>, the snapshot's glyphs drawn with
-    /// <paramref name="effects"/>; the layout itself is left as it is.</summary>
-    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window,
-        IReadOnlyList<GlyphEffect> effects)
+    public FrozenGlyphRun BuildGlyphRun(IGraphicsDevice graphicsDevice, RectangleF? window)
     {
         lock (_quads)
         {
             Update(graphicsDevice, window);
-            return _quads.Snapshot(FontSize, effects);
+            return _quads.Snapshot(FontSize);
         }
     }
 
