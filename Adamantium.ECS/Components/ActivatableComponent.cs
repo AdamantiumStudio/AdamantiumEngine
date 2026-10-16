@@ -1,20 +1,16 @@
-﻿using System;
+﻿using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components
 {
-    public abstract class ActivatableComponent : Component
+    [ViewModel]
+    public abstract partial class ActivatableComponent : Component
     {
-        private Boolean isEnabled;
-
         protected ActivatableComponent()
         {
-            isEnabled = true;
+            IsEnabled = true;
         }
 
-        public bool IsEnabled
-        {
-            get => isEnabled;
-            set => SetProperty(ref isEnabled, value);
-        }
+        [Bindable]
+        public partial bool IsEnabled { get; set; }
     }
 }

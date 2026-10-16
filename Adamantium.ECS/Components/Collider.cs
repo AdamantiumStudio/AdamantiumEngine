@@ -2,10 +2,12 @@
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components
 {
-    public abstract class Collider : ActivatableComponent
+    [ViewModel]
+    public abstract partial class Collider : ActivatableComponent
     {
         public Vector3F Size { get; set; }
 
@@ -21,17 +23,12 @@ namespace Adamantium.ECS.Components
 
         public Vector3F Center { get; set; }
 
-        public bool DisplayCollider
-        {
-            get => displayCollider;
-            set => SetProperty(ref displayCollider, value);
-        }
+        [Bindable]
+        public partial bool DisplayCollider { get; set; }
 
         // The CPU mesh used to visualize the collider bounds (debug draw). Its GPU buffers are built + owned by the
         // render-layer geometry cache, keyed by this mesh - the collider no longer holds any GPU resource itself.
         public Mesh Geometry { get; protected set; }
-
-        private bool displayCollider;
 
         public override void Initialize()
         {

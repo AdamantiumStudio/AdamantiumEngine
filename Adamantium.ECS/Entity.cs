@@ -4,6 +4,7 @@ using Adamantium.Core;
 using Adamantium.Core.Collections;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core;
+using Adamantium.MVVM;
 using Microsoft.Extensions.ObjectPool;
 using IComponent = Adamantium.ECS.Components.IComponent;
 
@@ -14,7 +15,8 @@ namespace Adamantium.ECS
     /// <summary>
     /// Class containing information about entity and its components
     /// </summary>
-    public sealed class Entity :
+    [ViewModel]
+    public sealed partial class Entity :
        PropertyChangedBase,
        IIdentifiable,
        INamedObject,
@@ -37,6 +39,7 @@ namespace Adamantium.ECS
             IsEnabled = true;
             Visible = true;
             Name = name;
+            IconKey = EntityIconKeys.Entity;
             Transform = new Transform();
             componentCollection = new EntityComponentCollection(this);
             componentCollection.Add(Transform);
@@ -46,16 +49,11 @@ namespace Adamantium.ECS
         private Entity owner;
         private readonly UInt128 uid;
         private UInt128 rootUid;
-        private bool isEnabled;
-        private bool isSelected;
-        private string name;
-        private string iconKey = EntityIconKeys.Entity;
         private readonly TrackingCollection<Entity> dependencies;
         private readonly ReadOnlyTrackingCollection<Entity> dependenciesReadOnly;
         private EntityComponentCollection componentCollection;
         private ReadOnlyTrackingCollection<IComponent> readOnlyComponents;
         private List<IInitializable> pendingComponents = new List<IInitializable>();
-        private bool visible;
 
         public Transform Transform { get; internal set; }
 
@@ -65,41 +63,26 @@ namespace Adamantium.ECS
 
         public bool IgnoreInCollisionDetection { get; set; }
 
-        public string Name
-        {
-            get => name;
-            set => SetProperty(ref name, value);
-        }
+        [Bindable]
+        public partial string Name { get; set; }
 
         /// <summary>The resource key of the icon an editor shows for this entity - one of <see cref="EntityIconKeys"/>,
         /// set by whatever makes an entity of that kind.</summary>
-        public string IconKey
-        {
-            get => iconKey;
-            set => SetProperty(ref iconKey, value);
-        }
+        [Bindable]
+        public partial string IconKey { get; set; }
 
         public bool HasName => !string.IsNullOrEmpty(Name);
         public object Tag { get; set; }
         public bool IsNameImmutable { get; private set; }
 
-        public bool Visible 
-        { 
-            get => visible; 
-            set => SetProperty(ref visible, value); 
-        }
+        [Bindable]
+        public partial bool Visible { get; set; }
 
-        public bool IsEnabled
-        {
-            get => isEnabled;
-            set => SetProperty(ref isEnabled, value);
-        }
+        [Bindable]
+        public partial bool IsEnabled { get; set; }
 
-        public bool IsSelected
-        {
-            get => isSelected;
-            set => SetProperty(ref isSelected, value);
-        }
+        [Bindable]
+        public partial bool IsSelected { get; set; }
 
         /// <summary>The entity this one hangs under; null for a root. Changed through
         /// <see cref="EntityManager.SetOwner"/> and <see cref="EntityManager.RemoveOwner"/>.</summary>
