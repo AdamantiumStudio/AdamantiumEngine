@@ -399,9 +399,10 @@ All packages share one version.
 
 ### Fixed
 
-- An entity changes owner only through `EntityManager.SetOwner`; `Entity.Owner` can no longer be set from outside, nor
-  `AddDependency`/`RemoveDependency` called. `RootEntities` are the roots of the world's tree: an entity given an
-  owner - a camera set to follow a model - leaves them and comes back once taken off, from the next frame. It stayed
+- An entity changes owner only through `EntityManager.SetOwner` and `RemoveOwner`; `Entity.Owner` can no longer be set
+  from outside, nor `AddDependency`/`RemoveDependency` called. `RootEntities` are the roots of the world's tree: an
+  entity given an owner - a camera set to follow a model - leaves them and comes back once taken off, from the next
+  frame. It stayed
   among the roots while being its owner's child too, so it was walked twice and a hierarchy showed it twice. An entity
   taken out of the world takes its tree along; `RemoveAllEntities` removes the roots, each with its tree.
 - The camera no longer hangs itself under its subject or takes itself off: `InputService` does it through the manager

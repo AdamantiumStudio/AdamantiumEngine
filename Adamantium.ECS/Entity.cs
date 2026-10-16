@@ -93,7 +93,7 @@ namespace Adamantium.ECS
         }
 
         /// <summary>The entity this one hangs under; null for a root. Changed through
-        /// <see cref="EntityManager.SetOwner"/>.</summary>
+        /// <see cref="EntityManager.SetOwner"/> and <see cref="EntityManager.RemoveOwner"/>.</summary>
         public Entity Owner
         {
             get => owner;

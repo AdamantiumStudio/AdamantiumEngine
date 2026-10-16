@@ -362,7 +362,7 @@ namespace Adamantium.ECS.Components
 
         ///<summary>
         ///Resets all third person related properties and set the camera type to Free; the view stays as it was. The
-        ///camera's entity stays under its host until taken off through <see cref="EntityManager.SetOwner"/>.
+        ///camera's entity stays under its host until taken off through <see cref="EntityManager.RemoveOwner"/>.
         ///</summary>
         public abstract void DeleteThirdPersonConfig();
 

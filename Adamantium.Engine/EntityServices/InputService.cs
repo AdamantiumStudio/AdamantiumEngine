@@ -145,7 +145,7 @@ public class InputService : EntityService
         if (entity?.Owner == null || camera.Type.IsThirdPerson()) return;
 
         entity.Transform.Position = entity.Transform.WorldPosition;
-        EntityWorld.EntityManager.SetOwner(entity, null);
+        EntityWorld.EntityManager.RemoveOwner(entity);
     }
 
     private void HandlePointer(Camera currentCamera, AppTime appTime)

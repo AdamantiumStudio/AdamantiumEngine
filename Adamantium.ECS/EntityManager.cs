@@ -92,9 +92,9 @@ public sealed class EntityManager
         }
     }
 
-    /// <summary>Hangs <paramref name="entity"/> under <paramref name="owner"/>, or takes it off its owner with null - the
-    /// one way an entity changes owner. A root given an owner leaves <see cref="RootEntities"/>, one taken off comes
-    /// back: from the next frame, on the world's thread.</summary>
+    /// <summary>Hangs <paramref name="entity"/> under <paramref name="owner"/> - with <see cref="RemoveOwner"/>, the one
+    /// way an entity changes owner. A root given an owner leaves <see cref="RootEntities"/>: from the next frame, on the
+    /// world's thread.</summary>
     public void SetOwner(Entity entity, Entity owner)
     {
         if (entity == null || entity.Owner == owner) return;
@@ -105,6 +105,10 @@ public sealed class EntityManager
             entitiesReowned.Add(entity);
         }
     }
+
+    /// <summary>Takes <paramref name="entity"/> off its owner; one of the world's comes back among
+    /// <see cref="RootEntities"/> from the next frame.</summary>
+    public void RemoveOwner(Entity entity) => SetOwner(entity, null);
 
     // A root while it has no owner; with one it is a branch of its owner's tree.
     private void PlaceByOwner(Entity entity)

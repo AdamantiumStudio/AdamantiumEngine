@@ -47,7 +47,7 @@ public class EntityManagerTests
         Assert.That(model.Dependencies, Does.Contain(camera));
         Assert.That(manager.FindEntity(camera.Uid), Is.SameAs(camera), "still in the world");
 
-        manager.SetOwner(camera, null);
+        manager.RemoveOwner(camera);
         NextFrame(universe);
 
         Assert.That(manager.RootEntities, Is.EquivalentTo(new[] { model, camera }));

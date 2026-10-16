@@ -153,7 +153,7 @@ public class EntityIcons : EditorProcessor
             iconOf.Remove(gone[i]);
             targetOf.Remove(icon);
             raysOf.Remove(gone[i]);
-            Tools.EntityWorld.EntityManager.SetOwner(icon, null);
+            Tools.EntityWorld.EntityManager.RemoveOwner(icon);
         }
     }
 
