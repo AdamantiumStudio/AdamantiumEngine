@@ -1266,20 +1266,17 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     {
         if (!CommandBufferStarted) return;
 
-        // No image means the acquire in EndDraw failed (an out-of-date swapchain, i.e. a resize). The submit below WAITS
-        // on this frame's ImageAvailable semaphore, which nothing will ever signal - submitting would hang the device.
-        // Skipping is safe for the fence: it is reset inside the submit, so an un-submitted frame leaves it signaled and
-        // the next BeginDraw walks straight through. The presenter self-heals on the next frame (OutOfDate rebuild).
-        // A WITHHELD frame has no image either, but by its own choice: its work - stroke expansion, layout transitions,
-        // the shared surfaces' semaphores - is still submitted, only nothing is shown.
-        if (Presenter is SwapChainGraphicsPresenter && !HasSwapchainImage && !FrameWithheld) return;
-
         _submissionSync?.Wait();
 
         //Log.Logger.Debug($"Enter Submit for device {DeviceId}");
 
         var commandBuffer = CurrentCommandBuffer;
-        var presents = Presenter is SwapChainGraphicsPresenter && !FrameWithheld;
+        // No image means the acquire in EndDraw failed (an out-of-date swapchain, i.e. a resize): the frame goes out like a
+        // WITHHELD one - its work (stroke expansion, layout transitions, the shared surfaces' copies and semaphores) is
+        // submitted, only nothing is shown. Waiting on the ImageAvailable semaphore, which nothing will signal, would hang
+        // the device; dropping the frame lost work its semaphore signals stood for. The presenter self-heals on the next
+        // frame (OutOfDate rebuild).
+        var presents = Presenter is SwapChainGraphicsPresenter && !FrameWithheld && HasSwapchainImage;
 
         // Transition the swapchain image to PresentSrc inside the MAIN command buffer instead of a separate
         // per-frame single-time submit in Present() (which Present()'s guard then skips).
@@ -1372,7 +1369,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             Log.Logger.Error($"failed to submit draw command buffer! Result was {result}");
         }
 
-        CanPresent = !FrameWithheld;
+        CanPresent = !FrameWithheld && HasSwapchainImage;
 
         _submissionSync?.Release();
         MainDevice.Observe(result);

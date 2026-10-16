@@ -60,7 +60,7 @@ namespace Adamantium.ECS.Components
             metadata.TopDiameter = 0;
             metadata.BottomDiameter = 1;
             metadata.LineStart = new Vector3(-0.5f, 0, 0);
-            metadata.LineStart = new Vector3(0.5f, 0, 0);
+            metadata.LineEnd = new Vector3(0.5f, 0, 0);
             return metadata;
         }
 

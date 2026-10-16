@@ -29,6 +29,7 @@ public sealed unsafe class SharedSurface : Texture
     private IntPtr _produceHandle;
     private IntPtr _consumeHandle;
     private ulong _latched;
+    private Texture _copy;
 
     public SharedSurfaceDescriptor Descriptor { get; private set; }
 
@@ -59,6 +60,67 @@ public sealed unsafe class SharedSurface : Texture
 
         _latched = latest;
         return latest;
+    }
+
+    /// <summary>The consumer's copy of the last frame latched by <see cref="LatchCopy"/>, sampled in place of the surface
+    /// so the producer may write its next frame meanwhile; <c>null</c> before the first latch.</summary>
+    public ITexture LatchedCopy => _copy;
+
+    /// <summary>
+    /// For the consumer, outside a render pass: when the producer has finished a frame newer than <see cref="LatchedCopy"/>,
+    /// records a copy of it into that texture on <paramref name="device"/>'s current command buffer. The copy waits for the
+    /// frame on the produce timeline and signals the consume timeline, so the producer writes again only after it. One
+    /// import per surface: a second one would copy a frame the first released to the producer.
+    /// </summary>
+    public void LatchCopy(IGraphicsDevice device)
+    {
+        var frame = LatchNewFrame();
+        if (frame == 0)
+        {
+            return;
+        }
+
+        var description = BuildDescription(Width, Height, Description.Format);
+        description.Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit;
+        _copy ??= New(device, description, "SharedSurface(copy)");
+
+        RecordCopy(device, _copy);
+        device.AddWaitSemaphore(_produceSemaphore, PipelineStageFlagBits2.AllTransferBit, frame);
+        device.AddSignalSemaphore(_consumeSemaphore, frame);
+    }
+
+    // Both images rest in ShaderReadOnly: the producer leaves the surface there, and the copy is only ever sampled.
+    private void RecordCopy(IGraphicsDevice device, ITexture copy)
+    {
+        var commandBuffer = device.CurrentCommandBuffer;
+        device.InsertImageMemoryBarrier(commandBuffer, this,
+            AccessFlagBits2.None, AccessFlagBits2.TransferReadBit,
+            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferSrcOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit);
+        device.InsertImageMemoryBarrier(commandBuffer, copy,
+            AccessFlagBits2.ShaderReadBit, AccessFlagBits2.TransferWriteBit,
+            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
+            PipelineStageFlagBits2.FragmentShaderBit, PipelineStageFlagBits2.AllTransferBit);
+
+        var region = new ImageCopy
+        {
+            Extent = new Extent3D { Width = Width, Height = Height, Depth = 1 },
+            SrcOffset = new Offset3D(),
+            DstOffset = new Offset3D(),
+            SrcSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 },
+            DstSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 }
+        };
+        commandBuffer.CopyImage(this.GetImage(), ImageLayout.TransferSrcOptimal,
+            copy.GetImage(), ImageLayout.TransferDstOptimal, 1, region);
+
+        device.InsertImageMemoryBarrier(commandBuffer, this,
+            AccessFlagBits2.TransferReadBit, AccessFlagBits2.None,
+            ImageLayout.TransferSrcOptimal, ImageLayout.ShaderReadOnlyOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit);
+        device.InsertImageMemoryBarrier(commandBuffer, copy,
+            AccessFlagBits2.TransferWriteBit, AccessFlagBits2.ShaderReadBit,
+            ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.FragmentShaderBit);
     }
 
     private ulong GetCounter(Semaphore semaphore)
@@ -152,8 +214,7 @@ public sealed unsafe class SharedSurface : Texture
 
         var surface = new SharedSurface(device, description, externalInfo, allocFactory, name);
         surface._useFd = useFd;
-        // TODO: acquire ownership from VK_QUEUE_FAMILY_EXTERNAL instead of a plain transition.
-        surface.TransitionImageLayout(description.DesiredImageLayout);
+        surface.AcquireFromProducer();
 
         if (descriptor.ProduceSemaphoreHandle != IntPtr.Zero)
         {
@@ -167,6 +228,44 @@ public sealed unsafe class SharedSurface : Texture
         surface._ownsHandles = false; // the producer owns and closes the handles
         surface.Descriptor = descriptor;
         return surface;
+    }
+
+    // VK_QUEUE_FAMILY_EXTERNAL: the producer owns the memory as it hands it over.
+    private const uint QueueFamilyExternal = ~1u;
+
+    // Taken over from the producer in the layout it keeps the surface in, not moved out of Undefined: the producer may
+    // already have written a frame, and a transition from Undefined may discard it.
+    private void AcquireFromProducer()
+    {
+        var device = GraphicsDevice;
+        var family = device.MainDevice.QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit).FamilyIndex;
+        var barrier = new ImageMemoryBarrier2
+        {
+            SrcStageMask = PipelineStageFlagBits2.TopOfPipeBit,
+            DstStageMask = PipelineStageFlagBits2.AllTransferBit | PipelineStageFlagBits2.FragmentShaderBit,
+            SrcAccessMask = AccessFlagBits2.None,
+            DstAccessMask = AccessFlagBits2.TransferReadBit | AccessFlagBits2.ShaderReadBit,
+            OldLayout = ImageLayout.ShaderReadOnlyOptimal,
+            NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+            SrcQueueFamilyIndex = QueueFamilyExternal,
+            DstQueueFamilyIndex = family,
+            Image = this.GetImage(),
+            SubresourceRange = new ImageSubresourceRange
+            {
+                AspectMask = ImageAspectFlagBits.ColorBit,
+                LevelCount = 1,
+                LayerCount = 1
+            }
+        };
+
+        var commandBuffer = device.BeginSingleTimeCommand();
+        commandBuffer.PipelineBarrier2(new DependencyInfo
+        {
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = new[] { barrier }
+        });
+        device.EndSingleTimeCommand(commandBuffer);
+        ImageLayout = ImageLayout.ShaderReadOnlyOptimal;
     }
 
     private IntPtr ExportMemoryHandle(ExternalMemoryHandleTypeFlagBits memHandleType)
@@ -280,10 +379,10 @@ public sealed unsafe class SharedSurface : Texture
         Format = format,
         Samples = MSAALevel.None,
         // Producer copies its resolved frame INTO this surface (TransferDst, then transitions it to ShaderReadOnly);
-        // consumer samples it directly. Producer and consumer are different queues of the SAME graphics family, so a
-        // semaphore (the Produce/Consume timeline) is enough to order the layout transition + write vs the sample (no
-        // queue-family ownership transfer needed).
-        Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit,
+        // consumer copies it out (TransferSrc, see LatchCopy) or samples it. Producer and consumer are different queues
+        // of the SAME graphics family, so a semaphore (the Produce/Consume timeline) is enough to order the layout
+        // transition + write vs the read (no queue-family ownership transfer needed).
+        Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit | ImageUsageFlagBits.TransferSrcBit,
         SharingMode = SharingMode.Exclusive,
         ImageTiling = ImageTiling.Optimal,
         InitialLayout = ImageLayout.Undefined,
@@ -301,6 +400,8 @@ public sealed unsafe class SharedSurface : Texture
 
     protected override void Dispose(bool disposeManaged)
     {
+        _copy?.Dispose();
+        _copy = null;
         var logical = GraphicsDevice.LogicalDevice;
         if (_produceSemaphore != null) { logical.DestroySemaphore(_produceSemaphore); _produceSemaphore = null; }
         if (_consumeSemaphore != null) { logical.DestroySemaphore(_consumeSemaphore); _consumeSemaphore = null; }
