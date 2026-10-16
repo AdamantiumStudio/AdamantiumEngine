@@ -53,10 +53,9 @@ public class EntityManagerTests
         Assert.That(manager.RootEntities, Is.EquivalentTo(new[] { model, camera }));
     }
 
-    // The model taken out of the world takes nothing of the camera's walk with it: held by nothing of the world any more,
-    // the camera is a root again, or no transform, drawing or picking would reach it.
+    // The world is a tree: the model taken out of it takes its branches along, the camera following it among them.
     [Test]
-    public void AnEntityWhoseOwnerLeavesTheWorld_IsARootAgain()
+    public void AnEntityWhoseOwnerLeavesTheWorld_LeavesWithIt()
     {
         var universe = new TestUniverse();
         var manager = universe.EntityWorld.EntityManager;
@@ -70,7 +69,8 @@ public class EntityManagerTests
         manager.RemoveEntity(model);
         NextFrame(universe);
 
-        Assert.That(manager.RootEntities, Is.EqualTo(new[] { camera }));
+        Assert.That(manager.RootEntities, Is.Empty);
+        Assert.That(manager.FindEntity(camera.Uid), Is.Null);
     }
 
     [Test]

@@ -41,16 +41,15 @@ public sealed class EntityManager
 
     public EntityWorld World { get; }
 
-    /// <summary>The entities of the world with no owner, raising a change as they are added and removed, so a view can
-    /// bind to them. One that is given an owner - a camera following a model - leaves them, and comes back once it has
-    /// none; it stays in the world all the while. The changes come on the world's thread.</summary>
+    /// <summary>The roots of the world's tree: its entities with no owner, raising a change as they are added and
+    /// removed, so a view can bind to them. One given an owner - a camera following a model - becomes a branch of its
+    /// owner's tree and leaves them, and comes back once it has none. The changes come on the world's thread.</summary>
     public ReadOnlyTrackingCollection<Entity> RootEntities { get; }
 
     internal void SyncEntities()
     {
         lock (syncObject)
         {
-            var changed = entitiesToRemove.Count > 0 || entitiesToAdd.Count > 0;
             if (entitiesToRemove.Count > 0)
             {
                 foreach (var entity in entitiesToRemove)
@@ -71,9 +70,7 @@ public sealed class EntityManager
                 entitiesToAdd.Clear();
             }
 
-            // What holds what may have changed for any of them: an owner given or taken, an owner come into the world or
-            // gone from it.
-            if (changed || ownersChanged)
+            if (ownersChanged)
             {
                 ownersChanged = false;
                 foreach (var entity in availableEntities.Values)
@@ -103,13 +100,12 @@ public sealed class EntityManager
         }
     }
 
-    // A root unless the world already reaches it through its owner: one with an owner whose topmost ancestor is not in
-    // the world - taken out of it, or never in it - is a root still, or nothing would walk it.
+    // A root while it has no owner; with one it is a branch of its owner's tree.
     private void PlaceByOwner(Entity entity)
     {
         if (!availableEntities.ContainsKey(entity.Uid)) return;
 
-        var held = entity.Owner != null && availableEntities.ContainsKey(entity.GetRoot().Uid);
+        var held = entity.Owner != null;
         var isRoot = rootEntities.Contains(entity);
         if (!held && !isRoot)
         {
@@ -133,12 +129,17 @@ public sealed class EntityManager
 
     private void RemoveEntityInternal(Entity entity)
     {
-        if (availableEntities.Remove(entity.Uid))
+        if (!availableEntities.Remove(entity.Uid)) return;
+
+        entity.OwnerChanged -= OnOwnerChanged;
+        rootEntities.Remove(entity);
+        OnEntityRemoved(entity);
+
+        // Its tree goes with it: an entity of the world it holds - a camera following it - leaves the world too.
+        entity.TraverseInDepth(held =>
         {
-            entity.OwnerChanged -= OnOwnerChanged;
-            rootEntities.Remove(entity);
-            OnEntityRemoved(entity);
-        }
+            if (held != entity) RemoveEntityInternal(held);
+        });
     }
 
     public Entity CreateEntity(string name, Entity owner = null, bool createDisabled = false)
@@ -217,14 +218,14 @@ public sealed class EntityManager
         }
     }
 
-    /// <summary>Takes every entity out of the world - one an owner holds as well as the roots.</summary>
+    /// <summary>Takes every root out of the world, and with each its tree.</summary>
     public void RemoveAllEntities()
     {
         lock (syncObject)
         {
-            foreach (var entity in availableEntities.Values)
+            foreach (var root in rootEntities)
             {
-                RemoveEntity(entity);
+                RemoveEntity(root);
             }
         }
     }
