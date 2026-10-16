@@ -229,9 +229,6 @@ public sealed class EntityManager
         }
     }
 
-    // Every entity of the world, held by an owner or not; read under the lock or on the world's thread.
-    internal IEnumerable<Entity> Entities => availableEntities.Values;
-
     public void RemoveEntities(IEnumerable<Entity> entities)
     {
         if (entities == null)
