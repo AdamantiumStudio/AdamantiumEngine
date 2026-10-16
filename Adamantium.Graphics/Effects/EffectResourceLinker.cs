@@ -18,7 +18,7 @@ internal interface IHeapResource
     bool HasLiveSlot { get; }
 }
 
-internal class ResourceInfo<T> : PropertyChangedBase, IHeapResource where T : class
+internal class ResourceInfo<T> : IHeapResource where T : class
 {
     private T resource;
 

@@ -17,7 +17,6 @@ namespace Adamantium.ECS
     /// </summary>
     [ViewModel]
     public sealed partial class Entity :
-       PropertyChangedBase,
        IIdentifiable,
        INamedObject,
        IEnable,

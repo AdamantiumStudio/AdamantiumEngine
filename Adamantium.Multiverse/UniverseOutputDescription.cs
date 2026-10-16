@@ -6,7 +6,7 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Multiverse
 {
-    public class UniverseOutputDescription : PropertyChangedBase
+    public class UniverseOutputDescription
     {
         public UniverseOutputDescription(PresenterType presenterType)
         {

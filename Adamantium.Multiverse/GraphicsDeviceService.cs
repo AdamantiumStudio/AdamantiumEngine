@@ -2,14 +2,16 @@
 using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.Graphics.Core;
+using Adamantium.MVVM;
 
 namespace Adamantium.Multiverse;
 
-public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDeviceService
+[ViewModel]
+public sealed partial class GraphicsDeviceService : IGraphicsDeviceService
 {
     public IGraphicsDeviceFactory GraphicsDeviceFactory { get; }
 
-    private bool isInDebugMode;
+    [Bindable] private bool isInDebugMode;
 
     private volatile bool _deviceUpdateNeeded;
 
@@ -95,17 +97,7 @@ public sealed class GraphicsDeviceService : PropertyChangedBase, IGraphicsDevice
         handler?.Invoke(sender, args);
     }
 
-    public bool IsInDebugMode
-    {
-        get => isInDebugMode;
-        set
-        {
-            if (SetProperty(ref isInDebugMode, value))
-            {
-                DeviceUpdateNeeded = true;
-            }
-        }
-    }
+    partial void OnIsInDebugModeChanged(bool value) => DeviceUpdateNeeded = true;
 
     internal void CreateMainDevice(string name, bool debugEnabled = true)
     {

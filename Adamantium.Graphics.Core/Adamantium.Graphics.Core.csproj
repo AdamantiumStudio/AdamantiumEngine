@@ -31,6 +31,8 @@
 		<ProjectReference Include="..\Adamantium.Imaging\Adamantium.Imaging.csproj" />
 		<ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
 		<ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+		<ProjectReference Include="..\Adamantium.MVVM\Adamantium.MVVM.csproj" />
+		<ProjectReference Include="..\Adamantium.MVVM.Generators\Adamantium.MVVM.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<ItemGroup>

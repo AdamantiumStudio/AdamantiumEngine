@@ -18,7 +18,7 @@ using Serilog;
 
 namespace Adamantium.Multiverse;
 
-public class Universe : PropertyChangedBase, IUniverse
+public class Universe : IUniverse
 {
     private readonly Dictionary<UniverseOutput, EntityService> drawSystems = [];
     private volatile bool deviceResourcesLost;

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel;
 using Adamantium.Core;
 using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
@@ -58,11 +57,6 @@ public interface ITexture : INamedObject
     /// Releases unmanaged and - optionally - managed resources
     /// </summary>
     void Dispose();
-
-    /// <summary>
-    /// Raised when a public property of this object is set.
-    /// </summary>
-    event PropertyChangedEventHandler PropertyChanged;
 
     /// <summary>
     /// Occurs when Dispose is called.

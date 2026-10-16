@@ -11,6 +11,7 @@ using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Graphics.Effects;
 using Adamantium.Imaging;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Adamantium.Vulkan.Core;
 using Adamantium.Vulkan.Core.Interop;
 using QuantumBinding.Utils;
@@ -22,7 +23,8 @@ using Image = Adamantium.Vulkan.Core.Image;
 
 namespace Adamantium.Graphics;
 
-public class GraphicsDevice : DisposableObject, IGraphicsDevice
+[ViewModel]
+public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 {
     private object _locker = new object();
     private bool _withheld;
@@ -35,9 +37,9 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     private uint frame;
         
-    private Type vertexType;
-    private PrimitiveTopology primitiveTopology;
-    private IEffectPass currentEffectPass;
+    [Bindable] private Type vertexType;
+    [Bindable] private PrimitiveTopology primitiveTopology;
+    [Bindable] private IEffectPass currentEffectPass;
 
     // -- Drawing States
         
@@ -336,28 +338,6 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
         
     public SamplerState Sampler { get; set; }
 
-    public Type VertexType
-    {
-        get => vertexType;
-        set
-        {
-            if (SetProperty(ref vertexType, value))
-            {
-            }
-        } 
-    }
-
-    public PrimitiveTopology PrimitiveTopology
-    {
-        get => primitiveTopology;
-        set
-        {
-            if (SetProperty(ref primitiveTopology, value))
-            {
-            }
-        }
-    }
-        
     public bool RasterizerDiscardEnabled { get; set; }
 
     public ColorBlendEquationEXT ColorBlendEquation { get; set; } = new ColorBlendEquationEXT();
@@ -457,17 +437,6 @@ public class GraphicsDevice : DisposableObject, IGraphicsDevice
                                                                       ColorComponentFlagBits.GBit |
                                                                       ColorComponentFlagBits.BBit |
                                                                       ColorComponentFlagBits.ABit;
-
-    public IEffectPass CurrentEffectPass
-    {
-        get => currentEffectPass;
-        set
-        {
-            if (SetProperty(ref currentEffectPass, value))
-            {
-            }
-        }
-    }
 
     // A COPY, from the array the setter fills. The tracking collections these came from were written on every
     // SetViewports/SetScissors and read by nobody.

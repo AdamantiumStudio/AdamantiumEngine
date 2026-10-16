@@ -7,7 +7,7 @@ using Adamantium.ProceduralGeometry.Shapes;
 namespace Adamantium.ECS.Components
 {
     [ViewModel]
-    public partial class MeshMetadata : PropertyChangedBase
+    public partial class MeshMetadata
     {
         [Bindable] private ShapeType _shapeType;
         [Bindable] private int _tessellationFactor;

@@ -7,7 +7,7 @@ using Adamantium.Core.DependencyInjection;
 
 namespace Adamantium.ECS
 {
-    public sealed class EntityServiceManager : PropertyChangedBase
+    public sealed class EntityServiceManager
     {
         private readonly object syncObject = new object();
 

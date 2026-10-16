@@ -623,6 +623,12 @@ All packages share one version.
   side effects in `OnXChanged` hooks and `Transform.Scale` raised through `[Affects]`; they behave as before.
   `Entity.Owner`, `Component.Owner` and `CameraBase.TanFov` stay written by hand: the first two need the owner they
   replace, the last has a protected setter.
+- `PropertyChangedBase` is gone: what notifies is a `[ViewModel]` - `Entity`, `MeshMetadata`, `EntityService`,
+  `GraphicsDevice`, `GraphicsPresenter`, `UniverseOutput`, `GraphicsDeviceService`, `ConversionConfig`,
+  `ModelConverter` - with the MVVM generator now in Graphics.Core, Graphics, Multiverse and the compiler. What never
+  raised a change - `NamedObject`, `EntityServiceManager`, `Universe`, `UniverseOutputDescription` - no longer
+  pretends to, and `IBuffer`/`ITexture` lose a `PropertyChanged` nothing raised. `ConversionConfig` marks itself
+  changed on any setting it is given, once the setting really changes.
 - `AdamantiumViewModel` implements `INotifyPropertyChanged` itself instead of deriving from `PropertyChangedBase`; it
   keeps `SetProperty` and the virtual `RaisePropertyChanged`. The MVVM generator knows a base that raises the change by
   what it can do - a `RaisePropertyChanged(string)` the class can call - not by the name `PropertyChangedBase`, so a

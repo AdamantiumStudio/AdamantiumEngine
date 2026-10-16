@@ -5,42 +5,19 @@ using Adamantium.Core;
 using Adamantium.Engine.Compiler.Converter;
 using Adamantium.Engine.Compiler.Converter.Configs;
 using Adamantium.Graphics.Core.Models;
+using Adamantium.MVVM;
 
 namespace Adamantium.Engine.Compiler.Models
 {
-    public class ModelConverter : PropertyChangedBase
+    [ViewModel]
+    public partial class ModelConverter
     {
         #region Variables
 
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
 
-        private Boolean convertationInProgress;
-        private Boolean convertationFinished = true;
-
-        #endregion
-
-
-        #region Properties
-
-        public Boolean ConvertationInProgress
-        {
-            get => convertationInProgress;
-            set
-            {
-                convertationInProgress = value;
-                RaisePropertyChanged();
-            }
-        }
-
-        public Boolean ConvertationFinished
-        {
-            get => convertationFinished;
-            set
-            {
-                convertationFinished = value;
-                RaisePropertyChanged();
-            }
-        }
+        [Bindable] private Boolean convertationInProgress;
+        [Bindable] private Boolean convertationFinished = true;
 
         #endregion
 
