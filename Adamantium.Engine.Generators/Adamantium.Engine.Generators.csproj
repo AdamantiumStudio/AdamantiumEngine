@@ -56,8 +56,8 @@
 		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="1.0.12" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="Adamantium.Vulkan.Slang" Version="1.0.12" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="QuantumBinding.Utils" Version="3.0.1" GeneratePathProperty="true" PrivateAssets="all" />
-        <PackageReference Include="MessagePack" Version="3.1.7" GeneratePathProperty="true" PrivateAssets="all" />
-        <PackageReference Include="MessagePack.Annotations" Version="3.1.7" GeneratePathProperty="true" PrivateAssets="all" />
+        <PackageReference Include="MessagePack" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
+        <PackageReference Include="MessagePack.Annotations" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" GeneratePathProperty="true" PrivateAssets="all" />
 
         <!--<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />-->
