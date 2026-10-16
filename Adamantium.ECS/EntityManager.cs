@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Adamantium.Core.Collections;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Templates;
 
@@ -11,7 +12,7 @@ public sealed class EntityManager
 {
     private object syncObject = new object();
 
-    private readonly List<Entity> rootEntities;
+    private readonly TrackingCollection<Entity> rootEntities;
     private readonly Dictionary<UInt128, Entity> availableEntities;
     private readonly Dictionary<String, EntityGroup> entitiesByGroup;
     private readonly List<Entity> entitiesToAdd;
@@ -21,7 +22,8 @@ public sealed class EntityManager
 
     internal EntityManager(EntityWorld world)
     {
-        rootEntities = new List<Entity>();
+        rootEntities = new TrackingCollection<Entity>();
+        RootEntities = new ReadOnlyTrackingCollection<Entity>(rootEntities);
         availableEntities = new Dictionary<UInt128, Entity>();
         entitiesByGroup = new Dictionary<String, EntityGroup>();
         entitiesToAdd = new List<Entity>();
@@ -38,7 +40,9 @@ public sealed class EntityManager
 
     public EntityWorld World { get; }
 
-    public IReadOnlyList<Entity> RootEntities => rootEntities.AsReadOnly();
+    /// <summary>The entities with no owner, raising a change as they are added and removed, so a view can bind to them.
+    /// The changes come on the world's thread.</summary>
+    public ReadOnlyTrackingCollection<Entity> RootEntities { get; }
 
     internal void SyncEntities()
     {
