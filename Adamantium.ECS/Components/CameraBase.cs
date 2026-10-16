@@ -21,6 +21,21 @@ namespace Adamantium.ECS.Components
         [Bindable] private Single aspectRatio;
         [Bindable] private Entity lookAtObject;
 
+        partial void OnFovChanged(Single value) => OnProjectionChanged();
+
+        partial void OnZNearChanged(Single value) => OnProjectionChanged();
+
+        partial void OnZFarChanged(Single value) => OnProjectionChanged();
+
+        partial void OnWidthChanged(uint value) => OnProjectionChanged();
+
+        partial void OnHeightChanged(uint value) => OnProjectionChanged();
+
+        /// <summary>A value the projections are built from changed: the field of view, a clipping plane or the size.</summary>
+        protected virtual void OnProjectionChanged()
+        {
+        }
+
 
         public Matrix4x4F ViewMatrix { get; set; } = Matrix4x4F.Identity;
 

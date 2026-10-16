@@ -420,6 +420,9 @@ All packages share one version.
 
 ### Fixed
 
+- A `Camera` rebuilds its projections when its field of view, a clipping plane or its size changes after it was
+  initialized. They were built once, so an edit - from an inspector - changed nothing on screen, while what reads
+  `ZNear` and `ZFar` directly, the clustered lighting, moved on with it.
 - An imported `SharedSurface` takes the memory over from its producer in the layout the producer keeps it in, instead of
   moving it out of `Undefined`, which allows a driver to discard a frame the producer had already written.
 - `MeshMetadata.Default()` sets the line's end; it wrote the end into the start a second time.

@@ -123,6 +123,18 @@ namespace Adamantium.ECS.Components
             base.Initialize();
         }
 
+        // Built in Initialize only, the projections kept the field of view and planes a camera was made with, while
+        // whatever reads ZNear or ZFar directly moved on with an edit.
+        /// <inheritdoc />
+        protected override void OnProjectionChanged()
+        {
+            if (Frustum == null || Width == 0 || Height == 0) return;
+
+            BuildPerspectiveFoV();
+            BuildOrthoProjection();
+            BuildUiProjection();
+        }
+
         /// <summary>
         /// Updates camera`s frustum
         /// </summary>
