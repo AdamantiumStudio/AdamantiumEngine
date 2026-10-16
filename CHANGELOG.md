@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `AdamantiumCollection<T>` is an `ICollection`, so `ReadOnlyTrackingCollection<T>` hands out the collection's own
+  `SyncRoot` - the lock every change is made and announced under. A view on another thread - the UI showing a world's
+  entities - reads the items under it and so never sees them halfway through a change.
+
 - `EntityManager.RootEntities` and `EntityWorld.RootEntities` are a `ReadOnlyTrackingCollection<Entity>`: a view - an
   editor's hierarchy - binds to them and follows entities as they are added and removed, as it follows an entity's
   `Dependencies`. The changes come on the world's thread.

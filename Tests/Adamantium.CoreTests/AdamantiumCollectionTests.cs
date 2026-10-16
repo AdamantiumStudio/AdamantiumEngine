@@ -73,4 +73,19 @@ public class AdamantiumCollectionTests
         Assert.That(c.Count, Is.EqualTo(1));
         Assert.That(c[0], Is.EqualTo("A"));
     }
+
+    // A view on another thread reads the items under the lock their changes are announced under - through the read-only
+    // wrapper too, which is what an entity's Dependencies and the world's roots are.
+    [Test]
+    public void TheLockOfTheChanges_IsFoundThroughTheReadOnlyWrapper()
+    {
+        var c = Of("A", "B");
+        var view = (System.Collections.ICollection)new ReadOnlyTrackingCollection<string>(c);
+        var copy = new object[2];
+
+        view.CopyTo(copy, 0);
+
+        Assert.That(view.SyncRoot, Is.SameAs(c.SyncRoot));
+        Assert.That(copy, Is.EqualTo(new object[] { "A", "B" }));
+    }
 }
