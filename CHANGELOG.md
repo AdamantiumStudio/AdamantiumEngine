@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `Entity.IconKey`: the resource key of the icon an editor shows for the entity, raising a change, so a hierarchy row
+  binds its icon to it with no converter. The keys are the constants of `EntityIconKeys` (`Entity` by default, `Model`,
+  `Mesh`, `Camera`, `PointLight`, `SpotLight`, `DirectionalLight`), set by whatever makes an entity of that kind: the
+  camera template, the primitives, a model's import - its root and its meshes - and a `Light` itself, on whatever entity
+  it is put and whenever its `Type` changes. `Duplicate` keeps the key.
+
 - `AdamantiumCollection<T>` is an `ICollection`, so `ReadOnlyTrackingCollection<T>` hands out the collection's own
   `SyncRoot` - the lock every change is made and announced under. A view on another thread - the UI showing a world's
   entities - reads the items under it and so never sees them halfway through a change.

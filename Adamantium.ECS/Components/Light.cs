@@ -45,7 +45,29 @@ namespace Adamantium.ECS.Components
         public LightType Type
         {
             get => _type;
-            set => SetProperty(ref _type, value);
+            set
+            {
+                if (SetProperty(ref _type, value)) ShowKindOnOwner();
+            }
+        }
+
+        protected override void OnOwnerChanged(Entity oldOwner, Entity newOwner)
+        {
+            base.OnOwnerChanged(oldOwner, newOwner);
+            ShowKindOnOwner();
+        }
+
+        // The entity a light is on is shown as that kind of light, whatever made it and whenever the kind changes.
+        private void ShowKindOnOwner()
+        {
+            if (Owner == null) return;
+
+            Owner.IconKey = Type switch
+            {
+                LightType.Point => EntityIconKeys.PointLight,
+                LightType.Spot => EntityIconKeys.SpotLight,
+                _ => EntityIconKeys.DirectionalLight
+            };
         }
 
         public Single Range

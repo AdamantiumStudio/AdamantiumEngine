@@ -49,6 +49,7 @@ namespace Adamantium.ECS
         private bool isEnabled;
         private bool isSelected;
         private string name;
+        private string iconKey = EntityIconKeys.Entity;
         private readonly TrackingCollection<Entity> dependencies;
         private readonly ReadOnlyTrackingCollection<Entity> dependenciesReadOnly;
         private EntityComponentCollection componentCollection;
@@ -68,6 +69,14 @@ namespace Adamantium.ECS
         {
             get => name;
             set => SetProperty(ref name, value);
+        }
+
+        /// <summary>The resource key of the icon an editor shows for this entity - one of <see cref="EntityIconKeys"/>,
+        /// set by whatever makes an entity of that kind.</summary>
+        public string IconKey
+        {
+            get => iconKey;
+            set => SetProperty(ref iconKey, value);
         }
 
         public bool HasName => !string.IsNullOrEmpty(Name);
@@ -363,7 +372,7 @@ namespace Adamantium.ECS
 
         public Entity Duplicate()
         {
-            Entity root = new Entity(null, $"{this.Name} (1)");
+            Entity root = new Entity(null, $"{this.Name} (1)") { IconKey = IconKey };
             var entities = new Dictionary<UInt128, Entity>();
             entities.Add(Uid, root);
             CloneComponents(root, this);
@@ -377,7 +386,7 @@ namespace Adamantium.ECS
                 if (entities.ContainsKey(current.Owner.Uid))
                 {
                     var currentOwner = entities[current.Owner.Uid];
-                    var entity = new Entity(currentOwner, current.Name);
+                    var entity = new Entity(currentOwner, current.Name) { IconKey = current.IconKey };
                     entities.Add(current.Uid, entity);
                     CloneComponents(entity, current);
                 }

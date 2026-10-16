@@ -48,6 +48,7 @@ public abstract class PrimitiveTemplate : IEntityTemplate
 
         entity.AddComponent(meshData);
         entity.AddComponent(collisionComponent);
+        entity.IconKey = EntityIconKeys.Mesh;
 
         return entity;
     }
