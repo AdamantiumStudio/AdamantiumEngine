@@ -395,6 +395,8 @@ All packages share one version.
 
 ### Fixed
 
+- MessagePack 3.1.12, past the advisory GHSA-qhrr-8q5h-9q3h (nested arrays could run past the buffer length limits);
+  3.1.7 failed every build that treats warnings as errors once the advisory was published.
 - `[Affects]` can be put on a `[Bindable]` partial property. The generator read it there, but the attribute was allowed
   on fields only, so it did not compile.
 - Centered and right-aligned lines after an empty line are aligned too: the alignment stopped at the first empty
