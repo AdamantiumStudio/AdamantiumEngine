@@ -12,7 +12,7 @@ namespace Adamantium.Core.Collections
     /// </summary>
     /// <remarks>Implements <see cref="INotifyPropertyChanged"/> and <see cref="INotifyPropertyChanged"/> interfaces</remarks>
     /// <typeparam name="T"></typeparam>
-    public class AdamantiumCollection<T> : IList<T>, IReadOnlyList<T>
+    public class AdamantiumCollection<T> : IList<T>, IReadOnlyList<T>, ICollection
     {
         private T[] items;
         private int currentIndex;
@@ -360,6 +360,16 @@ namespace Adamantium.Core.Collections
         /// </returns>
         /// <filterpriority>2</filterpriority>
         public bool IsSynchronized => true;
+
+        // As ICollection, so a view on another thread finds SyncRoot - the lock every change is made and announced under -
+        // and reads the items under it.
+        void ICollection.CopyTo(Array array, int index)
+        {
+            lock (SyncRoot)
+            {
+                Array.Copy(items, 0, array, index, currentIndex);
+            }
+        }
 
         public bool IsReadOnly => false;
 
