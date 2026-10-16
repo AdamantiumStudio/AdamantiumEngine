@@ -64,6 +64,7 @@ public class FontRenderer : GraphicsResource
     private EffectParameter effectTargetOrigin;
     private EffectParameter effectGlyphInstances;   // BDA address of the per-instance GlyphItem storage buffer (instanced batch)
     private EffectParameter effectTransforms;       // BDA address of the transform table the glyph VS indexes by slot
+    private EffectParameter effectEffectHead;
     private EffectParameter effectPaintPrograms;
     private EffectParameter effectPaintStops;
     private EffectParameter effectColorTexture;
@@ -102,14 +103,25 @@ public class FontRenderer : GraphicsResource
         effectTargetOrigin = fontEffect.TargetOrigin;
         effectGlyphInstances = fontEffect.GlyphInstancesAddress;
         effectTransforms = fontEffect.TransformsAddress;
+        effectEffectHead = fontEffect.EffectHead;
         effectPaintPrograms = fontEffect.PaintProgramsAddress;
         effectPaintStops = fontEffect.PaintStopsAddress;
         effectColorTexture = fontEffect.ColorTexture;
     }
 
-    public void DrawLayout(Buffer<FontItem> glyphs, uint count, FontAtlas atlas, float fontSize, Color foreground)
+    /// <summary>Draws one block's glyphs into the target <see cref="SetState"/> set; <paramref name="effects"/> is the table
+    /// its <see cref="GlyphEffect"/>s are in, as <see cref="GlyphEffect.ToSlot"/> writes them, from the slot
+    /// <paramref name="effectHead"/> (-1 for none).</summary>
+    public void DrawLayout(Buffer<FontItem> glyphs, uint count, FontAtlas atlas, float fontSize, Color foreground,
+        ulong effects = 0, int effectHead = -1)
     {
-        DrawInternal(glyphs, count, atlas, fontSize, foreground);
+        DrawInternal(glyphs, count, atlas, fontSize, foreground, effects, effectHead);
+    }
+
+    private void SetEffects(ulong effects, int effectHead)
+    {
+        effectTransforms.SetValue(effects);
+        effectEffectHead.SetValue(effects == 0 ? -1f : effectHead);
     }
 
     public void SetState(
@@ -151,7 +163,8 @@ public class FontRenderer : GraphicsResource
         beginCalled = true;
     }
 
-    private void DrawInternal(Buffer<FontItem> glyphs, uint count, FontAtlas atlas, float fontSize, Color foreground)
+    private void DrawInternal(Buffer<FontItem> glyphs, uint count, FontAtlas atlas, float fontSize, Color foreground,
+        ulong effects, int effectHead)
     {
         if (count == 0) return;
 
@@ -202,6 +215,7 @@ public class FontRenderer : GraphicsResource
         // unset, the pass would keep whatever the last per-block draw put there and cut the target by a stranger's rect.
         effectDirectClipBox.SetValue(Vector4F.Zero);
         effectDirectClipRadii.SetValue(Vector4F.Zero);
+        SetEffects(effects, effectHead);
         SetPaints(atlas);
         GraphicsDevice.VertexType = vertexType;
         GraphicsDevice.SetVertexBuffer(glyphs);   // the component's own buffer, uploaded from the FROZEN glyph run (no live layout)
@@ -213,9 +227,9 @@ public class FontRenderer : GraphicsResource
     }
 
     // Draws one block's glyphs straight into the current main pass with a caller-built MVP, instead of a private target
-    // and a composite; the main pass's clip, MSAA and depth state stand.
+    // and a composite; the main pass's clip, MSAA and depth state stand. The effects as DrawLayout takes them.
     public void DrawLayoutDirect(SamplerState samplerState, Buffer<FontItem> glyphs, uint count, FontAtlas atlas, float fontSize, Color foreground, Matrix4x4F mvp, float opacity,
-        Vector4F clipBox = default, Vector4F clipRadii = default)
+        Vector4F clipBox = default, Vector4F clipRadii = default, ulong effects = 0, int effectHead = -1)
     {
         if (count == 0) return;
 
@@ -247,6 +261,7 @@ public class FontRenderer : GraphicsResource
         effectSdfBlendHi.SetValue(SdfBlendHi);
         effectDirectClipBox.SetValue(clipBox);       // zero size = no rounded clip
         effectDirectClipRadii.SetValue(clipRadii);
+        SetEffects(effects, effectHead);
         SetTargetOrigin();
         SetPaints(atlas);
         GraphicsDevice.VertexType = vertexType;

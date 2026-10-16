@@ -22,12 +22,11 @@ struct FontItem
     // for a glyph drawn from one field), and its layer (x) and how far the glyph is from the first key to it (y).
     float4 SecondSource : TEXCOORD4;
     float2 Second : TEXCOORD5;
-    // A GlyphEffect on the glyph: its matrix less the identity (m11 - 1, m12, m21, m22 - 1) and its move, the pivot
-    // folded in. Zero draws the glyph where it is laid.
-    float4 Effect : TEXCOORD6;
-    float2 EffectOffset : TEXCOORD7;
-    // Its perspective: the corner is divided by w = 1 + Z + x * X + y * Y, left to the rasterizer, sign and all.
-    float4 EffectPerspective : TEXCOORD8;
+    // The cell the layout gave the glyph (x, y, width, height), which its effects turn it about and shift it by.
+    float4 Cell : TEXCOORD6;
+    // x = the character it draws, which picks the effects that reach it (-1: none do); y = 1 when it takes the text's
+    // color, which an effect's color replaces.
+    float2 Place : TEXCOORD7;
 };
 
 // The atlas layer is a runtime index, so glyphs the packer spills to layers 1+ are sampled from their own layer.
@@ -55,19 +54,11 @@ struct PSInput
     // glyph drawn from one field) and its share (y).
     float2 SecondUV : TEXCOORD8;
     nointerpolation float2 Second : TEXCOORD9;
+    // The clip of the glyph's effects (see EffectClipCoverage): the fragment in its space, homogeneous, and its shape.
+    float3 EffectClipPoint : TEXCOORD10;
+    nointerpolation float4 EffectClipBox : TEXCOORD11;
+    nointerpolation float4 EffectClipRadii : TEXCOORD12;
 };
-
-// A corner moved by a glyph's effect, as FontItem.Effect and FontItem.EffectOffset hold it (row vectors).
-float2 GlyphEffectPoint(float2 p, float4 effect, float2 offset)
-{
-    return p + float2(p.x * effect.x + p.y * effect.z, p.x * effect.y + p.y * effect.w) + offset;
-}
-
-// The homogeneous w of that corner: the point drawn is GlyphEffectPoint / w, and the atlas is read in perspective.
-float GlyphEffectW(float2 p, float2 perspective)
-{
-    return 1.0 + p.x * perspective.x + p.y * perspective.y;
-}
 
 // Where a glyph is drawn between two key instances, the second field's place for this corner and its layer and share;
 // a negative layer for a glyph drawn from one field.
@@ -189,6 +180,106 @@ void ClipFromSlot(float slotIndex, out float4 box, out float4 radii)
     if (clip.Params.x < 0.5) return;
     box = clip.World[0];
     radii = clip.World[1];
+}
+
+// The per-block draw's chain of glyph effects (see GlyphEffectsAt): the slot of its first effect, -1 for none.
+float EffectHead;
+
+// The longest chain walked, so a slot written wrong ends in a wrong glyph instead of a hung device.
+static const uint MaxEffectChain = 1024;
+
+// No effect clip: a negative size (a zero one cuts everything away).
+static const float4 NoEffectClip = float4(0.0, 0.0, -1.0, -1.0);
+
+// The cut of a glyph effect's clip (GlyphClip) at a fragment: `point` is the fragment in the clip's space, still
+// homogeneous - divided here, so it is right under a perspective too.
+float EffectClipCoverage(float3 point, float4 box, float4 radii)
+{
+    if (box.z < 0.0)
+    {
+        return 1.0;
+    }
+
+    if (box.z <= 0.0 || box.w <= 0.0)
+    {
+        return 0.0;
+    }
+
+    float2 halfSize = box.zw * 0.5;
+    float2 local = point.xy / point.z - (box.xy + halfSize);
+    float lim = min(halfSize.x, halfSize.y);
+    float d = TextClipDistance(local, halfSize, min(radii, float4(lim, lim, lim, lim)));
+    float aa = fwidth(d) + 1e-4;
+    return 1.0 - smoothstep(-aa, aa, d);
+}
+
+// A glyph's effects, read from the transform table as GlyphEffect.ToSlot writes them: from the slot `head`, each slot
+// one effect of the text, applied in order to the glyphs of its range. Rows 0-2 of a slot are the transform with the
+// range's start, its end and the next slot in their w; row 3 is the shift, the flags (1 around the glyph, 2 has a color)
+// and the slot of its clip; Params is the color, which replaces the text's on a glyph in it. The last effect that clips
+// the glyph gives `clipPoint` (homogeneous) - where the layout put it, or where the effects put it - `clipBox` and
+// `clipRadii`. Returns the point as (x * w, y * w, w), w left undivided so it keeps its sign however far the glyph is
+// from the origin.
+float3 GlyphEffectsAt(float2 p, float4 cell, float2 place, float head, inout float4 color, out float3 clipPoint,
+    out float4 clipBox, out float4 clipRadii)
+{
+    float3 h = float3(p, 1.0);
+    clipPoint = float3(0.0, 0.0, 1.0);
+    clipBox = NoEffectClip;
+    clipRadii = float4(0.0, 0.0, 0.0, 0.0);
+    if (head < 0.0 || place.x < 0.0)
+    {
+        return h;
+    }
+
+    NodeSlot* slots = (NodeSlot*)TransformsAddress;
+    float3 laid = h;
+    float clipSlot = -1.0;
+    float next = head;
+    [loop]
+    for (uint i = 0; i < MaxEffectChain && next >= 0.0; i++)
+    {
+        NodeSlot e = slots[(uint)next];
+        float4 r0 = e.World[0];
+        float4 r1 = e.World[1];
+        float4 r2 = e.World[2];
+        float4 r3 = e.World[3];
+        next = r2.w;
+        if (place.x < r0.w || place.x >= r1.w)
+        {
+            continue;
+        }
+
+        uint flags = (uint)(r3.z + 0.5);
+        float2 pivot = (flags & 1u) != 0u ? cell.xy + cell.zw * 0.5 : float2(0.0, 0.0);
+        float3 q = float3(h.xy - pivot * h.z, h.z);
+        q = float3(q.x * r0.x + q.y * r1.x + q.z * r2.x,
+                   q.x * r0.y + q.y * r1.y + q.z * r2.y,
+                   q.x * r0.z + q.y * r1.z + q.z * r2.z);
+        h = float3(q.xy + (pivot + r3.xy * cell.zw) * q.z, q.z);
+        if ((flags & 2u) != 0u && place.y > 0.5)
+        {
+            color = e.Params;
+        }
+
+        if (r3.w >= 0.0)
+        {
+            clipSlot = r3.w;
+        }
+    }
+
+    if (clipSlot >= 0.0)
+    {
+        NodeSlot c = slots[(uint)clipSlot];
+        float4 m = c.World[2];
+        float4 t = c.World[3];
+        float3 at = t.z > 0.5 ? h : laid;
+        clipPoint = float3(at.x * m.x + at.y * m.z + at.z * t.x, at.x * m.y + at.y * m.w + at.z * t.y, at.z);
+        clipBox = c.World[0];
+        clipRadii = c.World[1];
+    }
+
+    return h;
 }
 
 // ---- 'COLR' version 1 glyphs: one quad over the glyph's box, placed at the pen and baseline and scaled to pixels; the
@@ -464,17 +555,18 @@ PSInput ExpandGlyphCorner(FontItem item, int corner)
         position = pivot + float2(arm.x * rotation.x - arm.y * rotation.y, arm.x * rotation.y + arm.y * rotation.x);
     }
 
-    float effectW = GlyphEffectW(position, item.EffectPerspective.xy) + item.EffectPerspective.z;
-    position = GlyphEffectPoint(position, item.Effect, item.EffectOffset);
-    vertex.Position.xy = position;
+    float4 color = item.Color;
+    float3 moved = GlyphEffectsAt(position, item.Cell, item.Place, EffectHead, color, vertex.EffectClipPoint,
+        vertex.EffectClipBox, vertex.EffectClipRadii);
+    vertex.Position.xy = moved.xy;
 
     vertex.PaintProgram = item.Paint.x;
     vertex.PaintPoint = paintPoint;
     vertex.OwnFade = GlyphFade;
 
-    vertex.Position.z = item.Depth * effectW;
-    vertex.Position.w = effectW;
-    vertex.Color = item.Color;
+    vertex.Position.z = item.Depth * moved.z;
+    vertex.Position.w = moved.z;
+    vertex.Color = color;
 
     float2 uvCorner = TextureCornerCoords[corner ^ item.SpriteEffect];
     vertex.UV = item.Source.xy + uvCorner * item.Source.zw;
@@ -661,6 +753,13 @@ PSInput FontVertexShader(FontItem item, uint vertexId : SV_VertexID)
     return ExpandGlyphCorner(item, (int)vertexId);   // vertexId 0..3 = strip corner
 }
 
+// The rounded ancestor clip and the clip of the glyph's effects, as one coverage.
+float Cut(PSInput input)
+{
+    return ClipCoverage(input.Position.xy, input.ClipBox, input.ClipRadii)
+           * EffectClipCoverage(input.EffectClipPoint, input.EffectClipBox, input.EffectClipRadii);
+}
+
 // Canonical MSDF reconstruction (Chlumsky). ScreenPxRange() gives the field slope in screen pixels.
 // FontWeight shifts the 0.5 contour INSIDE the ScreenPxRange term (a true distance bias, not an opacity
 // add), so it makes stems thinner/thicker without hazing the background. Selected via the RenderMsdf pass,
@@ -680,7 +779,7 @@ float4 FontPixelShaderMsdf(PSInput input) : SV_Target
         // A color glyph draws its own coverage, so no gamma boost: its alphas and fades go in linear.
         float4 painted = RunPaint(input.PaintProgram, input.PaintPoint, glyphDx, glyphDy, color,
             pow(max(color.a, 0.0), 1.0 / 2.2), pow(input.OwnFade, 1.0 / 2.2));
-        return painted * ClipCoverage(input.Position.xy, input.ClipBox, input.ClipRadii);
+        return painted * Cut(input);
     }
     // Gamma-boost coverage times the color's alpha so thin stems keep their color; splitting the two washed text out.
     // The element's fade arrives pre-raised to 2.2, so the boost hands it back linear.
@@ -688,7 +787,7 @@ float4 FontPixelShaderMsdf(PSInput input) : SV_Target
     // The rounded ancestor clip, as coverage, exactly as the batch pass applies it. Both the premultiplied color and
     // the alpha are cut: this pass outputs rgb*alpha, so cutting one without the other leaves color where the glyph
     // was cut away. A zero-size box gives 1 and costs nothing.
-    alpha *= ClipCoverage(input.Position.xy, input.ClipBox, input.ClipRadii);
+    alpha *= Cut(input);
     return float4(color.rgb * alpha, alpha);
 }
 
@@ -710,13 +809,13 @@ float4 FontPixelShaderMsdfBatch(PSInput input) : SV_Target
         // A color glyph draws its own coverage, so no gamma boost: its alphas and fades go in linear.
         float4 painted = RunPaint(input.PaintProgram, input.PaintPoint, glyphDx, glyphDy, color,
             pow(max(color.a, 0.0), 1.0 / 2.2), pow(input.OwnFade, 1.0 / 2.2));
-        return painted * ClipCoverage(input.Position.xy, input.ClipBox, input.ClipRadii);
+        return painted * Cut(input);
     }
 
     float alpha = pow(color.a * opacity, 1.0 / 2.2);
     // The rounded ancestor clip, as coverage. Applied to the PREMULTIPLIED color as well as the alpha - this pass
     // outputs rgb*alpha, so cutting only the alpha would leave the color standing where the glyph was cut away.
-    alpha *= ClipCoverage(input.Position.xy, input.ClipBox, input.ClipRadii);
+    alpha *= Cut(input);
     return float4(color.rgb * alpha, alpha);
 }
 
@@ -733,13 +832,14 @@ struct GlyphData
     float4 Color;       // straight RGBA, element/brush opacity folded into .w
     float4 Paint;       // .x = a 'COLR' version 1 glyph's paint program plus one, or 0 (LocalRect is then the pen and
                         // baseline, xy, and pixels per font unit, zw); .y = the element's opacity raised to 2.2, for the
-                        // glyph's own colors; .zw = the move of Effect
+                        // glyph's own colors; .zw reserved
     float4 SecondSource; // a glyph between two key instances: the second key's cell over the same quad, or zero
     float4 Second;      // .x = that cell's layer; .y = its share; .z = the glyph's turn, radians clockwise about
                         // LocalRect.xy
-    float4 Effect;      // a GlyphEffect in node-local space, as FontItem.Effect holds it; zero for none
-    float4 Perspective; // .xy = its perspective; .z = its w at the origin less one (not divided out, so w keeps its
-                        // sign far from the node's origin); .w reserved
+    float4 Cell;        // the glyph's cell in the LAYOUT's units, as FontItem.Cell holds it
+    float4 ToNode;      // the layout's units to node-local: x * ToNode.x + ToNode.z, y * ToNode.y + ToNode.w
+    float4 Place;       // .x, .y = FontItem.Place; .z = the slot of the block's first effect, -1 for none; .w = the
+                        // element's opacity, which an effect's color takes
 };
 
 [shader("vertex")]
@@ -765,8 +865,19 @@ PSInput FontBatchInstancedVS(uint vertexId : SV_VertexID, uint instanceId : SV_I
         float2 arm = localPos - g.LocalRect.xy;
         localPos = g.LocalRect.xy + float2(arm.x * turn.x - arm.y * turn.y, arm.x * turn.y + arm.y * turn.x);
     }
-    float effectW = GlyphEffectW(localPos, g.Perspective.xy) + g.Perspective.z;
-    localPos = GlyphEffectPoint(localPos, g.Effect, g.Paint.zw);
+    // The block's effects work in the layout's units: there and back again, w kept.
+    float effectW = 1.0;
+    float4 recolor = float4(0.0, 0.0, 0.0, -1.0);
+    o.EffectClipPoint = float3(0.0, 0.0, 1.0);
+    o.EffectClipBox = NoEffectClip;
+    o.EffectClipRadii = float4(0.0, 0.0, 0.0, 0.0);
+    if (g.Place.z >= 0.0)
+    {
+        float3 moved = GlyphEffectsAt((localPos - g.ToNode.zw) / g.ToNode.xy, g.Cell, g.Place.xy, g.Place.z, recolor,
+            o.EffectClipPoint, o.EffectClipBox, o.EffectClipRadii);
+        localPos = moved.xy * g.ToNode.xy + g.ToNode.zw * moved.z;
+        effectW = moved.z;
+    }
     // Node-local -> world via the instance's transform-table matrix (slot 0 = identity for legacy world bakes).
     NodeSlot* nodes = (NodeSlot*)TransformsAddress;
     float4x4 nodeWorld = nodes[(uint)g.Params.x].World;
@@ -780,7 +891,8 @@ PSInput FontBatchInstancedVS(uint vertexId : SV_VertexID, uint instanceId : SV_I
     float fade = nodes[(uint)max(fadeSlot, 0.0)].Params.x;
     fade = lerp(1.0, fade, step(0.0, fadeSlot));
     // The fade is raised to 2.2 so the pixel shader's gamma boost hands back exactly `fade`, matching the shapes beside it.
-    o.Color = float4(g.Color.rgb, g.Color.a * pow(fade, 2.2));
+    float4 color = recolor.a >= 0.0 ? float4(recolor.rgb, recolor.a * g.Place.w) : g.Color;
+    o.Color = float4(color.rgb, color.a * pow(fade, 2.2));
     o.PaintProgram = g.Paint.x;
     o.PaintPoint = paintPoint;
     o.OwnFade = g.Paint.y * pow(fade, 2.2);

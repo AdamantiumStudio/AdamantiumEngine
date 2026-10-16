@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Fonts;
@@ -16,8 +17,9 @@ namespace Adamantium.Graphics.Fonts;
 /// such as an emoji's, stay.</param>
 /// <param name="Shift">A move after the transform, in sizes of each glyph: (0, -1) raises every glyph by its own
 /// height.</param>
+/// <param name="Clip">What the range is cut by, or null. Of the effects over a glyph, the last that cuts it does.</param>
 public readonly record struct GlyphEffect(int Start, int Length, Matrix3x3F Transform, bool AroundGlyph, Vector4F? Color,
-    Vector2F Shift = default)
+    Vector2F Shift = default, GlyphClip? Clip = null)
 {
     /// <summary>The character after the last one of the range.</summary>
     public int End => Start + Length;
@@ -25,4 +27,53 @@ public readonly record struct GlyphEffect(int Start, int Length, Matrix3x3F Tran
     /// <summary>A flat transform as the matrix an effect takes.</summary>
     public static Matrix3x3F Flat(Matrix3x2F transform) => new(transform.M11, transform.M12, 0, transform.M21,
         transform.M22, 0, transform.M31, transform.M32, 1);
+
+    /// <summary>The effect as the font shaders read it from a slot of the table a draw passes them, a chain of slots
+    /// per text: <paramref name="rows"/> holds the transform in its first three rows with the start of the range, its
+    /// end and <paramref name="next"/> (the slot of the text's next effect, -1 for the last) in their fourth column, and
+    /// the shift, the flags (1 = around the glyph, 2 = has a color) and <paramref name="clipSlot"/> (the slot
+    /// <see cref="GlyphClip.ToSlot"/> wrote <see cref="Clip"/> to, -1 for none) in the fourth row;
+    /// <paramref name="color"/> is the color.</summary>
+    public void ToSlot(int next, int clipSlot, out Matrix4x4F rows, out Vector4F color)
+    {
+        var t = Transform;
+        rows = new Matrix4x4F(
+            t.M11, t.M12, t.M13, Start,
+            t.M21, t.M22, t.M23, End,
+            t.M31, t.M32, t.M33, next,
+            Shift.X, Shift.Y, (AroundGlyph ? 1 : 0) + (Color.HasValue ? 2 : 0), clipSlot);
+        color = Color ?? default;
+    }
+
+    /// <summary>What <paramref name="effects"/> do to a glyph drawing <paramref name="position"/> in
+    /// <paramref name="cell"/> (x, y, width, height), in their order, as the font shaders do it; false when none reaches
+    /// it.</summary>
+    public static bool Compose(IReadOnlyList<GlyphEffect> effects, float position, Vector4F cell, out Matrix3x3F total)
+    {
+        total = Matrix3x3F.Identity;
+        var touched = false;
+        if (position < 0)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < effects.Count; i++)
+        {
+            var effect = effects[i];
+            if (position < effect.Start || position >= effect.End)
+            {
+                continue;
+            }
+
+            touched = true;
+            var pivotX = effect.AroundGlyph ? cell.X + cell.Z / 2 : 0;
+            var pivotY = effect.AroundGlyph ? cell.Y + cell.W / 2 : 0;
+            total *= Move(-pivotX, -pivotY) * effect.Transform
+                     * Move(pivotX + effect.Shift.X * cell.Z, pivotY + effect.Shift.Y * cell.W);
+        }
+
+        return touched;
+    }
+
+    private static Matrix3x3F Move(float x, float y) => new(1, 0, 0, 0, 1, 0, x, y, 1);
 }

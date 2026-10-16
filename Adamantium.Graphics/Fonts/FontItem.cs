@@ -94,24 +94,18 @@ public struct FontItem
     public Vector2F Second;
 
     /// <summary>
-    /// A <see cref="GlyphEffect"/> on the glyph, after it is placed and turned: its matrix less the identity (m11 - 1,
-    /// m12, m21, m22 - 1), so zero here and in <see cref="EffectOffset"/> draws the glyph where it is laid.
+    /// The cell the layout gave the glyph, as x, y, width and height: what a <see cref="GlyphEffect"/> turns the glyph
+    /// about and sizes its <see cref="GlyphEffect.Shift"/> by.
     /// </summary>
     [VertexInputElement("TEXCOORD6")]
-    public Vector4F Effect;
+    public Vector4F Cell;
 
     /// <summary>
-    /// The move of the <see cref="Effect"/>, its pivot folded in.
+    /// x = the UTF-16 character the glyph draws, which decides the effects that reach it, or -1 for a glyph no effect
+    /// moves; y = 1 for a glyph in the text's color, which an effect's color replaces, 0 for one in a color of its own.
     /// </summary>
     [VertexInputElement("TEXCOORD7")]
-    public Vector2F EffectOffset;
-
-    /// <summary>
-    /// The perspective of the <see cref="Effect"/>: a corner at (x, y) is divided by its w = 1 + Z + x * X + y * Y. Not
-    /// divided out, so w keeps its sign however far the glyph is from the origin. Zero for a flat effect.
-    /// </summary>
-    [VertexInputElement("TEXCOORD8")]
-    public Vector4F EffectPerspective;
+    public Vector2F Place;
 
     /// <summary>The <see cref="Color"/> of a glyph that takes the element's foreground: a negative alpha.</summary>
     public static readonly Vector4F InheritedColor = new(0, 0, 0, -1);

@@ -13,14 +13,17 @@ All packages share one version.
   camera template, the primitives, a model's import - its root and its meshes - and a `Light` itself, on whatever entity
   it is put and whenever its `Type` changes. `Duplicate` keeps the key.
 
-- `GlyphEffect` and `TextLayout.BuildGlyphRun(device, window, effects)`: a range of the text drawn apart from the rest -
-  its glyphs turned, scaled, slanted, moved or tipped in perspective (a 3×3 `Transform`), each about its own center or
-  about the layout's origin, moved after that in sizes of each glyph (`Shift`), and in a color of their own (a glyph's own
-  colors, an emoji's, stay). Only the snapshot is drawn so: the lines, the caret and hit testing stay where the layout
-  put them; a glyph the layout adds - an ellipsis, a hyphen - moves with the character before it. `FontItem.Effect`,
-  `EffectOffset` and `EffectPerspective` carry it to both glyph shaders, which read the atlas in perspective, and
-  `FrozenGlyphRun.EffectPadding` grows by how far the glyphs moved (`EffectReach`), so a drawn-apart glyph is not cut at
-  the block's edge.
+- `GlyphEffect`: a range of the text drawn apart from the rest - its glyphs turned, scaled, slanted, moved or tipped in
+  perspective (a 3×3 `Transform`), each about its own center or about the layout's origin, moved after that in sizes of
+  each glyph (`Shift`), in a color of their own (a glyph's own colors, an emoji's, stay) and cut by a rounded rectangle
+  (`GlyphClip`), where the layout put the glyphs or where the effect puts them. Only the drawing changes: the lines, the
+  caret and hit testing stay where the layout put them; a glyph the layout adds - an ellipsis, a hyphen - goes with the
+  character before it. The glyph run does not carry the effects: each `FontItem` says which character it draws, in which
+  cell (`Place`, `Cell`), and both glyph shaders read the effects from a table of slots the caller keeps - written by
+  `GlyphEffect.ToSlot` and `GlyphClip.ToSlot`, a chain per text, passed to `FontRenderer.DrawLayout` and
+  `DrawLayoutDirect` - so a changed effect is a slot write, not a new run. The atlas is read in perspective, and the clip
+  is right under it. `GlyphEffect.Compose` does on the CPU what the shaders do; `FrozenGlyphRun.ReachOf` and `PaddingFor`
+  say how far effects take a glyph, so a drawn-apart glyph is not cut at the block's edge.
 - `AdamantiumCollection<T>` is an `ICollection`, so `ReadOnlyTrackingCollection<T>` hands out the collection's own
   `SyncRoot` - the lock every change is made and announced under. A view on another thread - the UI showing a world's
   entities - reads the items under it and so never sees them halfway through a change.
