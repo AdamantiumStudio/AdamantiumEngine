@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `SharedSurface.LatchCopy` / `LatchedCopy`: the consumer's copy of a shared surface's newest frame, made outside a
+  render pass once per frame the producer finished, and sampled in place of the surface. The copy waits for the frame
+  on the produce timeline and signals the consume timeline once done, so the producer writes its next frame only after
+  it - a consumer that drew the surface itself again while nothing new came raced that write. A shared surface is
+  now also a transfer source.
 - `Entity.IconKey`: the resource key of the icon an editor shows for the entity, raising a change, so a hierarchy row
   binds its icon to it with no converter. The keys are the constants of `EntityIconKeys` (`Entity` by default, `Model`,
   `Mesh`, `Camera`, `PointLight`, `SpotLight`, `DirectionalLight`), set by whatever makes an entity of that kind: the
@@ -415,6 +420,12 @@ All packages share one version.
 
 ### Fixed
 
+- An imported `SharedSurface` takes the memory over from its producer in the layout the producer keeps it in, instead of
+  moving it out of `Undefined`, which allows a driver to discard a frame the producer had already written.
+- `MeshMetadata.Default()` sets the line's end; it wrote the end into the start a second time.
+- A frame whose swapchain acquire failed - a window being resized - is submitted like a withheld one, showing nothing,
+  instead of being dropped. Its work went with it, while the semaphores registered for it were signaled by the next
+  frame: a shared surface's consumer told its producer a frame was read that was never copied.
 - An entity changes owner only through `EntityManager.SetOwner` and `RemoveOwner`; `Entity.Owner` can no longer be set
   from outside, nor `AddDependency`/`RemoveDependency` called. `RootEntities` are the roots of the world's tree: an
   entity given an owner - a camera set to follow a model - leaves them and comes back once taken off, from the next

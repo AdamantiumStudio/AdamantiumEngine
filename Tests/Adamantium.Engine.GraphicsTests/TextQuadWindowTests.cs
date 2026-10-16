@@ -72,7 +72,16 @@ public class TextQuadWindowTests
         var window = LinesWindow(layout, 120, 130);
 
         layout.Update(device, window);
-        FontAtlasStore.SynchronousFill = true;
+        // Waited for, not switched to a synchronous fill: a glyph already on its way is not filled again, and a refresh
+        // taken before it landed came out short by it.
+        var deadline = System.DateTime.UtcNow.AddSeconds(30);
+        while (FontAtlasStore.HasPendingGlyphs && System.DateTime.UtcNow < deadline)
+        {
+            FontAtlasStore.PumpReadyGlyphs();
+            System.Threading.Thread.Sleep(5);
+        }
+
+        Assert.That(FontAtlasStore.HasPendingGlyphs, Is.False, "the glyphs never arrived");
         layout.RefreshGlyphs(device);
 
         Assert.Multiple(() =>
