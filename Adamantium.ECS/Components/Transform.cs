@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components
 {
-    public sealed class Transform : ActivatableComponent
+    [ViewModel]
+    public sealed partial class Transform : ActivatableComponent
     {
         public Transform()
         {
@@ -17,13 +19,13 @@ namespace Adamantium.ECS.Components
             TransformData = new Dictionary<CameraBase, TransformMetaData>();
         }
 
-        private Vector3 initialPosition;
-        private Vector3 position;
-        private QuaternionF rotation;
-        private Vector3F baseScale;
-        private Vector3F scaleFactor;
+        [Bindable] private Vector3 initialPosition;
+        [Bindable] private Vector3 position;
+        [Bindable] private QuaternionF rotation;
+        [Bindable, Affects(nameof(Scale))] private Vector3F baseScale;
+        [Bindable, Affects(nameof(Scale))] private Vector3F scaleFactor;
         private Vector3 pivot;
-        private QuaternionF pivotRotation;
+        [Bindable] private QuaternionF pivotRotation;
 
         private readonly Dictionary<CameraBase, TransformMetaData> TransformData;
 
@@ -104,73 +106,16 @@ namespace Adamantium.ECS.Components
             RaisePropertyChanged(nameof(Pivot));
         }
 
-        public QuaternionF PivotRotation
-        {
-            get => pivotRotation;
-            set
-            {
-                if (SetProperty(ref pivotRotation, value))
-                {
-                    IsWorldDirty = true;
-                }
-            }
-        }
+        // Every input of the world matrix marks it to be computed again.
+        partial void OnPivotRotationChanged(QuaternionF value) => IsWorldDirty = true;
 
-        public Vector3 InitialPosition
-        {
-            get => initialPosition;
-            set => SetProperty(ref initialPosition, value);
-        }
+        partial void OnPositionChanged(Vector3 value) => IsWorldDirty = true;
 
-        public Vector3 Position
-        {
-            get => position;
-            set
-            {
-                if (SetProperty(ref position, value))
-                {
-                    IsWorldDirty = true;
-                }
-            }
-        }
+        partial void OnRotationChanged(QuaternionF value) => IsWorldDirty = true;
 
-        public QuaternionF Rotation
-        {
-            get => rotation;
-            set
-            {
-                if (SetProperty(ref rotation, value))
-                {
-                    IsWorldDirty = true;
-                }
-            }
-        }
+        partial void OnBaseScaleChanged(Vector3F value) => IsWorldDirty = true;
 
-        public Vector3F BaseScale
-        {
-            get => baseScale;
-            set
-            {
-                if (SetProperty(ref baseScale, value))
-                {
-                    IsWorldDirty = true;
-                    RaisePropertyChanged(nameof(Scale));
-                }
-            }
-        }
-
-        public Vector3F ScaleFactor
-        {
-            get => scaleFactor;
-            set
-            {
-                if (SetProperty(ref scaleFactor, value))
-                {
-                    IsWorldDirty = true;
-                    RaisePropertyChanged(nameof(Scale));
-                }
-            }
-        }
+        partial void OnScaleFactorChanged(Vector3F value) => IsWorldDirty = true;
 
         public Vector3F Scale => baseScale * scaleFactor;
 

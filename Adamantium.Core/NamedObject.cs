@@ -28,15 +28,13 @@ namespace Adamantium.Core
    /// A lightweight base class providing possibility to assign Name and a Tag to class.
    /// </summary>
    [DataContract]
-   public abstract class NamedObject : PropertyChangedBase, INamedObject
+   public abstract class NamedObject : INamedObject
    {
       /// <summary>
       /// Occurs while this component is disposing and before it is disposed.
       /// </summary>
       //internal event EventHandler<EventArgs> Disposing;
       private string name = String.Empty;
-
-      private object tag;
 
       /// <summary>
       /// Gets or sets a value indicating whether the name of this instance is immutable.
@@ -74,7 +72,7 @@ namespace Adamantium.Core
          {
             if (IsNameImmutable)
                throw new ArgumentException("Name property is immutable for this instance", nameof(value));
-            SetProperty(ref name, value);
+            name = value;
          }
       }
 
@@ -86,10 +84,6 @@ namespace Adamantium.Core
       /// <value>The tag.</value>
       [DefaultValue(null)]
       [DataMember(Order = 2, EmitDefaultValue = false)]
-      public object Tag
-      {
-         get => tag;
-         set => SetProperty(ref tag, value);
-      }
+      public object Tag { get; set; }
    }
 }

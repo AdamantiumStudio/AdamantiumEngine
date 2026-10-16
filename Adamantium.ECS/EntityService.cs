@@ -6,19 +6,21 @@ using Adamantium.Core.Events;
 using Adamantium.ECS.Events;
 using Adamantium.ECS.Payloads;
 using Adamantium.Graphics.Core;
+using Adamantium.MVVM;
 using Serilog;
 
 namespace Adamantium.ECS
 {
-    public abstract class EntityService : PropertyChangedBase, IEntityService
+    [ViewModel]
+    public abstract partial class EntityService : IEntityService
     {
-        private bool enabled;
-        private ExecutionType updateExecutionType;
-        private int priority;
+        [Bindable] private bool enabled;
+        [Bindable] private ExecutionType updateExecutionType;
+        [Bindable] private int priority;
         private int previousPriority;
 
         private ExecutionType drawExecutionType;
-        private bool isVisible;
+        [Bindable] private bool isVisible;
 
         protected IEventAggregator EventAggregator { get; }
 
@@ -60,40 +62,13 @@ namespace Adamantium.ECS
         /// <value>The name.</value>
         public string Name { get; set; }
 
-        public bool Enabled
+        partial void OnPriorityChanging(int value)
         {
-            get => enabled;
-            set => SetProperty(ref enabled, value);
-        }
-
-        public int Priority
-        {
-            get => priority;
-            set
-            {
-                if (priority != value)
-                {
-                    previousPriority = priority;
-                }
-
-                SetProperty(ref priority, value);
-            }
+            if (priority != value) previousPriority = priority;
         }
 
         public virtual void Submit()
         {
-        }
-
-        public bool IsVisible 
-        { 
-            get => isVisible; 
-            set => SetProperty(ref isVisible, value); 
-        }
-
-        public ExecutionType UpdateExecutionType
-        {
-            get => updateExecutionType;
-            set => SetProperty(ref updateExecutionType, value);
         }
 
         public ExecutionType DrawExecutionType

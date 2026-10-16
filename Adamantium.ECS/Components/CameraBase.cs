@@ -2,31 +2,25 @@
 using System;
 using Adamantium.Core;
 using Adamantium.Graphics.Core;
+using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components
 {
-    public abstract class CameraBase : ActivatableComponent
+    [ViewModel]
+    public abstract partial class CameraBase : ActivatableComponent
     {
-        private QuaternionF rotation = QuaternionF.Identity;
-        private uint width;
-        private uint height;
-        private Single fov;
-        private Single fovY;
+        [Bindable] private QuaternionF rotation = QuaternionF.Identity;
+        [Bindable] private uint width;
+        [Bindable] private uint height;
+        [Bindable] private Single fov;
+        [Bindable] private Single fovY;
         private Single tanFov;
-        private Double radius;
-        private bool isDepthInversed;
-        private CameraType cameraType;
-        private Single zNear;
-        private Single zFar;
-        private Single aspectRatio;
-        private Entity lookAtObject;
+        [Bindable] private Double radius;
+        [Bindable] private Single zNear;
+        [Bindable] private Single zFar;
+        [Bindable] private Single aspectRatio;
+        [Bindable] private Entity lookAtObject;
 
-
-        public QuaternionF Rotation
-        {
-            get => rotation;
-            set => SetProperty(ref rotation, value);
-        }
 
         public Matrix4x4F ViewMatrix { get; set; } = Matrix4x4F.Identity;
 
@@ -84,12 +78,6 @@ namespace Adamantium.ECS.Components
 
         public Vector3 Backward => -Forward;
 
-        public Entity LookAtObject
-        {
-            get => lookAtObject;
-            set => SetProperty(ref lookAtObject, value);
-        }
-
         /// <summary>The object a third-person camera FOLLOWS. It IS the parent of the camera's entity: transforms are
         /// relative to the parent, so the follow link and the transform link are one thing.</summary>
         public Entity Subject => Owner?.Owner;
@@ -105,23 +93,8 @@ namespace Adamantium.ECS.Components
         /// <summary>
         /// Gets or Sets value indicating does ZNear and ZFar planes should be reversed for inverted depth buffer
         /// </summary>
-        public bool IsDepthInversed
-        {
-            get => isDepthInversed;
-            set => SetProperty(ref isDepthInversed, value);
-        }
-
-        public UInt32 Width
-        {
-            get => width;
-            set => SetProperty(ref width, value);
-        }
-
-        public UInt32 Height
-        {
-            get => height;
-            set => SetProperty(ref height, value);
-        }
+        [Bindable]
+        public partial bool IsDepthInversed { get; set; }
 
         /// <summary>
         /// Pixels per point on the output the camera draws into, as its host's scale gives it: <see cref="Width"/> and
@@ -135,43 +108,7 @@ namespace Adamantium.ECS.Components
             protected set => SetProperty(ref tanFov, value);
         }
 
-        public Single Fov
-        {
-            get => fov;
-            set => SetProperty(ref fov, value);
-        }
-
-        public Single FovY
-        {
-            get => fovY;
-            set => SetProperty(ref fovY, value);
-        }
-
-        public Single ZNear
-        {
-            get => zNear;
-            set => SetProperty(ref zNear, value);
-        }
-
-        public Single ZFar
-        {
-            get => zFar;
-            set => SetProperty(ref zFar, value);
-        }
-
-        public Single AspectRatio
-        {
-            get => aspectRatio;
-            set => SetProperty(ref aspectRatio, value);
-        }
-
         // ------- 3rd person related
-        public Double Radius
-        {
-            get => radius;
-            set => SetProperty(ref radius, value);
-        }
-
         public Vector3F HostUpVector { get; set; }
 
         public bool IsLookingBackwards { get; set; }
@@ -179,11 +116,8 @@ namespace Adamantium.ECS.Components
         public QuaternionF FormerRotation { get; set; }
         // ------- 3rd person related END
 
-        public CameraType Type
-        {
-            get => cameraType;
-            set => SetProperty(ref cameraType, value);
-        }
+        [Bindable]
+        public partial CameraType Type { get; set; }
 
         public CameraProjectionType ProjectionType { get; set; }
 

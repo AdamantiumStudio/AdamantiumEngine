@@ -1,30 +1,32 @@
 ﻿using Adamantium.Core;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Adamantium.ProceduralGeometry;
 using Adamantium.ProceduralGeometry.Shapes;
 
 namespace Adamantium.ECS.Components
 {
-    public class MeshMetadata : PropertyChangedBase
+    [ViewModel]
+    public partial class MeshMetadata
     {
-        private ShapeType _shapeType;
-        private int _tessellationFactor;
-        private double _width;
-        private double _height;
-        private double _depth;
-        private double _thickness;
-        private double _diameter;
-        private float _topDiameter;
-        private float _bottomDiameter;
-        private GeometryType _geometryType;
-        private float _radiusX;
-        private float _radiusY;
-        private float _startAngle;
-        private float _stopAngle;
-        private bool _isClockwise;
-        private EllipseType _ellipseType;
-        private Vector3 _lineStart;
-        private Vector3 _lineEnd;
+        [Bindable] private ShapeType _shapeType;
+        [Bindable] private int _tessellationFactor;
+        [Bindable] private double _width;
+        [Bindable] private double _height;
+        [Bindable] private double _depth;
+        [Bindable] private double _thickness;
+        [Bindable] private double _diameter;
+        [Bindable] private float _topDiameter;
+        [Bindable] private float _bottomDiameter;
+        [Bindable] private GeometryType _geometryType;
+        [Bindable] private float _radiusX;
+        [Bindable] private float _radiusY;
+        [Bindable] private float _startAngle;
+        [Bindable] private float _stopAngle;
+        [Bindable] private bool _isClockwise;
+        [Bindable] private EllipseType _ellipseType;
+        [Bindable] private Vector3 _lineStart;
+        [Bindable] private Vector3 _lineEnd;
 
         public MeshMetadata()
         { }
@@ -87,118 +89,10 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public ShapeType ShapeType
-        {
-            get => _shapeType;
-            set => SetProperty(ref _shapeType, value);
-        }
-
-        public GeometryType GeometryType
-        {
-            get => _geometryType;
-            set => SetProperty(ref _geometryType, value);
-        }
-
-        public int TessellationFactor
-        {
-            get => _tessellationFactor;
-            set => SetProperty(ref _tessellationFactor, value);
-        }
-
-        public double Width
-        {
-            get => _width;
-            set => SetProperty(ref _width, value);
-        }
-
-        public double Height
-        {
-            get => _height;
-            set => SetProperty(ref _height, value);
-        }
-
-        public float RadiusX
-        {
-            get => _radiusX;
-            set => SetProperty(ref _radiusX, value);
-        }
-
-        public float RadiusY
-        {
-            get => _radiusY;
-            set => SetProperty(ref _radiusY, value);
-        }
-
         public CornerRadius Corners
         {
             get;
             set;
-        }
-
-        public float StartAngle
-        {
-            get => _startAngle;
-            set => SetProperty(ref _startAngle, value);
-        }
-
-        public float StopAngle
-        {
-            get => _stopAngle;
-            set => SetProperty(ref _stopAngle, value);
-        }
-
-        public EllipseType EllipseType
-        {
-            get => _ellipseType;
-            set => SetProperty(ref _ellipseType, value);
-        }
-
-        public bool IsClockwise
-        {
-            get => _isClockwise;
-            set => SetProperty(ref _isClockwise, value);
-        }
-
-        public double Depth
-        {
-            get => _depth;
-            set => SetProperty(ref _depth, value);
-        }
-
-        public double Thickness
-        {
-            get => _thickness;
-            set => SetProperty(ref _thickness, value);
-        }
-
-        public double Diameter
-        {
-            get => _diameter;
-            set => SetProperty(ref _diameter, value);
-        }
-
-        public float TopDiameter
-        {
-            get => _topDiameter;
-            set => SetProperty(ref _topDiameter, value);
-        }
-
-        public float BottomDiameter
-        {
-            get => _bottomDiameter;
-            set => SetProperty(ref _bottomDiameter, value);
-        }
-
-        public Vector3 LineStart
-        {
-            get => _lineStart;
-            set => SetProperty(ref _lineStart, value);
-        }
-
-        public Vector3 LineEnd
-        {
-            get => _lineEnd;
-            set => SetProperty(ref _lineEnd, value);
         }
     }
 }

@@ -3,18 +3,20 @@ using System.Threading.Tasks;
 using Adamantium.Core;
 using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Imaging;
+using Adamantium.MVVM;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics.Core;
 
-public abstract class GraphicsPresenter : DisposableObject
+[ViewModel]
+public abstract partial class GraphicsPresenter : DisposableObject
 {
     // One color target and depth buffer per frame in flight, indexed by the fenced frame slot: a shared pair was redrawn
     // while the GPU still blitted the previous frame, which flickered.
     protected IRenderTarget[] renderTargets;
     protected IDepthStencilBuffer[] depthBuffers;
         
-    private PresentInterval presentInterval;
+    [Bindable] private PresentInterval presentInterval;
     protected uint currentImageIndex;
         
     public IGraphicsDevice GraphicsDevice { get; private set; }
@@ -57,16 +59,6 @@ public abstract class GraphicsPresenter : DisposableObject
     /// <summary>Whether every surface a frame draws into exists. False while a rebuild is under way and after one failed;
     /// the device draws nothing into the presenter until a rebuild succeeds.</summary>
     public bool IsReady { get; protected set; } = true;
-
-    public PresentInterval PresentInterval
-    {
-        get => presentInterval;
-        set
-        {
-            presentInterval = value;
-            RaisePropertyChanged();
-        }
-    }
 
     public ITexture[] BackBuffers { get; protected set; }
 

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel;
 using Adamantium.Core;
 using Adamantium.Vulkan.Core;
 using Buffer = Adamantium.Vulkan.Core.Buffer;
@@ -156,11 +155,6 @@ public interface IBuffer: IDisposable
     UInt64 GetDeviceAddress();
 
     Buffer GetBuffer();
-
-    /// <summary>
-    /// Raised when a public property of this object is set.
-    /// </summary>
-    event PropertyChangedEventHandler PropertyChanged;
 
     /// <summary>
     /// Occurs when Dispose is called.

@@ -9,8 +9,8 @@ namespace Adamantium.ECS.Components
 {
     // NOT DisposableObject: components are plain data + behavior and own no unmanaged/GPU resources (GPU buffers live in
     // the render-layer geometry cache, not on components). Being IDisposable only invited the dispose pattern -
-    // use-after-dispose, ownership ambiguity - into the data layer for no benefit. NamedObject still supplies the INPC
-    // SetProperty (via PropertyChangedBase) and the Name.
+    // use-after-dispose, ownership ambiguity - into the data layer for no benefit. [ViewModel] supplies the change
+    // notification.
     [ViewModel]
     public abstract partial class Component: IComponent, IControllableComponent, IInitializable, IEntityOwner, ICloneableComponent
     {

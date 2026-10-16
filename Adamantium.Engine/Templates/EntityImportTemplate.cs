@@ -54,6 +54,7 @@ public class EntityImportTemplate : IEntityTemplate
 
             var nameToEntityId = new Dictionary<string, Entity>();
             owner.Name = sceneData.Name;
+            owner.IconKey = EntityIconKeys.Model;
             nameToEntityId.Add(sceneData.Models.ToString(), owner);
             var stack = new Stack<SceneData.Model>();
             stack.Push(sceneData.Models);
@@ -190,6 +191,9 @@ public class EntityImportTemplate : IEntityTemplate
 
     private void WriteMeshData(Entity entity, Mesh mesh)
     {
+        // The model's root keeps its own icon when it carries a mesh as well.
+        if (entity.IconKey == EntityIconKeys.Entity) entity.IconKey = EntityIconKeys.Mesh;
+
         var meshData = new MeshData();
         meshData.Mesh = mesh;
         // Import default: a mesh that carries joint data gets the animated path, others the plain path. This is now an

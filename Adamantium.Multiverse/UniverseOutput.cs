@@ -9,6 +9,7 @@ using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Imaging;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Adamantium.Vulkan.Core;
 using Rectangle = Adamantium.Mathematics.Rectangle;
 
@@ -17,7 +18,8 @@ namespace Adamantium.Multiverse
     /// <summary>
     /// Abstract class representing encapsulated rendering surface (control) with <see cref="GraphicsPresenter"/>
     /// </summary>
-    public abstract class UniverseOutput : DisposableObject
+    [ViewModel]
+    public abstract partial class UniverseOutput : DisposableObject
     {
         private Camera[] cameras = [];
         private readonly object camerasLock = new object();

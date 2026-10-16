@@ -2,20 +2,22 @@
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components
 {
-    public class Light: ActivatableComponent
+    [ViewModel]
+    public partial class Light: ActivatableComponent
     {
-        private Vector3F _color;
-        private float _intensity;
-        private LightType _type;
-        private float _range;
-        private bool _isWithShadows;
-        private float _outerSpotAngle;
-        private float _innerSpotAngle;
-        private float _innerAngleDelta;
-        private float _outerAngleDelta;
+        [Bindable] private Vector3F _color;
+        [Bindable] private float _intensity;
+        [Bindable] private LightType _type;
+        [Bindable] private float _range;
+        [Bindable] private bool _isWithShadows;
+        [Bindable] private float _outerSpotAngle;
+        [Bindable] private float _innerSpotAngle;
+        [Bindable] private float _innerAngleDelta;
+        [Bindable] private float _outerAngleDelta;
 
         public Light() : this(LightType.Point)
         {
@@ -30,34 +32,25 @@ namespace Adamantium.ECS.Components
             Color = Colors.White.ToVector3();
         }
 
-        public Vector3F Color
+        partial void OnTypeChanged(LightType value) => ShowKindOnOwner();
+
+        protected override void OnOwnerChanged(Entity oldOwner, Entity newOwner)
         {
-            get => _color;
-            set => SetProperty(ref _color, value);
+            base.OnOwnerChanged(oldOwner, newOwner);
+            ShowKindOnOwner();
         }
 
-        public Single Intensity
+        // The entity a light is on is shown as that kind of light, whatever made it and whenever the kind changes.
+        private void ShowKindOnOwner()
         {
-            get => _intensity;
-            set => SetProperty(ref _intensity, value);
-        }
+            if (Owner == null) return;
 
-        public LightType Type
-        {
-            get => _type;
-            set => SetProperty(ref _type, value);
-        }
-
-        public Single Range
-        {
-            get => _range;
-            set => SetProperty(ref _range, value);
-        }
-
-        public Boolean IsWithShadows
-        {
-            get => _isWithShadows;
-            set => SetProperty(ref _isWithShadows, value);
+            Owner.IconKey = Type switch
+            {
+                LightType.Point => EntityIconKeys.PointLight,
+                LightType.Spot => EntityIconKeys.SpotLight,
+                _ => EntityIconKeys.DirectionalLight
+            };
         }
 
         public Int32 ShadowMapResolution { get; set; }
@@ -78,30 +71,6 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public float OuterSpotAngle
-        {
-            get => _outerSpotAngle;
-            set => SetProperty(ref _outerSpotAngle, value);
-        }
-
         public float SpotRadius => Range * (float)Math.Tan(OuterSpotAngle);
-
-        public float InnerAngleDelta
-        {
-            get => _innerAngleDelta;
-            set => SetProperty(ref _innerAngleDelta, value);
-        }
-
-        public float OuterAngleDelta
-        {
-            get => _outerAngleDelta;
-            set => SetProperty(ref _outerAngleDelta, value);
-        }
-
-        public float InnerSpotAngle
-        {
-            get => _innerSpotAngle;
-            set => SetProperty(ref _innerSpotAngle, value);
-        }
     }
 }

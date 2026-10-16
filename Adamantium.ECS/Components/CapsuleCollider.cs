@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Adamantium.ProceduralGeometry;
 using Adamantium.ProceduralGeometry.Shapes;
 
@@ -11,50 +12,32 @@ namespace Adamantium.ECS.Components;
 /// A capsule round an entity: a segment along <see cref="Direction"/> through the middle of its mesh, rounded at both
 /// ends. Fitted to the mesh when added: along the mesh's longest side, as thick as the wider of the other two.
 /// </summary>
-public class CapsuleCollider : Collider
+[ViewModel]
+public partial class CapsuleCollider : Collider
 {
     private readonly Dictionary<CameraBase, BoundingCapsule> colliderData = new();
     private BoundingCapsule capsule;
-    private CapsuleDirection direction = CapsuleDirection.Y;
-    private float radius;
-    private float height;
 
-    public CapsuleDirection Direction
+    public CapsuleCollider()
     {
-        get => direction;
-        set
-        {
-            if (SetProperty(ref direction, value))
-            {
-                Rebuild();
-            }
-        }
+        Direction = CapsuleDirection.Y;
     }
 
-    public float Radius
-    {
-        get => radius;
-        set
-        {
-            if (SetProperty(ref radius, value))
-            {
-                Rebuild();
-            }
-        }
-    }
+    [Bindable]
+    public partial CapsuleDirection Direction { get; set; }
+
+    [Bindable]
+    public partial float Radius { get; set; }
 
     /// <summary>End to end, the rounded ends included; a height below the diameter counts as the diameter.</summary>
-    public float Height
-    {
-        get => height;
-        set
-        {
-            if (SetProperty(ref height, value))
-            {
-                Rebuild();
-            }
-        }
-    }
+    [Bindable]
+    public partial float Height { get; set; }
+
+    partial void OnDirectionChanged(CapsuleDirection value) => Rebuild();
+
+    partial void OnRadiusChanged(float value) => Rebuild();
+
+    partial void OnHeightChanged(float value) => Rebuild();
 
     /// <summary>The capsule in its entity's own space.</summary>
     public BoundingCapsule Capsule => capsule;
@@ -81,10 +64,10 @@ public class CapsuleCollider : Collider
 
     public override Mesh GetVisualRepresentation()
     {
-        var turn = direction == CapsuleDirection.X ? Matrix4x4.RotationZ(MathHelper.DegreesToRadians(-90))
-            : direction == CapsuleDirection.Z ? Matrix4x4.RotationX(MathHelper.DegreesToRadians(90))
+        var turn = Direction == CapsuleDirection.X ? Matrix4x4.RotationZ(MathHelper.DegreesToRadians(-90))
+            : Direction == CapsuleDirection.Z ? Matrix4x4.RotationX(MathHelper.DegreesToRadians(90))
             : Matrix4x4.Identity;
-        Geometry = Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, radius * 2, 40, turn * Matrix4x4.Translation((Vector3)capsule.Center));
+        Geometry = Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, Radius * 2, 40, turn * Matrix4x4.Translation((Vector3)capsule.Center));
         return Geometry;
     }
 
@@ -140,9 +123,9 @@ public class CapsuleCollider : Collider
 
     private void Fit(Vector3F size)
     {
-        var along = direction == CapsuleDirection.X ? size.X : direction == CapsuleDirection.Y ? size.Y : size.Z;
-        var across = direction == CapsuleDirection.X ? Math.Max(size.Y, size.Z)
-            : direction == CapsuleDirection.Y ? Math.Max(size.X, size.Z)
+        var along = Direction == CapsuleDirection.X ? size.X : Direction == CapsuleDirection.Y ? size.Y : size.Z;
+        var across = Direction == CapsuleDirection.X ? Math.Max(size.Y, size.Z)
+            : Direction == CapsuleDirection.Y ? Math.Max(size.X, size.Z)
             : Math.Max(size.X, size.Y);
         Radius = across / 2;
         Height = Math.Max(along, across);
@@ -151,9 +134,9 @@ public class CapsuleCollider : Collider
 
     private void Rebuild()
     {
-        var axis = direction == CapsuleDirection.X ? Vector3F.UnitX : direction == CapsuleDirection.Y ? Vector3F.UnitY : Vector3F.UnitZ;
-        var half = Math.Max(height / 2 - radius, 0);
+        var axis = Direction == CapsuleDirection.X ? Vector3F.UnitX : Direction == CapsuleDirection.Y ? Vector3F.UnitY : Vector3F.UnitZ;
+        var half = Math.Max(Height / 2 - Radius, 0);
         var center = LocalCenter;
-        capsule = new BoundingCapsule(center - axis * half, center + axis * half, radius);
+        capsule = new BoundingCapsule(center - axis * half, center + axis * half, Radius);
     }
 }
