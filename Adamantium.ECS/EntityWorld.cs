@@ -115,7 +115,8 @@ namespace Adamantium.ECS
 
         public void Merge(EntityWorld world)
         {
-            foreach (var entity in world.EntityManager.RootEntities)
+            // Every entity of it, an owned one as well: a camera following a model is not among the roots.
+            foreach (var entity in world.EntityManager.Entities)
             {
                 EntityManager.AddEntity(entity);
             }

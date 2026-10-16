@@ -17,6 +17,7 @@ public sealed class EntityManager
     private readonly Dictionary<String, EntityGroup> entitiesByGroup;
     private readonly List<Entity> entitiesToAdd;
     private readonly List<Entity> entitiesToRemove;
+    private bool ownersChanged;
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
 
@@ -40,14 +41,16 @@ public sealed class EntityManager
 
     public EntityWorld World { get; }
 
-    /// <summary>The entities with no owner, raising a change as they are added and removed, so a view can bind to them.
-    /// The changes come on the world's thread.</summary>
+    /// <summary>The entities of the world with no owner, raising a change as they are added and removed, so a view can
+    /// bind to them. One that is given an owner - a camera following a model - leaves them, and comes back once it has
+    /// none; it stays in the world all the while. The changes come on the world's thread.</summary>
     public ReadOnlyTrackingCollection<Entity> RootEntities { get; }
 
     internal void SyncEntities()
     {
         lock (syncObject)
         {
+            var changed = entitiesToRemove.Count > 0 || entitiesToAdd.Count > 0;
             if (entitiesToRemove.Count > 0)
             {
                 foreach (var entity in entitiesToRemove)
@@ -67,6 +70,17 @@ public sealed class EntityManager
 
                 entitiesToAdd.Clear();
             }
+
+            // What holds what may have changed for any of them: an owner given or taken, an owner come into the world or
+            // gone from it.
+            if (changed || ownersChanged)
+            {
+                ownersChanged = false;
+                foreach (var entity in availableEntities.Values)
+                {
+                    PlaceByOwner(entity);
+                }
+            }
         }
     }
 
@@ -74,8 +88,36 @@ public sealed class EntityManager
     {
         if (availableEntities.TryAdd(entity.Uid, entity))
         {
-            rootEntities.Add(entity);
+            entity.OwnerChanged += OnOwnerChanged;
+            PlaceByOwner(entity);
             OnEntityAdded(entity);
+        }
+    }
+
+    // An owner can be given on any thread; the roots change on the world's, with the rest of what changes in it.
+    private void OnOwnerChanged(object sender, OwnerChangedEventArgs e)
+    {
+        lock (syncObject)
+        {
+            ownersChanged = true;
+        }
+    }
+
+    // A root unless the world already reaches it through its owner: one with an owner whose topmost ancestor is not in
+    // the world - taken out of it, or never in it - is a root still, or nothing would walk it.
+    private void PlaceByOwner(Entity entity)
+    {
+        if (!availableEntities.ContainsKey(entity.Uid)) return;
+
+        var held = entity.Owner != null && availableEntities.ContainsKey(entity.GetRoot().Uid);
+        var isRoot = rootEntities.Contains(entity);
+        if (!held && !isRoot)
+        {
+            rootEntities.Add(entity);
+        }
+        else if (held && isRoot)
+        {
+            rootEntities.Remove(entity);
         }
     }
     
@@ -93,6 +135,7 @@ public sealed class EntityManager
     {
         if (availableEntities.Remove(entity.Uid))
         {
+            entity.OwnerChanged -= OnOwnerChanged;
             rootEntities.Remove(entity);
             OnEntityRemoved(entity);
         }
@@ -174,10 +217,20 @@ public sealed class EntityManager
         }
     }
 
+    /// <summary>Takes every entity out of the world - one an owner holds as well as the roots.</summary>
     public void RemoveAllEntities()
     {
-        RemoveEntities(RootEntities.ToArray());
+        lock (syncObject)
+        {
+            foreach (var entity in availableEntities.Values)
+            {
+                RemoveEntity(entity);
+            }
+        }
     }
+
+    // Every entity of the world, held by an owner or not; read under the lock or on the world's thread.
+    internal IEnumerable<Entity> Entities => availableEntities.Values;
 
     public void RemoveEntities(IEnumerable<Entity> entities)
     {
@@ -445,6 +498,12 @@ public sealed class EntityManager
     {
         lock (syncObject)
         {
+            foreach (var entity in availableEntities.Values)
+            {
+                entity.OwnerChanged -= OnOwnerChanged;
+            }
+
+            ownersChanged = false;
             rootEntities.Clear();
             availableEntities.Clear();
             entitiesByGroup.Clear();

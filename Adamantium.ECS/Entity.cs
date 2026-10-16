@@ -99,9 +99,11 @@ namespace Adamantium.ECS
             set
             {
                 if (owner == value) return;
-                OnOwnerChanged(owner, value);
+                // Set before it is announced: a listener on another thread reads the new owner, not the one it replaces.
+                var oldOwner = owner;
                 owner = value;
                 rootUid = GetRoot().rootUid;
+                OnOwnerChanged(oldOwner, value);
             }
         }
 
