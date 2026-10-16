@@ -12,7 +12,6 @@ internal sealed class GlyphQuadBuilder
 {
     private FontItem[] _items = Array.Empty<FontItem>();
     private int _atlasVersion = -1;
-    private bool _vertexBufferDirty;
 
     public RectangleF? Window { get; private set; }
 
@@ -20,13 +19,7 @@ internal sealed class GlyphQuadBuilder
 
     public FontAtlas FontAtlas { get; private set; }
 
-    public Buffer<FontItem> VertexBuffer { get; private set; }
-
     public bool NeedsGlyphRefresh => FontAtlas != null && (FontAtlas.IsDisposed || FontAtlas.Version != _atlasVersion);
-
-    public int EffectPadding(float fontSize) => FontAtlas == null
-        ? 0
-        : (int)Math.Ceiling(FontAtlas.GlyphMargin * fontSize / FontAtlas.MSDFTextureSize);
 
     public FontAtlas EnsureAtlas(IGraphicsDevice graphicsDevice)
     {
@@ -42,7 +35,6 @@ internal sealed class GlyphQuadBuilder
     public void Clear()
     {
         ElementsCount = 0;
-        _vertexBufferDirty = true;
     }
 
     public IEnumerable<(IFont Font, Glyph Glyph)> GetGlyphs(LaidOutText text)
@@ -107,8 +99,6 @@ internal sealed class GlyphQuadBuilder
         atlas.RequestAsync(GetGlyphs(text));
         _atlasVersion = atlas.Version;
         ElementsCount = 0;
-        // No vertex buffer here: only the direct draw path needs one (EnsureVertexBuffer), and one per block ran the BAR
-        // heap out of memory.
 
         var glyphs = text.Glyphs;
         var lastPosition = -1;
@@ -140,67 +130,6 @@ internal sealed class GlyphQuadBuilder
                 _items[k].Place.X = word.PositionInString >= 0 ? word.PositionInString : lastPosition;
             }
         }
-
-        _vertexBufferDirty = true;
-    }
-
-    public void EnsureVertexBuffer(IGraphicsDevice graphicsDevice)
-    {
-        if (VertexBuffer == null || VertexBuffer.ElementCount < ElementsCount)
-        {
-            if (VertexBuffer != null)
-            {
-                graphicsDevice.AddToDeferDisposeQueue(VertexBuffer);
-            }
-
-            VertexBuffer = Adamantium.Graphics.Buffer.Vertex.New<FontItem>(graphicsDevice,
-                (uint)Math.Max(_items.Length, 1), Adamantium.Graphics.BufferMemoryUsage.UploadFromCpuToGpu);
-            _vertexBufferDirty = true;
-        }
-
-        if (_vertexBufferDirty)
-        {
-            VertexBuffer.SetData((ReadOnlySpan<FontItem>)_items.AsSpan(0, (int)ElementsCount));
-            _vertexBufferDirty = false;
-        }
-    }
-
-    public bool TryBakeWorldGlyphs(FontItem[] dest, ref int count, Matrix4x4F world, Vector2F textAreaOffset, Vector4F color)
-    {
-        if (ElementsCount == 0) return true;
-
-        const float eps = 1e-4f;
-        if (Math.Abs(world.M12) > eps || Math.Abs(world.M21) > eps) return false;
-        if (count + (int)ElementsCount > dest.Length) return false;
-
-        var sx = world.M11;
-        var sy = world.M22;
-        var tx = world.M41;
-        var ty = world.M42;
-        for (var i = 0; i < ElementsCount && Math.Abs(sx - sy) > eps; i++)
-        {
-            if (_items[i].Rotation != 0)
-            {
-                return false;
-            }
-        }
-
-        for (int i = 0; i < ElementsCount; i++)
-        {
-            var item = _items[i];
-            var d = item.ArrangeRect;
-            item.ArrangeRect = new Vector4F(
-                (d.X + textAreaOffset.X) * sx + tx,
-                (d.Y + textAreaOffset.Y) * sy + ty,
-                d.Z * sx,
-                d.W * sy);
-            if (!item.HasOwnColor)
-            {
-                item.Color = color;
-            }
-            dest[count++] = item;
-        }
-        return true;
     }
 
     public FrozenGlyphRun Snapshot(float fontSize)

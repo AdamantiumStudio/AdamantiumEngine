@@ -79,30 +79,8 @@ public class FontAtlasStoreTests
         var layout = Layout("SourceSans3-Regular.ttf", new string('a', 5000));
 
         layout.Update(device);
-        layout.EnsureVertexBuffer(device);
 
         Assert.That(layout.ElementsCount, Is.EqualTo(5000), "no glyph past a fixed cap is dropped");
-        Assert.That(layout.VertexBuffer.ElementCount, Is.GreaterThanOrEqualTo(5000UL), "the direct path's buffer grew");
-    }
-
-    [Test]
-    public void ABlockEmptiedAfterItGrew_UploadsNothingPastItsBuffer()
-    {
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
-        var layout = Layout("SourceSans3-Regular.ttf", "a");
-        layout.Update(device);
-        layout.EnsureVertexBuffer(device);
-        var size = new Size(double.NaN, double.NaN);
-        layout.ProcessText(new string('a', 5000), 20, size, TextWrapping.NoWrap, TextTrimming.None,
-            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
-        layout.Update(device);
-        layout.ProcessText(string.Empty, 20, size, TextWrapping.NoWrap, TextTrimming.None,
-            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
-        layout.Update(device);
-
-        Assert.DoesNotThrow(() => layout.EnsureVertexBuffer(device));
-        Assert.That(layout.ElementsCount, Is.EqualTo(0));
     }
 
     // A weight animation's frame lays the text out at its own weight and draws each glyph from the two key instances

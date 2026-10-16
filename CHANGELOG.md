@@ -721,6 +721,8 @@ All packages share one version.
 - `FontRenderer.UseDirectTextDraw`, `DrawLayout`, `SetState`, `RestoreState` and `RenderScale`: the old way of drawing a
   text block into a target of its own and laying that over the element. Nothing turned it on; text is drawn straight
   into the pass (`DrawLayoutDirect`) or in the batch (`DrawBatch`).
+- `TextLayout.VertexBuffer`, `EnsureVertexBuffer`, `TryBakeWorldGlyphs` and `EffectPadding`: nothing used them - a
+  per-block draw uploads the frozen glyph run into a buffer of its own, and the batch packs it.
 - `MainGraphicsDevice.GetAvailableGraphicsQueue`, `GetAvailableTransferQueue` and `UsedGraphicsQueues`: a queue is
   leased with `LeaseGraphicsQueue` and given back with `ReturnGraphicsQueue`.
 
