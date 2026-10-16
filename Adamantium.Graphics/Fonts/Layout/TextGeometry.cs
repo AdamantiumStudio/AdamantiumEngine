@@ -12,6 +12,8 @@ internal static class TextGeometry
 
     public const char LineSeparator = (char)0x2028;
 
+    public const char ParagraphSeparator = (char)0x2029;
+
     public const char ObjectReplacement = (char)0xFFFC;
 
     public static bool IsBlank(char symbol)
@@ -191,6 +193,9 @@ internal static class TextGeometry
 
         return rect;
     }
+
+    // A length that is no number counts as none.
+    internal static double Finite(double? value) => value is { } number && double.IsFinite(number) ? number : 0;
 
     public static double InkRight(GlyphWordData word) =>
         IsSlanted(word.Attributes) && !word.Sideways && !word.Upright
