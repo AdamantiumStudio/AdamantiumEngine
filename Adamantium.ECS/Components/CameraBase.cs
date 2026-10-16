@@ -328,7 +328,9 @@ namespace Adamantium.ECS.Components
         ///Sets camera as Third Person with specific parameters.
         ///</summary>
         ///<remarks>
-        ///<param name="hostObject">the host object of the camera. Camera spins around host object's center.</param>
+        ///<param name="hostObject">the host object of the camera. Camera spins around host object's center. The camera's
+        ///entity is hung under it first, through <see cref="EntityManager.SetOwner"/>: its transforms are relative to
+        ///the host.</param>
         ///<param name="initialRelRotation">initial rotation relative to host object's rotation.</param>
         ///<param name="lookAt">initial point at which camera is looking at creation (not always the same as center!).</param>
         ///<param name="distanceToObject">initial distance from host object's center</param>
@@ -359,7 +361,8 @@ namespace Adamantium.ECS.Components
         public abstract void SetThirdPersonLookBackwards(bool lookBackwards);
 
         ///<summary>
-        ///Resets all third person related properties and set the camera type to Free; the view stays as it was.
+        ///Resets all third person related properties and set the camera type to Free; the view stays as it was. The
+        ///camera's entity stays under its host until taken off through <see cref="EntityManager.RemoveOwner"/>.
         ///</summary>
         public abstract void DeleteThirdPersonConfig();
 

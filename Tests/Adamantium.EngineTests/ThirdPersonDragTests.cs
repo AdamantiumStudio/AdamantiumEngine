@@ -61,6 +61,7 @@ public class ThirdPersonDragTests
     [Test]
     public void DraggingWhatTheCameraFollows_StopsWhereThePointerStops()
     {
+        universe.EntityWorld.EntityManager.SetOwner(camera.Owner, target);
         camera.SetThirdPersonCamera(target, Vector3F.Zero, CameraType.ThirdPersonFree);
         selection.Current = target;
         tools.Tool = new MoveTool();

@@ -19,7 +19,6 @@ namespace Adamantium.ECS
        IIdentifiable,
        INamedObject,
        IEnable,
-       IEntityOwner,
        IControllableComponent,
        IDisposable,
        IEntitySearch
@@ -93,10 +92,12 @@ namespace Adamantium.ECS
             set => SetProperty(ref isSelected, value);
         }
 
+        /// <summary>The entity this one hangs under; null for a root. Changed through
+        /// <see cref="EntityManager.SetOwner"/> and <see cref="EntityManager.RemoveOwner"/>.</summary>
         public Entity Owner
         {
             get => owner;
-            set
+            internal set
             {
                 if (owner == value) return;
                 OnOwnerChanged(owner, value);
@@ -279,12 +280,12 @@ namespace Adamantium.ECS
             return componentCollection.GetAllInChildren<T>();
         }
 
-        public void AddDependency(Entity entity)
+        internal void AddDependency(Entity entity)
         {
             dependencies.Add(entity);
         }
 
-        public void RemoveDependency(Entity entity)
+        internal void RemoveDependency(Entity entity)
         {
             dependencies.Remove(entity);
         }

@@ -21,11 +21,6 @@ namespace Adamantium.ECS.Components.Extensions
                });
         }
 
-        public static void BringIntoView(this Entity owner, CameraBase camera)
-        {
-            camera?.SetThirdPersonCamera(owner, Vector3F.Zero, CameraType.ThirdPersonFree);
-        }
-
         public static Vector3 GetCenterAbsolute(this Entity owner)
         {
             var transform = owner.Transform;
