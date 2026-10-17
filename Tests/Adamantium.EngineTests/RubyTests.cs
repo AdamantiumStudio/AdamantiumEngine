@@ -488,6 +488,39 @@ public class RubyTests
     }
 
     [Test]
+    public void ATextEndingInASpreadBase_IsAsWideAsItsAnnotation()
+    {
+        var text = new AttributedText("a").SetRuby(0, 1, new RubyAnnotation("averyveryverylongannotation"));
+        var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]) { Fallback = null };
+        var size = layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+            TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(size.Width, Is.GreaterThanOrEqualTo(Right(Annotation(layout)) - 0.5));
+    }
+
+    [Test]
+    public void AlignedRight_ASpreadBaseEndsAtTheEdge()
+    {
+        var text = new AttributedText("x a").SetRuby(2, 1, new RubyAnnotation("averyveryverylongannotation"));
+        var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]) { Fallback = null };
+        layout.ProcessText(text, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
+
+        Assert.That(Right(Annotation(layout)), Is.EqualTo(300).Within(0.5));
+    }
+
+    [Test]
+    public void ABaseTheEllipsisCut_DoesNotGrowItsLine()
+    {
+        var plain = LayIn(NotoSansCjk, new AttributedText(Text), 4 * FontSize, TextWrapping.NoWrap,
+            trimming: TextTrimming.CharEllipses).GetLine(0);
+        var line = LayIn(NotoSansCjk, new AttributedText(Text).SetRuby(Base, 2, new RubyAnnotation("かんじ")),
+            4 * FontSize, TextWrapping.NoWrap, trimming: TextTrimming.CharEllipses).GetLine(0);
+
+        Assert.That(line.Height, Is.EqualTo(plain.Height).Within(0.01));
+    }
+
+    [Test]
     public void SettingARuby_ReplacesTheOnesItOverlaps_AndAnEmptyOneRemovesThem()
     {
         var text = new AttributedText(Text)

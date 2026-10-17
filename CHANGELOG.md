@@ -443,6 +443,10 @@ All packages share one version.
 
 ### Fixed
 
+- Ruby: a text that ends in a base spread to its annotation measures to the annotation's width, and lines are aligned
+  by the room a spread base takes, not its ink, so an annotation no longer reaches past the edge; a base the trimming
+  cut no longer grows its line. An effect over a base's last character reaches its annotation, which is drawn after it.
+
 - In `Frames`, a line of larger text no longer covers the lines after it: once it is set, the lines below are placed
   under it, so they keep inside their frame, out of the exclusions and in the overset when they no longer fit.
 

@@ -165,6 +165,7 @@ internal sealed class LineComposer
 
         int[] rubyAt = null;
         List<Ruby> rubies = null;
+        bool[] rubyShown = null;
 
         HashSet<int> composedStarts = null;
         HashSet<int> composedCuts = null;
@@ -260,6 +261,25 @@ internal sealed class LineComposer
         var lineAscents = new double[lineCount];
         double[] lineCoreAbove = null;
         double[] lineCoreBelow = null;
+        if (rubies != null)
+        {
+            // Only a base that came out whole is annotated, and only its line grows for it.
+            var counts = new int[rubies.Count];
+            foreach (var glyph in glyphsData)
+            {
+                if (RubyIndex(glyph.PositionInString) is var r and >= 0)
+                {
+                    counts[r]++;
+                }
+            }
+
+            rubyShown = new bool[rubies.Count];
+            for (var r = 0; r < rubies.Count; r++)
+            {
+                rubyShown[r] = rubies[r].Annotation != null && counts[r] == rubies[r].Items && !rubies[r].Pending;
+            }
+        }
+
         PlaceLines();
         // The middle of each vertical line's own text: an annotation's room beside it does not move it.
         double[] lineAxes = null;
@@ -296,7 +316,7 @@ internal sealed class LineComposer
             Array.Fill(lineRights, double.NegativeInfinity);
             foreach (var glyph in glyphsData)
             {
-                lineRights[glyph.LineIndex] = Math.Max(lineRights[glyph.LineIndex], InkRight(glyph));
+                lineRights[glyph.LineIndex] = Math.Max(lineRights[glyph.LineIndex], RightOf(glyph));
             }
 
             for (var i = 0; i < lineCount; i++)
@@ -429,9 +449,9 @@ internal sealed class LineComposer
             var maxY = float.NaN;
             foreach (var glyph in glyphs)
             {
-                minX = Math.Min(minX, InkLeft(glyph));
+                minX = Math.Min(minX, LeftOf(glyph));
                 minY = Math.Min(minY, glyph.Rect.Top);
-                var right = InkRight(glyph);
+                var right = RightOf(glyph);
                 if (double.IsNaN(maxInk) || right > maxInk)
                 {
                     maxInk = right;
@@ -731,6 +751,15 @@ internal sealed class LineComposer
 
         int RubyIndex(int index) => rubyAt != null && index >= 0 && index < rubyAt.Length ? rubyAt[index] : -1;
 
+        // The edges a glyph takes on its line: its ink, or for a ruby base the whole room it was spread to.
+        double RightOf(GlyphWordData glyph) => RubyIndex(glyph.PositionInString) >= 0
+            ? Math.Max(InkRight(glyph), glyph.PenX + glyph.Advance)
+            : InkRight(glyph);
+
+        double LeftOf(GlyphWordData glyph) => RubyIndex(glyph.PositionInString) >= 0
+            ? Math.Min(InkLeft(glyph), glyph.PenX)
+            : InkLeft(glyph);
+
         // An item of a ruby base with more of the base after it: no line breaks there.
         bool InsideABase(int k) => rubyAt != null && k + 1 < items.Count && items[k].Symbol != '\t'
                                    && RubyIndex(items[k].Cluster) is var r and >= 0 && RubyIndex(items[k + 1].Cluster) == r;
@@ -776,7 +805,7 @@ internal sealed class LineComposer
             Array.Fill(after, -1);
             for (var r = 0; r < rubies.Count; r++)
             {
-                if (bases[r].Line >= 0 && bases[r].Count == rubies[r].Items && !rubies[r].Pending)
+                if (bases[r].Line >= 0 && rubyShown[r])
                 {
                     after[bases[r].Last] = r;
                 }
@@ -1000,7 +1029,7 @@ internal sealed class LineComposer
 
             // A ruby base's line grows to hold its annotation, as CSS's; one whose height is set does not.
             if (withRuby && !setHeight && RubyIndex(glyph.PositionInString) is var r and >= 0
-                && rubies[r].Annotation is { } annotation)
+                && rubies[r].Annotation is { } annotation && (rubyShown == null || rubyShown[r]))
             {
                 var ruby = rubies[r];
                 var over = annotation.Position == RubyPosition.Over;
@@ -2157,8 +2186,8 @@ internal sealed class LineComposer
                         // By the ink, so leading/trailing spaces don't pull the line off-center.
                         var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
                         if (ink.Length == 0) continue;
-                        var minX = ink.Min(x => x.Rect.Left);
-                        var maxX = ink.Max(x => x.Rect.Right);
+                        var minX = ink.Min(LeftOf);
+                        var maxX = ink.Max(RightOf);
                         var lineWidth = maxX - minX;
                         var diff = LineIndent(i) + (AlignRight(i) - LineIndent(i) - lineWidth) / 2 - minX;
                         foreach (var glyphWordData in glyphsForLine)
@@ -2188,7 +2217,7 @@ internal sealed class LineComposer
                             continue;
                         }
 
-                        var maxX = ink.Max(x => x.Rect.Right);
+                        var maxX = ink.Max(RightOf);
                         var diff = (AlignRight(i) - maxX);
                         foreach (var glyphWordData in glyphsForLine)
                         {
@@ -2282,7 +2311,7 @@ internal sealed class LineComposer
                         var leftHang = hangs && firstInk == 0 && lastTab < 0 ? Hang(lineGlyphs[firstInk], true) : 0;
                         var rightHang = hangs ? Hang(lineGlyphs[lastInk], false) : 0;
                         var inkRight = lineGlyphs.Where(glyph => !IsBlank(glyph.Symbol) && glyph.Symbol != '\n')
-                            .Select(glyph => glyph.Rect.Right).DefaultIfEmpty(lineGlyphs[lastInk].Rect.Right).Max();
+                            .Select(RightOf).DefaultIfEmpty(lineGlyphs[lastInk].Rect.Right).Max();
                         var extra = AlignRight(i) + leftHang + rightHang - (inkRight - lead);
 
                         double wordShare;
@@ -2769,7 +2798,7 @@ internal sealed class LineComposer
                     .Where(g => !IsBlank(g.Symbol)).ToArray();
                 if (toRight && ink.Length > 0 && AlignmentOf(glyphsData[lineStart].LineIndex) == alignment)
                 {
-                    var shift = AlignRight(glyphsData[lineStart].LineIndex) - ink.Max(g => g.Rect.Right);
+                    var shift = AlignRight(glyphsData[lineStart].LineIndex) - ink.Max(RightOf);
                     for (var k = lineStart; k < lineEnd; k++)
                     {
                         glyphsData[k].Rect.X += (float)shift;
