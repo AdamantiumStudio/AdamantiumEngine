@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- Optical kerning, as InDesign's: `TextLayout.Kerning` and `TextAttributes.Kerning` (`TextKerning.Metrics` - the font's
+  pairs, the default; `Optical`; `None`). Optically, the space between two letters is measured from their outlines
+  (`OpticalKerning.Between`): the white between them, taken into their hollows no deeper than 0.15 em, is made what it
+  is between the font's "nn" and "HH", by no more than a quarter em, and never so close that their ink at one height
+  comes within 0.02 em. For a font with no pairs, or pairs it left out. Horizontal left-to-right text of the scripts
+  whose letters stand apart (`OpticalKerning.Applies`: Latin, Greek, Cyrillic, Armenian, Georgian); right to left,
+  vertical text and other scripts keep the font's pairs, and two letters of different sizes are left as they are.
+  `Glyph.GetMergedOutlineSegments(rate)` samples and reads the outline under the glyph's lock.
+
 - `SharedSurface.LatchCopy` / `LatchedCopy`: the consumer's copy of a shared surface's newest frame, made outside a
   render pass once per frame the producer finished, and sampled in place of the surface. The copy waits for the frame
   on the produce timeline and signals the consume timeline once done, so the producer writes its next frame only after
