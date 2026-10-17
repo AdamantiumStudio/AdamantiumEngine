@@ -8,29 +8,38 @@ internal sealed class Normalizer
 {
     private const int MaxCombiningMarks = 32;
 
-    private readonly IFont _font;
-    private readonly GlyphBuffer _buffer;
-    private readonly List<GlyphInfo> _output = [];
-    private readonly bool _arabicMarks;
+    [ThreadStatic]
+    private static Normalizer _spare;
 
-    private Normalizer(IFont font, GlyphBuffer buffer, bool arabicMarks)
-    {
-        _font = font;
-        _buffer = buffer;
-        _arabicMarks = arabicMarks;
-    }
+    private readonly List<GlyphInfo> _output = [];
+    private GlyphInfo[] _input = [];
+    private IFont _font;
+    private GlyphBuffer _buffer;
+    private bool _arabicMarks;
 
     public static void Normalize(IFont font, GlyphBuffer buffer, bool arabicMarks = false)
     {
-        new Normalizer(font, buffer, arabicMarks).Run();
+        var normalizer = _spare ?? new Normalizer();
+        _spare = null;
+        normalizer._font = font;
+        normalizer._buffer = buffer;
+        normalizer._arabicMarks = arabicMarks;
+        normalizer.Run();
+        normalizer._font = null;
+        normalizer._buffer = null;
+        _spare = normalizer._input.Length <= GlyphBuffer.MostKept && normalizer._output.Capacity <= GlyphBuffer.MostKept
+            ? normalizer
+            : null;
     }
 
     private void Run()
     {
-        var input = new GlyphInfo[_buffer.Length];
-        Array.Copy(_buffer.Info, input, input.Length);
+        var length = _buffer.Length;
+        var input = Input(length);
+        Array.Copy(_buffer.Info, input, length);
+        _output.Clear();
 
-        var allSimple = Decompose(input);
+        var allSimple = Decompose(input, length);
         if (!allSimple)
         {
             Reorder();
@@ -44,19 +53,29 @@ internal sealed class Normalizer
         }
     }
 
-    private bool Decompose(GlyphInfo[] input)
+    private GlyphInfo[] Input(int length)
+    {
+        if (_input.Length < length)
+        {
+            _input = new GlyphInfo[Math.Max(length, _input.Length * 2)];
+        }
+
+        return _input;
+    }
+
+    private bool Decompose(GlyphInfo[] input, int length)
     {
         var allSimple = true;
         var index = 0;
-        while (index < input.Length)
+        while (index < length)
         {
             var end = index + 1;
-            while (end < input.Length && !input[end].IsUnicodeMark)
+            while (end < length && !input[end].IsUnicodeMark)
             {
                 end++;
             }
 
-            if (end < input.Length)
+            if (end < length)
             {
                 end--;
             }
@@ -66,14 +85,14 @@ internal sealed class Normalizer
                 DecomposeCurrent(input[index], true);
             }
 
-            if (index == input.Length)
+            if (index == length)
             {
                 break;
             }
 
             allSimple = false;
             end = index + 1;
-            while (end < input.Length && input[end].IsUnicodeMark)
+            while (end < length && input[end].IsUnicodeMark)
             {
                 end++;
             }
@@ -301,11 +320,13 @@ internal sealed class Normalizer
 
     private void Recompose()
     {
-        var input = _output.ToArray();
+        var length = _output.Count;
+        var input = Input(length);
+        _output.CopyTo(input);
         _output.Clear();
         _output.Add(input[0]);
         var starter = 0;
-        for (var i = 1; i < input.Length; i++)
+        for (var i = 1; i < length; i++)
         {
             var current = input[i];
             if (current.IsUnicodeMark

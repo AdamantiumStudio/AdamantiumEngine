@@ -11,12 +11,15 @@ namespace Adamantium.Graphics.Fonts.Layout;
 
 internal sealed class GlyphRunShaper
 {
+    private const int MostKept = 16384;
+
     private static readonly char[] LineEnds = ['\n', LineSeparator, ParagraphSeparator];
 
     private static readonly char[] LineEndsAndObjects = ['\n', LineSeparator, ParagraphSeparator, ObjectReplacement];
 
     private readonly IFont _font;
     private readonly Dictionary<(IFont Font, int Codepoint), bool> _verticalForms = new();
+    private readonly List<ShapedItem> _items = [];
     private bool _pending;
 
     public GlyphRunShaper(IFont font)
@@ -29,7 +32,9 @@ internal sealed class GlyphRunShaper
         bool[] graphemes, out bool hasPendingFonts)
     {
         _pending = false;
-        var items = new List<ShapedItem>(text.Length);
+        var items = text.Length > MostKept ? new List<ShapedItem>(text.Length) : _items;
+        items.Clear();
+        items.EnsureCapacity(text.Length);
         var runIndex = 0;
         foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, runs, fontSize,
                      options.Kerning), attributed), split))

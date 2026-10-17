@@ -4,6 +4,8 @@ namespace Adamantium.Fonts.Shaping;
 
 internal sealed class GlyphBuffer
 {
+    public const int MostKept = 16384;
+
     private int _serial;
 
     public GlyphBuffer(int capacity)
@@ -32,6 +34,16 @@ internal sealed class GlyphBuffer
     public void Clear()
     {
         Length = 0;
+    }
+
+    public void Reset(int capacity)
+    {
+        Length = 0;
+        _serial = 0;
+        HasDefaultIgnorables = false;
+        HasSpaceFallback = false;
+        HasNonAscii = false;
+        EnsureCapacity(capacity);
     }
 
     public void Insert(int index, in GlyphInfo info)
@@ -111,7 +123,14 @@ internal sealed class GlyphBuffer
 
     public void ClearPlacements()
     {
-        Placements = new GlyphPlacement[Length];
+        if (Placements == null || Placements.Length < Length)
+        {
+            Placements = new GlyphPlacement[Math.Max(Length, Info.Length)];
+        }
+        else
+        {
+            Array.Clear(Placements, 0, Length);
+        }
     }
 
     public void RemoveWhere(Func<GlyphInfo, bool> predicate)
