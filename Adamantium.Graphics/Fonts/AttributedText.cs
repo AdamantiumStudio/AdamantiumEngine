@@ -11,6 +11,7 @@ namespace Adamantium.Graphics.Fonts;
 public sealed class AttributedText
 {
     private readonly List<AttributeRun> _own = [];
+    private readonly List<AttributeRun> _splice = [];
     private readonly List<ParagraphRun> _paragraphs = [];
     private readonly List<(int Start, int End, CharacterStyle Style)> _characterStyles = [];
     private readonly List<(int Start, int End, ParagraphStyle Style)> _paragraphStyles = [];
@@ -61,32 +62,31 @@ public sealed class AttributedText
             return this;
         }
 
-        var result = new List<AttributeRun>(_own.Count + 2);
-        foreach (var run in _own)
+        // Only the runs the range touches are split, in place: the text's own runs cover it end to end.
+        var first = FirstEndingAfter(_own, start);
+        var last = first;
+        _splice.Clear();
+        for (; last < _own.Count && _own[last].Start < end; last++)
         {
-            if (run.End <= start || run.Start >= end)
-            {
-                result.Add(run);
-                continue;
-            }
-
+            var run = _own[last];
             if (run.Start < start)
             {
-                result.Add(new AttributeRun(run.Start, start - run.Start, run.Attributes));
+                _splice.Add(new AttributeRun(run.Start, start - run.Start, run.Attributes));
             }
 
             var from = Math.Max(run.Start, start);
             var to = Math.Min(run.End, end);
-            result.Add(new AttributeRun(from, to - from, run.Attributes.With(attributes)));
+            _splice.Add(new AttributeRun(from, to - from, run.Attributes.With(attributes)));
 
             if (run.End > end)
             {
-                result.Add(new AttributeRun(end, run.End - end, run.Attributes));
+                _splice.Add(new AttributeRun(end, run.End - end, run.Attributes));
             }
         }
 
-        _own.Clear();
-        _own.AddRange(result);
+        _own.RemoveRange(first, last - first);
+        _own.InsertRange(first, _splice);
+        _splice.Clear();
         Interlocked.Increment(ref _edits);
         return this;
     }
@@ -459,34 +459,73 @@ public sealed class AttributedText
     private static void Replace<T>(List<(int Start, int End, T Style)> runs, int start, int end, T style)
         where T : class
     {
-        var result = new List<(int Start, int End, T Style)>(runs.Count + 2);
-        foreach (var run in runs)
+        // Only the runs the range touches are replaced, in place: before it what runs left of it, then the new one,
+        // then what runs right of it.
+        var low = 0;
+        var high = runs.Count;
+        while (low < high)
         {
-            if (run.End <= start || run.Start >= end)
+            var middle = (low + high) / 2;
+            if (runs[middle].End <= start)
             {
-                result.Add(run);
-                continue;
+                low = middle + 1;
             }
+            else
+            {
+                high = middle;
+            }
+        }
 
-            if (run.Start < start)
-            {
-                result.Add((run.Start, start, run.Style));
-            }
+        var first = low;
+        var last = first;
+        while (last < runs.Count && runs[last].Start < end)
+        {
+            last++;
+        }
 
-            if (run.End > end)
-            {
-                result.Add((end, run.End, run.Style));
-            }
+        (int Start, int End, T Style)? left = first < last && runs[first].Start < start
+            ? (runs[first].Start, start, runs[first].Style)
+            : null;
+        (int Start, int End, T Style)? right = first < last && runs[last - 1].End > end
+            ? (end, runs[last - 1].End, runs[last - 1].Style)
+            : null;
+        runs.RemoveRange(first, last - first);
+        var at = first;
+        if (left is { } leftPart)
+        {
+            runs.Insert(at++, leftPart);
         }
 
         if (style != null)
         {
-            result.Add((start, end, style));
+            runs.Insert(at++, (start, end, style));
         }
 
-        result.Sort((left, right) => left.Start.CompareTo(right.Start));
-        runs.Clear();
-        runs.AddRange(result);
+        if (right is { } rightPart)
+        {
+            runs.Insert(at, rightPart);
+        }
+    }
+
+    // The first of runs covering the text end to end whose end lies past the index.
+    private static int FirstEndingAfter(List<AttributeRun> runs, int index)
+    {
+        var low = 0;
+        var high = runs.Count;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (runs[middle].End <= index)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return low;
     }
 
     private static T StyleAt<T>(List<(int Start, int End, T Style)> runs, int index) where T : class
