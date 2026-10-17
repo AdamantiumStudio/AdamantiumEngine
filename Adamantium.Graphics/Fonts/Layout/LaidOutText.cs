@@ -29,6 +29,10 @@ internal sealed record LaidOutText
 
     public double[] LineBaselines { get; init; }
 
+    // The middle of each vertical line's own text below its top, when an annotation's room beside it moved it off the
+    // line's middle; null otherwise.
+    public double[] LineAxes { get; init; }
+
     public double VerticalShift { get; init; }
 
     public double LineSpacing { get; init; }

@@ -206,6 +206,229 @@ public class RubyTests
             string.Join(", ", layout.GetTextData().Select(glyph => $"{glyph.Symbol}{glyph.LineIndex}")));
     }
 
+    private static readonly Lazy<Typeface> SourceSans = new(() =>
+        Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf")));
+
+    private static TextLayout LayIn(Lazy<Typeface> face, AttributedText attributed, double width,
+        TextWrapping wrapping = TextWrapping.WrapByWords, Action<TextLayout> setUp = null, double height = double.NaN,
+        TextTrimming trimming = TextTrimming.None)
+    {
+        var layout = new TextLayout(face.Value, face.Value.Fonts[0]) { Fallback = null };
+        setUp?.Invoke(layout);
+        layout.ProcessText(attributed, FontSize, new Size(width, height), wrapping, trimming,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        return layout;
+    }
+
+    private static int[] LinesOf(TextLayout layout, int start, int end) => layout.GetTextData()
+        .Where(glyph => glyph.PositionInString >= start && glyph.PositionInString < end)
+        .Select(glyph => glyph.LineIndex).Distinct().ToArray();
+
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void ABaseWithASpace_StaysOnOneLine(LineBreaking breaking)
+    {
+        var text = new AttributedText("aaaa bbbb cccc dddd").SetRuby(5, 9, new RubyAnnotation("ruby"));
+        var layout = LayIn(SourceSans, text, 90, setUp: set => set.LineBreaking = breaking);
+
+        Assert.That(LinesOf(layout, 5, 14), Has.Length.EqualTo(1));
+    }
+
+    [TestCase(Hyphens.Manual)]
+    [TestCase(Hyphens.Auto)]
+    public void ABase_IsNotHyphenated(Hyphens hyphens)
+    {
+        var text = new AttributedText("xx inter­national yy").SetRuby(3, 14, new RubyAnnotation("word"));
+        var layout = LayIn(SourceSans, text, 60, setUp: set => set.Hyphens = hyphens);
+
+        Assert.That(LinesOf(layout, 3, 17), Has.Length.EqualTo(1));
+    }
+
+    [Test]
+    public void ABase_IsNotBrokenBySymbols()
+    {
+        var text = new AttributedText("漢字漢字漢字漢字漢字").SetRuby(2, 4, new RubyAnnotation("かんじかんじ"));
+        var layout = LayIn(NotoSansCjk, text, 70, TextWrapping.WrapBySymbols);
+
+        Assert.That(LinesOf(layout, 2, 6), Has.Length.EqualTo(1));
+    }
+
+    [Test]
+    public void ABase_EndsAtAHardBreak()
+    {
+        var layout = LayIn(NotoSansCjk, new AttributedText("日本の漢\n字を読む").SetRuby(3, 3, new RubyAnnotation("かん")), 400);
+        var annotation = Annotation(layout);
+        var bases = BaseGlyphs(layout, 3, 1);
+
+        Assert.That((Left(annotation) + Right(annotation)) / 2, Is.EqualTo((Left(bases) + Right(bases)) / 2).Within(0.01));
+    }
+
+    [Test]
+    public void TheAnnotation_ClearsTheTallestGlyphOfItsBase()
+    {
+        var text = new AttributedText(Text).Apply(4, 1, new TextAttributes { FontSize = 40 })
+            .SetRuby(Base, 2, new RubyAnnotation("かんじ"));
+        var layout = LayIn(NotoSansCjk, text, 400);
+
+        Assert.That(Annotation(layout).Max(glyph => glyph.Rect.Bottom),
+            Is.LessThanOrEqualTo(BaseGlyphs(layout).Min(glyph => glyph.Rect.Top) + 0.5));
+    }
+
+    [Test]
+    public void TheAnnotation_ClearsAnObjectBase()
+    {
+        var text = new AttributedText("ab￼cd").Apply(2, 1, new TextAttributes { ObjectSize = new Size(30, 30) })
+            .SetRuby(2, 1, new RubyAnnotation("box"));
+        var layout = LayIn(SourceSans, text, 400);
+        var box = layout.GetTextData().Single(glyph => glyph.PositionInString == 2);
+
+        Assert.That(Annotation(layout).Max(glyph => glyph.Rect.Bottom), Is.LessThanOrEqualTo(box.Rect.Top + 0.5));
+    }
+
+    [Test]
+    public void ASpreadBase_KeepsItsMarksOnItsLetters()
+    {
+        var hebrew = new Lazy<Typeface>(() =>
+            Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf")));
+        const string word = "שָׁלוֹם";
+        // Each mark's ink against the ink of the letter it sits on: the nearest letter of its cluster or before it.
+        double[] MarkOffsets(TextLayout layout)
+        {
+            var glyphs = layout.GetTextData().Where(glyph => glyph.PositionInString >= 0).ToArray();
+            return glyphs.Where(glyph => glyph.Advance == 0)
+                .Select(mark => (double)mark.Rect.X - glyphs.Where(letter => letter.Advance > 0
+                                                                     && letter.PositionInString <= mark.PositionInString)
+                    .MaxBy(letter => letter.PositionInString).Rect.X)
+                .ToArray();
+        }
+
+        var plain = MarkOffsets(LayIn(hebrew, new AttributedText(word), 400));
+        var spread = MarkOffsets(LayIn(hebrew, new AttributedText(word)
+            .SetRuby(0, word.Length, new RubyAnnotation("a very long annotation here")), 400));
+
+        Assert.That(spread, Is.EqualTo(plain).Within(0.01));
+    }
+
+    [Test]
+    public void ASpreadJoinedBase_StaysJoined()
+    {
+        var arabic = new Lazy<Typeface>(() =>
+            Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansArabic-Regular.ttf")));
+        const string word = "سلام";
+        // Where each letter's ink stands against the first's: joined letters keep their places to each other.
+        double[] Gaps(TextLayout layout)
+        {
+            var glyphs = layout.GetTextData().Where(glyph => glyph.PositionInString >= 0)
+                .OrderBy(glyph => glyph.PositionInString).ToArray();
+            return glyphs.Select(glyph => (double)glyph.Rect.X - glyphs[0].Rect.X).ToArray();
+        }
+
+        var plain = Gaps(LayIn(arabic, new AttributedText(word), 400));
+        var spread = Gaps(LayIn(arabic, new AttributedText(word)
+            .SetRuby(0, word.Length, new RubyAnnotation("a very long annotation here")), 400));
+
+        Assert.That(spread, Is.EqualTo(plain).Within(0.01));
+    }
+
+    [Test]
+    public void ADropCap_TakesNoRuby()
+    {
+        var layout = LayIn(NotoSansCjk, new AttributedText(Text + Text + Text).SetRuby(0, 1, new RubyAnnotation("に")),
+            100, setUp: set => set.DropCap = new DropCap(2));
+
+        Assert.That(Annotation(layout), Is.Empty);
+    }
+
+    [Test]
+    public void ABaseTheEllipsisCut_HasNoAnnotation()
+    {
+        var layout = LayIn(NotoSansCjk, new AttributedText(Text).SetRuby(Base, 2, new RubyAnnotation("かんじ")), 4 * FontSize,
+            TextWrapping.NoWrap, trimming: TextTrimming.CharEllipses);
+
+        Assert.That(Annotation(layout).Where(glyph => "かんじ".Contains(glyph.Symbol)), Is.Empty);
+    }
+
+    [Test]
+    public void InAFixedHeight_EveryLineKeptStartsInside()
+    {
+        var text = new AttributedText(Text + Text + Text + Text);
+        for (var i = 0; i < 4; i++)
+        {
+            text.SetRuby(i * Text.Length + Base, 2, new RubyAnnotation("かんじ"));
+        }
+
+        var layout = LayIn(NotoSansCjk, text, 8 * FontSize, height: 90, trimming: TextTrimming.CharEllipses);
+        var tops = Enumerable.Range(0, layout.LineCount).Select(i => layout.GetLine(i).Top).ToArray();
+
+        Assert.That(tops.All(top => top < 90), Is.True, string.Join(", ", tops));
+    }
+
+    [Test]
+    public void TheAnnotation_FollowsItsBase_SoAnEffectOverTheBaseReachesIt()
+    {
+        var layout = Lay("かんじ");
+        var glyphs = layout.GetTextData();
+        var last = Array.FindLastIndex(glyphs, glyph => glyph.PositionInString == Base + 1);
+
+        Assert.That(glyphs.Skip(last + 1).Take(3).All(glyph => glyph.PositionInString < 0), Is.True);
+    }
+
+    [Test]
+    public void AnAnnotationTheBaseFontLacks_TakesTheFallbacksFont()
+    {
+        var latin = SourceSans.Value.Fonts[0];
+        Assume.That(FontFallback.System.FontFor('と', latin, "ja"), Is.Not.Null, "a system font with kana");
+        var layout = new TextLayout(SourceSans.Value, latin) { Fallback = FontFallback.System, LoadFontsInBackground = false };
+        layout.ProcessText(new AttributedText("Tokyo").SetRuby(0, 5, new RubyAnnotation("とうきょう")), FontSize,
+            new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            VerticalTextAlignment.Top);
+
+        Assert.That(Annotation(layout).All(glyph => glyph.Glyph.Index != 0 && !ReferenceEquals(glyph.Font, latin)), Is.True);
+    }
+
+    [Test]
+    public void ABaseInsideALigature_StillTakesItsAnnotation()
+    {
+        var playfair = new Lazy<Typeface>(() =>
+            Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "PlayfairDisplay-Regular.ttf")));
+        var layout = LayIn(playfair, new AttributedText("a fit b").SetRuby(3, 1, new RubyAnnotation("i")), 400);
+
+        Assert.That(Annotation(layout), Is.Not.Empty);
+    }
+
+    [Test]
+    public void InVerticalText_ALineOverTheBase_StaysOnItsText()
+    {
+        TextLayout Vertical(bool ruby)
+        {
+            var typeface = NotoSansCjk.Value;
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, WritingMode = WritingMode.VerticalRightToLeft,
+            };
+            var attributed = new AttributedText(Text).Apply(0, Text.Length,
+                new TextAttributes { Decorations = TextDecorations.Strikethrough });
+            if (ruby)
+            {
+                attributed.SetRuby(Base, 2, new RubyAnnotation("かんじ"));
+            }
+
+            layout.ProcessText(attributed, FontSize, new Size(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        double Offset(TextLayout layout)
+        {
+            var line = layout.GetAdornments().First(adornment => adornment.Kind != TextAdornmentKind.Background).Rect;
+            var bases = layout.GetTextData().Where(glyph => glyph.PositionInString >= 0).ToArray();
+            var middle = (bases.Min(glyph => glyph.Rect.Left) + bases.Max(glyph => glyph.Rect.Right)) / 2;
+            return line.Left + line.Width / 2 - middle;
+        }
+
+        Assert.That(Offset(Vertical(true)), Is.EqualTo(Offset(Vertical(false))).Within(0.5));
+    }
+
     [Test]
     public void SettingARuby_ReplacesTheOnesItOverlaps_AndAnEmptyOneRemovesThem()
     {
