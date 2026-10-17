@@ -9,6 +9,9 @@ namespace Adamantium.Fonts.Shaping;
 /// <summary>Turns text into positioned glyphs of a font, applying its OpenType substitutions and positioning.</summary>
 public static class TextShaper
 {
+    [ThreadStatic]
+    private static GlyphBuffer _spareBuffer;
+
     /// <summary>The features shaping applies to all text without being asked - the required ones (<c>ccmp</c>,
     /// <c>locl</c>, <c>rlig</c>…) and those on by default (<c>calt</c>, <c>liga</c>, <c>kern</c>…); a
     /// <see cref="FontFeature"/> of value 0 turns one off. Any other feature applies only when asked for.</summary>
@@ -62,7 +65,22 @@ public static class TextShaper
     private static ShapedGlyph[] ShapeRun(IFont font, string text, int start, int end, int origin, string script,
         ShapingOptions options)
     {
-        var buffer = new GlyphBuffer(end - start);
+        var buffer = _spareBuffer ?? new GlyphBuffer(end - start);
+        _spareBuffer = null;
+        buffer.Reset(end - start);
+        try
+        {
+            return ShapeRun(font, text, start, end, origin, script, options, buffer);
+        }
+        finally
+        {
+            _spareBuffer = buffer.Info.Length <= GlyphBuffer.MostKept ? buffer : null;
+        }
+    }
+
+    private static ShapedGlyph[] ShapeRun(IFont font, string text, int start, int end, int origin, string script,
+        ShapingOptions options, GlyphBuffer buffer)
+    {
         AddText(buffer, text, start, end);
         UnicodeProps.SetAll(buffer);
         FormClusters(buffer);
