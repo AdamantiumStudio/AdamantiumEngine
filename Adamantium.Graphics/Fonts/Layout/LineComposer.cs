@@ -661,6 +661,7 @@ internal sealed class LineComposer
 
         void NewLine()
         {
+            SettleLine(lineIndex);
             height = NextTop(pendingGap);
             lineIndex++;
             NoteLine(lineIndex, pendingGap);
@@ -679,6 +680,72 @@ internal sealed class LineComposer
             }
 
             ForgetSlotsFrom(line, gap);
+        }
+
+        // A line in a frame turns out as tall as its text: the slots after it are found again below it.
+        void SettleLine(int line)
+        {
+            if (slots == null || line >= slots.Count || options.LineStacking != LineStackingStrategy.MaxHeight)
+            {
+                return;
+            }
+
+            var (lineBaseline, lineBox) = MeasuredLine(line);
+            var (frame, next, rows) = slotCursors[line];
+            var bottom = OnGrid(slots[line].Top, lineBaseline, line) + lineBox + SpacingAfter(line);
+            if (bottom <= next + 1e-6)
+            {
+                return;
+            }
+
+            slotCursors[line] = (frame, bottom, rows);
+            if (slots.Count > line + 1)
+            {
+                slots.RemoveRange(line + 1, slots.Count - line - 1);
+                slotCursors.RemoveRange(line + 1, slotCursors.Count - line - 1);
+                slotBases.RemoveRange(line + 1, slotBases.Count - line - 1);
+            }
+        }
+
+        // The baseline and height of a line as its glyphs stack it, as PlaceLines does.
+        (double Baseline, double Height) MeasuredLine(int line)
+        {
+            var ownBaseline = RowBaseline(line);
+            var ownHeight = OwnLineHeight(line);
+            var setHeight = OwnSetHeight(line) is > 0 and var set && double.IsFinite(set)
+                            || (options.LineHeight > 0 && double.IsFinite(options.LineHeight));
+            var above = ownBaseline;
+            var below = ownHeight - ownBaseline;
+            for (var k = glyphsData.Count - 1; k >= 0 && glyphsData[k].LineIndex >= line; k--)
+            {
+                if (glyphsData[k].LineIndex == line)
+                {
+                    var extent = GlyphExtent(glyphsData[k], setHeight, ownBaseline, ownHeight);
+                    above = Math.Max(above, extent.Above);
+                    below = Math.Max(below, extent.Below);
+                }
+            }
+
+            return (above, above + below);
+        }
+
+        // How far a glyph reaches above and below its line's baseline when lines grow to hold their text.
+        (double Above, double Below, double Ascent) GlyphExtent(GlyphWordData glyph, bool setHeight, double ownBaseline,
+            double ownHeight)
+        {
+            var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
+            var ownSize = setHeight && glyph.FontSize == fontSize;
+            var above = ownSize ? ownBaseline : BaselineInLine(glyph.Font, glyphScale);
+            var below = ownSize ? ownHeight - ownBaseline : LineAdvance(glyph.Font, glyph.FontSize) - above;
+            var ascent = glyph.Font.Ascender * glyphScale;
+            if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize)
+            {
+                above = Math.Max(above, objectSize.Height + glyph.OffsetY);
+                ascent = Math.Max(ascent, objectSize.Height + glyph.OffsetY);
+                below = Math.Max(below, -glyph.OffsetY);
+            }
+
+            return (above, below, ascent);
         }
 
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
@@ -903,10 +970,21 @@ internal sealed class LineComposer
 
         // The next line's top stays inside the area: below this line by its height and the room a paragraph starting
         // there keeps.
-        bool HasRoomBelow() => (options.MaxLines <= 0 || lineIndex + 1 < options.MaxLines)
-                               && (slots != null
-                                   ? HasSlot(lineIndex + 1)
-                                   : NextTop(pendingGap) < textArea.Height);
+        bool HasRoomBelow()
+        {
+            if (options.MaxLines > 0 && lineIndex + 1 >= options.MaxLines)
+            {
+                return false;
+            }
+
+            if (slots == null)
+            {
+                return NextTop(pendingGap) < textArea.Height;
+            }
+
+            SettleLine(lineIndex);
+            return HasSlot(lineIndex + 1);
+        }
 
         bool CutsOverflow() => slots != null || options.MaxLines > 0;
 
@@ -1344,13 +1422,7 @@ internal sealed class LineComposer
                 var slot = SlotOf(i);
                 lineFrames[i] = slot.Frame;
                 shiftsX[i] = frames[slot.Frame].Left;
-                var top = slot.Top;
-                if (i > 0 && lineFrames[i - 1] == slot.Frame)
-                {
-                    top = Math.Max(top, lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i));
-                }
-
-                top = OnGrid(top, lineBaselines[i], i);
+                var top = OnGrid(slot.Top, lineBaselines[i], i);
                 shiftsY[i] = top - lineTops[i];
                 lineTops[i] = top;
             }
@@ -2460,22 +2532,10 @@ internal sealed class LineComposer
                 foreach (var glyph in glyphsData)
                 {
                     var line = glyph.LineIndex;
-                    var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
-                    var ownSize = setHeights[line] && glyph.FontSize == fontSize;
-                    var glyphBaseline = ownSize ? ownBaselines[line] : BaselineInLine(glyph.Font, glyphScale);
-                    var glyphBelow = ownSize
-                        ? lineHeights[line] - ownBaselines[line]
-                        : LineAdvance(glyph.Font, glyph.FontSize) - glyphBaseline;
-                    var glyphAscent = glyph.Font.Ascender * glyphScale;
-                    lineBaselines[line] = Math.Max(lineBaselines[line], glyphBaseline);
-                    below[line] = Math.Max(below[line], glyphBelow);
-                    lineAscents[line] = Math.Max(lineAscents[line], glyphAscent);
-                    if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize)
-                    {
-                        lineBaselines[line] = Math.Max(lineBaselines[line], objectSize.Height + glyph.OffsetY);
-                        lineAscents[line] = Math.Max(lineAscents[line], objectSize.Height + glyph.OffsetY);
-                        below[line] = Math.Max(below[line], -glyph.OffsetY);
-                    }
+                    var extent = GlyphExtent(glyph, setHeights[line], ownBaselines[line], lineHeights[line]);
+                    lineBaselines[line] = Math.Max(lineBaselines[line], extent.Above);
+                    below[line] = Math.Max(below[line], extent.Below);
+                    lineAscents[line] = Math.Max(lineAscents[line], extent.Ascent);
                 }
 
                 for (var i = 0; i < lineCount; i++)

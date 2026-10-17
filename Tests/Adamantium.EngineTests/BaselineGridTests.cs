@@ -171,6 +171,53 @@ public class BaselineGridTests
         });
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void InFrames_ALargerLine_PushesTheNextOnesDown_WithinTheirFramesAndPastExclusions(bool gridded)
+    {
+        var text = "Line one.\nA LARGER LINE\n" + Prose;
+        var attributed = new AttributedText(text).Apply(10, 13, new TextAttributes { FontSize = FontSize * 2 });
+        var exclusion = new RectangleF(0, 72, 200, 12);
+        var layout = Layout(gridded ? new BaselineGrid(Step) : null);
+        layout.Frames = [new RectangleF(0, 0, 300, 100), new RectangleF(320, 0, 300, 400)];
+        layout.Exclusions = [exclusion];
+        layout.ProcessText(attributed, FontSize, new Size(620, 400), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var glyphs = layout.GetTextData();
+
+        bool InFirstFrame(int line) => glyphs.Where(glyph => glyph.LineIndex == line).All(glyph => glyph.Rect.X < 310);
+
+        Assert.Multiple(() =>
+        {
+            for (var i = 0; i < layout.LineCount; i++)
+            {
+                var line = layout.GetLine(i);
+                if (InFirstFrame(i))
+                {
+                    Assert.That(line.Top + line.Height, Is.LessThanOrEqualTo(100.5), $"line {i} ends in its frame");
+                }
+
+                if (i > 0 && InFirstFrame(i) == InFirstFrame(i - 1))
+                {
+                    var before = layout.GetLine(i - 1);
+                    Assert.That(line.Top, Is.GreaterThanOrEqualTo(before.Top + before.Height - 1),
+                        $"line {i} is below the one before");
+                }
+
+                var overlapsExclusion = i != 1 && line.Top < exclusion.Bottom && line.Top + line.Height > exclusion.Top
+                                        && glyphs.Any(glyph => glyph.LineIndex == i && glyph.Rect.Width > 0
+                                                               && glyph.Rect.Left < exclusion.Right);
+                Assert.That(overlapsExclusion, Is.False, $"line {i} after the larger one keeps out of the exclusion");
+            }
+
+            if (gridded)
+            {
+                Assert.That(Baselines(layout).All(baseline => OnGrid(baseline)), Is.True,
+                    string.Join(", ", Baselines(layout)));
+            }
+        });
+    }
+
     [Test]
     public void AFarOffset_KeepsTheLinesApart()
     {
