@@ -37,6 +37,7 @@ public class CameraProjectionTests
         Assert.That(camera.ProjectionMatrix.M22, Is.EqualTo(expected).Within(1e-4f));
 
         camera.ZFar = 10f;
+        camera.Update(new AppTime());
         Assert.That(camera.ProjectionMatrix.M33, Is.Not.EqualTo(before.M33).Within(1e-6f), "the far plane moved");
     }
 }
