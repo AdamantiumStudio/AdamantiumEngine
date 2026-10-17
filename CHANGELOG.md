@@ -450,6 +450,8 @@ All packages share one version.
 
 ### Fixed
 
+- Making a text style is no longer an edit of styles: text laid out by other styles is not resolved again for it.
+
 - Ruby: a text that ends in a base spread to its annotation measures to the annotation's width, and lines are aligned
   by the room a spread base takes, not its ink, so an annotation no longer reaches past the edge; a base the trimming
   cut no longer grows its line. An effect over a base's last character reaches its annotation, which is drawn after it.

@@ -26,9 +26,10 @@ public sealed class CharacterStyle
     /// <summary>A style of this name setting these attributes over the style it is based on.</summary>
     public CharacterStyle(string name, TextAttributes attributes = null, CharacterStyle basedOn = null)
     {
+        // A style just made is no edit: no text uses it yet, and no chain can come round to it.
         Name = name;
         _attributes = attributes;
-        BasedOn = basedOn;
+        _basedOn = basedOn;
     }
 
     /// <summary>What the style is called.</summary>
@@ -120,7 +121,7 @@ public sealed class ParagraphStyle
         Name = name;
         _paragraph = paragraph;
         _text = text;
-        BasedOn = basedOn;
+        _basedOn = basedOn;
     }
 
     /// <summary>What the style is called.</summary>
