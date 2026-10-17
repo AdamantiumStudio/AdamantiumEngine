@@ -510,6 +510,57 @@ public class RubyTests
     }
 
     [Test]
+    public void ABaseNotSpread_LeavesItsLineAlignedByItsInk()
+    {
+        TextLayout Right(bool ruby)
+        {
+            var text = new AttributedText("hello world");
+            if (ruby)
+            {
+                text.SetRuby(6, 5, new RubyAnnotation("w"));
+            }
+
+            var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]) { Fallback = null, Tracking = 100 };
+            layout.ProcessText(text, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        double InkRight(TextLayout layout) => layout.GetTextData().Where(glyph => glyph.PositionInString >= 0)
+            .Max(glyph => glyph.Rect.Right);
+
+        Assert.That(InkRight(Right(true)), Is.EqualTo(InkRight(Right(false))).Within(0.01));
+    }
+
+    [Test]
+    public void InVerticalText_TheInkMeasuresAcrossTheColumns()
+    {
+        TextLayout Vertical(bool ruby)
+        {
+            var typeface = NotoSansCjk.Value;
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, WritingMode = WritingMode.VerticalRightToLeft,
+            };
+            var attributed = new AttributedText(Text);
+            if (ruby)
+            {
+                attributed.SetRuby(Base, 2, new RubyAnnotation("とてもながいよみがな"));
+            }
+
+            layout.ProcessText(attributed, FontSize, new Size(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        var layout = Vertical(true);
+        var glyphs = layout.GetTextData();
+        var inkWidth = glyphs.Max(glyph => glyph.Rect.Right) - glyphs.Min(glyph => glyph.Rect.Left);
+
+        Assert.That(layout.RealTextDimensions.Width, Is.EqualTo(inkWidth).Within(0.5));
+    }
+
+    [Test]
     public void ABaseTheEllipsisCut_DoesNotGrowItsLine()
     {
         var plain = LayIn(NotoSansCjk, new AttributedText(Text), 4 * FontSize, TextWrapping.NoWrap,

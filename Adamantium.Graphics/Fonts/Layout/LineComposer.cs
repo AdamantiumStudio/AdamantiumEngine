@@ -25,7 +25,7 @@ internal sealed class LineComposer
 
     private readonly record struct Ruby(RubyAnnotation Annotation, double FontSize,
         List<(IFont Font, ShapedGlyph Glyph, int Cluster)> Glyphs, double Width, double Ascent, double Descent,
-        int Items, bool Pending);
+        int Items, bool Pending, bool Spread);
 
     private readonly IFont _font;
     private readonly Glyph _spaceGlyph;
@@ -166,6 +166,7 @@ internal sealed class LineComposer
         int[] rubyAt = null;
         List<Ruby> rubies = null;
         bool[] rubyShown = null;
+        var turned = false;
 
         HashSet<int> composedStarts = null;
         HashSet<int> composedCuts = null;
@@ -710,7 +711,8 @@ internal sealed class LineComposer
                     descent = Math.Max(descent, font.LineDescent * glyphScale);
                 }
 
-                set.Add(new Ruby(annotation, size, glyphs, width, ascent, descent, counts[r], pending));
+                set.Add(new Ruby(annotation, size, glyphs, width, ascent, descent, counts[r], pending,
+                    width > widths[r]));
                 var extra = width - widths[r];
                 if (extra <= 0)
                 {
@@ -751,14 +753,18 @@ internal sealed class LineComposer
 
         int RubyIndex(int index) => rubyAt != null && index >= 0 && index < rubyAt.Length ? rubyAt[index] : -1;
 
-        // The edges a glyph takes on its line: its ink, or for a ruby base the whole room it was spread to.
-        double RightOf(GlyphWordData glyph) => RubyIndex(glyph.PositionInString) >= 0
+        // The edges a glyph takes on its line: its ink, or for a base spread to its annotation the whole room it takes;
+        // once the lines are turned into columns, the ink.
+        double RightOf(GlyphWordData glyph) => Spread(glyph)
             ? Math.Max(InkRight(glyph), glyph.PenX + glyph.Advance)
             : InkRight(glyph);
 
-        double LeftOf(GlyphWordData glyph) => RubyIndex(glyph.PositionInString) >= 0
+        double LeftOf(GlyphWordData glyph) => Spread(glyph)
             ? Math.Min(InkLeft(glyph), glyph.PenX)
             : InkLeft(glyph);
+
+        bool Spread(GlyphWordData glyph) => !turned && RubyIndex(glyph.PositionInString) is var r and >= 0
+                                            && rubies[r].Spread;
 
         // An item of a ruby base with more of the base after it: no line breaks there.
         bool InsideABase(int k) => rubyAt != null && k + 1 < items.Count && items[k].Symbol != '\t'
@@ -1029,7 +1035,7 @@ internal sealed class LineComposer
 
             // A ruby base's line grows to hold its annotation, as CSS's; one whose height is set does not.
             if (withRuby && !setHeight && RubyIndex(glyph.PositionInString) is var r and >= 0
-                && rubies[r].Annotation is { } annotation && (rubyShown == null || rubyShown[r]))
+                && rubies[r].Annotation is { } annotation && !rubies[r].Pending && (rubyShown == null || rubyShown[r]))
             {
                 var ruby = rubies[r];
                 var over = annotation.Position == RubyPosition.Over;
@@ -1755,6 +1761,7 @@ internal sealed class LineComposer
 
         void TurnIntoColumns()
         {
+            turned = true;
             if (slots == null)
             {
                 columnsRight = finalRect.Height;
