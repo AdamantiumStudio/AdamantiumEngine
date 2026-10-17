@@ -586,14 +586,28 @@ internal sealed class LineComposer
             }
 
             var first = items[0];
+            var kerning = first.Attributes?.Kerning ?? options.Kerning;
+            var features = first.Attributes?.Features;
             var shapingOptions = new ShapingOptions(null, first.Attributes?.Language ?? options.Language,
-                first.Attributes?.Features);
+                kerning == TextKerning.Metrics ? features : [.. features ?? [], FontFeature.Kerning.Off]);
             var font = dropCap.Font ?? first.Font;
-            var shaped = TextShaper.Shape(font, text, 0, dropEnd, shapingOptions);
+            var shaped = Shape(font);
             if (!ReferenceEquals(font, first.Font) && shaped.Any(glyph => glyph.GlyphIndex == 0))
             {
                 font = first.Font;
-                shaped = TextShaper.Shape(font, text, 0, dropEnd, shapingOptions);
+                shaped = Shape(font);
+            }
+
+            ShapedGlyph[] Shape(IFont capFont)
+            {
+                var glyphs = TextShaper.Shape(capFont, text, 0, dropEnd, shapingOptions);
+                if (kerning == TextKerning.Optical && OpticalKerning.Measures(capFont)
+                                                   && OpticalKerning.Applies(text, 0, dropEnd))
+                {
+                    OpticalKerning.Apply(capFont, glyphs, 0, glyphs.Length);
+                }
+
+                return glyphs;
             }
 
             double top = 0;

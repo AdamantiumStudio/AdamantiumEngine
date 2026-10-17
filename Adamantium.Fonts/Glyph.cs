@@ -378,6 +378,23 @@ namespace Adamantium.Fonts
 
         public List<LineSegment2D> GetMergedOutlineSegments() => new(mergedOutlinesSegments);
 
+        /// <summary>The outline sampled at <paramref name="rate"/>, as one set of segments with no self-intersections:
+        /// sampled and copied under the glyph's lock, so a glyph sampled on another thread at the same time - the
+        /// atlas rasterizing it - is read whole. Empty for a glyph with no outline.</summary>
+        public List<LineSegment2D> GetMergedOutlineSegments(byte rate)
+        {
+            if (IsEmpty)
+            {
+                return [];
+            }
+
+            lock (lockObject)
+            {
+                Sample(rate);
+                return new List<LineSegment2D>(mergedOutlinesSegments ?? []);
+            }
+        }
+
         internal void SetOutlinesForRate(byte rate, SampledOutline[] outlines)
         {
             sampledOutlinesCache[rate] = outlines;
@@ -515,7 +532,8 @@ namespace Adamantium.Fonts
 
         private Vector3F[] RemoveSelfIntersections(in SampledOutline[] outlines)
         {
-            mergedOutlinesSegments = new List<LineSegment2D>();
+            // Built apart and then put in place whole: the outline is read without the lock while it is made again.
+            var merged = new List<LineSegment2D>();
             var contours = outlines.Where(x => x.Segments is { Length: > 0 }).Select(x => x.Segments).ToArray();
             var segments = contours.SelectMany(x => x).ToArray();
             var contourOf = contours.SelectMany((x, index) => Enumerable.Repeat(index, x.Length)).ToArray();
@@ -581,7 +599,7 @@ namespace Adamantium.Fonts
                 {
                     if (boundary)
                     {
-                        mergedOutlinesSegments.Add(reversed[contourOf[i]] ? new LineSegment2D(segment.End, segment.Start) : segment);
+                        merged.Add(reversed[contourOf[i]] ? new LineSegment2D(segment.End, segment.Start) : segment);
                     }
 
                     continue;
@@ -602,16 +620,17 @@ namespace Adamantium.Fonts
                     var end = pieces[k].Point;
                     if (start != end && IsBoundary(segments, start, end, out var filledOnLeft) && kept.Add((start, end)))
                     {
-                        mergedOutlinesSegments.Add(filledOnLeft == fillsOnLeft
+                        merged.Add(filledOnLeft == fillsOnLeft
                             ? new LineSegment2D(start, end)
                             : new LineSegment2D(end, start));
                     }
                 }
             }
 
+            mergedOutlinesSegments = merged;
             var points = new List<Vector3F>();
 
-            foreach (var segment in mergedOutlinesSegments)
+            foreach (var segment in merged)
             {
                 points.Add(new Vector3F((float)segment.Start.X, (float)segment.Start.Y, 0));
                 points.Add(new Vector3F((float)segment.End.X, (float)segment.End.Y, 0));
