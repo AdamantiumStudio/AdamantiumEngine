@@ -137,6 +137,114 @@ public class BaselineGridTests
         Assert.That(lines.All(baseline => OnGrid(baseline)), Is.True, string.Join(", ", lines));
     }
 
+    [TestCase(TextTrimming.None)]
+    [TestCase(TextTrimming.CharEllipses)]
+    public void InAFixedHeight_EveryLineThatIsKeptStartsInside(TextTrimming trimming)
+    {
+        var layout = Layout(new BaselineGrid(Step));
+        layout.ProcessText(Prose, FontSize, new Size(300, 50), TextWrapping.WrapByWords, trimming,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var tops = Enumerable.Range(0, layout.LineCount).Select(i => layout.GetLine(i).Top).ToArray();
+
+        Assert.That(tops.All(top => top < 50), Is.True, string.Join(", ", tops));
+    }
+
+    [Test]
+    public void InFrames_ALineOfLargerText_StandsOnTheGrid()
+    {
+        const string text = "A first line.\nA LARGER LINE\nAnd a third.\nAnd a fourth.";
+        var attributed = new AttributedText(text).Apply(14, 13, new TextAttributes { FontSize = FontSize * 2 });
+        var layout = Layout(new BaselineGrid(Step));
+        layout.Frames = [new RectangleF(0, 0, 300, 400)];
+        layout.ProcessText(attributed, FontSize, new Size(300, 400), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var lines = Baselines(layout);
+
+        Assert.That(lines.All(baseline => OnGrid(baseline)), Is.True, string.Join(", ", lines));
+    }
+
+    [TestCase(LineBreaking.Greedy, false)]
+    [TestCase(LineBreaking.Paragraph, false)]
+    [TestCase(LineBreaking.Paragraph, true)]
+    public void InFrames_OnlyFirstLines_StandOnTheGrid(LineBreaking breaking, bool paragraphRuns)
+    {
+        var text = Prose + (paragraphRuns ? ParagraphEnd : "\n") + Prose;
+        var attributed = new AttributedText(text);
+        if (paragraphRuns)
+        {
+            attributed.SetParagraph(Prose.Length + 1, Prose.Length, new ParagraphAttributes { MarginLeft = 1 });
+        }
+
+        var layout = Layout(new BaselineGrid(Step, FirstLineOnly: true));
+        layout.LineBreaking = breaking;
+        layout.Frames = [new RectangleF(0, 0, 300, 600)];
+        layout.ProcessText(attributed, FontSize, new Size(300, 600), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var second = Enumerable.Range(0, layout.LineCount).First(i => layout.GetLine(i).Start > Prose.Length);
+
+        Assert.That(OnGrid(Baselines(layout)[second]), Is.True, string.Join(", ", Baselines(layout)));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ADropCap_SpansTheLinesAsTheGridSetsThem(bool inFrames)
+    {
+        var layout = Layout(new BaselineGrid(Step));
+        layout.DropCap = new DropCap(3);
+        if (inFrames)
+        {
+            layout.Frames = [new RectangleF(0, 0, 300, 600)];
+        }
+
+        layout.ProcessText(Prose, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var cap = layout.GetTextData().Single(glyph => glyph.PositionInString == 0);
+        var font = layout.Font;
+        var capTop = layout.GetLine(0).Baseline - font.CapsHeight * FontSize / font.UnitsPerEm;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cap.FontSize, Is.GreaterThan(FontSize * 2.5), "the cap is made");
+            Assert.That(cap.Rect.Top, Is.EqualTo(capTop).Within(1.5), "its top at the cap height of the first line");
+            Assert.That(cap.Rect.Bottom, Is.EqualTo(layout.GetLine(2).Baseline).Within(1.5));
+        });
+    }
+
+    [TestCase(VerticalTextAlignment.Center)]
+    [TestCase(VerticalTextAlignment.Bottom)]
+    public void ATextTallerThanItsArea_MovesNoFurtherThanAsked(VerticalTextAlignment alignment)
+    {
+        var plain = Lay(Prose, null, height: 50, alignment: alignment).GetLine(0).Top;
+        var gridded = Lay(Prose, new BaselineGrid(Step), height: 50, alignment: alignment).GetLine(0).Top;
+
+        Assert.That(gridded, Is.GreaterThanOrEqualTo(plain - 0.5));
+    }
+
+    [Test]
+    public void AFrameTooShortForTheGriddedFirstLine_PassesItOn()
+    {
+        var layout = Layout(new BaselineGrid(40));
+        layout.Frames = [new RectangleF(0, 41, 300, 22), new RectangleF(320, 0, 300, 200)];
+        layout.ProcessText(Prose, FontSize, new Size(620, 200), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var first = layout.GetTextData()[0];
+
+        Assert.That(first.Rect.X, Is.GreaterThanOrEqualTo(320), "set in the second frame");
+    }
+
+    [Test]
+    public void AGrid_IsFinite()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(double.PositiveInfinity));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(double.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(Step, double.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(Step) with { Offset = double.NegativeInfinity });
+        });
+    }
+
     [Test]
     public void VerticalText_IsLeftAsItIs()
     {

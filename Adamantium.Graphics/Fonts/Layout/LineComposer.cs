@@ -50,6 +50,7 @@ internal sealed class LineComposer
 
         var scale = fontSize / _font.UnitsPerEm;
         var vertical = options.Vertical;
+        var grid = vertical ? null : options.BaselineGrid;
         IReadOnlyList<RectangleF> frames = options.Frames;
         IReadOnlyList<RectangleF> exclusions = options.Exclusions;
         double columnsRight = 0;
@@ -123,7 +124,7 @@ internal sealed class LineComposer
         // Per slot: where the next one is looked for (frame, top, rows tried in it), and the room above and the height
         // it was found for, so a line that turns out otherwise finds its slot again.
         var slotCursors = new List<(int Frame, double Top, int Rows)>();
-        var slotBases = new List<(double Gap, double Height)>();
+        var slotBases = new List<(double Gap, double Height, bool Gridded)>();
         var frameRects = slots != null ? frames.ToArray() : null;
         if (slots != null && !HasSlot(0))
         {
@@ -182,6 +183,7 @@ internal sealed class LineComposer
         }
 
         NoteLine(0, 0);
+        height = OnGrid(height, RowBaseline(0), 0);
         var wordStart = dropItems;
         while (wordStart <= items.Count)
         {
@@ -535,7 +537,11 @@ internal sealed class LineComposer
         }
 
         // A drop cap spans lines of the first paragraph, as far apart as its lines are.
-        double DropPitch() => OwnLineHeight(0) + SpacingAfter(0);
+        double DropPitch()
+        {
+            var pitch = OwnLineHeight(0) + SpacingAfter(0);
+            return grid is { FirstLineOnly: false } ? Math.Ceiling(pitch / grid.Step - 1e-6) * grid.Step : pitch;
+        }
 
         List<GlyphWordData> DropCapGlyphs()
         {
@@ -654,7 +660,7 @@ internal sealed class LineComposer
 
         void NewLine()
         {
-            height += OwnLineHeight(lineIndex) + SpacingAfter(lineIndex) + pendingGap;
+            height = NextTop(pendingGap);
             lineIndex++;
             NoteLine(lineIndex, pendingGap);
             pendingGap = 0;
@@ -677,7 +683,7 @@ internal sealed class LineComposer
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
         void ForgetSlotsFrom(int line, double gap)
         {
-            if (slots != null && line < slots.Count && slotBases[line] != (gap, OwnLineHeight(line)))
+            if (slots != null && line < slots.Count && slotBases[line] != (gap, OwnLineHeight(line), GridsLine(line)))
             {
                 slots.RemoveRange(line, slots.Count - line);
                 slotCursors.RemoveRange(line, slotCursors.Count - line);
@@ -698,11 +704,14 @@ internal sealed class LineComposer
         double SpacingAfter(int line) =>
             double.IsFinite(options.LineSpacing) ? Math.Max(options.LineSpacing, 1 - OwnLineHeight(line)) : 0;
 
+        // The top of the line after this one: below it by its height and the room given, on the grid.
+        double NextTop(double gap) => OnGrid(height + OwnLineHeight(lineIndex) + SpacingAfter(lineIndex) + gap,
+            RowBaseline(lineIndex + 1), lineIndex + 1);
+
         // The top that puts the line's baseline on the first grid line at or below it.
         double OnGrid(double top, double lineBaseline, int line)
         {
-            if (options.BaselineGrid is not { Step: > 0 } grid || vertical
-                || (grid.FirstLineOnly && !OpensParagraph(line)))
+            if (!GridsLine(line))
             {
                 return top;
             }
@@ -711,14 +720,32 @@ internal sealed class LineComposer
             return grid.Offset + steps * grid.Step - lineBaseline;
         }
 
+        bool GridsLine(int line) => grid != null && (!grid.FirstLineOnly || OpensParagraph(line));
+
         // The first line of the text or of a paragraph: one its paragraph opens, or one after a hard break.
         bool OpensParagraph(int line) =>
             line == 0 || LineState(line).Opens || linesAfterBreaks?.Contains(line) == true;
 
+        // A hard break that is not a line separator starts the line after it as a first line.
+        void NoteParagraphBreak(int cluster, int nextLine)
+        {
+            if (grid is { FirstLineOnly: true } && cluster >= 0 && cluster < text.Length && text[cluster] != LineSeparator)
+            {
+                (linesAfterBreaks ??= []).Add(nextLine);
+            }
+        }
+
         // A shift of the whole text that keeps its lines on the grid: whole steps of it, no further than asked.
-        double GridSteps(double shift) => options.BaselineGrid is { Step: > 0 } grid && !vertical
-            ? Math.Floor(shift / grid.Step + 1e-6) * grid.Step
-            : shift;
+        double GridSteps(double shift)
+        {
+            if (grid == null)
+            {
+                return shift;
+            }
+
+            var steps = shift >= 0 ? Math.Floor(shift / grid.Step + 1e-6) : Math.Ceiling(shift / grid.Step - 1e-6);
+            return steps * grid.Step;
+        }
 
         // Where a row's baseline lies in it, as the lines of its paragraph are set.
         double RowBaseline(int line) => OwnSetHeight(line) is > 0 and var set && double.IsFinite(set)
@@ -766,7 +793,8 @@ internal sealed class LineComposer
             {
                 var frame = frames[f];
                 var rowTop = OnGrid(top, RowBaseline(line), line);
-                if ((rows > 0 && rowTop + rowHeight > frame.Bottom + 1e-6) || rows >= 4 * (text.Length + 1))
+                if (((rows > 0 || rowTop > top + 1e-6) && rowTop + rowHeight > frame.Bottom + 1e-6)
+                    || rows >= 4 * (text.Length + 1))
                 {
                     f++;
                     rows = 0;
@@ -780,7 +808,7 @@ internal sealed class LineComposer
                 {
                     slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, rowTop));
                     slotCursors.Add((f, top, rows));
-                    slotBases.Add((gap, rowHeight));
+                    slotBases.Add((gap, rowHeight, GridsLine(line)));
                     return true;
                 }
             }
@@ -877,8 +905,7 @@ internal sealed class LineComposer
         bool HasRoomBelow() => (options.MaxLines <= 0 || lineIndex + 1 < options.MaxLines)
                                && (slots != null
                                    ? HasSlot(lineIndex + 1)
-                                   : height + OwnLineHeight(lineIndex) + SpacingAfter(lineIndex) + pendingGap
-                                     < textArea.Height);
+                                   : NextTop(pendingGap) < textArea.Height);
 
         bool CutsOverflow() => slots != null || options.MaxLines > 0;
 
@@ -1000,6 +1027,7 @@ internal sealed class LineComposer
                     if (start > dropItems && items[start - 1].Symbol == '\n')
                     {
                         BreakInto(items[start].Cluster, composedLines);
+                        NoteParagraphBreak(items[start - 1].Cluster, composedLines);
                     }
 
                     justified = (lineParagraph?.Alignment ?? renderingParameters.HorizontalTextAlignment)
@@ -1315,8 +1343,9 @@ internal sealed class LineComposer
                 var slot = SlotOf(i);
                 lineFrames[i] = slot.Frame;
                 shiftsX[i] = frames[slot.Frame].Left;
-                shiftsY[i] = slot.Top - lineTops[i];
-                lineTops[i] = slot.Top;
+                var top = OnGrid(slot.Top, lineBaselines[i], i);
+                shiftsY[i] = top - lineTops[i];
+                lineTops[i] = top;
             }
 
             foreach (var glyph in glyphsData)
@@ -1637,6 +1666,7 @@ internal sealed class LineComposer
                 {
                     case '\n':
                         BreakInto(item.Cluster + 1, lineIndex + 1);
+                        NoteParagraphBreak(item.Cluster, lineIndex + 1);
                         if (renderingParameters.TextWrapping == TextWrapping.WrapByWords
                             && renderingParameters.TextTrimming != TextTrimming.None
                             && !HasRoomBelow()
@@ -1661,11 +1691,6 @@ internal sealed class LineComposer
                         if (CutsOverflow() && !HasRoomBelow())
                         {
                             return i < items.Count - 1 && Overset(i + 1);
-                        }
-
-                        if (item.Cluster >= 0 && item.Cluster < text.Length && text[item.Cluster] != LineSeparator)
-                        {
-                            (linesAfterBreaks ??= []).Add(lineIndex + 1);
                         }
 
                         NewLine();
@@ -1717,7 +1742,7 @@ internal sealed class LineComposer
                                         var glyphsDataCopy = glyphsData.ToArray();
                                         if (HasRoomBelow())
                                         {
-                                            height += OwnLineHeight(lineIndex) + SpacingAfter(lineIndex);
+                                            height = NextTop(0);
                                             lineIndex++;
                                             NoteLine(lineIndex, 0);
                                             glyphBase = height + baseLine;
@@ -2456,15 +2481,13 @@ internal sealed class LineComposer
                 mixed = paragraphHeights;
             }
 
-            var gridded = false;
             for (var i = 0; i < lineCount; i++)
             {
                 var top = i == 0 ? textArea.Y : lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i);
                 lineTops[i] = OnGrid(top, lineBaselines[i], i);
-                gridded |= lineTops[i] != top;
             }
 
-            mixed |= gridded;
+            mixed |= grid != null;
 
             var aligned = false;
             foreach (var glyph in glyphsData)

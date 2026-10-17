@@ -19,7 +19,9 @@ All packages share one version.
 - A baseline grid, as InDesign's: `TextLayout.BaselineGrid` (`BaselineGrid(Step, Offset, FirstLineOnly)`). Every line
   is moved down to the first grid line at or below its baseline, never up, so lines of a larger size and the columns of
   `Frames` keep the grid's rhythm; `Offset` puts the grid of an element above under this text; `FirstLineOnly` puts only
-  each paragraph's first line on it. A text aligned to the center or bottom moves by whole steps. Horizontal text only.
+  each paragraph's first line on it. A text aligned to the center or bottom moves by whole steps, never further than
+  asked; a drop cap spans its lines as the grid sets them; a frame that cannot hold a line on the grid passes it to the
+  next. The step is finite and more than 0, the offset finite. Horizontal text only.
 
 - `SharedSurface.LatchCopy` / `LatchedCopy`: the consumer's copy of a shared surface's newest frame, made outside a
   render pass once per frame the producer finished, and sampled in place of the surface. The copy waits for the frame
