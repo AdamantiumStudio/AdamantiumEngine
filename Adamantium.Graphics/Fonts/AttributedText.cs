@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Adamantium.Fonts.Text;
 
 namespace Adamantium.Graphics.Fonts;
 
 /// <summary>Text with attributes over ranges of it: features, language, colors, background and lines; paragraphs; ruby
-/// annotations; and named paragraph and character styles. What a range ends up with is, each over the one before: the defaults, its
-/// paragraph's style, its character style, and what was applied to it itself.</summary>
+/// annotations; and named paragraph and character styles. What a range ends up with is, each over the one before:
+/// the defaults, its paragraph's style, its character style, and what was applied to it itself.</summary>
 public sealed class AttributedText
 {
     private readonly List<AttributeRun> _own = [];
@@ -18,8 +19,12 @@ public sealed class AttributedText
     private readonly object _resolving = new();
     private List<AttributeRun> _runs = [];
     private List<ParagraphRun> _resolvedParagraphs = [];
-    private volatile bool _resolved;
+    // What the resolved lists were made from: the edits of this text, its styles' stamp, and the count of style
+    // edits anywhere when that stamp was last found current.
+    private int _edits;
+    private int _resolvedEdits = -1;
     private long _stamp;
+    private long _styleEditsSeen = -1;
 
     public AttributedText(string text, TextAttributes defaults = null)
     {
@@ -82,7 +87,7 @@ public sealed class AttributedText
 
         _own.Clear();
         _own.AddRange(result);
-        _resolved = false;
+        Interlocked.Increment(ref _edits);
         return this;
     }
 
@@ -97,7 +102,7 @@ public sealed class AttributedText
         }
 
         Replace(_characterStyles, start, end, style);
-        _resolved = false;
+        Interlocked.Increment(ref _edits);
         return this;
     }
 
@@ -131,7 +136,7 @@ public sealed class AttributedText
         _paragraphs.RemoveAll(run => (run.Start < end && run.End > start) || run.Start == start);
         var at = _paragraphs.FindIndex(run => run.Start > start);
         _paragraphs.Insert(at < 0 ? _paragraphs.Count : at, new ParagraphRun(start, end - start, attributes));
-        _resolved = false;
+        Interlocked.Increment(ref _edits);
         return this;
     }
 
@@ -153,7 +158,7 @@ public sealed class AttributedText
             _paragraphStyles.Insert(at < 0 ? _paragraphStyles.Count : at, (start, end, style));
         }
 
-        _resolved = false;
+        Interlocked.Increment(ref _edits);
         return this;
     }
 
@@ -267,16 +272,20 @@ public sealed class AttributedText
     // Built anew and published whole, so a reader on another thread keeps the lists it took.
     private void Resolve()
     {
-        var stamp = _characterStyles.Count + _paragraphStyles.Count > 0 ? StylesStamp() : 0;
-        if (_resolved && stamp == _stamp)
+        var edits = Volatile.Read(ref _edits);
+        var styled = _characterStyles.Count + _paragraphStyles.Count > 0;
+        var styleEdits = styled ? TextStyleEdits.Count : 0;
+        if (Volatile.Read(ref _resolvedEdits) == edits && (!styled || Interlocked.Read(ref _styleEditsSeen) == styleEdits))
         {
             return;
         }
 
         lock (_resolving)
         {
-            if (_resolved && stamp == _stamp)
+            var stamp = styled ? StylesStamp() : 0;
+            if (_resolvedEdits == edits && stamp == _stamp)
             {
+                Interlocked.Exchange(ref _styleEditsSeen, styleEdits);
                 return;
             }
 
@@ -285,7 +294,8 @@ public sealed class AttributedText
             _resolvedParagraphs = paragraphs;
             _runs = runs;
             _stamp = stamp;
-            _resolved = true;
+            Interlocked.Exchange(ref _styleEditsSeen, styleEdits);
+            Volatile.Write(ref _resolvedEdits, edits);
         }
     }
 
@@ -361,29 +371,69 @@ public sealed class AttributedText
     private List<ParagraphRun> ResolveParagraphs()
     {
         var resolved = new List<ParagraphRun>(_paragraphs.Count + _paragraphStyles.Count);
-        int own = 0, styled = 0;
-        while (own < _paragraphs.Count || styled < _paragraphStyles.Count)
+        if (_paragraphStyles.Count == 0)
         {
-            var ownStart = own < _paragraphs.Count ? _paragraphs[own].Start : int.MaxValue;
-            var styleStart = styled < _paragraphStyles.Count ? _paragraphStyles[styled].Start : int.MaxValue;
-            if (ownStart == styleStart)
+            resolved.AddRange(_paragraphs);
+            return resolved;
+        }
+
+        // Stretch by stretch between the edges of both, so where they disagree each part takes what covers it.
+        var edges = new List<int>((_paragraphs.Count + _paragraphStyles.Count) * 2);
+        foreach (var run in _paragraphs)
+        {
+            edges.Add(run.Start);
+            edges.Add(run.End);
+        }
+
+        foreach (var (start, end, _) in _paragraphStyles)
+        {
+            edges.Add(start);
+            edges.Add(end);
+        }
+
+        edges.Sort();
+        int own = 0, styled = 0;
+        for (var e = 0; e + 1 < edges.Count; e++)
+        {
+            var (from, to) = (edges[e], edges[e + 1]);
+            if (to <= from)
             {
-                var (_, styleEnd, style) = _paragraphStyles[styled];
-                var run = _paragraphs[own];
-                resolved.Add(new ParagraphRun(run.Start, Math.Max(run.End, styleEnd) - run.Start,
-                    style.ResolvedParagraph.With(run.Attributes)));
+                continue;
+            }
+
+            while (own < _paragraphs.Count && _paragraphs[own].End <= from)
+            {
                 own++;
+            }
+
+            while (styled < _paragraphStyles.Count && _paragraphStyles[styled].End <= from)
+            {
                 styled++;
             }
-            else if (ownStart < styleStart)
+
+            var ownRun = own < _paragraphs.Count && _paragraphs[own].Start <= from ? _paragraphs[own].Attributes : null;
+            var style = styled < _paragraphStyles.Count && _paragraphStyles[styled].Start <= from
+                ? _paragraphStyles[styled].Style
+                : null;
+            if (ownRun != null || style != null)
             {
-                resolved.Add(_paragraphs[own++]);
+                resolved.Add(new ParagraphRun(from, to - from,
+                    style == null ? ownRun : style.ResolvedParagraph.With(ownRun)));
             }
-            else
-            {
-                var (start, end, style) = _paragraphStyles[styled++];
-                resolved.Add(new ParagraphRun(start, end - start, style.ResolvedParagraph));
-            }
+        }
+
+        // The empty paragraph after a closing U+2029.
+        var ownLast = _paragraphs.Count > 0 && _paragraphs[^1] is { Length: 0 } emptyOwn && emptyOwn.Start == Text.Length
+            ? emptyOwn.Attributes
+            : null;
+        var styleLast = _paragraphStyles[^1] is var (lastStart, lastEnd, lastStyle) && lastStart == lastEnd
+                                                                                    && lastStart == Text.Length
+            ? lastStyle
+            : null;
+        if (ownLast != null || styleLast != null)
+        {
+            resolved.Add(new ParagraphRun(Text.Length, 0,
+                styleLast == null ? ownLast : styleLast.ResolvedParagraph.With(ownLast)));
         }
 
         return resolved;

@@ -143,6 +143,41 @@ public class TextStyleTests
     }
 
     [Test]
+    public void WhereAStyleAndAParagraphsOwnAttributesDisagree_EachPartTakesWhatCoversIt()
+    {
+        var p = ((char)0x2029).ToString();
+        var style = new ParagraphStyle("Spaced", new ParagraphAttributes { SpaceBefore = 10 });
+        var text = new AttributedText("aaaa" + p + "bbbb" + p + "cccc")
+            .SetParagraph(0, 5, new ParagraphAttributes { MarginLeft = 5 })
+            .SetParagraph(5, 5, new ParagraphAttributes { MarginLeft = 50 })
+            .SetParagraphStyle(0, 10, style);
+        var paragraphs = text.Paragraphs;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text.ParagraphAt(2)!.Value.Attributes.MarginLeft, Is.EqualTo(5));
+            Assert.That(text.ParagraphAt(7)!.Value.Attributes.MarginLeft, Is.EqualTo(50));
+            Assert.That(text.ParagraphAt(7)!.Value.Attributes.SpaceBefore, Is.EqualTo(10));
+            Assert.That(text.ParagraphAt(12), Is.Null);
+            for (var i = 1; i < paragraphs.Count; i++)
+            {
+                Assert.That(paragraphs[i].Start, Is.GreaterThanOrEqualTo(paragraphs[i - 1].End), "none overlap");
+            }
+        });
+    }
+
+    [Test]
+    public void ParagraphAttributes_AreEqualByWhatTheySay()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(new ParagraphAttributes { MarginLeft = 0, LineHeight = double.NaN }, Is.EqualTo(new ParagraphAttributes()));
+            Assert.That(new ParagraphAttributes { MarginLeft = 0 }.GetHashCode(), Is.EqualTo(new ParagraphAttributes().GetHashCode()));
+            Assert.That(new ParagraphAttributes { MarginLeft = 1 }, Is.Not.EqualTo(new ParagraphAttributes()));
+        });
+    }
+
+    [Test]
     public void ParagraphAttributes_TakeOnlyTheFieldsSetOverThem()
     {
         var under = new ParagraphAttributes { MarginLeft = 10, LineHeight = 30, Alignment = HorizontalTextAlignment.Center };

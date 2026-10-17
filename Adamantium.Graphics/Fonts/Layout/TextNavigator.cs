@@ -182,7 +182,7 @@ internal sealed class TextNavigator
         }
 
         double fontSize = (float)_laid.FontSize;
-        foreach (var run in _laid.Attributed.Runs)
+        foreach (var run in _laid.AttributeRuns ?? _laid.Attributed.Runs)
         {
             var attributes = run.Attributes;
             var decorations = attributes.Decorations ?? TextDecorations.None;

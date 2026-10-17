@@ -31,7 +31,7 @@ internal sealed class GlyphRunShaper
         var items = new List<ShapedItem>(text.Length);
         var runs = attributed?.Runs;
         var runIndex = 0;
-        foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, attributed, fontSize,
+        foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, runs, fontSize,
                      options.Kerning), attributed), split))
         {
             var language = attributes?.Language ?? options.Language;
@@ -354,15 +354,14 @@ internal sealed class GlyphRunShaper
     }
 
     private IEnumerable<(int Start, int End, TextAttributes Attributes)> ShapingSegments(string text,
-        AttributedText attributed, double fontSize, TextKerning kerning)
+        IReadOnlyList<AttributeRun> runs, double fontSize, TextKerning kerning)
     {
-        if (attributed == null || attributed.Runs.Count == 0)
+        if (runs == null || runs.Count == 0)
         {
             yield return (0, text.Length, null);
             yield break;
         }
 
-        var runs = attributed.Runs;
         var start = runs[0].Start;
         var attributes = runs[0].Attributes;
         for (var i = 1; i < runs.Count; i++)

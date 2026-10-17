@@ -1,3 +1,5 @@
+using System;
+
 namespace Adamantium.Graphics.Fonts;
 
 /// <summary>How a paragraph stands on the page. Lengths are in the units the text is laid out in; one that is no
@@ -36,6 +38,16 @@ public sealed record ParagraphAttributes
     /// <summary>The height of its lines, as the layout's line height: larger text may still grow a line. NaN keeps the
     /// layout's.</summary>
     public double LineHeight { get => _lineHeight ?? double.NaN; init => _lineHeight = value; }
+
+    /// <summary>Whether the paragraphs stand alike: the fields' values, whether set or not.</summary>
+    public bool Equals(ParagraphAttributes other) =>
+        other != null && Alignment == other.Alignment && MarginLeft.Equals(other.MarginLeft)
+        && MarginRight.Equals(other.MarginRight) && SpaceBefore.Equals(other.SpaceBefore)
+        && SpaceAfter.Equals(other.SpaceAfter) && TextIndent.Equals(other.TextIndent)
+        && LineHeight.Equals(other.LineHeight);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Alignment, MarginLeft, MarginRight, SpaceBefore, SpaceAfter, TextIndent, LineHeight);
 
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public ParagraphAttributes With(ParagraphAttributes over)

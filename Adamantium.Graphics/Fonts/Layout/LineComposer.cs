@@ -89,6 +89,7 @@ internal sealed class LineComposer
             ? DropCapEnd(text, options.DropCap)
             : 0;
         var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
+        var attributeRuns = attributed?.Runs;
         var items = _shaper.Shape(text, attributed, fontSize, dropEnd, vertical, options, paragraphs, graphemes,
             out var hasPendingFonts);
         var tabStop = _font.GetAdvanceWidth(_spaceGlyph.Index) * scale * Math.Max(options.TabSize, 1);
@@ -409,6 +410,7 @@ internal sealed class LineComposer
         {
             Text = text,
             Attributed = attributed,
+            AttributeRuns = attributeRuns,
             FontSize = fontSize,
             Font = _font,
             Options = options,
