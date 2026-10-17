@@ -42,8 +42,10 @@ namespace Adamantium.Fonts.TextureGeneration
         /// several fonts share (<see cref="KeyOf"/>).</summary>
         public ulong Key { get; set; }
 
-        /// <summary>The key of glyph <paramref name="glyphIndex"/> of <paramref name="typeface"/> in a shared atlas.</summary>
-        public static ulong KeyOf(Typeface typeface, uint glyphIndex) => (ulong)(uint)typeface.Id << 32 | glyphIndex;
+        /// <summary>The key of glyph <paramref name="glyphIndex"/> of <paramref name="typeface"/> in a shared atlas, by the
+        /// outlines it draws (<see cref="Typeface.OutlinesId"/>): instances that vary only metrics and colors share
+        /// their font's cells.</summary>
+        public static ulong KeyOf(Typeface typeface, uint glyphIndex) => (ulong)(uint)typeface.OutlinesId << 32 | glyphIndex;
 
         public byte[] Pixels { get; set; }
 

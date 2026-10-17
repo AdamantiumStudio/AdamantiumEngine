@@ -168,12 +168,12 @@ public class SvgGlyphTests
     }
 
     [Test]
-    public void AnArc_IsCurvesOfAnEighthOfATurnAtMost()
+    public void AnArc_IsCurvesOfAQuarterTurnAtMost()
     {
         Convert("<path id=\"glyph5\" d=\"M9,5 A4 4 0 1 1 1,5 A4 4 0 1 1 9,5 Z\"/>");
 
         var points = outlines.Single().Single();
-        Assert.That(points.Count(p => p.IsControl), Is.EqualTo(16), "a circle is eight cubic curves");
+        Assert.That(points.Count(p => p.IsControl), Is.EqualTo(8), "a circle is four cubic curves");
         Assert.That(points.Where(p => !p.IsControl).All(p => Math.Abs(Math.Sqrt((p.X - 5) * (p.X - 5) + (p.Y + 5) * (p.Y + 5)) - 4) < 1e-9));
     }
 

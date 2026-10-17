@@ -12,6 +12,8 @@ All packages share one version.
   runs red along it and the Z axis blue, and the grid fades out towards its edge; what stands on it hides it. Drawn by
   the editor overlay with its own `GridEffect`, from the eye's place modulo each level's cells, so the lines hold still
   however far the eye has gone. Colors, line width, the cell size and the plane's y (`PlaneY`) are settings.
+- `Typeface.OutlinesId`: the typeface whose glyphs it draws with the same outlines. `GlyphTextureData.KeyOf` keys atlas
+  cells by it.
 
 - `TextLayout.HyphenLimit`, as InDesign's hyphen limit: the most lines in a row that may end in a hyphen breaking a
   word (0, the default, sets none); hyphens of the text itself are not counted. Past it a word goes down whole, unless
@@ -475,6 +477,12 @@ All packages share one version.
   drew them too, as hiding was checked inside the walk's action, which could not stop the walk. Picking skips it with
   its subtree as well: a hidden model still took the pointer and stopped the ray from reaching what is behind it.
   `Entity.VisitInDepth` walks a tree whose visit says whether to go under the entity it is given.
+- Curves of a glyph are cut into as many chords as keep each within 1/1024 of the glyph's size: a long curve, cut into a
+  fixed five, sagged inside it - a quarter arc of radius 480 by some four units - and a cubic curve could lose its last
+  chord. Arcs of SVG glyphs are cut by a quarter turn instead of an eighth.
+- An instance of a variable font that varies only advances, metrics or colors - no outline variations - draws with its
+  font's glyphs and atlas cells: each instance rasterized the same outlines again, and animating such an axis filled
+  the atlas.
 - Trimmed text in a fixed height sets only lines that fit whole: at two and a half lines high the third line stood half
   shown, its ellipsis with it. Untrimmed, a line that starts inside is still set and cut by the area, as CSS clips it.
 - A composite glyph flagged `USE_MY_METRICS` takes its component's advance and origin in a variable font without
