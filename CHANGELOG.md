@@ -16,6 +16,13 @@ All packages share one version.
   vertical text and other scripts keep the font's pairs, and two letters of different sizes are left as they are.
   `Glyph.GetMergedOutlineSegments(rate)` samples and reads the outline under the glyph's lock.
 
+- A baseline grid, as InDesign's: `TextLayout.BaselineGrid` (`BaselineGrid(Step, Offset, FirstLineOnly)`). Every line
+  is moved down to the first grid line at or below its baseline, never up, so lines of a larger size and the columns of
+  `Frames` keep the grid's rhythm; `Offset` puts the grid of an element above under this text; `FirstLineOnly` puts only
+  each paragraph's first line on it. A text aligned to the center or bottom moves by whole steps, never further than
+  asked; a drop cap spans its lines as the grid sets them; a frame that cannot hold a line on the grid passes it to the
+  next. The step is finite and more than 0, the offset finite. Horizontal text only.
+
 - `SharedSurface.LatchCopy` / `LatchedCopy`: the consumer's copy of a shared surface's newest frame, made outside a
   render pass once per frame the producer finished, and sampled in place of the surface. The copy waits for the frame
   on the produce timeline and signals the consume timeline once done, so the producer writes its next frame only after
@@ -428,6 +435,9 @@ All packages share one version.
   weight of 600 or more on a lighter face, an italic or oblique style on an upright one, only as allowed.
 
 ### Fixed
+
+- In `Frames`, a line of larger text no longer covers the lines after it: once it is set, the lines below are placed
+  under it, so they keep inside their frame, out of the exclusions and in the overset when they no longer fit.
 
 - An imported `SharedSurface` takes the memory over from its producer in the layout the producer keeps it in, instead of
   moving it out of `Undefined`, which allows a driver to discard a frame the producer had already written.
