@@ -430,6 +430,64 @@ public class RubyTests
     }
 
     [Test]
+    public void ABase_TakesWholeCharacters()
+    {
+        var text = new AttributedText("aéb").SetRuby(1, 1, new RubyAnnotation("x"));
+
+        Assert.That((text.Rubies[0].Start, text.Rubies[0].Length), Is.EqualTo((1, 2)));
+    }
+
+    [Test]
+    public void OnABaselineGrid_InAFixedHeight_EveryLineKeptStartsInside()
+    {
+        var text = new AttributedText(Text + Text + Text + Text);
+        for (var i = 0; i < 4; i++)
+        {
+            text.SetRuby(i * Text.Length + Base, 2, new RubyAnnotation("かんじ"));
+        }
+
+        var layout = LayIn(NotoSansCjk, text, 8 * FontSize, height: 100, trimming: TextTrimming.CharEllipses,
+            setUp: set => set.BaselineGrid = new BaselineGrid(24));
+        var tops = Enumerable.Range(0, layout.LineCount).Select(i => layout.GetLine(i).Top).ToArray();
+
+        Assert.That(tops.All(top => top < 100), Is.True, string.Join(", ", tops));
+    }
+
+    [Test]
+    public void ADropCapThatDoesNotFit_LeavesTheRubyThere()
+    {
+        var layout = LayIn(NotoSansCjk, new AttributedText(Text).SetRuby(0, 2, new RubyAnnotation("にほん")), 60,
+            setUp: set => set.DropCap = new DropCap(2));
+
+        Assert.That(Annotation(layout), Is.Not.Empty);
+    }
+
+    [Test]
+    public void ARubyStartingInADropCap_KeepsTheRestOfItsBase()
+    {
+        var layout = LayIn(NotoSansCjk, new AttributedText(Text + Text + Text).SetRuby(0, 2, new RubyAnnotation("ほん")),
+            200, setUp: set => set.DropCap = new DropCap(2));
+        var second = layout.GetTextData().Single(glyph => glyph.PositionInString == 1);
+        var annotation = Annotation(layout);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(annotation, Is.Not.Empty);
+            Assert.That((Left(annotation) + Right(annotation)) / 2, Is.EqualTo(second.PenX + second.Advance / 2).Within(0.01));
+        });
+    }
+
+    [Test]
+    public void ATabInABase_StillReachesItsStop()
+    {
+        var plain = LayIn(SourceSans, new AttributedText("ab\tcd"), 400);
+        var layout = LayIn(SourceSans, new AttributedText("ab\tcd").SetRuby(0, 5, new RubyAnnotation("x")), 400);
+
+        Assert.That(layout.GetTextData().Single(glyph => glyph.PositionInString == 3).PenX,
+            Is.EqualTo(plain.GetTextData().Single(glyph => glyph.PositionInString == 3).PenX).Within(0.01));
+    }
+
+    [Test]
     public void SettingARuby_ReplacesTheOnesItOverlaps_AndAnEmptyOneRemovesThem()
     {
         var text = new AttributedText(Text)

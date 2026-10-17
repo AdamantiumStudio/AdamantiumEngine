@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.Fonts.Text;
 
 namespace Adamantium.Graphics.Fonts;
 
@@ -10,6 +11,7 @@ public sealed class AttributedText
     private readonly List<AttributeRun> _runs = [];
     private readonly List<ParagraphRun> _paragraphs = [];
     private readonly List<RubyRun> _rubies = [];
+    private bool[] _graphemes;
 
     public AttributedText(string text, TextAttributes defaults = null)
     {
@@ -92,8 +94,8 @@ public sealed class AttributedText
     /// <summary>The ruby bases, in text order, not overlapping.</summary>
     public IReadOnlyList<RubyRun> Rubies => _rubies;
 
-    /// <summary>Sets a ruby annotation over a range, its base: the base stays on one line and the annotation stands
-    /// centered over it. It replaces any ruby it overlaps; an empty annotation removes them.</summary>
+    /// <summary>Sets a ruby annotation over a range, its base, widened to whole characters: the base stays on one line
+    /// and the annotation stands centered over it. It replaces any ruby it overlaps; an empty annotation removes them.</summary>
     public AttributedText SetRuby(int start, int length, RubyAnnotation annotation)
     {
         var end = Math.Min(start + length, Text.Length);
@@ -102,6 +104,10 @@ public sealed class AttributedText
         {
             return this;
         }
+
+        _graphemes ??= TextBoundaries.Graphemes(Text);
+        start = _graphemes[start] ? start : TextBoundaries.Previous(_graphemes, start);
+        end = _graphemes[end] ? end : TextBoundaries.Next(_graphemes, end);
 
         _rubies.RemoveAll(run => run.Start < end && run.End > start);
         if (string.IsNullOrEmpty(annotation?.Text))

@@ -385,8 +385,9 @@ internal sealed class GlyphRunShaper
     // A short text set apart from the text, as a ruby annotation: in the font, or the fallback's font for what it lacks;
     // kept for the layouts after this one.
     internal List<(IFont Font, ShapedGlyph Glyph, int Cluster)> ShapeAlone(string text, IFont font, string language,
-        bool vertical, TextLayoutOptions options)
+        bool vertical, TextLayoutOptions options, out bool pending)
     {
+        pending = false;
         var key = (text, font, language, vertical, options.Fallback);
         if (_alone.TryGetValue(key, out var known))
         {
@@ -395,7 +396,6 @@ internal sealed class GlyphRunShaper
 
         var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
         var glyphs = new List<(IFont Font, ShapedGlyph Glyph, int Cluster)>(text.Length);
-        var pending = false;
         foreach (var (start, end, runFont, runPending) in FontRuns(text, graphemes, 0, text.Length, font, language, options))
         {
             pending |= runPending;

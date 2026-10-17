@@ -25,7 +25,7 @@ internal sealed class LineComposer
 
     private readonly record struct Ruby(RubyAnnotation Annotation, double FontSize,
         List<(IFont Font, ShapedGlyph Glyph, int Cluster)> Glyphs, double Width, double Ascent, double Descent,
-        int Items);
+        int Items, bool Pending);
 
     private readonly IFont _font;
     private readonly Glyph _spaceGlyph;
@@ -105,6 +105,7 @@ internal sealed class LineComposer
         var textArea = renderingParameters.TextArea;
         double width = 0;
         double height = textArea.Y;
+        double lineRawTop = textArea.Y;
         double cursorPosition = 0;
         double wordStartPosition = 0;
         var glyphsData = new List<GlyphWordData>(items.Count);
@@ -163,7 +164,7 @@ internal sealed class LineComposer
         }
 
         int[] rubyAt = null;
-        var rubies = attributed is { Rubies.Count: > 0 } ? SetUpRubies() : null;
+        List<Ruby> rubies = null;
 
         HashSet<int> composedStarts = null;
         HashSet<int> composedCuts = null;
@@ -179,6 +180,11 @@ internal sealed class LineComposer
             SetUpDropCap();
         }
 
+        if (attributed is { Rubies.Count: > 0 })
+        {
+            rubies = SetUpRubies();
+        }
+
         cursorPosition = LineIndent(0);
         if (lineBreaks != null && options.LineBreaking == LineBreaking.Paragraph
                                && (slots != null || textArea.Width < Int32.MaxValue))
@@ -191,6 +197,7 @@ internal sealed class LineComposer
         }
 
         NoteLine(0, 0);
+        lineRawTop = height;
         height = OnGrid(height, RowBaseline(0), 0);
         var wordStart = dropItems;
         while (wordStart <= items.Count)
@@ -604,16 +611,18 @@ internal sealed class LineComposer
 
         // Each ruby's annotation shaped in its base's font (or the fallback's); a base narrower than it spread to its
         // width - the room around each of its clusters, or only around the whole of a joined script - and kept on one
-        // line. A base ends at a hard break in it; a drop cap's letters take none.
+        // line. A base ends at a hard break in it, and starts after the letters a drop cap took.
         List<Ruby> SetUpRubies()
         {
             rubyAt = new int[text.Length];
             Array.Fill(rubyAt, -1);
             var runs = attributed.Rubies;
+            var capped = dropItems > 0 ? items[dropItems - 1].Cluster + 1 : 0;
             for (var r = 0; r < runs.Count; r++)
             {
-                var end = runs[r].Start < dropEnd ? runs[r].Start : runs[r].End;
-                for (var c = runs[r].Start; c < end; c++)
+                var start = Math.Max(runs[r].Start, capped);
+                var end = runs[r].End;
+                for (var c = start; c < end; c++)
                 {
                     if (text[c] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
                     {
@@ -622,12 +631,12 @@ internal sealed class LineComposer
                     }
                 }
 
-                for (var c = runs[r].Start; c < end; c++)
+                for (var c = start; c < end; c++)
                 {
                     rubyAt[c] = r;
                 }
 
-                for (var c = runs[r].Start + 1; lineBreaks != null && c < end; c++)
+                for (var c = start + 1; lineBreaks != null && c < end; c++)
                 {
                     lineBreaks[c] = LineBreakKind.None;
                 }
@@ -668,7 +677,8 @@ internal sealed class LineComposer
                 var annotation = runs[r].Annotation;
                 var size = annotation.FontSize is > 0 and var own && double.IsFinite(own) ? own : item.FontSize / 2;
                 var glyphs = _shaper.ShapeAlone(annotation.Text, item.Font, item.Attributes?.Language ?? options.Language,
-                    vertical, options);
+                    vertical, options, out var pending);
+                hasPendingFonts |= pending;
                 double width = 0;
                 double ascent = 0;
                 double descent = 0;
@@ -680,7 +690,7 @@ internal sealed class LineComposer
                     descent = Math.Max(descent, font.LineDescent * glyphScale);
                 }
 
-                set.Add(new Ruby(annotation, size, glyphs, width, ascent, descent, counts[r]));
+                set.Add(new Ruby(annotation, size, glyphs, width, ascent, descent, counts[r], pending));
                 var extra = width - widths[r];
                 if (extra <= 0)
                 {
@@ -722,8 +732,8 @@ internal sealed class LineComposer
         int RubyIndex(int index) => rubyAt != null && index >= 0 && index < rubyAt.Length ? rubyAt[index] : -1;
 
         // An item of a ruby base with more of the base after it: no line breaks there.
-        bool InsideABase(int k) => rubyAt != null && k + 1 < items.Count && RubyIndex(items[k].Cluster) is var r and >= 0
-                                   && RubyIndex(items[k + 1].Cluster) == r;
+        bool InsideABase(int k) => rubyAt != null && k + 1 < items.Count && items[k].Symbol != '\t'
+                                   && RubyIndex(items[k].Cluster) is var r and >= 0 && RubyIndex(items[k + 1].Cluster) == r;
 
         // How far a base glyph reaches from its line's baseline on the annotation's side.
         double BaseReach(GlyphWordData glyph, bool over)
@@ -766,7 +776,7 @@ internal sealed class LineComposer
             Array.Fill(after, -1);
             for (var r = 0; r < rubies.Count; r++)
             {
-                if (bases[r].Line >= 0 && bases[r].Count == rubies[r].Items)
+                if (bases[r].Line >= 0 && bases[r].Count == rubies[r].Items && !rubies[r].Pending)
                 {
                     after[bases[r].Last] = r;
                 }
@@ -905,7 +915,7 @@ internal sealed class LineComposer
         void NewLine()
         {
             SettleLine(lineIndex);
-            height = NextTop(pendingGap);
+            (lineRawTop, height) = NextTop(pendingGap);
             lineIndex++;
             NoteLine(lineIndex, pendingGap);
             pendingGap = 0;
@@ -1038,13 +1048,16 @@ internal sealed class LineComposer
             double.IsFinite(options.LineSpacing) ? Math.Max(options.LineSpacing, 1 - OwnLineHeight(line)) : 0;
 
         // The top of the line after this one: below it by its height and the room given, on the grid.
-        double NextTop(double gap) => OnGrid(height + LineBox(lineIndex) + SpacingAfter(lineIndex) + gap,
-            RowBaseline(lineIndex + 1), lineIndex + 1);
-
-        // How tall a line is as its text sets it, when lines grow to hold their text.
-        double LineBox(int line) => options.LineStacking == LineStackingStrategy.MaxHeight
-            ? MeasuredLine(line).Height
-            : OwnLineHeight(line);
+        // The tops of the line after this one, before and on the grid: below this one as its text sets it, where
+        // PlaceLines puts them.
+        (double Raw, double Top) NextTop(double gap)
+        {
+            var (lineBaseline, box) = options.LineStacking == LineStackingStrategy.MaxHeight
+                ? MeasuredLine(lineIndex)
+                : (RowBaseline(lineIndex), OwnLineHeight(lineIndex));
+            var raw = OnGrid(lineRawTop, lineBaseline, lineIndex) + box + SpacingAfter(lineIndex) + gap;
+            return (raw, OnGrid(raw, RowBaseline(lineIndex + 1), lineIndex + 1));
+        }
 
         // The top that puts the line's baseline on the first grid line at or below it.
         double OnGrid(double top, double lineBaseline, int line)
@@ -1250,7 +1263,7 @@ internal sealed class LineComposer
 
             if (slots == null)
             {
-                return NextTop(pendingGap) < textArea.Height;
+                return NextTop(pendingGap).Top < textArea.Height;
             }
 
             SettleLine(lineIndex);
@@ -2092,7 +2105,7 @@ internal sealed class LineComposer
                                         var glyphsDataCopy = glyphsData.ToArray();
                                         if (HasRoomBelow())
                                         {
-                                            height = NextTop(0);
+                                            (lineRawTop, height) = NextTop(0);
                                             lineIndex++;
                                             NoteLine(lineIndex, 0);
                                             glyphBase = height + baseLine;
