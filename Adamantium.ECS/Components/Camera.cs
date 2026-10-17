@@ -119,6 +119,7 @@ namespace Adamantium.ECS.Components
             BuildOrthoProjection();
             BuildUiProjection();
             BuildIsometricProjection();
+            ProjectionStale = false;
             Frustum = new BoundingFrustum(ViewMatrix * ProjectionMatrix);
             base.Initialize();
         }
@@ -291,6 +292,16 @@ namespace Adamantium.ECS.Components
 
         public override void Update(AppTime appTime)
         {
+            // Built in Initialize only, the projections kept the field of view and planes a camera was made with, while
+            // whatever reads ZNear or ZFar directly moved on with an edit.
+            if (ProjectionStale && Frustum != null && Width > 0 && Height > 0)
+            {
+                ProjectionStale = false;
+                BuildPerspectiveFoV();
+                BuildOrthoProjection();
+                BuildUiProjection();
+            }
+
             // Rotation is a STRUCT behind a property: Rotation.Normalize() normalized a copy and dropped it, so the
             // quaternion drifted from unit length as mouse-look multiplied into it - and a non-unit quaternion scales
             // the rotation matrix, shrinking the third-person offset until the camera sat inside its subject.

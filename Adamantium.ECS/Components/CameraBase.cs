@@ -21,6 +21,20 @@ namespace Adamantium.ECS.Components
         [Bindable] private Single aspectRatio;
         [Bindable] private Entity lookAtObject;
 
+        partial void OnFovChanged(Single value) => ProjectionStale = true;
+
+        partial void OnZNearChanged(Single value) => ProjectionStale = true;
+
+        partial void OnZFarChanged(Single value) => ProjectionStale = true;
+
+        partial void OnWidthChanged(uint value) => ProjectionStale = true;
+
+        partial void OnHeightChanged(uint value) => ProjectionStale = true;
+
+        /// <summary>A value the projections are built from changed - the field of view, a clipping plane or the size - and
+        /// the next <see cref="Update"/> builds them again, on the world's thread.</summary>
+        protected bool ProjectionStale { get; set; }
+
 
         public Matrix4x4F ViewMatrix { get; set; } = Matrix4x4F.Identity;
 
