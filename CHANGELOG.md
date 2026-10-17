@@ -16,6 +16,11 @@ All packages share one version.
   vertical text and other scripts keep the font's pairs, and two letters of different sizes are left as they are.
   `Glyph.GetMergedOutlineSegments(rate)` samples and reads the outline under the glyph's lock.
 
+- A baseline grid, as InDesign's: `TextLayout.BaselineGrid` (`BaselineGrid(Step, Offset, FirstLineOnly)`). Every line
+  is moved down to the first grid line at or below its baseline, never up, so lines of a larger size and the columns of
+  `Frames` keep the grid's rhythm; `Offset` puts the grid of an element above under this text; `FirstLineOnly` puts only
+  each paragraph's first line on it. A text aligned to the center or bottom moves by whole steps. Horizontal text only.
+
 - `SharedSurface.LatchCopy` / `LatchedCopy`: the consumer's copy of a shared surface's newest frame, made outside a
   render pass once per frame the producer finished, and sampled in place of the surface. The copy waits for the frame
   on the produce timeline and signals the consume timeline once done, so the producer writes its next frame only after

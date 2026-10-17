@@ -110,6 +110,7 @@ internal sealed class LineComposer
         var lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
         double pendingGap = 0;
         var lineStates = new List<(ParagraphAttributes Paragraph, bool Opens, bool RightToLeft, double Gap)>();
+        HashSet<int> linesAfterBreaks = null;
         double verticalShift = 0;
         Size? realTextDimensions = null;
         int[] laidOutLineFrames = null;
@@ -697,6 +698,33 @@ internal sealed class LineComposer
         double SpacingAfter(int line) =>
             double.IsFinite(options.LineSpacing) ? Math.Max(options.LineSpacing, 1 - OwnLineHeight(line)) : 0;
 
+        // The top that puts the line's baseline on the first grid line at or below it.
+        double OnGrid(double top, double lineBaseline, int line)
+        {
+            if (options.BaselineGrid is not { Step: > 0 } grid || vertical
+                || (grid.FirstLineOnly && !OpensParagraph(line)))
+            {
+                return top;
+            }
+
+            var steps = Math.Ceiling((top + lineBaseline - grid.Offset) / grid.Step - 1e-6);
+            return grid.Offset + steps * grid.Step - lineBaseline;
+        }
+
+        // The first line of the text or of a paragraph: one its paragraph opens, or one after a hard break.
+        bool OpensParagraph(int line) =>
+            line == 0 || LineState(line).Opens || linesAfterBreaks?.Contains(line) == true;
+
+        // A shift of the whole text that keeps its lines on the grid: whole steps of it, no further than asked.
+        double GridSteps(double shift) => options.BaselineGrid is { Step: > 0 } grid && !vertical
+            ? Math.Floor(shift / grid.Step + 1e-6) * grid.Step
+            : shift;
+
+        // Where a row's baseline lies in it, as the lines of its paragraph are set.
+        double RowBaseline(int line) => OwnSetHeight(line) is > 0 and var set && double.IsFinite(set)
+            ? BaselineInLine(_font, scale) + (set - naturalHeight) / 2
+            : baseLine;
+
         (int Frame, double Left, double Right, double Top) SlotOf(int line)
         {
             HasSlot(line);
@@ -737,7 +765,8 @@ internal sealed class LineComposer
             while (f < frames.Count)
             {
                 var frame = frames[f];
-                if ((rows > 0 && top + rowHeight > frame.Bottom + 1e-6) || rows >= 4 * (text.Length + 1))
+                var rowTop = OnGrid(top, RowBaseline(line), line);
+                if ((rows > 0 && rowTop + rowHeight > frame.Bottom + 1e-6) || rows >= 4 * (text.Length + 1))
                 {
                     f++;
                     rows = 0;
@@ -746,8 +775,7 @@ internal sealed class LineComposer
                 }
 
                 rows++;
-                var rowTop = top;
-                top += rowHeight + SpacingAfter(line);
+                top = rowTop + rowHeight + SpacingAfter(line);
                 if (WidestSpan(frame, rowTop, rowHeight) is { } widest)
                 {
                     slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, rowTop));
@@ -1635,6 +1663,11 @@ internal sealed class LineComposer
                             return i < items.Count - 1 && Overset(i + 1);
                         }
 
+                        if (item.Cluster >= 0 && item.Cluster < text.Length && text[item.Cluster] != LineSeparator)
+                        {
+                            (linesAfterBreaks ??= []).Add(lineIndex + 1);
+                        }
+
                         NewLine();
                         break;
                     default:
@@ -2046,7 +2079,7 @@ internal sealed class LineComposer
                         blockHeight = lineTops[lastInk] + lineHeights[lastInk] - lineTops[0];
                     }
 
-                    var diff = (finalRect.Height - blockHeight) / 2 - blockTop;
+                    var diff = GridSteps((finalRect.Height - blockHeight) / 2 - blockTop);
                     verticalShift = diff;
                     foreach (var glyphWordData in glyphsData)
                     {
@@ -2059,7 +2092,7 @@ internal sealed class LineComposer
                 case VerticalTextAlignment.Bottom:
                 {
                     // The last baseline on the bottom edge, not the lowest ink, for the same reason.
-                    var diff = finalRect.Height - (vertical ? height : lastBaseline);
+                    var diff = GridSteps(finalRect.Height - (vertical ? height : lastBaseline));
                     verticalShift = diff;
                     foreach (var glyphWordData in glyphsData)
                     {
@@ -2423,11 +2456,15 @@ internal sealed class LineComposer
                 mixed = paragraphHeights;
             }
 
-            lineTops[0] = textArea.Y;
-            for (var i = 1; i < lineCount; i++)
+            var gridded = false;
+            for (var i = 0; i < lineCount; i++)
             {
-                lineTops[i] = lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i);
+                var top = i == 0 ? textArea.Y : lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i);
+                lineTops[i] = OnGrid(top, lineBaselines[i], i);
+                gridded |= lineTops[i] != top;
             }
+
+            mixed |= gridded;
 
             var aligned = false;
             foreach (var glyph in glyphsData)
