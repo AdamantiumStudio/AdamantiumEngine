@@ -45,6 +45,46 @@ internal sealed class LineComposer
     public LaidOutText Lay(string text, AttributedText attributed, double fontSize,
         TextRenderingParameters renderingParameters, TextLayoutOptions options)
     {
+        // A text trimmed and wrapped by words in a fixed height takes only lines that fit whole. A line raised by larger
+        // text in it is known only once laid, so a text whose last line came out taller than the room is laid again up
+        // to the lines that fit - until its last line fits, or only one is left.
+        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0);
+        var limit = TrimmedLinesThatFit(laid, renderingParameters, options);
+        while (limit > 0)
+        {
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit);
+            var fit = TrimmedLinesThatFit(laid, renderingParameters, options);
+            limit = fit < limit ? fit : 0;
+        }
+
+        return laid;
+    }
+
+    private static int TrimmedLinesThatFit(LaidOutText laid, TextRenderingParameters renderingParameters,
+        TextLayoutOptions options)
+    {
+        var height = renderingParameters.TextArea.Height;
+        var tops = laid.LineTops;
+        if (renderingParameters.TextTrimming == TextTrimming.None
+            || renderingParameters.TextWrapping != TextWrapping.WrapByWords || height == Int32.MaxValue
+            || options.Vertical || options.Frames is { Length: > 0 } || laid.HasPendingFonts || tops == null
+            || tops.Length < 2)
+        {
+            return 0;
+        }
+
+        var fit = 0;
+        while (fit < tops.Length && tops[fit] - laid.VerticalShift + laid.LineHeights[fit] < height + 1.0)
+        {
+            fit++;
+        }
+
+        return fit < tops.Length ? Math.Max(fit, 1) : 0;
+    }
+
+    private LaidOutText Lay(string text, AttributedText attributed, double fontSize,
+        TextRenderingParameters renderingParameters, TextLayoutOptions options, int lineLimit)
+    {
         var laidOutParameters = renderingParameters;
 
         var _b0 = System.GC.GetAllocatedBytesForCurrentThread();
@@ -88,6 +128,7 @@ internal sealed class LineComposer
                                               && !TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0)
                                               && !vertical
                                               && (options.MaxLines <= 0 || options.MaxLines >= options.DropCap.Lines)
+                                              && (lineLimit <= 0 || lineLimit >= options.DropCap.Lines)
             ? DropCapEnd(text, options.DropCap)
             : 0;
         var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
@@ -102,7 +143,6 @@ internal sealed class LineComposer
         var baseLine = BaselineInLine(_font, scale) + (lineHeight - naturalHeight) / 2;
         var lineSpacing = double.IsFinite(options.LineSpacing) ? Math.Max(options.LineSpacing, 1 - lineHeight) : 0;
 
-        var dotGlyphsWidth = _font.GetAdvanceWidth(_dotGlyph.Index) * scale * 3 * options.GlyphScaling.Desired;
 
         var textArea = renderingParameters.TextArea;
         double width = 0;
@@ -158,10 +198,15 @@ internal sealed class LineComposer
             };
         }
 
+        // A number keeps the ideograph or kana after it (1月) only while the two fit a line they may stand on: a longer
+        // one may break there, as it may anyway.
+        double[] clusterAdvances = null;
+        var trimRoom = double.MaxValue;
         for (var i = 1; lineBreaks != null && i < text.Length; i++)
         {
             if (lineBreaks[i] == LineBreakKind.Allowed
-                && (text[i - 1] == SoftHyphen || (char.IsDigit(text[i - 1]) && IsHanOrKana(CodepointAt(text, i)))))
+                && (text[i - 1] == SoftHyphen
+                    || (char.IsDigit(text[i - 1]) && IsHanOrKana(CodepointAt(text, i)) && NumberFitsWith(i))))
             {
                 lineBreaks[i] = LineBreakKind.None;
             }
@@ -572,6 +617,48 @@ internal sealed class LineComposer
             }
 
             return result;
+        }
+
+        bool NumberFitsWith(int letter)
+        {
+            var room = frames is { Count: > 0 } ? frames.Max(frame => (double)frame.Width) : textArea.Width;
+            if (room >= Int32.MaxValue)
+            {
+                return true;
+            }
+
+            if (clusterAdvances == null)
+            {
+                clusterAdvances = new double[text.Length];
+                foreach (var item in items)
+                {
+                    if (item.Cluster >= 0 && item.Cluster < text.Length)
+                    {
+                        clusterAdvances[item.Cluster] += item.Advance;
+                    }
+                }
+            }
+
+            var start = letter - 1;
+            while (start > 0 && char.IsDigit(text[start - 1]))
+            {
+                start--;
+            }
+
+            // Between the paragraph's margins; past its indent only where the number opens it, on its first line.
+            var paragraph = AttributedText.ParagraphIn(paragraphRuns, start, text.Length);
+            var attributes = paragraph?.Attributes;
+            room -= Math.Max(0, Finite(attributes?.MarginLeft)) + Math.Max(0, Finite(attributes?.MarginRight))
+                    + (start == (paragraph?.Start ?? 0) ? Math.Max(0, Finite(attributes?.TextIndent)) : 0);
+
+            var end = Math.Min(letter + (char.IsHighSurrogate(text[letter]) ? 2 : 1), text.Length);
+            var width = 0.0;
+            for (var c = start; c < end; c++)
+            {
+                width += clusterAdvances[c];
+            }
+
+            return width <= room;
         }
 
         int WordEnd(int start)
@@ -1309,10 +1396,10 @@ internal sealed class LineComposer
         // The next line's top stays inside the area: below this line by its height and the room a paragraph starting
         // there keeps. A trimmed text takes only a line that fits whole at its paragraph's line height, so its ellipsis is
         // not cut off - within the part of a pixel the area's whole height lost. A line grown by larger text in it is
-        // not known yet.
+        // not known yet: the text is laid again up to the lines that fit (lineLimit).
         bool HasRoomBelow()
         {
-            if (options.MaxLines > 0 && lineIndex + 1 >= options.MaxLines)
+            if (options.MaxLines > 0 && lineIndex + 1 >= options.MaxLines || lineLimit > 0 && lineIndex + 1 >= lineLimit)
             {
                 return false;
             }
@@ -1329,12 +1416,27 @@ internal sealed class LineComposer
             return HasSlot(lineIndex + 1);
         }
 
-        bool CutsOverflow() => slots != null || options.MaxLines > 0;
+        bool CutsOverflow() => slots != null || options.MaxLines > 0 || lineLimit > 0;
+
+        // A word laid on the last line only to be cut to the ellipsis keeps no letters that raise the line past the
+        // bottom, unless the line was that tall without it.
+        void LayAndTrim(int start, int end, TextTrimming trimming, bool lastLine)
+        {
+            trimRoom = lastLine && slots == null && !vertical && textArea.Height < Int32.MaxValue
+                       && options.LineStacking == LineStackingStrategy.MaxHeight
+                ? Math.Max(textArea.Height + 1.0 - height, MeasuredLine(lineIndex).Height)
+                : double.MaxValue;
+            LayItems(start, end);
+            EndInEllipsis(trimming);
+            trimRoom = double.MaxValue;
+        }
+
+        bool FitsTrimRoom() => trimRoom == double.MaxValue || MeasuredLine(lineIndex).Height <= trimRoom;
 
         void EndInEllipsis(TextTrimming trimming)
         {
             var floor = LineFirstGlyph();
-            if (cursorPosition + dotGlyphsWidth <= LineRight(lineIndex))
+            if (cursorPosition + EllipsisWidth() <= LineRight(lineIndex) && FitsTrimRoom())
             {
                 TrimText(0, height + baseLine);
                 return;
@@ -1426,8 +1528,7 @@ internal sealed class LineComposer
             if (trims && !LineHasContent() && cursorPosition + WordWidth(start, newline) > LineRight(lineIndex))
             {
                 var lastLine = !HasRoomBelow();
-                LayItems(start, newline);
-                EndInEllipsis(TextTrimming.CharEllipses);
+                LayAndTrim(start, newline, TextTrimming.CharEllipses, lastLine);
                 return !lastLine && LayItems(newline, end);
             }
 
@@ -1738,8 +1839,7 @@ internal sealed class LineComposer
                 var newline = end > start && items[end - 1].Symbol == '\n' ? end - 1 : end;
                 var lastLine = !HasRoomBelow();
                 var trimming = LineHasContent() ? renderingParameters.TextTrimming : TextTrimming.CharEllipses;
-                LayItems(start, newline);
-                EndInEllipsis(trimming);
+                LayAndTrim(start, newline, trimming, lastLine);
                 return !lastLine && LayItems(newline, end);
             }
 
@@ -3176,13 +3276,13 @@ internal sealed class LineComposer
                     break;
                 }
                 else if (trimming == TextTrimming.CharEllipses &&
-                    cursorPosition + dotGlyphsWidth <= right)
+                    cursorPosition + EllipsisWidth() <= right && FitsTrimRoom())
                 {
                     break;
                 }
                 else if (trimming ==
                          TextTrimming.WordEllipses &&
-                         cursorPosition + dotGlyphsWidth <= right)
+                         cursorPosition + EllipsisWidth() <= right && FitsTrimRoom())
                 {
                     if (wordIndex > 0 && !IsBlank(data.Symbol))
                     {
@@ -3205,24 +3305,66 @@ internal sealed class LineComposer
 
         void TrimText(int position, double glyphBase)
         {
-            var dotAdvance = _font.GetAdvanceWidth(_dotGlyph.Index) * scale * options.GlyphScaling.Desired;
+            var style = EllipsisStyle();
+            var (font, dot, size) = EllipsisFont(style);
+            var dotScale = size / font.UnitsPerEm;
+            var dotAdvance = font.GetAdvanceWidth(dot.Index) * dotScale * options.GlyphScaling.Desired;
+            var shift = style is { Upright: false } ? style.OffsetY : 0;
             for (int j = 0; j < 3; j++)
             {
-                var glyphRect = Widened(CalculateGlyphPosition(_font, _dotGlyph,
+                var glyphRect = Widened(CalculateGlyphPosition(font, dot,
                     cursorPosition,
-                    glyphBase,
-                    scale), cursorPosition, options.GlyphScaling.Desired);
-                glyphsData.Add(new GlyphWordData(_dotGlyph, '.', glyphRect, -1, lineIndex)
+                    glyphBase - shift,
+                    dotScale), cursorPosition, options.GlyphScaling.Desired);
+                glyphsData.Add(new GlyphWordData(dot, '.', glyphRect, -1, lineIndex)
                 {
                     PenX = cursorPosition,
                     Advance = dotAdvance,
-                    Font = _font,
-                    FontSize = fontSize,
+                    OffsetY = shift,
+                    Attributes = style?.Attributes,
+                    Font = font,
+                    FontSize = size,
                     HorizontalScale = options.GlyphScaling.Desired,
                 });
 
                 cursorPosition += dotAdvance;
             }
+        }
+
+        // The ellipsis is set as the text it follows: in its font and size (the text's own font and size when that one
+        // has no full stop, which never raises the line), its colors and decorations, and its baseline shift. After upright letters of vertical text, whose
+        // size and offsets set them in their column, it takes only their colors and decorations.
+        GlyphWordData EllipsisStyle()
+        {
+            for (var k = glyphsData.Count - 1; k >= 0 && glyphsData[k].LineIndex == lineIndex; k--)
+            {
+                var glyph = glyphsData[k];
+                if (glyph.PositionInString >= 0 && !IsBlank(glyph.Symbol) && glyph.Symbol != '\n'
+                    && ObjectSizeOf(glyph.Symbol, glyph.Attributes) == null)
+                {
+                    return glyph;
+                }
+            }
+
+            return null;
+        }
+
+        (IFont Font, Glyph Dot, double Size) EllipsisFont(GlyphWordData style)
+        {
+            if (style is not { Upright: false })
+            {
+                return (_font, _dotGlyph, fontSize);
+            }
+
+            return style.Font.TryGetGlyphIndex('.', out var dot)
+                ? (style.Font, style.Font.GetGlyphByIndex(dot), style.FontSize)
+                : (_font, _dotGlyph, fontSize);
+        }
+
+        double EllipsisWidth()
+        {
+            var (font, dot, size) = EllipsisFont(EllipsisStyle());
+            return font.GetAdvanceWidth(dot.Index) * size / font.UnitsPerEm * 3 * options.GlyphScaling.Desired;
         }
     }
 

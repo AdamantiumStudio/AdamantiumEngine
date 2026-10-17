@@ -477,6 +477,17 @@ All packages share one version.
 
 ### Fixed
 
+- Text trimmed and wrapped by words in a fixed height no longer sets a line that larger text in it raises past the
+  bottom: the fit was checked at the paragraph's line height, so such a line stood half shown with the ellipsis on it.
+  The text is laid again up to the lines that fit, the last of them ending in the ellipsis, and a word cut to the
+  ellipsis keeps no letters that would raise the last line past the bottom. A first line taller than the area by its
+  own words is set all the same.
+- A trimming ellipsis is set as the text it follows - its font and size, colors and decorations, and baseline shift -
+  where it took the layout's font and size, its default color and the line's baseline. After a font with no full stop
+  the dots are the text's own, at its own size; after upright letters of vertical text they take only their colors.
+- A number keeps the ideograph or kana after it only while the two fit a line they may stand on (the widest frame,
+  between the paragraph's margins, past its indent when the number opens the paragraph): `1234567890年` in a narrow
+  column ran past its edge, held together.
 - An empty line between two hard breaks (a line feed, U+2028 or U+2029) starts after the first of them: the line
   before took both breaks, so `"ab\n\ncd"` gave lines 0..4, 4..4, 4..6, and a caret at the start of the empty line
   stood on the line before; the breaks also took shares of the width of the letter before them. Lines are now 0..3,
