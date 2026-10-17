@@ -101,7 +101,8 @@ internal sealed class TextNavigator
             // The empty last line stands as its paragraph says: between its margins, and its indent at its start when
             // a paragraph separator opened it; after a line break it goes on with the last paragraph.
             var opens = text[text.Length - 1] == ParagraphSeparator;
-            var paragraph = _laid.Attributed?.ParagraphAt(opens ? text.Length : text.Length - 1)?.Attributes;
+            var paragraph = AttributedText.ParagraphIn(_laid.ParagraphRuns, opens ? text.Length : text.Length - 1,
+                text.Length)?.Attributes;
             var indent = opens ? Finite(paragraph?.TextIndent) : 0;
             var left = Math.Max(0, Finite(paragraph?.MarginLeft) + (rightToLeft ? 0 : indent));
             var edge = _laid.Size.Width - Math.Max(0, Finite(paragraph?.MarginRight) + (rightToLeft ? indent : 0));
@@ -182,7 +183,7 @@ internal sealed class TextNavigator
         }
 
         double fontSize = (float)_laid.FontSize;
-        foreach (var run in _laid.Attributed.Runs)
+        foreach (var run in _laid.AttributeRuns ?? _laid.Attributed.Runs)
         {
             var attributes = run.Attributes;
             var decorations = attributes.Decorations ?? TextDecorations.None;
@@ -214,7 +215,9 @@ internal sealed class TextNavigator
                     LineMetric(_laid.LineBaselines, segment.Line), LineMetric(_laid.LineHeights, segment.Line), font, size);
                 var baseline = Math.Round(top - _laid.VerticalShift + LineMetric(_laid.LineBaselines, segment.Line) - shift)
                                + _laid.VerticalShift;
-                var axis = top + LineMetric(_laid.LineHeights, segment.Line) / 2 - shift;
+                var axis = top + (_laid.LineAxes != null
+                    ? LineMetric(_laid.LineAxes, segment.Line)
+                    : LineMetric(_laid.LineHeights, segment.Line) / 2) - shift;
                 var beside = axis - (attributes.FontSize ?? fontSize) / 2 - thickness;
                 var underlineTop = vertical ? beside - thickness : baseline - underline;
                 if (attributes.Background is { } background)

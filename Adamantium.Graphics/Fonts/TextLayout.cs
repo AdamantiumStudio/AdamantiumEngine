@@ -167,6 +167,14 @@ public class TextLayout : DisposableObject
     /// as Arabic, are never tracked.</summary>
     public double Tracking { get; set; }
 
+    /// <summary>Where the space between two letters comes from: the font's pairs (the default), the letters' outlines,
+    /// as InDesign's optical kerning, or neither. <see cref="TextAttributes.Kerning"/> sets it for a range.</summary>
+    public TextKerning Kerning { get; set; }
+
+    /// <summary>The grid the lines' baselines stand on (<see cref="Fonts.BaselineGrid"/>); null, the default, keeps
+    /// them where their heights put them.</summary>
+    public BaselineGrid BaselineGrid { get; set; }
+
     /// <summary>How far apart the baselines of lines are, in the layout's units, as WPF's line height: the extra room
     /// over the font's own line height (or what it lacks) is split above and below the text. NaN (the default) takes
     /// the font's. <see cref="LineStacking"/> says whether larger text still raises its line.</summary>
@@ -482,6 +490,8 @@ public class TextLayout : DisposableObject
         SingleWordJustification = SingleWordJustification,
         Kashidas = Kashidas,
         Tracking = Tracking,
+        Kerning = Kerning,
+        BaselineGrid = BaselineGrid,
         LineHeight = LineHeight,
         LineStacking = LineStacking,
         LineSpacing = LineSpacing,

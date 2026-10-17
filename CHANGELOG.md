@@ -7,6 +7,36 @@ All packages share one version.
 
 ### Added
 
+- Named paragraph and character styles, as InDesign's: `ParagraphStyle(Name, Paragraph, Text, BasedOn)` and
+  `CharacterStyle(Name, Attributes, BasedOn)`, set with `AttributedText.SetParagraphStyle` / `SetCharacterStyle` and
+  read back with `ParagraphStyleAt` / `CharacterStyleAt`. A range takes, each over the one before, the defaults, its
+  paragraph's style, its character style and what was applied to it; a paragraph's own `ParagraphAttributes` set over
+  its style field by field (`ParagraphAttributes.With` takes only the fields set). A style based on another sets over
+  it; changing a style, or one it is based on, changes the text it is set on the next time it is laid out.
+
+- Ruby, as HTML's `<ruby>`: `AttributedText.SetRuby(start, length, RubyAnnotation(Text, Position, FontSize))` sets an
+  annotation - furigana, a reading - over a base, centered, at half the base's size unless told; a base narrower than
+  its annotation is spread to its width with the room around each glyph, and stays on one line. The line grows to hold
+  the annotation, as CSS's, unless its height is set (`LineHeight` or `BlockLineHeight`). `RubyPosition.Under` puts it
+  below the line. In vertical text the annotation stands upright to the right of its base (to the left under), and
+  the column widens on that side only.
+
+- Optical kerning, as InDesign's: `TextLayout.Kerning` and `TextAttributes.Kerning` (`TextKerning.Metrics` - the font's
+  pairs, the default; `Optical`; `None`). Optically, the space between two letters is measured from their outlines
+  (`OpticalKerning.Between`): the white between them, taken into their hollows no deeper than 0.15 em, is made what it
+  is between the font's "nn" and "HH", by no more than a quarter em, and never so close that their ink at one height
+  comes within 0.02 em. For a font with no pairs, or pairs it left out. Horizontal left-to-right text of the scripts
+  whose letters stand apart (`OpticalKerning.Applies`: Latin, Greek, Cyrillic, Armenian, Georgian); right to left,
+  vertical text and other scripts keep the font's pairs, and two letters of different sizes are left as they are.
+  `Glyph.GetMergedOutlineSegments(rate)` samples and reads the outline under the glyph's lock.
+
+- A baseline grid, as InDesign's: `TextLayout.BaselineGrid` (`BaselineGrid(Step, Offset, FirstLineOnly)`). Every line
+  is moved down to the first grid line at or below its baseline, never up, so lines of a larger size and the columns of
+  `Frames` keep the grid's rhythm; `Offset` puts the grid of an element above under this text; `FirstLineOnly` puts only
+  each paragraph's first line on it. A text aligned to the center or bottom moves by whole steps, never further than
+  asked; a drop cap spans its lines as the grid sets them; a frame that cannot hold a line on the grid passes it to the
+  next. The step is finite and more than 0, the offset finite. Horizontal text only.
+
 - `SharedSurface.LatchCopy` / `LatchedCopy`: the consumer's copy of a shared surface's newest frame, made outside a
   render pass once per frame the producer finished, and sampled in place of the surface. The copy waits for the frame
   on the produce timeline and signals the consume timeline once done, so the producer writes its next frame only after
@@ -425,6 +455,16 @@ All packages share one version.
 - A `Camera` rebuilds its projections when its field of view, a clipping plane or its size changes after it was
   initialized. They were built once, so an edit - from an inspector - changed nothing on screen, while what reads
   `ZNear` and `ZFar` directly, the clustered lighting, moved on with it.
+
+- Making a text style is no longer an edit of styles: text laid out by other styles is not resolved again for it.
+
+- Ruby: a text that ends in a base spread to its annotation measures to the annotation's width, and lines are aligned
+  by the room a spread base takes, not its ink, so an annotation no longer reaches past the edge; a base the trimming
+  cut no longer grows its line. An effect over a base's last character reaches its annotation, which is drawn after it.
+
+- In `Frames`, a line of larger text no longer covers the lines after it: once it is set, the lines below are placed
+  under it, so they keep inside their frame, out of the exclusions and in the overset when they no longer fit.
+
 - An imported `SharedSurface` takes the memory over from its producer in the layout the producer keeps it in, instead of
   moving it out of `Undefined`, which allows a driver to discard a frame the producer had already written.
 - `MeshMetadata.Default()` sets the line's end; it wrote the end into the start a second time.

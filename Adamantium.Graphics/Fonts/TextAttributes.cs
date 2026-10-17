@@ -33,6 +33,10 @@ public sealed class TextAttributes
     /// letters closer. Unset takes the layout's <see cref="TextLayout.Tracking"/>.</summary>
     public double? Tracking { get; init; }
 
+    /// <summary>Where the space between two letters comes from: the font's pairs, the letters' outlines or neither.
+    /// Unset takes the layout's <see cref="TextLayout.Kerning"/>.</summary>
+    public TextKerning? Kerning { get; init; }
+
     /// <summary>How far the text is raised above its line's baseline, in the layout's units, as InDesign's baseline
     /// shift; negative lowers it. Its size and the line's height stay as they are; its lines follow it.</summary>
     public double? BaselineShift { get; init; }
@@ -70,9 +74,14 @@ public sealed class TextAttributes
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public TextAttributes With(TextAttributes over)
     {
-        if (over == null)
+        if (over == null || ReferenceEquals(over, Empty))
         {
             return this;
+        }
+
+        if (ReferenceEquals(this, Empty))
+        {
+            return over;
         }
 
         return new TextAttributes
@@ -83,6 +92,7 @@ public sealed class TextAttributes
             FontSize = over.FontSize ?? FontSize,
             Synthesis = over.Synthesis ?? Synthesis,
             Tracking = over.Tracking ?? Tracking,
+            Kerning = over.Kerning ?? Kerning,
             BaselineShift = over.BaselineShift ?? BaselineShift,
             BaselineAlignment = over.BaselineAlignment ?? BaselineAlignment,
             ObjectSize = over.ObjectSize ?? ObjectSize,
@@ -97,7 +107,8 @@ public sealed class TextAttributes
 
     /// <summary>Whether text with these attributes and with <paramref name="other"/> shapes alike: colors, lines and
     /// sizes differ freely; a palette does not, as its color glyphs are drawn anew, and tracking, baseline shift and
-    /// alignment and an object's size do not, as they move them.</summary>
+    /// alignment and an object's size do not, as they move them. Kerning is the layout's to compare, as an unset one
+    /// takes its <see cref="TextLayout.Kerning"/>.</summary>
     public bool ShapesLike(TextAttributes other)
     {
         return Language == other.Language && ReferenceEquals(Font, other.Font) && Synthesis == other.Synthesis

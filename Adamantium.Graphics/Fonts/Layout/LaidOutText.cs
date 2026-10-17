@@ -13,6 +13,11 @@ internal sealed record LaidOutText
 
     public AttributedText Attributed { get; init; }
 
+    // The attributed text's runs as the text was laid out by them: a style changed since does not reach what is drawn.
+    public IReadOnlyList<AttributeRun> AttributeRuns { get; init; }
+
+    public IReadOnlyList<ParagraphRun> ParagraphRuns { get; init; }
+
     public double FontSize { get; init; }
 
     public IFont Font { get; init; }
@@ -28,6 +33,10 @@ internal sealed record LaidOutText
     public double[] LineHeights { get; init; }
 
     public double[] LineBaselines { get; init; }
+
+    // The middle of each vertical line's own text below its top, when an annotation's room beside it moved it off the
+    // line's middle; null otherwise.
+    public double[] LineAxes { get; init; }
 
     public double VerticalShift { get; init; }
 

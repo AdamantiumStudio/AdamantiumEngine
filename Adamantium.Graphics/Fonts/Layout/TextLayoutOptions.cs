@@ -42,6 +42,10 @@ internal sealed class TextLayoutOptions
 
     public double Tracking { get; init; }
 
+    public TextKerning Kerning { get; init; }
+
+    public BaselineGrid BaselineGrid { get; init; }
+
     public double LineHeight { get; init; } = double.NaN;
 
     public LineStackingStrategy LineStacking { get; init; }
@@ -67,7 +71,9 @@ internal sealed class TextLayoutOptions
                && TabStops.SequenceEqual(other.TabStops) && OpticalMarginAlignment == other.OpticalMarginAlignment
                && Equals(DropCap, other.DropCap) && WritingMode == other.WritingMode
                && WordSpacing.Equals(other.WordSpacing) && LetterSpacing.Equals(other.LetterSpacing)
-               && Tracking.Equals(other.Tracking) && GlyphScaling.Equals(other.GlyphScaling)
+               && Tracking.Equals(other.Tracking) && Kerning == other.Kerning
+               && Equals(BaselineGrid, other.BaselineGrid)
+               && GlyphScaling.Equals(other.GlyphScaling)
                && JustificationAlternates == other.JustificationAlternates
                && LastLineAlignment == other.LastLineAlignment
                && SingleWordJustification == other.SingleWordJustification && Kashidas == other.Kashidas

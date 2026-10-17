@@ -24,19 +24,27 @@ internal sealed class GlyphRunShaper
         _font = font;
     }
 
-    public List<ShapedItem> Shape(string text, AttributedText attributed, double fontSize, int split, bool vertical,
-        TextLayoutOptions options, TextParagraphs paragraphs, bool[] graphemes, out bool hasPendingFonts)
+    public List<ShapedItem> Shape(string text, AttributedText attributed, IReadOnlyList<AttributeRun> runs,
+        double fontSize, int split, bool vertical, TextLayoutOptions options, TextParagraphs paragraphs,
+        bool[] graphemes, out bool hasPendingFonts)
     {
         _pending = false;
         var items = new List<ShapedItem>(text.Length);
-        var runs = attributed?.Runs;
         var runIndex = 0;
-        foreach (var (start, end, attributes) in SplitAt(ShapingSegments(text, attributed, fontSize), split))
+        foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, runs, fontSize,
+                     options.Kerning), attributed), split))
         {
             var language = attributes?.Language ?? options.Language;
-            var shapingOptions = attributes == null && language == null
-                ? ShapingOptions.Default
-                : new ShapingOptions(null, language, attributes?.Features);
+            var kerning = attributes?.Kerning ?? options.Kerning;
+            var unkerned = kerning == TextKerning.Metrics
+                ? null
+                : new ShapingOptions(null, language, [.. attributes?.Features ?? [], FontFeature.Kerning.Off]);
+            var shapingOptions = kerning == TextKerning.None
+                ? unkerned
+                : attributes?.Features == null && language == null
+                    ? ShapingOptions.Default
+                    : new ShapingOptions(null, language, attributes?.Features);
+            var opticalOptions = kerning == TextKerning.Optical ? unkerned : null;
             var font = RunFont(_font, attributes, fontSize);
             var position = start;
             var stops = attributes?.ObjectSize != null ? LineEndsAndObjects : LineEnds;
@@ -52,7 +60,7 @@ internal sealed class GlyphRunShaper
                     {
                         if (!vertical)
                         {
-                            AddAcross(shapingOptions, runFont, blank, levelStart, levelEnd, direction);
+                            AddAcross(shapingOptions, runFont, blank, levelStart, levelEnd, direction, opticalOptions);
                             continue;
                         }
 
@@ -69,7 +77,7 @@ internal sealed class GlyphRunShaper
                             }
                             else
                             {
-                                AddAcross(shapingOptions, runFont, blank, orientedStart, orientedEnd, direction);
+                                AddAcross(shapingOptions, runFont, blank, orientedStart, orientedEnd, direction, null);
                             }
                         }
                     }
@@ -106,7 +114,26 @@ internal sealed class GlyphRunShaper
             double objectHeight = double.NaN) =>
             TextGeometry.Raise(_font, options.WritingMode, raised, raisedFont, size, baseSize, objectHeight);
 
-        void AddAcross(ShapingOptions shaping, IFont runFont, Glyph blank, int start, int end, TextDirection direction)
+        void AddAcross(ShapingOptions shaping, IFont runFont, Glyph blank, int start, int end, TextDirection direction,
+            ShapingOptions optical)
+        {
+            if (optical == null || blank != null || direction == TextDirection.RightToLeft
+                || !OpticalKerning.Measures(runFont))
+            {
+                AddShaped(shaping, runFont, blank, start, end, direction, false);
+                return;
+            }
+
+            while (start < end)
+            {
+                var stop = OpticalKerning.Run(text, start, end, out var applies);
+                AddShaped(applies ? optical : shaping, runFont, blank, start, stop, direction, applies);
+                start = stop;
+            }
+        }
+
+        void AddShaped(ShapingOptions shaping, IFont runFont, Glyph blank, int start, int end, TextDirection direction,
+            bool kernsOptically)
         {
             var shaped = direction == TextDirection.Auto
                 ? TextShaper.Shape(runFont, text, start, end, shaping)
@@ -115,6 +142,10 @@ internal sealed class GlyphRunShaper
             if (direction == TextDirection.RightToLeft)
             {
                 shaped = ToLogicalOrder(shaped);
+            }
+            else if (kernsOptically)
+            {
+                KernOptically(runFont, start, shaped);
             }
 
             for (var k = 0; k < shaped.Length; k++)
@@ -142,6 +173,28 @@ internal sealed class GlyphRunShaper
                     horizontalScale: widthScale));
             }
         }
+
+        void KernOptically(IFont runFont, int start, ShapedGlyph[] shaped)
+        {
+            var resume = runIndex;
+            var from = 0;
+            var size = shaped.Length > 0 ? SizeAt(start + shaped[0].Cluster) : 0;
+            for (var k = 1; k < shaped.Length; k++)
+            {
+                var next = SizeAt(start + shaped[k].Cluster);
+                if (next != size)
+                {
+                    OpticalKerning.Apply(runFont, shaped, from, k);
+                    from = k;
+                    size = next;
+                }
+            }
+
+            OpticalKerning.Apply(runFont, shaped, from, shaped.Length);
+            runIndex = resume;
+        }
+
+        double SizeAt(int index) => AttributesAt(index)?.FontSize ?? fontSize;
 
         double Spaced(double advance, IFont font, double size, TextAttributes attributes, int cluster, bool carries)
         {
@@ -260,21 +313,61 @@ internal sealed class GlyphRunShaper
         }
     }
 
-    private IEnumerable<(int Start, int End, TextAttributes Attributes)> ShapingSegments(string text,
-        AttributedText attributed, double fontSize)
+    // A ruby base is shaped by itself, so no ligature or cluster reaches across its edges.
+    private static IEnumerable<(int Start, int End, TextAttributes Attributes)> SplitAtRubies(
+        IEnumerable<(int Start, int End, TextAttributes Attributes)> segments, AttributedText attributed)
     {
-        if (attributed == null || attributed.Runs.Count == 0)
+        if (attributed is not { Rubies.Count: > 0 } withRubies)
+        {
+            foreach (var segment in segments)
+            {
+                yield return segment;
+            }
+
+            yield break;
+        }
+
+        var rubies = withRubies.Rubies;
+        var next = 0;
+        foreach (var (start, end, attributes) in segments)
+        {
+            var from = start;
+            while (next < rubies.Count * 2)
+            {
+                var edge = next % 2 == 0 ? rubies[next / 2].Start : rubies[next / 2].End;
+                if (edge >= end)
+                {
+                    break;
+                }
+
+                if (edge > from)
+                {
+                    yield return (from, edge, attributes);
+                    from = edge;
+                }
+
+                next++;
+            }
+
+            yield return (from, end, attributes);
+        }
+    }
+
+    private IEnumerable<(int Start, int End, TextAttributes Attributes)> ShapingSegments(string text,
+        IReadOnlyList<AttributeRun> runs, double fontSize, TextKerning kerning)
+    {
+        if (runs == null || runs.Count == 0)
         {
             yield return (0, text.Length, null);
             yield break;
         }
 
-        var runs = attributed.Runs;
         var start = runs[0].Start;
         var attributes = runs[0].Attributes;
         for (var i = 1; i < runs.Count; i++)
         {
             if (runs[i].Attributes.ShapesLike(attributes)
+                && (runs[i].Attributes.Kerning ?? kerning) == (attributes.Kerning ?? kerning)
                 && ReferenceEquals(RunFont(_font, runs[i].Attributes, fontSize), RunFont(_font, attributes, fontSize)))
             {
                 continue;
@@ -287,6 +380,47 @@ internal sealed class GlyphRunShaper
 
         yield return (start, text.Length, attributes);
     }
+
+    // A short text set apart from the text, as a ruby annotation: in the font, or the fallback's font for what it lacks;
+    // kept for the layouts after this one.
+    internal List<(IFont Font, ShapedGlyph Glyph, int Cluster)> ShapeAlone(string text, IFont font, string language,
+        bool vertical, TextLayoutOptions options, out bool pending)
+    {
+        pending = false;
+        var key = (text, font, language, vertical, options.Fallback);
+        if (_alone.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
+        var glyphs = new List<(IFont Font, ShapedGlyph Glyph, int Cluster)>(text.Length);
+        foreach (var (start, end, runFont, runPending) in FontRuns(text, graphemes, 0, text.Length, font, language, options))
+        {
+            pending |= runPending;
+            foreach (var glyph in TextShaper.Shape(runFont, text, start, end,
+                         new ShapingOptions(null, language, null, vertical: vertical)))
+            {
+                glyphs.Add((runFont, glyph, start + glyph.Cluster));
+            }
+        }
+
+        if (pending)
+        {
+            return glyphs;
+        }
+
+        if (_alone.Count >= 1024)
+        {
+            _alone.Clear();
+        }
+
+        _alone[key] = glyphs;
+        return glyphs;
+    }
+
+    private readonly Dictionary<(string, IFont, string, bool, FontFallback), List<(IFont Font, ShapedGlyph Glyph, int Cluster)>>
+        _alone = [];
 
     private IEnumerable<(int Start, int End, IFont Font, bool Pending)> FontRuns(string text, bool[] graphemes, int start,
         int end, IFont font, string language, TextLayoutOptions options)
