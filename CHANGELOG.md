@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Ruby, as HTML's `<ruby>`: `AttributedText.SetRuby(start, length, RubyAnnotation(Text, Position, FontSize))` sets an
+  annotation - furigana, a reading - over a base, centered, at half the base's size unless told; a base narrower than
+  its annotation is spread to its width with the room around each glyph, and stays on one line. The line grows to hold
+  the annotation, as CSS's, unless its height is set (`LineHeight` or `BlockLineHeight`). `RubyPosition.Under` puts it
+  below the line. In vertical text the annotation stands upright to the right of its base (to the left under), and
+  the column widens on that side only.
+
 - Optical kerning, as InDesign's: `TextLayout.Kerning` and `TextAttributes.Kerning` (`TextKerning.Metrics` - the font's
   pairs, the default; `Optical`; `None`). Optically, the space between two letters is measured from their outlines
   (`OpticalKerning.Between`): the white between them, taken into their hollows no deeper than 0.15 em, is made what it

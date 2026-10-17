@@ -214,7 +214,9 @@ internal sealed class TextNavigator
                     LineMetric(_laid.LineBaselines, segment.Line), LineMetric(_laid.LineHeights, segment.Line), font, size);
                 var baseline = Math.Round(top - _laid.VerticalShift + LineMetric(_laid.LineBaselines, segment.Line) - shift)
                                + _laid.VerticalShift;
-                var axis = top + LineMetric(_laid.LineHeights, segment.Line) / 2 - shift;
+                var axis = top + (_laid.LineAxes != null
+                    ? LineMetric(_laid.LineAxes, segment.Line)
+                    : LineMetric(_laid.LineHeights, segment.Line) / 2) - shift;
                 var beside = axis - (attributes.FontSize ?? fontSize) / 2 - thickness;
                 var underlineTop = vertical ? beside - thickness : baseline - underline;
                 if (attributes.Background is { } background)

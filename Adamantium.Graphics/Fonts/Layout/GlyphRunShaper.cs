@@ -31,7 +31,8 @@ internal sealed class GlyphRunShaper
         var items = new List<ShapedItem>(text.Length);
         var runs = attributed?.Runs;
         var runIndex = 0;
-        foreach (var (start, end, attributes) in SplitAt(ShapingSegments(text, attributed, fontSize, options.Kerning), split))
+        foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, attributed, fontSize,
+                     options.Kerning), attributed), split))
         {
             var language = attributes?.Language ?? options.Language;
             var kerning = attributes?.Kerning ?? options.Kerning;
@@ -312,6 +313,46 @@ internal sealed class GlyphRunShaper
         }
     }
 
+    // A ruby base is shaped by itself, so no ligature or cluster reaches across its edges.
+    private static IEnumerable<(int Start, int End, TextAttributes Attributes)> SplitAtRubies(
+        IEnumerable<(int Start, int End, TextAttributes Attributes)> segments, AttributedText attributed)
+    {
+        if (attributed is not { Rubies.Count: > 0 } withRubies)
+        {
+            foreach (var segment in segments)
+            {
+                yield return segment;
+            }
+
+            yield break;
+        }
+
+        var rubies = withRubies.Rubies;
+        var next = 0;
+        foreach (var (start, end, attributes) in segments)
+        {
+            var from = start;
+            while (next < rubies.Count * 2)
+            {
+                var edge = next % 2 == 0 ? rubies[next / 2].Start : rubies[next / 2].End;
+                if (edge >= end)
+                {
+                    break;
+                }
+
+                if (edge > from)
+                {
+                    yield return (from, edge, attributes);
+                    from = edge;
+                }
+
+                next++;
+            }
+
+            yield return (from, end, attributes);
+        }
+    }
+
     private IEnumerable<(int Start, int End, TextAttributes Attributes)> ShapingSegments(string text,
         AttributedText attributed, double fontSize, TextKerning kerning)
     {
@@ -340,6 +381,47 @@ internal sealed class GlyphRunShaper
 
         yield return (start, text.Length, attributes);
     }
+
+    // A short text set apart from the text, as a ruby annotation: in the font, or the fallback's font for what it lacks;
+    // kept for the layouts after this one.
+    internal List<(IFont Font, ShapedGlyph Glyph, int Cluster)> ShapeAlone(string text, IFont font, string language,
+        bool vertical, TextLayoutOptions options, out bool pending)
+    {
+        pending = false;
+        var key = (text, font, language, vertical, options.Fallback);
+        if (_alone.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
+        var glyphs = new List<(IFont Font, ShapedGlyph Glyph, int Cluster)>(text.Length);
+        foreach (var (start, end, runFont, runPending) in FontRuns(text, graphemes, 0, text.Length, font, language, options))
+        {
+            pending |= runPending;
+            foreach (var glyph in TextShaper.Shape(runFont, text, start, end,
+                         new ShapingOptions(null, language, null, vertical: vertical)))
+            {
+                glyphs.Add((runFont, glyph, start + glyph.Cluster));
+            }
+        }
+
+        if (pending)
+        {
+            return glyphs;
+        }
+
+        if (_alone.Count >= 1024)
+        {
+            _alone.Clear();
+        }
+
+        _alone[key] = glyphs;
+        return glyphs;
+    }
+
+    private readonly Dictionary<(string, IFont, string, bool, FontFallback), List<(IFont Font, ShapedGlyph Glyph, int Cluster)>>
+        _alone = [];
 
     private IEnumerable<(int Start, int End, IFont Font, bool Pending)> FontRuns(string text, bool[] graphemes, int start,
         int end, IFont font, string language, TextLayoutOptions options)
