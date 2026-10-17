@@ -19,3 +19,6 @@ Variations/RobotoFlex-Variable.ttf	opsz=36,slnt=-5,wght=300,YOPQ=40
 Variations/RobotoFlex-NoHVAR.subset.ttf	wdth=25,wght=900
 Variations/RobotoFlex-NoHVAR.subset.ttf	wdth=151,wght=100
 Variations/RobotoFlex-NoHVAR.subset.ttf	opsz=144
+# A subset without gvar: the outlines stay, only the advances vary by HVAR.
+Variations/RobotoFlex-NoGvar.subset.ttf	wdth=25,wght=900
+Variations/RobotoFlex-NoGvar.subset.ttf	wdth=151,wght=100

@@ -8,7 +8,7 @@ namespace Adamantium.Fonts.Svg;
 
 internal sealed class SvgOutlineSink : ISvgPathSink
 {
-    private const double MaxArcPiece = Math.PI / 4;
+    private const double MaxArcPiece = Math.PI / 2;
 
     private List<OutlinePoint> contour;
     private Vector2 current;

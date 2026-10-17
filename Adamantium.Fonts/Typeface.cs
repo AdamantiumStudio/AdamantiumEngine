@@ -28,6 +28,7 @@ namespace Adamantium.Fonts
         public Typeface()
         {
             Id = System.Threading.Interlocked.Increment(ref lastId);
+            OutlinesId = Id;
             fonts = new List<IFont>();
             glyphs = new List<Glyph>();
             unicodes = new List<uint>();
@@ -37,6 +38,10 @@ namespace Adamantium.Fonts
 
         /// <summary>Unique among the typefaces of the process: with a glyph index, it names a glyph in a shared atlas.</summary>
         public int Id { get; }
+
+        /// <summary>The <see cref="Id"/> of the typeface whose glyphs this one draws with the same outlines: its own, or
+        /// that of the font it is an instance of when the instance varies only metrics and colors.</summary>
+        public int OutlinesId { get; internal set; }
 
         public IReadOnlyList<IFont> Fonts => fonts.AsReadOnly();
 

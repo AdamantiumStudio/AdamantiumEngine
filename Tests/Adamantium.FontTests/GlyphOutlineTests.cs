@@ -148,6 +148,41 @@ public class GlyphOutlineTests
         Assert.That(glyphs.Select(x => x.Sample(3).Length), Is.EqualTo(expected));
     }
 
+    // A long curve cut into a fixed number of chords sagged inside it: a quarter arc of radius 480 by some 4 units.
+    // Quadratic points are rounded to whole units, which the bound allows for.
+    [TestCase("TTFFonts/SourceSans3-Black.ttf", 0.75)]
+    [TestCase("OTFFonts/SourceSans3-Regular.otf", 0.0)]
+    public void SampledCurves_StayWithinAThousandthOfTheGlyph(string path, double rounding)
+    {
+        var typeface = Typeface.LoadFont(path, 3);
+        var font = typeface.GetFont(0);
+
+        foreach (var character in "oOCGQS@&%")
+        {
+            var glyph = font.GetGlyphByCharacter(character);
+            glyph.Sample(5);
+            var chords = glyph.GenerateOutlines(5).SelectMany(x => x.Segments ?? []).ToArray();
+            var bound = Math.Max(Math.Max(glyph.BoundingRectangle.Width, glyph.BoundingRectangle.Height) / 1024.0, 0.25)
+                        + rounding + 1e-6;
+            var worst = 0.0;
+            foreach (var curve in glyph.Outlines.SelectMany(x => x.Segments).Where(x => x.Points.Count > 2))
+            {
+                for (var step = 1; step < 32; step++)
+                {
+                    var point = Point(curve.Points, step / 32.0);
+                    worst = Math.Max(worst, chords.Min(x => GlyphSegmentsMath.GetDistanceToSegment(x, point)));
+                }
+            }
+
+            Assert.That(worst, Is.LessThanOrEqualTo(bound), $"'{character}'");
+        }
+
+        static Vector2 Point(System.Collections.Generic.List<Vector2> p, double t) => p.Count == 3
+            ? (1 - t) * (1 - t) * p[0] + 2 * t * (1 - t) * p[1] + t * t * p[2]
+            : Math.Pow(1 - t, 3) * p[0] + 3 * t * (1 - t) * (1 - t) * p[1] + 3 * t * t * (1 - t) * p[2] +
+              Math.Pow(t, 3) * p[3];
+    }
+
     [TestCase("TTFFonts/CascadiaCode-Regular.ttf")]
     [TestCase("source-sans-3v028R/VAR/SourceSans3VF-Roman.otf")]
     [TestCase("OTFFonts/SourceSans3-Regular.otf")]
