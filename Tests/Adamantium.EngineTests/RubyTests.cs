@@ -583,4 +583,23 @@ public class RubyTests
         text.SetRuby(0, Text.Length, new RubyAnnotation(string.Empty));
         Assert.That(text.Rubies, Is.Empty);
     }
+
+    // A box trimmed to the capitals keeps an annotation over the first line inside it, and is trimmed as without one
+    // when the annotation is under the line.
+    [Test]
+    public void TrimToCapHeight_KeepsAnAnnotationOverTheFirstLineInside()
+    {
+        var layout = Lay("にほん", setUp: l => l.LineBounds = TextLineBounds.TrimToCapHeight, start: 0);
+
+        Assert.That(Annotation(layout).Min(glyph => glyph.Rect.Y), Is.GreaterThanOrEqualTo(-1));
+    }
+
+    [Test]
+    public void TrimToCapHeight_TrimsALineWhoseAnnotationIsUnder()
+    {
+        var plain = Lay(null, setUp: l => l.LineBounds = TextLineBounds.TrimToCapHeight);
+        var under = Lay("にほん", RubyPosition.Under, setUp: l => l.LineBounds = TextLineBounds.TrimToCapHeight, start: 0);
+
+        Assert.That(under.GetLine(0).Baseline, Is.EqualTo(plain.GetLine(0).Baseline));
+    }
 }
