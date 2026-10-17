@@ -97,3 +97,12 @@ ScriptFonts/PonomarUnicode.otf	Cyrl	cu		Ѿ{U+0447}е на{U+0301}шъ, и{U+0486
 ScriptFonts/PonomarUnicode.otf	Cyrl	cu		гд{U+2DED}{U+0487}ь бг{U+0483}ъ хр{U+2DED}{U+0487}то{U+0301}съ і{U+0486}и{U+0483}съ ѻ{U+0486}{U+0301}ч{U+0483}е ст{U+0483}ꙋ{U+0301}ю
 ScriptFonts/PonomarUnicode.otf	Cyrl	cu		ѻ ѿ ѽ ѧ ꙋ ѣ ѳ ѵ ѯ ѱ ҂а{U+0483} ҂вк{U+0483}і і{U+0308} ѷ
 ScriptFonts/MonomakhUnicode.otf	Cyrl	cu		Аꙁъ ѥсмь ꙗко ꙑ ѫ ѭ ꙙ ꙃ ꙉ ѣ ѳ ѵ ѯ ѱ ҁ ꙇ
+ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			ܫܠܡܐ ܥܠܡܐ
+ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			ܡܰܠܟܽܘܬܳܐ ܕܰܫܡܰܝܳܐ
+ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			ܐ ܒܐ ܕܐ ܪܐ ܐܒܐ ܠܐ ܡܐܢܐ
+ScriptFonts/NotoSansMongolian-Regular.ttf	Mong			ᠮᠣᠩᠭᠣᠯ ᠪᠢᠴᠢᠭ
+ScriptFonts/NotoSansMongolian-Regular.ttf	Mong			ᠭ{U+180B}ᠠ ᠪᠢᠴᠢᠭ{U+202F}ᠦᠨ ᠠ{U+180E}ᠠ
+ScriptFonts/NotoSansNKo-Regular.ttf	Nkoo			ߒߞߏ ߞߊ߲ߜߍ
+ScriptFonts/NotoSansNKo-Regular.ttf	Nkoo			ߊ߫ߟߊ߬ ߓߊ߲߮ ߁߂߃
+ScriptFonts/NotoSansAdlam-Regular.ttf	Adlm			𞤀𞤣𞤤𞤢𞤥 𞤆𞤵𞤤𞤢𞤪
+ScriptFonts/NotoSansAdlam-Regular.ttf	Adlm			𞤢𞥄𞤤 𞤳𞥆𞤢 𞥑𞥒𞥓

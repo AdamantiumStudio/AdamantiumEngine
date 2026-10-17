@@ -163,6 +163,68 @@ public class TabStopLayoutTests
         Assert.That(At(layout, text.IndexOf('\t') + 1).PenX, Is.EqualTo(200).Within(1e-3));
     }
 
+    // As Word: a tab stop is measured from the margin, and only the text after the last tab is aligned, in the room
+    // after it.
+    [TestCase(HorizontalTextAlignment.Right)]
+    [TestCase(HorizontalTextAlignment.Center)]
+    public void AlignedText_KeepsItsTabStops_AndAlignsWhatFollowsTheLastTab(HorizontalTextAlignment alignment)
+    {
+        const string text = "Name\tValue";
+        var layout = Layout(text, 300, TextWrapping.WrapByWords, TextTrimming.None, alignment, LineBreaking.Greedy,
+            false, new TabStop(100));
+        var value = layout.GetTextData().Where(g => g.PositionInString > text.IndexOf('\t')).ToArray();
+        var left = value.Min(g => g.Rect.Left);
+        var right = value.Max(g => g.Rect.Right);
+
+        Assert.That(At(layout, 0).PenX, Is.EqualTo(0).Within(1e-3), "the text before the tab stays at the margin");
+        Assert.That(alignment == HorizontalTextAlignment.Right ? right : (left + right) / 2,
+            Is.EqualTo(alignment == HorizontalTextAlignment.Right ? 300 : 200).Within(0.5));
+    }
+
+    // The tab grows to the text it moved: its leader, an underline or a selection run on to it.
+    [TestCase(HorizontalTextAlignment.Right)]
+    [TestCase(HorizontalTextAlignment.Center)]
+    public void AnAlignedLine_ItsTabReachesTheTextAfterIt_AndSoDoesItsLeader(HorizontalTextAlignment alignment)
+    {
+        const string text = "Name\tValue";
+        var layout = Layout(text, 300, TextWrapping.WrapByWords, TextTrimming.None, alignment, LineBreaking.Greedy,
+            false, new TabStop(100, TabAlignment.Left, "."));
+        var tab = At(layout, text.IndexOf('\t'));
+        var value = At(layout, text.IndexOf('\t') + 1);
+        var dots = layout.GetTextData().Where(g => g.PositionInString < 0).ToArray();
+
+        Assert.That(tab.PenX + tab.Advance, Is.EqualTo(value.PenX).Within(1e-3));
+        Assert.That(layout.GetRangeRects(0, text.Length), Has.Count.EqualTo(1), "one stretch to underline and select");
+        Assert.That(dots.Max(g => g.PenX + g.Advance), Is.GreaterThan(value.PenX - dots[0].Advance - 1e-3));
+        Assert.That(dots.Max(g => g.PenX + g.Advance), Is.LessThanOrEqualTo(value.PenX + 1e-3));
+    }
+
+    [Test]
+    public void ARightAlignedLineWithAHangingStop_ItsTabStillReachesTheText()
+    {
+        const string text = "Name\tValue.";
+        var layout = Layout(text, 300, TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Right,
+            LineBreaking.Greedy, true, new TabStop(100, TabAlignment.Left, "."));
+        var tab = At(layout, text.IndexOf('\t'));
+
+        Assert.That(tab.PenX + tab.Advance, Is.EqualTo(At(layout, text.IndexOf('\t') + 1).PenX).Within(1e-3));
+    }
+
+    // A right, centered or decimal stop sets the text after it itself: aligning the line leaves it there.
+    [TestCase(TabAlignment.Right)]
+    [TestCase(TabAlignment.Center)]
+    public void AnAlignedLine_LeavesTheTextAfterAStopThatPlacesIt(TabAlignment stop)
+    {
+        const string text = "Name\tValue";
+        var aligned = Layout(text, 300, TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Right,
+            LineBreaking.Greedy, false, new TabStop(200, stop, "."));
+        var left = Layout(text, 300, TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            LineBreaking.Greedy, false, new TabStop(200, stop, "."));
+
+        Assert.That(At(aligned, text.Length - 1).PenX, Is.EqualTo(At(left, text.Length - 1).PenX).Within(1e-3));
+        Assert.That(At(aligned, 0).PenX, Is.EqualTo(0).Within(1e-3));
+    }
+
     [TestCase("“Pears”\t2.25", 9)]
     [TestCase("\t-3.75", 3)]
     public void OpticalMargins_LeaveTheTabColumnWhereItIs(string text, int separator)

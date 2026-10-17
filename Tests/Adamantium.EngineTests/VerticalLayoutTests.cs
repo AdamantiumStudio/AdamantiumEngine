@@ -192,6 +192,29 @@ public class VerticalLayoutTests
         Assert.That(glyphs[1].PenX, Is.EqualTo(top + FontSize).Within(1e-3));
     }
 
+    // Tracking is room after a letter: the cell an upright letter takes down its line ends where the letter does.
+    [Test]
+    public void AJustifiedLineWithTracking_EndsItsLastLetterAtTheEnd()
+    {
+        var layout = new TextLayout(NotoSansCjk.Value, Font)
+        {
+            Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, Tracking = 200,
+            LetterSpacing = new SpacingRange(0, 0, 1),
+        };
+        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな、", 12)), FontSize, new Size(400, 301),
+            TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
+        var glyphs = layout.GetTextData();
+        var tail = 200 * FontSize / 1000;
+
+        Assume.That(layout.LineCount, Is.GreaterThan(2));
+        for (var line = 0; line < layout.LineCount - 1; line++)
+        {
+            var last = glyphs.Where(glyph => glyph.LineIndex == line && glyph.PositionInString >= 0)
+                .OrderBy(glyph => glyph.PenX).Last();
+            Assert.That(last.PenX + last.Advance - tail, Is.EqualTo(301).Within(0.5), $"line {line}");
+        }
+    }
+
     [Test]
     public void Size_IsTheLinesAcrossByTheLongestLineDown()
     {

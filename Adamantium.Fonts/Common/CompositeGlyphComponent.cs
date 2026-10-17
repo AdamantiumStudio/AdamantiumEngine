@@ -10,6 +10,8 @@ namespace Adamantium.Fonts.Common
 
         internal bool IsAnchored { get; set; }
 
+        internal bool UseMyMetrics { get; set; }
+
         internal int ParentPoint { get; set; }
 
         internal int ChildPoint { get; set; }

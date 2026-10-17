@@ -7,6 +7,21 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.HyphenLimit`, as InDesign's hyphen limit: the most lines in a row that may end in a hyphen breaking a
+  word (0, the default, sets none); hyphens of the text itself are not counted. Past it a word goes down whole, unless
+  it is alone on its line. `ParagraphComposer.Break` and `BreakAnyway` take the limit too.
+
+- `TextShaper.SetsSpace(font, codepoint)`: whether shaping sets a space separator in a font, by its own glyph or by the
+  font's space at its width.
+
+- `AttributedText.ClearOverrides(start, length)`, as InDesign's Clear Overrides: the range keeps only its styles; an
+  inline object keeps its size and alignment.
+
+- `IFont.GetGlyphAlternates(glyph, feature, codepoint, language)`: the glyphs one feature gives a glyph in text of a
+  script and language, from the language system a shaper takes for them.
+
+- `GlyphWordData.Annotates`: whether a glyph is a ruby annotation's.
+
 - Named paragraph and character styles, as InDesign's: `ParagraphStyle(Name, Paragraph, Text, BasedOn)` and
   `CharacterStyle(Name, Attributes, BasedOn)`, set with `AttributedText.SetParagraphStyle` / `SetCharacterStyle` and
   read back with `ParagraphStyleAt` / `CharacterStyleAt`. A range takes, each over the one before, the defaults, its
@@ -450,6 +465,27 @@ All packages share one version.
 
 ### Fixed
 
+- Trimmed text in a fixed height sets only lines that fit whole: at two and a half lines high the third line stood half
+  shown, its ellipsis with it. Untrimmed, a line that starts inside is still set and cut by the area, as CSS clips it.
+- A composite glyph flagged `USE_MY_METRICS` takes its component's advance and origin in a variable font without
+  `HVAR`, as HarfBuzz does; its own phantom points were used.
+- Justification alternates (`jalt`) come from the feature of the text's own script and language, as a variable font's
+  instance has it: they were taken from every script the font gives the feature for.
+- `AttributedText` ranges whose length runs past the end of the text, `int.MaxValue` among them, reach the end: applied
+  attributes, styles, paragraphs and ruby set over them did nothing, or gave a paragraph a length past the text.
+- A number keeps the ideograph or kana after it on its line (1月, 3つ), which UAX #14 lets part.
+- A space the font lacks - a subset of an emoji font - is taken from a fallback font, as Edge does, instead of the
+  font's missing-glyph box. A thin or narrow no-break space the font sets by its own space stays in it.
+- Threads filling an atlas inline at once (`FontAtlasStore.SynchronousFill`) fill and upload one at a time: an
+  off-screen render made every thread fill inline, and two of them uploaded into one atlas at once.
+- In columns and around exclusions, letters of a line set into a later frame stand on its baseline: they were rounded
+  to the pixel before the line moved there by a part of one, and its underline stood a pixel off.
+- Centered and right-aligned lines keep their tab stops, measured from the margin as Word does: only the text after the
+  last tab is aligned, in the room after it, and the tab - its leader, underline and selection with it - reaches it;
+  text a right, centered or decimal stop sets stays at the stop. The whole line moved, tab stops with it.
+- An upright letter's cell down a vertical line ends where the letter does, without its tracking: a justified line
+  with tracking fell short of the end by as much.
+- A ruby annotation takes none of its base's text effects: it took those of the base's last letter.
 - `TypeParser` no longer throws and catches an `ArgumentException` for every type whose parser returns a value: it
   asks whether the parser binds as a delegate instead of trying. A debugger stopped on each of them at start-up.
 - A `Camera` rebuilds its projections in its next `Update` when its field of view, a clipping plane or its size

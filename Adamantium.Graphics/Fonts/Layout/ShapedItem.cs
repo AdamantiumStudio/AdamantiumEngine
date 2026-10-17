@@ -5,9 +5,11 @@ namespace Adamantium.Graphics.Fonts.Layout;
 internal readonly struct ShapedItem
 {
     public ShapedItem(Glyph glyph, char symbol, int cluster, double advance, double offsetX, double offsetY,
-        TextAttributes attributes, IFont font, double fontSize, bool upright = false, double horizontalScale = 1)
+        TextAttributes attributes, IFont font, double fontSize, bool upright = false, double horizontalScale = 1,
+        double tail = 0)
     {
         Upright = upright;
+        Tail = tail;
         HorizontalScale = horizontalScale;
         Font = font;
         Glyph = glyph;
@@ -41,4 +43,6 @@ internal readonly struct ShapedItem
     public bool Upright { get; }
 
     public double HorizontalScale { get; }
+
+    public double Tail { get; }
 }

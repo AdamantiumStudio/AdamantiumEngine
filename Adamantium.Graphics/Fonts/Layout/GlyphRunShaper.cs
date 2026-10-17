@@ -232,11 +232,13 @@ internal sealed class GlyphRunShaper
                 var size = glyphAttributes?.FontSize ?? fontSize;
                 var scale = size / runFont.UnitsPerEm;
                 var carries = k == shaped.Length - 1 || shaped[k + 1].Cluster != glyph.Cluster;
+                var natural = -glyph.YAdvance * scale;
+                var advance = Spaced(natural, runFont, size, glyphAttributes, cluster, carries);
                 items.Add(new ShapedItem(blank ?? runFont.GetGlyphByIndex(glyph.GlyphIndex), text[cluster],
-                    cluster, Spaced(-glyph.YAdvance * scale, runFont, size, glyphAttributes, cluster, carries),
+                    cluster, advance,
                     -glyph.YOffset * scale, glyph.XOffset * scale + Raise(glyphAttributes, runFont, size, fontSize),
                     glyphAttributes,
-                    runFont, size, true));
+                    runFont, size, true, tail: advance - natural));
             }
         }
 
@@ -454,12 +456,13 @@ internal sealed class GlyphRunShaper
             var graphemeEnd = Math.Min(nextGrapheme, end);
             IFont chosen;
             var pending = false;
-            if (runFont != null && (JoinsPrevious(codepoint) || IsSpaceOrControl(codepoint)))
+            var space = IsSpaceOrControl(codepoint);
+            if (runFont != null && (JoinsPrevious(codepoint) || (space && Holds(runFont, codepoint))))
             {
                 chosen = runFont;
                 pending = runPending;
             }
-            else if (IsSpaceOrControl(codepoint))
+            else if (space && Holds(font, codepoint))
             {
                 chosen = font;
             }
@@ -499,6 +502,10 @@ internal sealed class GlyphRunShaper
 
         yield return (runStart, end, runFont, runPending);
     }
+
+    private static bool Holds(IFont font, int codepoint) =>
+        CharUnicodeInfo.GetUnicodeCategory(codepoint) != UnicodeCategory.SpaceSeparator
+        || TextShaper.SetsSpace(font, codepoint);
 
     private static bool HasColorGlyph(IFont font, int codepoint)
     {

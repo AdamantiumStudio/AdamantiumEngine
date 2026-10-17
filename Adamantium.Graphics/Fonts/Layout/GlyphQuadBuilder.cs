@@ -127,7 +127,7 @@ internal sealed class GlyphQuadBuilder
             for (var k = first; k < ElementsCount; k++)
             {
                 _items[k].Cell = cell;
-                _items[k].Place.X = word.PositionInString >= 0 ? word.PositionInString : lastPosition;
+                _items[k].Place.X = word.PositionInString >= 0 ? word.PositionInString : word.Annotates ? -1 : lastPosition;
             }
         }
     }

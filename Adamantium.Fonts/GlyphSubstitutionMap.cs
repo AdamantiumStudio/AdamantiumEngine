@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Adamantium.Fonts.Common;
+using Adamantium.Fonts.Shaping;
 using Adamantium.Fonts.Tables.GSUB;
 using Adamantium.Fonts.Tables.Layout;
 
@@ -12,11 +14,15 @@ internal sealed class GlyphSubstitutionMap
 {
     private const int MaxRounds = 16;
 
+    private readonly Font font;
     private readonly Dictionary<uint, List<GlyphAlternate>> alternates = new();
     private readonly Dictionary<uint, List<string>> texts = new();
+    private readonly ConcurrentDictionary<(string Script, string Language, string Feature, int Variation),
+        Dictionary<uint, uint[]>> scoped = new();
 
     public GlyphSubstitutionMap(Font font)
     {
+        this.font = font;
         var lookups = font.Layout.Gsub?.LookupList ?? [];
         CollectAlternates(font.FeatureCatalog, lookups);
         CollectTexts(font, lookups);
@@ -24,6 +30,13 @@ internal sealed class GlyphSubstitutionMap
 
     public IReadOnlyList<GlyphAlternate> Alternates(uint glyph) =>
         alternates.TryGetValue(glyph, out var list) ? list : [];
+
+    public IReadOnlyList<uint> Alternates(uint glyph, string feature, int codepoint, string language, float[] coordinates)
+    {
+        var variation = font.Layout.Gsub?.FeatureVariations?.Find(coordinates) ?? -1;
+        var map = scoped.GetOrAdd((UnicodeData.GetScript(codepoint), language, feature, variation), CollectScoped);
+        return map.TryGetValue(glyph, out var outputs) ? outputs : [];
+    }
 
     public IReadOnlyList<string> Text(uint glyph) => texts.TryGetValue(glyph, out var list) ? list : [];
 
@@ -54,6 +67,38 @@ internal sealed class GlyphSubstitutionMap
                 }
             }
         }
+    }
+
+    private Dictionary<uint, uint[]> CollectScoped((string Script, string Language, string Feature, int Variation) key)
+    {
+        var map = new Dictionary<uint, uint[]>();
+        var gsub = font.Layout.Gsub;
+        var variation = key.Variation;
+        var langSys = ShapePlan.Select(gsub, OpenTypeTags.ScriptTag(key.Script), OpenTypeTags.LanguageTag(key.Language),
+            variation).LangSys;
+        var index = ShapePlan.FindFeature(gsub, langSys, key.Feature);
+        if (index < 0)
+        {
+            return map;
+        }
+
+        foreach (var lookup in ShapePlan.Feature(gsub, index, variation).LookupListIndices ?? [])
+        {
+            if (lookup >= gsub.LookupList.Length)
+            {
+                continue;
+            }
+
+            foreach (var (glyph, outputs, _) in Substitutions(gsub.LookupList[lookup]))
+            {
+                if (!map.ContainsKey(glyph))
+                {
+                    map[glyph] = outputs;
+                }
+            }
+        }
+
+        return map;
     }
 
     private void CollectTexts(Font font, ILookupTable[] lookups)

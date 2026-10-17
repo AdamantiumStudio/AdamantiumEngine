@@ -38,6 +38,20 @@ public class ColorBitmapTests
         Assert.That(Describe(font, pixelsPerEm), Is.EqualTo(expected));
     }
 
+    // HarfBuzz reads only index formats 1 and 3 and image format 17, which the subset has: the other formats were made
+    // from it, so each must find the same images where the subset does.
+    [TestCase("ColorFonts/NotoColorEmoji.subset.index_format2_image_format19.ttf")]
+    [TestCase("ColorFonts/NotoColorEmoji.subset.index_format4_image_format18.ttf")]
+    [TestCase("ColorFonts/NotoColorEmoji.subset.index_format5_image_format19.ttf")]
+    public void TheOtherFormats_FindTheImagesTheSubsetHas(string variant)
+    {
+        var subset = Fonts.GetOrAdd("ColorFonts/NotoColorEmoji.subset.ttf", p => Typeface.LoadFont(p, 3).GetFont(0));
+        var font = Fonts.GetOrAdd(variant, p => Typeface.LoadFont(p, 3).GetFont(0));
+
+        Assert.That(Describe(font, 0), Is.Not.Empty.And.EqualTo(Describe(subset, 0)));
+        Assert.That(Describe(font, 109), Is.EqualTo(Describe(subset, 109)));
+    }
+
     [Test]
     public void AFontWithoutImages_HasNone()
     {

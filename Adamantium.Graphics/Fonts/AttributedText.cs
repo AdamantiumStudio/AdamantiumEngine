@@ -55,14 +55,31 @@ public sealed class AttributedText
     /// and win over the range's styles.</summary>
     public AttributedText Apply(int start, int length, TextAttributes attributes)
     {
-        var end = Math.Min(start + length, Text.Length);
+        return attributes == null
+            ? this
+            : Splice(start, length, attributes, static (own, applied) => own.With(applied));
+    }
+
+    /// <summary>Takes what was applied over a range away, as InDesign's Clear Overrides: the range keeps only its
+    /// styles. An inline object keeps its size and alignment, which place it rather than format it.</summary>
+    public AttributedText ClearOverrides(int start, int length)
+    {
+        return Splice(start, length, (object)null, static (own, _) => own.ObjectSize is { } size
+            ? new TextAttributes { ObjectSize = size, BaselineAlignment = own.BaselineAlignment }
+            : TextAttributes.Empty);
+    }
+
+    // Only the runs the range touches are split, in place: the text's own runs cover it end to end.
+    private AttributedText Splice<TState>(int start, int length, TState state,
+        Func<TextAttributes, TState, TextAttributes> change)
+    {
+        var end = EndOf(start, length);
         start = Math.Max(start, 0);
-        if (end <= start || attributes == null)
+        if (end <= start)
         {
             return this;
         }
 
-        // Only the runs the range touches are split, in place: the text's own runs cover it end to end.
         var first = FirstEndingAfter(_own, start);
         var last = first;
         _splice.Clear();
@@ -76,7 +93,7 @@ public sealed class AttributedText
 
             var from = Math.Max(run.Start, start);
             var to = Math.Min(run.End, end);
-            _splice.Add(new AttributeRun(from, to - from, run.Attributes.With(attributes)));
+            _splice.Add(new AttributeRun(from, to - from, change(run.Attributes, state)));
 
             if (run.End > end)
             {
@@ -94,7 +111,7 @@ public sealed class AttributedText
     /// <summary>Sets a character style over a range, in place of any there; null takes them away.</summary>
     public AttributedText SetCharacterStyle(int start, int length, CharacterStyle style)
     {
-        var end = Math.Min(start + length, Text.Length);
+        var end = EndOf(start, length);
         start = Math.Max(start, 0);
         if (end <= start)
         {
@@ -126,7 +143,7 @@ public sealed class AttributedText
     /// attributes set win over the paragraph's style.</summary>
     public AttributedText SetParagraph(int start, int length, ParagraphAttributes attributes)
     {
-        var end = Math.Min(start + length, Text.Length);
+        var end = EndOf(start, length);
         start = Math.Max(start, 0);
         if (attributes == null || (end <= start && start != Text.Length))
         {
@@ -144,7 +161,7 @@ public sealed class AttributedText
     /// it overlaps; null takes them away.</summary>
     public AttributedText SetParagraphStyle(int start, int length, ParagraphStyle style)
     {
-        var end = Math.Min(start + length, Text.Length);
+        var end = EndOf(start, length);
         start = Math.Max(start, 0);
         if (end <= start && start != Text.Length)
         {
@@ -183,7 +200,7 @@ public sealed class AttributedText
     /// and the annotation stands centered over it. It replaces any ruby it overlaps; an empty annotation removes them.</summary>
     public AttributedText SetRuby(int start, int length, RubyAnnotation annotation)
     {
-        var end = Math.Min(start + length, Text.Length);
+        var end = EndOf(start, length);
         start = Math.Max(start, 0);
         if (end <= start)
         {
@@ -506,6 +523,8 @@ public sealed class AttributedText
             runs.Insert(at, rightPart);
         }
     }
+
+    private int EndOf(int start, int length) => (int)Math.Min((long)start + length, Text.Length);
 
     // The first of runs covering the text end to end whose end lies past the index.
     private static int FirstEndingAfter(List<AttributeRun> runs, int index)

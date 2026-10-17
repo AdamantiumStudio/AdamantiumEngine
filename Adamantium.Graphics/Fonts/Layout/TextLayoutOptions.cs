@@ -14,6 +14,8 @@ internal sealed class TextLayoutOptions
 
     public Hyphens Hyphens { get; init; }
 
+    public int HyphenLimit { get; init; }
+
     public LineBreaking LineBreaking { get; init; }
 
     public bool OpticalMarginAlignment { get; init; }
@@ -67,7 +69,7 @@ internal sealed class TextLayoutOptions
     public bool LaysOutLike(TextLayoutOptions other)
     {
         return other != null && TabSize == other.TabSize && Direction == other.Direction && Hyphens == other.Hyphens
-               && Language == other.Language && LineBreaking == other.LineBreaking
+               && HyphenLimit == other.HyphenLimit && Language == other.Language && LineBreaking == other.LineBreaking
                && TabStops.SequenceEqual(other.TabStops) && OpticalMarginAlignment == other.OpticalMarginAlignment
                && Equals(DropCap, other.DropCap) && WritingMode == other.WritingMode
                && WordSpacing.Equals(other.WordSpacing) && LetterSpacing.Equals(other.LetterSpacing)

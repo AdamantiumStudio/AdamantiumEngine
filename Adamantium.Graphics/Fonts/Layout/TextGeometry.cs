@@ -31,6 +31,10 @@ internal static class TextGeometry
             ? char.ConvertToUtf32(text[index], text[index + 1])
             : text[index];
 
+    public static bool IsHanOrKana(int codepoint) => codepoint is >= 0x3040 and <= 0x30FF or >= 0x31F0 and <= 0x31FF
+        or >= 0x3005 and <= 0x3007 or >= 0x3400 and <= 0x4DBF or >= 0x4E00 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF
+        or >= 0x20000 and <= 0x3FFFF;
+
     public static bool IsSpaceOrControl(int codepoint)
     {
         return CharUnicodeInfo.GetUnicodeCategory(codepoint) is UnicodeCategory.SpaceSeparator
