@@ -13,6 +13,11 @@ internal sealed record LaidOutText
 
     public AttributedText Attributed { get; init; }
 
+    // The attributed text's runs as the text was laid out by them: a style changed since does not reach what is drawn.
+    public IReadOnlyList<AttributeRun> AttributeRuns { get; init; }
+
+    public IReadOnlyList<ParagraphRun> ParagraphRuns { get; init; }
+
     public double FontSize { get; init; }
 
     public IFont Font { get; init; }

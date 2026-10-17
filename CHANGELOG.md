@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Named paragraph and character styles, as InDesign's: `ParagraphStyle(Name, Paragraph, Text, BasedOn)` and
+  `CharacterStyle(Name, Attributes, BasedOn)`, set with `AttributedText.SetParagraphStyle` / `SetCharacterStyle` and
+  read back with `ParagraphStyleAt` / `CharacterStyleAt`. A range takes, each over the one before, the defaults, its
+  paragraph's style, its character style and what was applied to it; a paragraph's own `ParagraphAttributes` set over
+  its style field by field (`ParagraphAttributes.With` takes only the fields set). A style based on another sets over
+  it; changing a style, or one it is based on, changes the text it is set on the next time it is laid out.
+
 - Ruby, as HTML's `<ruby>`: `AttributedText.SetRuby(start, length, RubyAnnotation(Text, Position, FontSize))` sets an
   annotation - furigana, a reading - over a base, centered, at half the base's size unless told; a base narrower than
   its annotation is spread to its width with the room around each glyph, and stays on one line. The line grows to hold

@@ -81,7 +81,9 @@ internal sealed class LineComposer
         var oversetIndex = text.Length;
         var tabStops = options.TabStops.OrderBy(stop => stop.Position).ToArray();
         var paragraphs = TextParagraphs.Resolve(text, options.Direction);
-        var paragraphRuns = attributed is { Paragraphs.Count: > 0 } ? attributed : null;
+        // What the attributed text says, read once: a style changed meanwhile does not reach this layout.
+        var (attributeRuns, resolvedParagraphs) = attributed?.Resolved() ?? (null, null);
+        var paragraphRuns = resolvedParagraphs is { Count: > 0 } ? resolvedParagraphs : null;
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
                                               && !TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0)
                                               && !vertical
@@ -89,8 +91,8 @@ internal sealed class LineComposer
             ? DropCapEnd(text, options.DropCap)
             : 0;
         var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
-        var items = _shaper.Shape(text, attributed, fontSize, dropEnd, vertical, options, paragraphs, graphemes,
-            out var hasPendingFonts);
+        var items = _shaper.Shape(text, attributed, attributeRuns, fontSize, dropEnd, vertical, options, paragraphs,
+            graphemes, out var hasPendingFonts);
         var tabStop = _font.GetAdvanceWidth(_spaceGlyph.Index) * scale * Math.Max(options.TabSize, 1);
 
         var _b2 = System.GC.GetAllocatedBytesForCurrentThread();
@@ -409,6 +411,8 @@ internal sealed class LineComposer
         {
             Text = text,
             Attributed = attributed,
+            AttributeRuns = attributeRuns,
+            ParagraphRuns = paragraphRuns,
             FontSize = fontSize,
             Font = _font,
             Options = options,
@@ -957,7 +961,7 @@ internal sealed class LineComposer
             cursorPosition = LineIndent(lineIndex);
         }
 
-        ParagraphAttributes ParagraphOf(int index) => paragraphRuns?.ParagraphAt(index)?.Attributes;
+        ParagraphAttributes ParagraphOf(int index) => AttributedText.ParagraphIn(paragraphRuns, index, text.Length)?.Attributes;
 
         void NoteLine(int line, double gap)
         {
@@ -1248,7 +1252,7 @@ internal sealed class LineComposer
         void BreakInto(int next, int openLine)
         {
             var paragraph = ParagraphOf(next);
-            var startsHere = paragraphRuns?.ParagraphAt(next)?.Start == next;
+            var startsHere = AttributedText.ParagraphIn(paragraphRuns, next, text.Length)?.Start == next;
             if (paragraphRuns == null || next > text.Length
                 || (!startsHere && paragraph == lineParagraph)
                 || (!startsHere && next == text.Length && text[next - 1] != ParagraphSeparator))
