@@ -178,6 +178,50 @@ public class TextStyleTests
     }
 
     [Test]
+    public void ManyRangesAppliedAndStyled_EachCharacterTakesWhatWasSetLastOverIt()
+    {
+        var random = new Random(7);
+        const int length = 400;
+        var text = new AttributedText(new string('x', length));
+        var styles = Enumerable.Range(0, 4).Select(i => new CharacterStyle("S" + i, new TextAttributes { Tracking = i + 1 })).ToArray();
+        var sizes = new double?[length];
+        var styled = new CharacterStyle[length];
+        for (var step = 0; step < 2000; step++)
+        {
+            var start = random.Next(length);
+            var count = random.Next(1, 30);
+            if (random.Next(2) == 0)
+            {
+                var size = random.Next(8, 40);
+                text.Apply(start, count, new TextAttributes { FontSize = size });
+                for (var c = start; c < Math.Min(length, start + count); c++)
+                {
+                    sizes[c] = size;
+                }
+            }
+            else
+            {
+                var style = random.Next(5) == 0 ? null : styles[random.Next(styles.Length)];
+                text.SetCharacterStyle(start, count, style);
+                for (var c = start; c < Math.Min(length, start + count); c++)
+                {
+                    styled[c] = style;
+                }
+            }
+        }
+
+        Assert.Multiple(() =>
+        {
+            for (var c = 0; c < length; c++)
+            {
+                Assert.That(text.AttributesAt(c).FontSize, Is.EqualTo(sizes[c]), $"size at {c}");
+                Assert.That(text.CharacterStyleAt(c), Is.SameAs(styled[c]), $"style at {c}");
+                Assert.That(text.AttributesAt(c).Tracking, Is.EqualTo(styled[c]?.Attributes.Tracking), $"tracking at {c}");
+            }
+        });
+    }
+
+    [Test]
     public void ParagraphAttributes_TakeOnlyTheFieldsSetOverThem()
     {
         var under = new ParagraphAttributes { MarginLeft = 10, LineHeight = 30, Alignment = HorizontalTextAlignment.Center };
