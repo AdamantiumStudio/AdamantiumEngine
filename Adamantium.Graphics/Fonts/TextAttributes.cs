@@ -74,9 +74,14 @@ public sealed class TextAttributes
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public TextAttributes With(TextAttributes over)
     {
-        if (over == null)
+        if (over == null || ReferenceEquals(over, Empty))
         {
             return this;
+        }
+
+        if (ReferenceEquals(this, Empty))
+        {
+            return over;
         }
 
         return new TextAttributes
