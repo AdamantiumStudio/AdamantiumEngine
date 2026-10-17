@@ -328,6 +328,34 @@ namespace Adamantium.ECS
             }
         }
 
+        /// <summary>Visits the entity and what is under it, depth first: <paramref name="visit"/> says whether to go under
+        /// the entity it is given, so a subtree is skipped by returning false at its root.</summary>
+        public void VisitInDepth(Func<Entity, bool> visit)
+        {
+            var stack = StackPool.Get();
+            try
+            {
+                stack.Push(this);
+                while (stack.Count > 0)
+                {
+                    var current = stack.Pop();
+                    if (!visit(current))
+                    {
+                        continue;
+                    }
+
+                    foreach (var child in current.Dependencies)
+                    {
+                        stack.Push(child);
+                    }
+                }
+            }
+            finally
+            {
+                StackPool.Return(stack);
+            }
+        }
+
         public void TraverseByLayer(Action<Entity> action, bool ignoreDisabled = false)
         {
             var queue = QueuePool.Get();

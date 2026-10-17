@@ -29,7 +29,9 @@ public class EntityImportTemplate : IEntityTemplate
         //this.camera = camera;
     }
         
-    /// <param name="initialPosition">Where the model's center is placed; the model turns and scales about it.</param>
+    /// <param name="initialPosition">Where the model's own origin is placed, as the file has it: the root's position is
+    /// its position in the file plus this, the model is not moved to put its center there, and it scales and turns about
+    /// that origin. Each part below it turns about its own center.</param>
     public EntityImportTemplate(SceneData sceneData, IContentManager manager, Vector3 initialPosition)
     {
         this.sceneData = sceneData;
@@ -127,10 +129,15 @@ public class EntityImportTemplate : IEntityTemplate
 
             owner.TraverseInDepth(entity =>
             {
+                if (ReferenceEquals(entity, owner))
+                {
+                    return;
+                }
+
                 var transform = entity.Transform;
                 transform.Pivot = (Vector3)Vector3F.TransformCoordinate(entity.GetLocalCenter(), transform.GetLocalMatrixF());
             });
-            owner.Transform.Position += initialPosition - owner.Transform.Pivot;
+            owner.Transform.Position += initialPosition;
             return Task.FromResult(owner);
         }
         catch (Exception exception)

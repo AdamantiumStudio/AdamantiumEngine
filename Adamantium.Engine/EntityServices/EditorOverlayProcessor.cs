@@ -35,9 +35,12 @@ public class EditorOverlayProcessor : RenderingProcessor
     private readonly Vector4F[] instanceLines = new Vector4F[InstanceCapacity];
     private readonly Vector4F[] instanceRings = new Vector4F[InstanceCapacity];
     private readonly Dictionary<Mesh, Ribbon> ribbons = [];
+    private readonly Matrix4x4F[] gridWorld = new Matrix4x4F[1];
+    private readonly Vector4F[] gridPhases = new Vector4F[GroundGrid.Levels / 2];
     private bool[] drawn = [];
     private uint outlineMark;
     private BasicEffect effect;
+    private GridEffect gridEffect;
     private MeshGeometryCache geometry;
 
     public EditorOverlayProcessor(ToolsService tools)
@@ -58,7 +61,9 @@ public class EditorOverlayProcessor : RenderingProcessor
     protected override void CreateDeviceResources()
     {
         geometry?.Dispose();
+        gridEffect?.Dispose();
         effect = new BasicEffect(GraphicsDevice);
+        gridEffect = new GridEffect(GraphicsDevice);
         geometry = new MeshGeometryCache(GraphicsDevice);
         base.CreateDeviceResources();
     }
@@ -66,6 +71,7 @@ public class EditorOverlayProcessor : RenderingProcessor
     protected override void OnDetached()
     {
         geometry?.Dispose();
+        gridEffect?.Dispose();
         base.OnDetached();
     }
 
@@ -160,6 +166,34 @@ public class EditorOverlayProcessor : RenderingProcessor
         GraphicsDevice.ColorBlendEquation = blend;
     }
 
+    /// <summary>Draws the ground grid behind what stands on it: the scene's depth hides it, and it leaves no depth of its
+    /// own, so nothing drawn after it is hidden by it.</summary>
+    public void DrawGrid(GroundGrid grid)
+    {
+        var layout = grid.LayoutFor(ActiveCamera);
+        var pointPixels = ActiveCamera.PixelsPerPoint;
+        gridWorld[0] = layout.Placement;
+        grid.PhasesFor(ActiveCamera, gridPhases);
+
+        gridEffect.InstanceWorld.SetValue(gridWorld);
+        gridEffect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
+        gridEffect.Phases.SetValue(gridPhases);
+        gridEffect.Layout.SetValue(new Vector4F(layout.Cell, layout.Reach, 0, 0));
+        gridEffect.Lines.SetValue(new Vector4F(layout.Axes, MathF.Max(1, MathF.Round(grid.LineWidth * pointPixels)),
+            grid.ShownCellPointsOrDefault * pointPixels));
+        gridEffect.MinorColor.SetValue(grid.MinorColor);
+        gridEffect.MajorColor.SetValue(grid.MajorColor);
+        gridEffect.AxisXColor.SetValue(grid.AxisXColor);
+        gridEffect.AxisZColor.SetValue(grid.AxisZColor);
+        gridEffect.GridGroundPass.Apply();
+
+        var blend = GraphicsDevice.ColorBlendEquation;
+        GraphicsDevice.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
+        geometry.GetOrCreate(RingSquare, typeof(MeshVertex))
+            .Draw(GraphicsDevice, new RenderState(false, CullModeFlagBits.None, true, false, null), 1);
+        GraphicsDevice.ColorBlendEquation = blend;
+    }
+
     /// <summary>Draws an entity laid out in the output's pixels.</summary>
     public void DrawOnScreen(Entity root)
     {
@@ -208,12 +242,17 @@ public class EditorOverlayProcessor : RenderingProcessor
     private void Collect(Entity root)
     {
         parts.Clear();
-        root.TraverseInDepth(current =>
+        root.VisitInDepth(current =>
         {
-            var transformation = current.Transform.GetMetadata(ActiveCamera);
-            if (!transformation.Enabled || !current.Visible)
+            if (!current.IsEnabled || !current.Visible)
             {
-                return;
+                return false;
+            }
+
+            var transformation = current.Transform.GetMetadata(ActiveCamera);
+            if (!transformation.Enabled)
+            {
+                return true;
             }
 
             var color = ColorOf(current, transformation);
@@ -229,7 +268,9 @@ public class EditorOverlayProcessor : RenderingProcessor
                 var line = topology == PrimitiveType.LineList || topology == PrimitiveType.LineStrip;
                 parts.Add(new Part(data, transformation.WorldMatrixF, color, line || !data.Mesh.IsNormalsPresent, line));
             }
-        }, true);
+
+            return true;
+        });
     }
 
     private static Vector4F ColorOf(Entity current, TransformMetaData transformation)

@@ -67,8 +67,10 @@ public class EntityImportTests
         Assert.That(Import(scene, Vector3.Zero), Is.Not.Null);
     }
 
+    // As the file has it: the model's own origin lands where it is placed, and its position reads that; the geometry
+    // stays where its author put it about the origin - here five units off, 500 centimeters - not moved to its center.
     [Test]
-    public void TheCenter_LandsWhereTheModelIsPlaced()
+    public void TheModelsOrigin_LandsWhereItIsPlaced_AsTheFileHasIt()
     {
         var scene = NewScene();
         scene.Units.Value = 0.01f;
@@ -76,7 +78,29 @@ public class EntityImportTests
 
         var model = Import(scene, new Vector3(0, 0, 5));
 
-        Assert.That(((Vector3F)model.GetCenterAbsolute() - new Vector3F(0, 0, 5)).Length(), Is.LessThan(1e-3f));
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.Transform.Position, Is.EqualTo(new Vector3(0, 0, 5)));
+            Assert.That(((Vector3F)model.GetCenterAbsolute() - new Vector3F(0, 0, 5)).Length(), Is.EqualTo(5f).Within(1e-3f));
+        });
+    }
+
+    [Test]
+    public void ARootMovedInItsFile_IsPlacedFromThere_AndTurnsAboutItsOrigin()
+    {
+        var scene = NewScene();
+        scene.Models.Position = new Vector3F(1, 2, 3);
+        scene.CreateMesh(scene.Models, "part", "Part").Meshes.Add(Box(1, 500));
+
+        var model = Import(scene, new Vector3(0, 0, 5));
+        model.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(70));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.Transform.Position, Is.EqualTo(new Vector3(1, 2, 8)));
+            Assert.That((model.Transform.GetWorldMatrixF().TranslationVector - new Vector3F(1, 2, 8)).Length(),
+                Is.LessThan(1e-4f), "the origin holds still as the model turns");
+        });
     }
 
     [Test]
