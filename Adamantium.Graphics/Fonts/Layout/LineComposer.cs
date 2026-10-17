@@ -23,6 +23,9 @@ internal sealed class LineComposer
         [']'] = (0, 0.1),
     };
 
+    private readonly record struct Ruby(RubyAnnotation Annotation, IFont Font, double FontSize, ShapedGlyph[] Glyphs,
+        double Width);
+
     private readonly IFont _font;
     private readonly Glyph _spaceGlyph;
     private readonly Glyph _dotGlyph;
@@ -158,6 +161,9 @@ internal sealed class LineComposer
             }
         }
 
+        int[] rubyAt = null;
+        var rubies = attributed is { Rubies.Count: > 0 } ? SetUpRubies() : null;
+
         HashSet<int> composedStarts = null;
         HashSet<int> composedCuts = null;
         var composedLines = 0;
@@ -244,6 +250,8 @@ internal sealed class LineComposer
         var lineHeights = new double[lineCount];
         var lineBaselines = new double[lineCount];
         var lineAscents = new double[lineCount];
+        double[] lineCoreAbove = null;
+        double[] lineCoreBelow = null;
         PlaceLines();
         var lastBaseline = lineTops[lineCount - 1] + lineBaselines[lineCount - 1];
         height = lineTops[lineCount - 1] + lineHeights[lineCount - 1];
@@ -334,6 +342,15 @@ internal sealed class LineComposer
         {
             glyphsData = WithLeaders(glyphsData, leaders,
                 slots == null && textArea.Width < Int32.MaxValue ? textArea.Width : double.MaxValue);
+        }
+
+        if (rubies != null)
+        {
+            AddRubyGlyphs();
+            if (glyphsData.Count > 0)
+            {
+                CalculateRealTextDimensions(glyphsData);
+            }
         }
 
         if (vertical)
@@ -573,6 +590,158 @@ internal sealed class LineComposer
             return glyphs;
         }
 
+        // Each ruby's annotation shaped in its base's font; a base narrower than it spread to its width, space around
+        // each glyph, and kept on one line.
+        List<Ruby> SetUpRubies()
+        {
+            rubyAt = new int[text.Length];
+            Array.Fill(rubyAt, -1);
+            var runs = attributed.Rubies;
+            for (var r = 0; r < runs.Count; r++)
+            {
+                for (var c = runs[r].Start; c < runs[r].End; c++)
+                {
+                    rubyAt[c] = r;
+                }
+
+                for (var c = runs[r].Start + 1; lineBreaks != null && c < runs[r].End; c++)
+                {
+                    lineBreaks[c] = LineBreakKind.None;
+                }
+            }
+
+            var firsts = new int[runs.Count];
+            var counts = new int[runs.Count];
+            var widths = new double[runs.Count];
+            Array.Fill(firsts, -1);
+            for (var k = 0; k < items.Count; k++)
+            {
+                if (RubyIndex(items[k].Cluster) is var r and >= 0)
+                {
+                    firsts[r] = firsts[r] < 0 ? k : firsts[r];
+                    counts[r]++;
+                    widths[r] += items[k].Advance;
+                }
+            }
+
+            List<Ruby> set = new(runs.Count);
+            for (var r = 0; r < runs.Count; r++)
+            {
+                if (firsts[r] < 0)
+                {
+                    set.Add(default);
+                    continue;
+                }
+
+                var item = items[firsts[r]];
+                var annotation = runs[r].Annotation;
+                var size = annotation.FontSize is > 0 and var own && double.IsFinite(own) ? own : item.FontSize / 2;
+                var glyphs = TextShaper.Shape(item.Font, annotation.Text, 0, annotation.Text.Length,
+                    new ShapingOptions(null, item.Attributes?.Language ?? options.Language, null, vertical: vertical));
+                var annotationScale = size / item.Font.UnitsPerEm;
+                double width = 0;
+                foreach (var glyph in glyphs)
+                {
+                    width += (vertical ? -glyph.YAdvance : glyph.XAdvance) * annotationScale;
+                }
+
+                set.Add(new Ruby(annotation, item.Font, size, glyphs, width));
+                var extra = (width - widths[r]) / counts[r];
+                for (var k = firsts[r]; extra > 0 && k < items.Count; k++)
+                {
+                    if (RubyIndex(items[k].Cluster) == r)
+                    {
+                        var spread = items[k];
+                        items[k] = new ShapedItem(spread.Glyph, spread.Symbol, spread.Cluster, spread.Advance + extra,
+                            spread.OffsetX + extra / 2, spread.OffsetY, spread.Attributes, spread.Font, spread.FontSize,
+                            spread.Upright, spread.HorizontalScale);
+                    }
+                }
+            }
+
+            return set;
+        }
+
+        int RubyIndex(int index) => rubyAt != null && index >= 0 && index < rubyAt.Length ? rubyAt[index] : -1;
+
+        // Each annotation centered over (or under) its base where the base was set, next to the base's ascent or descent.
+        void AddRubyGlyphs()
+        {
+            var bases = new (int Line, double Left, double Right, GlyphWordData First)[rubies.Count];
+            Array.Fill(bases, (-1, double.PositiveInfinity, double.NegativeInfinity, null));
+            foreach (var glyph in glyphsData)
+            {
+                if (RubyIndex(glyph.PositionInString) is var r and >= 0)
+                {
+                    var (line, left, right, first) = bases[r];
+                    bases[r] = (line < 0 ? glyph.LineIndex : line, Math.Min(left, glyph.PenX),
+                        Math.Max(right, glyph.PenX + glyph.Advance), first ?? glyph);
+                }
+            }
+
+            for (var r = 0; r < rubies.Count; r++)
+            {
+                var (line, left, right, first) = bases[r];
+                var ruby = rubies[r];
+                if (line < 0 || ruby.Annotation == null)
+                {
+                    continue;
+                }
+
+                var scale = ruby.FontSize / ruby.Font.UnitsPerEm;
+                var over = ruby.Annotation.Position == RubyPosition.Over;
+                if (vertical)
+                {
+                    // Upright down the line beside its base, an em of each apart from the line's middle.
+                    var across = (first.FontSize + ruby.FontSize) / 2 * (over ? 1 : -1);
+                    var down = (left + right) / 2 - ruby.Width / 2;
+                    foreach (var shaped in ruby.Glyphs)
+                    {
+                        glyphsData.Add(new GlyphWordData(ruby.Font.GetGlyphByIndex(shaped.GlyphIndex),
+                            ruby.Annotation.Text[shaped.Cluster], default, -1, line)
+                        {
+                            PenX = down,
+                            Advance = -shaped.YAdvance * scale,
+                            OffsetX = -shaped.YOffset * scale,
+                            OffsetY = shaped.XOffset * scale + across,
+                            Upright = true,
+                            Attributes = first.Attributes,
+                            Font = ruby.Font,
+                            FontSize = ruby.FontSize,
+                        });
+                        down -= shaped.YAdvance * scale;
+                    }
+
+                    continue;
+                }
+
+                var baseScale = first.FontSize / first.Font.UnitsPerEm;
+                var lineBase = lineTops[line] + lineBaselines[line];
+                var baseBase = lineBase - first.OffsetY;
+                var baseline = over
+                    ? baseBase - first.Font.LineAscent * baseScale - ruby.Font.LineDescent * scale
+                    : baseBase + first.Font.LineDescent * baseScale + ruby.Font.LineAscent * scale;
+                var pen = (left + right) / 2 - ruby.Width / 2;
+                foreach (var shaped in ruby.Glyphs)
+                {
+                    var glyph = ruby.Font.GetGlyphByIndex(shaped.GlyphIndex);
+                    var rect = CalculateGlyphPosition(ruby.Font, glyph, pen + shaped.XOffset * scale,
+                        baseline - shaped.YOffset * scale, scale);
+                    glyphsData.Add(new GlyphWordData(glyph, ruby.Annotation.Text[shaped.Cluster], rect, -1, line)
+                    {
+                        PenX = pen,
+                        Advance = shaped.XAdvance * scale,
+                        OffsetX = shaped.XOffset * scale,
+                        OffsetY = lineBase - baseline + shaped.YOffset * scale,
+                        Attributes = first.Attributes,
+                        Font = ruby.Font,
+                        FontSize = ruby.FontSize,
+                    });
+                    pen += shaped.XAdvance * scale;
+                }
+            }
+        }
+
         void SetUpDropCap()
         {
             var dropCap = options.DropCap;
@@ -731,7 +900,7 @@ internal sealed class LineComposer
 
         // How far a glyph reaches above and below its line's baseline when lines grow to hold their text.
         (double Above, double Below, double Ascent) GlyphExtent(GlyphWordData glyph, bool setHeight, double ownBaseline,
-            double ownHeight)
+            double ownHeight, bool withRuby = true)
         {
             var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
             var ownSize = setHeight && glyph.FontSize == fontSize;
@@ -743,6 +912,32 @@ internal sealed class LineComposer
                 above = Math.Max(above, objectSize.Height + glyph.OffsetY);
                 ascent = Math.Max(ascent, objectSize.Height + glyph.OffsetY);
                 below = Math.Max(below, -glyph.OffsetY);
+            }
+
+            // A ruby base's line grows to hold its annotation, as CSS's; one whose height is set does not.
+            if (withRuby && !setHeight && RubyIndex(glyph.PositionInString) is var r and >= 0
+                && rubies[r].Annotation is { } annotation)
+            {
+                var ruby = rubies[r];
+                var over = annotation.Position == RubyPosition.Over;
+                if (vertical)
+                {
+                    // An upright annotation is an em of its size across the line.
+                    above += over ? ruby.FontSize : 0;
+                    below += over ? 0 : ruby.FontSize;
+                }
+                else
+                {
+                    var rubyHeight = (ruby.Font.LineAscent + ruby.Font.LineDescent) * ruby.FontSize / ruby.Font.UnitsPerEm;
+                    if (over)
+                    {
+                        above = Math.Max(above, glyph.Font.LineAscent * glyphScale + glyph.OffsetY + rubyHeight);
+                    }
+                    else
+                    {
+                        below = Math.Max(below, glyph.Font.LineDescent * glyphScale - glyph.OffsetY + rubyHeight);
+                    }
+                }
             }
 
             return (above, below, ascent);
@@ -1452,7 +1647,10 @@ internal sealed class LineComposer
             foreach (var glyph in glyphsData)
             {
                 var line = Math.Min(glyph.LineIndex, lineCount - 1);
-                var axis = lineTops[line] + lineHeights[line] / 2;
+                // The middle of the line's own text: an annotation's room beside it does not move it.
+                var axis = lineCoreAbove != null
+                    ? lineTops[line] + lineBaselines[line] + (lineCoreBelow[line] - lineCoreAbove[line]) / 2
+                    : lineTops[line] + lineHeights[line] / 2;
                 var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
                 if (glyph.Upright)
                 {
@@ -2516,6 +2714,7 @@ internal sealed class LineComposer
             }
 
             var paragraphHeights = mixed;
+            mixed |= rubies != null;
             foreach (var glyph in glyphsData)
             {
                 mixed |= glyph.FontSize != fontSize || !ReferenceEquals(glyph.Font, _font)
@@ -2530,6 +2729,12 @@ internal sealed class LineComposer
                     below[i] = lineHeights[i] - lineBaselines[i];
                 }
 
+                if (vertical && rubies != null)
+                {
+                    lineCoreAbove = (double[])lineBaselines.Clone();
+                    lineCoreBelow = (double[])below.Clone();
+                }
+
                 foreach (var glyph in glyphsData)
                 {
                     var line = glyph.LineIndex;
@@ -2537,6 +2742,12 @@ internal sealed class LineComposer
                     lineBaselines[line] = Math.Max(lineBaselines[line], extent.Above);
                     below[line] = Math.Max(below[line], extent.Below);
                     lineAscents[line] = Math.Max(lineAscents[line], extent.Ascent);
+                    if (lineCoreAbove != null)
+                    {
+                        var core = GlyphExtent(glyph, setHeights[line], ownBaselines[line], lineHeights[line], false);
+                        lineCoreAbove[line] = Math.Max(lineCoreAbove[line], core.Above);
+                        lineCoreBelow[line] = Math.Max(lineCoreBelow[line], core.Below);
+                    }
                 }
 
                 for (var i = 0; i < lineCount; i++)

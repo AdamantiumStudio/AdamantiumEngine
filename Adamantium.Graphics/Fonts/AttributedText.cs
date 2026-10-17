@@ -3,11 +3,13 @@ using System.Collections.Generic;
 
 namespace Adamantium.Graphics.Fonts;
 
-/// <summary>Text with attributes over ranges of it: features, language, colors, background and lines.</summary>
+/// <summary>Text with attributes over ranges of it: features, language, colors, background and lines; paragraphs and
+/// ruby annotations.</summary>
 public sealed class AttributedText
 {
     private readonly List<AttributeRun> _runs = [];
     private readonly List<ParagraphRun> _paragraphs = [];
+    private readonly List<RubyRun> _rubies = [];
 
     public AttributedText(string text, TextAttributes defaults = null)
     {
@@ -84,6 +86,31 @@ public sealed class AttributedText
         _paragraphs.RemoveAll(run => (run.Start < end && run.End > start) || run.Start == start);
         var at = _paragraphs.FindIndex(run => run.Start > start);
         _paragraphs.Insert(at < 0 ? _paragraphs.Count : at, new ParagraphRun(start, end - start, attributes));
+        return this;
+    }
+
+    /// <summary>The ruby bases, in text order, not overlapping.</summary>
+    public IReadOnlyList<RubyRun> Rubies => _rubies;
+
+    /// <summary>Sets a ruby annotation over a range, its base: the base stays on one line and the annotation stands
+    /// centered over it. It replaces any ruby it overlaps; an empty annotation removes them.</summary>
+    public AttributedText SetRuby(int start, int length, RubyAnnotation annotation)
+    {
+        var end = Math.Min(start + length, Text.Length);
+        start = Math.Max(start, 0);
+        if (end <= start)
+        {
+            return this;
+        }
+
+        _rubies.RemoveAll(run => run.Start < end && run.End > start);
+        if (string.IsNullOrEmpty(annotation?.Text))
+        {
+            return this;
+        }
+
+        var at = _rubies.FindIndex(run => run.Start > start);
+        _rubies.Insert(at < 0 ? _rubies.Count : at, new RubyRun(start, end - start, annotation));
         return this;
     }
 
