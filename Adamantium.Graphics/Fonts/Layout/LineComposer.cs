@@ -120,7 +120,7 @@ internal sealed class LineComposer
             ? TextBoundaries.LineBreaks(text)
             : null;
         var slots = lineBreaks != null && frames is { Count: > 0 }
-            ? new List<(int Frame, double Left, double Right, double Top)>()
+            ? new List<(int Frame, double Left, double Right, double Top, double Unsnapped)>()
             : null;
         // Per slot: where the next one is looked for (frame, top, rows tried in it), and the room above and the height
         // it was found for, so a line that turns out otherwise finds its slot again.
@@ -692,7 +692,7 @@ internal sealed class LineComposer
 
             var (lineBaseline, lineBox) = MeasuredLine(line);
             var (frame, next, rows) = slotCursors[line];
-            var bottom = OnGrid(slots[line].Top, lineBaseline, line) + lineBox + SpacingAfter(line);
+            var bottom = OnGrid(slots[line].Unsnapped, lineBaseline, line) + lineBox + SpacingAfter(line);
             if (bottom <= next + 1e-6)
             {
                 return;
@@ -820,7 +820,7 @@ internal sealed class LineComposer
             ? BaselineInLine(_font, scale) + (set - naturalHeight) / 2
             : baseLine;
 
-        (int Frame, double Left, double Right, double Top) SlotOf(int line)
+        (int Frame, double Left, double Right, double Top, double Unsnapped) SlotOf(int line)
         {
             HasSlot(line);
             return slots[Math.Min(line, slots.Count - 1)];
@@ -871,10 +871,11 @@ internal sealed class LineComposer
                 }
 
                 rows++;
+                var unsnapped = top;
                 top = rowTop + rowHeight + SpacingAfter(line);
                 if (WidestSpan(frame, rowTop, rowHeight) is { } widest)
                 {
-                    slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, rowTop));
+                    slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, rowTop, unsnapped));
                     slotCursors.Add((f, top, rows));
                     slotBases.Add((gap, rowHeight, GridsLine(line)));
                     return true;
@@ -1422,7 +1423,7 @@ internal sealed class LineComposer
                 var slot = SlotOf(i);
                 lineFrames[i] = slot.Frame;
                 shiftsX[i] = frames[slot.Frame].Left;
-                var top = OnGrid(slot.Top, lineBaselines[i], i);
+                var top = OnGrid(slot.Unsnapped, lineBaselines[i], i);
                 shiftsY[i] = top - lineTops[i];
                 lineTops[i] = top;
             }

@@ -219,6 +219,28 @@ public class BaselineGridTests
     }
 
     [Test]
+    public void InOneTallFrame_TheLinesStandWhereTheyDoWithoutFrames()
+    {
+        var text = "Line one.\nA LARGER LINE\n" + Prose;
+        double[] Laid(bool framed)
+        {
+            var attributed = new AttributedText(text).Apply(10, 13, new TextAttributes { FontSize = FontSize * 2 });
+            var layout = Layout(new BaselineGrid(Step, 3));
+            layout.LineHeight = 30;
+            if (framed)
+            {
+                layout.Frames = [new RectangleF(0, 0, 220, 2000)];
+            }
+
+            layout.ProcessText(attributed, FontSize, new Size(220, framed ? 2000 : double.NaN), TextWrapping.WrapByWords,
+                TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return Baselines(layout);
+        }
+
+        Assert.That(Laid(true), Is.EqualTo(Laid(false)).Within(0.01));
+    }
+
+    [Test]
     public void AFarOffset_KeepsTheLinesApart()
     {
         var near = Baselines(Lay(Prose, new BaselineGrid(Step, 5)));

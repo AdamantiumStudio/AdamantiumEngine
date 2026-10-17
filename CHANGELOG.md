@@ -436,6 +436,9 @@ All packages share one version.
 
 ### Fixed
 
+- In `Frames`, a line of larger text no longer covers the lines after it: once it is set, the lines below are placed
+  under it, so they keep inside their frame, out of the exclusions and in the overset when they no longer fit.
+
 - An imported `SharedSurface` takes the memory over from its producer in the layout the producer keeps it in, instead of
   moving it out of `Undefined`, which allows a driver to discard a frame the producer had already written.
 - `MeshMetadata.Default()` sets the line's end; it wrote the end into the start a second time.
