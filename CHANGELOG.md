@@ -420,6 +420,8 @@ All packages share one version.
 
 ### Fixed
 
+- `TypeParser` no longer throws and catches an `ArgumentException` for every type whose parser returns a value: it
+  asks whether the parser binds as a delegate instead of trying. A debugger stopped on each of them at start-up.
 - A `Camera` rebuilds its projections when its field of view, a clipping plane or its size changes after it was
   initialized. They were built once, so an edit - from an inspector - changed nothing on screen, while what reads
   `ZNear` and `ZFar` directly, the clustered lighting, moved on with it.

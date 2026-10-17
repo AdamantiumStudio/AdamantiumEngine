@@ -76,25 +76,24 @@ public static class TypeParser
                     ?? throw new InvalidOperationException($"{parserType.FullName} has no Parse(string) method");
 
         // A direct delegate avoids per-call reflection and allocation on the hot parse path; a value-type return cannot
-        // bind covariantly and falls back to Invoke.
-        try
+        // bind covariantly and falls back to Invoke. Asked without throwing: a debugger stops on every one it sees.
+        if (Delegate.CreateDelegate(typeof(Func<string, object>), parser, parse, throwOnBindFailure: false)
+            is Func<string, object> direct)
         {
-            return (Func<string, object>)Delegate.CreateDelegate(typeof(Func<string, object>), parser, parse);
+            return direct;
         }
-        catch (ArgumentException)
+
+        return value =>
         {
-            return value =>
+            try
             {
-                try
-                {
-                    return parse.Invoke(parser, [value]);
-                }
-                catch (Exception e)
-                {
-                    throw new InvalidOperationException($"Cannot parse {value} as input for {targetType.FullName}",
-                        e is TargetInvocationException tie ? tie.InnerException : e);
-                }
-            };
-        }
+                return parse.Invoke(parser, [value]);
+            }
+            catch (Exception e)
+            {
+                throw new InvalidOperationException($"Cannot parse {value} as input for {targetType.FullName}",
+                    e is TargetInvocationException tie ? tie.InnerException : e);
+            }
+        };
     }
 }
