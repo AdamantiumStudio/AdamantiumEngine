@@ -354,10 +354,10 @@ internal sealed class ShapePlan
     }
 
     // A feature as the axis values have it: 'FeatureVariations' may swap the lookups it applies.
-    private static FeatureTable Feature(IFontLayout table, int index, int variation) =>
+    internal static FeatureTable Feature(IFontLayout table, int index, int variation) =>
         table.FeatureVariations?.Substitute(variation, index, table.FeatureList[index]) ?? table.FeatureList[index];
 
-    private static (LangSysTable LangSys, FeatureTable Required, string Script) Select(IFontLayout table,
+    internal static (LangSysTable LangSys, FeatureTable Required, string Script) Select(IFontLayout table,
         string scriptTag, string languageTag, int variation)
     {
         if (table?.ScriptList == null)
@@ -403,7 +403,7 @@ internal sealed class ShapePlan
         return -1;
     }
 
-    private static int FindFeature(IFontLayout table, LangSysTable langSys, string tag)
+    internal static int FindFeature(IFontLayout table, LangSysTable langSys, string tag)
     {
         if (table == null || langSys?.FeatureIndices == null)
         {

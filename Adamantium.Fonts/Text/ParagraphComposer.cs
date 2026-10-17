@@ -26,37 +26,41 @@ public static class ParagraphComposer
 
     /// <summary>The items <paramref name="items"/> breaks at, each line no worse than <paramref name="tolerance"/>
     /// (TeX's badness: 100 when its spaces stretch or shrink by all they may); null when no breaking keeps to it. The
-    /// items end with a forced penalty, which is the last break.</summary>
-    public static int[] Break(IReadOnlyList<ComposerItem> items, double lineWidth, double tolerance)
+    /// items end with a forced penalty, which is the last break. At most <paramref name="hyphenLimit"/> lines in a row
+    /// end at a flagged penalty with a width - a hyphen the break adds - unless a line has no other place to break, a
+    /// piece of a word wider than it; 0 sets no limit.</summary>
+    public static int[] Break(IReadOnlyList<ComposerItem> items, double lineWidth, double tolerance, int hyphenLimit = 0)
     {
-        return Run(items, [lineWidth], tolerance, 0, false);
+        return Run(items, [lineWidth], tolerance, 0, false, hyphenLimit);
     }
 
-    /// <summary>The breaks of <see cref="Break(IReadOnlyList{ComposerItem}, double, double)"/> for lines of
+    /// <summary>The breaks of <see cref="Break(IReadOnlyList{ComposerItem}, double, double, int)"/> for lines of
     /// <paramref name="lineWidths"/> in turn, the last for every line after - narrower first lines beside a drop cap.</summary>
-    public static int[] Break(IReadOnlyList<ComposerItem> items, IReadOnlyList<double> lineWidths, double tolerance)
+    public static int[] Break(IReadOnlyList<ComposerItem> items, IReadOnlyList<double> lineWidths, double tolerance,
+        int hyphenLimit = 0)
     {
-        return Run(items, lineWidths, tolerance, 0, false);
+        return Run(items, lineWidths, tolerance, 0, false, hyphenLimit);
     }
 
     /// <summary>The breaks of <see cref="Break"/> as TeX's last pass finds them: every line may be as loose as it must,
     /// each glue stretching by <paramref name="emergencyStretch"/> more, and where nothing fits a line, as a word wider
     /// than it, the line overflows.</summary>
-    public static int[] BreakAnyway(IReadOnlyList<ComposerItem> items, double lineWidth, double emergencyStretch)
+    public static int[] BreakAnyway(IReadOnlyList<ComposerItem> items, double lineWidth, double emergencyStretch,
+        int hyphenLimit = 0)
     {
-        return Run(items, [lineWidth], InfiniteBadness, emergencyStretch, true);
+        return Run(items, [lineWidth], InfiniteBadness, emergencyStretch, true, hyphenLimit);
     }
 
-    /// <summary>The breaks of <see cref="BreakAnyway(IReadOnlyList{ComposerItem}, double, double)"/> for lines of
+    /// <summary>The breaks of <see cref="BreakAnyway(IReadOnlyList{ComposerItem}, double, double, int)"/> for lines of
     /// <paramref name="lineWidths"/> in turn, the last for every line after.</summary>
     public static int[] BreakAnyway(IReadOnlyList<ComposerItem> items, IReadOnlyList<double> lineWidths,
-        double emergencyStretch)
+        double emergencyStretch, int hyphenLimit = 0)
     {
-        return Run(items, lineWidths, InfiniteBadness, emergencyStretch, true);
+        return Run(items, lineWidths, InfiniteBadness, emergencyStretch, true, hyphenLimit);
     }
 
     private static int[] Run(IReadOnlyList<ComposerItem> items, IReadOnlyList<double> lineWidths, double tolerance,
-        double emergencyStretch, bool lastPass)
+        double emergencyStretch, bool lastPass, int hyphenLimit)
     {
         var count = items.Count;
         if (count == 0 || items[count - 1].Kind != ComposerItemKind.Penalty || items[count - 1].Cost > Forced)
@@ -75,15 +79,20 @@ public static class ParagraphComposer
         var stretches = new double[count + 1];
         var shrinks = new double[count + 1];
         var fills = new int[count + 1];
+        var plainBreaks = new int[count + 1];
         for (var i = 0; i < count; i++)
         {
             var item = items[i];
             var isGlue = item.Kind == ComposerItemKind.Glue;
             var fillsLine = isGlue && double.IsPositiveInfinity(item.Stretch);
+            var plainBreak = isGlue
+                ? i > 0 && items[i - 1].Kind == ComposerItemKind.Box
+                : item.Kind == ComposerItemKind.Penalty && item.Cost < Never && !item.Flagged;
             widths[i + 1] = widths[i] + (item.Kind == ComposerItemKind.Penalty ? 0 : item.Width);
             stretches[i + 1] = stretches[i] + (isGlue && !fillsLine ? item.Stretch : 0);
             shrinks[i + 1] = shrinks[i] + (isGlue ? item.Shrink : 0);
             fills[i + 1] = fills[i] + (fillsLine ? 1 : 0);
+            plainBreaks[i + 1] = plainBreaks[i] + (plainBreak ? 1 : 0);
         }
 
         var firstBox = new int[count + 1];
@@ -94,7 +103,7 @@ public static class ParagraphComposer
         }
 
         List<ComposerNode> active = [new ComposerNode(-1, 0, Decent, 0, null, false)];
-        var candidates = new Dictionary<(int Line, int Fitness), ComposerNode>();
+        var candidates = new Dictionary<(int Line, int Fitness, int Hyphens), ComposerNode>();
         for (var b = 0; b < count; b++)
         {
             var item = items[b];
@@ -129,7 +138,7 @@ public static class ParagraphComposer
                     active.RemoveAt(i);
                     if (keep)
                     {
-                        candidates[(lineKey, Decent)] = new ComposerNode(b, from.Line + 1, Decent, from.Total, from, false);
+                        candidates[(lineKey, Decent, 0)] = new ComposerNode(b, from.Line + 1, Decent, from.Total, from, false);
                         found = true;
                     }
 
@@ -158,7 +167,9 @@ public static class ParagraphComposer
                     i++;
                 }
 
-                if (badness > tolerance && !artificial)
+                var hyphens = isPenalty && item.Flagged && item.Width > 0 ? from.Hyphens + 1 : 0;
+                var overLimit = hyphenLimit > 0 && hyphens > hyphenLimit && plainBreaks[b] > plainBreaks[start];
+                if ((badness > tolerance || overLimit) && !artificial)
                 {
                     continue;
                 }
@@ -191,10 +202,11 @@ public static class ParagraphComposer
                     }
                 }
 
-                if (!candidates.TryGetValue((lineKey, fitness), out var known) || demerits < known.Total)
+                var key = (lineKey, fitness, hyphenLimit > 0 ? hyphens : 0);
+                if (!candidates.TryGetValue(key, out var known) || demerits < known.Total)
                 {
-                    candidates[(lineKey, fitness)] =
-                        new ComposerNode(b, from.Line + 1, fitness, demerits, from, isPenalty && item.Flagged);
+                    candidates[key] = new ComposerNode(b, from.Line + 1, fitness, demerits, from, isPenalty && item.Flagged,
+                        hyphens);
                     found = true;
                 }
             }

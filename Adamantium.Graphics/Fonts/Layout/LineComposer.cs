@@ -112,6 +112,7 @@ internal sealed class LineComposer
         double wordStartPosition = 0;
         var glyphsData = new List<GlyphWordData>(items.Count);
         var leaders = new Dictionary<GlyphWordData, string>();
+        HashSet<GlyphWordData> placingTabs = null;
         int wordIndex = 0;
         int lineIndex = 0;
         var lineParagraph = ParagraphOf(0);
@@ -159,7 +160,8 @@ internal sealed class LineComposer
 
         for (var i = 1; lineBreaks != null && i < text.Length; i++)
         {
-            if (text[i - 1] == SoftHyphen && lineBreaks[i] == LineBreakKind.Allowed)
+            if (lineBreaks[i] == LineBreakKind.Allowed
+                && (text[i - 1] == SoftHyphen || (char.IsDigit(text[i - 1]) && IsHanOrKana(CodepointAt(text, i)))))
             {
                 lineBreaks[i] = LineBreakKind.None;
             }
@@ -243,6 +245,11 @@ internal sealed class LineComposer
                 if (isTab && stop.Leader != null)
                 {
                     leaders[blank] = stop.Leader;
+                }
+
+                if (isTab && stop.Alignment != TabAlignment.Left)
+                {
+                    (placingTabs ??= []).Add(blank);
                 }
 
                 cursorPosition += advance;
@@ -741,7 +748,7 @@ internal sealed class LineComposer
                     items[k] = new ShapedItem(spread.Glyph, spread.Symbol, spread.Cluster,
                         spread.Advance + (takes ? share : 0), spread.OffsetX + share / 2,
                         spread.OffsetY, spread.Attributes, spread.Font, spread.FontSize, spread.Upright,
-                        spread.HorizontalScale);
+                        spread.HorizontalScale, spread.Tail);
                 }
             }
 
@@ -859,6 +866,7 @@ internal sealed class LineComposer
                         Attributes = at.First.Attributes,
                         Font = font,
                         FontSize = ruby.FontSize,
+                        Annotates = true,
                     });
                     pen += advance;
                 }
@@ -1292,7 +1300,9 @@ internal sealed class LineComposer
         bool LineHasContent() => cursorPosition > LineIndent(lineIndex) + 1e-9;
 
         // The next line's top stays inside the area: below this line by its height and the room a paragraph starting
-        // there keeps.
+        // there keeps. A trimmed text takes only a line that fits whole at its paragraph's line height, so its ellipsis is
+        // not cut off - within the part of a pixel the area's whole height lost. A line grown by larger text in it is
+        // not known yet.
         bool HasRoomBelow()
         {
             if (options.MaxLines > 0 && lineIndex + 1 >= options.MaxLines)
@@ -1302,7 +1312,10 @@ internal sealed class LineComposer
 
             if (slots == null)
             {
-                return NextTop(pendingGap).Top < textArea.Height;
+                var top = NextTop(pendingGap).Top;
+                return renderingParameters.TextTrimming == TextTrimming.None
+                    ? top < textArea.Height
+                    : top + OwnLineHeight(lineIndex + 1) < textArea.Height + 1.0;
             }
 
             SettleLine(lineIndex);
@@ -1530,13 +1543,14 @@ internal sealed class LineComposer
             paragraph.Add((ComposerItem.Penalty(0, ParagraphComposer.Forced, false), -1, false, false));
             var exact = paragraph.Where(entry => !entry.Automatic).ToList();
             var chosen = exact;
-            var breaks = ParagraphComposer.Break(exact.Select(entry => entry.Item).ToList(), widths, 100);
+            var limit = options.HyphenLimit;
+            var breaks = ParagraphComposer.Break(exact.Select(entry => entry.Item).ToList(), widths, 100, limit);
             if (breaks == null)
             {
                 chosen = paragraph;
                 var all = paragraph.Select(entry => entry.Item).ToList();
-                breaks = ParagraphComposer.Break(all, widths, 200)
-                         ?? ParagraphComposer.BreakAnyway(all, widths, 2 * fontSize);
+                breaks = ParagraphComposer.Break(all, widths, 200, limit)
+                         ?? ParagraphComposer.BreakAnyway(all, widths, 2 * fontSize, limit);
             }
 
             composedLines += breaks.Length;
@@ -1740,6 +1754,7 @@ internal sealed class LineComposer
             var lineFrames = new int[lineCount];
             var shiftsX = new double[lineCount];
             var shiftsY = new double[lineCount];
+            var lettersShiftsY = new double[lineCount];
             for (var i = 0; i < lineCount; i++)
             {
                 var slot = SlotOf(i);
@@ -1747,14 +1762,18 @@ internal sealed class LineComposer
                 shiftsX[i] = frames[slot.Frame].Left;
                 var top = OnGrid(slot.Unsnapped, lineBaselines[i], i);
                 shiftsY[i] = top - lineTops[i];
+                lettersShiftsY[i] = Math.Round(top + lineBaselines[i]) - Math.Round(lineTops[i] + lineBaselines[i]);
                 lineTops[i] = top;
             }
 
             foreach (var glyph in glyphsData)
             {
-                glyph.Rect.X += (float)shiftsX[glyph.LineIndex];
-                glyph.Rect.Y += (float)shiftsY[glyph.LineIndex];
-                glyph.PenX += shiftsX[glyph.LineIndex];
+                var line = glyph.LineIndex;
+                glyph.Rect.X += (float)shiftsX[line];
+                glyph.Rect.Y += (float)(ObjectSizeOf(glyph.Symbol, glyph.Attributes) != null
+                    ? shiftsY[line]
+                    : lettersShiftsY[line]);
+                glyph.PenX += shiftsX[line];
             }
 
             laidOutLineFrames = lineFrames;
@@ -1932,7 +1951,7 @@ internal sealed class LineComposer
                 var pen = cursorPosition;
                 var k = start;
                 var room = LineRight(lineIndex) + LineShrink();
-                foreach (var point in points)
+                foreach (var point in MayHyphenate() ? points : [])
                 {
                     for (; k < point; k++)
                     {
@@ -1969,6 +1988,35 @@ internal sealed class LineComposer
             }
 
             return start;
+        }
+
+        bool MayHyphenate()
+        {
+            if (options.HyphenLimit <= 0 || !LineHasContent())
+            {
+                return true;
+            }
+
+            var run = 0;
+            var line = lineIndex - 1;
+            for (var k = glyphsData.Count - 1; k >= 0 && line >= 0 && run < options.HyphenLimit; k--)
+            {
+                var glyph = glyphsData[k];
+                if (glyph.LineIndex > line || IsBlank(glyph.Symbol))
+                {
+                    continue;
+                }
+
+                if (glyph.LineIndex < line || glyph.PositionInString >= 0 || glyph.Symbol != '-')
+                {
+                    break;
+                }
+
+                run++;
+                line--;
+            }
+
+            return run < options.HyphenLimit;
         }
 
         List<int> HyphenationPoints(int start, int end)
@@ -2104,7 +2152,7 @@ internal sealed class LineComposer
                         var glyphRect = ObjectSizeOf(item.Symbol, item.Attributes) is { } objectSize
                             ? ObjectRect(cursorPosition, glyphBase - item.OffsetY, objectSize)
                             : item.Upright
-                            ? CellRect(item.Font, item.FontSize, cursorPosition, item.Advance, glyphBase)
+                            ? CellRect(item.Font, item.FontSize, cursorPosition, item.Advance - item.Tail, glyphBase)
                             : Widened(CalculateGlyphPosition(item.Font, item.Glyph,
                                 cursorPosition + item.OffsetX,
                                 glyphBase - item.OffsetY,
@@ -2121,6 +2169,7 @@ internal sealed class LineComposer
                             FontSize = item.FontSize,
                             Upright = item.Upright,
                             HorizontalScale = item.HorizontalScale,
+                            Tail = item.Tail,
                         });
                         cursorPosition += item.Advance;
 
@@ -2195,19 +2244,29 @@ internal sealed class LineComposer
                         }
 
                         // By the ink, so leading/trailing spaces don't pull the line off-center.
-                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
-                        if (ink.Length == 0) continue;
+                        var tab = LastTab(glyphsForLine, 0, glyphsForLine.Length, LineState(i).RightToLeft);
+                        var from = AfterTab(tab);
+                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol) && Aligned(x, from)).ToArray();
+                        if (ink.Length == 0 || PlacesWhatFollows(tab)) continue;
                         var minX = ink.Min(LeftOf);
                         var maxX = ink.Max(RightOf);
                         var lineWidth = maxX - minX;
-                        var diff = LineIndent(i) + (AlignRight(i) - LineIndent(i) - lineWidth) / 2 - minX;
+                        var roomLeft = double.IsFinite(from) ? from : LineIndent(i);
+                        var diff = PastTab(tab, roomLeft + (AlignRight(i) - roomLeft - lineWidth) / 2 - minX);
                         foreach (var glyphWordData in glyphsForLine)
                         {
+                            if (!Aligned(glyphWordData, from))
+                            {
+                                continue;
+                            }
+
                             var rect = glyphWordData.Rect;
                             rect.X += (float)diff;
                             glyphWordData.Rect = rect;
                             glyphWordData.PenX += diff;
                         }
+
+                        Widen(tab, diff);
                     }
                 }
                 else if (alignment == HorizontalTextAlignment.Right)
@@ -2222,21 +2281,30 @@ internal sealed class LineComposer
                             continue;
                         }
 
-                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol)).ToArray();
-                        if (ink.Length == 0)
+                        var tab = LastTab(glyphsForLine, 0, glyphsForLine.Length, LineState(i).RightToLeft);
+                        var from = AfterTab(tab);
+                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol) && Aligned(x, from)).ToArray();
+                        if (ink.Length == 0 || PlacesWhatFollows(tab))
                         {
                             continue;
                         }
 
                         var maxX = ink.Max(RightOf);
-                        var diff = (AlignRight(i) - maxX);
+                        var diff = PastTab(tab, AlignRight(i) - maxX);
                         foreach (var glyphWordData in glyphsForLine)
                         {
+                            if (!Aligned(glyphWordData, from))
+                            {
+                                continue;
+                            }
+
                             var rect = glyphWordData.Rect;
                             rect.X += (float)diff;
                             glyphWordData.Rect = rect;
                             glyphWordData.PenX += diff;
                         }
+
+                        Widen(tab, diff);
                     }
                 }
                 else if (alignment == HorizontalTextAlignment.Justify)
@@ -2344,7 +2412,8 @@ internal sealed class LineComposer
                             rest -= kashidaShare;
                             if (options.JustificationAlternates && rest > 0 && stretches)
                             {
-                                alternateShare = ChooseAlternates(clusters, fromCluster, lastInkCluster, rest, alternates);
+                                alternateShare = ChooseAlternates(text, options.Language, clusters, fromCluster,
+                                    lastInkCluster, rest, alternates);
                             }
 
                             scaleShare = Math.Min(rest - alternateShare, scaleStretch);
@@ -2584,6 +2653,11 @@ internal sealed class LineComposer
                     glyphs[k].Rect.X += (float)shift;
                     glyphs[k].PenX += shift;
                 }
+
+                if (toRight && from > 0)
+                {
+                    Widen(glyphs[from - 1], shift);
+                }
             }
         }
 
@@ -2786,6 +2860,37 @@ internal sealed class LineComposer
             return false;
         }
 
+        GlyphWordData LastTab(IReadOnlyList<GlyphWordData> glyphs, int from, int to, bool rightToLeft)
+        {
+            GlyphWordData tab = null;
+            for (var k = from; k < to && !rightToLeft; k++)
+            {
+                if (glyphs[k].Symbol == '\t' && (tab == null || glyphs[k].PenX > tab.PenX))
+                {
+                    tab = glyphs[k];
+                }
+            }
+
+            return tab;
+        }
+
+        bool PlacesWhatFollows(GlyphWordData tab) => tab != null && placingTabs?.Contains(tab) == true;
+
+        static double AfterTab(GlyphWordData tab) => tab == null ? double.NegativeInfinity : tab.PenX + tab.Advance;
+
+        static bool Aligned(GlyphWordData glyph, double from) => glyph.PenX > from - 1e-6;
+
+        static double PastTab(GlyphWordData tab, double shift) => tab == null ? shift : Math.Max(shift, 0);
+
+        static void Widen(GlyphWordData tab, double by)
+        {
+            if (tab != null)
+            {
+                tab.Advance += by;
+                tab.Rect.Width += (float)by;
+            }
+        }
+
         void AlignToEachLinesStart(HorizontalTextAlignment alignment)
         {
             var lineStart = 0;
@@ -2805,16 +2910,24 @@ internal sealed class LineComposer
 
                 var rightToLeft = first >= 0 && (paragraphs.ParagraphAt(first).Paragraph.BaseLevel & 1) == 1;
                 var toRight = rightToLeft == (alignment == HorizontalTextAlignment.Left);
+                var line = glyphsData[lineStart].LineIndex;
+                var tab = LastTab(glyphsData, lineStart, lineEnd, rightToLeft);
+                var from = AfterTab(tab);
                 var ink = Enumerable.Range(lineStart, lineEnd - lineStart).Select(k => glyphsData[k])
-                    .Where(g => !IsBlank(g.Symbol)).ToArray();
-                if (toRight && ink.Length > 0 && AlignmentOf(glyphsData[lineStart].LineIndex) == alignment)
+                    .Where(g => !IsBlank(g.Symbol) && Aligned(g, from)).ToArray();
+                if (toRight && ink.Length > 0 && AlignmentOf(line) == alignment && !PlacesWhatFollows(tab))
                 {
-                    var shift = AlignRight(glyphsData[lineStart].LineIndex) - ink.Max(RightOf);
+                    var shift = PastTab(tab, AlignRight(line) - ink.Max(RightOf));
                     for (var k = lineStart; k < lineEnd; k++)
                     {
-                        glyphsData[k].Rect.X += (float)shift;
-                        glyphsData[k].PenX += shift;
+                        if (Aligned(glyphsData[k], from))
+                        {
+                            glyphsData[k].Rect.X += (float)shift;
+                            glyphsData[k].PenX += shift;
+                        }
                     }
+
+                    Widen(tab, shift);
                 }
 
                 lineStart = lineEnd;
@@ -2927,7 +3040,7 @@ internal sealed class LineComposer
                 }
                 else if (glyph.Upright)
                 {
-                    glyph.Rect = CellRect(glyph.Font, glyph.FontSize, glyph.PenX, glyph.Advance, lineBase);
+                    glyph.Rect = CellRect(glyph.Font, glyph.FontSize, glyph.PenX, glyph.Advance - glyph.Tail, lineBase);
                 }
                 else
                 {
@@ -2981,7 +3094,8 @@ internal sealed class LineComposer
                 var glyphRect = ObjectSizeOf(glyphData.Symbol, glyphData.Attributes) is { } objectSize
                     ? ObjectRect(cursorPosition, glyphBase - glyphData.OffsetY, objectSize)
                     : glyphData.Upright
-                    ? CellRect(glyphData.Font, glyphData.FontSize, cursorPosition, glyphData.Advance, glyphBase)
+                    ? CellRect(glyphData.Font, glyphData.FontSize, cursorPosition, glyphData.Advance - glyphData.Tail,
+                        glyphBase)
                     : Widened(CalculateGlyphPosition(glyphData.Font, glyphData.Glyph,
                         cursorPosition + glyphData.OffsetX,
                         glyphBase - glyphData.OffsetY,
@@ -3144,8 +3258,8 @@ internal sealed class LineComposer
     private static double FontAdvance(GlyphWordData glyph) =>
         glyph.Font.GetAdvanceWidth(glyph.Glyph.Index) * glyph.FontSize / glyph.Font.UnitsPerEm;
 
-    private static double ChooseAlternates(List<GlyphWordData[]> clusters, int from, int to, double room,
-        Glyph[] chosen)
+    private static double ChooseAlternates(string text, string language, List<GlyphWordData[]> clusters, int from,
+        int to, double room, Glyph[] chosen)
     {
         List<(int Cluster, Glyph Glyph, double Gain)> candidates = [];
         for (var c = from; c <= to; c++)
@@ -3158,13 +3272,15 @@ internal sealed class LineComposer
             }
 
             var current = FontAdvance(glyph);
-            foreach (var alternate in glyph.Font.GetGlyphAlternates(glyph.Glyph.Index))
+            var codepoint = glyph.PositionInString >= 0 ? CodepointAt(text, glyph.PositionInString) : glyph.Symbol;
+            foreach (var alternate in glyph.Font.GetGlyphAlternates(glyph.Glyph.Index, "jalt", codepoint,
+                         glyph.Attributes?.Language ?? language))
             {
-                var gain = (glyph.Font.GetAdvanceWidth(alternate.Glyph) * glyph.FontSize / glyph.Font.UnitsPerEm - current)
+                var gain = (glyph.Font.GetAdvanceWidth(alternate) * glyph.FontSize / glyph.Font.UnitsPerEm - current)
                            * glyph.HorizontalScale;
-                if (alternate.Feature == "jalt" && gain > 0)
+                if (gain > 0)
                 {
-                    candidates.Add((c, glyph.Font.GetGlyphByIndex(alternate.Glyph), gain));
+                    candidates.Add((c, glyph.Font.GetGlyphByIndex(alternate), gain));
                     break;
                 }
             }

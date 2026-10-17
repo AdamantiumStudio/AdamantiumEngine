@@ -154,6 +154,12 @@ namespace Adamantium.Fonts
         /// feature and value that ask for it - what a glyph panel offers for a character.</summary>
         public IReadOnlyList<GlyphAlternate> GetGlyphAlternates(uint glyphIndex);
 
+        /// <summary>The glyphs a 'GSUB' feature turns this glyph into in text of the script of
+        /// <paramref name="codepoint"/> in <paramref name="language"/>: from that feature of the language system a shaper
+        /// takes for them, none when the system has no such feature - so 'jalt' gives Hebrew's wide letters to Hebrew
+        /// text only.</summary>
+        public IReadOnlyList<uint> GetGlyphAlternates(uint glyphIndex, string feature, int codepoint, string language);
+
         /// <summary>The texts this glyph stands for: its characters from 'cmap', those of the glyphs a substitution
         /// makes it from, and the joined characters of a ligature - so a glyph put in by hand can be copied as text.</summary>
         public IReadOnlyList<string> GetGlyphText(uint glyphIndex);

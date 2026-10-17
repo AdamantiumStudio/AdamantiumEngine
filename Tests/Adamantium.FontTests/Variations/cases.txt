@@ -14,3 +14,8 @@ Variations/RobotoFlex-Variable.ttf	slnt=-10
 Variations/RobotoFlex-Variable.ttf	wdth=25,wght=900
 Variations/RobotoFlex-Variable.ttf	GRAD=150,XTRA=323,YTUC=760
 Variations/RobotoFlex-Variable.ttf	opsz=36,slnt=-5,wght=300,YOPQ=40
+# A subset without HVAR: advances and origins come from the phantom points; a composite with USE_MY_METRICS takes its
+# component's (Eacute's own phantoms move, those of its E do not).
+Variations/RobotoFlex-NoHVAR.subset.ttf	wdth=25,wght=900
+Variations/RobotoFlex-NoHVAR.subset.ttf	wdth=151,wght=100
+Variations/RobotoFlex-NoHVAR.subset.ttf	opsz=144

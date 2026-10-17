@@ -57,6 +57,11 @@ public class GlyphWordData
     /// <see cref="Advance"/> then run down the line, and <see cref="Rect"/> bounds the turned glyph.</summary>
     public bool Sideways { get; set; }
 
+    /// <summary>Whether the glyph is a ruby annotation's, set beside its base: it takes none of the base's effects.</summary>
+    public bool Annotates { get; init; }
+
+    internal double Tail { get; init; }
+
     public override string ToString()
     {
         return $"{Symbol} [{Rect}]";

@@ -10,7 +10,7 @@ namespace Adamantium.Graphics.Fonts
         // Concurrent: a virtualizing panel lays text out across cores.
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<FontParameters, FontAtlas> _fontAtlasMap = new();
         /// <summary>Rasterizes glyphs inline instead of on a worker, for a one-shot render that has no next frame for the
-        /// text to fill in.</summary>
+        /// text to fill in. Threads filling inline at once upload into an atlas one at a time.</summary>
         public static bool SynchronousFill { get; set; }
 
         /// <summary>The atlas rasterized with <paramref name="fontParameters"/>, shared by all text in every font: a glyph

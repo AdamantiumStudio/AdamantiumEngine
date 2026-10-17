@@ -138,6 +138,20 @@ public class GlyphAlternateTests
         Assert.That(font.GetGlyphText(shaped[0].GlyphIndex), Does.Contain("fi"));
     }
 
+    // Roboto Flex swaps its 'rvrn' lookups by weight: an instance gives what its own shaping substitutes.
+    [Test]
+    public void AnInstancesAlternates_FollowItsAxisValues()
+    {
+        var font = Load("Variations/RobotoFlex-Variable.ttf");
+        var heavy = font.GetInstance([new FontVariation("wght", 1000)]);
+        var dollar = font.GetGlyphByCharacter('$').Index;
+        var shaped = TextShaper.Shape(heavy, "$")[0].GlyphIndex;
+        Assume.That(shaped, Is.Not.EqualTo(dollar), "the heavy instance substitutes the dollar");
+
+        Assert.That(heavy.GetGlyphAlternates(dollar, "rvrn", '$', null), Does.Contain(shaped));
+        Assert.That(font.GetGlyphAlternates(dollar, "rvrn", '$', null), Does.Not.Contain(shaped));
+    }
+
     private static IFont Load(string fontPath) => Fonts.GetOrAdd(fontPath, p => Typeface.LoadFont(p, 3).GetFont(0));
 
     private static List<string[]> Expected(string fontPath, string kind) =>

@@ -1397,6 +1397,7 @@ namespace Adamantium.Fonts.Parsers
                 var glyphIndexInComposite = reader.ReadUInt16();
 
                 compositeGlyphComponent.SimpleGlyphIndex = glyphIndexInComposite;
+                compositeGlyphComponent.UseMyMetrics = compositeFlag.UseMyMetrics;
                 var matrix = compositeGlyphComponent.TransformMatrix;
 
                 Int16 arg1Word = 0;
@@ -1494,6 +1495,7 @@ namespace Adamantium.Fonts.Parsers
                 WeHaveAnXAndYScale = Convert.ToBoolean(rawFlag & 0x0040),
                 WeHaveATwoByTwo = Convert.ToBoolean(rawFlag & 0x0080),
                 WeHaveInstructions = Convert.ToBoolean(rawFlag & 0x0100),
+                UseMyMetrics = Convert.ToBoolean(rawFlag & 0x0200),
                 ScaledComponentOffset = Convert.ToBoolean(rawFlag & 0x0800)
             };
 

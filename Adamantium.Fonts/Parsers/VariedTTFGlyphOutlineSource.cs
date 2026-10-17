@@ -107,6 +107,16 @@ internal sealed class VariedTTFGlyphOutlineSource : IGlyphOutlineSource
 
         SetPhantoms(glyph.Index, xMin, xs, count);
         font.GlyphVariations.Apply(glyph.Index, coordinates, xs, ys, null);
+        foreach (var component in components)
+        {
+            if (component.UseMyMetrics)
+            {
+                var metrics = GlyphAt(component.SimpleGlyphIndex);
+                _ = metrics.HasOutlines;
+                xs[count] = originShifts[component.SimpleGlyphIndex];
+                xs[count + 1] = xs[count] + metrics.AdvanceWidth;
+            }
+        }
 
         var shift = xs[count];
         for (var i = 0; i < count; i++)

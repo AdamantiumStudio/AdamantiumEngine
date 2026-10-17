@@ -9,6 +9,7 @@
         public bool WeHaveAnXAndYScale { get; set; }
         public bool WeHaveATwoByTwo { get; set; }
         public bool WeHaveInstructions { get; set; }
+        public bool UseMyMetrics { get; set; }
         public bool ScaledComponentOffset { get; set; }
     };
 }

@@ -233,6 +233,23 @@ public class GlyphEffectTests
         Assert.That(run.Glyphs.Take(run.Count).Select(g => g.Place.X), Is.All.GreaterThanOrEqualTo(0));
     }
 
+    // Drawn after its base's last letter, the annotation took that letter's effects and not the others'.
+    [Test]
+    public void ARubyAnnotation_TakesNoneOfItsBasesEffects()
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0]);
+        layout.ProcessText(new AttributedText("xab").SetRuby(1, 2, new RubyAnnotation("ruby")), 40,
+            new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
+            VerticalTextAlignment.Top);
+        Assume.That(layout.GetTextData().Count(g => g.Annotates), Is.EqualTo(4));
+
+        var run = Run(layout);
+
+        Assert.That(run.Glyphs.Take(run.Count).Count(g => g.Place.X < 0), Is.EqualTo(4), "the annotation's letters");
+        Assert.That(run.Glyphs.Take(run.Count).Count(g => g.Place.X >= 0), Is.EqualTo(3), "the text's");
+    }
+
     [Test]
     public void ASlot_HoldsTheEffect_TheWayTheShadersReadIt()
     {

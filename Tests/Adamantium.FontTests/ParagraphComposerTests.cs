@@ -41,6 +41,29 @@ public class ParagraphComposerTests
     }
 
     [Test]
+    public void Break_WithAHyphenLimit_FindsTheBestBreakingWithinIt([Range(0, 199)] int seed)
+    {
+        var random = new Random(seed);
+        var items = RandomParagraph(random, splitOneIn: 1);
+        List<double> widths = [random.Next(100, 200)];
+        var limit = 1 + seed % 2;
+
+        var breaks = ParagraphComposer.Break(items, widths, 1000, limit);
+        var best = BestByEveryBreaking(items, widths, 1000, limit);
+
+        if (best == null)
+        {
+            Assert.That(breaks, Is.Null, "no breaking keeps to the tolerance and the limit");
+            return;
+        }
+
+        Assert.That(breaks, Is.Not.Null);
+        var demerits = Demerits(items, widths, 1000, breaks, limit);
+        Assert.That(demerits, Is.Not.Null, "no more lines in a row end in a hyphen than the limit");
+        Assert.That(demerits.Value, Is.EqualTo(best.Value).Within(1e-6 * Math.Max(1, best.Value)));
+    }
+
+    [Test]
     public void BreakAnyway_SetsAWordWiderThanTheLineOnALineOfItsOwn()
     {
         List<ComposerItem> items =
@@ -82,7 +105,7 @@ public class ParagraphComposerTests
         Assert.Throws<ArgumentException>(() => ParagraphComposer.Break([ComposerItem.Box(10)], 100, 100));
     }
 
-    private static List<ComposerItem> RandomParagraph(Random random)
+    private static List<ComposerItem> RandomParagraph(Random random, int splitOneIn = 3)
     {
         List<ComposerItem> items = [];
         var words = random.Next(4, 10);
@@ -102,7 +125,7 @@ public class ParagraphComposerTests
             }
 
             var length = random.Next(10, 90);
-            if (length > 40 && random.Next(3) == 0)
+            if (length > 40 && random.Next(splitOneIn) == 0)
             {
                 var head = random.Next(10, length - 10);
                 items.Add(ComposerItem.Box(head));
@@ -120,7 +143,8 @@ public class ParagraphComposerTests
         return items;
     }
 
-    private static double? BestByEveryBreaking(List<ComposerItem> items, IReadOnlyList<double> widths, double tolerance)
+    private static double? BestByEveryBreaking(List<ComposerItem> items, IReadOnlyList<double> widths, double tolerance,
+        int hyphenLimit = 0)
     {
         var legal = Enumerable.Range(0, items.Count - 1).Where(i => IsLegal(items, i)).ToArray();
         Assert.That(legal.Length, Is.LessThanOrEqualTo(20), "small enough to try every breaking");
@@ -137,7 +161,7 @@ public class ParagraphComposerTests
             }
 
             breaks.Add(items.Count - 1);
-            var demerits = Demerits(items, widths, tolerance, breaks);
+            var demerits = Demerits(items, widths, tolerance, breaks, hyphenLimit);
             if (demerits != null && (best == null || demerits < best))
             {
                 best = demerits;
@@ -158,12 +182,13 @@ public class ParagraphComposerTests
     }
 
     private static double? Demerits(List<ComposerItem> items, IReadOnlyList<double> widths, double tolerance,
-        IReadOnlyList<int> breaks)
+        IReadOnlyList<int> breaks, int hyphenLimit = 0)
     {
         double total = 0;
         var previous = -1;
         var previousFitness = 2;
         var previousFlagged = false;
+        var hyphens = 0;
         var lineIndex = 0;
         foreach (var b in breaks)
         {
@@ -260,6 +285,16 @@ public class ParagraphComposerTests
             if (Math.Abs(fitness - previousFitness) > 1)
             {
                 demerits += 10000;
+            }
+
+            hyphens = flagged && item.Width > 0 ? hyphens + 1 : 0;
+            if (hyphenLimit > 0 && hyphens > hyphenLimit && Enumerable.Range(start, b - start).Any(i =>
+                    items[i].Kind == ComposerItemKind.Glue
+                        ? i > 0 && items[i - 1].Kind == ComposerItemKind.Box
+                        : items[i].Kind == ComposerItemKind.Penalty && items[i].Cost < ParagraphComposer.Never
+                                                                    && !items[i].Flagged))
+            {
+                return null;
             }
 
             total += demerits;
