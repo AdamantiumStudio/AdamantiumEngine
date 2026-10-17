@@ -242,12 +242,17 @@ public class EditorOverlayProcessor : RenderingProcessor
     private void Collect(Entity root)
     {
         parts.Clear();
-        root.TraverseInDepth(current =>
+        root.VisitInDepth(current =>
         {
-            var transformation = current.Transform.GetMetadata(ActiveCamera);
-            if (!transformation.Enabled || !current.Visible)
+            if (!current.IsEnabled || !current.Visible)
             {
-                return;
+                return false;
+            }
+
+            var transformation = current.Transform.GetMetadata(ActiveCamera);
+            if (!transformation.Enabled)
+            {
+                return true;
             }
 
             var color = ColorOf(current, transformation);
@@ -263,7 +268,9 @@ public class EditorOverlayProcessor : RenderingProcessor
                 var line = topology == PrimitiveType.LineList || topology == PrimitiveType.LineStrip;
                 parts.Add(new Part(data, transformation.WorldMatrixF, color, line || !data.Mesh.IsNormalsPresent, line));
             }
-        }, true);
+
+            return true;
+        });
     }
 
     private static Vector4F ColorOf(Entity current, TransformMetaData transformation)

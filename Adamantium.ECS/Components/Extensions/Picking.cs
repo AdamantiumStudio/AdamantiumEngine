@@ -7,8 +7,8 @@ using Adamantium.Mathematics;
 namespace Adamantium.ECS.Components.Extensions;
 
 /// <summary>
-/// Finds what a ray hits: the nearest hit along it, over an entity and everything under it. A disabled entity is
-/// skipped with its subtree.
+/// Finds what a ray hits: the nearest hit along it, over an entity and everything under it. A disabled or hidden
+/// entity is skipped with its subtree.
 /// </summary>
 public static class Picking
 {
@@ -67,7 +67,7 @@ public static class Picking
 
     private static void PickTree(Entity entity, in PickRay ray, PickMode mode, float aperture, ref PickHit nearest)
     {
-        if (!entity.IsEnabled)
+        if (!entity.IsEnabled || !entity.Visible)
         {
             return;
         }

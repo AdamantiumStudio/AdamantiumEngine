@@ -173,6 +173,25 @@ public class PickingTests
     }
 
     [Test]
+    public void Hidden_IsSkippedWithWhatIsUnderIt_AndLetsTheRayThrough()
+    {
+        var scene = new PickScene();
+        var hidden = PickScene.Box(null, "Hidden", new Vector3(0, 0, 10), 1);
+        PickScene.Box(hidden, "Child", new Vector3(0, 0, -5), 1);
+        var behind = PickScene.Box(null, "Behind", new Vector3(0, 0, 20), 1);
+        hidden.Visible = false;
+        scene.Place(hidden);
+        scene.Place(behind);
+        var ray = scene.RayThroughCenter();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hidden.Pick(ray, PickMode.Colliders).IsHit, Is.False, "the child, nearest of all, is hidden with its root");
+            Assert.That(Picking.Pick([hidden, behind], ray, PickMode.Colliders).Entity, Is.SameAs(behind));
+        });
+    }
+
+    [Test]
     public void Ignored_LeavesWhatIsUnderItPickable()
     {
         var scene = new PickScene();

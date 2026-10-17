@@ -455,6 +455,10 @@ All packages share one version.
 
 ### Fixed
 
+- A hidden entity (`Visible` false) hides what is under it: the scene drew its children, and the selection outline
+  drew them too, as hiding was checked inside the walk's action, which could not stop the walk. Picking skips it with
+  its subtree as well: a hidden model still took the pointer and stopped the ray from reaching what is behind it.
+  `Entity.VisitInDepth` walks a tree whose visit says whether to go under the entity it is given.
 - `TypeParser` no longer throws and catches an `ArgumentException` for every type whose parser returns a value: it
   asks whether the parser binds as a delegate instead of trying. A debugger stopped on each of them at start-up.
 - A `Camera` rebuilds its projections in its next `Update` when its field of view, a clipping plane or its size

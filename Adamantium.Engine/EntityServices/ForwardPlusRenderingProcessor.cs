@@ -177,7 +177,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         try
         {
-            entity.TraverseInDepth(DrawEntity);
+            entity.VisitInDepth(DrawEntity);
         }
         catch (Exception exception)
         {
@@ -185,24 +185,24 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    private void DrawEntity(Entity entity)
+    private bool DrawEntity(Entity entity)
     {
         if (!entity.Visible)
         {
-            return;
+            return false;
         }
 
         var collider = entity.GetComponent<Collider>();
         if (collider == null)
         {
-            return;
+            return true;
         }
 
         if (collider.ContainsDataFor(ActiveCamera))
         {
             if (collider.IsInsideCameraFrustum(ActiveCamera) == ContainmentType.Disjoint)
             {
-                return;
+                return true;
             }
 
             if (collider.DisplayCollider)
@@ -214,13 +214,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var meshData = entity.GetComponent<MeshData>();
         if (meshData?.Mesh == null || !meshData.IsEnabled)
         {
-            return;
+            return true;
         }
 
         var transformation = entity.Transform.GetMetadata(ActiveCamera);
         if (!transformation.Enabled)
         {
-            return;
+            return true;
         }
 
         var material = entity.GetComponent<Material>();
@@ -246,6 +246,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         geometryCache.DrawMesh(GraphicsDevice, meshData);
+        return true;
     }
 
     private void DrawCollider(Entity entity, Collider collider)
