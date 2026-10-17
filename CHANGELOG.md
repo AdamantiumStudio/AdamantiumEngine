@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.LineBounds` (`TextLineBounds`), as WinUI's: `Full` (the default) takes whole lines; `TrimToCapHeight`
+  starts the first line at the top of its tallest capitals, `TrimToBaseline` ends the last on its baseline, `Tight`
+  does both. The size and a vertical alignment take the trimmed box, so a label centered by its layout has its capitals
+  in the middle. Horizontal text outside frames; a text on a baseline grid keeps its first line whole.
 - `GroundGrid`, the editor's ground: the plane y = 0 ruled into cells, as editors show it. Cells of 1, 10, 100...
   times `CellSize` are shown by how big they are on screen, the smaller ones fading as the eye moves away, the X axis
   runs red along it and the Z axis blue, and the grid fades out towards its edge; what stands on it hides it. Drawn by
@@ -473,6 +477,10 @@ All packages share one version.
 
 ### Fixed
 
+- An empty line between two hard breaks (a line feed, U+2028 or U+2029) starts after the first of them: the line
+  before took both breaks, so `"ab\n\ncd"` gave lines 0..4, 4..4, 4..6, and a caret at the start of the empty line
+  stood on the line before; the breaks also took shares of the width of the letter before them. Lines are now 0..3,
+  3..4, 4..6 whether or not the layout emits newline carets.
 - A hidden entity (`Visible` false) hides what is under it: the scene drew its children, and the selection outline
   drew them too, as hiding was checked inside the walk's action, which could not stop the walk. Picking skips it with
   its subtree as well: a hidden model still took the pointer and stopped the ray from reaching what is behind it.
@@ -738,6 +746,11 @@ All packages share one version.
 
 ### Changed
 
+- A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
+  the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text
+  whose height is its own (no height given) is not moved at all: it was moved by half its descent under `Center` and by
+  its descent under `Bottom`, so its letters, selection and backgrounds came out of its size - 56 pixels for Poppins at
+  320.
 - Laying text out again allocates about half of what it did, and takes less time: the shaper and its normalizer keep
   their buffers between runs, and a layout keeps its list of shaped glyphs (for text of up to 16,384 characters). A
   paragraph of 1300 characters in Segoe UI laid out again went from 543 KB to 237 KB, in Source Sans 3 from 663 KB to

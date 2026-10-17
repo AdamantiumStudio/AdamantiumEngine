@@ -54,6 +54,8 @@ internal sealed class TextLayoutOptions
 
     public double LineSpacing { get; init; }
 
+    public TextLineBounds LineBounds { get; init; }
+
     public int MaxLines { get; init; }
 
     public string Language { get; init; }
@@ -80,7 +82,7 @@ internal sealed class TextLayoutOptions
                && LastLineAlignment == other.LastLineAlignment
                && SingleWordJustification == other.SingleWordJustification && Kashidas == other.Kashidas
                && LineHeight.Equals(other.LineHeight) && LineStacking == other.LineStacking
-               && LineSpacing.Equals(other.LineSpacing) && MaxLines == other.MaxLines
+               && LineSpacing.Equals(other.LineSpacing) && LineBounds == other.LineBounds && MaxLines == other.MaxLines
                && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? []);
     }
 }
