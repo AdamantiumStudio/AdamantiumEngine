@@ -6,18 +6,38 @@ namespace Adamantium.Fonts.Common
 {
     internal static class BezierSampler
     {
+        private const double ToleranceShare = 1.0 / 1024;
+        private const double LeastTolerance = 0.25;
+        private const int MostChords = 256;
+
         public static SampledOutline[] GenerateOutlines(this Glyph glyph, byte rate)
         {
+            var box = glyph.BoundingRectangle;
+            var tolerance = Math.Max(Math.Max(Math.Abs(box.Width), Math.Abs(box.Height)) * ToleranceShare, LeastTolerance);
             return glyph.OutlineType switch
             {
-                OutlineType.TrueType => GenerateQuadraticBezierOutlines(glyph.Outlines, rate),
-                OutlineType.CompactFontFormat => GenerateCubicBezierOutlines(glyph.Outlines, rate),
+                OutlineType.TrueType => GenerateQuadraticBezierOutlines(glyph.Outlines, rate, tolerance),
+                OutlineType.CompactFontFormat => GenerateCubicBezierOutlines(glyph.Outlines, rate, tolerance),
                 _ => Array.Empty<SampledOutline>(),
             };
         }
-        
+
+        private static int WangChords(byte rate, double tolerance, double factor, double secondDifference)
+        {
+            var needed = Math.Ceiling(Math.Sqrt(factor * secondDifference / tolerance));
+            if (double.IsNaN(needed))
+            {
+                needed = rate;
+            }
+
+            return (int)Math.Min(Math.Max(Math.Max(rate, needed), 1), MostChords);
+        }
+
+        private static double SecondDifference(Vector2 a, Vector2 b, Vector2 c) => (a - 2 * b + c).Length();
+
         // Cubic Bezier generator
-        private static SampledOutline[] GenerateCubicBezierOutlines(IEnumerable<Outline> outlines, byte rate)
+        private static SampledOutline[] GenerateCubicBezierOutlines(IEnumerable<Outline> outlines, byte rate,
+            double tolerance)
         {
             var sampledOutlines = new List<SampledOutline>();
 
@@ -27,7 +47,7 @@ namespace Adamantium.Fonts.Common
 
                 foreach (var segment in outline.Segments)
                 {
-                    var sampledPoints = GenerateCubicOutlineFromSegment(segment, rate);
+                    var sampledPoints = GenerateCubicOutlineFromSegment(segment, rate, tolerance);
                     for (var i = 0; i < (sampledPoints.Count - 1); i++)
                     {
                         var sampledSegment = new LineSegment2D(sampledPoints[i], sampledPoints[i + 1]);
@@ -41,7 +61,7 @@ namespace Adamantium.Fonts.Common
             return sampledOutlines.ToArray();
         }
 
-        private static List<Vector2> GenerateCubicOutlineFromSegment(OutlineSegment segment, byte rate)
+        private static List<Vector2> GenerateCubicOutlineFromSegment(OutlineSegment segment, byte rate, double tolerance)
         {
             var sampledPoints = new List<Vector2>();
 
@@ -56,41 +76,30 @@ namespace Adamantium.Fonts.Common
                 return sampledPoints;
             }
 
-            var t = 1.0 / rate;
-
-            for (double d = 0; d <= 1; d += t)
+            var p = segment.Points;
+            var chords = WangChords(rate, tolerance, 3.0 / 4,
+                Math.Max(SecondDifference(p[0], p[1], p[2]), SecondDifference(p[1], p[2], p[3])));
+            for (var i = 0; i <= chords; i++)
             {
-                try
-                {
-                    var bezierX = Math.Pow(1 - d, 3) * segment.Points[0].X +
-                                  3 * d * Math.Pow(1 - d, 2) * segment.Points[1].X +
-                                  3 * Math.Pow(d, 2) * (1 - d) * segment.Points[2].X +
-                                  Math.Pow(d, 3) * segment.Points[3].X;
-                
-                    var bezierY = Math.Pow(1 - d, 3) * segment.Points[0].Y +
-                                  3 * d * Math.Pow(1 - d, 2) * segment.Points[1].Y +
-                                  3 * Math.Pow(d, 2) * (1 - d) * segment.Points[2].Y +
-                                  Math.Pow(d, 3) * segment.Points[3].Y;
-                
-                    sampledPoints.Add(new Vector2(Math.Round(bezierX, 4), Math.Round(bezierY, 4)));
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                    throw;
-                }
+                var d = (double)i / chords;
+                var bezierX = Math.Pow(1 - d, 3) * p[0].X + 3 * d * Math.Pow(1 - d, 2) * p[1].X +
+                              3 * Math.Pow(d, 2) * (1 - d) * p[2].X + Math.Pow(d, 3) * p[3].X;
+                var bezierY = Math.Pow(1 - d, 3) * p[0].Y + 3 * d * Math.Pow(1 - d, 2) * p[1].Y +
+                              3 * Math.Pow(d, 2) * (1 - d) * p[2].Y + Math.Pow(d, 3) * p[3].Y;
+                sampledPoints.Add(new Vector2(Math.Round(bezierX, 4), Math.Round(bezierY, 4)));
             }
 
             return sampledPoints;
         }
         
         // Quadratic Bezier generator
-        public static SampledOutline[] GenerateQuadraticBezierOutlines(IEnumerable<Outline> outlines, byte rate)
+        public static SampledOutline[] GenerateQuadraticBezierOutlines(IEnumerable<Outline> outlines, byte rate,
+            double tolerance)
         {
             var sampledOutlines = new List<SampledOutline>();
             foreach (var outline in outlines)
             {
-                var sampledOutline = GenerateQuadraticBezierCurves(outline, rate);
+                var sampledOutline = GenerateQuadraticBezierCurves(outline, rate, tolerance);
                 if (sampledOutline == SampledOutline.Empty) continue;
 
                 sampledOutlines.Add(sampledOutline);
@@ -99,15 +108,8 @@ namespace Adamantium.Fonts.Common
             return sampledOutlines.ToArray();
         }
         
-        private static SampledOutline GenerateQuadraticBezierCurves(Outline outline, byte rate)
+        private static SampledOutline GenerateQuadraticBezierCurves(Outline outline, byte rate, double tolerance)
         {
-            if (rate == 0)
-            {
-                rate = 1;
-            }
-
-            var step = 1.0 / rate;
-
             var points = new List<Vector2>();
 
             foreach (var segment in outline.Segments)
@@ -125,9 +127,11 @@ namespace Adamantium.Fonts.Common
                 else
                 {
                     // bezier curve
-                    for (var t = step; t <= 1; t += step)
+                    var p = segment.Points;
+                    var chords = WangChords(rate, tolerance, 1.0 / 4, SecondDifference(p[0], p[1], p[2]));
+                    for (var i = 1; i <= chords; i++)
                     {
-                        points.Add(GetQuadraticCurvePoint(segment.Points[0], segment.Points[1], segment.Points[2], t));
+                        points.Add(GetQuadraticCurvePoint(p[0], p[1], p[2], (double)i / chords));
                     }
                 }
             }

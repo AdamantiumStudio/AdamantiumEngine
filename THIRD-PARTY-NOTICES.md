@@ -244,6 +244,7 @@ Project Authors, under the SIL Open Font License 1.1, whose text is `RobotoFlex-
 
 `RobotoFlex-NoHVAR.subset.ttf` beside it is a modified version of that font, made for the tests: four letters of it,
 without its `HVAR` and layout tables, and with the phantom-point variations of one composite glyph moved.
+`RobotoFlex-NoGvar.subset.ttf` is another: three letters of it, without its `gvar`, `MVAR` and layout tables.
 
 ---
 
