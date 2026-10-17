@@ -101,7 +101,8 @@ internal sealed class TextNavigator
             // The empty last line stands as its paragraph says: between its margins, and its indent at its start when
             // a paragraph separator opened it; after a line break it goes on with the last paragraph.
             var opens = text[text.Length - 1] == ParagraphSeparator;
-            var paragraph = _laid.Attributed?.ParagraphAt(opens ? text.Length : text.Length - 1)?.Attributes;
+            var paragraph = AttributedText.ParagraphIn(_laid.ParagraphRuns, opens ? text.Length : text.Length - 1,
+                text.Length)?.Attributes;
             var indent = opens ? Finite(paragraph?.TextIndent) : 0;
             var left = Math.Max(0, Finite(paragraph?.MarginLeft) + (rightToLeft ? 0 : indent));
             var edge = _laid.Size.Width - Math.Max(0, Finite(paragraph?.MarginRight) + (rightToLeft ? indent : 0));

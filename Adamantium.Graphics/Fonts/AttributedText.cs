@@ -209,8 +209,18 @@ public sealed class AttributedText
     public ParagraphRun? ParagraphAt(int index)
     {
         Resolve();
-        var paragraphs = _resolvedParagraphs;
-        if (index == Text.Length)
+        return ParagraphIn(_resolvedParagraphs, index, Text.Length);
+    }
+
+    // The paragraph of a resolved list a UTF-16 index is in: what a layout reads from the list it took.
+    internal static ParagraphRun? ParagraphIn(IReadOnlyList<ParagraphRun> paragraphs, int index, int textLength)
+    {
+        if (paragraphs == null)
+        {
+            return null;
+        }
+
+        if (index == textLength)
         {
             return paragraphs.Count > 0 && paragraphs[^1] is { Length: 0 } last && last.Start == index ? last : null;
         }

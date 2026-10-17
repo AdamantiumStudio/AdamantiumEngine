@@ -24,12 +24,12 @@ internal sealed class GlyphRunShaper
         _font = font;
     }
 
-    public List<ShapedItem> Shape(string text, AttributedText attributed, double fontSize, int split, bool vertical,
-        TextLayoutOptions options, TextParagraphs paragraphs, bool[] graphemes, out bool hasPendingFonts)
+    public List<ShapedItem> Shape(string text, AttributedText attributed, IReadOnlyList<AttributeRun> runs,
+        double fontSize, int split, bool vertical, TextLayoutOptions options, TextParagraphs paragraphs,
+        bool[] graphemes, out bool hasPendingFonts)
     {
         _pending = false;
         var items = new List<ShapedItem>(text.Length);
-        var runs = attributed?.Runs;
         var runIndex = 0;
         foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, runs, fontSize,
                      options.Kerning), attributed), split))
