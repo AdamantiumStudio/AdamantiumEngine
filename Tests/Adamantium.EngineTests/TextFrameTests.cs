@@ -69,6 +69,21 @@ public class TextFrameTests
         }
     }
 
+    // The underline is drawn from the line's baseline; a line moved into a later column by a part of a pixel kept its
+    // letters rounded where it was set.
+    [Test]
+    public void InEveryColumn_TheLettersStandOnTheirLinesBaseline()
+    {
+        var layout = Layout(Prose, Columns(3, 200, 20, 4));
+
+        foreach (var glyph in layout.GetTextData().Where(g => g.Symbol != ' ' && g.PositionInString >= 0))
+        {
+            var baseline = glyph.Rect.Bottom + glyph.Glyph.BoundingRectangle.Y * glyph.FontSize / glyph.Font.UnitsPerEm;
+            Assert.That(baseline, Is.EqualTo(layout.GetLine(glyph.LineIndex).Baseline).Within(0.01),
+                $"line {glyph.LineIndex}");
+        }
+    }
+
     [Test]
     public void WhatTheFramesHaveNoRoomFor_IsOverset()
     {

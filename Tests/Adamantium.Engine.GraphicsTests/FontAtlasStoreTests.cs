@@ -48,6 +48,36 @@ public class FontAtlasStoreTests
         Assert.That(glyphs.All(p => atlas.GetGlyphData(p.font, p.g) != null), "every glyph has its cell");
     }
 
+    // An off-screen render fills inline; a window's thread asking meanwhile fills inline too, into the same atlas.
+    [Test]
+    public void ThreadsFillingInlineAtOnce_EachGlyphGetsACellOfItsOwn()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        FontAtlasStore.SynchronousFill = true;
+        var layout = Layout("SourceSans3-Regular.ttf", "a");
+        var atlas = layout.EnsureAtlas(device);
+        var font = layout.Font;
+        var glyphs = font.Typeface.Glyphs
+            .Where(g => !g.IsEmpty && g.BoundingRectangle.Width > 0 && g.BoundingRectangle.Height > 0)
+            .Take(300)
+            .Select(g => (font, g))
+            .ToList();
+        using var start = new System.Threading.Barrier(4);
+        var threads = Enumerable.Range(0, 4).Select(t => new System.Threading.Thread(() =>
+        {
+            start.SignalAndWait();
+            atlas.RequestAsync(glyphs.Where((_, i) => i % 4 == t || i % 3 == t).ToList());
+        })).ToList();
+
+        threads.ForEach(thread => thread.Start());
+        threads.ForEach(thread => thread.Join());
+
+        var cells = glyphs.Select(p => atlas.GetGlyphData(p.font, p.g)).ToList();
+        Assert.That(cells, Has.None.Null, "every glyph has its cell");
+        Assert.That(cells.Select(cell => (cell.DepthLayer, cell.BoundingRect)).Distinct().Count(), Is.EqualTo(cells.Count),
+            "and no two share one");
+    }
+
     [Test]
     public void TwoFonts_ShareOneAtlas_AndKeepTheirGlyphsApart()
     {

@@ -117,6 +117,9 @@ namespace Adamantium.Fonts
         /// <inheritdoc />
         public IReadOnlyList<GlyphAlternate> GetGlyphAlternates(uint glyphIndex) => substitutionMap.Value.Alternates(glyphIndex);
 
+        public IReadOnlyList<uint> GetGlyphAlternates(uint glyphIndex, string feature, int codepoint, string language) =>
+            substitutionMap.Value.Alternates(glyphIndex, feature, codepoint, language, coordinates);
+
         /// <inheritdoc />
         public IReadOnlyList<string> GetGlyphText(uint glyphIndex) => substitutionMap.Value.Text(glyphIndex);
 

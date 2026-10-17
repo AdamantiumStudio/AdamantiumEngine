@@ -48,6 +48,38 @@ public class TextLayoutFallbackTests
         Assert.That(glyphs.Where(g => g.PositionInString != 1).All(g => g.Font == layout.Font));
     }
 
+    // The subset of Noto Color Emoji has 8 and 9 but no space, as Edge draws it.
+    [Test]
+    public void ASpaceTheFontLacks_IsTakenFromAFallbackFont()
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoColorEmoji.subset.ttf"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0]);
+        layout.ProcessText("8 9", 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var glyphs = layout.GetTextData();
+        var space = glyphs.Single(g => g.PositionInString == 1);
+
+        Assert.That(space.Font, Is.Not.SameAs(layout.Font));
+        Assert.That(space.Glyph.Index, Is.Not.Zero, "a real space, not the missing-glyph box");
+        Assert.That(glyphs.Where(g => g.PositionInString != 1).All(g => g.Font == layout.Font));
+    }
+
+    // The font lacks the thin and the narrow no-break space; its space is set in their width, as HarfBuzz sets it.
+    [TestCase(0x2009)]
+    [TestCase(0x202F)]
+    public void ASpaceTheFontSetsByItsOwnSpace_StaysInTheFont(int space)
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansHebrew-Regular.ttf"));
+        Assume.That(typeface.Fonts[0].TryGetGlyphIndex(space, out _), Is.False);
+        var layout = new TextLayout(typeface, typeface.Fonts[0]);
+        layout.ProcessText("שלום" + (char)space + "עולם", 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+            TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.GetTextData().All(g => g.Font == layout.Font), Is.True);
+    }
+
     [Test]
     public void WithoutAFallback_TheMissingGlyphBoxIsDrawn()
     {

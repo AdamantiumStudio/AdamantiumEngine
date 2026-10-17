@@ -22,6 +22,7 @@ public class TextLayout : DisposableObject
     private TextRenderingParameters _previousRenderingParameters;
     private AttributedText _attributed;
     private SpacingRange _glyphScaling = new(1, 1, 1);
+    private int _hyphenLimit;
     private FontFallback _fallback;
     private bool _fallbackSet;
     private bool _textUpdated;
@@ -66,6 +67,22 @@ public class TextLayout : DisposableObject
     /// <see cref="Fonts.Hyphens.Manual"/> (the default) at soft hyphens only.
     /// </summary>
     public Hyphens Hyphens { get; set; } = Hyphens.Manual;
+
+    /// <summary>
+    /// The most lines in a row that may end in a hyphen breaking a word, as InDesign's hyphen limit: past it a word is
+    /// not broken but goes down whole, unless it is the only word on its line. Hyphens of the text itself, as in
+    /// "state-of-the-art", are not counted. 0, the default, sets no limit.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is below 0.</exception>
+    public int HyphenLimit
+    {
+        get => _hyphenLimit;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            _hyphenLimit = value;
+        }
+    }
 
     /// <summary>
     /// How words wrapped by <see cref="TextWrapping.WrapByWords"/> are broken into lines: a line at a time
@@ -476,6 +493,7 @@ public class TextLayout : DisposableObject
         TabStops = TabStops?.ToArray() ?? [],
         Direction = Direction,
         Hyphens = Hyphens,
+        HyphenLimit = HyphenLimit,
         LineBreaking = LineBreaking,
         OpticalMarginAlignment = OpticalMarginAlignment,
         DropCap = DropCap,

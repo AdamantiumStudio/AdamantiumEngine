@@ -17,6 +17,12 @@ public static class TextShaper
     /// <see cref="FontFeature"/> of value 0 turns one off. Any other feature applies only when asked for.</summary>
     public static IReadOnlyList<string> DefaultFeatures { get; } = Array.AsReadOnly(ShapePlan.DefaultFeatures);
 
+    /// <summary>Whether shaping sets a space separator in <paramref name="font"/>: by its own glyph, or by the font's
+    /// space at the width the separator asks, as HarfBuzz sets a thin or a narrow no-break space the font lacks.</summary>
+    public static bool SetsSpace(IFont font, int codepoint) =>
+        font.TryGetGlyphIndex(codepoint, out _)
+        || (UnicodeProps.SpaceFallback(codepoint) != SpaceKind.NotSpace && font.TryGetGlyphIndex(0x0020, out _));
+
     /// <summary>Shapes <paramref name="text"/>; the result is in font design units, each run's glyphs in visual order,
     /// a right-to-left run's first character last. Without a script in <paramref name="options"/> the text is split
     /// where its script changes and each part is shaped with its own.</summary>

@@ -230,7 +230,9 @@ and Google LLC, under the MIT License, whose text is `LICENSE-chromacheck.txt` b
 `NotoColorEmoji.subset.multiple_size_tables.ttf` and `NotoColorEmoji.subset.index_format3.ttf`, unchanged, the subsets
 of Noto Color Emoji HarfBuzz's tests carry (https://github.com/harfbuzz/harfbuzz/tree/main/test/api/fonts), used only by
 the tests. Copyright Google LLC, under the SIL Open Font License 1.1, whose text is `LICENSE-NotoColorEmoji.txt` beside
-them.
+them. `NotoColorEmoji.subset.index_format2_image_format19.ttf`, `…index_format4_image_format18.ttf` and
+`…index_format5_image_format19.ttf` beside them are modified versions of the first, made for the tests: the same images
+stored in the other formats of the 'CBLC' and 'CBDT' tables.
 
 ---
 
@@ -239,6 +241,9 @@ them.
 **Where:** `Tests/Adamantium.FontTests/Variations/RobotoFlex-Variable.ttf`, unchanged, the variable font from
 https://github.com/google/fonts/tree/main/ofl/robotoflex, used only by the tests. Copyright 2017 The Roboto Flex
 Project Authors, under the SIL Open Font License 1.1, whose text is `RobotoFlex-OFL.txt` beside it.
+
+`RobotoFlex-NoHVAR.subset.ttf` beside it is a modified version of that font, made for the tests: four letters of it,
+without its `HVAR` and layout tables, and with the phantom-point variations of one composite glyph moved.
 
 ---
 
@@ -266,12 +271,31 @@ Open Font License 1.1, whose text is `LICENSE-NotoNastaliqUrdu.txt` beside it.
 
 ---
 
+## Noto Sans Syriac, Noto Sans Mongolian, Noto Sans NKo, Noto Sans Adlam
+
+**Where:** `Tests/Adamantium.FontTests/ScriptFonts/` — `NotoSansSyriac-Regular.ttf`, `NotoSansMongolian-Regular.ttf`,
+`NotoSansNKo-Regular.ttf` and `NotoSansAdlam-Regular.ttf`, unchanged, the hinted builds from
+https://github.com/notofonts/notofonts.github.io, used only by the tests. Copyright 2022 and 2023 The Noto Project
+Authors, under the SIL Open Font License 1.1, whose text is `LICENSE-NotoSansSyriac.txt`, `LICENSE-NotoSansMongolian.txt`,
+`LICENSE-NotoSansNKo.txt` and `LICENSE-NotoSansAdlam.txt` beside them.
+
+---
+
 ## Ponomar Unicode, Monomakh Unicode
 
 **Where:** `Tests/Adamantium.FontTests/ScriptFonts/PonomarUnicode.otf` and `MonomakhUnicode.otf`, unchanged, from the
 fonts-churchslavonic release 2.2.1 of the Slavonic Computing Initiative (https://github.com/typiconman/fonts-cu), used
 only by the tests. Copyright 2013-2020 (Ponomar) and 2006-2020 (Monomakh) Aleksandr Andreev and Nikita Simmons, under
 the SIL Open Font License 1.1, whose text is `LICENSE-ChurchSlavonic.txt` beside them.
+
+---
+
+## Adamantium Jalt Test
+
+**Where:** `Tests/Adamantium.FontTests/TTFFonts/JaltByScript-Regular.ttf`, made for the tests from Source Sans 3
+Regular beside it: its Latin and Cyrillic lowercase only, without its layout tables, with a 'jalt' feature of its own
+for the Cyrillic script, renamed as the license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font
+Name 'Source', under the SIL Open Font License 1.1, whose text is `source-sans-3v028R/LICENSE.md`.
 
 ---
 

@@ -173,6 +173,89 @@ public class ParagraphLayoutTests
         Assert.That(clusters.Distinct().Count(), Is.EqualTo(Prose.Length));
     }
 
+    // Wide enough for every word whole: one wider than its line breaks whatever the limit.
+    private const double Column = 240;
+
+    private const string LongWords =
+        "Достопримечательности высокопроизводительного сельскохозяйственного производства неизменно привлекают " +
+        "внимание любознательных путешественников, интересующихся достижениями отечественного машиностроения.";
+
+    [TestCase(LineBreaking.Greedy, 1)]
+    [TestCase(LineBreaking.Greedy, 2)]
+    [TestCase(LineBreaking.Paragraph, 1)]
+    public void AHyphenLimit_EndsNoMoreLinesInARowInAHyphen(LineBreaking breaking, int limit)
+    {
+        int Run(TextLayout layout)
+        {
+            int longest = 0, run = 0;
+            foreach (var line in Lines(layout))
+            {
+                run = line.Last(g => g.Symbol != ' ').Symbol == '-' ? run + 1 : 0;
+                longest = Math.Max(longest, run);
+            }
+
+            return longest;
+        }
+
+        var free = Layout(LongWords, Column, breaking, hyphens: Hyphens.Auto, language: "ru");
+        var typeface = SourceSans.Value;
+        var limited = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, LineBreaking = breaking, Hyphens = Hyphens.Auto, Language = "ru", HyphenLimit = limit,
+        };
+        limited.ProcessText(LongWords, FontSize, new Size(Column, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assume.That(Run(free), Is.GreaterThan(limit), "without a limit more lines in a row end in a hyphen");
+        Assert.That(Run(limited), Is.LessThanOrEqualTo(limit));
+        Assert.That(limited.GetTextData().Where(g => g.Symbol != ' ').Max(g => g.Rect.Right), Is.LessThanOrEqualTo(Column + 0.5));
+    }
+
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void AWordWiderThanItsColumn_BreaksWhereItMust_WhateverTheLimit(LineBreaking breaking)
+    {
+        var typeface = SourceSans.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, LineBreaking = breaking, Hyphens = Hyphens.Auto, Language = "ru", HyphenLimit = 1,
+        };
+        layout.ProcessText("высокопроизводительного", FontSize, new Size(60, double.NaN), TextWrapping.WrapByWords,
+            TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.LineCount, Is.GreaterThan(2));
+        Assert.That(layout.GetTextData().Max(g => g.Rect.Right), Is.LessThanOrEqualTo(60.5));
+    }
+
+    [TestCase(LineBreaking.Greedy, HorizontalTextAlignment.Left)]
+    [TestCase(LineBreaking.Paragraph, HorizontalTextAlignment.Left)]
+    [TestCase(LineBreaking.Paragraph, HorizontalTextAlignment.Justify)]
+    public void AHyphenLimit_LeavesTheHyphensOfTheTextUncounted(LineBreaking breaking, HorizontalTextAlignment alignment)
+    {
+        const string text = "state-of-the-art up-to-date mother-in-law long-term well-known self-made far-reaching";
+        string Lines(int limit)
+        {
+            var typeface = SourceSans.Value;
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, LineBreaking = breaking, Hyphens = Hyphens.Manual, HyphenLimit = limit,
+            };
+            layout.ProcessText(text, FontSize, new Size(110, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+                alignment, VerticalTextAlignment.Top);
+            return string.Join("|", Enumerable.Range(0, layout.LineCount).Select(i => layout.GetLine(i).Start));
+        }
+
+        Assert.That(Lines(1), Is.EqualTo(Lines(0)));
+    }
+
+    [Test]
+    public void AHyphenLimit_BelowZero_IsRejected()
+    {
+        var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => layout.HyphenLimit = -1);
+    }
+
     [Test]
     public void Paragraph_EndsTheLastLineTheHeightAllowsInAnEllipsis()
     {

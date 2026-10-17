@@ -201,6 +201,21 @@ public class GlyphScalingTests
         }
     }
 
+    // The font's 'jalt' turns a into m and а into м, for Cyrillic text only.
+    [TestCase("a banana and a cat, a hat and a bag, a man and a can, a jam and a map, a fan and a pan", false)]
+    [TestCase("а банан и сад, а там дама, а вам каша, а нам мама, а сам Сава, а там папа", true)]
+    public void JustificationAlternates_AreTakenOnlyFromTheTextsScript(string text, bool replaces)
+    {
+        var font = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "JaltByScript-Regular.ttf");
+        var plain = Lay(text, font, HorizontalTextAlignment.Justify, new SpacingRange(1, 1, 1), new SpacingRange(1, 1, 1),
+            alternates: false, width: 200).GetTextData();
+        var wide = Lay(text, font, HorizontalTextAlignment.Justify, new SpacingRange(1, 1, 1), new SpacingRange(1, 1, 1),
+            width: 200).GetTextData();
+
+        Assert.That(Enumerable.Range(0, plain.Length).Any(i => wide[i].Glyph.Index != plain[i].Glyph.Index),
+            Is.EqualTo(replaces));
+    }
+
     // The Culmus fonts' wide Hebrew letters come with some Windows installations; the test runs where they are.
     [Test]
     public void AJustifiedHebrewLine_TakesTheFontsWideLetters()

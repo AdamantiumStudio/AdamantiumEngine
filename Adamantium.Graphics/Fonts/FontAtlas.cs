@@ -24,6 +24,8 @@ namespace Adamantium.Graphics.Fonts
         private List<GlyphTextureData> _ready = new();
         private readonly HashSet<ulong> _generated = new();
         private readonly object _asyncGate = new();
+        private readonly object _uploadGate = new();
+        private readonly object _fillGate = new();
 
         /// <summary>Bumped whenever glyphs LAND in the atlas. A text block built while some of its glyphs were still
         /// being rasterized compares this against the version it built at and rebuilds when they differ - that is what
@@ -272,6 +274,14 @@ namespace Adamantium.Graphics.Fonts
 
         private void ProcessGlyphs(IReadOnlyList<(IFont Font, Glyph Glyph)> glyphs)
         {
+            lock (_fillGate)
+            {
+                FillInline(glyphs);
+            }
+        }
+
+        private void FillInline(IReadOnlyList<(IFont Font, Glyph Glyph)> glyphs)
+        {
             var glyphsToProcess = GetNotProcessedGlyphs(glyphs);
             var textureDataArray = atlasGenerator.GenerateTextureForGlyphs(glyphsToProcess);
 
@@ -296,6 +306,14 @@ namespace Adamantium.Graphics.Fonts
         }
 
         private void ProcessTextureData(IReadOnlyList<GlyphTextureData> textureDataArray)
+        {
+            lock (_uploadGate)
+            {
+                Upload(textureDataArray);
+            }
+        }
+
+        private void Upload(IReadOnlyList<GlyphTextureData> textureDataArray)
         {
             GlyphIntegrityProbe.EnterUpload(this);
             foreach (var textureData in textureDataArray) GlyphIntegrityProbe.Inspect(this, textureData);
@@ -489,7 +507,12 @@ namespace Adamantium.Graphics.Fonts
                 return failed;
             }
 
-            var cells = new HashSet<ColorBitmapCell>(_bitmaps.Upload());
+            HashSet<ColorBitmapCell> cells;
+            lock (_uploadGate)
+            {
+                cells = new HashSet<ColorBitmapCell>(_bitmaps.Upload());
+            }
+
             lock (_asyncGate)
             {
                 foreach (var pair in _imagesInFlight.ToArray())

@@ -38,6 +38,71 @@ public class TextStyleTests
     }
 
     [Test]
+    public void ClearingOverrides_LeavesTheRangeOnlyItsStyles()
+    {
+        var emphasis = new CharacterStyle("Emphasis", new TextAttributes { Foreground = Red, FontSize = 20 });
+        var text = new AttributedText(Text, new TextAttributes { FontSize = 12 })
+            .SetCharacterStyle(10, 10, emphasis)
+            .Apply(10, 10, new TextAttributes { FontSize = 30, Foreground = Blue })
+            .ClearOverrides(10, 4);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text.AttributesAt(10).FontSize, Is.EqualTo(20), "the style's size again");
+            Assert.That(text.AttributesAt(13).Foreground, Is.EqualTo(Red), "and its color");
+            Assert.That(text.AttributesAt(14).FontSize, Is.EqualTo(30), "past the range, what was applied stays");
+            Assert.That(text.AttributesAt(9).FontSize, Is.EqualTo(12));
+            Assert.That(text.CharacterStyleAt(11), Is.SameAs(emphasis));
+        });
+    }
+
+    [Test]
+    public void ClearingOverridesToTheEnd_TakesAnyLengthPastIt()
+    {
+        var text = new AttributedText(Text).Apply(0, Text.Length, new TextAttributes { FontSize = 30 })
+            .ClearOverrides(5, int.MaxValue);
+
+        Assert.That(text.AttributesAt(4).FontSize, Is.EqualTo(30));
+        Assert.That(text.AttributesAt(Text.Length - 1).FontSize, Is.Null);
+    }
+
+    [Test]
+    public void StylesAndParagraphsToTheEnd_TakeAnyLengthPastIt()
+    {
+        var emphasis = new CharacterStyle("Emphasis", new TextAttributes { FontSize = 20 });
+        var body = new ParagraphStyle("Body", new ParagraphAttributes(), new TextAttributes());
+        var text = new AttributedText("0123456789")
+            .SetCharacterStyle(1, int.MaxValue, emphasis)
+            .SetParagraphStyle(2, int.MaxValue, body)
+            .SetParagraph(10, int.MaxValue, new ParagraphAttributes());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text.CharacterStyleAt(5), Is.SameAs(emphasis));
+            Assert.That(text.ParagraphStyleAt(5), Is.SameAs(body));
+            Assert.That(text.Paragraphs[^1].Length, Is.Zero);
+        });
+    }
+
+    [Test]
+    public void ClearingOverrides_KeepsWhatPlacesAnInlineObject()
+    {
+        var text = new AttributedText("a" + (char)0xFFFC + "b")
+            .Apply(1, 1, new TextAttributes
+            {
+                ObjectSize = new Size(10, 12), BaselineAlignment = BaselineAlignment.Top, Foreground = Red,
+            })
+            .ClearOverrides(0, 3);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text.AttributesAt(1).ObjectSize, Is.EqualTo(new Size(10, 12)));
+            Assert.That(text.AttributesAt(1).BaselineAlignment, Is.EqualTo(BaselineAlignment.Top));
+            Assert.That(text.AttributesAt(1).Foreground, Is.Null);
+        });
+    }
+
+    [Test]
     public void AStyleBasedOnAnother_SetsOverIt()
     {
         var body = new CharacterStyle("Body", new TextAttributes { Foreground = Red, FontSize = 14 });

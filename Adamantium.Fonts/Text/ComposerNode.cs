@@ -2,7 +2,8 @@ namespace Adamantium.Fonts.Text;
 
 internal sealed class ComposerNode
 {
-    public ComposerNode(int position, int line, int fitness, double total, ComposerNode previous, bool flagged)
+    public ComposerNode(int position, int line, int fitness, double total, ComposerNode previous, bool flagged,
+        int hyphens = 0)
     {
         Position = position;
         Line = line;
@@ -10,6 +11,7 @@ internal sealed class ComposerNode
         Total = total;
         Previous = previous;
         Flagged = flagged;
+        Hyphens = hyphens;
     }
 
     public int Position { get; }
@@ -23,4 +25,6 @@ internal sealed class ComposerNode
     public ComposerNode Previous { get; }
 
     public bool Flagged { get; }
+
+    public int Hyphens { get; }
 }
