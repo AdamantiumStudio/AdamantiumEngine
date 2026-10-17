@@ -17,8 +17,8 @@ public sealed class AttributedText
     private readonly List<RubyRun> _rubies = [];
     private bool[] _graphemes;
     private readonly object _resolving = new();
-    private List<AttributeRun> _runs = [];
-    private List<ParagraphRun> _resolvedParagraphs = [];
+    private Tuple<List<AttributeRun>, List<ParagraphRun>> _resolved = Tuple.Create(new List<AttributeRun>(),
+        new List<ParagraphRun>());
     // What the resolved lists were made from: the edits of this text, its styles' stamp, and the count of style
     // edits anywhere when that stamp was last found current.
     private int _edits;
@@ -46,7 +46,7 @@ public sealed class AttributedText
         get
         {
             Resolve();
-            return _runs;
+            return Volatile.Read(ref _resolved).Item1;
         }
     }
 
@@ -116,7 +116,7 @@ public sealed class AttributedText
         get
         {
             Resolve();
-            return _resolvedParagraphs;
+            return Volatile.Read(ref _resolved).Item2;
         }
     }
 
@@ -209,7 +209,15 @@ public sealed class AttributedText
     public ParagraphRun? ParagraphAt(int index)
     {
         Resolve();
-        return ParagraphIn(_resolvedParagraphs, index, Text.Length);
+        return ParagraphIn(Volatile.Read(ref _resolved).Item2, index, Text.Length);
+    }
+
+    // The runs and the paragraphs of one resolution, for a layout to read them together.
+    internal (IReadOnlyList<AttributeRun> Runs, IReadOnlyList<ParagraphRun> Paragraphs) Resolved()
+    {
+        Resolve();
+        var resolved = Volatile.Read(ref _resolved);
+        return (resolved.Item1, resolved.Item2);
     }
 
     // The paragraph of a resolved list a UTF-16 index is in: what a layout reads from the list it took.
@@ -301,8 +309,7 @@ public sealed class AttributedText
 
             var paragraphs = ResolveParagraphs();
             var runs = ResolveRuns();
-            _resolvedParagraphs = paragraphs;
-            _runs = runs;
+            Volatile.Write(ref _resolved, Tuple.Create(runs, paragraphs));
             _stamp = stamp;
             Interlocked.Exchange(ref _styleEditsSeen, styleEdits);
             Volatile.Write(ref _resolvedEdits, edits);

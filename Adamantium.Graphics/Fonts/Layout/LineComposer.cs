@@ -82,8 +82,8 @@ internal sealed class LineComposer
         var tabStops = options.TabStops.OrderBy(stop => stop.Position).ToArray();
         var paragraphs = TextParagraphs.Resolve(text, options.Direction);
         // What the attributed text says, read once: a style changed meanwhile does not reach this layout.
-        var paragraphRuns = attributed?.Paragraphs is { Count: > 0 } resolvedParagraphs ? resolvedParagraphs : null;
-        var attributeRuns = attributed?.Runs;
+        var (attributeRuns, resolvedParagraphs) = attributed?.Resolved() ?? (null, null);
+        var paragraphRuns = resolvedParagraphs is { Count: > 0 } ? resolvedParagraphs : null;
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
                                               && !TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0)
                                               && !vertical
