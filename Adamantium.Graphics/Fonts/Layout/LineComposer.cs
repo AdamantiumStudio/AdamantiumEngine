@@ -51,6 +51,7 @@ internal sealed class LineComposer
         var scale = fontSize / _font.UnitsPerEm;
         var vertical = options.Vertical;
         var grid = vertical ? null : options.BaselineGrid;
+        var gridOffset = grid != null ? (grid.Offset % grid.Step + grid.Step) % grid.Step : 0;
         IReadOnlyList<RectangleF> frames = options.Frames;
         IReadOnlyList<RectangleF> exclusions = options.Exclusions;
         double columnsRight = 0;
@@ -716,8 +717,8 @@ internal sealed class LineComposer
                 return top;
             }
 
-            var steps = Math.Ceiling((top + lineBaseline - grid.Offset) / grid.Step - 1e-6);
-            return grid.Offset + steps * grid.Step - lineBaseline;
+            var steps = Math.Ceiling((top + lineBaseline - gridOffset) / grid.Step - 1e-6);
+            return gridOffset + steps * grid.Step - lineBaseline;
         }
 
         bool GridsLine(int line) => grid != null && (!grid.FirstLineOnly || OpensParagraph(line));
@@ -793,7 +794,7 @@ internal sealed class LineComposer
             {
                 var frame = frames[f];
                 var rowTop = OnGrid(top, RowBaseline(line), line);
-                if (((rows > 0 || rowTop > top + 1e-6) && rowTop + rowHeight > frame.Bottom + 1e-6)
+                if (((rows > 0 || (rowTop > top + 1e-6 && f + 1 < frames.Count)) && rowTop + rowHeight > frame.Bottom + 1e-6)
                     || rows >= 4 * (text.Length + 1))
                 {
                     f++;
@@ -1343,7 +1344,13 @@ internal sealed class LineComposer
                 var slot = SlotOf(i);
                 lineFrames[i] = slot.Frame;
                 shiftsX[i] = frames[slot.Frame].Left;
-                var top = OnGrid(slot.Top, lineBaselines[i], i);
+                var top = slot.Top;
+                if (i > 0 && lineFrames[i - 1] == slot.Frame)
+                {
+                    top = Math.Max(top, lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i));
+                }
+
+                top = OnGrid(top, lineBaselines[i], i);
                 shiftsY[i] = top - lineTops[i];
                 lineTops[i] = top;
             }

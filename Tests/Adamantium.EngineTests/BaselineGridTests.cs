@@ -160,7 +160,36 @@ public class BaselineGridTests
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var lines = Baselines(layout);
 
-        Assert.That(lines.All(baseline => OnGrid(baseline)), Is.True, string.Join(", ", lines));
+        Assert.Multiple(() =>
+        {
+            Assert.That(lines.All(baseline => OnGrid(baseline)), Is.True, string.Join(", ", lines));
+            for (var i = 1; i < layout.LineCount; i++)
+            {
+                Assert.That(layout.GetLine(i).Top, Is.GreaterThanOrEqualTo(
+                    layout.GetLine(i - 1).Top + layout.GetLine(i - 1).Height - 1), $"line {i} is below the one before");
+            }
+        });
+    }
+
+    [Test]
+    public void AFarOffset_KeepsTheLinesApart()
+    {
+        var near = Baselines(Lay(Prose, new BaselineGrid(Step, 5)));
+        var far = Baselines(Lay(Prose, new BaselineGrid(Step, 5 + Step * 1e14)));
+
+        Assert.That(far, Is.EqualTo(near).Within(0.51));
+    }
+
+    [Test]
+    public void TheOnlyFrame_KeepsALineTheGridMovedPastItsBottom()
+    {
+        var layout = Layout(new BaselineGrid(Step));
+        layout.Frames = [new RectangleF(0, 0, 300, 23)];
+        layout.ProcessText(Prose, FontSize, new Size(300, 23), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.LineCount, Is.EqualTo(1));
+        Assert.That(layout.GetTextData(), Is.Not.Empty);
     }
 
     [TestCase(LineBreaking.Greedy, false)]
@@ -240,6 +269,7 @@ public class BaselineGridTests
             Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(0));
             Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(double.PositiveInfinity));
             Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(double.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(double.Epsilon));
             Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(Step, double.NaN));
             Assert.Throws<ArgumentOutOfRangeException>(() => _ = new BaselineGrid(Step) with { Offset = double.NegativeInfinity });
         });

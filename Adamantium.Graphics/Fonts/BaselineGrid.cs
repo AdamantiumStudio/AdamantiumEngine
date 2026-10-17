@@ -28,7 +28,7 @@ public sealed record BaselineGrid(double Step, double Offset = 0, bool FirstLine
         init => _offset = ValidOffset(value);
     }
 
-    private static double ValidStep(double step) => step > 0 && !double.IsPositiveInfinity(step)
+    private static double ValidStep(double step) => step > 0 && double.IsNormal(step)
         ? step
         : throw new ArgumentOutOfRangeException(nameof(Step), step, "A grid's step is finite and more than 0.");
 
