@@ -173,6 +173,23 @@ public class PickingTests
     }
 
     [Test]
+    public void Disabled_IsPickedWithWhatIsUnderIt_WhenAskedFor_ButHiddenNever()
+    {
+        var scene = new PickScene();
+        var parent = PickScene.Box(null, "Parent", new Vector3(0, 0, 10), 1);
+        var child = PickScene.Box(parent, "Child", new Vector3(0, 0, -5), 1);
+        parent.IsEnabled = false;
+        scene.Place(parent);
+        var ray = scene.RayThroughCenter();
+
+        Assert.That(parent.Pick(ray, PickMode.Colliders, withDisabled: true).Entity, Is.SameAs(child));
+
+        parent.Visible = false;
+
+        Assert.That(parent.Pick(ray, PickMode.Colliders, withDisabled: true).IsHit, Is.False);
+    }
+
+    [Test]
     public void Hidden_IsSkippedWithWhatIsUnderIt_AndLetsTheRayThrough()
     {
         var scene = new PickScene();

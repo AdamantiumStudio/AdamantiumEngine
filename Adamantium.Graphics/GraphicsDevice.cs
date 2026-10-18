@@ -96,6 +96,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private CompareOp _cDepthCompare;
     private bool _cDepthBounds;
     private bool _cDepthBias;
+    private float _cDepthBiasConstant;
+    private float _cDepthBiasSlope;
+    private bool _depthBiasKnown;
     private bool _cDepthClamp;
     private const StencilFaceFlagBits BothStencilFaces = StencilFaceFlagBits.FrontAndBack;
     private bool _cStencilTest;
@@ -369,7 +372,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public bool DepthBoundsTestEnabled { get; set; } = false;
         
     public bool DepthBiasEnabled { get; set; } = false;
-    
+
+    public float DepthBiasConstantFactor { get; set; }
+
+    public float DepthBiasSlopeFactor { get; set; }
+
     public bool DepthClampEnable { get; set; } = false;
         
     public bool StencilTestEnabled { get; set; } = false;
@@ -1043,6 +1050,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         // Fresh command buffer => dynamic state is undefined, so the state cache must re-emit everything next draw.
         _stateInitialized = false;
+        _depthBiasKnown = false;
         _boundShaderPass = null;
         _originX = 0;
         _originY = 0;
@@ -1653,6 +1661,14 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         { commandBuffer.SetDepthBoundsTestEnable(DepthBoundsTestEnabled); _cDepthBounds = DepthBoundsTestEnabled; }
         if (!_stateInitialized || _cDepthBias != DepthBiasEnabled)
         { commandBuffer.SetDepthBiasEnable(DepthBiasEnabled); _cDepthBias = DepthBiasEnabled; }
+        if (DepthBiasEnabled && (!_depthBiasKnown || _cDepthBiasConstant != DepthBiasConstantFactor
+                                                  || _cDepthBiasSlope != DepthBiasSlopeFactor))
+        {
+            commandBuffer.SetDepthBias(DepthBiasConstantFactor, 0, DepthBiasSlopeFactor);
+            _cDepthBiasConstant = DepthBiasConstantFactor;
+            _cDepthBiasSlope = DepthBiasSlopeFactor;
+            _depthBiasKnown = true;
+        }
         if (!_stateInitialized || _cDepthClamp != DepthClampEnable)
         { commandBuffer.SetDepthClampEnableEXT(DepthClampEnable); _cDepthClamp = DepthClampEnable; }
         if (!_stateInitialized || _cStencilTest != StencilTestEnabled)

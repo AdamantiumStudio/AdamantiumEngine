@@ -11,7 +11,7 @@ public class SpotLightVisualTemplate: LightVisualTemplate
     public override Entity BuildEntity(Entity owner, string name)
     {
         var transform = Matrix4x4.Translation(0, -0.5f, 0);
-        var cone = Shapes.Cone.GenerateGeometry(GeometryType.Outlined, 1, 0, 1, 40, transform);
+        var cone = Shapes.Cone.GenerateGeometry(GeometryType.Outlined, 1, 1, 0, 40, transform);
         var anchor = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 1, 1);
 
         var root = BuildSubEntity(owner, name, Colors.Yellow, cone);

@@ -6,24 +6,30 @@ using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine.EntityServices;
 using Adamantium.Engine.Templates.CameraTemplates;
 using Adamantium.Engine.Templates.Lights;
+using Adamantium.Engine.Templates.Markers;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Icons for what a scene has but does not draw - lights and cameras - facing every camera at a steady size on screen. A
-/// directional light's icon also has rays running where it shines. A click on an icon selects its entity. A camera has
-/// no icon in its own view.
+/// Icons for what a scene has but does not draw - lights, cameras, entities with a <see cref="Marker"/> - facing every
+/// camera at a steady size on screen. A directional light's icon also has rays running where it shines. A click on an
+/// icon selects its entity. A camera has no icon in its own view.
 /// </summary>
 public class EntityIcons : EditorProcessor
 {
+    /// <summary>The size icons have unless set otherwise, in points.</summary>
+    public const float DefaultPixels = 36;
+
     private readonly Entity root = new(null, nameof(EntityIcons));
     private readonly Entity pointIcon = new PointLightIconTemplate().BuildEntity(null, "Point light");
     private readonly Entity spotIcon = new SpotLightIconTemplate().BuildEntity(null, "Spot light");
     private readonly Entity directionalIcon = new DirectionalLightIconTemplate().BuildEntity(null, "Directional light");
     private readonly Entity directionalRays = new DirectionalLightVisualTemplate().BuildEntity(null, "Rays");
     private readonly Entity cameraIcon = new CameraIconTemplate().BuildEntity(null, "Camera");
+    private readonly Entity emptyIcon = new EmptyIconTemplate().BuildEntity(null, "Entity");
+    private readonly Entity groupIcon = new GroupIconTemplate().BuildEntity(null, "Group");
     private readonly Dictionary<Entity, Entity> iconOf = new();
     private readonly Dictionary<Entity, Entity> targetOf = new();
     private readonly Dictionary<Entity, Entity> raysOf = new();
@@ -31,7 +37,7 @@ public class EntityIcons : EditorProcessor
     private readonly List<Entity> gone = [];
 
     /// <summary>How big an icon looks, in points: pixels at 100% scale.</summary>
-    public float Pixels { get; set; } = 36;
+    public float Pixels { get; set; } = DefaultPixels;
 
     public bool ShowsLights { get; set; } = true;
 
@@ -43,7 +49,7 @@ public class EntityIcons : EditorProcessor
         var roots = Tools.EntityWorld.RootEntities;
         for (int i = 0; i < roots.Count; i++)
         {
-            roots[i].TraverseInDepth(Collect, true);
+            roots[i].TraverseInDepth(Collect);
         }
 
         DropGone();
@@ -56,6 +62,18 @@ public class EntityIcons : EditorProcessor
                 Place(target, icon, cameras[i]);
             }
         }
+    }
+
+    /// <summary>Puts an icon at <paramref name="at"/> in the world, facing the camera, <paramref name="pixels"/> points
+    /// big on its screen.</summary>
+    public static void PlaceIcon(Entity icon, Vector3 at, float pixels, CameraBase camera)
+    {
+        var size = pixels * ScreenSpace.UnitsPerPoint(camera, at);
+        var metadata = icon.Transform.GetMetadata(camera);
+        metadata.WorldMatrixF = Matrix4x4F.Scaling(size, -size, size)
+                                * Matrix4x4F.RotationQuaternion(ScreenSpace.Facing(camera))
+                                * Matrix4x4F.Translation(ScreenSpace.InRender(at, camera));
+        metadata.Enabled = true;
     }
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
@@ -119,7 +137,17 @@ public class EntityIcons : EditorProcessor
             };
         }
 
-        return ShowsCameras && entity.GetComponent<Camera>() != null ? cameraIcon : null;
+        if (ShowsCameras && entity.GetComponent<Camera>() != null)
+        {
+            return cameraIcon;
+        }
+
+        if (entity.GetComponent<Marker>() is { IsEnabled: true })
+        {
+            return entity.IconKey == EntityIconKeys.Group ? groupIcon : emptyIcon;
+        }
+
+        return null;
     }
 
     private static Entity Instance(Entity owner, Entity look)
@@ -159,22 +187,18 @@ public class EntityIcons : EditorProcessor
 
     private void Place(Entity target, Entity icon, Camera camera)
     {
-        var metadata = icon.Transform.GetMetadata(camera);
         if (target == camera.Owner)
         {
-            metadata.Enabled = false;
+            icon.Transform.GetMetadata(camera).Enabled = false;
             return;
         }
 
         var at = target.Transform.WorldPosition;
-        var size = Pixels * ScreenSpace.UnitsPerPoint(camera, at);
-        metadata.WorldMatrixF = Matrix4x4F.Scaling(size, -size, size)
-                                * Matrix4x4F.RotationQuaternion(ScreenSpace.Facing(camera))
-                                * Matrix4x4F.Translation(ScreenSpace.InRender(at, camera));
-        metadata.Enabled = true;
+        PlaceIcon(icon, at, Pixels, camera);
 
         if (raysOf.TryGetValue(target, out var rays))
         {
+            var size = Pixels * ScreenSpace.UnitsPerPoint(camera, at);
             var raysMetadata = rays.Transform.GetMetadata(camera);
             raysMetadata.WorldMatrixF = Matrix4x4F.Scaling(size)
                                         * TurnOf(target)

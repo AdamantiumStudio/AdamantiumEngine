@@ -87,7 +87,14 @@ public interface IDynamicStateDevice
     bool DepthBoundsTestEnabled { get; set; }
         
     bool DepthBiasEnabled { get; set; }
-        
+
+    /// <summary>The depth added to every fragment while <see cref="DepthBiasEnabled"/>, in the depth buffer's smallest
+    /// steps; negative brings it nearer.</summary>
+    float DepthBiasConstantFactor { get; set; }
+
+    /// <summary>The depth added per unit of the polygon's depth slope while <see cref="DepthBiasEnabled"/>.</summary>
+    float DepthBiasSlopeFactor { get; set; }
+
     bool StencilTestEnabled { get; set; }
 
     /// <summary>Stencil comparison, the value compared against, and what a passing fragment writes back - for marking

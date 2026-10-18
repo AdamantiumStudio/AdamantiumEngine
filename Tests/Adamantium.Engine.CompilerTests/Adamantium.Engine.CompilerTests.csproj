@@ -42,15 +42,15 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="EffectsData\structs.hlsl">
-        <Link>CompilerEffects\structs.hlsl</Link>
+      <Content Include="EffectsData\structs.fxh">
+        <Link>CompilerEffects\structs.fxh</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="EffectsData\structs.ui.hlsl">
-        <Link>CompilerEffects\structs.ui.hlsl</Link>
+      <Content Include="EffectsData\structs.ui.fxh">
+        <Link>CompilerEffects\structs.ui.fxh</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
     </ItemGroup>

@@ -21,12 +21,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return new Vector3(dx, 0, dz);
             }
 
+            private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
+
             private static void CreateCylinder(
                 List<Vector3> vertices,
                 List<Vector2F> uvs,
                 List<int> indices,
                 double radius,
                 double height,
+                double depth,
                 int tessellation,
                 bool isInnerCylinder
             )
@@ -44,9 +47,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     var uv = new Vector2F((float)i / tessellation, 0);
 
-                    vertices.Add(sideOffset + topOffset);
+                    vertices.Add(Stretch(sideOffset + topOffset, depth));
                     uvs.Add(uv);
-                    vertices.Add(sideOffset - topOffset);
+                    vertices.Add(Stretch(sideOffset - topOffset, depth));
                     uvs.Add(uv + Vector2F.UnitY);
 
                     int index = 0;
@@ -88,6 +91,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double radius,
                 double height,
                 double thickness,
+                double depth,
                 int tessellation,
                 bool isTop
             )
@@ -116,7 +120,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         (float)circleVector.X * textureScale.X + 0.5f,
                         (float)circleVector.Z * textureScale.Y + 0.5f);
 
-                    vertices.Add(position);
+                    vertices.Add(Stretch(position, depth));
                     uvs.Add(textureCoordinate);
 
                     position = (circleVector * radius) + (normal * height);
@@ -124,7 +128,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         (float)(circleVector.X * textureScale.X + 0.5f - (1 / radius)),
                         (float)(circleVector.Z * textureScale.Y + 0.5f - (1 / radius)));
 
-                    vertices.Add(position);
+                    vertices.Add(Stretch(position, depth));
                     uvs.Add(textureCoordinate);
 
                     int index = 0;
@@ -173,7 +177,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Mesh mesh;
                 if (geometryType == GeometryType.Solid)
                 {
-                    mesh = GenerateSolidGeometry(diameter, height, thickness, tessellation);
+                    mesh = GenerateSolidGeometry(diameter, height, thickness, 1, tessellation);
                 }
                 else
                 {
@@ -185,11 +189,28 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
+            /// <summary>
+            /// A solid tube filling <paramref name="size"/> - <paramref name="size"/>.X wide, .Z deep, .Y high - its wall
+            /// <paramref name="thicknessRatio"/> of its outer radius thick: 1 closes the hole.
+            /// </summary>
+            public static Mesh GenerateGeometry(
+                Vector3 size,
+                double thicknessRatio,
+                int tessellation = 36,
+                Matrix4x4? transform = null)
+            {
+                var wall = size.X / 2 * thicknessRatio;
+                var mesh = GenerateSolidGeometry(size.X - wall * 2, size.Y, wall, size.Z / size.X, Math.Max(tessellation, 3));
+                mesh.ApplyTransform(transform);
+                return mesh;
+            }
+
             private static Mesh GenerateSolidGeometry(
                 double diameter,
                 double height,
                 double thickness,
-                int tessellation = 40)
+                double depth,
+                int tessellation)
             {
                 var primitiveType = PrimitiveType.TriangleList;
 
@@ -198,12 +219,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var vertices = new List<Vector3>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
-                CreateCylinder(vertices, uvs, indices, radius, height, tessellation, true);
-                CreateCylinder(vertices, uvs, indices, radius + thickness, height, tessellation, false);
+                CreateCylinder(vertices, uvs, indices, radius, height, depth, tessellation, true);
+                CreateCylinder(vertices, uvs, indices, radius + thickness, height, depth, tessellation, false);
 
                 // Create flat triangle fan caps to seal the top and bottom.
-                CreateTubeCap(vertices, uvs, indices, radius, height, thickness, tessellation, true);
-                CreateTubeCap(vertices, uvs, indices, radius, height, thickness, tessellation, false);
+                CreateTubeCap(vertices, uvs, indices, radius, height, thickness, depth, tessellation, true);
+                CreateTubeCap(vertices, uvs, indices, radius, height, thickness, depth, tessellation, false);
 
                 var mesh = new Mesh();
                 mesh.MeshTopology = primitiveType;

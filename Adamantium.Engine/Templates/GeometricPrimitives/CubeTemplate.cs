@@ -27,17 +27,6 @@ public class CubeTemplate : PrimitiveTemplate
         this.geometryType = geometryType;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Cube;
-        metadata.Width = width;
-        metadata.Height = height;
-        metadata.Depth = depth;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Cube.GenerateGeometry(geometryType, width, height, depth, Tessellation);

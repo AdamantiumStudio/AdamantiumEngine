@@ -26,15 +26,6 @@ public class LineTemplate : PrimitiveTemplate
         this.thickness = thickness;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Ellipse;
-        metadata.Thickness = thickness;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Line.GenerateGeometry(GeometryType.Solid, startPoint, endPoint, thickness);

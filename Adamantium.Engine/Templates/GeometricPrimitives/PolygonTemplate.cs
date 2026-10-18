@@ -21,16 +21,6 @@ public class PolygonTemplate : PrimitiveTemplate
         this.diameter = diameter;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Polygon;
-        metadata.Width = diameter.X;
-        metadata.Height = diameter.Y;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive = Shapes.Polygon.GenerateGeometry(GeometryType, diameter, Tessellation, transform: Transform);

@@ -32,7 +32,6 @@ public abstract class PrimitiveTemplate : IEntityTemplate
     {
         MeshData meshData = new MeshData();
         meshData.Mesh = geometry;
-        FillMetadata(meshData.Metadata);
 
         Collider collisionComponent;
 
@@ -52,8 +51,6 @@ public abstract class PrimitiveTemplate : IEntityTemplate
 
         return entity;
     }
-
-    protected abstract void FillMetadata(MeshMetadata metadata);
 
     public abstract Task<Entity> BuildEntity(Entity owner);
 

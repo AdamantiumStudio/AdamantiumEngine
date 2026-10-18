@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.ECS;
+using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine.EntityServices;
 using Adamantium.Mathematics;
@@ -12,15 +13,22 @@ namespace Adamantium.Engine.Tools;
 /// A tool: a modifier or creator driven by the mouse, one in use at a time. A drag goes to the nearest of its handles; a
 /// click anywhere else selects what is under the pointer. A selected light brings its own handles to whichever tool is in
 /// use, so a light is moved and sized without switching tools. A drag is measured from where the eye stood when it began,
-/// so a camera riding on what is dragged does not carry the pointer, and the target after it, further every frame.
+/// so a camera riding on what is dragged does not carry the pointer, and the target after it, further every frame; it
+/// stops when the selection or the output's camera changes under it.
 /// </summary>
 public abstract class ToolProcessor : EditorProcessor
 {
     private readonly Handles[] own;
     private readonly Handles[] lightHandles = [new PointLightHandles(), new SpotLightHandles()];
     private readonly List<Handles> active = [];
+    private const float ClickSlop = 4;
     private Handles dragged;
+    private Entity dragTarget;
+    private Camera dragCamera;
     private Vector3 dragEye;
+    private bool dragBegun;
+    private PickRay pressRay;
+    private Vector2F pressedAt;
 
     protected ToolProcessor(params Handles[] own)
     {
@@ -56,9 +64,23 @@ public abstract class ToolProcessor : EditorProcessor
 
         if (dragged != null)
         {
-            if (input.IsMouseButtonDown(MouseButton.Left) && active.Contains(dragged))
+            if (input.IsMouseButtonDown(MouseButton.Left) && target == dragTarget && camera == dragCamera
+                && (active.Contains(dragged) || dragged == DragsClicked(target)))
             {
-                dragged.Drag(target, ray.Moved((Vector3F)(dragEye - camera.WorldPosition)));
+                var fromEye = (Vector3F)(dragEye - camera.WorldPosition);
+                if (!dragBegun)
+                {
+                    // A press on the entity is a click until the pointer moves away from where it went down.
+                    if (Vector2F.Distance(input.RelativePosition, pressedAt) <= ClickSlop * camera.PixelsPerPoint)
+                    {
+                        return;
+                    }
+
+                    dragged.BeginDrag(target, null, pressRay.Moved(fromEye));
+                    dragBegun = true;
+                }
+
+                dragged.Drag(target, ray.Moved(fromEye));
                 return;
             }
 
@@ -84,14 +106,31 @@ public abstract class ToolProcessor : EditorProcessor
         if (hit.IsHit)
         {
             dragged = owner;
+            dragTarget = target;
+            dragCamera = camera;
             dragEye = camera.WorldPosition;
+            dragBegun = true;
             dragged.BeginDrag(target, hit.Entity, ray);
         }
         else
         {
             Tools.Selection.Current = under.Entity;
+            if (DragsClicked(under.Entity) is { } mover)
+            {
+                dragged = mover;
+                dragTarget = under.Entity;
+                dragCamera = camera;
+                dragEye = camera.WorldPosition;
+                dragBegun = false;
+                pressRay = ray;
+                pressedAt = input.RelativePosition;
+            }
         }
     }
+
+    /// <summary>The handles that drag an entity by a press on the entity itself, with no handle taken, once the pointer
+    /// moves; null when a press only selects it.</summary>
+    protected virtual Handles DragsClicked(Entity entity) => null;
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {

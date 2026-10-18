@@ -33,20 +33,6 @@ public class ArcTemplate : PrimitiveTemplate
         this.isClockwise = isClockwise;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Arc;
-        metadata.Width = diameter.X;
-        metadata.Height = diameter.Y;
-        metadata.StartAngle = startAngle;
-        metadata.StopAngle = stopAngle;
-        metadata.Thickness = thickness;
-        metadata.IsClockwise = isClockwise;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var geometry = Shapes.Arc.GenerateGeometry(

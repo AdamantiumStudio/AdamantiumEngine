@@ -24,15 +24,6 @@ public class CapsuleTemplate : PrimitiveTemplate
         this.diameter = diameter;
     }
 
-    protected override void FillMetadata(MeshMetadata metadata)
-    {
-        metadata.ShapeType = ShapeType.Capsule;
-        metadata.GeometryType = GeometryType;
-        metadata.Diameter = diameter;
-        metadata.Height = height;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(
         Entity owner)
     {

@@ -12,7 +12,6 @@ namespace Adamantium.ECS.Components
     public sealed partial class MeshData : ActivatableComponent
     {
         [Bindable] private Mesh mesh;
-        [Bindable] private MeshMetadata metadata;
         [Bindable] private MeshRenderMode renderMode;
         [Bindable] private bool isWireFrame;
         [Bindable] private CullModeFlagBits cullMode = CullModeFlagBits.None;
@@ -20,27 +19,14 @@ namespace Adamantium.ECS.Components
         [Bindable] private bool depthWriteEnabled = true;
         [Bindable] private PrimitiveTopology? topologyOverride;
 
-        public MeshData()
-        {
-            Metadata = MeshMetadata.Default();
-        }
-
-        public MeshData(MeshMetadata metadata)
-        {
-            Metadata = new MeshMetadata(metadata);
-        }
-
         // Generator hooks: keep the existing side-effect events (fired after the property actually changed).
         partial void OnMeshChanged(Mesh value) => MeshDataChanged?.Invoke(this, EventArgs.Empty);
-        partial void OnMetadataChanged(MeshMetadata value) => MetadataChanged?.Invoke(this, EventArgs.Empty);
 
         public event EventHandler MeshDataChanged;
 
-        public event EventHandler MetadataChanged;
-
         public override IComponent Clone()
         {
-            var meshComponent = new MeshData(Metadata)
+            var meshComponent = new MeshData
             {
                 Mesh = Mesh.Clone(),
                 RenderMode = RenderMode,

@@ -62,6 +62,20 @@ namespace Adamantium.ECS.Components
             Bounds = mesh.Bounds;
         }
 
+        /// <summary>Makes the shown collider - if it has been shown - follow what it holds now, in the same mesh, which
+        /// what draws it uploads anew.</summary>
+        public void RefreshShownGeometry()
+        {
+            if (Geometry is not { } shown)
+            {
+                return;
+            }
+
+            var fresh = GetVisualRepresentation();
+            shown.ReplaceWith(fresh);
+            Geometry = shown;
+        }
+
         public abstract void Merge(Collider collider);
 
         public abstract bool Intersects(ref Ray ray, out Vector3F point);

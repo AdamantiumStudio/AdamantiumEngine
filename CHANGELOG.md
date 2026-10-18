@@ -13,6 +13,55 @@ All packages share one version.
   the editor overlay with its own `GridEffect`, from the eye's place modulo each level's cells, so the lines hold still
   however far the eye has gone. Colors, line width, the cell size and the plane's y (`PlaneY`) are settings.
 
+- `PlacementTool`, an editor tool that places a new object with the mouse: a see-through ghost of it
+  (`EditorOverlayProcessor.DrawGhost`) follows the pointer, resting by its lowest point on the surface under it or, past
+  every surface, on the ground grid as far as the grid is drawn. A click raises `Placed`; with Shift held the tool stays,
+  else it is done (`Finished`), as it is on Esc or a right click; a right drag still turns the camera.
+  `NeedsSomethingUnder` places only on a scene entity, as a camera riding on one is. `Icon` draws an icon with the ghost
+  for what the scene shows by an icon.
+
+- `Marker`, a component that shows an entity with nothing else to show - an empty one, a group - by an icon of
+  `EntityIcons` (`EmptyIconTemplate`, or `GroupIconTemplate` for an entity with `EntityIconKeys.Group`). A click on it
+  selects the entity; with the select tool a drag, once the pointer has moved a few points, moves the entity in the
+  plane facing the eye, as the move tool's center does (`ToolProcessor.DragsClicked` names the handles that drag what a press lands on). `EntityIcons.PlaceIcon`
+  puts an icon facing a camera at a size on its screen.
+
+- `Picking.Pick(..., withDisabled)`: a disabled entity and what is under it are picked too, as an editor picks what is
+  switched off; a hidden one never is. The editor's tools pick so.
+
+- `EntityIconKeys.Group`, the icon key of a group.
+
+- `ForwardPlusRenderingProcessor.Display` (`ViewDisplay`): a view draws its meshes shaded, as wireframes, or shaded
+  with the wireframe over them, in `WireColor`. With `FollowsEditorDisplay` on, as in an editor, an entity's
+  `EditorDisplay` sets how its subtree is drawn - as the view, only as a wireframe, or only as its collider's box, with
+  `WireOver` adding the wireframe to a shaded mesh; a part's own setting overrides its owner's. A game leaves it off.
+  Over a shaded mesh the wireframe is drawn in the same pass (`ForwardPlusWireEffect`), from where each pixel lies in
+  its triangle, smooth and `WireWidth` pixels wide, on a GPU with VK_KHR_fragment_shader_barycentric
+  (`MainGraphicsDevice.FragmentBarycentricSupported`); without it, and for a wireframe alone, as lines of one pixel,
+  drawn a step nearer than the surface under them so they do not break up in it. A skinned mesh has no wireframe and
+  stays shaded.
+
+- `IGraphicsDevice.DepthBiasConstantFactor` and `DepthBiasSlopeFactor`: how far `DepthBiasEnabled` moves what is drawn
+  in depth.
+
+- `ProceduralShape`, the parameters a shape's mesh is generated from, kept on its entity to change later:
+  `RectangleShape`, `EllipseShape`, `PolygonShape`, `ArcShape`, `LineShape`, `PlaneShape` - flat, sized along two axes -
+  and `CubeShape`, `SphereShape`, `CylinderShape`, `ConeShape`, `CapsuleShape`, `TorusShape`, `TubeShape`,
+  `TeapotShape` - sized along three - each with its `Tessellation`, passed to the generator as it is, and its own
+  parameters (the polygon's sides are its tessellation; the cone's top, the torus' and tube's thickness are fractions).
+  A change to a parameter makes the mesh again once, on the next frame's transform pass (`RebuildWhenChanged`), in the
+  same `Mesh` (`Mesh.ReplaceWith`) so what draws it uploads it anew rather than holding a new mesh besides, and
+  refits the collider; nothing is made while the parameters stay. `ShapeTemplate` builds an entity from a shape.
+
+- Generators sized along each axis: `Shapes.Sphere` (all three kinds, an ellipsoid with its own normals),
+  `Shapes.Cone`, `Shapes.Cylinder`, `Shapes.Capsule`, `Shapes.Torus`, `Shapes.Tube` and `Shapes.Teapot` take a
+  `Vector3` size and stretch the points - and the normals they write - as they make them, not by a pass after.
+
+- `Observatory.ControlledCamera`: the one camera the user's mouse and camera keys move, as an editor's own camera is;
+  any other camera an output shows is only looked through - `InputService` and the orientation cube leave it alone.
+  Unset, as before, they move whichever camera the output shows. The wireframe and screenshot keys work whatever the
+  camera.
+
 - `TextLayout.HyphenLimit`, as InDesign's hyphen limit: the most lines in a row that may end in a hyphen breaking a
   word (0, the default, sets none); hyphens of the text itself are not counted. Past it a word goes down whole, unless
   it is alone on its line. `ParagraphComposer.Break` and `BreakAnyway` take the limit too.
@@ -471,6 +520,39 @@ All packages share one version.
 
 ### Fixed
 
+- An effect compiled from its file finds a header by its path from the file's folder (`#include "Includes/X.fxh"`),
+  nested headers included; only those beside it were found. Headers are `.fxh` only: `.hlsl` ones beside it are no
+  longer gathered. A request names a header by its whole name: `#include "Tint.fxh"` took the first header whose path
+  merely ended so, `BlueTint.fxh`.
+
+- A mesh drawn through more than one cache - the scene and the editor's overlay - is uploaded again by each when it
+  changes: the first to upload cleared the mesh's `IsModified` for all, so the selection outline kept the old shape.
+  `RenderGeometry` keeps the `Mesh.Version` it uploaded, makes new buffers for a changed mesh and hands the old ones
+  to `AddToDeferDisposeQueue` - it destroyed them, and wrote into a live vertex buffer, while a frame in flight could
+  still draw with them - and draws nothing for a mesh with no points.
+
+- A shown collider follows a shape made again (`Collider.RefreshShownGeometry`); it kept the old box.
+
+- A first-person camera riding on its host stays on it: `InputService` took it off the host the first frame it was
+  looked through, as it takes off a camera free again.
+
+- A tool's drag stops when the selection or the output's camera changes under it; it went on with the next selected
+  entity, moving it from where the first one stood.
+
+- Shapes with a top stand up: up is -Y, and the cone, the cylinder built on it and the teapot were generated standing
+  along +Y, upside down - a cone's point at the bottom. They are generated the right way up, with no turn after; the
+  engine's own cones (the move and pivot handles' arrows, the orientation cube's, the spot light's) give the diameter at
+  the end they meant, and an outlined cone puts its rim at the end that has a diameter, as a solid one does.
+- Flat shapes - rectangle, ellipse, polygon, arc, line - face the eye: a camera looks along +Z and they were wound to
+  face it from behind, so their back was culled where they were looked at. Their triangles are wound to face -Z.
+- A solid arc short of a circle no longer draws a triangle across its gap: its strip led back to the first point.
+- An outlined box - a box collider drawn, the move handles' center - is its twelve edges as a line list: as a strip it
+  needed primitive restart, and drawn without it the restart index joined corners that share no edge. A solid line is
+  two triangles with no restart index either.
+- `Camera.JumpToObject` stands where the object fills the view with `FramingMargin` to spare, keeping the way it looks:
+  it stood off by the object's diameter times the field of view in degrees, far out of sight, measured the diameter
+  without the object's scale, and flew into an object with no bounds.
+- The editor overlay outlines and shows icons for disabled entities too: an editor works on what is switched off.
 - A hidden entity (`Visible` false) hides what is under it: the scene drew its children, and the selection outline
   drew them too, as hiding was checked inside the walk's action, which could not stop the walk. Picking skips it with
   its subtree as well: a hidden model still took the pointer and stopped the ray from reaching what is behind it.
@@ -831,6 +913,8 @@ All packages share one version.
 
 ### Removed
 
+- `MeshMetadata` and `MeshData.Metadata` / `MetadataChanged`, with the primitive templates' `FillMetadata`: one bag of
+  every shape's numbers that the templates filled and nothing read. A shape's parameters are its `ProceduralShape` now.
 - `FontRenderer.UseDirectTextDraw`, `DrawLayout`, `SetState`, `RestoreState` and `RenderScale`: the old way of drawing a
   text block into a target of its own and laying that over the element. Nothing turned it on; text is drawn straight
   into the pass (`DrawLayoutDirect`) or in the batch (`DrawBatch`).

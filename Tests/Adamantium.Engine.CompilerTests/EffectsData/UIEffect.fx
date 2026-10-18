@@ -1,4 +1,4 @@
-#include "structs.ui.hlsl"
+#include "structs.ui.fxh"
 
 matrix wvp;
 

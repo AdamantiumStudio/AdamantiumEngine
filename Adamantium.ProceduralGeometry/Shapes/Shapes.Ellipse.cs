@@ -135,6 +135,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var mesh = new Mesh();
                 mesh.SetTopology(PrimitiveType.TriangleList).
                     SetPoints(points).
+                    SetIndices(FacingTheEye(points.Count)).
                     SetUVs(0, uvs).
                     Optimize().
                     ApplyTransform(transform);

@@ -43,6 +43,7 @@ namespace Adamantium.EffectsCompiler
         private EffectCompilerLogger logger;
         private List<EffectData.ShaderMacro> macros;
         private ImmutableArray<ShaderFileInfo> includes;
+        private string sourceDirectory;
         private EffectParserResult parserResult;
         private string slangRawSource;
         private EffectData.Pass pass;
@@ -172,6 +173,7 @@ namespace Adamantium.EffectsCompiler
 
             // Slang pulls each header itself through its VFS callback, so sources go to it untouched and its diagnostics
             // keep honest line numbers.
+            sourceDirectory = null;
             if (includes == null)
             {
                 var directory = Path.GetDirectoryName(fileName);
@@ -180,7 +182,8 @@ namespace Adamantium.EffectsCompiler
                     directory = ".";
                 }
 
-                var includeFiles = Directory.GetFiles(directory, "*.hlsl").Concat(Directory.GetFiles(directory, "*.fxh"));
+                sourceDirectory = directory;
+                var includeFiles = Directory.GetFiles(directory, "*.fxh");
                 includes = includeFiles.Select(x => new ShaderFileInfo()
                 { Content = File.ReadAllText(x), Path = x, FileName = Path.GetFileName(x) }).ToImmutableArray();
             }
@@ -876,30 +879,65 @@ namespace Adamantium.EffectsCompiler
 
         // Resolves a Slang #include request against the engine's include collection (same matching as
         // IncludeParser: by path suffix or file name). Returns null if not found, so Slang reports it.
+        // A file compiled from disk also finds a header by its path from the file's folder ("Includes/X.fxh").
         private string ResolveSlangInclude(string requestedPath)
         {
-            if (string.IsNullOrEmpty(requestedPath) || includes.IsDefaultOrEmpty)
+            if (string.IsNullOrEmpty(requestedPath))
                 return null;
 
             var includePath = requestedPath.Replace("\"", string.Empty).Replace('/', '\\');
             var fileName = Path.GetFileName(includePath);
 
-            foreach (var include in includes)
+            foreach (var include in includes.IsDefault ? ImmutableArray<ShaderFileInfo>.Empty : includes)
             {
-                if ((include.Path != null && include.Path.EndsWith(includePath, StringComparison.OrdinalIgnoreCase))
+                if (EndsWithPath(include.Path, includePath)
                     || string.Equals(include.FileName, fileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    var resolved = include.Path ?? include.FileName;
-                    if (!resolvedIncludes.Contains(resolved))
-                    {
-                        resolvedIncludes.Add(resolved);
-                    }
+                    return Resolved(include.Path ?? include.FileName, include.Content);
+                }
+            }
 
-                    return include.Content;
+            if (sourceDirectory == null)
+            {
+                return null;
+            }
+
+            // Slang asks for a nested header from its includer's folder ("Includes/Includes/X.fxh"): the shorter
+            // tails of the request are tried too.
+            var parts = includePath.Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var skip = 0; skip < parts.Length; skip++)
+            {
+                var onDisk = Path.Combine(sourceDirectory, string.Join(Path.DirectorySeparatorChar.ToString(), parts.Skip(skip)));
+                if (File.Exists(onDisk))
+                {
+                    return Resolved(onDisk, File.ReadAllText(onDisk));
                 }
             }
 
             return null;
+        }
+
+        private string Resolved(string path, string content)
+        {
+            if (!resolvedIncludes.Contains(path))
+            {
+                resolvedIncludes.Add(path);
+            }
+
+            return content;
+        }
+
+        // "Shading.fxh" names Shading.fxh, not ForwardPlusShading.fxh: the request ends the path at a folder boundary.
+        private static bool EndsWithPath(string path, string request)
+        {
+            if (path == null)
+            {
+                return false;
+            }
+
+            var normalized = path.Replace('/', '\\');
+            return normalized.Equals(request, StringComparison.OrdinalIgnoreCase)
+                   || normalized.EndsWith("\\" + request, StringComparison.OrdinalIgnoreCase);
         }
 
         // Replaces every top-level `technique { ... }` block with spaces (newlines kept so line numbers in

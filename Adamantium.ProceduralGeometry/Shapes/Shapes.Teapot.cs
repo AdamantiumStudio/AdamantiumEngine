@@ -219,9 +219,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
             }
 
             public static Mesh GenerateGeometry(
-                GeometryType geometryType, 
-                double size = 1.0, 
-                int tessellation = 8, 
+                GeometryType geometryType,
+                double size = 1.0,
+                int tessellation = 8,
+                Matrix4x4? transform = null)
+            {
+                return GenerateGeometry(geometryType, new Vector3(size), tessellation, transform);
+            }
+
+            /// <summary>The teapot scaled by <paramref name="size"/> along each axis.</summary>
+            public static Mesh GenerateGeometry(
+                GeometryType geometryType,
+                Vector3 size,
+                int tessellation = 8,
                 Matrix4x4? transform = null)
             {
                 var vertices = new List<Vector3>();
@@ -231,12 +241,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 if (tessellation < 1)
                     throw new ArgumentOutOfRangeException(nameof(tessellation), "tessellation must be > 0");
 
-                var scaleVector = new Vector3(size, size, size);
+                // The control points stand along +Y; up is -Y, so y turns over, and z with it to keep the patches'
+                // winding.
+                var scaleVector = new Vector3(size.X, -size.Y, -size.Z);
                 var scaleNegateX = scaleVector;
                 scaleNegateX.X = -scaleNegateX.X;
                 var scaleNegateZ = scaleVector;
                 scaleNegateZ.Z = -scaleNegateZ.Z;
-                var scaleNegateXZ = new Vector3(-size, size, -size);
+                var scaleNegateXZ = new Vector3(-size.X, -size.Y, size.Z);
 
                 for (int i = 0; i < TeapotPatches.Length; i++)
                 {

@@ -34,20 +34,6 @@ public class EllipseTemplate : PrimitiveTemplate
         this.isClockwise = isClockwise;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Ellipse;
-        metadata.Width = diameter.X;
-        metadata.Height = diameter.Y;
-        metadata.StartAngle = startAngle;
-        metadata.StopAngle = stopAngle;
-        metadata.EllipseType = ellipseType;
-        metadata.IsClockwise = isClockwise;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var geometry = Shapes.Ellipse.GenerateGeometry(

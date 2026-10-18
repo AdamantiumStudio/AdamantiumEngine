@@ -33,12 +33,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             public static Mesh GenerateSolidGeometry(Vector3 startPoint, Vector3 endPoint, double thickness)
             {
-                var primitiveType = PrimitiveType.TriangleStrip;
+                var primitiveType = PrimitiveType.TriangleList;
 
                 var vertexArray = new List<Vector3>();
-                var indicesArray = new List<int>();
-                var interrupt = -1;
-                var lastIndex = 0;
 
                 var direction = endPoint - startPoint;
                 var normal = new Vector3(-direction.Y, direction.X);
@@ -63,11 +60,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 uvs.Add(Vector2F.UnitX);
                 uvs.Add(Vector2F.Zero);
                 
-                indicesArray.Add(lastIndex++);
-                indicesArray.Add(lastIndex++);
-                indicesArray.Add(lastIndex++);
-                indicesArray.Add(lastIndex++);
-                indicesArray.Add(interrupt);
+                // Two triangles wound to face -Z, toward a camera looking along +Z.
+                List<int> indicesArray = [0, 2, 1, 1, 2, 3];
 
                 var mesh = new Mesh();
                 mesh.SetTopology(primitiveType).

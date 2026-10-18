@@ -84,11 +84,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 int basicIndex = 0;
 
+                // Wound to face -Z, toward a camera looking along +Z.
                 for (int i = 0; i < tessellation-2; i++)
                 {
                     indices.Add(basicIndex);
-                    indices.Add(i + 1);
                     indices.Add(i + 2);
+                    indices.Add(i + 1);
                 }
 
                 var mesh = new Mesh();
