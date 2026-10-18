@@ -31,6 +31,7 @@ internal sealed class SvgGlyphConverter
     private readonly List<ColorPaintOperation> operations = [];
     private int ordinal;
     private int visits;
+    private int boxVisits;
 
     private SvgGlyphConverter(SvgDocument document, uint glyph, ColorPaletteTable palettes, int palette,
         Func<string, List<List<OutlinePoint>>, uint> outline)
@@ -51,17 +52,30 @@ internal sealed class SvgGlyphConverter
             return [];
         }
 
+        // The glyph's ancestors style and move it, hide it, and clip it, the outermost first.
         var converter = new SvgGlyphConverter(document, glyph, palettes, palette, outline);
         var ctm = Matrix3x2.Identity;
         var style = SvgStyle.Initial;
+        var clips = 0;
         foreach (var ancestor in element.Ancestors().Reverse())
         {
+            if (SvgStyle.Property(ancestor, "display") == "none")
+            {
+                return [];
+            }
+
             style = style.Inherit(ancestor, palettes, palette, true);
             ctm = Matrix3x2.Multiply(SvgTransform.Parse((string)ancestor.Attribute("transform")), ctm);
+            clips += converter.PushClipPath(ancestor, ctm) ? 1 : 0;
         }
 
         converter.Walk(element, ctm, style, 0, false);
-        return converter.operations.ToArray();
+        for (var k = 0; k < clips; k++)
+        {
+            converter.operations.Add(ColorPaintOperation.PopClip());
+        }
+
+        return converter.operations.Count > 2 * clips ? converter.operations.ToArray() : [];
     }
 
     private void Walk(XElement element, Matrix3x2 parent, SvgStyle inherited, int depth, bool referenced)
@@ -151,15 +165,31 @@ internal sealed class SvgGlyphConverter
     private bool PushClipPath(XElement element, Matrix3x2 ctm)
     {
         var clipPath = document.FindReference(SvgStyle.Property(element, "clip-path"));
-        if (clipPath == null || clipPath.Name.LocalName != "clipPath" ||
-            (string)clipPath.Attribute("clipPathUnits") == "objectBoundingBox")
+        if (clipPath == null || clipPath.Name.LocalName != "clipPath")
         {
             return false;
         }
 
-        var clipCtm = Matrix3x2.Multiply(SvgTransform.Parse((string)clipPath.Attribute("transform")), ctm);
+        // In the units of the box of what it clips, that box mapped from 0 to 1 across and down, then moved by the clip's
+        // own transform, as browsers place it.
+        var units = Matrix3x2.Identity;
+        if ((string)clipPath.Attribute("clipPathUnits") == "objectBoundingBox")
+        {
+            boxVisits = 0;
+            if (BoxOf(element, Matrix3x2.Identity, 0, true, false) is not { Width: > 0, Height: > 0 } box)
+            {
+                operations.Add(ColorPaintOperation.PushClip(Register([], false), Matrix3x2.Identity));
+                return true;
+            }
+
+            units = new Matrix3x2(box.Width, 0, 0, box.Height, box.X, box.Y);
+        }
+
+        var clipCtm = Matrix3x2.Multiply(Matrix3x2.Multiply(units,
+            SvgTransform.Parse((string)clipPath.Attribute("transform"))), ctm);
         var contours = new List<List<OutlinePoint>>();
         var evenOdd = false;
+        var clipRule = SvgStyle.Property(clipPath, "clip-rule");
         foreach (var child in clipPath.Elements())
         {
             var shape = child;
@@ -167,10 +197,18 @@ internal sealed class SvgGlyphConverter
             for (var hops = 0; hops < MaxReferences && shape.Name.LocalName == "use"; hops++)
             {
                 childCtm = Matrix3x2.Multiply(new Matrix3x2(1, 0, 0, 1, Number(shape, "x"), Number(shape, "y")), childCtm);
-                shape = document.FindReference(Reference(shape)) ?? shape;
+                var target = document.FindReference(Reference(shape));
+                if (target == null)
+                {
+                    break;
+                }
+
+                shape = target;
+                childCtm = Matrix3x2.Multiply(SvgTransform.Parse((string)shape.Attribute("transform")), childCtm);
             }
 
-            evenOdd |= SvgStyle.Property(child, "clip-rule") == "evenodd";
+            var rule = SvgStyle.Property(child, "clip-rule");
+            evenOdd |= (rule == null || rule == "inherit" ? clipRule : rule) == "evenodd";
             foreach (var contour in SvgOutlines.Of(shape))
             {
                 contours.Add(Transform(contour, childCtm));
@@ -179,6 +217,58 @@ internal sealed class SvgGlyphConverter
 
         operations.Add(ColorPaintOperation.PushClip(Register(contours, evenOdd), Matrix3x2.Identity));
         return true;
+    }
+
+    // An element's box in its own units, as SVG's objectBoundingBox takes it: its shape's, or the union of what it draws,
+    // placed as the walk places it - the element's own transform and a use's place are already in its units at the top;
+    // the geometry alone, null for none.
+    private RectangleF? BoxOf(XElement element, Matrix3x2 parent, int depth, bool top, bool referenced)
+    {
+        var name = element.Name.LocalName;
+        if (depth > MaxDepth || ++boxVisits > MaxVisits || (Skipped.Contains(name) && !(referenced && name == "symbol"))
+            || SvgStyle.Property(element, "display") == "none")
+        {
+            return null;
+        }
+
+        var own = top ? Matrix3x2.Identity : SvgTransform.Parse((string)element.Attribute("transform"));
+        if (!top && name == "use")
+        {
+            own = Matrix3x2.Multiply(new Matrix3x2(1, 0, 0, 1, Number(element, "x"), Number(element, "y")), own);
+        }
+
+        var transform = Matrix3x2.Multiply(own, parent);
+        if (name is "path" or "rect" or "circle" or "ellipse" or "polygon" or "polyline")
+        {
+            return Bounds(SvgOutlines.Of(element).Select(contour => contour
+                .Select(p => new OutlinePoint(Matrix3x2.TransformPoint(transform, p), p.IsControl)).ToList()).ToList());
+        }
+
+        RectangleF? box = null;
+        IEnumerable<(XElement Child, bool Referenced)> children = name == "use"
+            ? document.FindReference(Reference(element)) is { } target ? [(target, true)] : []
+            : element.Elements().Select(child => (child, false));
+        foreach (var (child, isTarget) in children)
+        {
+            if (BoxOf(child, transform, depth + 1, false, isTarget) is not { } part)
+            {
+                continue;
+            }
+
+            if (box is { } held)
+            {
+                var left = Math.Min(held.Left, part.Left);
+                var upper = Math.Min(held.Top, part.Top);
+                box = new RectangleF(left, upper, Math.Max(held.Right, part.Right) - left,
+                    Math.Max(held.Bottom, part.Bottom) - upper);
+            }
+            else
+            {
+                box = part;
+            }
+        }
+
+        return box;
     }
 
     private uint Outline(List<List<OutlinePoint>> contours, Matrix3x2 ctm, bool evenOdd)

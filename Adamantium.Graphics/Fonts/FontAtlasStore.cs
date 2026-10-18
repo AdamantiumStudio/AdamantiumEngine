@@ -18,6 +18,37 @@ namespace Adamantium.Graphics.Fonts
         /// of Noto Color Emoji's. When the images text shows take more, the atlas grows past it.</summary>
         public static int ColorImageLayerBudget { get; set; } = 16;
 
+        /// <summary>The images of color glyphs every atlas holds.</summary>
+        public static int ColorImages
+        {
+            get
+            {
+                var images = 0;
+                foreach (var atlas in _fontAtlasMap.Values)
+                {
+                    images += atlas.ColorImageCount;
+                }
+
+                return images;
+            }
+        }
+
+        /// <summary>The layers the images of color glyphs take in every atlas, against
+        /// <see cref="ColorImageLayerBudget"/>.</summary>
+        public static int ColorImageLayers
+        {
+            get
+            {
+                var layers = 0;
+                foreach (var atlas in _fontAtlasMap.Values)
+                {
+                    layers += (int)atlas.ColorImages.LayersTaken;
+                }
+
+                return layers;
+            }
+        }
+
         /// <summary>The atlas rasterized with <paramref name="fontParameters"/>, shared by all text in every font: a glyph
         /// is found in it by its typeface and index.</summary>
         public static FontAtlas GetOrCreateFrom(IGraphicsDevice graphicsDevice, FontParameters fontParameters)
