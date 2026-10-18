@@ -1584,6 +1584,7 @@ namespace Adamantium.Fonts.Parsers
                 ushort rawCoverage = FontReader.ReadUInt16();
 
                 ParseTTFCoverage(rawCoverage, kernSubtable);
+                CurrentFont.Layout.HasCrossKerning |= kernSubtable.CrossStream;
 
                 if (kernSubtable.Format != 0) // Windows supports only format 0
                 {

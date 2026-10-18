@@ -123,6 +123,33 @@ public class DropCapTests
         Assert.That(stops[1].X, Is.GreaterThan(stops[0].X));
     }
 
+    [TestCase(0)]
+    [TestCase(1)]
+    [TestCase(2)]
+    public void AClickOnTheDropCap_FindsIt_OnEveryLineItSpans(int line)
+    {
+        var layout = Layout(Prose, new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var y = layout.GetLine(line).Top + layout.GetLine(line).Height / 2;
+        var leading = layout.HitTest(cap.PenX + cap.Advance * 0.25, y);
+        var trailing = layout.HitTest(cap.PenX + cap.Advance * 0.75, y);
+        var beside = layout.HitTest(cap.PenX + cap.Advance + 0.5, y);
+
+        Assert.That((leading.Index, leading.CaretIndex, leading.IsInside), Is.EqualTo((0, 0, true)), "its left half");
+        Assert.That((trailing.Index, trailing.CaretIndex, trailing.IsInside), Is.EqualTo((0, 1, true)), "its right half");
+        Assert.That(beside.CaretIndex, Is.EqualTo(Body(layout).Where(g => g.LineIndex == line).Min(g => g.PositionInString)),
+            "past it, the start of the line beside it");
+    }
+
+    [Test]
+    public void AClickBelowAShortText_IsNotOnTheDropCap()
+    {
+        var layout = Layout("Ab cd", new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+
+        Assert.That(layout.HitTest(cap.PenX + cap.Advance / 2, 1000).IsInside, Is.False);
+    }
+
     [TestCase("A")]
     [TestCase("A\n")]
     [TestCase("A\n\n")]

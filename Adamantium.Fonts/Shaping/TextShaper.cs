@@ -106,8 +106,16 @@ public static class TextShaper
             ToVerticalForms(font, buffer);
         }
 
-        Normalizer.Normalize(font, buffer, plan.JoinsLetters);
+        // Hebrew in a font that positions no marks: a letter and its point are set as one of the presentation forms the
+        // font has, as HarfBuzz sets them.
+        Normalizer.Normalize(font, buffer, plan.JoinsLetters,
+            script == "Hebr" && plan.GetFeature("mark") is not { GposIndex: >= 0 });
         SetupMasks(buffer, plan, options, text, start, end, origin);
+        if (plan.FallbackMarkPositioning)
+        {
+            Positioner.RecategorizeMarks(buffer);
+        }
+
         SetGlyphProps(buffer, layout);
 
         var applier = new LookupApplier(layout, buffer, font.NormalizedCoordinates)
@@ -115,8 +123,25 @@ public static class TextShaper
             RightToLeft = rightToLeft,
             Vertical = options.Vertical,
         };
-        applier.ApplyGsub(plan);
-        Positioner.Position(font, buffer, plan, applier, rightToLeft);
+        // A Syriac abbreviation mark the font's 'stch' cut into pieces: what that stage multiplied is marked right after it.
+        var stretchStage = plan.JoinsLetters && plan.GetFeature("stch") is { GsubIndex: >= 0 } stch ? stch.GsubStage : -1;
+        // Arabic in a font with no joining forms: the presentation forms it maps are set right after 'rlig'.
+        var fallbackStage = ArabicFallback.Needed(plan) ? plan.GetFeature("rlig").GsubStage : -1;
+        var stretches = false;
+        applier.ApplyGsub(plan, stretchStage < 0 && fallbackStage < 0 ? null : stage =>
+        {
+            if (stage == stretchStage)
+            {
+                stretches = MarkStretches(buffer);
+            }
+
+            if (stage == fallbackStage)
+            {
+                ArabicFallback.Apply(font, plan, applier);
+            }
+        });
+        // A ligature's components run the way the text does, or, down vertical lines, as its script reads.
+        Positioner.Position(font, buffer, plan, applier, rightToLeft, options.Vertical ? IsRightToLeft(script) : rightToLeft);
         HideDefaultIgnorables(font, buffer);
 
         var result = new ShapedGlyph[buffer.Length];
@@ -128,8 +153,132 @@ public static class TextShaper
                 placement.XAdvance, placement.YAdvance, placement.XOffset, placement.YOffset);
         }
 
-        return result;
+        return stretches ? Stretched(font, buffer, result, rightToLeft) : result;
     }
+
+    // The pieces 'stch' multiplied a mark into: the odd ones repeat, the even ones stand once (HarfBuzz's record_stch).
+    private static bool MarkStretches(GlyphBuffer buffer)
+    {
+        var any = false;
+        for (var i = 0; i < buffer.Length; i++)
+        {
+            ref var info = ref buffer.Info[i];
+            if (info.IsMultiplied)
+            {
+                info.Stretch = (byte)(info.LigComp % 2 == 1 ? 2 : 1);
+                any = true;
+            }
+        }
+
+        return any;
+    }
+
+    // Each stretched mark spread over the rest of its word, as HarfBuzz's apply_stch: its repeating pieces copied as
+    // many times as the word needs, a little closer together to fill it exactly, all of them with no advance of their
+    // own. The glyphs come in drawing order.
+    private static ShapedGlyph[] Stretched(IFont font, GlyphBuffer buffer, ShapedGlyph[] glyphs, bool rightToLeft)
+    {
+        var count = glyphs.Length;
+        var actions = new byte[count];
+        var words = new bool[count];
+        for (var i = 0; i < count; i++)
+        {
+            var info = buffer.Info[rightToLeft ? count - 1 - i : i];
+            actions[i] = info.Stretch;
+            words[i] = info.IsDefaultIgnorable || IsWordCategory(info.Category);
+        }
+
+        var built = new List<ShapedGlyph>(count + 16);
+        for (var i = count; i > 0; i--)
+        {
+            if (actions[i - 1] == 0)
+            {
+                built.Add(glyphs[i - 1]);
+                continue;
+            }
+
+            int total = 0, fixedWidth = 0, repeatingWidth = 0, repeating = 0;
+            var end = i;
+            while (i > 0 && actions[i - 1] != 0)
+            {
+                i--;
+                var width = font.GetAdvanceWidth(glyphs[i].GlyphIndex);
+                if (actions[i] == 1)
+                {
+                    fixedWidth += width;
+                }
+                else
+                {
+                    repeatingWidth += width;
+                    repeating++;
+                }
+            }
+
+            var start = i;
+            var context = i;
+            while (context > 0 && actions[context - 1] == 0 && words[context - 1])
+            {
+                context--;
+                total += glyphs[context].XAdvance;
+            }
+
+            var copies = 0;
+            var remaining = total - fixedWidth;
+            if (remaining > repeatingWidth && repeatingWidth > 0)
+            {
+                copies = remaining / repeatingWidth - 1;
+            }
+
+            var overlap = 0;
+            var shortfall = remaining - repeatingWidth * (copies + 1);
+            if (shortfall > 0 && repeating > 0)
+            {
+                copies++;
+                var excess = (copies + 1) * repeatingWidth - remaining;
+                if (excess > 0)
+                {
+                    overlap = excess / (copies * repeating);
+                    remaining = 0;
+                }
+            }
+
+            var offset = remaining / 2;
+            for (var k = end; k > start; k--)
+            {
+                var piece = glyphs[k - 1];
+                var width = font.GetAdvanceWidth(piece.GlyphIndex);
+                var repeat = actions[k - 1] == 2 ? copies + 1 : 1;
+                for (var n = 0; n < repeat; n++)
+                {
+                    if (rightToLeft)
+                    {
+                        offset -= width;
+                        offset += n > 0 ? overlap : 0;
+                    }
+
+                    built.Add(new ShapedGlyph(piece.GlyphIndex, piece.Cluster, 0, piece.YAdvance, offset, piece.YOffset));
+                    if (!rightToLeft)
+                    {
+                        offset += width;
+                        offset -= n > 0 ? overlap : 0;
+                    }
+                }
+            }
+
+            i++;
+        }
+
+        built.Reverse();
+        return built.ToArray();
+    }
+
+    // What a stretched mark spreads over: letters, marks, numbers and symbols, as HarfBuzz's word categories.
+    private static bool IsWordCategory(UnicodeCategory category) => category is UnicodeCategory.OtherNotAssigned
+        or UnicodeCategory.PrivateUse or UnicodeCategory.ModifierLetter or UnicodeCategory.OtherLetter
+        or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark or UnicodeCategory.NonSpacingMark
+        or UnicodeCategory.DecimalDigitNumber or UnicodeCategory.LetterNumber or UnicodeCategory.OtherNumber
+        or UnicodeCategory.CurrencySymbol or UnicodeCategory.ModifierSymbol or UnicodeCategory.MathSymbol
+        or UnicodeCategory.OtherSymbol;
 
     private static bool IsRightToLeft(string script) => script is "Arab" or "Hebr" or "Syrc" or "Thaa" or "Cprt" or "Khar"
         or "Phnx" or "Nkoo" or "Lydi" or "Avst" or "Armi" or "Phli" or "Prti" or "Sarb" or "Orkh" or "Samr" or "Mand"

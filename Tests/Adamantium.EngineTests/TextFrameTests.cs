@@ -232,6 +232,40 @@ public class TextFrameTests
         Assert.That(Ink(layout, 2).Max(g => g.Rect.Right), Is.EqualTo(200).Within(0.5));
     }
 
+    // A line raised by larger text takes the room it needs: the line after it stands below it, and one it raises past
+    // the bottom of its frame goes on to the next frame.
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void ALineRaisedByLargerText_TakesItsRoomInTheFrame(LineBreaking breaking)
+    {
+        var text = new AttributedText(Prose);
+        var big = Prose.IndexOf("king", StringComparison.Ordinal);
+        text.Apply(big, 4, new TextAttributes { FontSize = 48 });
+        var frames = Columns(2, 220, 20, 4);
+        var typeface = SourceSans.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Frames = frames, LineBreaking = breaking };
+        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        for (var i = 0; i < layout.LineCount; i++)
+        {
+            var line = layout.GetLine(i);
+            var frame = frames[layout.GetTextData().Where(g => g.LineIndex == i).Select(g => g.Rect.X)
+                .DefaultIfEmpty(0).Min() >= frames[1].X - 0.5 ? 1 : 0];
+            if (line.Start >= layout.OversetIndex)
+            {
+                continue;
+            }
+
+            Assert.That(line.Top + line.Height, Is.LessThanOrEqualTo(frame.Bottom + 0.5), $"line {i} past its frame's bottom");
+            if (i + 1 < layout.LineCount && layout.GetLine(i + 1).Top > line.Top)
+            {
+                Assert.That(layout.GetLine(i + 1).Top, Is.GreaterThanOrEqualTo(line.Top + line.Height - 0.5),
+                    $"line {i + 1} over line {i}");
+            }
+        }
+    }
+
     [Test]
     public void ADropCap_StandsAtTheStartOfTheFirstFrame()
     {

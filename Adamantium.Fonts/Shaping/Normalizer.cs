@@ -16,14 +16,23 @@ internal sealed class Normalizer
     private IFont _font;
     private GlyphBuffer _buffer;
     private bool _arabicMarks;
+    private bool _hebrewForms;
 
-    public static void Normalize(IFont font, GlyphBuffer buffer, bool arabicMarks = false)
+    // The presentation forms of the Hebrew letters with a dagesh, from alef: 0 where there is none.
+    private static readonly int[] DageshForms =
+    [
+        0xFB30, 0xFB31, 0xFB32, 0xFB33, 0xFB34, 0xFB35, 0xFB36, 0, 0xFB38, 0xFB39, 0xFB3A, 0xFB3B, 0xFB3C, 0, 0xFB3E, 0,
+        0xFB40, 0xFB41, 0, 0xFB43, 0xFB44, 0, 0xFB46, 0xFB47, 0xFB48, 0xFB49, 0xFB4A,
+    ];
+
+    public static void Normalize(IFont font, GlyphBuffer buffer, bool arabicMarks = false, bool hebrewForms = false)
     {
         var normalizer = _spare ?? new Normalizer();
         _spare = null;
         normalizer._font = font;
         normalizer._buffer = buffer;
         normalizer._arabicMarks = arabicMarks;
+        normalizer._hebrewForms = hebrewForms;
         normalizer.Run();
         normalizer._font = null;
         normalizer._buffer = null;
@@ -43,6 +52,7 @@ internal sealed class Normalizer
         if (!allSimple)
         {
             Reorder();
+            UnhideIdleJoiners();
             Recompose();
         }
 
@@ -50,6 +60,22 @@ internal sealed class Normalizer
         foreach (var info in _output)
         {
             _buffer.Add(info);
+        }
+    }
+
+    // A combining grapheme joiner that kept no marks from being reordered is skipped by lookups as any default
+    // ignorable is, as HarfBuzz unhides it.
+    private void UnhideIdleJoiners()
+    {
+        for (var i = 1; i + 1 < _output.Count; i++)
+        {
+            if (_output[i].Codepoint == 0x034F && (_output[i + 1].CombiningClass == 0
+                                                   || _output[i - 1].CombiningClass <= _output[i + 1].CombiningClass))
+            {
+                var joiner = _output[i];
+                joiner.Flags &= ~UnicodeFlags.Hidden;
+                _output[i] = joiner;
+            }
         }
     }
 
@@ -331,7 +357,8 @@ internal sealed class Normalizer
             var current = input[i];
             if (current.IsUnicodeMark
                 && (starter == _output.Count - 1 || _output[_output.Count - 1].CombiningClass < current.CombiningClass)
-                && UnicodeData.TryCompose(_output[starter].Codepoint, current.Codepoint, out var composed)
+                && (UnicodeData.TryCompose(_output[starter].Codepoint, current.Codepoint, out var composed)
+                    || (_hebrewForms && TryComposeHebrew(_output[starter].Codepoint, current.Codepoint, out composed)))
                 && _font.TryGetGlyphIndex(composed, out var glyph))
             {
                 _output.Add(current);
@@ -351,6 +378,32 @@ internal sealed class Normalizer
                 starter = _output.Count - 1;
             }
         }
+    }
+
+    // The Hebrew presentation forms Unicode leaves out of composition, as HarfBuzz composes them for a font that cannot
+    // position the points itself.
+    private static bool TryComposeHebrew(int letter, int point, out int composed)
+    {
+        composed = point switch
+        {
+            0x05B4 when letter == 0x05D9 => 0xFB1D,
+            0x05B7 when letter == 0x05F2 => 0xFB1F,
+            0x05B7 when letter == 0x05D0 => 0xFB2E,
+            0x05B8 when letter == 0x05D0 => 0xFB2F,
+            0x05B9 when letter == 0x05D5 => 0xFB4B,
+            0x05BC when letter is >= 0x05D0 and <= 0x05EA => DageshForms[letter - 0x05D0],
+            0x05BC when letter == 0xFB2A => 0xFB2C,
+            0x05BC when letter == 0xFB2B => 0xFB2D,
+            0x05BF when letter == 0x05D1 => 0xFB4C,
+            0x05BF when letter == 0x05DB => 0xFB4D,
+            0x05BF when letter == 0x05E4 => 0xFB4E,
+            0x05C1 when letter == 0x05E9 => 0xFB2A,
+            0x05C1 when letter == 0xFB49 => 0xFB2C,
+            0x05C2 when letter == 0x05E9 => 0xFB2B,
+            0x05C2 when letter == 0xFB49 => 0xFB2D,
+            _ => 0,
+        };
+        return composed != 0;
     }
 
     private void MergeClusters(int start, int end)

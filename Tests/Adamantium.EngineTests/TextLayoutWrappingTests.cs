@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Linq;
 using Adamantium.Fonts;
 using Adamantium.Graphics.Fonts;
 using Adamantium.Mathematics;
@@ -94,7 +96,13 @@ public class TextLayoutWrappingTests
         const string text = "今日は2026年10月17日で、3つのりんごと12個のみかんを買いました。";
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
             "NotoSansCJK-Regular.ttc"));
-        for (var width = 40; width <= 400; width += 7)
+        var widest = new[] { "2026年", "10月", "17日", "3つ", "12個" }.Max(unit =>
+        {
+            var alone = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+            return alone.ProcessText(unit, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+                TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top).Width;
+        });
+        for (var width = (int)Math.Ceiling(widest); width <= 400; width += 7)
         {
             var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
             layout.ProcessText(text, 20, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
@@ -106,6 +114,95 @@ public class TextLayoutWrappingTests
                 Assert.That(char.IsDigit(text[start - 1]), Is.False, $"width {width}: line {line} starts {text[start..]}");
             }
         }
+    }
+
+    // Held together, a long number and its ideograph ran past the edge of a narrow column.
+    [Test]
+    public void ANumberWiderThanTheLine_LetsItsIdeographGoToTheNextLine()
+    {
+        const string text = "1234567890年";
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansCJK-Regular.ttc"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        layout.ProcessText(text, 20, new Size(60, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.LineCount, Is.EqualTo(2));
+        Assert.That(layout.GetLine(1).Start, Is.EqualTo(10));
+    }
+
+    // The room is the line's: between the paragraph's margins, past its indent.
+    [Test]
+    public void ANumberWiderThanTheRoomBetweenTheMargins_LetsItsIdeographGo()
+    {
+        const string text = "1234567890年";
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansCJK-Regular.ttc"));
+        var attributed = new AttributedText(text);
+        attributed.SetParagraph(0, text.Length, new ParagraphAttributes { MarginLeft = 20, MarginRight = 20 });
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        layout.ProcessText(attributed, 20, new Size(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.GetTextData().Where(g => g.LineIndex == 0).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(130 + 1));
+    }
+
+    // An indent narrows only the first line: past it, numbers keep their ideographs as before.
+    [Test]
+    public void AFirstLineIndent_LeavesTheOtherLinesNumbersWhole()
+    {
+        const string sentence = "今日は2026年10月17日で、3つのりんごと12個のみかんを買いました。";
+        const string text = sentence + sentence;
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansCJK-Regular.ttc"));
+        var attributed = new AttributedText(text);
+        attributed.SetParagraph(0, text.Length, new ParagraphAttributes { TextIndent = 60 });
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        layout.ProcessText(attributed, 20, new Size(100, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        for (var line = 1; line < layout.LineCount; line++)
+        {
+            var start = layout.GetLine(line).Start;
+            Assert.That(char.IsDigit(text[start - 1]), Is.False, $"line {line} starts {text[start..]}");
+        }
+    }
+
+    // A number that opens its paragraph stands on its first line, past the indent.
+    [Test]
+    public void ANumberOpeningAnIndentedParagraph_LetsItsIdeographGoWhereItDoesNotFit()
+    {
+        const string text = "1234567890年";
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansCJK-Regular.ttc"));
+        var attributed = new AttributedText(text);
+        attributed.SetParagraph(0, text.Length, new ParagraphAttributes { TextIndent = 40 });
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        layout.ProcessText(attributed, 20, new Size(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.GetTextData().Where(g => g.LineIndex == 0).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(150 + 1));
+    }
+
+    // The ellipsis after upright letters of vertical text stays in their column.
+    [Test]
+    public void TheEllipsisOfVerticalText_StaysInItsColumn()
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansCJK-Regular.ttc"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, WritingMode = WritingMode.VerticalRightToLeft,
+        };
+        layout.ProcessText("日本語の文章がここに続きます日本語の文章", 20, new Size(double.NaN, 100), TextWrapping.NoWrap,
+            TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var data = layout.GetTextData();
+        var letters = data.Where(g => g.PositionInString >= 0).ToArray();
+        var dots = data.Where(g => g.PositionInString < 0).ToArray();
+
+        Assert.That(dots, Has.Length.EqualTo(3));
+        Assert.That(dots.Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(letters.Min(g => g.Rect.Left) - 1));
+        Assert.That(dots.Max(g => g.Rect.Right), Is.LessThanOrEqualTo(letters.Max(g => g.Rect.Right) + 1));
     }
 
     [Test]

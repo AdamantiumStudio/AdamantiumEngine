@@ -444,6 +444,12 @@ public class TextLayout : DisposableObject
     /// <summary>The start of the word before <paramref name="index"/>: where Ctrl+Left goes.</summary>
     public int PreviousWordStop(int index) => _navigator.PreviousWordStop(index);
 
+    /// <summary>The caret one word to the right or left on the screen, as Ctrl+arrows move it: stepped as
+    /// <see cref="MoveVisually"/> steps it until it stands where a word or a mark starts (its left edge in left-to-right
+    /// text, its right edge in right-to-left), or at the end of the text. In mixed text it follows the screen, where
+    /// <see cref="NextWordStop"/> follows the reading order.</summary>
+    public CaretPosition MoveWordVisually(CaretPosition from, bool toRight) => _navigator.MoveWordVisually(from, toRight);
+
     /// <summary>The grapheme nearest to a point in layout coordinates, and where a click there puts the caret.</summary>
     public TextHit HitTest(double x, double y) => _navigator.HitTest(x, y);
 

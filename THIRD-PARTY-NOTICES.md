@@ -60,13 +60,15 @@ JPEG 2000 — that is a different format built on wavelets, and there is no code
 
 ## HarfBuzz — Arabic shaper, modified combining classes, vertical forms
 
-**Where:** `Adamantium.Fonts/Shaping/ArabicShaper.cs`, `GetModifiedCombiningClass` in
+**Where:** `Adamantium.Fonts/Shaping/ArabicShaper.cs`, `Adamantium.Fonts/Shaping/ArabicFallback.cs`, `GetModifiedCombiningClass` in
 `Adamantium.Fonts/Shaping/UnicodeData.cs`, and `Adamantium.Fonts/Shaping/VerticalForms.cs`
 
 The joining state table, the list of modifier combining marks and the order the Arabic features apply in follow
 HarfBuzz's Arabic shaper (`src/hb-ot-shaper-arabic.cc`, https://github.com/harfbuzz/harfbuzz); the combining classes
 remapped for Hebrew, Arabic, Thai and Tibetan follow its `hb-unicode.hh`; the vertical presentation forms text set
-top to bottom falls back to without a 'vert' feature follow its `hb_vert_char_for` (`src/hb-ot-shape.cc`). All are
+top to bottom falls back to without a 'vert' feature follow its `hb_vert_char_for` (`src/hb-ot-shape.cc`); the
+presentation forms and ligatures of `Adamantium.Fonts/Shaping/ArabicFallback.cs`, for a font with no Arabic joining
+forms, are its tables and lookups (`src/hb-ot-shaper-arabic-table.hh`, `src/hb-ot-shaper-arabic-fallback.hh`). All are
 ported to C#. HarfBuzz is under the
 "Old MIT" licence:
 
@@ -252,7 +254,9 @@ without its `HVAR` and layout tables, and with the phantom-point variations of o
 
 **Where:** `Tests/Adamantium.FontTests/ScriptFonts/NotoSansHebrew-Regular.ttf`, unchanged, from
 https://github.com/notofonts/hebrew, used only by the tests. Copyright 2022 The Noto Project Authors, under the SIL
-Open Font License 1.1, whose text is `LICENSE-NotoSansHebrew.txt` beside it.
+Open Font License 1.1, whose text is `LICENSE-NotoSansHebrew.txt` beside it. `NotoSansHebrew-NoGpos.subset.ttf` beside
+it is a modified version of that font, made for the tests: its Hebrew letters, points and presentation forms, without
+its `GPOS` table.
 
 ---
 
@@ -261,6 +265,9 @@ Open Font License 1.1, whose text is `LICENSE-NotoSansHebrew.txt` beside it.
 **Where:** `Tests/Adamantium.FontTests/ScriptFonts/NotoSansArabic-Regular.ttf` and `NotoNaskhArabic-Regular.ttf`,
 unchanged, from https://github.com/notofonts/arabic, used only by the tests. Copyright 2022 The Noto Project Authors,
 under the SIL Open Font License 1.1, whose text is `LICENSE-NotoArabic.txt` beside them.
+`NotoSansArabic-NoGsub.subset.ttf` and `NotoSansArabic-NoGpos.subset.ttf` beside them are modified versions of Noto
+Sans Arabic, made for the tests: its Arabic letters, marks and presentation forms, without its `GSUB` table, and
+without its `GPOS` table.
 
 ---
 
@@ -297,6 +304,16 @@ the SIL Open Font License 1.1, whose text is `LICENSE-ChurchSlavonic.txt` beside
 Regular beside it: its Latin and Cyrillic lowercase only, without its layout tables, with a 'jalt' feature of its own
 for the Cyrillic script, renamed as the license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font
 Name 'Source', under the SIL Open Font License 1.1, whose text is `source-sans-3v028R/LICENSE.md`.
+
+---
+
+## Adamantium Marks Test
+
+**Where:** `Tests/Adamantium.FontTests/ScriptFonts/AdamantiumMarksTest-Regular.ttf` and
+`AdamantiumMarksTest-EmptyGpos.ttf`, made for the tests from Source Sans 3 Regular: its basic Latin and combining marks,
+some Thai and Lao characters mapped to them, without its `GPOS` table, and with one of no lookups; renamed as the
+license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font Name 'Source', under the SIL Open Font License 1.1, whose text
+is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 
 ---
 

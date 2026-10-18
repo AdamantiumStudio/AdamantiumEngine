@@ -36,6 +36,12 @@ internal sealed class ShapePlan
 
     public bool ApplyKernTable { get; private set; }
 
+    // A font that positions nothing itself: marks keep their place when their advances are zeroed, and, where HarfBuzz's
+    // shaper for the script does so, are placed around their base by their classes.
+    public bool AdjustMarksWhenZeroing { get; private set; }
+
+    public bool FallbackMarkPositioning { get; private set; }
+
     public uint KernMask { get; private set; }
 
     public uint FracMask { get; private set; }
@@ -141,6 +147,9 @@ internal sealed class ShapePlan
         var kern = plan.GetFeature("kern");
         plan.ApplyGpos = layout.Gpos?.LookupList?.Length > 0;
         plan.ApplyKernTable = !vertical && layout.HasKernTable && (kern == null || kern.GposIndex < 0);
+        // As HarfBuzz, by the table being there: one with no lookups (only 'size', say) still positions.
+        plan.AdjustMarksWhenZeroing = layout.Gpos == null && (!plan.ApplyKernTable || !layout.HasCrossKerning);
+        plan.FallbackMarkPositioning = plan.AdjustMarksWhenZeroing && PlacesMarks(script, gsub.Script);
         plan.KernMask = kern?.Mask ?? 0;
         plan.FracMask = plan.GetFeature("frac")?.Mask ?? 0;
         plan.NumrMask = plan.GetFeature("numr")?.Mask ?? 0;
@@ -152,6 +161,37 @@ internal sealed class ShapePlan
         }
 
         return plan;
+    }
+
+    private static readonly HashSet<string> IndicScripts = ["Beng", "Deva", "Gujr", "Guru", "Knda", "Mlym", "Orya", "Taml", "Telu"];
+
+    private static readonly HashSet<string> UniversalScripts =
+    [
+        "Tibt", "Mong", "Sinh", "Buhd", "Hano", "Tglg", "Tagb", "Limb", "Tale", "Bugi", "Khar", "Sylo", "Tfng", "Bali",
+        "Nkoo", "Phag", "Cham", "Kali", "Lepc", "Rjng", "Saur", "Sund", "Egyp", "Java", "Kthi", "Mtei", "Lana", "Tavt",
+        "Batk", "Brah", "Mand", "Cakm", "Plrd", "Shrd", "Takr", "Dupl", "Gran", "Khoj", "Sind", "Mahj", "Mani", "Modi",
+        "Hmng", "Phlp", "Sidd", "Tirh", "Ahom", "Mult", "Adlm", "Bhks", "Marc", "Newa", "Gonm", "Soyo", "Zanb", "Dogr",
+        "Gong", "Rohg", "Maka", "Medf", "Sogo", "Sogd", "Elym", "Nand", "Hmnp", "Wcho", "Chrs", "Diak", "Kits", "Yezi",
+        "Cpmn", "Ougr", "Tnsa", "Toto", "Vith", "Kawi", "Nagm",
+    ];
+
+    // Whether HarfBuzz's shaper for the script places marks in a font that positions none: the default, Arabic and Hebrew
+    // shapers do; those for Thai and Lao, Hangul, Khmer, Myanmar, the Indic scripts and the Universal Shaping Engine do
+    // not - but a font that took 'DFLT' or 'latn' for those scripts (Myanmar's 'mymr' too) has the default shaper.
+    private static bool PlacesMarks(string script, string chosenScript)
+    {
+        if (script is "Thai" or "Laoo" or "Hang" or "Khmr")
+        {
+            return false;
+        }
+
+        var plain = chosenScript is "DFLT" or "latn";
+        if (script == "Mymr")
+        {
+            return plain || chosenScript == "mymr";
+        }
+
+        return plain || script == null || (!IndicScripts.Contains(script) && !UniversalScripts.Contains(script));
     }
 
     private static (List<FeatureRequest> Requests, int StageCount) CollectRequests(
