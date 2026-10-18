@@ -5,6 +5,7 @@ namespace Adamantium.ECS;
 public static class EntityIconKeys
 {
     public const string Entity = "EntityIcon.Entity";
+    public const string Group = "EntityIcon.Group";
     public const string Model = "EntityIcon.Model";
     public const string Mesh = "EntityIcon.Mesh";
     public const string Camera = "EntityIcon.Camera";

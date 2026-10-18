@@ -106,6 +106,20 @@ public class EditorOverlayProcessor : RenderingProcessor
         DrawParts(ActiveCamera.ViewProjectionMatrix, true, Look.Shaded);
     }
 
+    /// <summary>Draws an entity and what is under it in the scene as a see-through ghost of one tint, hidden where the
+    /// scene stands in front of it; the tint's alpha is how much of it shows.</summary>
+    public void DrawGhost(Entity root, Vector4F tint)
+    {
+        Collect(root);
+        for (var i = 0; i < parts.Count; i++)
+        {
+            parts[i] = parts[i] with { Color = tint };
+        }
+
+        effect.View.SetValue(ActiveCamera.ViewMatrix);
+        DrawParts(ActiveCamera.ViewProjectionMatrix, false, Look.Shaded);
+    }
+
     /// <summary>Draws an entity and what is under it in the scene in its flat colors, in front of everything the scene
     /// drew: for pictograms, which have no form to shade.</summary>
     public void DrawFlatInScene(Entity root)
@@ -244,7 +258,7 @@ public class EditorOverlayProcessor : RenderingProcessor
         parts.Clear();
         root.VisitInDepth(current =>
         {
-            if (!current.IsEnabled || !current.Visible)
+            if (!current.Visible)
             {
                 return false;
             }

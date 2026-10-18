@@ -68,6 +68,18 @@ public class OrientationCube : EditorProcessor
             return;
         }
 
+        // Only the camera the user steers is turned by the cube; another one is only looked through.
+        if (!observatory.Controls(camera))
+        {
+            if (grabbed != null)
+            {
+                input.HoldPointer(false);
+                grabbed = null;
+            }
+
+            return;
+        }
+
         if (grabbed != null)
         {
             Tools.TakePointer();
@@ -150,6 +162,8 @@ public class OrientationCube : EditorProcessor
         var metadata = current.Transform.GetMetadata(camera);
         metadata.WorldMatrixF = world * Matrix4x4F.Translation(relativePosition);
         metadata.RelativePosition = relativePosition;
+        // Shown only to a camera the user steers: another one is only looked through, and nothing would turn it.
+        metadata.Enabled = Tools.Observatory.Controls(camera);
     }
 
     private static Vector3F UpOf(Vector3F forward)

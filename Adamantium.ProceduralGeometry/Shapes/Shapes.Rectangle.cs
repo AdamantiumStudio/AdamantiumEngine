@@ -122,23 +122,23 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     case GeometryType.Solid:
                     {
                         var points = Triangulate(vertices);
-                        mesh.SetPoints(points);
+                        mesh.SetPoints(points).SetIndices(FacingTheEye(points.Count));
                         break;
                     }
                     case GeometryType.Both:
                     {
                         mesh.AddContour(vertices, true);
                         var points = Triangulate(vertices);
-                        mesh.SetPoints(points);
+                        mesh.SetPoints(points).SetIndices(FacingTheEye(points.Count));
                         break;
                     }
                     case GeometryType.Outlined:
                     {
                         mesh.AddContour(vertices, true);
+                        mesh.GenerateBasicIndices();
                         break;
                     }
                 }
-                mesh.GenerateBasicIndices();
                 
                 var uvs = new List<Vector2F>();
                 

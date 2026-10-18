@@ -52,6 +52,9 @@ public class TransformService : EntityService
     {
         entity.TraverseInDepth(current =>
         {
+            // First, so a shape made again this frame gets its collider placed in the same pass.
+            current.GetComponent<ProceduralShape>()?.RebuildWhenChanged();
+
             var transform = current.Transform;
             var dirty = transform.IsWorldDirty;
             Collider[] colliders = null;

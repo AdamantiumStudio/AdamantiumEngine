@@ -27,17 +27,6 @@ public class ConeTemplate : PrimitiveTemplate
         this.height = height;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Cone;
-        metadata.TopDiameter = topDiameter;
-        metadata.BottomDiameter = bottomDiameter;
-        metadata.Height = height;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var geometry = Shapes.Cone.GenerateGeometry(

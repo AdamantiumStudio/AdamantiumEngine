@@ -24,16 +24,6 @@ public class PlaneTemplate : PrimitiveTemplate
         this.length = length;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Plane;
-        metadata.Width = width;
-        metadata.Depth = length;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Plane.GenerateGeometry(GeometryType, width, length, Tessellation);

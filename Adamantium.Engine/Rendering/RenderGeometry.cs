@@ -12,12 +12,14 @@ namespace Adamantium.Engine.Rendering;
 
 // GPU vertex/index buffers for one mesh, built for a specific vertex format. Owned by the render layer (the geometry
 // cache), NOT by an ECS component - a component is bindable/cloneable per-entity editor data and must not hold GPU
-// resources. Rebuilt only when the source mesh reports IsModified.
+// resources. Rebuilt only when the source mesh's version moved past the one uploaded - each copy for itself, as one mesh
+// may be drawn through several caches (the scene and the editor overlay).
 public sealed class RenderGeometry : DisposableObject
 {
     private readonly Mesh _mesh;
     private IBuffer _vertexBuffer;
     private IBuffer _indexBuffer;
+    private int _uploadedVersion;
 
     public RenderGeometry(Mesh mesh, Type vertexType)
     {
@@ -35,22 +37,38 @@ public sealed class RenderGeometry : DisposableObject
     // per-frame case) - which is what keeps the re-upload off the hot path.
     public void EnsureUpToDate(IGraphicsDevice device)
     {
-        if (_vertexBuffer != null && !_mesh.IsModified) return;
+        var version = _mesh.Version;
+        if (version == _uploadedVersion && (_vertexBuffer != null || !_mesh.HasPoints)) return;
+
+        // New buffers each time, the old ones let go only once no frame in flight still draws with them: a buffer the
+        // GPU may yet read is neither written nor destroyed.
+        Retire(device, ref _vertexBuffer);
+        Retire(device, ref _indexBuffer);
+        HasIndices = false;
+        _uploadedVersion = version;
+        if (!_mesh.HasPoints) return;
 
         if (VertexType == typeof(SkinnedMeshVertex))
-            UploadVertices(device, _mesh.ToSkinnedMeshVertices());
+            _vertexBuffer = ToDispose(Buffer.Vertex.New(device, _mesh.ToSkinnedMeshVertices(), BufferMemoryUsage.GpuOnly));
         else
-            UploadVertices(device, _mesh.ToMeshVertices());
+            _vertexBuffer = ToDispose(Buffer.Vertex.New(device, _mesh.ToMeshVertices(), BufferMemoryUsage.GpuOnly));
 
         HasIndices = _mesh.HasIndices;
         if (HasIndices)
         {
-            RemoveAndDispose(ref _indexBuffer);
             _indexBuffer = ToDispose(Buffer.Index.New(device, _mesh.Indices, BufferMemoryUsage.GpuOnly));
         }
 
         Topology = _mesh.MeshTopology;
-        _mesh.AcceptChanges();
+    }
+
+    private void Retire(IGraphicsDevice device, ref IBuffer buffer)
+    {
+        if (buffer == null) return;
+
+        RemoveToDispose(buffer);
+        device.AddToDeferDisposeQueue(buffer);
+        buffer = null;
     }
 
     // Applies the per-object render state, sets the vertex input, and issues the draw. The caller applies the effect
@@ -76,21 +94,6 @@ public sealed class RenderGeometry : DisposableObject
         {
             device.SetVertexBuffer(_vertexBuffer);
             device.Draw(_vertexBuffer.ElementCount, instanceCount);
-        }
-    }
-
-    private void UploadVertices<T>(IGraphicsDevice device, T[] vertices) where T : struct
-    {
-        if (vertices == null) return;
-
-        if (_vertexBuffer != null && (ulong)vertices.Length <= _vertexBuffer.ElementCount)
-        {
-            _vertexBuffer.SetData(vertices);
-        }
-        else
-        {
-            RemoveAndDispose(ref _vertexBuffer);
-            _vertexBuffer = ToDispose(Buffer.Vertex.New(device, vertices, BufferMemoryUsage.GpuOnly));
         }
     }
 }

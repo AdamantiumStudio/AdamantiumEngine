@@ -20,15 +20,6 @@ public class TeapotTemplate : PrimitiveTemplate
         this.size = size;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Teapot;
-        metadata.Width = size;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Teapot.GenerateGeometry(GeometryType, size, Tessellation, Transform);

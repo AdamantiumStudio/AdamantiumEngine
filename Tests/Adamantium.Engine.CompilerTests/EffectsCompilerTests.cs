@@ -156,6 +156,55 @@ technique T { pass P { VertexShader = VS; PixelShader = PS; } }
             Assert.That(result.HasErrors, Is.False, string.Join(Environment.NewLine, result.Logger.Messages));
         }
 
+        /// <summary>A file's headers are looked for in the folders under it too: one in its Includes folder was not found.
+        /// </summary>
+        [Test]
+        public void AFile_FindsTheHeadersInTheFoldersUnderIt()
+        {
+            var folder = Path.Combine(Path.GetTempPath(), "adamantium-effect-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(folder, "Includes"));
+                foreach (var header in TintInclude())
+                {
+                    File.WriteAllText(Path.Combine(folder, header.Path), header.Content);
+                }
+
+                var path = Path.Combine(folder, "Probe.fx");
+                File.WriteAllText(path, EffectCalling("#include \"Includes/Tint.fxh\"\n"));
+
+                CompileOrFail(path);
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+
+        /// <summary>A header is named by its whole name: "Tint.fxh" is not a header whose name only ends so.</summary>
+        [Test]
+        public void AHeader_IsNotTakenForAnotherWhoseNameEndsTheSame()
+        {
+            var offered = ImmutableArray.Create(
+                new ShaderFileInfo
+                {
+                    FileName = "BlueTint.fxh",
+                    Path = Path.Combine("Includes", "BlueTint.fxh"),
+                    Content = "float4 Tint(float4 c) { return c * float4(0, 0, 1, 1); }\n"
+                },
+                new ShaderFileInfo
+                {
+                    FileName = "Tint.fxh",
+                    Path = Path.Combine("Includes", "Tint.fxh"),
+                    Content = "float4 Tint(float4 c) { return c; }\n"
+                });
+
+            var result = EffectCompiler.Compile(EffectCalling("#include \"Tint.fxh\"\n"), "Probe.fx", offered);
+
+            Assert.That(result.HasErrors, Is.False, string.Join(Environment.NewLine, result.Logger.Messages));
+            Assert.That(result.Includes, Is.EquivalentTo(new[] { Path.Combine("Includes", "Tint.fxh") }));
+        }
+
         /// <summary>A value parameter is described by its own type. The reflected base type used to be cast straight to
         /// the D3D-numbered enum, so a uint came out as Texture3D and a float as Sampler3D.</summary>
         [Test]

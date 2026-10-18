@@ -12,7 +12,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private class UVSphere
             {
                 public static Mesh GenerateGeometry(
-                    double diameter = 1.0,
+                    Vector3 size,
                     int tessellation = 40)
                 {
 
@@ -24,7 +24,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var uvs = new Vector2F[vertices.Length];
                     var indices = new int[verticalSegments * horizontalSegments * 6];
 
-                    var radius = diameter / 2;
+                    var radius = size / 2;
 
                     int vertexCount = 0;
                     // Create rings of vertices at progressively higher latitudes.
@@ -50,8 +50,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                             var normal = new Vector3(dx, dy, dz);
 
+                            // Stretched by axis, an ellipsoid's normal leans the other way: its direction over the radii.
                             vertices[vertexCount] = normal * radius;
-                            normals[vertexCount] = (Vector3F)normal;
+                            normals[vertexCount] = (Vector3F)Vector3.Normalize(normal / radius);
                             uvs[vertexCount++] = new Vector2F(1.0f - u, 1.0f - v);
                         }
                     }
@@ -145,26 +146,26 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 /// <param name="tessellation">The tessellation.</param>
                 /// <returns>A <see cref="Mesh"/> containing all necesseray info in raw format.</returns>
                 public static Mesh GenerateGeometry(
-                    double diameter = 1.0f,
+                    Vector3 size,
                     int tessellation = 3)
                 {
                     var sphere = new GeoSphere();
-                    return sphere.GenerateSphere(diameter, tessellation);
+                    return sphere.GenerateSphere(size, tessellation);
                 }
 
                 /// <summary>
                 /// Creates a Geodesic sphere.
                 /// </summary>
-                /// <param name="diameter">The diameter.</param>
+                /// <param name="size">The size along each axis.</param>
                 /// <param name="tessellation">The tessellation.</param>
                 /// <returns>A Geodesic sphere.</returns>
                 private unsafe Mesh GenerateSphere(
-                    double diameter = 1.0f,
+                    Vector3 size,
                     int tessellation = 3)
                 {
                     subdividedEdges = new Dictionary<UndirectedEdge, int>();
 
-                    var radius = diameter / 2.0;
+                    var radius = size / 2.0;
 
                     // Start with an octahedron; copy the data into the vertex/index collection.
                     vertexPositions = new List<Vector3>(OctahedronVertices);
@@ -524,18 +525,18 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private class CubeSphere
             {
                 public static Mesh GenerateGeometry(
-                    double diameter,
+                    Vector3 size,
                     int tessellation = 3)
                 {
-                    if (diameter <= 0)
+                    if (size.X <= 0 || size.Y <= 0 || size.Z <= 0)
                     {
-                        throw new ArgumentOutOfRangeException(nameof(diameter), "diameter parameter must be more than 0");
+                        throw new ArgumentOutOfRangeException(nameof(size), "size must be more than 0 along every axis");
                     }
 
-                    var mesh = Cube.GenerateGeometry(GeometryType.Solid, diameter, diameter, diameter, tessellation, null);
+                    var mesh = Cube.GenerateGeometry(GeometryType.Solid, 1, 1, 1, tessellation, null);
 
                     var vertices = mesh.Points;
-                    var radius = diameter / 2;
+                    var radius = size / 2;
 
                     for (int i = 0; i < vertices.Length; i++)
                     {
@@ -565,9 +566,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         phi = Math.Atan2(y, x);
 
                         var position = new Vector3();
-                        position.X = (float) (radius * Math.Sin(theta) * Math.Cos(phi));
-                        position.Y = (float) (radius * Math.Sin(theta) * Math.Sin(phi));
-                        position.Z = (float) (radius * Math.Cos(theta));
+                        position.X = (float) (radius.X * Math.Sin(theta) * Math.Cos(phi));
+                        position.Y = (float) (radius.Y * Math.Sin(theta) * Math.Sin(phi));
+                        position.Z = (float) (radius.Z * Math.Cos(theta));
 
                         vertices[i] = position;
                     }
@@ -583,21 +584,27 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double diameter = 1.0,
                 int tessellation = 40)
             {
+                return GenerateOutlinedGeometry(new Vector3(diameter), tessellation);
+            }
+
+            /// <summary>Three rings of a sphere stretched to <paramref name="size"/>, one round each axis.</summary>
+            public static Mesh GenerateOutlinedGeometry(
+                Vector3 size,
+                int tessellation = 40)
+            {
                 var primitiveType = PrimitiveType.LineStrip;
 
                 var vertices = new List<Vector3>();
                 var indices = new List<int>();
-                var center = Vector3.Zero;
                 int lastIndex = 0;
-                double bottomRadius = diameter / 2;
+                var radius = size / 2;
 
                 for (int i = 0; i <= tessellation; ++i)
                 {
                     float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = center.X + bottomRadius * (float) Math.Cos(angle);
-                    var y = center.Y + bottomRadius * (float) Math.Sin(angle);
-                    vertices.Add(new Vector3(x, 0, y));
+                    var cos = Math.Cos(angle);
+                    var sin = Math.Sin(angle);
+                    vertices.Add(new Vector3(radius.X * cos, 0, radius.Z * sin));
                     indices.Add(lastIndex++);
                 }
                 indices.Add(PrimitiveRestartValue);
@@ -605,10 +612,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 for (int i = 0; i <= tessellation; ++i)
                 {
                     float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = center.X + bottomRadius * (float) Math.Cos(angle);
-                    var y = center.Y + bottomRadius * (float) Math.Sin(angle);
-                    vertices.Add(new Vector3(x, y, 0));
+                    var cos = Math.Cos(angle);
+                    var sin = Math.Sin(angle);
+                    vertices.Add(new Vector3(radius.X * cos, radius.Y * sin, 0));
                     indices.Add(lastIndex++);
                 }
 
@@ -617,10 +623,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 for (int i = 0; i <= tessellation; ++i)
                 {
                     float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = center.X + bottomRadius * (float) Math.Cos(angle);
-                    var y = center.Y + bottomRadius * (float) Math.Sin(angle);
-                    vertices.Add(new Vector3(0, x, y));
+                    var cos = Math.Cos(angle);
+                    var sin = Math.Sin(angle);
+                    vertices.Add(new Vector3(0, radius.Y * cos, radius.Z * sin));
                     indices.Add(lastIndex++);
                 }
 
@@ -636,6 +641,18 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 GeometryType geometryType,
                 SphereType sphereType,
                 double diameter = 1.0f,
+                int tessellation = 40,
+                Matrix4x4? transform = null)
+            {
+                return GenerateGeometry(geometryType, sphereType, new Vector3(diameter), tessellation, transform);
+            }
+
+            /// <summary>A sphere stretched to <paramref name="size"/> along each axis - an ellipsoid, with its normals
+            /// generated for that shape.</summary>
+            public static Mesh GenerateGeometry(
+                GeometryType geometryType,
+                SphereType sphereType,
+                Vector3 size,
                 int tessellation = 40,
                 Matrix4x4? transform = null)
             {
@@ -657,20 +674,20 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Mesh mesh;
                 if (geometryType == GeometryType.Outlined)
                 {
-                    mesh = GenerateOutlinedGeometry(diameter, tessellation);
+                    mesh = GenerateOutlinedGeometry(size, tessellation);
                 }
                 else
                 {
                     switch (sphereType)
                     {
                         case SphereType.GeoSphere:
-                            mesh = GeoSphere.GenerateGeometry(diameter, tessellation);
+                            mesh = GeoSphere.GenerateGeometry(size, tessellation);
                             break;
                         case SphereType.CubeSphere:
-                            mesh = CubeSphere.GenerateGeometry(diameter, tessellation);
+                            mesh = CubeSphere.GenerateGeometry(size, tessellation);
                             break;
                         default:
-                            mesh = UVSphere.GenerateGeometry(diameter, tessellation);
+                            mesh = UVSphere.GenerateGeometry(size, tessellation);
                             break;
                     }
                 }

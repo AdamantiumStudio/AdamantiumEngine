@@ -315,10 +315,10 @@ namespace Adamantium.ECS.Components
         public abstract void DeleteThirdPersonConfig();
 
         /// <summary>
-        /// Make camera jump to a certain object in the specified time
+        /// Flies, keeping the way it looks, over <paramref name="time"/> milliseconds to where
+        /// <paramref name="lookAtObject"/> fills the view with <see cref="FramingMargin"/> to spare; an object with no
+        /// bounds is looked at from a few units away.
         /// </summary>
-        /// <param name="lookAtObject"></param>
-        /// <param name="time"></param>
         public abstract void JumpToObject(Entity lookAtObject, int time);
 
         /// <summary>Travels to a point over <paramref name="time"/> milliseconds. The same machinery

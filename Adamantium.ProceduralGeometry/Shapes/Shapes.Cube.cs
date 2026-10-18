@@ -238,27 +238,16 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 vertices.Add(new Vector3(endPositionX, endPositionY, endPositionZ));
                 vertices.Add(new Vector3(endPositionX, startPositionY, endPositionZ));
 
-                List<int> indices = new List<int>();
-
-                for (int i = 0; i < 8; i++)
-                {
-                    indices.Add(i);
-                }
-                indices.Add(4);
-
-                indices.Insert(4, 0);
-                indices.Add(PrimitiveRestartValue);
-                indices.Add(1);
-                indices.Add(5);
-                indices.Add(PrimitiveRestartValue);
-                indices.Add(2);
-                indices.Add(6);
-                indices.Add(PrimitiveRestartValue);
-                indices.Add(3);
-                indices.Add(7);
+                // The twelve edges as pairs: a list needs no strip restart, which not every draw turns on.
+                List<int> indices =
+                [
+                    0, 1, 1, 2, 2, 3, 3, 0,
+                    4, 5, 5, 6, 6, 7, 7, 4,
+                    0, 4, 1, 5, 2, 6, 3, 7
+                ];
 
                 var mesh = new Mesh();
-                mesh.SetTopology(PrimitiveType.LineStrip).
+                mesh.SetTopology(PrimitiveType.LineList).
                     SetPoints(vertices).
                     SetIndices(indices);
 

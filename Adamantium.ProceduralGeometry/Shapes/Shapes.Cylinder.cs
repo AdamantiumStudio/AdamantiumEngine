@@ -46,6 +46,24 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
+            /// <summary>A cylinder filling <paramref name="size"/>: <paramref name="size"/>.X wide and .Z deep - an
+            /// ellipse when the two differ - and .Y high.</summary>
+            public static Mesh GenerateGeometry(
+                GeometryType geometryType,
+                Vector3 size,
+                int tessellation = 32,
+                Matrix4x4? transform = null)
+            {
+                if (geometryType == GeometryType.Solid)
+                {
+                    return Cone.GenerateGeometry(GeometryType.Solid, size, 1, tessellation, transform);
+                }
+
+                var mesh = GenerateOutlinedGeometry(size.Y, size.X, size.Z / size.X, Math.Max(tessellation, 3));
+                mesh.ApplyTransform(transform);
+                return mesh;
+            }
+
             public static Mesh GenerateSolidGeometry(
                 double height = 1.0,
                 double diameter = 1.0,
@@ -60,10 +78,20 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double diameter = 1.0,
                 int tessellation = 32)
             {
+                return GenerateOutlinedGeometry(height, diameter, 1, tessellation);
+            }
+
+            // The rings stretched along z by depth over width.
+            private static Mesh GenerateOutlinedGeometry(
+                double height,
+                double diameter,
+                double depth,
+                int tessellation)
+            {
                 var vertices = new List<Vector3>();
                 var indices = new List<int>();
                 int lastIndex = 0;
-                var radius = diameter / 2;
+                var radius = new Vector3(diameter / 2, 0, diameter / 2 * depth);
                 var topOffset = Vector3.Down * height / 2;
 
                 for (int i = 0; i <= tessellation; ++i)

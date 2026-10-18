@@ -63,18 +63,22 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 if (shapeType == GeometryType.Solid)
                 {
+                    // Inner point first, so the strip faces -Z, toward a camera looking along +Z.
                     for (int i = 0; i <= tessellation; ++i)
                     {
-                        vertex = CreatePoint(center, radiusX, radiusY, 0, angle);
-                        vertices.Add(vertex);
                         vertex = CreatePoint(center, radiusX, radiusY, thickness, angle);
                         vertices.Add(vertex);
+                        indices.Add(indices.Count);
+                        vertex = CreatePoint(center, radiusX, radiusY, 0, angle);
+                        vertices.Add(vertex);
+                        indices.Add(indices.Count);
                         angle += angleItem;
                     }
 
+                    // The strip ends where the arc does: basic indices would lead it back to the first point, a
+                    // triangle across the gap of an arc short of a circle.
                     mesh.SetPoints(vertices).
-                        GenerateBasicIndices().
-                        Optimize();
+                        SetIndices(indices);
 
                     for (int i = 0; i < mesh.Points.Length; ++i)
                     {

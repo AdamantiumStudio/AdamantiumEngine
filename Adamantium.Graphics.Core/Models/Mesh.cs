@@ -103,6 +103,10 @@ public class Mesh
         }
     }
 
+    /// <summary>Counts the changes to the mesh: whoever keeps a copy of it - GPU buffers, a cache - holds the version it
+    /// copied and makes the copy again when this one differs, each on its own.</summary>
+    public int Version => version;
+
     public string MaterialID { get; set; }
 
     public VertexSemantic Semantic { get; private set; }
@@ -748,6 +752,33 @@ public class Mesh
     public Mesh Clone()
     {
         return Clone(Matrix4x4.Identity);
+    }
+
+    /// <summary>
+    /// Takes over everything <paramref name="source"/> holds - a mesh just generated and not used elsewhere - so the
+    /// geometry changes in place: whatever draws this mesh uploads it again rather than holding a new mesh besides.
+    /// </summary>
+    public void ReplaceWith(Mesh source)
+    {
+        MeshTopology = source.MeshTopology;
+        Contours = source.Contours;
+        Points = source.Points;
+        Colors = source.Colors;
+        Normals = source.Normals;
+        UV0 = source.UV0;
+        UV1 = source.UV1;
+        UV2 = source.UV2;
+        UV3 = source.UV3;
+        Tangents = source.Tangents;
+        BiTangents = source.BiTangents;
+        JointIndices = source.JointIndices;
+        JointWeights = source.JointWeights;
+        Indices = source.Indices;
+        Bounds = source.Bounds;
+        IsOptimized = source.IsOptimized;
+        Semantic = source.Semantic;
+        UpAxis = source.UpAxis;
+        IsModified = true;
     }
 
     public Mesh Clone(Matrix4x4 transform)

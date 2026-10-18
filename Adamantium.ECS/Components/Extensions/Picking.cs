@@ -7,28 +7,30 @@ using Adamantium.Mathematics;
 namespace Adamantium.ECS.Components.Extensions;
 
 /// <summary>
-/// Finds what a ray hits: the nearest hit along it, over an entity and everything under it. A disabled or hidden
-/// entity is skipped with its subtree.
+/// Finds what a ray hits: the nearest hit along it, over an entity and everything under it. A hidden entity is skipped
+/// with its subtree, and so is a disabled one unless asked for, as an editor picks what is switched off.
 /// </summary>
 public static class Picking
 {
     /// <param name="aperture">How close a line has to pass, in pixels.</param>
-    public static PickHit Pick(this Entity root, in PickRay ray, PickMode mode, float aperture = 0)
+    /// <param name="withDisabled">Whether a disabled entity and what is under it are picked too.</param>
+    public static PickHit Pick(this Entity root, in PickRay ray, PickMode mode, float aperture = 0, bool withDisabled = false)
     {
         Validate(mode);
         var nearest = default(PickHit);
-        PickTree(root, in ray, mode, aperture, ref nearest);
+        PickTree(root, in ray, mode, aperture, withDisabled, ref nearest);
         return nearest;
     }
 
     /// <param name="aperture">How close a line has to pass, in pixels.</param>
-    public static PickHit Pick(IReadOnlyList<Entity> roots, in PickRay ray, PickMode mode, float aperture = 0)
+    /// <param name="withDisabled">Whether a disabled entity and what is under it are picked too.</param>
+    public static PickHit Pick(IReadOnlyList<Entity> roots, in PickRay ray, PickMode mode, float aperture = 0, bool withDisabled = false)
     {
         Validate(mode);
         var nearest = default(PickHit);
         for (int i = 0; i < roots.Count; i++)
         {
-            PickTree(roots[i], in ray, mode, aperture, ref nearest);
+            PickTree(roots[i], in ray, mode, aperture, withDisabled, ref nearest);
         }
 
         return nearest;
@@ -65,9 +67,9 @@ public static class Picking
         }
     }
 
-    private static void PickTree(Entity entity, in PickRay ray, PickMode mode, float aperture, ref PickHit nearest)
+    private static void PickTree(Entity entity, in PickRay ray, PickMode mode, float aperture, bool withDisabled, ref PickHit nearest)
     {
-        if (!entity.IsEnabled || !entity.Visible)
+        if (!entity.Visible || (!entity.IsEnabled && !withDisabled))
         {
             return;
         }
@@ -80,7 +82,7 @@ public static class Picking
         var children = entity.Dependencies;
         for (int i = 0; i < children.Count; i++)
         {
-            PickTree(children[i], in ray, mode, aperture, ref nearest);
+            PickTree(children[i], in ray, mode, aperture, withDisabled, ref nearest);
         }
     }
 

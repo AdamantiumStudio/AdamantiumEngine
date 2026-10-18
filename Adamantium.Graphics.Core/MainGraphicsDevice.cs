@@ -32,6 +32,11 @@ public class MainGraphicsDevice : DisposableBase
 
     /// <summary>True when VK_EXT_device_fault was enabled, so a device-lost can be queried for its real cause.</summary>
     public bool DeviceFaultSupported { get; private set; }
+
+    /// <summary>True when VK_KHR_fragment_shader_barycentric was enabled, so a fragment shader can read where in its
+    /// triangle it lies.</summary>
+    public bool FragmentBarycentricSupported { get; private set; }
+
     public VulkanInstance VulkanInstance { get; private set; }
 
     public GraphicsAdapter GraphicsAdapter { get; private set; }
@@ -211,6 +216,8 @@ public class MainGraphicsDevice : DisposableBase
             Constants.VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
             // The real cause of a device-lost.
             Constants.VK_EXT_DEVICE_FAULT_EXTENSION_NAME,
+            // Wireframes drawn over shaded meshes in one pass.
+            Constants.VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
 
             // Promoted KHR form first, EXT as the fallback: a driver may advertise either.
             Constants.VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
@@ -409,6 +416,17 @@ public class MainGraphicsDevice : DisposableBase
         var deviceFeatures2 = GraphicsAdapter.Adapter.GetPhysicalDeviceFeatures2();
 
         deviceFeatures2.PNext = vulkan11Features;
+        // A driver with the extension has the feature too.
+        if (finalDeviceExtensions.Contains(Constants.VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME))
+        {
+            deviceFeatures2.PNext = new PhysicalDeviceFragmentShaderBarycentricFeaturesKHR
+            {
+                FragmentShaderBarycentric = true,
+                PNext = vulkan11Features
+            };
+            FragmentBarycentricSupported = true;
+        }
+
         vulkan11Features.PNext = vulkan12Features;
         vulkan12Features.PNext = vulkan13Features;
         vulkan13Features.PNext = features14;

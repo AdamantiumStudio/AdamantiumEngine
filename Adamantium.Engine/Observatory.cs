@@ -38,6 +38,21 @@ public class Observatory : IInputRouting
 
     public CameraGizmo CameraGizmo { get; }
 
+    /// <summary>
+    /// The one camera the user's mouse and camera keys move, as an editor's own camera is; any other camera an output
+    /// shows is only looked through. Null - the default - lets them move whichever camera the output shows.
+    /// </summary>
+    public Camera ControlledCamera
+    {
+        get => controlledCamera;
+        set => controlledCamera = value;
+    }
+
+    private volatile Camera controlledCamera;
+
+    /// <summary>Whether the user's input moves <paramref name="camera"/>: see <see cref="ControlledCamera"/>.</summary>
+    public bool Controls(Camera camera) => controlledCamera == null || camera == controlledCamera;
+
     public IReadOnlyList<UniverseOutput> Outputs => snapshot.Outputs;
 
     /// <summary>

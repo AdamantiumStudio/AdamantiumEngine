@@ -29,7 +29,7 @@ public class PivotToolTemplate: BaseToolTemplate
 
         var xAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3(axisLength/2, 0, 0), xSize, 0);
         var xAxisTransform = Matrix4x4.RotationZ(MathHelper.DegreesToRadians(-90)) * Matrix4x4.Translation(xSize);
-        var coneMeshX = Shapes.Cone.GenerateGeometry(GeometryType.Solid, quarterPart, 0, axisLength * 0.1f, tesselation, xAxisTransform);
+        var coneMeshX = Shapes.Cone.GenerateGeometry(GeometryType.Solid, quarterPart, axisLength * 0.1f, 0, tesselation, xAxisTransform);
 
         var rightAxisEntity = BuildSubEntity(root, "MoveRight", xAxisMesh, Colors.Red);
         BuildSubEntity(rightAxisEntity, "MoveRightManipulator", coneMeshX, Colors.Red, BoundingVolume.OrientedBox);

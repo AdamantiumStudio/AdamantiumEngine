@@ -24,15 +24,6 @@ public class SphereTemplate : PrimitiveTemplate
         this.sphereType = sphereType;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = (ShapeType)sphereType;
-        metadata.Diameter = diameter;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Sphere.GenerateGeometry(GeometryType, sphereType, diameter, Tessellation, Transform);

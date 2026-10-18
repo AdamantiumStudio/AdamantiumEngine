@@ -9,6 +9,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
     {
         public class Cone
         {
+            // Up is -Y, so the top is at -Y; the circle runs the other way round in z with it, which keeps the triangles
+            // facing out.
+            private static readonly Vector3 Up = -Vector3.UnitY;
+
             //Computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
             private static Vector3 GetCircleVector(
                 int i,
@@ -18,8 +22,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var dx = (float) Math.Sin(angle);
                 var dz = (float) Math.Cos(angle);
 
-                return new Vector3(dx, 0, dz);
+                return new Vector3(dx, 0, -dz);
             }
+
+            // A point and its normal of the round shape, as they stand once it is stretched along z by depth over width.
+            private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
+
+            private static Vector3F StretchNormal(Vector3 normal, double depth) =>
+                (Vector3F)Vector3.Normalize(new Vector3(normal.X, normal.Y, normal.Z / depth));
 
             // Creates a triangle fan to close the end of a cylinder.
             private static void CreateConeCap(
@@ -30,6 +40,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 int tessellation,
                 double height,
                 double radius,
+                double depth,
                 bool isTop)
             {
                 // Create cap indices.
@@ -50,7 +61,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
 
                 // Which end of the cylinder is this?
-                var normal = Vector3.UnitY;
+                var normal = Up;
                 var textureScale = new Vector2F(-0.5f);
 
                 if (!isTop)
@@ -67,9 +78,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var position = (circleVector * radius) + (normal * height);
                     var uv = new Vector2F(
                         0.5f + (float)(position.X / diameter.X),
-                        0.5f - (float)(position.Z / diameter.Y));
+                        0.5f + (float)(position.Z / diameter.Y));
 
-                    positions.Add(position);
+                    positions.Add(Stretch(position, depth));
                     // A cap is FLAT: its whole face looks one way, which is also what keeps the rim a hard edge rather
                     // than blending into the side.
                     normals.Add((Vector3F)normal);
@@ -85,6 +96,33 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 int tessellation = 40,
                 Matrix4x4? transform = null)
             {
+                return Generate(geometryType, height, topDiameter, bottomDiameter, 1, tessellation, transform);
+            }
+
+            /// <summary>
+            /// A cone filling <paramref name="size"/> - its base <paramref name="size"/>.X wide and .Z deep, an ellipse
+            /// when the two differ, its height .Y - with a top <paramref name="topRatio"/> of the base: 0 a point, 1 a
+            /// cylinder.
+            /// </summary>
+            public static Mesh GenerateGeometry(
+                GeometryType geometryType,
+                Vector3 size,
+                double topRatio,
+                int tessellation = 40,
+                Matrix4x4? transform = null)
+            {
+                return Generate(geometryType, size.Y, size.X * topRatio, size.X, size.Z / size.X, tessellation, transform);
+            }
+
+            private static Mesh Generate(
+                GeometryType geometryType,
+                double height,
+                double topDiameter,
+                double bottomDiameter,
+                double depth,
+                int tessellation,
+                Matrix4x4? transform)
+            {
                 if (tessellation < 3)
                 {
                     tessellation = 3;
@@ -93,11 +131,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Mesh mesh;
                 if (geometryType == GeometryType.Solid)
                 {
-                    mesh = GenerateSolidGeometry(height, topDiameter, bottomDiameter, tessellation);
+                    mesh = GenerateSolidGeometry(height, topDiameter, bottomDiameter, depth, tessellation);
                 }
                 else
                 {
-                    mesh = GenerateOutlinedGeometry(height, bottomDiameter, tessellation);
+                    mesh = GenerateOutlinedGeometry(height, topDiameter, bottomDiameter, depth, tessellation);
                 }
 
                 mesh.ApplyTransform(transform);
@@ -106,10 +144,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
             }
 
             private static Mesh GenerateSolidGeometry(
-                double height = 1.0,
-                double topDiameter = 0.0,
-                double bottomDiameter = 1,
-                int tessellation = 32)
+                double height,
+                double topDiameter,
+                double bottomDiameter,
+                double depth,
+                int tessellation)
             {
                 PrimitiveType primitiveType = PrimitiveType.TriangleList;
 
@@ -123,7 +162,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var topRadius = topDiameter / 2;
                 var bottomRadius = bottomDiameter / 2;
 
-                var topOffset = Vector3.UnitY * height;
+                var topOffset = Up * height;
 
                 int stride = tessellation + 1;
 
@@ -139,15 +178,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     // falls away over the height - straight out only when the two radii match and it is a cylinder.
                     // Written rather than averaged back out of the triangles, which a cone's apex cannot survive: every
                     // vertex there is the same point, so the faces meeting it have no area to weigh.
-                    var sideNormal = (Vector3F)Vector3.Normalize(
-                        circle * (height * 2) + Vector3.UnitY * (bottomRadius - topRadius));
+                    var sideNormal = StretchNormal(circle * (height * 2) + Up * (bottomRadius - topRadius), depth);
 
                     var uv = new Vector2F(i / (float)tessellation, 0);
 
-                    positions.Add(sideOffsetTop + topOffset);
+                    positions.Add(Stretch(sideOffsetTop + topOffset, depth));
                     normals.Add(sideNormal);
                     uvs.Add(uv);
-                    positions.Add(sideOffsetBottom - topOffset);
+                    positions.Add(Stretch(sideOffsetBottom - topOffset, depth));
                     normals.Add(sideNormal);
                     uvs.Add(uv + Vector2F.UnitY);
 
@@ -163,8 +201,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 // Flat triangle fans to seal the ends - but only an end that HAS a radius. A cone's point is already
                 // closed, and capping it produced a fan of zero-area triangles with NaN texture coordinates (the cap's
                 // uv divides by the diameter, which is zero there).
-                if (topRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, topRadius, true);
-                if (bottomRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, bottomRadius, false);
+                if (topRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, topRadius, depth, true);
+                if (bottomRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, bottomRadius, depth, false);
 
                 var mesh = new Mesh();
                 mesh.SetTopology(primitiveType).
@@ -176,10 +214,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
+            // The rim stands at the end with a diameter and the point at the other: at the bottom unless only the top
+            // has one.
             private static Mesh GenerateOutlinedGeometry(
-                double height = 1.0,
-                double bottomDiameter = 1,
-                int tessellation = 40)
+                double height,
+                double topDiameter,
+                double bottomDiameter,
+                double depth,
+                int tessellation)
             {
                 var primitiveType = PrimitiveType.LineStrip;
 
@@ -187,21 +229,23 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var indices = new List<int>();
                 var center = Vector3.Zero;
                 int lastIndex = 0;
-                var bottomRadius = bottomDiameter / 2;
-                var topOffset = Vector3.UnitY * height / 2;
+                var rimAtTop = bottomDiameter <= 0;
+                var rimRadius = (rimAtTop ? topDiameter : bottomDiameter) / 2;
+                var topOffset = Up * height / 2;
+                var rimY = rimAtTop ? topOffset.Y : -topOffset.Y;
                 for (int i = 0; i <= tessellation; ++i)
                 {
                     float angle = (float) Math.PI * 2 / tessellation * i;
 
-                    double x = center.X + bottomRadius * (float) Math.Cos(angle);
-                    double y = center.Y + bottomRadius * (float) Math.Sin(angle);
-                    var position = new Vector3(x, -topOffset.Y, y);
+                    double x = center.X + rimRadius * (float) Math.Cos(angle);
+                    double y = center.Y + rimRadius * (float) Math.Sin(angle);
+                    var position = new Vector3(x, rimY, -y * depth);
                     vertices.Add(position);
                     indices.Add(lastIndex++);
                 }
 
-                //Add top vertex
-                vertices.Add(topOffset);
+                // The point.
+                vertices.Add(rimAtTop ? -topOffset : topOffset);
 
                 var vertexCount = tessellation + 1;
                 var indexQuantity = indices.Count - 1;

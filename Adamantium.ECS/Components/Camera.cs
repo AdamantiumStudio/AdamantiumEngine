@@ -26,6 +26,9 @@ namespace Adamantium.ECS.Components
         private Vector3 diameter;
         private Vector3 center;
 
+        // How far a jump stands from an object with no bounds to frame: an empty entity, a group.
+        private const double UnframedDistance = 5;
+
         public Single OrthoScaleFactor = 1;
 
         public Camera()
@@ -265,13 +268,21 @@ namespace Adamantium.ECS.Components
         {
             LookAtObject = lookAtObject;
             moveTime = time;
-            moveToObjectDone = false;
             moveToDuration = 0;
             startingOffset = Owner.Transform.Position;
-            diameter = ((Vector3) Forward * lookAtObject.GetDiameter() * Fov);
-            endingPosition = lookAtObject.GetCenterAbsolute() - diameter;
+            var world = lookAtObject.Transform.GetWorldMatrixF();
+            var size = lookAtObject.GetDiameter() * Math.Max(world.Right.Length(), Math.Max(world.Up.Length(), world.Backward.Length()));
+            var away = size > 0 ? FramingDistance(size) : UnframedDistance;
+            endingPosition = lookAtObject.GetCenterAbsolute() - (Vector3)Forward * away;
             Type = CameraType.Free;
+            // Last: the flight starts once where it goes is known.
+            moveToObjectDone = false;
         }
+
+        // From the center: out of the body, then far enough back for a diameter in the world to fill the field of view
+        // (Fov is in degrees), with the margin.
+        private double FramingDistance(double size) =>
+            (size / 2 + size / (2 * Math.Tan(MathHelper.DegreesToRadians(Fov / 2)))) * FramingMargin;
 
         private void MoveToPoint(AppTime appTime)
         {
@@ -628,8 +639,7 @@ namespace Adamantium.ECS.Components
 
                         if (diameter > 0)
                         {
-                            var framed = diameter / 2 + diameter / (2 * Math.Tan(MathHelper.DegreesToRadians(Fov / 2)));
-                            Radius = framed * FramingMargin;
+                            Radius = FramingDistance(diameter);
                         }
                         else if (Radius <= 0)
                         {

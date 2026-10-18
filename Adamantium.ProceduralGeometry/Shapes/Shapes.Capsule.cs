@@ -17,6 +17,30 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 int tessellation = 40,
                 Matrix4x4? transform = null)
             {
+                return Generate(geometryType, height, diameter, 1, tessellation, transform);
+            }
+
+            /// <summary>
+            /// A capsule filling <paramref name="size"/>: its round ends <paramref name="size"/>.X across, stretched to
+            /// .Z deep, and .Y high from end to end - no lower than it is wide.
+            /// </summary>
+            public static Mesh GenerateGeometry(
+                GeometryType geometryType,
+                Vector3 size,
+                int tessellation = 40,
+                Matrix4x4? transform = null)
+            {
+                return Generate(geometryType, Math.Max(size.Y - size.X, 0), size.X, size.Z / size.X, tessellation, transform);
+            }
+
+            private static Mesh Generate(
+                GeometryType geometryType,
+                double height,
+                double diameter,
+                double depth,
+                int tessellation,
+                Matrix4x4? transform)
+            {
                 if (tessellation < 8)
                 {
                     tessellation = 8;
@@ -25,22 +49,25 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Mesh mesh;
                 if (geometryType == GeometryType.Solid)
                 {
-                    mesh = GenerateSolidGeometry(height, radius, tessellation);
+                    mesh = GenerateSolidGeometry(height, radius, depth, tessellation);
                 }
                 else
                 {
-                    mesh = GenerateOutlinedGeometry(height, radius, tessellation);
+                    mesh = GenerateOutlinedGeometry(height, radius, depth, tessellation);
                 }
-                
+
                 mesh.ApplyTransform(transform);
 
                 return mesh;
             }
 
+            private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
+
             private static Mesh GenerateSolidGeometry(
                 double height,
                 double radius,
-                int tessellation = 40)
+                double depth,
+                int tessellation)
             {
                 var primitiveType = PrimitiveType.TriangleList;
                 var vertices = new List<Vector3>();
@@ -93,7 +120,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         var normal = new Vector3(dx, dy, dz);
                         var uv = new Vector2F(1.0f - (u * uScale), 1.0f - (v * vScale));
                         var position = radius * normal + new Vector3(0, deltaY, 0);
-                        vertices.Add(position);
+                        vertices.Add(Stretch(position, depth));
                         uvs.Add(uv);
                     }
                 }
@@ -131,7 +158,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private static Mesh GenerateOutlinedGeometry(
                 double height,
                 double radius,
-                int tessellation = 40)
+                double depth,
+                int tessellation)
             {
                 var primitiveType = PrimitiveType.LineStrip;
                 var vertices = new List<Vector3>();
@@ -204,6 +232,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     vertices.Add(new Vector3(x, topOffset.Y, y));
                     indices.Add(lastIndex++);
+                }
+
+                for (int i = 0; i < vertices.Count; i++)
+                {
+                    vertices[i] = Stretch(vertices[i], depth);
                 }
 
                 var mesh = new Mesh();

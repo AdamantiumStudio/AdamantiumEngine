@@ -24,16 +24,6 @@ public class TorusTemplate : PrimitiveTemplate
         this.thickness = thickness;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Torus;
-        metadata.Diameter = diameter;
-        metadata.Thickness = thickness;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Torus.GenerateGeometry(GeometryType, diameter, thickness, Tessellation, Transform);

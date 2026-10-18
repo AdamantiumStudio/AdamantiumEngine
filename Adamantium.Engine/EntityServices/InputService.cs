@@ -120,14 +120,19 @@ public class InputService : EntityService
     {
         userControlledEntity = selection.Current ?? UserControlledEntity;
 
-        if (observatory.PointerOutput is { Camera: { } pointerCamera })
+        if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera))
         {
             HandlePointer(pointerCamera, appTime);
         }
 
         if (observatory.KeyboardOutput is { Camera: { } keyboardCamera } keyboardOutput)
         {
-            HandleKeyboard(keyboardOutput, keyboardCamera, appTime);
+            if (observatory.Controls(keyboardCamera))
+            {
+                HandleKeyboard(keyboardOutput, keyboardCamera, appTime);
+            }
+
+            HandleOutputKeys();
         }
 
         var cameras = observatory.CurrentCameras;
@@ -138,11 +143,12 @@ public class InputService : EntityService
         }
     }
 
-    // A camera free again - its travel over, its subject gone, the user's choice - comes off its subject where it stands.
+    // A camera free again - its travel over, its subject gone, the user's choice - comes off its subject where it stands;
+    // a first-person camera rides on its host for good.
     private void TakeOffWhenFree(CameraBase camera)
     {
         var entity = camera.Owner;
-        if (entity?.Owner == null || camera.Type.IsThirdPerson()) return;
+        if (entity?.Owner == null || camera.Type.IsThirdPerson() || camera.Type == CameraType.FirstPerson) return;
 
         entity.Transform.Position = entity.Transform.WorldPosition;
         EntityWorld.EntityManager.RemoveOwner(entity);
@@ -299,6 +305,11 @@ public class InputService : EntityService
             }
         }
 
+    }
+
+    // Keys that do not move the camera, so they work whatever camera the output shows.
+    private void HandleOutputKeys()
+    {
         if (wireframe.IsPressed)
         {
             selection.Current?.SetWireFrame();

@@ -24,16 +24,6 @@ public class CylinderTemplate : PrimitiveTemplate
         this.height = height;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Cylinder;
-        metadata.Diameter = diameter;
-        metadata.Height = height;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Cylinder.GenerateGeometry(GeometryType, height, diameter, Tessellation, Transform);

@@ -26,7 +26,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Mesh mesh;
                 if (geometryType == GeometryType.Solid)
                 {
-                    mesh = GenerateSolidGeometry(diameter, thickness, tessellation);
+                    mesh = GenerateSolidGeometry(diameter, thickness, Vector3.One, tessellation);
                 }
                 else
                 {
@@ -41,11 +41,28 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
+            /// <summary>
+            /// A solid torus filling <paramref name="size"/>, its tube <paramref name="thicknessRatio"/> of its outer
+            /// radius thick: 1 closes the hole.
+            /// </summary>
+            public static Mesh GenerateGeometry(
+                Vector3 size,
+                double thicknessRatio,
+                int tessellation = 32,
+                Matrix4x4? transform = null)
+            {
+                var tube = size.X / 2 * thicknessRatio;
+                var stretch = new Vector3(1, size.Y / tube, size.Z / size.X);
+                var mesh = GenerateSolidGeometry(size.X - tube, tube, stretch, Math.Max(tessellation, 3));
+                mesh.ApplyTransform(transform);
+                return mesh;
+            }
 
             private static Mesh GenerateSolidGeometry(
-                double diameter = 1.0,
-                double thickness = 0.33333,
-                int tessellation = 32)
+                double diameter,
+                double thickness,
+                Vector3 stretch,
+                int tessellation)
             {
                 var vertices = new List<Vector3>();
                 var uvs = new List<Vector2F>();
@@ -80,7 +97,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                         Vector3.TransformCoordinate(ref position, ref transformMatrix, out position);
 
-                        vertices.Add(position);
+                        vertices.Add(position * stretch);
                         uvs.Add(uv);
 
                         //Create indices for 2 triangles

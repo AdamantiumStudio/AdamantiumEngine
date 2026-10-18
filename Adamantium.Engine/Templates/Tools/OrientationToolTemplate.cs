@@ -105,7 +105,7 @@ public class OrientationToolTemplate: BaseToolTemplate
       // ONE cone, placed four ways round - one mesh, one draw. It is generated standing along Y, which already lies IN
       // the screen plane, so it is seen from the SIDE: a round arrowhead the light can shade across, instead of the
       // flat triangle a pyramid turned end-on to the viewer gave.
-      var shape = Shapes.Cone.GenerateGeometry(GeometryType.Solid, arrow, 0, arrow * 0.75, 24);
+      var shape = Shapes.Cone.GenerateGeometry(GeometryType.Solid, arrow, arrow * 0.75, 0, 24);
 
       void Step(string name, double x, double y, double spin)
       {

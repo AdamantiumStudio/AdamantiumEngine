@@ -8,6 +8,7 @@ using Adamantium.Engine.Managers;
 using Adamantium.Engine.Rendering;
 using Adamantium.FX;
 using Adamantium.Graphics.Core;
+using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Graphics.Core.Vertices;
 using Adamantium.Mathematics;
 using Adamantium.Vulkan.Core;
@@ -37,6 +38,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private Buffer[] clusterCounts = [];
     private Buffer[] clusterLists = [];
     private ForwardPlusEffect effect;
+    private ForwardPlusWireEffect wireEffect;
+    private readonly Stack<(Entity Entity, EditorDisplay Display)> walk = new();
     private BasicEffect basicEffect;
     private MeshGeometryCache geometryCache;
     private bool prepared;
@@ -59,11 +62,30 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     /// <summary>The lights of the last frame, directional ones included.</summary>
     public int LightCount { get; private set; }
 
+    /// <summary>How the whole view draws meshes: shaded, as wireframes, or both.</summary>
+    public ViewDisplay Display { get; set; }
+
+    /// <summary>Whether an entity's <see cref="EditorDisplay"/> - set for its subtree - changes how it is drawn, as in an
+    /// editor; a game leaves it off and draws the scene as it is.</summary>
+    public bool FollowsEditorDisplay { get; set; }
+
+    /// <summary>The color wireframes are drawn in.</summary>
+    public Vector3F WireColor { get; set; } = new(0.55f, 0.65f, 0.8f);
+
+    /// <summary>The width in pixels of a wireframe drawn over a shaded mesh. Without VK_KHR_fragment_shader_barycentric
+    /// the wireframe is drawn as lines of one pixel.</summary>
+    public float WireWidth { get; set; } = 1f;
+
     protected override void CreateDeviceResources()
     {
         ReleaseDeviceResources();
         basicEffect = new BasicEffect(GraphicsDevice);
         effect = new ForwardPlusEffect(GraphicsDevice);
+        if (GraphicsDevice.MainDevice.FragmentBarycentricSupported)
+        {
+            wireEffect = new ForwardPlusWireEffect(GraphicsDevice);
+        }
+
         geometryCache = new MeshGeometryCache(GraphicsDevice);
 
         var frames = (int)Math.Max(1u, GraphicsDevice.MaxFramesInFlight);
@@ -100,7 +122,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var frame = (int)(GraphicsDevice.CurrentFrame % (uint)lightBuffers.Length);
         var directional = CollectLights(camera);
         lightBuffers[frame].SetData<ClusterLight>(frameLights.AsSpan(0, LightCount));
-        SetFrameParameters(camera, frame, directional);
+        SetFrameParameters(effect, camera, frame, directional);
+        if (wireEffect != null)
+        {
+            SetFrameParameters(wireEffect, camera, frame, directional);
+            wireEffect.WireColor.SetValue(WireColor);
+            wireEffect.WireWidth.SetValue(WireWidth);
+        }
 
         var device = (GraphicsDevice)GraphicsDevice;
         effect.ForwardPlusAssignLightsPass.Apply();
@@ -124,6 +152,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         effect.View.SetValue(ActiveCamera.ViewMatrix);
         effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
+        wireEffect?.View.SetValue(ActiveCamera.ViewMatrix);
+        wireEffect?.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         foreach (var entity in Entities)
         {
             OnDraw(entity);
@@ -155,37 +185,65 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         return count;
     }
 
-    private void SetFrameParameters(Camera camera, int frame, int directional)
+    private void SetFrameParameters(Effect target, Camera camera, int frame, int directional)
     {
         var near = Math.Max(camera.ZNear, 1e-3f);
         var far = Math.Max(Math.Min(camera.ZFar, ClusterFar), near * 2);
         var projection = camera.ProjectionMatrix;
         var viewport = Window.Viewport;
+        var parameters = target.Parameters;
 
-        effect.LightsAddress.SetValue(lightBuffers[frame].GetDeviceAddress());
-        effect.ClusterCountsAddress.SetValue(clusterCounts[frame].GetDeviceAddress());
-        effect.ClusterLightsAddress.SetValue(clusterLists[frame].GetDeviceAddress());
-        effect.LightCount.SetValue((uint)LightCount);
-        effect.DirectionalCount.SetValue((uint)directional);
-        effect.ClusterDepth.SetValue(new Vector4F(near, far, ClusterSlices / MathF.Log(far / near), MathF.Log(near)));
-        effect.InverseScale.SetValue(new Vector2F(1f / projection.M11, 1f / projection.M22));
-        effect.ViewportRect.SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
-        effect.Ambient.SetValue(Ambient);
+        parameters["LightsAddress"].SetValue(lightBuffers[frame].GetDeviceAddress());
+        parameters["ClusterCountsAddress"].SetValue(clusterCounts[frame].GetDeviceAddress());
+        parameters["ClusterLightsAddress"].SetValue(clusterLists[frame].GetDeviceAddress());
+        parameters["LightCount"].SetValue((uint)LightCount);
+        parameters["DirectionalCount"].SetValue((uint)directional);
+        parameters["ClusterDepth"].SetValue(new Vector4F(near, far, ClusterSlices / MathF.Log(far / near), MathF.Log(near)));
+        parameters["InverseScale"].SetValue(new Vector2F(1f / projection.M11, 1f / projection.M22));
+        parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
+        parameters["Ambient"].SetValue(Ambient);
     }
 
     private void OnDraw(Entity entity)
     {
         try
         {
-            entity.VisitInDepth(DrawEntity);
+            DrawTree(entity);
         }
         catch (Exception exception)
         {
             Log.Logger.Error(exception, "Draw failed for entity {Entity}", entity.Name);
         }
+        finally
+        {
+            walk.Clear();
+        }
     }
 
-    private bool DrawEntity(Entity entity)
+    private void DrawTree(Entity root)
+    {
+        walk.Push((root, null));
+        while (walk.Count > 0)
+        {
+            var (entity, display) = walk.Pop();
+            if (FollowsEditorDisplay && entity.GetComponent<EditorDisplay>() is { IsEnabled: true } own)
+            {
+                display = own;
+            }
+
+            if (!DrawEntity(entity, display))
+            {
+                continue;
+            }
+
+            foreach (var child in entity.Dependencies)
+            {
+                walk.Push((child, display));
+            }
+        }
+    }
+
+    private bool DrawEntity(Entity entity, EditorDisplay display)
     {
         if (!entity.Visible)
         {
@@ -198,6 +256,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return true;
         }
 
+        var shown = display?.Display ?? EntityDisplay.AsView;
         if (collider.ContainsDataFor(ActiveCamera))
         {
             if (collider.IsInsideCameraFrustum(ActiveCamera) == ContainmentType.Disjoint)
@@ -205,14 +264,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
                 return true;
             }
 
-            if (collider.DisplayCollider)
+            if (collider.DisplayCollider || shown == EntityDisplay.Bounds)
             {
                 DrawCollider(entity, collider);
             }
         }
 
         var meshData = entity.GetComponent<MeshData>();
-        if (meshData?.Mesh == null || !meshData.IsEnabled)
+        if (meshData?.Mesh == null || !meshData.IsEnabled || shown == EntityDisplay.Bounds)
         {
             return true;
         }
@@ -223,11 +282,81 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return true;
         }
 
+        var shaded = shown == EntityDisplay.AsView && Display != ViewDisplay.Wireframe;
+        var wired = shown == EntityDisplay.Wireframe || Display != ViewDisplay.Shaded || display is { WireOver: true };
+        if (meshData.RenderMode == MeshRenderMode.Skinned)
+        {
+            shaded = true;
+            wired = false;
+        }
+
+        var wireInShading = shaded && wired && wireEffect != null && IsTriangles(meshData);
+        if (shaded)
+        {
+            DrawShaded(entity, meshData, transformation, wireInShading);
+        }
+
+        if (wired && !wireInShading)
+        {
+            DrawWire(meshData, transformation, shaded);
+        }
+
+        return true;
+    }
+
+    private static bool IsTriangles(MeshData meshData) =>
+        (meshData.TopologyOverride ?? meshData.Mesh.MeshTopology) is PrimitiveTopology.TriangleList
+            or PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan;
+
+    private void DrawWire(MeshData meshData, TransformMetaData transformation, bool overShaded)
+    {
+        basicEffect.Wvp.SetValue(transformation.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
+        basicEffect.MeshColor.SetValue(WireColor);
+        basicEffect.BasicColoredPass.Apply();
+        if (overShaded)
+        {
+            GraphicsDevice.DepthBiasEnabled = true;
+            GraphicsDevice.DepthBiasConstantFactor = -1;
+            GraphicsDevice.DepthBiasSlopeFactor = -1;
+        }
+
+        try
+        {
+            var state = new RenderState(true, CullModeFlagBits.None, meshData.DepthTestEnabled,
+                !overShaded && meshData.DepthWriteEnabled, meshData.TopologyOverride);
+            geometryCache.GetOrCreate(meshData.Mesh, typeof(MeshVertex)).Draw(GraphicsDevice, state);
+        }
+        finally
+        {
+            GraphicsDevice.DepthBiasEnabled = false;
+            GraphicsDevice.DepthBiasConstantFactor = 0;
+            GraphicsDevice.DepthBiasSlopeFactor = 0;
+            basicEffect.BasicColoredPass.UnApply();
+        }
+    }
+
+    private void DrawShaded(Entity entity, MeshData meshData, TransformMetaData transformation, bool withWire)
+    {
         var material = entity.GetComponent<Material>();
         if (meshData.RenderMode == MeshRenderMode.Skinned)
         {
             basicEffect.Wvp.SetValue(transformation.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
             basicEffect.Techniques["Basic"].Passes["Skinned"].Apply();
+        }
+        else if (withWire)
+        {
+            wireEffect.World.SetValue(transformation.WorldMatrixF);
+            if (material?.Texture != null)
+            {
+                wireEffect.SampleType.SetResource(SamplerStates.LinearRepeat);
+                wireEffect.ShaderTexture.SetResource(material.Texture);
+                wireEffect.ForwardPlusWireTexturedPass.Apply();
+            }
+            else
+            {
+                wireEffect.Albedo.SetValue(AlbedoOf(material));
+                wireEffect.ForwardPlusWireColoredPass.Apply();
+            }
         }
         else
         {
@@ -246,7 +375,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         geometryCache.DrawMesh(GraphicsDevice, meshData);
-        return true;
     }
 
     private void DrawCollider(Entity entity, Collider collider)
@@ -283,6 +411,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         geometryCache?.Dispose();
         effect?.Dispose();
+        wireEffect?.Dispose();
         basicEffect?.Dispose();
         foreach (var buffer in lightBuffers)
         {
@@ -304,6 +433,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         clusterLists = [];
         geometryCache = null;
         effect = null;
+        wireEffect = null;
         basicEffect = null;
     }
 }

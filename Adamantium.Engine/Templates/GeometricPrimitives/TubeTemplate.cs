@@ -25,17 +25,6 @@ public class TubeTemplate : PrimitiveTemplate
         this.thickness = thickness;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Tube;
-        metadata.Diameter = diameter;
-        metadata.Height = height;
-        metadata.Thickness = thickness;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var primitive3D = Shapes.Tube.GenerateGeometry(GeometryType, diameter, height, thickness, Tessellation, Transform);

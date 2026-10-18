@@ -26,17 +26,6 @@ public class RectangleTemplate : PrimitiveTemplate
         this.corners = corners;
     }
 
-    protected override void FillMetadata(
-        MeshMetadata metadata)
-    {
-        metadata.GeometryType = GeometryType;
-        metadata.ShapeType = ShapeType.Rectangle;
-        metadata.Width = width;
-        metadata.Height = height;
-        metadata.Corners = corners;
-        metadata.TessellationFactor = Tessellation;
-    }
-
     public override Task<Entity> BuildEntity(Entity owner)
     {
         var geometry = Shapes.Rectangle.GenerateGeometry(
