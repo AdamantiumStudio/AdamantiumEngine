@@ -334,26 +334,28 @@ internal sealed class GlyphRunShaper
             yield break;
         }
 
-        var rubies = withRubies.Rubies;
-        var next = 0;
+        // The edges of every base in order: the bases of a double-sided ruby may nest.
+        var edges = new SortedSet<int>();
+        foreach (var ruby in withRubies.Rubies)
+        {
+            edges.Add(ruby.Start);
+            edges.Add(ruby.End);
+        }
+
+        using var edge = edges.GetEnumerator();
+        var more = edge.MoveNext();
         foreach (var (start, end, attributes) in segments)
         {
             var from = start;
-            while (next < rubies.Count * 2)
+            while (more && edge.Current < end)
             {
-                var edge = next % 2 == 0 ? rubies[next / 2].Start : rubies[next / 2].End;
-                if (edge >= end)
+                if (edge.Current > from)
                 {
-                    break;
+                    yield return (from, edge.Current, attributes);
+                    from = edge.Current;
                 }
 
-                if (edge > from)
-                {
-                    yield return (from, edge, attributes);
-                    from = edge;
-                }
-
-                next++;
+                more = edge.MoveNext();
             }
 
             yield return (from, end, attributes);

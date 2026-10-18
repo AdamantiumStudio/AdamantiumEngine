@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -320,5 +321,140 @@ public class BidiLayoutTests
         var ranges = layout.GetVisualRanges(layout.GetLineStart(0), layout.GetLineEnd(1));
 
         Assert.That(ranges, Is.EqualTo(new[] { (0, text.Length) }));
+    }
+
+    // Ctrl+arrows go by the screen, as the plain arrows do: each word step lands further that way, on a word's start.
+    [TestCase(TextDirection.LeftToRight, true)]
+    [TestCase(TextDirection.LeftToRight, false)]
+    [TestCase(TextDirection.RightToLeft, true)]
+    [TestCase(TextDirection.RightToLeft, false)]
+    public void WordSteps_GoByTheScreen(TextDirection direction, bool toRight)
+    {
+        var text = $"abc {Hebrew} {Hebrew} def ghi";
+        var layout = Layout(text, direction);
+        var leftToRight = direction == TextDirection.LeftToRight;
+        var leftEdge = leftToRight ? layout.GetLineStart(0) : layout.GetLineEnd(0);
+        var rightEdge = leftToRight ? layout.GetLineEnd(0) : layout.GetLineStart(0);
+        var position = toRight ? leftEdge : rightEdge;
+        var x = layout.GetCaretPoint(position).X;
+        var steps = 0;
+        while (steps++ < 20)
+        {
+            var next = layout.MoveWordVisually(position, toRight);
+            if (next.Index == position.Index && next.AfterPrevious == position.AfterPrevious)
+            {
+                break;
+            }
+
+            var nextX = layout.GetCaretPoint(next).X;
+            Assert.That(toRight ? nextX > x + 0.5 : nextX < x - 0.5, Is.True,
+                $"step {steps} went from {x} to {nextX} (index {next.Index})");
+            var atEdge = layout.MoveVisually(next, toRight) is var beyond && beyond.Index == next.Index
+                                                                         && beyond.AfterPrevious == next.AfterPrevious;
+            Assert.That(atEdge || next.Index == text.Length || text[next.Index] != ' ', Is.True,
+                $"step {steps} stopped in the spaces, at {next.Index}");
+            position = next;
+            x = nextX;
+        }
+
+        Assert.That(steps, Is.GreaterThanOrEqualTo(5), "it went word by word");
+    }
+
+    // Ctrl+Right and Ctrl+Left stop at the same places, numbers and runs of the other direction among them.
+    [TestCase("שלום 123 456 עולם", TextDirection.RightToLeft, new[] { 0, 5, 9, 13 })]
+    [TestCase("abc שלום עולם def", TextDirection.LeftToRight, new[] { 0, 4, 9, 14 })]
+    public void WordSteps_StopAtTheSamePlaces_BothWays(string text, TextDirection direction, int[] words)
+    {
+        var layout = Layout(text, direction);
+        var leftToRight = direction == TextDirection.LeftToRight;
+        var leftEdge = leftToRight ? layout.GetLineStart(0) : layout.GetLineEnd(0);
+        var rightEdge = leftToRight ? layout.GetLineEnd(0) : layout.GetLineStart(0);
+
+        var rightward = Steps(layout, leftEdge, true);
+        var leftward = Steps(layout, rightEdge, false);
+
+        Assert.That(rightward.Select(x => Math.Round(x, 2)),
+            Is.EqualTo(leftward.Select(x => Math.Round(x, 2)).Reverse().Skip(1).Append(Math.Round(layout.GetCaretPoint(rightEdge).X, 2))));
+        var places = rightward.Prepend(layout.GetCaretPoint(leftEdge).X).ToArray();
+        foreach (var word in words)
+        {
+            Assert.That(places.Any(x => Math.Abs(x - layout.GetCaretPoint(new CaretPosition(word)).X) < 0.01), Is.True,
+                $"a stop at the word at {word}");
+        }
+    }
+
+    // Across paragraphs running different ways the arrows go from line to line as the text's own direction reads, so
+    // they get through it, word by word or letter by letter, and never come round again.
+    [TestCase("abc def\nשלום עולם\nghi jkl", true)]
+    [TestCase("abc def\nשלום עולם\nghi jkl", false)]
+    [TestCase("שלום עולם\nabc def\nטוב מאוד", true)]
+    [TestCase("שלום עולם\nabc def\nטוב מאוד", false)]
+    public void TheArrows_GetThroughParagraphsOfBothDirections(string text, bool byWords)
+    {
+        var layout = Layout(text);
+        var rightToLeft = layout.GetLine(0).Start == 0 && text[0] >= 0x0590 && text[0] <= 0x05FF;
+        var onwards = !rightToLeft;
+        var position = layout.GetLineStart(0);
+        var seen = new HashSet<(int, bool)> { (position.Index, position.AfterPrevious) };
+        for (var i = 0; i < 4 * text.Length; i++)
+        {
+            var next = byWords ? layout.MoveWordVisually(position, onwards) : layout.MoveVisually(position, onwards);
+            if (next.Index == position.Index && next.AfterPrevious == position.AfterPrevious)
+            {
+                break;
+            }
+
+            Assert.That(seen.Add((next.Index, next.AfterPrevious)), Is.True, $"came round again to {next.Index}");
+            position = next;
+        }
+
+        Assert.That(layout.GetCaretPoint(position).LineIndex, Is.EqualTo(layout.LineCount - 1), "through to the last line");
+    }
+
+    // A soft wrap is one stop: the caret goes from the last word of a line to the first of the next.
+    [Test]
+    public void WordSteps_StopOnceAtAWrap()
+    {
+        const string text = "aaaa bbbb cccc dddd eeee ffff";
+        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
+        var typeface = Typeface.LoadFont(path);
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        layout.ProcessText(text, 20, new Size(100, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        Assume.That(layout.LineCount, Is.GreaterThan(1));
+        var position = new CaretPosition(0);
+        var indices = new List<int>();
+        for (var i = 0; i < 20; i++)
+        {
+            var next = layout.MoveWordVisually(position, true);
+            if (next.Index == position.Index && next.AfterPrevious == position.AfterPrevious)
+            {
+                break;
+            }
+
+            indices.Add(next.Index);
+            position = next;
+        }
+
+        Assert.That(indices, Is.EqualTo(new[] { 5, 10, 15, 20, 25, text.Length }));
+    }
+
+    private static double[] Steps(TextLayout layout, CaretPosition from, bool toRight)
+    {
+        var xs = new List<double>();
+        var position = from;
+        for (var i = 0; i < 40; i++)
+        {
+            var next = layout.MoveWordVisually(position, toRight);
+            if (next.Index == position.Index && next.AfterPrevious == position.AfterPrevious)
+            {
+                break;
+            }
+
+            xs.Add(layout.GetCaretPoint(next).X);
+            position = next;
+        }
+
+        return xs.ToArray();
     }
 }

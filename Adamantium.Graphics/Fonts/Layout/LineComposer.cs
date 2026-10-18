@@ -45,19 +45,56 @@ internal sealed class LineComposer
     public LaidOutText Lay(string text, AttributedText attributed, double fontSize,
         TextRenderingParameters renderingParameters, TextLayoutOptions options)
     {
-        // A text trimmed and wrapped by words in a fixed height takes only lines that fit whole. A line raised by larger
+        // A text trimmed and wrapped in a fixed height takes only lines that fit whole. A line raised by larger
         // text in it is known only once laid, so a text whose last line came out taller than the room is laid again up
         // to the lines that fit - until its last line fits, or only one is left.
-        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0);
+        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, null);
         var limit = TrimmedLinesThatFit(laid, renderingParameters, options);
         while (limit > 0)
         {
-            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit);
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit, null);
             var fit = TrimmedLinesThatFit(laid, renderingParameters, options);
             limit = fit < limit ? fit : 0;
         }
 
+        // In frames a line is given the room of its paragraph's line height: raised by larger text or a taller object,
+        // it can come out past the bottom of its frame. The text is laid again with that line in the next frame on.
+        Dictionary<int, int> pushed = null;
+        for (var pass = 0; options.Frames is { Length: > 0 } && pass <= options.Frames.Length; pass++)
+        {
+            if (LineOverItsFrame(laid) is not var (line, frame))
+            {
+                break;
+            }
+
+            (pushed ??= [])[line] = frame + 1;
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, pushed);
+        }
+
         return laid;
+    }
+
+    // The first line that ends past the bottom of its frame and is not the first in it: the next frame may hold it.
+    private static (int Line, int Frame)? LineOverItsFrame(LaidOutText laid)
+    {
+        var tops = laid.LineTops;
+        var frames = laid.FrameRects;
+        var lineFrames = laid.LineFrames;
+        if (tops == null || frames == null || lineFrames == null || laid.HasPendingFonts)
+        {
+            return null;
+        }
+
+        for (var i = 1; i < tops.Length && i < lineFrames.Length; i++)
+        {
+            var frame = frames[lineFrames[i]];
+            if (tops[i] + laid.LineHeights[i] > frame.Bottom + 0.5 && lineFrames[i - 1] == lineFrames[i])
+            {
+                return (i, lineFrames[i]);
+            }
+        }
+
+        return null;
     }
 
     private static int TrimmedLinesThatFit(LaidOutText laid, TextRenderingParameters renderingParameters,
@@ -66,7 +103,7 @@ internal sealed class LineComposer
         var height = renderingParameters.TextArea.Height;
         var tops = laid.LineTops;
         if (renderingParameters.TextTrimming == TextTrimming.None
-            || renderingParameters.TextWrapping != TextWrapping.WrapByWords || height == Int32.MaxValue
+            || renderingParameters.TextWrapping == TextWrapping.NoWrap || height == Int32.MaxValue
             || options.Vertical || options.Frames is { Length: > 0 } || laid.HasPendingFonts || tops == null
             || tops.Length < 2)
         {
@@ -83,7 +120,8 @@ internal sealed class LineComposer
     }
 
     private LaidOutText Lay(string text, AttributedText attributed, double fontSize,
-        TextRenderingParameters renderingParameters, TextLayoutOptions options, int lineLimit)
+        TextRenderingParameters renderingParameters, TextLayoutOptions options, int lineLimit,
+        IReadOnlyDictionary<int, int> pushed)
     {
         var laidOutParameters = renderingParameters;
 
@@ -126,7 +164,6 @@ internal sealed class LineComposer
         var paragraphRuns = resolvedParagraphs is { Count: > 0 } ? resolvedParagraphs : null;
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
                                               && !TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0)
-                                              && !vertical
                                               && (options.MaxLines <= 0 || options.MaxLines >= options.DropCap.Lines)
                                               && (lineLimit <= 0 || lineLimit >= options.DropCap.Lines)
             ? DropCapEnd(text, options.DropCap)
@@ -213,6 +250,7 @@ internal sealed class LineComposer
         }
 
         int[] rubyAt = null;
+        int[] rubyOther = null;
         List<Ruby> rubies = null;
         bool[] rubyShown = null;
         var turned = false;
@@ -324,6 +362,11 @@ internal sealed class LineComposer
                 if (RubyIndex(glyph.PositionInString) is var r and >= 0)
                 {
                     counts[r]++;
+                }
+
+                if (OtherRuby(glyph.PositionInString) is var o and >= 0)
+                {
+                    counts[o]++;
                 }
             }
 
@@ -541,9 +584,11 @@ internal sealed class LineComposer
             return new TabStop((Math.Floor(x / tabStop) + 1) * tabStop);
         }
 
-        double TabAdvance(TabStop stop, int tab)
+        double TabAdvance(TabStop stop, int tab) => TabAdvanceAt(stop, tab, cursorPosition);
+
+        double TabAdvanceAt(TabStop stop, int tab, double x)
         {
-            var advance = stop.Position - cursorPosition;
+            var advance = stop.Position - x;
             if (stop.Alignment == TabAlignment.Left)
             {
                 return advance;
@@ -715,9 +760,29 @@ internal sealed class LineComposer
             var baseline = DropBaseline() - shift;
             List<GlyphWordData> glyphs = [];
             double pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Left : 0) + EdgeReserve(0, false);
+            // Down vertical lines its middle stands halfway from the first line's middle to the last's.
+            var across = (DropBaseline() - lineTops[0] - lineBaselines[0]) / 2;
             foreach (var shaped in dropGlyphs)
             {
                 var glyph = dropFont.GetGlyphByIndex(shaped.GlyphIndex);
+                if (vertical)
+                {
+                    var down = -shaped.YAdvance * dropScale;
+                    glyphs.Add(new GlyphWordData(glyph, text[shaped.Cluster], default, shaped.Cluster, 0)
+                    {
+                        PenX = pen,
+                        Advance = down,
+                        OffsetX = -shaped.YOffset * dropScale,
+                        OffsetY = shaped.XOffset * dropScale - across + shift,
+                        Attributes = attributes,
+                        Font = dropFont,
+                        FontSize = dropScale * dropFont.UnitsPerEm,
+                        Upright = true,
+                    });
+                    pen += down;
+                    continue;
+                }
+
                 var advance = shaped.XAdvance * dropScale;
                 var rect = CalculateGlyphPosition(dropFont, glyph, pen + shaped.XOffset * dropScale,
                     baseline - shaped.YOffset * dropScale, dropScale);
@@ -744,6 +809,8 @@ internal sealed class LineComposer
         {
             rubyAt = new int[text.Length];
             Array.Fill(rubyAt, -1);
+            rubyOther = new int[text.Length];
+            Array.Fill(rubyOther, -1);
             var runs = attributed.Rubies;
             var capped = dropItems > 0 ? items[dropItems - 1].Cluster + 1 : 0;
             for (var r = 0; r < runs.Count; r++)
@@ -759,9 +826,17 @@ internal sealed class LineComposer
                     }
                 }
 
+                // A base takes one annotation over it and one under it, as a double-sided ruby.
                 for (var c = start; c < end; c++)
                 {
-                    rubyAt[c] = r;
+                    if (rubyAt[c] < 0)
+                    {
+                        rubyAt[c] = r;
+                    }
+                    else
+                    {
+                        rubyOther[c] = r;
+                    }
                 }
 
                 for (var c = start + 1; lineBreaks != null && c < end; c++)
@@ -770,6 +845,7 @@ internal sealed class LineComposer
                 }
             }
 
+            KernAcrossBaseEdges();
             var firsts = new int[runs.Count];
             var lasts = new int[runs.Count];
             var counts = new int[runs.Count];
@@ -779,9 +855,15 @@ internal sealed class LineComposer
             Array.Fill(firsts, -1);
             for (var k = 0; k < items.Count; k++)
             {
-                if (RubyIndex(items[k].Cluster) is not (var r and >= 0))
+                Note(k, RubyIndex(items[k].Cluster));
+                Note(k, OtherRuby(items[k].Cluster));
+            }
+
+            void Note(int k, int r)
+            {
+                if (r < 0)
                 {
-                    continue;
+                    return;
                 }
 
                 firsts[r] = firsts[r] < 0 ? k : firsts[r];
@@ -818,9 +900,16 @@ internal sealed class LineComposer
                     descent = Math.Max(descent, font.LineDescent * glyphScale);
                 }
 
+                // The base as wide as it already is: the annotation on its other side may have spread it.
+                double spreadWidth = 0;
+                for (var k = firsts[r]; k <= lasts[r]; k++)
+                {
+                    spreadWidth += InRuby(items[k].Cluster, r) ? items[k].Advance : 0;
+                }
+
                 set.Add(new Ruby(annotation, size, glyphs, width, ascent, descent, counts[r], pending,
                     width > widths[r]));
-                var extra = width - widths[r];
+                var extra = width - spreadWidth;
                 if (extra <= 0)
                 {
                     continue;
@@ -832,7 +921,7 @@ internal sealed class LineComposer
                 var share = joined[r] ? extra : extra / Math.Max(1, units[r]);
                 for (var k = firsts[r]; k <= lasts[r]; k++)
                 {
-                    if (RubyIndex(items[k].Cluster) != r)
+                    if (!InRuby(items[k].Cluster, r))
                     {
                         continue;
                     }
@@ -851,14 +940,72 @@ internal sealed class LineComposer
             return set;
         }
 
+        // Shaping is cut at a base's edge, so a ligature never joins a base to the text beside it - and the pair the font
+        // kerns there lost its kerning. The pair is shaped whole and the first letter takes the kerning the font gives it,
+        // between letters that do not join (shaped whole, joining letters would take other forms).
+        void KernAcrossBaseEdges()
+        {
+            for (var k = 0; !vertical && k + 1 < items.Count; k++)
+            {
+                var left = items[k];
+                var right = items[k + 1];
+                if ((RubyIndex(left.Cluster), OtherRuby(left.Cluster)) == (RubyIndex(right.Cluster), OtherRuby(right.Cluster))
+                    || !ReferenceEquals(left.Font, right.Font) || !left.FontSize.Equals(right.FontSize)
+                    || left.Cluster >= right.Cluster || IsBlank(left.Symbol) || IsBlank(right.Symbol)
+                    || left.Symbol == '\n' || ObjectSizeOf(left.Symbol, left.Attributes) != null
+                    || ObjectSizeOf(right.Symbol, right.Attributes) != null
+                    || (left.Attributes?.Kerning ?? options.Kerning) != TextKerning.Metrics
+                    || CursiveScripts.Contains(CodepointAt(text, left.Cluster))
+                    || CursiveScripts.Contains(CodepointAt(text, right.Cluster)))
+                {
+                    continue;
+                }
+
+                var rightEnd = k + 2 < items.Count && items[k + 2].Cluster > right.Cluster
+                    ? items[k + 2].Cluster
+                    : Math.Min(text.Length, right.Cluster + (char.IsHighSurrogate(text[right.Cluster]) ? 2 : 1));
+                var language = left.Attributes?.Language ?? options.Language;
+                var alone = _shaper.ShapeAlone(text[left.Cluster..right.Cluster], left.Font, language, false, options,
+                    out var pendingAlone);
+                var pair = _shaper.ShapeAlone(text[left.Cluster..rightEnd], left.Font, language, false, options,
+                    out var pendingPair);
+                // The pair comes in the order it is drawn: right to left, its first letter is the second glyph.
+                var first = pair.Count == 2 && pair[0].Cluster != pair[1].Cluster ? pair[pair[0].Cluster == 0 ? 0 : 1] : default;
+                if (pendingAlone || pendingPair || alone.Count != 1 || first.Font == null || first.Cluster != 0
+                    || !ReferenceEquals(first.Font, left.Font))
+                {
+                    continue;
+                }
+
+                var scale = left.FontSize / left.Font.UnitsPerEm;
+                var kerning = (first.Glyph.XAdvance - alone[0].Glyph.XAdvance) * scale;
+                var moved = (first.Glyph.XOffset - alone[0].Glyph.XOffset) * scale;
+                if (kerning != 0 || moved != 0)
+                {
+                    items[k] = new ShapedItem(left.Glyph, left.Symbol, left.Cluster, left.Advance + kerning,
+                        left.OffsetX + moved, left.OffsetY, left.Attributes, left.Font, left.FontSize, left.Upright,
+                        left.HorizontalScale, left.Tail);
+                }
+            }
+        }
+
         // The last and the first item of a cluster of a base.
-        bool UnitEnds(int k, int r) => k + 1 >= items.Count || RubyIndex(items[k + 1].Cluster) != r
+        bool UnitEnds(int k, int r) => k + 1 >= items.Count || !InRuby(items[k + 1].Cluster, r)
                                                              || items[k + 1].Cluster != items[k].Cluster;
 
-        bool UnitStarts(int k, int r) => k == 0 || RubyIndex(items[k - 1].Cluster) != r
+        bool UnitStarts(int k, int r) => k == 0 || !InRuby(items[k - 1].Cluster, r)
                                                 || items[k - 1].Cluster != items[k].Cluster;
 
         int RubyIndex(int index) => rubyAt != null && index >= 0 && index < rubyAt.Length ? rubyAt[index] : -1;
+
+        // The annotation on the other side of a double-sided ruby's base, or -1.
+        int OtherRuby(int index) => rubyOther != null && index >= 0 && index < rubyOther.Length ? rubyOther[index] : -1;
+
+        bool InRuby(int index, int r) => r >= 0 && (RubyIndex(index) == r || OtherRuby(index) == r);
+
+        bool SameBase(int a, int b) => InRuby(b, RubyIndex(a)) || InRuby(b, OtherRuby(a));
+
+        bool InABase(GlyphWordData glyph) => RubyIndex(glyph.PositionInString) >= 0 || OtherRuby(glyph.PositionInString) >= 0;
 
         // The edges a glyph takes on its line: its ink, or for a base spread to its annotation the whole room it takes;
         // once the lines are turned into columns, the ink.
@@ -870,12 +1017,13 @@ internal sealed class LineComposer
             ? Math.Min(InkLeft(glyph), glyph.PenX)
             : InkLeft(glyph);
 
-        bool Spread(GlyphWordData glyph) => !turned && RubyIndex(glyph.PositionInString) is var r and >= 0
-                                            && rubies[r].Spread;
+        bool Spread(GlyphWordData glyph) => !turned
+                                            && (RubyIndex(glyph.PositionInString) is var r and >= 0 && rubies[r].Spread
+                                                || OtherRuby(glyph.PositionInString) is var o and >= 0 && rubies[o].Spread);
 
         // An item of a ruby base with more of the base after it: no line breaks there.
         bool InsideABase(int k) => rubyAt != null && k + 1 < items.Count && items[k].Symbol != '\t'
-                                   && RubyIndex(items[k].Cluster) is var r and >= 0 && RubyIndex(items[k + 1].Cluster) == r;
+                                   && SameBase(items[k].Cluster, items[k + 1].Cluster);
 
         // How far a base glyph reaches from its line's baseline on the annotation's side.
         double BaseReach(GlyphWordData glyph, bool over)
@@ -901,12 +1049,18 @@ internal sealed class LineComposer
             Array.Fill(bases, (-1, double.PositiveInfinity, double.NegativeInfinity, 0.0, 0.0, 0, -1, (GlyphWordData)null));
             for (var k = 0; k < glyphsData.Count; k++)
             {
-                var glyph = glyphsData[k];
-                if (RubyIndex(glyph.PositionInString) is not (var r and >= 0) || rubies[r].Annotation is not { } annotation)
+                Reach(k, RubyIndex(glyphsData[k].PositionInString));
+                Reach(k, OtherRuby(glyphsData[k].PositionInString));
+            }
+
+            void Reach(int k, int r)
+            {
+                if (r < 0 || rubies[r].Annotation is not { } annotation)
                 {
-                    continue;
+                    return;
                 }
 
+                var glyph = glyphsData[k];
                 var b = bases[r];
                 bases[r] = (b.Line < 0 ? glyph.LineIndex : b.Line, Math.Min(b.Left, glyph.PenX),
                     Math.Max(b.Right, glyph.PenX + glyph.Advance),
@@ -914,13 +1068,13 @@ internal sealed class LineComposer
                     Math.Max(b.Em, glyph.FontSize), b.Count + 1, k, b.First ?? glyph);
             }
 
-            var after = new int[glyphsData.Count];
-            Array.Fill(after, -1);
+            // A base's annotations follow its last glyph; a double-sided base has two.
+            var after = new List<int>[glyphsData.Count];
             for (var r = 0; r < rubies.Count; r++)
             {
                 if (bases[r].Line >= 0 && rubyShown[r])
                 {
-                    after[bases[r].Last] = r;
+                    (after[bases[r].Last] ??= []).Add(r);
                 }
             }
 
@@ -928,9 +1082,9 @@ internal sealed class LineComposer
             for (var k = 0; k < glyphsData.Count; k++)
             {
                 placed.Add(glyphsData[k]);
-                if (after[k] >= 0)
+                foreach (var r in after[k] ?? [])
                 {
-                    AddAnnotation(rubies[after[k]], bases[after[k]]);
+                    AddAnnotation(rubies[r], bases[r]);
                 }
             }
 
@@ -993,7 +1147,7 @@ internal sealed class LineComposer
             var kerning = first.Attributes?.Kerning ?? options.Kerning;
             var features = first.Attributes?.Features;
             var shapingOptions = new ShapingOptions(null, first.Attributes?.Language ?? options.Language,
-                kerning == TextKerning.Metrics ? features : [.. features ?? [], FontFeature.Kerning.Off]);
+                kerning == TextKerning.Metrics ? features : [.. features ?? [], FontFeature.Kerning.Off], vertical: vertical);
             var font = dropCap.Font ?? first.Font;
             var shaped = Shape(font);
             if (!ReferenceEquals(font, first.Font) && shaped.Any(glyph => glyph.GlyphIndex == 0))
@@ -1005,8 +1159,8 @@ internal sealed class LineComposer
             ShapedGlyph[] Shape(IFont capFont)
             {
                 var glyphs = TextShaper.Shape(capFont, text, 0, dropEnd, shapingOptions);
-                if (kerning == TextKerning.Optical && OpticalKerning.Measures(capFont)
-                                                   && OpticalKerning.Applies(text, 0, dropEnd))
+                if (kerning == TextKerning.Optical && !vertical && OpticalKerning.Measures(capFont)
+                    && OpticalKerning.Applies(text, 0, dropEnd))
                 {
                     OpticalKerning.Apply(capFont, glyphs, 0, glyphs.Length);
                 }
@@ -1014,31 +1168,12 @@ internal sealed class LineComposer
                 return glyphs;
             }
 
-            double top = 0;
-            double pen = 0;
-            double inkRight = 0;
-            foreach (var glyph in shaped)
-            {
-                var bounds = font.GetGlyphByIndex(glyph.GlyphIndex).BoundingRectangle;
-                top = Math.Max(top, bounds.Y + bounds.Height);
-                if (bounds.Width > 0)
-                {
-                    inkRight = Math.Max(inkRight,
-                        pen + glyph.XOffset + font.GetLeftSideBearing(glyph.GlyphIndex) + bounds.Width);
-                }
-
-                pen += glyph.XAdvance;
-            }
-
-            var bodyScale = first.FontSize / first.Font.UnitsPerEm;
-            var cap = (first.Font.CapsHeight > 0 ? first.Font.CapsHeight : first.Font.Ascender * 0.7) * bodyScale;
-            if (top <= 0)
+            var (capScale, indent) = vertical ? DownTheLines() : AcrossTheLines();
+            if (capScale <= 0)
             {
                 return;
             }
 
-            var capScale = (cap + (dropCap.Lines - 1) * DropPitch()) / top;
-            var indent = Math.Max(pen * capScale, inkRight * capScale + 0.1 * first.FontSize);
             if ((slots != null || textArea.Width < Int32.MaxValue) && indent > LineRight(0) - LineIndent(0) - 2 * first.FontSize)
             {
                 return;
@@ -1052,6 +1187,57 @@ internal sealed class LineComposer
             while (dropItems < items.Count && items[dropItems].Cluster < dropEnd)
             {
                 dropItems++;
+            }
+
+            // Upright at the head of vertical lines: its em as wide as the lines it spans, from the right of the first's
+            // em to the left of the last's.
+            (double, double) DownTheLines()
+            {
+                double down = 0;
+                double wide = 0;
+                foreach (var glyph in shaped)
+                {
+                    down -= glyph.YAdvance;
+                    wide = Math.Max(wide, font.GetAdvanceWidth(glyph.GlyphIndex));
+                }
+
+                if (down <= 0 || wide <= 0)
+                {
+                    return (0, 0);
+                }
+
+                var scale = (first.FontSize + (dropCap.Lines - 1) * DropPitch()) / wide;
+                return (scale, down * scale);
+            }
+
+            // Its top at the cap height of the first line, its foot on the baseline of the last.
+            (double, double) AcrossTheLines()
+            {
+                double top = 0;
+                double pen = 0;
+                double inkRight = 0;
+                foreach (var glyph in shaped)
+                {
+                    var bounds = font.GetGlyphByIndex(glyph.GlyphIndex).BoundingRectangle;
+                    top = Math.Max(top, bounds.Y + bounds.Height);
+                    if (bounds.Width > 0)
+                    {
+                        inkRight = Math.Max(inkRight,
+                            pen + glyph.XOffset + font.GetLeftSideBearing(glyph.GlyphIndex) + bounds.Width);
+                    }
+
+                    pen += glyph.XAdvance;
+                }
+
+                var bodyScale = first.FontSize / first.Font.UnitsPerEm;
+                var cap = (first.Font.CapsHeight > 0 ? first.Font.CapsHeight : first.Font.Ascender * 0.7) * bodyScale;
+                if (top <= 0)
+                {
+                    return (0, 0);
+                }
+
+                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / top;
+                return (scale, Math.Max(pen * scale, inkRight * scale + 0.1 * first.FontSize));
             }
         }
 
@@ -1139,10 +1325,23 @@ internal sealed class LineComposer
                 below = Math.Max(below, -glyph.OffsetY);
             }
 
-            // A ruby base's line grows to hold its annotation, as CSS's; one whose height is set does not.
-            if (withRuby && !setHeight && RubyIndex(glyph.PositionInString) is var r and >= 0
-                && rubies[r].Annotation is { } annotation && !rubies[r].Pending && (rubyShown == null || rubyShown[r]))
+            // A ruby base's line grows to hold its annotations, as CSS's; one whose height is set does not.
+            if (withRuby && !setHeight)
             {
+                Grow(RubyIndex(glyph.PositionInString));
+                Grow(OtherRuby(glyph.PositionInString));
+            }
+
+            return (above, below);
+
+            void Grow(int r)
+            {
+                if (r < 0 || rubies[r].Annotation is not { } annotation || rubies[r].Pending
+                    || (rubyShown != null && !rubyShown[r]))
+                {
+                    return;
+                }
+
                 var ruby = rubies[r];
                 var over = annotation.Position == RubyPosition.Over;
                 if (vertical)
@@ -1160,8 +1359,6 @@ internal sealed class LineComposer
                     below = Math.Max(below, BaseReach(glyph, false) + ruby.Ascent + ruby.Descent);
                 }
             }
-
-            return (above, below);
         }
 
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
@@ -1279,6 +1476,14 @@ internal sealed class LineComposer
             if (rows > 0)
             {
                 top += gap;
+            }
+
+            // A line an earlier layout found too tall for the rest of its frame starts in a later one.
+            if (pushed != null && pushed.TryGetValue(line, out var from) && f < from)
+            {
+                f = from;
+                rows = 0;
+                top = f < frames.Count ? frames[f].Top : 0;
             }
 
             while (f < frames.Count)
@@ -1542,6 +1747,7 @@ internal sealed class LineComposer
             var justified = renderingParameters.HorizontalTextAlignment == HorizontalTextAlignment.Justify;
             var raggedStretch = 2 * fontSize;
             List<(ComposerItem Item, int Next, bool Cut, bool Automatic)> paragraph = [];
+            Dictionary<int, int> tabs = [];
             var start = dropItems;
             while (start < items.Count)
             {
@@ -1577,8 +1783,9 @@ internal sealed class LineComposer
 
                 if (newline < end || end >= items.Count)
                 {
-                    ComposeParagraph(paragraph, justified);
+                    ComposeParagraph(paragraph, justified, tabs);
                     paragraph.Clear();
+                    tabs.Clear();
                     start = end;
                     continue;
                 }
@@ -1593,14 +1800,24 @@ internal sealed class LineComposer
                 {
                     var hyphen = items[end - 1].Symbol is '-' or '‐';
                     AddBreak(paragraph, next, ComposerItem.Penalty(0, hyphen ? 50 : 0, hyphen), justified, raggedStretch);
+                    // Words with no space between them - ideographs, a word after a hyphen - keep the letter spacing
+                    // of the gap between them, which a space's glue carries elsewhere; at a break it is dropped.
+                    if (justified && lastLetter > 0)
+                    {
+                        paragraph.Add((ComposerItem.Glue(0,
+                            lastLetter * (options.LetterSpacing.Maximum - options.LetterSpacing.Desired),
+                            lastLetter * (options.LetterSpacing.Desired - options.LetterSpacing.Minimum)), next, false, false));
+                    }
                 }
                 else
                 {
                     AddBreak(paragraph, next, WordGlue(end, lastLetter), justified, raggedStretch);
+                    NoteTab(end);
                     for (var k = end + 1; k < next; k++)
                     {
                         var glue = WordGlue(k, 0);
                         paragraph.Add((justified ? glue : ComposerItem.Glue(glue.Width, 0, 0), next, false, false));
+                        NoteTab(k);
                     }
                 }
 
@@ -1609,11 +1826,20 @@ internal sealed class LineComposer
 
             if (paragraph.Count > 0)
             {
-                ComposeParagraph(paragraph, justified);
+                ComposeParagraph(paragraph, justified, tabs);
+            }
+
+            void NoteTab(int k)
+            {
+                if (items[k].Symbol == '\t')
+                {
+                    tabs[paragraph.Count - 1] = k;
+                }
             }
         }
 
-        void ComposeParagraph(List<(ComposerItem Item, int Next, bool Cut, bool Automatic)> paragraph, bool justified)
+        void ComposeParagraph(List<(ComposerItem Item, int Next, bool Cut, bool Automatic)> paragraph, bool justified,
+            Dictionary<int, int> tabs)
         {
             while (paragraph.Count > 0 && paragraph[paragraph.Count - 1].Item.Kind != ComposerItemKind.Box)
             {
@@ -1649,16 +1875,28 @@ internal sealed class LineComposer
             }
 
             paragraph.Add((ComposerItem.Penalty(0, ParagraphComposer.Forced, false), -1, false, false));
-            var exact = paragraph.Where(entry => !entry.Automatic).ToList();
-            var chosen = exact;
             var limit = options.HyphenLimit;
-            var breaks = ParagraphComposer.Break(exact.Select(entry => entry.Item).ToList(), widths, 100, limit);
-            if (breaks == null)
+            List<(ComposerItem Item, int Next, bool Cut, bool Automatic)> chosen;
+            int[] breaks;
+            for (var pass = 0;; pass++)
             {
-                chosen = paragraph;
-                var all = paragraph.Select(entry => entry.Item).ToList();
-                breaks = ParagraphComposer.Break(all, widths, 200, limit)
-                         ?? ParagraphComposer.BreakAnyway(all, widths, 2 * fontSize, limit);
+                var exactIndices = Enumerable.Range(0, paragraph.Count).Where(e => !paragraph[e].Automatic).ToList();
+                var chosenIndices = exactIndices;
+                chosen = exactIndices.Select(e => paragraph[e]).ToList();
+                breaks = ParagraphComposer.Break(chosen.Select(entry => entry.Item).ToList(), widths, 100, limit);
+                if (breaks == null)
+                {
+                    chosen = paragraph;
+                    chosenIndices = Enumerable.Range(0, paragraph.Count).ToList();
+                    var all = paragraph.Select(entry => entry.Item).ToList();
+                    breaks = ParagraphComposer.Break(all, widths, 200, limit)
+                             ?? ParagraphComposer.BreakAnyway(all, widths, 2 * fontSize, limit);
+                }
+
+                if (tabs.Count == 0 || pass == 2 || !MeasureTabs(chosenIndices, breaks))
+                {
+                    break;
+                }
             }
 
             composedLines += breaks.Length;
@@ -1670,6 +1908,77 @@ internal sealed class LineComposer
                 if (entry.Cut)
                 {
                     composedCuts.Add(entry.Next);
+                }
+            }
+
+            // A tab is as wide as the room to its stop from where it stands on its line, which only the breaks tell: each
+            // is measured on the line it fell on, and the spaces before the last tab of a justified line take no stretch,
+            // as justification widens only what follows it. Whether anything changed, for the paragraph to be broken again.
+            bool MeasureTabs(List<int> chosenIndices, int[] found)
+            {
+                var breakAt = new HashSet<int>(found.Take(found.Length - 1).Select(b => chosenIndices[b]));
+                var changed = false;
+                var line = composedLines;
+                var x = LineIndent(line);
+                var atLineStart = true;
+                var lineFirst = 0;
+                for (var e = 0; e < paragraph.Count; e++)
+                {
+                    var item = paragraph[e].Item;
+                    if (breakAt.Contains(e))
+                    {
+                        FreezeBeforeLastTab(lineFirst, e);
+                        line++;
+                        x = LineIndent(line);
+                        atLineStart = true;
+                        lineFirst = e + 1;
+                        continue;
+                    }
+
+                    if (atLineStart && item.Kind != ComposerItemKind.Box)
+                    {
+                        continue;
+                    }
+
+                    atLineStart = false;
+                    if (tabs.TryGetValue(e, out var tab))
+                    {
+                        var width = TabAdvanceAt(NextTabStop(x), tab, x);
+                        if (Math.Abs(width - item.Width) > 0.01)
+                        {
+                            paragraph[e] = (ComposerItem.Glue(width, 0, 0), paragraph[e].Next, paragraph[e].Cut,
+                                paragraph[e].Automatic);
+                            changed = true;
+                        }
+
+                        x += width;
+                        continue;
+                    }
+
+                    x += item.Kind == ComposerItemKind.Penalty ? 0 : item.Width;
+                }
+
+                FreezeBeforeLastTab(lineFirst, paragraph.Count);
+                return changed;
+
+                void FreezeBeforeLastTab(int from, int to)
+                {
+                    var lastTab = -1;
+                    for (var e = from; e < to; e++)
+                    {
+                        lastTab = tabs.ContainsKey(e) ? e : lastTab;
+                    }
+
+                    for (var e = from; justified && e < lastTab; e++)
+                    {
+                        var item = paragraph[e].Item;
+                        if (item.Kind == ComposerItemKind.Glue && (item.Stretch != 0 || item.Shrink != 0))
+                        {
+                            paragraph[e] = (ComposerItem.Glue(item.Width, 0, 0), paragraph[e].Next, paragraph[e].Cut,
+                                paragraph[e].Automatic);
+                            changed = true;
+                        }
+                    }
                 }
             }
         }
@@ -2225,7 +2534,7 @@ internal sealed class LineComposer
                     case '\n':
                         BreakInto(item.Cluster + 1, lineIndex + 1);
                         NoteParagraphBreak(item.Cluster, lineIndex + 1);
-                        if (renderingParameters.TextWrapping == TextWrapping.WrapByWords
+                        if (renderingParameters.TextWrapping != TextWrapping.NoWrap
                             && renderingParameters.TextTrimming != TextTrimming.None
                             && !HasRoomBelow()
                             && i < items.Count - 1)
@@ -2729,11 +3038,17 @@ internal sealed class LineComposer
 
                     from = Array.FindLastIndex(glyphs, last, last + 1, glyph => glyph.Symbol == '\t') + 1;
                     to = glyphs.Length;
+                    // A ruby base does not hang: its annotation would go past the margin with it.
+                    if (InABase(glyphs[last]))
+                    {
+                        continue;
+                    }
+
                     shift = Hang(glyphs[last], false);
                 }
                 else
                 {
-                    if (IsBlank(glyphs[0].Symbol) || glyphs[0].Symbol == '\n')
+                    if (IsBlank(glyphs[0].Symbol) || glyphs[0].Symbol == '\n' || InABase(glyphs[0]))
                     {
                         continue;
                     }
@@ -3172,11 +3487,13 @@ internal sealed class LineComposer
                 var reach = ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize
                     ? objectSize.Height + glyph.OffsetY
                     : CapHeight(glyph.Font, glyph.FontSize) + glyph.OffsetY;
-                if (rubies != null && RubyIndex(glyph.PositionInString) is var r and >= 0
-                    && rubies[r].Annotation is { Position: RubyPosition.Over } && !rubies[r].Pending
-                    && (rubyShown == null || rubyShown[r]))
+                foreach (var r in rubies == null ? [] : new[] { RubyIndex(glyph.PositionInString), OtherRuby(glyph.PositionInString) })
                 {
-                    reach = Math.Max(reach, BaseReach(glyph, true) + rubies[r].Ascent + rubies[r].Descent);
+                    if (r >= 0 && rubies[r].Annotation is { Position: RubyPosition.Over } && !rubies[r].Pending
+                        && (rubyShown == null || rubyShown[r]))
+                    {
+                        reach = Math.Max(reach, BaseReach(glyph, true) + rubies[r].Ascent + rubies[r].Descent);
+                    }
                 }
 
                 cap = Math.Max(cap, reach);
@@ -3223,8 +3540,7 @@ internal sealed class LineComposer
                 }
                 else if (cursorPosition <= right &&
                          renderingParameters.TextWrapping == TextWrapping.WrapBySymbols &&
-                         (k == 0 || RubyIndex(data.PositionInString) is not (var r and >= 0)
-                                 || RubyIndex(glyphsData[k - 1].PositionInString) != r))
+                         (k == 0 || !SameBase(glyphsData[k - 1].PositionInString, data.PositionInString)))
                 {
                     break;
                 }

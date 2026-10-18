@@ -256,4 +256,27 @@ public class TabStopLayoutTests
 
         Assert.That(At(layout, 2).PenX, Is.EqualTo(150).Within(1e-3));
     }
+
+    // The paragraph composer took a tab for one step of the default stops: to a stop far along the line, the line it
+    // planned did not fit, the layout broke it again, and the next line, cut where the plan said, was justified loose.
+    [Test]
+    public void TheParagraphComposer_TakesATabAsWideAsItIsOnItsLine()
+    {
+        const string text = "Name\tvalue one two three four five six seven eight nine ten eleven twelve";
+        var typeface = SourceSans.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, TabStops = [new TabStop(300)], LineBreaking = LineBreaking.Paragraph,
+        };
+        layout.ProcessText(text, FontSize, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
+        var space = typeface.Fonts[0].GetAdvanceWidth(typeface.Fonts[0].GetGlyphByCharacter(' ').Index) * FontSize
+                    / typeface.Fonts[0].UnitsPerEm;
+        var lastLine = layout.LineCount - 1;
+        // The tab's line has one space after the tab to take the room; the line after it has plenty.
+        var spaces = layout.GetTextData().Where(g => g.Symbol == ' ' && g.LineIndex > 0 && g.LineIndex < lastLine).ToArray();
+
+        Assert.That(spaces.Max(g => g.Advance), Is.LessThan(3 * space), "a line justified loose");
+        Assert.That(At(layout, 5).PenX, Is.EqualTo(300).Within(1e-3), "the tab still reaches its stop");
+    }
 }

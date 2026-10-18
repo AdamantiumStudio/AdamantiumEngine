@@ -50,16 +50,26 @@ internal sealed partial class LookupApplier
         Maybe,
     }
 
-    public void ApplyGsub(ShapePlan plan)
+    // afterStage hears the index of each stage once it is applied, as a pause between HarfBuzz's stages.
+    public void ApplyGsub(ShapePlan plan, Action<int> afterStage = null)
     {
         _gsub = true;
-        foreach (var stage in plan.GsubStages)
+        for (var stage = 0; stage < plan.GsubStages.Length; stage++)
         {
-            foreach (var lookup in stage)
+            foreach (var lookup in plan.GsubStages[stage])
             {
                 ApplyLookup(lookup);
             }
+
+            afterStage?.Invoke(stage);
         }
+    }
+
+    // A lookup the shaper made, not one of the font's, as HarfBuzz's fallback lookups.
+    public void ApplySynthesizedGsub(in PlannedLookup lookup)
+    {
+        _gsub = true;
+        ApplyLookup(lookup);
     }
 
     public void ApplyGpos(ShapePlan plan)

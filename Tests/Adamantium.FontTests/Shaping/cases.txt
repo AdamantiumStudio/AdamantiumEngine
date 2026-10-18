@@ -100,9 +100,17 @@ ScriptFonts/MonomakhUnicode.otf	Cyrl	cu		Аꙁъ ѥсмь ꙗко ꙑ ѫ ѭ ꙙ 
 ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			ܫܠܡܐ ܥܠܡܐ
 ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			ܡܰܠܟܽܘܬܳܐ ܕܰܫܡܰܝܳܐ
 ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			ܐ ܒܐ ܕܐ ܪܐ ܐܒܐ ܠܐ ܡܐܢܐ
+# The abbreviation mark stretched over its word by 'stch': its middle piece repeated to the word's width.
+ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			{U+070F}{U+0721}{U+072B}{U+071D}{U+071A}{U+0710}
+ScriptFonts/NotoSansSyriac-Regular.ttf	Syrc			{U+070F}{U+0710}{U+0712} {U+070F}{U+0721}{U+072B}{U+071D}{U+071A}{U+0710}{U+0721}{U+072B}{U+071D}{U+071A}
 ScriptFonts/NotoSansMongolian-Regular.ttf	Mong			ᠮᠣᠩᠭᠣᠯ ᠪᠢᠴᠢᠭ
 ScriptFonts/NotoSansMongolian-Regular.ttf	Mong			ᠭ{U+180B}ᠠ ᠪᠢᠴᠢᠭ{U+202F}ᠦᠨ ᠠ{U+180E}ᠠ
 ScriptFonts/NotoSansNKo-Regular.ttf	Nkoo			ߒߞߏ ߞߊ߲ߜߍ
 ScriptFonts/NotoSansNKo-Regular.ttf	Nkoo			ߊ߫ߟߊ߬ ߓߊ߲߮ ߁߂߃
 ScriptFonts/NotoSansAdlam-Regular.ttf	Adlm			𞤀𞤣𞤤𞤢𞤥 𞤆𞤵𞤤𞤢𞤪
 ScriptFonts/NotoSansAdlam-Regular.ttf	Adlm			𞤢𞥄𞤤 𞤳𞥆𞤢 𞥑𞥒𞥓
+ScriptFonts/NotoSansArabic-NoGsub.subset.ttf	Arab			السلام عليكم ﻻ
+ScriptFonts/NotoSansArabic-NoGsub.subset.ttf	Arab			لا إله إلا لآلئ بيت
+ScriptFonts/NotoSansArabic-NoGsub.subset.ttf	Arab			مُحَمَّدٌ شَيْءٍ لِّأب ک‍
+ScriptFonts/NotoSansArabic-NoGsub.subset.ttf	Arab			الله لمحة لمجد بمن تخم سمع نى بر
+ScriptFonts/NotoSansArabic-NoGsub.subset.ttf	Arab			{U+0644}{U+034F}{U+0627} {U+0628}{U+0651}{U+034F}{U+064E}

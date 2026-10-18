@@ -418,6 +418,64 @@ internal sealed class TextNavigator
         return stop;
     }
 
+    // A word to the right or left on the screen, as Ctrl+arrows go: the nearest place on the caret's line, that way, where
+    // a word or a mark starts - a word's left edge in left-to-right text, its right edge in right-to-left. Past the last
+    // of them the caret goes on to the line the plain arrows go to, at its first such place that way, or, on the last
+    // line, to its edge.
+    public CaretPosition MoveWordVisually(CaretPosition from, bool toRight)
+    {
+        var (x, lineIndex) = GetCaretPoint(from);
+        if (NearestWordStart(lineIndex, x, toRight) is { } onTheLine)
+        {
+            return onTheLine;
+        }
+
+        var target = lineIndex + (toRight != ReadsRightToLeft() ? 1 : -1);
+        var boxes = LineBoxes(lineIndex);
+        if (target < 0 || target >= LineCount)
+        {
+            if (boxes.Count == 0)
+            {
+                return from;
+            }
+
+            var edge = toRight ? RightEdgeOf(boxes[boxes.Count - 1]) : LeftEdgeOf(boxes[0]);
+            var edgeX = GetCaretPoint(edge).X;
+            return (toRight ? edgeX > x + 1e-6 : edgeX < x - 1e-6) ? edge : from;
+        }
+
+        return NearestWordStart(target, toRight ? double.NegativeInfinity : double.PositiveInfinity, toRight)
+               ?? MoveVisually(from, toRight);
+    }
+
+    private CaretPosition? NearestWordStart(int lineIndex, double x, bool toRight)
+    {
+        var text = Text ?? string.Empty;
+        var words = Words();
+        var stops = Stops();
+        var line = GetLine(lineIndex);
+        CaretPosition? nearest = null;
+        var nearestX = 0.0;
+        for (var i = line.Start; i < line.End && i < text.Length; i++)
+        {
+            if (stops[i].LineIndex != lineIndex || !words[i] || char.IsWhiteSpace(text[i]))
+            {
+                continue;
+            }
+
+            var position = new CaretPosition(i);
+            var at = GetCaretPoint(position).X;
+            if ((toRight ? at > x + 1e-6 : at < x - 1e-6)
+                && (nearest == null || (toRight ? at < nearestX : at > nearestX)))
+            {
+                nearest = position;
+                nearestX = at;
+            }
+        }
+
+        return nearest;
+    }
+
     public TextHit HitTest(double x, double y)
     {
         var text = Text ?? string.Empty;
@@ -558,8 +616,7 @@ internal sealed class TextNavigator
             }
         }
 
-        var forward = toRight != _laid.IsRightToLeftParagraph(GetLine(lineIndex).Start);
-        var target = lineIndex + (forward ? 1 : -1);
+        var target = lineIndex + (toRight != ReadsRightToLeft() ? 1 : -1);
         if (target < 0 || target >= LineCount)
         {
             return from;
@@ -573,6 +630,10 @@ internal sealed class TextNavigator
 
         return toRight ? LeftEdgeOf(targetBoxes[0]) : RightEdgeOf(targetBoxes[targetBoxes.Count - 1]);
     }
+
+    // From line to line the arrows go as the text reads, by its first paragraph: a paragraph running the other way in it
+    // sends them on, not back, so they never come round again.
+    private bool ReadsRightToLeft() => _laid.IsRightToLeftParagraph(0);
 
     public CaretPosition GetLineStart(int lineIndex)
     {
