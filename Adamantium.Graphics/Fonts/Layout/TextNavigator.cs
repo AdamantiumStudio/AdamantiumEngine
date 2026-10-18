@@ -487,6 +487,12 @@ internal sealed class TextNavigator
         var stops = Stops();
         var graphemes = _laid.Graphemes;
         var lineIndex = _laid.LineFrames != null ? LineInFrames(x, y) : LineAt(y);
+        // The drop cap stands across the lines it spans; its characters are on the first.
+        if (lineIndex > 0 && lineIndex < Math.Min(_laid.DropCapLines, LineCount) && !_laid.Vertical && OverTheDropCap(x, stops))
+        {
+            lineIndex = 0;
+        }
+
         var insideY = lineIndex >= 0 && lineIndex < LineCount;
         lineIndex = Math.Max(0, Math.Min(lineIndex, LineCount - 1));
         var line = GetLine(lineIndex);
@@ -557,6 +563,19 @@ internal sealed class TextNavigator
         return stops[nearest].IsRightToLeft == onLeft
             ? new TextHit(nearest, true, false, after)
             : new TextHit(nearest, false, false, nearest);
+    }
+
+    private bool OverTheDropCap(double x, CaretStop[] stops)
+    {
+        for (var c = 0; c < _laid.DropCapEnd && c < stops.Length; c++)
+        {
+            if (x >= stops[c].Left && x < stops[c].Right)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public (double X, int LineIndex) GetCaretPoint(CaretPosition position)

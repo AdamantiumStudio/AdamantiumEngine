@@ -52,6 +52,11 @@ internal sealed record LaidOutText
 
     public int OversetIndex { get; init; }
 
+    // The characters a drop cap took and the lines it stands across; 0 without one.
+    public int DropCapEnd { get; init; }
+
+    public int DropCapLines { get; init; }
+
     public Size Size { get; init; }
 
     public Size? RealTextDimensions { get; init; }

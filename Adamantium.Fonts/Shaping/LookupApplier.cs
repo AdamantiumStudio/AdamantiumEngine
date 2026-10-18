@@ -204,8 +204,7 @@ internal sealed partial class LookupApplier
             return SkipResult.Yes;
         }
 
-        if (info.IsDefaultIgnorable && (ignoreZwnj || !info.IsZwnj) && (ignoreZwj || !info.IsZwj)
-            && (!_gsub || (info.Flags & UnicodeFlags.Hidden) == 0))
+        if (info.IsDefaultIgnorableAndNotHidden && (ignoreZwnj || !info.IsZwnj) && (ignoreZwj || !info.IsZwj))
         {
             return SkipResult.Maybe;
         }

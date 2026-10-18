@@ -265,8 +265,9 @@ its `GPOS` table.
 **Where:** `Tests/Adamantium.FontTests/ScriptFonts/NotoSansArabic-Regular.ttf` and `NotoNaskhArabic-Regular.ttf`,
 unchanged, from https://github.com/notofonts/arabic, used only by the tests. Copyright 2022 The Noto Project Authors,
 under the SIL Open Font License 1.1, whose text is `LICENSE-NotoArabic.txt` beside them.
-`NotoSansArabic-NoGsub.subset.ttf` beside them is a modified version of Noto Sans Arabic, made for the tests: its
-Arabic letters, marks and presentation forms, without its `GSUB` table.
+`NotoSansArabic-NoGsub.subset.ttf` and `NotoSansArabic-NoGpos.subset.ttf` beside them are modified versions of Noto
+Sans Arabic, made for the tests: its Arabic letters, marks and presentation forms, without its `GSUB` table, and
+without its `GPOS` table.
 
 ---
 
@@ -303,6 +304,16 @@ the SIL Open Font License 1.1, whose text is `LICENSE-ChurchSlavonic.txt` beside
 Regular beside it: its Latin and Cyrillic lowercase only, without its layout tables, with a 'jalt' feature of its own
 for the Cyrillic script, renamed as the license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font
 Name 'Source', under the SIL Open Font License 1.1, whose text is `source-sans-3v028R/LICENSE.md`.
+
+---
+
+## Adamantium Marks Test
+
+**Where:** `Tests/Adamantium.FontTests/ScriptFonts/AdamantiumMarksTest-Regular.ttf` and
+`AdamantiumMarksTest-EmptyGpos.ttf`, made for the tests from Source Sans 3 Regular: its basic Latin and combining marks,
+some Thai and Lao characters mapped to them, without its `GPOS` table, and with one of no lookups; renamed as the
+license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font Name 'Source', under the SIL Open Font License 1.1, whose text
+is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 
 ---
 

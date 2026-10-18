@@ -528,6 +528,8 @@ internal sealed class LineComposer
             Paragraphs = paragraphs,
             Graphemes = graphemes,
             OversetIndex = oversetIndex,
+            DropCapEnd = dropGlyphs != null ? dropEnd : 0,
+            DropCapLines = dropGlyphs != null ? dropLines : 0,
             Size = finalRect,
             RealTextDimensions = realTextDimensions,
             HasPendingFonts = hasPendingFonts,

@@ -111,6 +111,11 @@ public static class TextShaper
         Normalizer.Normalize(font, buffer, plan.JoinsLetters,
             script == "Hebr" && plan.GetFeature("mark") is not { GposIndex: >= 0 });
         SetupMasks(buffer, plan, options, text, start, end, origin);
+        if (plan.FallbackMarkPositioning)
+        {
+            Positioner.RecategorizeMarks(buffer);
+        }
+
         SetGlyphProps(buffer, layout);
 
         var applier = new LookupApplier(layout, buffer, font.NormalizedCoordinates)
@@ -135,7 +140,8 @@ public static class TextShaper
                 ArabicFallback.Apply(font, plan, applier);
             }
         });
-        Positioner.Position(font, buffer, plan, applier, rightToLeft);
+        // A ligature's components run the way the text does, or, down vertical lines, as its script reads.
+        Positioner.Position(font, buffer, plan, applier, rightToLeft, options.Vertical ? IsRightToLeft(script) : rightToLeft);
         HideDefaultIgnorables(font, buffer);
 
         var result = new ShapedGlyph[buffer.Length];

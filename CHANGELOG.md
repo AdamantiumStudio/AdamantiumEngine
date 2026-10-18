@@ -490,6 +490,10 @@ All packages share one version.
   into stood once each; the repeating ones are now copied to the word's width, as HarfBuzz does.
 - Hebrew in a font that positions no marks (no GPOS `mark`) sets a letter and its point as the presentation form the
   font has (U+FB1D-FB4F), as HarfBuzz composes them: the point stood where the font drew it.
+- A font with no GPOS places its marks around their base by their combining classes and the glyphs' boxes, as
+  HarfBuzz's fallback does - above, below, to a side, stacked, on a ligature's component - in the scripts whose
+  HarfBuzz shaper does so (Latin and the other default ones, Arabic, Syriac, Hebrew): a mark stood where the font drew
+  it, over the space after its letter. Right to left, a mark's advance is zeroed without moving it, as in HarfBuzz.
 - A text wrapped by symbols and trimmed in a fixed height stops at the bottom as one wrapped by words does: lines
   after a hard break, and a line raised by larger text, were set past it.
 - Arabic in a font with no joining forms of its own (no `init`, `medi`, `fina`, `isol`) joins by the presentation
@@ -511,7 +515,9 @@ All packages share one version.
   paragraphs running different ways the arrows went back up at a paragraph of the other direction and came round
   again, never reaching the end.
 - A combining grapheme joiner (U+034F) that keeps no marks from being reordered is skipped by lookups, as HarfBuzz
-  skips it: lam, the joiner and alef made no ligature, nor a shadda and its vowel.
+  skips it: lam, the joiner and alef made no ligature, nor a shadda and its vowel. One that does keep a mark from being
+  reordered stands as a base to it, as in HarfBuzz 8.3.1: the mark was attached past it to the letter.
+- A click on a drop cap below its first line finds the cap: it found the line beside it, its first or last character.
 - A ruby base at the start or end of a line does not hang its punctuation past the margin with optical margin
   alignment: its annotation, spread over it, went past the margin with it.
 - Text trimmed and wrapped by words in a fixed height no longer sets a line that larger text in it raises past the
