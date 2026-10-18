@@ -28,6 +28,8 @@ uint DirectionalCount;
 float4 ClusterDepth;
 // The inverse of the projection's x and y scales.
 float2 InverseScale;
+// The projection's w at a depth, as depth * x + y: the depth itself in perspective, 1 in a flat view.
+float2 ClusterW;
 // The viewport in framebuffer pixels: x, y, width, height.
 float4 ViewportRect;
 float3 Ambient;

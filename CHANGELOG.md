@@ -7,6 +7,59 @@ All packages share one version.
 
 ### Added
 
+- A camera's projection changes smoothly: setting `CameraBase.ProjectionType` flows from the old projection into the
+  new over `ProjectionTransitionTime` milliseconds (300; 0 switches at once), keeping the plane at `FocusDistance` - a
+  third-person camera's `Radius` - the same size on screen all the way, as Unity's scene view does. Coming back from a
+  zoomed flat view, the camera steps along its view to where the perspective shows that plane as large. A projection
+  set before a camera's first frame is taken as it is.
+- `CameraProjectionType.Isometric` is an orthographic view seen down a cube's diagonal: the camera turns, with the
+  change, to the diagonal nearest to where it looks, about the point at its focus distance, and can turn on from there.
+- `CameraBase.OrthoScale`: an orthographic or isometric view's zoom, scaling its projection along X and Y and never Z,
+  so nothing is clipped away however close it comes, as a CAD view zooms. The wheel multiplies it by `ZoomStep` a
+  notch; going flat from a perspective sets it to show the focus plane as large, and `JumpToObject` to show the object
+  as large. `JumpToObject` also makes its distance the focus distance.
+- A camera hung on another entity, or taken off one, travels from where it stood and looked to its new place and view
+  over `CameraBase.HostChangeTime` milliseconds (250; 0 jumps), as `WorldPosition` and its view show it.
+- `EntityManager.Cameras`: the world's cameras in a group of their own, wherever they hang - an entity with a camera
+  joins as its tree joins the world and leaves with it; `EntityGroup.Count`. Every camera of the group moves on each
+  frame, not only those an output shows: a third-person camera follows its subject, a hung one travels.
+- `EntityIcons` draws a camera's view beside its icon: a pyramid for a perspective view, as wide as its field of view,
+  or a box for a flat one, running where the camera looks, with a mark over its top edge
+  (`CameraFrustumTemplate`).
+- `PlacementTool` with no ghost picks what a click lands on (`Under`), drawing only its `Icon`, if it has one: a pick
+  of what to place onto.
+- Forward+ clusters follow a flat or flowing projection, and the first one reaches behind the camera, as a flat view
+  sees what is there.
+- A free camera with no owner turns with its entity: the rotation tool turns its view, and its view turns the entity.
+- Leaving an isometric view, a camera turns back to where it looked before it, unless it was turned meanwhile.
+- `CameraBase.IsLocked`: the user's mouse and keys leave the camera where it stands, even looked through
+  (`Observatory.Controls`).
+- The middle mouse button drags a free camera across its screen plane with the pointer, as far as the plane at its
+  focus distance moves under it.
+- In a flat view the ground grid reaches past all the view shows, fading only off screen.
+- `Universe.Fps`: the frames a universe actually runs a second, beside what its rendering could sustain (`RenderFps`);
+  0 while it is paused.
+- `Transform.Angles`: the rotation in degrees about X, Y and Z, as an inspector types it; the angles set come back as
+  set until something else turns the entity. `QuaternionF.ToYawPitchRoll` takes a rotation apart into the angles
+  `RotationYawPitchRoll` makes it from.
+- `Selection` holds several entities: `Items`, the current one last; `Select`, `Add`, `Remove`, `Contains`.
+  `Current` stays the one chosen last, and setting it selects it alone. Every selected entity is outlined, round their
+  joint silhouette (`EditorOverlayProcessor.DrawOutline` takes several).
+- A click with Shift adds what it lands on to the selection, with Control takes it out. `SelectTool` draws a frame
+  across the screen from a press on nothing, selecting CAD style (`ScreenFrame`): drawn to the right, solid and blue,
+  what lies wholly inside; to the left, dashed and green, whatever it touches - with Shift adding, Control taking out.
+  It takes what a click would (`ToolsService.PickEntities`, `EditorProcessor.PickEntities`): the scene's parts with a
+  form, by their points and triangles on screen, and the icons of lights, cameras and markers.
+- The move, rotation and scale tools work several selected entities together, about their common center
+  (`ToolProcessor.WorksGroups`).
+- `ToolProcessor.PressedOnNothing` and `ContinueGesture`: a tool's own gesture begun from a press on nothing.
+- The ground grid's axes are drawn as lines, seen from any side, and so are its lines while the plane is seen edge
+  on - the eye in it, or a flat view along it.
+- `CameraBase.OrthoNear` and `OrthoFar` (-10 000 and 10 000): an orthographic or isometric view's planes, behind the
+  camera and ahead, set apart from a perspective's.
+- A first-person camera looks where its host faces, turned by its own `Rotation`, and keeps its view when it is freed;
+  it stood still.
+
 - `TextLayout.MoveWordVisually`: the caret a word to the right or left on the screen, as Ctrl+arrows move it - to the
   nearest place that way on its line where a word starts, past the last one to the first on the next line the plain
   arrows go to. In mixed text it follows the screen, where `NextWordStop` follows the reading order; both ways stop at
@@ -535,6 +588,16 @@ All packages share one version.
 
 ### Fixed
 
+- A ring of the rotation and pivot tools turns by the angle the pointer sweeps round its center on screen, so following
+  the ring round keeps turning, past half a turn and on; by the tangent where it was grabbed, a pointer past a quarter
+  turn turned the target back. A ring seen nearly edge-on still turns by that tangent.
+- The pointer over a light's, a camera's or a marker's icon outlines the icon, as over a model, so it reads as
+  something a click takes (`EntityIcons.IconOf`).
+- A hosted universe keeps time by its own frames, a gap without frames counting as a quarter of a second at most: it
+  took the frame time of the loop hosting it, which runs at its own rate and sleeps while idle, so camera moves and
+  transitions jerked and ran too fast, and the `AppTime.Fps` its services got read wrong.
+- Mouse look turns a camera by the distance the mouse moved, the same at any frame rate; it was scaled by the frame
+  time as well, and turned slower the faster the frames came.
 - An effect compiled from its file finds a header by its path from the file's folder (`#include "Includes/X.fxh"`),
   nested headers included; only those beside it were found. Headers are `.fxh` only: `.hlsl` ones beside it are no
   longer gathered. A request names a header by its whole name: `#include "Tint.fxh"` took the first header whose path
@@ -896,8 +959,8 @@ All packages share one version.
   turns about that origin; the tools' handles sit there too. It moved the model's center there instead, through a
   pivot that shifted the position: the F-15, its center 122 centimeters above its origin, stood at y = 122, and setting
   its y to 0 sent it up. Each part below the root still turns about its own center.
-- A universe's output camera opens above the ground, at (0, -8, -20), looking at the scene's center. It stood on the
-  ground, which it then saw only edge-on: the grid did not show until the camera was first moved.
+- A universe's output camera opens at (0, 0, -20), at the ground's height, looking at the scene's center: the ground
+  grid, seen edge on, shows as its lines.
 - The observable properties of `Entity` and of the components - `Light`, `Transform`, `CameraBase`, `Collider`,
   `CapsuleCollider`, `ActivatableComponent`, `MeshMetadata` - are generated by the MVVM generator (`[Bindable]`), their
   side effects in `OnXChanged` hooks and `Transform.Scale` raised through `[Affects]`; they behave as before.
@@ -988,6 +1051,9 @@ All packages share one version.
 
 ### Removed
 
+- `Camera.OrthoScaleFactor`, a field only the orthographic projection divided its size by; `CameraBase.OrthoScale`
+  zooms it now. `CameraBase.IsometricProjection` and `Camera.BuildIsometricProjection`: an oblique matrix that flattened
+  depth to nothing and had no near or far plane; an isometric view draws with `OrthoProjection` now.
 - `MeshMetadata` and `MeshData.Metadata` / `MetadataChanged`, with the primitive templates' `FillMetadata`: one bag of
   every shape's numbers that the templates filled and nothing read. A shape's parameters are its `ProceduralShape` now.
 - `FontRenderer.UseDirectTextDraw`, `DrawLayout`, `SetState`, `RestoreState` and `RenderScale`: the old way of drawing a

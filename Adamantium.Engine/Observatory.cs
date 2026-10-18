@@ -50,8 +50,9 @@ public class Observatory : IInputRouting
 
     private volatile Camera controlledCamera;
 
-    /// <summary>Whether the user's input moves <paramref name="camera"/>: see <see cref="ControlledCamera"/>.</summary>
-    public bool Controls(Camera camera) => controlledCamera == null || camera == controlledCamera;
+    /// <summary>Whether the user's input moves <paramref name="camera"/>: see <see cref="ControlledCamera"/>; a locked
+    /// camera (<see cref="CameraBase.IsLocked"/>) it never moves.</summary>
+    public bool Controls(Camera camera) => !camera.IsLocked && (controlledCamera == null || camera == controlledCamera);
 
     public IReadOnlyList<UniverseOutput> Outputs => snapshot.Outputs;
 

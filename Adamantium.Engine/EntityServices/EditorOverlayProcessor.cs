@@ -223,6 +223,41 @@ public class EditorOverlayProcessor : RenderingProcessor
     public void DrawOutline(Entity root, Vector4F color, float points)
     {
         Collect(root);
+        DrawCollectedOutline(color, points);
+    }
+
+    /// <summary>
+    /// Outlines several entities and what is under each: a band <paramref name="points"/> wide round their joint
+    /// silhouette, in front of everything the scene drew.
+    /// </summary>
+    public void DrawOutline(IReadOnlyList<Entity> roots, Vector4F color, float points)
+    {
+        parts.Clear();
+        for (int i = 0; i < roots.Count; i++)
+        {
+            CollectInto(roots[i]);
+        }
+
+        DrawCollectedOutline(color, points);
+    }
+
+    /// <summary>
+    /// Outlines an entity and what is under it together with <paramref name="alone"/>, an entity without what is under
+    /// it - an icon without its rays: a band <paramref name="points"/> wide round their joint silhouette.
+    /// </summary>
+    public void DrawOutline(Entity root, Entity alone, Vector4F color, float points)
+    {
+        Collect(root);
+        if (alone != null)
+        {
+            CollectInto(alone, descend: false);
+        }
+
+        DrawCollectedOutline(color, points);
+    }
+
+    private void DrawCollectedOutline(Vector4F color, float points)
+    {
         if (parts.Count == 0)
         {
             return;
@@ -256,6 +291,11 @@ public class EditorOverlayProcessor : RenderingProcessor
     private void Collect(Entity root)
     {
         parts.Clear();
+        CollectInto(root);
+    }
+
+    private void CollectInto(Entity root, bool descend = true)
+    {
         root.VisitInDepth(current =>
         {
             if (!current.Visible)
@@ -266,7 +306,7 @@ public class EditorOverlayProcessor : RenderingProcessor
             var transformation = current.Transform.GetMetadata(ActiveCamera);
             if (!transformation.Enabled)
             {
-                return true;
+                return descend;
             }
 
             var color = ColorOf(current, transformation);
@@ -283,7 +323,7 @@ public class EditorOverlayProcessor : RenderingProcessor
                 parts.Add(new Part(data, transformation.WorldMatrixF, color, line || !data.Mesh.IsNormalsPresent, line));
             }
 
-            return true;
+            return descend;
         });
     }
 

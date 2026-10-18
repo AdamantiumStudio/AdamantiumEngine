@@ -32,9 +32,25 @@ public sealed class EntityManager
         entitiesReowned = new List<Entity>();
         entityParametersMap = new Dictionary<UInt128, EntityParameters>();
         availableProjectionTypes = new List<CameraProjectionType>();
+        joinCameras = entity =>
+        {
+            if (entity.GetComponent<CameraBase>() != null)
+            {
+                Cameras.Add(entity);
+            }
+        };
+        leaveCameras = entity => Cameras.Remove(entity);
+        Cameras = CreateGroup(nameof(Cameras));
 
         World = world;
     }
+
+    private readonly Action<Entity> joinCameras;
+    private readonly Action<Entity> leaveCameras;
+
+    /// <summary>The world's cameras, wherever they hang in its trees: an entity with a camera joins as its tree joins
+    /// the world, and leaves with it; on the world's thread. The world's own group: it is never removed.</summary>
+    public EntityGroup Cameras { get; }
     
     internal void InitializeResources()
     {
@@ -88,6 +104,7 @@ public sealed class EntityManager
         if (availableEntities.TryAdd(entity.Uid, entity))
         {
             PlaceByOwner(entity);
+            entity.TraverseInDepth(joinCameras);
             OnEntityAdded(entity);
         }
     }
@@ -142,6 +159,7 @@ public sealed class EntityManager
         if (!availableEntities.Remove(entity.Uid)) return;
 
         rootEntities.Remove(entity);
+        entity.TraverseInDepth(leaveCameras);
         OnEntityRemoved(entity);
 
         // Its tree goes with it: an entity of the world it holds - a camera following it - leaves the world too.
@@ -317,7 +335,7 @@ public sealed class EntityManager
 
         lock (syncObject)
         {
-            if (entitiesByGroup.TryGetValue(groupName, out var group))
+            if (entitiesByGroup.TryGetValue(groupName, out var group) && group != Cameras)
             {
                 entitiesByGroup.Remove(groupName);
                 OnGroupRemoved(group);
@@ -509,6 +527,8 @@ public sealed class EntityManager
             rootEntities.Clear();
             availableEntities.Clear();
             entitiesByGroup.Clear();
+            Cameras.Clear();
+            entitiesByGroup.Add(Cameras.Name, Cameras);
             entityParametersMap.Clear();
             availableProjectionTypes.Clear();
         }

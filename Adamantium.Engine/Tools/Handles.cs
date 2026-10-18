@@ -60,6 +60,12 @@ public abstract class Handles
         handle?.TraverseInDepth(part => part.IsSelected = true);
     }
 
+    internal static Vector3 PivotOf(Entity target) => PivotInWorld(target);
+
+    internal static Vector3F ParentVector(Entity target, Vector3F worldVector) => ToParent(target, worldVector);
+
+    internal static QuaternionF WorldRotationOf(Entity target, QuaternionF local) => RotationInWorld(target, local);
+
     protected static Vector3 PivotInWorld(Entity target)
     {
         var pivot = target.Transform.Pivot;
@@ -253,14 +259,22 @@ public abstract class Handles
     }
 
     /// <summary>
-    /// Turning by a ring, as in Unity: the pointer's way along the ring's tangent where it was grabbed, a radian per
-    /// radius on screen - even for a ring seen edge-on.
+    /// Turning by a ring: the angle the pointer sweeps round the ring's center on screen, gathered, so going round and
+    /// round keeps turning. A ring seen nearly edge-on draws no circle to go round: it turns by the pointer's way along
+    /// its tangent where it was grabbed, a radian per radius on screen, as in Unity.
     /// </summary>
     protected sealed class RingDrag
     {
+        private const float EdgeOn = 0.25f;
+        private const float NearCenterPixels = 4;
+
         private Vector2F startPixel;
         private Vector2F tangentOnScreen;
         private float radiusInPixels;
+        private bool round;
+        private float lastAngle;
+        private float swept;
+        private float sweepSign;
 
         /// <summary>
         /// Grabs <paramref name="ring"/>, turning about <paramref name="axis"/> in the camera-relative space, where
@@ -287,6 +301,21 @@ public abstract class Handles
             {
                 tangentOnScreen = Vector2F.Normalize(onScreen);
             }
+
+            var centerPixel = ScreenSpace.ToPixel(origin, ray.Camera);
+            var fromCenter = startPixel - centerPixel;
+            var flat = ray.Camera.ProjectionMatrix.M44 > 0.5f;
+            var sight = flat ? Vector3F.Normalize((Vector3F)ray.Camera.Forward) : Vector3F.Normalize(origin);
+            var facing = Math.Abs(Vector3F.Dot(Vector3F.Normalize(axis), sight));
+            var growing = fromCenter.Length() >= NearCenterPixels ? Vector2F.Normalize(new Vector2F(-fromCenter.Y, fromCenter.X)) : Vector2F.Zero;
+            var along = Vector2F.Dot(growing, tangentOnScreen);
+            round = facing >= EdgeOn && Math.Abs(along) >= EdgeOn;
+            if (round)
+            {
+                sweepSign = along > 0 ? 1 : -1;
+                lastAngle = MathF.Atan2(fromCenter.Y, fromCenter.X);
+                swept = 0;
+            }
         }
 
         /// <summary>The turn so far, in radians; 0 when the grab found no way along the ring on screen.</summary>
@@ -297,7 +326,21 @@ public abstract class Handles
                 return 0;
             }
 
-            return Vector2F.Dot(PointerPixel(ray, origin) - startPixel, tangentOnScreen) / radiusInPixels;
+            var pixel = PointerPixel(ray, origin);
+            if (!round)
+            {
+                return Vector2F.Dot(pixel - startPixel, tangentOnScreen) / radiusInPixels;
+            }
+
+            var fromCenter = pixel - ScreenSpace.ToPixel(origin, ray.Camera);
+            if (fromCenter.Length() >= NearCenterPixels)
+            {
+                var angle = MathF.Atan2(fromCenter.Y, fromCenter.X);
+                swept += MathF.IEEERemainder(angle - lastAngle, 2 * MathF.PI);
+                lastAngle = angle;
+            }
+
+            return sweepSign * swept;
         }
 
         private static Vector2F PointerPixel(in PickRay pick, Vector3F origin)

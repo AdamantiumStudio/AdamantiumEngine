@@ -1,6 +1,11 @@
 using System;
+using System.Collections.Generic;
+using Adamantium.Core;
+using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.EntityServices;
+using Adamantium.Graphics.Core;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Tools;
@@ -9,14 +14,21 @@ namespace Adamantium.Engine.Tools;
 /// The ground of the editor's scene: the plane y = <see cref="PlaneY"/> ruled into cells, as editors show it. Cells of 1, 10, 100... times
 /// <see cref="CellSize"/> are shown by how big they are on screen, the smaller ones fading as the eye moves away; the X
 /// axis runs red along it and the Z axis blue. The grid fades out towards its edge, and what stands or lies on it hides
-/// it.
+/// it. The axes are drawn as lines too, seen from any side, and so are the grid's lines while the plane is seen edge on
+/// - the eye in it, or a flat view along it - where its pixels have nothing to rule.
 /// </summary>
 public class GroundGrid : EditorProcessor
 {
     private const float ReachPerHeight = 60;
     private const float LeastReachInCells = 200;
+    private const float FlatReachPerShown = 3;
     private const float DefaultCellSize = 1;
     private const float DefaultShownCellPoints = 10;
+    private const int EdgeLines = 50;
+    private readonly Entity edges = new(null, "Ground lines");
+    private readonly Entity lines;
+    private readonly Entity axisX;
+    private readonly Entity axisZ;
 
     /// <summary>How many levels of cells, 1, 10, 100... times <see cref="CellSize"/>, the grid has phases for; bigger
     /// cells are not drawn.</summary>
@@ -55,19 +67,148 @@ public class GroundGrid : EditorProcessor
 
     private float Cell => float.IsFinite(CellSize) && CellSize > 0 ? Math.Clamp(CellSize, 1e-6f, 1e6f) : DefaultCellSize;
 
+    public GroundGrid()
+    {
+        lines = LineEntity("Lines", UnitGrid());
+        axisX = LineEntity("X axis", Segment(Vector3.UnitX));
+        axisZ = LineEntity("Z axis", Segment(Vector3.UnitZ));
+    }
+
+    public override void Update(AppTime appTime)
+    {
+        var cameras = Tools.Observatory.CurrentCameras;
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            PlaceLines(cameras[i]);
+        }
+    }
+
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
         overlay.DrawGrid(this);
+        overlay.DrawFlatInScene(edges);
+    }
+
+    private void PlaceLines(CameraBase camera)
+    {
+        var layout = LayoutFor(camera);
+        var eye = camera.WorldPosition;
+        var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
+        var reach = layout.Reach;
+        Place(axisX, camera, Math.Abs(eye.Z) < reach,
+            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation(0, below, (float)-eye.Z), AxisXColor, 1);
+        Place(axisZ, camera, Math.Abs(eye.X) < reach,
+            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation((float)-eye.X, below, 0), AxisZColor, 1);
+
+        var cell = layout.Cell;
+        while (cell * EdgeLines < reach)
+        {
+            cell *= 10;
+        }
+
+        var edgeOn = EdgeOn(camera, below, cell);
+        var phaseX = (float)Modulo(eye.X, cell);
+        var phaseZ = (float)Modulo(eye.Z, cell);
+        Place(lines, camera, edgeOn > 0.01f,
+            Matrix4x4F.Scaling(cell, 1, cell) * Matrix4x4F.Translation(-phaseX, below, -phaseZ), MajorColor, edgeOn);
+    }
+
+    private static float EdgeOn(CameraBase camera, float below, float cell)
+    {
+        var forward = (Vector3F)camera.Forward;
+        var across = new Vector3F(forward.X, 0, forward.Z);
+        if (across.Length() < 0.1f)
+        {
+            return 0;
+        }
+
+        across = Vector3F.Normalize(across);
+        var ahead = Math.Max((float)camera.FocusDistance, cell);
+        var near = across * ahead + new Vector3F(0, below, 0);
+        var far = near + across * cell;
+        if (Vector3F.Dot(near, forward) <= camera.ZNear && camera.ProjectionMatrix.M44 < 0.5f)
+        {
+            return 0;
+        }
+
+        var covered = Vector2F.Distance(ScreenSpace.ToPixel(near, camera), ScreenSpace.ToPixel(far, camera));
+        var t = Math.Clamp((covered - 1) / 5, 0, 1);
+        return 1 - t * t * (3 - 2 * t);
+    }
+
+    private static void Place(Entity line, CameraBase camera, bool shown, Matrix4x4F world, Vector4F color, float strength)
+    {
+        var metadata = line.Transform.GetMetadata(camera);
+        metadata.Enabled = shown;
+        if (!shown)
+        {
+            return;
+        }
+
+        metadata.WorldMatrixF = world;
+        var material = line.GetComponent<Material>();
+        material.MeshColor = new Vector3F(color.X, color.Y, color.Z);
+        material.Transparency = color.W * strength;
+    }
+
+    private Entity LineEntity(string name, Mesh mesh)
+    {
+        var entity = new Entity(edges, name);
+        entity.AddComponent(new MeshData { Mesh = mesh });
+        entity.AddComponent(new Material { HighlightColor = Vector4F.One, Transparency = 1 });
+        return entity;
+    }
+
+    private static Mesh Segment(Vector3 along)
+    {
+        var mesh = new Mesh(PrimitiveType.LineList);
+        mesh.SetPoints(new List<Vector3> { -along, along });
+        mesh.SetIndices(new List<int> { 0, 1 });
+        return mesh;
+    }
+
+    private static Mesh UnitGrid()
+    {
+        var points = new List<Vector3>();
+        var indices = new List<int>();
+        for (int i = -EdgeLines; i <= EdgeLines; i++)
+        {
+            indices.Add(points.Count);
+            points.Add(new Vector3(i, 0, -EdgeLines));
+            indices.Add(points.Count);
+            points.Add(new Vector3(i, 0, EdgeLines));
+            indices.Add(points.Count);
+            points.Add(new Vector3(-EdgeLines, 0, i));
+            indices.Add(points.Count);
+            points.Add(new Vector3(EdgeLines, 0, i));
+        }
+
+        var mesh = new Mesh(PrimitiveType.LineList);
+        mesh.SetPoints(points);
+        mesh.SetIndices(indices);
+        return mesh;
     }
 
     /// <summary>Where the grid lies for <paramref name="camera"/>: it reaches sixty times the eye's height above the
-    /// grid, never less than two hundred cells, and never past nine tenths of the far plane.</summary>
+    /// grid, never less than two hundred cells - in a flat view far enough past all it shows that it fades only off
+    /// screen - and never past nine tenths of the far plane.</summary>
     public GroundGridLayout LayoutFor(CameraBase camera)
     {
         var eye = camera.WorldPosition;
         var cell = Cell;
         var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
-        var reach = Math.Min(Math.Max(Math.Abs(below) * ReachPerHeight, cell * LeastReachInCells), camera.ZFar * 0.9f);
+        var reach = Math.Max(Math.Abs(below) * ReachPerHeight, cell * LeastReachInCells);
+        var projection = camera.ProjectionMatrix;
+        if (projection.M44 > 0.5f)
+        {
+            var forward = camera.Forward;
+            var drop = Math.Max(Math.Abs((float)forward.Y), 0.05f);
+            var shown = Math.Max(1 / projection.M11, 1 / projection.M22 / drop);
+            var off = (float)(Math.Sqrt(forward.X * forward.X + forward.Z * forward.Z) * camera.FocusDistance);
+            reach = Math.Max(reach, FlatReachPerShown * (shown + off));
+        }
+
+        reach = Math.Min(reach, camera.ZFar * 0.9f);
         var placement = Matrix4x4F.Scaling(reach) * Matrix4x4F.RotationX(MathF.PI / 2) * Matrix4x4F.Translation(0, below, 0);
         var axes = new Vector2F(Math.Clamp((float)-eye.X, -2 * reach, 2 * reach), Math.Clamp((float)-eye.Z, -2 * reach, 2 * reach));
         return new GroundGridLayout(placement, axes, reach, cell);

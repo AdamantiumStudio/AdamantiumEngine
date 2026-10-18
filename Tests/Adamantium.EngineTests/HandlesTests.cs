@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Tools;
@@ -140,7 +141,7 @@ public class HandlesTests
     }
 
     [Test]
-    public void Rotate_AlongARing_TurnsARadianPerRadiusOnScreen()
+    public void Rotate_AlongARing_TurnsAsFarAsThePointerGoesRoundIt()
     {
         var scene = new ToolScene();
         var target = ToolScene.Target(At);
@@ -154,9 +155,82 @@ public class HandlesTests
         handles.Drag(target, scene.RayAt(grab + along * 20));
 
         var turned = Vector3F.TransformNormal(Vector3F.UnitX, target.Transform.GetLocalMatrixF());
-        Assert.That(Math.Atan2(turned.Y, turned.X), Is.EqualTo(20.0 / handles.Pixels).Within(1e-3));
+        var center = scene.PixelOf(At);
+        Assert.That(Math.Atan2(turned.Y, turned.X), Is.EqualTo(Math.Atan2(20, (grab - center).Length())).Within(1e-3));
         Assert.That(turned.Z, Is.EqualTo(0).Within(1e-4));
         AssertNear(target.Transform.Position, At);
+    }
+
+    // Following the ring round keeps turning: by the tangent where it was grabbed, a pointer past a quarter turn went
+    // back and turned the target back with it.
+    [Test]
+    public void Rotate_GoingRoundARing_KeepsTurning_PastHalfATurn()
+    {
+        var scene = new ToolScene();
+        var target = ToolScene.Target(At);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
+        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
+
+        for (var degrees = 30; degrees <= 240; degrees += 30)
+        {
+            var angle = MathHelper.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * Math.Cos(angle), radius * Math.Sin(angle), 0))));
+        }
+
+        var turned = Vector3F.TransformNormal(Vector3F.UnitX, target.Transform.GetLocalMatrixF());
+        var expected = MathHelper.DegreesToRadians(240f);
+        Assert.That(Math.Abs(Math.Atan2(turned.Y, turned.X)), Is.EqualTo(Math.PI * 2 - expected).Within(1e-2));
+        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, QuaternionF.RotationAxis(Vector3F.UnitZ, expected))),
+            Is.EqualTo(1).Within(1e-3));
+    }
+
+    [Test]
+    public void Rotate_GoingRoundARing_TheOtherWay_TurnsTheOtherWay()
+    {
+        var scene = new ToolScene();
+        var target = ToolScene.Target(At);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
+        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
+
+        for (var degrees = -30; degrees >= -240; degrees -= 30)
+        {
+            var angle = MathHelper.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * Math.Cos(angle), radius * Math.Sin(angle), 0))));
+        }
+
+        var expected = MathHelper.DegreesToRadians(-240f);
+        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, QuaternionF.RotationAxis(Vector3F.UnitZ, expected))),
+            Is.EqualTo(1).Within(1e-3));
+    }
+
+    // A flat view sees every ring along its own forward: a ring off the middle of the view, edge-on there, is a line to
+    // drag along, not a circle to go round.
+    [Test]
+    public void Rotate_ARingEdgeOnInAFlatView_OffTheMiddle_StillTurns()
+    {
+        var scene = new ToolScene();
+        scene.Camera.ProjectionTransitionTime = 0;
+        scene.Camera.ProjectionType = Adamantium.ECS.Components.CameraProjectionType.Ortho;
+        scene.Camera.Update(new AppTime());
+        var at = new Vector3(6, 0, 10);
+        var target = ToolScene.Target(at);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "RightAxisOrbit", scene);
+        var grab = scene.PixelOf(at + new Vector3(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
+        var along = Vector2F.Normalize(scene.PixelOf(at) - grab);
+
+        handles.BeginDrag(target, handles.Shape.Get("RightAxisOrbit"), scene.RayAt(grab));
+        handles.Drag(target, scene.RayAt(grab + along * 20));
+
+        var turned = Vector3F.TransformNormal(Vector3F.UnitY, target.Transform.GetLocalMatrixF());
+        Assert.That(Math.Abs(Math.Atan2(turned.Z, turned.Y)), Is.EqualTo(20.0 / handles.Pixels).Within(2e-3));
     }
 
     [Test]

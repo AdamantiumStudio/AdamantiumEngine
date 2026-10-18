@@ -1042,6 +1042,34 @@ namespace Adamantium.Mathematics
         }
 
         /// <summary>
+        /// The yaw, pitch and roll, in radians, that <see cref="RotationYawPitchRoll(float, float, float)"/> makes this
+        /// rotation from: pitch within ±π/2, yaw and roll within ±π. Looking straight up or down, the roll is zero.
+        /// </summary>
+        public void ToYawPitchRoll(out float yaw, out float pitch, out float roll)
+        {
+            var length = Math.Sqrt((double)X * X + (double)Y * Y + (double)Z * Z + (double)W * W);
+            if (length == 0)
+            {
+                yaw = pitch = roll = 0;
+                return;
+            }
+
+            double x = X / length, y = Y / length, z = Z / length, w = W / length;
+            var sinPitch = 2 * (w * x - y * z);
+            if (Math.Abs(sinPitch) >= 1 - 1e-12)
+            {
+                pitch = sinPitch > 0 ? MathHelper.PiOverTwo : -MathHelper.PiOverTwo;
+                yaw = (float)Math.IEEERemainder(2 * Math.Atan2(y, w), 2 * Math.PI);
+                roll = 0;
+                return;
+            }
+
+            pitch = (float)Math.Asin(sinPitch);
+            yaw = (float)Math.Atan2(2 * (x * z + w * y), 1 - 2 * (x * x + y * y));
+            roll = (float)Math.Atan2(2 * (x * y + w * z), 1 - 2 * (x * x + z * z));
+        }
+
+        /// <summary>
         /// Interpolates between two quaternions, using spherical linear interpolation.
         /// </summary>
         /// <param name="start">Start quaternion.</param>

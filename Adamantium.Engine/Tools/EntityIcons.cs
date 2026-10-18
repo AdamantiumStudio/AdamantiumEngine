@@ -14,8 +14,9 @@ namespace Adamantium.Engine.Tools;
 
 /// <summary>
 /// Icons for what a scene has but does not draw - lights, cameras, entities with a <see cref="Marker"/> - facing every
-/// camera at a steady size on screen. A directional light's icon also has rays running where it shines. A click on an
-/// icon selects its entity. A camera has no icon in its own view.
+/// camera at a steady size on screen. A directional light's icon also has rays running where it shines, a camera's the
+/// shape of its view - a pyramid or, flat, a box - running where it looks, with a mark on top. A click on an icon selects
+/// its entity. A camera has no icon in its own view.
 /// </summary>
 public class EntityIcons : EditorProcessor
 {
@@ -28,6 +29,8 @@ public class EntityIcons : EditorProcessor
     private readonly Entity directionalIcon = new DirectionalLightIconTemplate().BuildEntity(null, "Directional light");
     private readonly Entity directionalRays = new DirectionalLightVisualTemplate().BuildEntity(null, "Rays");
     private readonly Entity cameraIcon = new CameraIconTemplate().BuildEntity(null, "Camera");
+    private readonly Entity perspectiveRays = new CameraFrustumTemplate().BuildEntity(null, "View", flat: false);
+    private readonly Entity flatRays = new CameraFrustumTemplate().BuildEntity(null, "View", flat: true);
     private readonly Entity emptyIcon = new EmptyIconTemplate().BuildEntity(null, "Entity");
     private readonly Entity groupIcon = new GroupIconTemplate().BuildEntity(null, "Group");
     private readonly Dictionary<Entity, Entity> iconOf = new();
@@ -81,6 +84,9 @@ public class EntityIcons : EditorProcessor
         overlay.DrawFlatInScene(root);
     }
 
+    /// <summary>The icon that stands for <paramref name="target"/> in the scene, or null when it shows none.</summary>
+    public Entity IconOf(Entity target) => target != null && iconOf.TryGetValue(target, out var icon) ? icon : null;
+
     public override PickHit PickEntity(in PickRay ray)
     {
         var hit = root.Pick(ray, PickMode.MeshColliders);
@@ -90,6 +96,31 @@ public class EntityIcons : EditorProcessor
         }
 
         return new PickHit(target, hit.Point, hit.Depth);
+    }
+
+    public override void PickEntities(CameraBase camera, in ScreenFrame frame, List<Entity> into)
+    {
+        var half = Pixels * camera.PixelsPerPoint / 2;
+        foreach (var target in iconOf.Keys)
+        {
+            if (target == camera.Owner)
+            {
+                continue;
+            }
+
+            var at = target.GetComponent<Camera>()?.WorldPosition ?? target.Transform.WorldPosition;
+            var inRender = ScreenSpace.InRender(at, camera);
+            if (Vector3F.Dot(inRender, (Vector3F)camera.Forward) <= camera.ZNear && camera.ProjectionMatrix.M44 < 0.5f)
+            {
+                continue;
+            }
+
+            var center = ScreenSpace.ToPixel(inRender, camera);
+            if (frame.Takes(center - new Vector2F(half), center + new Vector2F(half)))
+            {
+                into.Add(target);
+            }
+        }
     }
 
     private void Collect(Entity entity)
@@ -111,9 +142,18 @@ public class EntityIcons : EditorProcessor
             {
                 raysOf[entity] = Instance(icon, directionalRays);
             }
+            else if (look == cameraIcon)
+            {
+                raysOf[entity] = Instance(icon, perspectiveRays);
+            }
         }
 
         icon.IsSelected = entity.IsSelected;
+        if (raysOf.TryGetValue(entity, out var view) && look == cameraIcon)
+        {
+            view.IsSelected = entity.IsSelected;
+        }
+
         if (entity.GetComponent<Light>() is { } light)
         {
             icon.GetComponent<Material>().MeshColor = light.Color;
@@ -187,24 +227,58 @@ public class EntityIcons : EditorProcessor
 
     private void Place(Entity target, Entity icon, Camera camera)
     {
+        raysOf.TryGetValue(target, out var rays);
         if (target == camera.Owner)
         {
             icon.Transform.GetMetadata(camera).Enabled = false;
+            if (rays != null)
+            {
+                rays.Transform.GetMetadata(camera).Enabled = false;
+            }
+
             return;
         }
 
-        var at = target.Transform.WorldPosition;
+        var at = target.GetComponent<Camera>()?.WorldPosition ?? target.Transform.WorldPosition;
         PlaceIcon(icon, at, Pixels, camera);
 
-        if (raysOf.TryGetValue(target, out var rays))
+        if (rays != null)
         {
             var size = Pixels * ScreenSpace.UnitsPerPoint(camera, at);
             var raysMetadata = rays.Transform.GetMetadata(camera);
-            raysMetadata.WorldMatrixF = Matrix4x4F.Scaling(size)
-                                        * TurnOf(target)
-                                        * Matrix4x4F.Translation(ScreenSpace.InRender(at, camera));
+            var stretchAndTurn = target.GetComponent<Camera>() is { } seen
+                ? ViewOf(seen, rays, size)
+                : Matrix4x4F.Scaling(size) * TurnOf(target);
+            raysMetadata.WorldMatrixF = stretchAndTurn * Matrix4x4F.Translation(ScreenSpace.InRender(at, camera));
             raysMetadata.Enabled = true;
         }
+    }
+
+    private Matrix4x4F ViewOf(Camera seen, Entity rays, float size)
+    {
+        var projection = seen.ProjectionMatrix;
+        var flat = projection.M44 > 0.5f;
+        var shape = (flat ? flatRays : perspectiveRays).GetComponent<MeshData>().Mesh;
+        var drawn = rays.GetComponent<MeshData>();
+        if (drawn.Mesh != shape)
+        {
+            drawn.Mesh = shape;
+        }
+
+        var length = 2 * size;
+        var stretch = flat
+            ? Matrix4x4F.Scaling(0.5f * size * projection.M22 / projection.M11, 0.5f * size, length)
+            : Matrix4x4F.Scaling(length / projection.M11, length / projection.M22, length);
+
+        var right = (Vector3F)seen.Right;
+        var up = -(Vector3F)seen.Up;
+        var forward = (Vector3F)seen.Forward;
+        var turn = new Matrix4x4F(
+            right.X, right.Y, right.Z, 0,
+            up.X, up.Y, up.Z, 0,
+            forward.X, forward.Y, forward.Z, 0,
+            0, 0, 0, 1);
+        return stretch * turn;
     }
 
     private static Matrix4x4F TurnOf(Entity target)

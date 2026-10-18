@@ -23,11 +23,13 @@ public sealed class PlacementTool : ToolProcessor
     private Vector2F rightPressedAt;
     private bool rightClicking;
 
-    /// <param name="ghost">What is placed, standing at its origin; it is only drawn and never joins the world.</param>
+    /// <param name="ghost">What is placed, standing at its origin; it is only drawn and never joins the world. Null draws
+    /// no ghost, only the <see cref="Icon"/> if there is one: the tool then picks what to place onto, <see cref="Under"/>,
+    /// as with <see cref="NeedsSomethingUnder"/>.</param>
     public PlacementTool(Entity ghost)
     {
         Ghost = ghost;
-        lowest = LowestPoint(ghost);
+        lowest = ghost == null ? 0 : LowestPoint(ghost);
     }
 
     public Entity Ghost { get; }
@@ -105,7 +107,11 @@ public sealed class PlacementTool : ToolProcessor
         var iconPixels = Find<EntityIcons>()?.Pixels ?? EntityIcons.DefaultPixels;
         for (int i = 0; i < cameras.Count; i++)
         {
-            PlaceGhost(Ghost, Matrix4x4F.Translation((Vector3F)(position - cameras[i].WorldPosition)), cameras[i]);
+            if (Ghost != null)
+            {
+                PlaceGhost(Ghost, Matrix4x4F.Translation((Vector3F)(position - cameras[i].WorldPosition)), cameras[i]);
+            }
+
             if (Icon != null)
             {
                 EntityIcons.PlaceIcon(Icon, position, iconPixels, cameras[i]);
@@ -128,7 +134,11 @@ public sealed class PlacementTool : ToolProcessor
     {
         if (Position != null)
         {
-            overlay.DrawGhost(Ghost, GhostTint);
+            if (Ghost != null)
+            {
+                overlay.DrawGhost(Ghost, GhostTint);
+            }
+
             if (Icon != null)
             {
                 overlay.DrawFlatInScene(Icon);
@@ -138,7 +148,8 @@ public sealed class PlacementTool : ToolProcessor
 
     /// <summary>
     /// Where a ray in render space - its origin taken from <paramref name="eye"/> - meets the plane y =
-    /// <paramref name="planeY"/> in the world, no further than <paramref name="reach"/> along it.
+    /// <paramref name="planeY"/> in the world, no further across it from the eye than <paramref name="reach"/>, as far
+    /// as the ground grid lies; a flat view's rays start far behind the eye.
     /// </summary>
     public static bool OnGround(in Ray ray, Vector3 eye, double planeY, float reach, out Vector3 point)
     {
@@ -150,12 +161,18 @@ public sealed class PlacementTool : ToolProcessor
 
         var start = (Vector3)ray.Position + eye;
         var along = (planeY - start.Y) / ray.Direction.Y;
-        if (along < 0 || along > reach)
+        if (along < 0)
         {
             return false;
         }
 
-        point = start + (Vector3)ray.Direction * along;
+        var met = start + (Vector3)ray.Direction * along;
+        if (Math.Abs(met.X - eye.X) > reach || Math.Abs(met.Z - eye.Z) > reach)
+        {
+            return false;
+        }
+
+        point = met;
         return true;
     }
 
@@ -206,20 +223,6 @@ public sealed class PlacementTool : ToolProcessor
 
         rightClicking = false;
         return true;
-    }
-
-    private T Find<T>() where T : EditorProcessor
-    {
-        var processors = Tools.Processors;
-        for (int i = 0; i < processors.Count; i++)
-        {
-            if (processors[i] is T processor)
-            {
-                return processor;
-            }
-        }
-
-        return null;
     }
 
     // The ground is the grid's plane, as far as the grid is drawn; without a grid there is only what the pointer hits.

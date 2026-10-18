@@ -200,6 +200,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["DirectionalCount"].SetValue((uint)directional);
         parameters["ClusterDepth"].SetValue(new Vector4F(near, far, ClusterSlices / MathF.Log(far / near), MathF.Log(near)));
         parameters["InverseScale"].SetValue(new Vector2F(1f / projection.M11, 1f / projection.M22));
+        parameters["ClusterW"].SetValue(new Vector2F(projection.M34, projection.M44));
         parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
         parameters["Ambient"].SetValue(Ambient);
     }

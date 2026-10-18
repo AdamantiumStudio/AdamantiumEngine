@@ -4,8 +4,9 @@ using Adamantium.Mathematics;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Outlines what is selected, together with everything under it, so the part of a model being changed stands apart from
-/// the rest; and, in another color, what a click would select under the pointer. Works with whatever tool is in use.
+/// Outlines what is selected - all of it, round its joint silhouette - together with everything under it, so the part of a model being changed stands apart from
+/// the rest; and, in another color, what a click would select under the pointer, with the icon it shows by, if any. Works
+/// with whatever tool is in use.
 /// </summary>
 public class SelectionOutline : EditorProcessor
 {
@@ -18,13 +19,14 @@ public class SelectionOutline : EditorProcessor
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
-        var selected = Tools.Selection.Current;
-        if (Tools.Hovered is { } hovered && hovered != selected)
+        var selection = Tools.Selection;
+        if (Tools.Hovered is { } hovered && !selection.Contains(hovered))
         {
-            overlay.DrawOutline(hovered, HoverColor, Pixels);
+            overlay.DrawOutline(hovered, Find<EntityIcons>()?.IconOf(hovered), HoverColor, Pixels);
         }
 
-        if (selected != null)
+        var selected = selection.Items;
+        if (selected.Count > 0)
         {
             overlay.DrawOutline(selected, Color, Pixels);
         }

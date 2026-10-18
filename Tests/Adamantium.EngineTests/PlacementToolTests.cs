@@ -48,6 +48,17 @@ public class PlacementToolTests
         Assert.That(PlacementTool.OnGround(ray, new Vector3(0, -10, 0), 0, 500, out _), Is.False);
     }
 
+    // A flat view casts its rays from far behind the camera: the reach counts across the ground, not along the ray.
+    [Test]
+    public void ARayFromFarBehindTheEye_MeetsTheGroundNearIt()
+    {
+        var direction = Vector3F.Normalize(new Vector3F(0, 1, 1));
+        var ray = new Ray(direction * -10000, direction);
+
+        Assert.That(PlacementTool.OnGround(ray, new Vector3(0, -10, 0), 0, 500, out var point), Is.True);
+        Assert.That(point.Z, Is.EqualTo(10).Within(1e-2));
+    }
+
     [Test]
     public void AnObject_RestsOnThePointByItsLowestPoint_UpBeingMinusY()
     {

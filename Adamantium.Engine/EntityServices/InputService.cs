@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
+using Adamantium.Engine.Tools;
 using Adamantium.Multiverse;
 using Adamantium.Multiverse.Input;
 using Adamantium.Graphics.Core;
@@ -16,6 +18,9 @@ public class InputService : EntityService
 {
     private const double ZoomNotchesPerMeter = 8;
     private const float PinchNotchesPerDoubling = 4;
+
+    // Mouse look turns by the distance moved, not by time: the turn a pixel gave at a 120 Hz frame.
+    private const float LookPerPixel = 1f / 120;
 
     private Entity userControlledEntity;
     //private AudioManager audioManager;
@@ -43,6 +48,9 @@ public class InputService : EntityService
     private readonly InputAction lookBack;
     private readonly InputAction wireframe;
     private readonly InputAction screenshot;
+    private bool panning;
+    private Vector2F panFrom;
+    private Camera panCamera;
 
     public InputService(EntityWorld world) : base(world)
     {
@@ -113,7 +121,8 @@ public class InputService : EntityService
     public Entity UserControlledEntity { get; set; }
 
     /// <summary>
-    /// The mouse turns and zooms the camera of the output under the pointer, the keys and gamepad drive the camera of
+    /// The mouse turns and zooms the camera of the output under the pointer - with the middle button down, a free one is
+    /// dragged across its screen plane with the pointer, as far as the plane it looks at moves - the keys and gamepad drive the camera of
     /// the output taking the keyboard - which may be another output, or none. Every visible camera is updated either way.
     /// </summary>
     public override void Update(AppTime appTime)
@@ -122,7 +131,11 @@ public class InputService : EntityService
 
         if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera))
         {
-            HandlePointer(pointerCamera, appTime);
+            HandlePointer(pointerCamera);
+        }
+        else
+        {
+            panning = false;
         }
 
         if (observatory.KeyboardOutput is { Camera: { } keyboardCamera } keyboardOutput)
@@ -141,6 +154,33 @@ public class InputService : EntityService
             cameras[i].Update(appTime);
             TakeOffWhenFree(cameras[i]);
         }
+
+        UpdateIdleCameras(appTime);
+    }
+
+    private void UpdateIdleCameras(AppTime appTime)
+    {
+        var cameras = EntityWorld.EntityManager.Cameras;
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            if (cameras[i].GetComponent<Camera>() is { } camera && !Contains(observatory.CurrentCameras, camera))
+            {
+                camera.Update(appTime);
+            }
+        }
+    }
+
+    private static bool Contains(IReadOnlyList<Camera> cameras, Camera camera)
+    {
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            if (cameras[i] == camera)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // A camera free again - its travel over, its subject gone, the user's choice - comes off its subject where it stands;
@@ -152,15 +192,16 @@ public class InputService : EntityService
 
         entity.Transform.Position = entity.Transform.WorldPosition;
         EntityWorld.EntityManager.RemoveOwner(entity);
+        EntityWorld.EntityManager.AddEntity(entity);
     }
 
-    private void HandlePointer(Camera currentCamera, AppTime appTime)
+    private void HandlePointer(Camera currentCamera)
     {
         if (look.IsDown)
         {
             currentCamera.RotateRelativeXY(
-                (look.Vector.Y * currentCamera.MouseSensitivity) * (float)appTime.FrameTime,
-                (-look.Vector.X * currentCamera.MouseSensitivity) * (float)appTime.FrameTime);
+                look.Vector.Y * currentCamera.MouseSensitivity * LookPerPixel,
+                -look.Vector.X * currentCamera.MouseSensitivity * LookPerPixel);
         }
 
         if (zoom.Value != 0)
@@ -172,6 +213,31 @@ public class InputService : EntityService
         {
             currentCamera.RotateForward(-twist.Value);
         }
+
+        Pan(currentCamera);
+    }
+
+    private void Pan(Camera camera)
+    {
+        if (observatory.PointerInput is not { CanLocatePointer: true } input || !input.IsMouseButtonDown(MouseButton.Middle))
+        {
+            panning = false;
+            return;
+        }
+
+        var at = input.RelativePosition;
+        if (panning && camera == panCamera)
+        {
+            var moved = at - panFrom;
+            var focus = camera.WorldPosition + camera.Forward * camera.FocusDistance;
+            var unitsPerPixel = ScreenSpace.UnitsPerPixel(camera, focus);
+            camera.TranslateRight(-moved.X * unitsPerPixel);
+            camera.TranslateUp(-moved.Y * unitsPerPixel);
+        }
+
+        panFrom = at;
+        panCamera = camera;
+        panning = true;
     }
 
     private void HandleKeyboard(UniverseOutput output, Camera currentCamera, AppTime appTime)

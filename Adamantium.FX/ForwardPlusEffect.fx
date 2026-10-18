@@ -22,12 +22,15 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
     uint y = (cluster / ClusterX) % ClusterY;
     uint z = cluster / (ClusterX * ClusterY);
 
-    float zNear = SliceDepth(z);
+    // A flat view also sees behind the camera: its first slice reaches back as far as the last reaches ahead.
+    float zNear = z == 0 && ClusterW.y > 0.0f ? -ClusterDepth.y : SliceDepth(z);
     float zFar = SliceDepth(z + 1);
+    float wNear = zNear * ClusterW.x + ClusterW.y;
+    float wFar = zFar * ClusterW.x + ClusterW.y;
     float2 a = (float2(x, y) / float2(ClusterX, ClusterY) * 2.0f - 1.0f) * InverseScale;
     float2 b = (float2(x + 1, y + 1) / float2(ClusterX, ClusterY) * 2.0f - 1.0f) * InverseScale;
-    float3 boxMin = float3(min(min(a * zNear, a * zFar), min(b * zNear, b * zFar)), zNear);
-    float3 boxMax = float3(max(max(a * zNear, a * zFar), max(b * zNear, b * zFar)), zFar);
+    float3 boxMin = float3(min(min(a * wNear, a * wFar), min(b * wNear, b * wFar)), zNear);
+    float3 boxMax = float3(max(max(a * wNear, a * wFar), max(b * wNear, b * wFar)), zFar);
 
     ClusterLight* lights = (ClusterLight*)LightsAddress;
     uint* list = (uint*)ClusterLightsAddress;
