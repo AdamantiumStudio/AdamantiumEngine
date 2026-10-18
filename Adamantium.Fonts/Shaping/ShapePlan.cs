@@ -36,6 +36,9 @@ internal sealed class ShapePlan
 
     public bool ApplyKernTable { get; private set; }
 
+    // Marks lose their width, unless a kerning state machine places them, as HarfBuzz leaves them then.
+    public bool ZeroMarks { get; private set; }
+
     // A font that positions nothing itself: marks keep their place when their advances are zeroed, and, where HarfBuzz's
     // shaper for the script does so, are placed around their base by their classes.
     public bool AdjustMarksWhenZeroing { get; private set; }
@@ -150,6 +153,7 @@ internal sealed class ShapePlan
         var positions = layout.Gpos != null && (script != "Hebr" || gpos.Script == "hebr");
         plan.ApplyGpos = positions && layout.Gpos.LookupList?.Length > 0;
         plan.ApplyKernTable = layout.HasKernTable && (!positions || kern is not { GposIndex: >= 0 });
+        plan.ZeroMarks = !plan.ApplyKernTable || !layout.HasMachineKerning;
         plan.AdjustMarksWhenZeroing = !positions && (!plan.ApplyKernTable || !layout.HasCrossKerning);
         plan.FallbackMarkPositioning = plan.AdjustMarksWhenZeroing && PlacesMarks(script, gsub.Script);
         plan.KernMask = kern?.Mask ?? 0;

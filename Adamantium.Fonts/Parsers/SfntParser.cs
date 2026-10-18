@@ -1557,62 +1557,108 @@ namespace Adamantium.Fonts.Parsers
             return glyphHeader;
         }
 
+        // Microsoft's 'kern' (version 0) and Apple's (version 1.0), as HarfBuzz reads them: each subtable to its length,
+        // the last one to the end of the table.
         protected virtual void ReadKerningTable(TableEntry entry)
         {
+            var table = new byte[entry.Length];
             FontReader.Position = entry.Offset;
-            
-            var version = FontReader.ReadUInt16();
-            var numTables = FontReader.ReadUInt16();
-
-            var kernSubtables = new KerningSubtable[numTables];
-
-            long nextSubtableOffset = FontReader.Position;
-
-            for (ushort i = 0; i < numTables; ++i)
+            var read = 0;
+            while (read < table.Length)
             {
-                if (i > 0)
+                var chunk = FontReader.Read(table, read, table.Length - read);
+                if (chunk == 0)
                 {
-                    // advance to next subtable
-                    nextSubtableOffset += kernSubtables[i - 1].Length;
-                    FontReader.Position = nextSubtableOffset;
+                    break;
                 }
 
-                var kernSubtable = new KerningSubtable();
-
-                kernSubtable.Version = FontReader.ReadUInt16();
-                kernSubtable.Length = FontReader.ReadUInt16();
-                ushort rawCoverage = FontReader.ReadUInt16();
-
-                ParseTTFCoverage(rawCoverage, kernSubtable);
-                CurrentFont.Layout.HasCrossKerning |= kernSubtable.CrossStream;
-
-                if (kernSubtable.Format != 0) // Windows supports only format 0
-                {
-                    kernSubtables[i] = kernSubtable;
-                    continue;
-                }
-
-                kernSubtable.NumberOfPairs = FontReader.ReadUInt16();
-                kernSubtable.SearchRange = FontReader.ReadUInt16();
-                kernSubtable.EntrySelector = FontReader.ReadUInt16();
-                kernSubtable.RangeShift = FontReader.ReadUInt16();
-
-                for (ushort j = 0; j < kernSubtable.NumberOfPairs; ++j)
-                {
-                    ushort left = FontReader.ReadUInt16();
-                    ushort right = FontReader.ReadUInt16();
-
-                    UInt32 key = GenerateKerningKey(left, right);
-                    kernSubtable.KerningValues[key] = FontReader.ReadInt16();
-                }
-
-                kernSubtables[i] = kernSubtable;
-
-                CurrentFont.KerningData = kernSubtables;
+                read += chunk;
             }
 
-            CurrentFont.Layout.KernSubtables = kernSubtables;
+            if (read < 4)
+            {
+                return;
+            }
+
+            var apple = BigEndian16(table, 0) == 1;
+            if (!apple && BigEndian16(table, 0) != 0)
+            {
+                return;
+            }
+
+            var count = apple ? (read >= 8 ? BigEndian32(table, 4) : 0) : BigEndian16(table, 2);
+            var subtables = new List<KerningSubtable>();
+            var start = apple ? 8 : 4;
+            for (var i = 0; i < count && start + (apple ? 8 : 6) <= read; i++)
+            {
+                var subtable = new KerningSubtable { Apple = apple };
+                int length;
+                if (apple)
+                {
+                    length = (int)Math.Min(BigEndian32(table, start), int.MaxValue);
+                    var coverage = table[start + 4];
+                    subtable.Horizontal = (coverage & 0x80) == 0;
+                    subtable.CrossStream = (coverage & 0x40) != 0;
+                    subtable.Variation = (coverage & 0x20) != 0;
+                    subtable.Format = table[start + 5];
+                }
+                else
+                {
+                    subtable.Version = BigEndian16(table, start);
+                    length = BigEndian16(table, start + 2);
+                    ParseTTFCoverage(BigEndian16(table, start + 4), subtable);
+                }
+
+                subtable.Length = (ushort)Math.Min(length, ushort.MaxValue);
+                var end = i == count - 1 ? read : (int)Math.Min((long)start + length, read);
+                if (end <= start)
+                {
+                    break;
+                }
+
+                subtable.Data = new byte[end - start];
+                Array.Copy(table, start, subtable.Data, 0, end - start);
+                if (subtable.Format == 0)
+                {
+                    ReadKerningPairs(subtable);
+                }
+
+                CurrentFont.Layout.HasCrossKerning |= subtable.CrossStream;
+                CurrentFont.Layout.HasMachineKerning |= subtable.Format == 1;
+                subtables.Add(subtable);
+                start = end;
+            }
+
+            CurrentFont.Layout.KernSubtables = subtables.ToArray();
+            if (subtables.Exists(subtable => subtable.Format == 0))
+            {
+                CurrentFont.KerningData = CurrentFont.Layout.KernSubtables;
+            }
         }
+
+        private static void ReadKerningPairs(KerningSubtable subtable)
+        {
+            var data = subtable.Data;
+            var at = subtable.HeaderSize;
+            if (at + 8 > data.Length)
+            {
+                return;
+            }
+
+            subtable.NumberOfPairs = BigEndian16(data, at);
+            subtable.SearchRange = BigEndian16(data, at + 2);
+            subtable.EntrySelector = BigEndian16(data, at + 4);
+            subtable.RangeShift = BigEndian16(data, at + 6);
+            for (int j = 0, pair = at + 8; j < subtable.NumberOfPairs && pair + 6 <= data.Length; j++, pair += 6)
+            {
+                var key = GenerateKerningKey(BigEndian16(data, pair), BigEndian16(data, pair + 2));
+                subtable.KerningValues[key] = (short)BigEndian16(data, pair + 4);
+            }
+        }
+
+        private static ushort BigEndian16(byte[] data, int at) => (ushort)((data[at] << 8) | data[at + 1]);
+
+        private static uint BigEndian32(byte[] data, int at) => ((uint)BigEndian16(data, at) << 16) | BigEndian16(data, at + 2);
 
         protected virtual void ReadGDEFTable(TableEntry entry)
         {

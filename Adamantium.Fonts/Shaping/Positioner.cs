@@ -1,7 +1,5 @@
 using System.Globalization;
 using Adamantium.Fonts.Common;
-using Adamantium.Fonts.Parsers;
-using Adamantium.Fonts.Tables;
 
 namespace Adamantium.Fonts.Shaping;
 
@@ -40,11 +38,11 @@ internal static class Positioner
 
         if (plan.ApplyKernTable)
         {
-            KernTable(buffer, font.Layout, plan, rightToLeft);
+            KernTable.Apply(buffer, font.Layout, plan, rightToLeft);
         }
 
         var adjustOffsets = plan.AdjustMarksWhenZeroing && !rightToLeft;
-        for (var i = 0; i < buffer.Length; i++)
+        for (var i = 0; plan.ZeroMarks && i < buffer.Length; i++)
         {
             if (!info[i].IsMark)
             {
@@ -437,116 +435,6 @@ internal static class Positioner
             }
         }
     }
-
-    // The 'kern' table as HarfBuzz applies it: each subtable of the text's direction in turn; the first one across the
-    // direction chains every glyph to the one before it, so a glyph it moves carries the rest of the line along.
-    // HarfBuzz carries offsets along the chains only once something was attached: the chains stay idle if nothing was
-    // before them and no pair moved a glyph across.
-    private static void KernTable(GlyphBuffer buffer, OpenTypeLayout layout, ShapePlan plan, bool rightToLeft)
-    {
-        var placements = buffer.Placements;
-        var chained = false;
-        var attached = false;
-        foreach (var subtable in layout.KernSubtables)
-        {
-            if (subtable.Horizontal == plan.Vertical)
-            {
-                continue;
-            }
-
-            if (subtable.CrossStream && !chained)
-            {
-                chained = true;
-                for (var i = 0; i < buffer.Length; i++)
-                {
-                    attached |= placements[i].AttachChain != 0;
-                    placements[i].AttachType = GlyphPlacement.AttachCursive;
-                    placements[i].AttachChain = rightToLeft ? 1 : -1;
-                }
-            }
-
-            if (subtable.Format == 0 && plan.KernMask != 0)
-            {
-                attached |= Kern(buffer, subtable, plan.KernMask, plan.Vertical, rightToLeft);
-            }
-        }
-
-        if (chained && !attached)
-        {
-            for (var i = 0; i < buffer.Length; i++)
-            {
-                placements[i].AttachChain = 0;
-            }
-        }
-    }
-
-    // One subtable's pairs, left to right on the line; marks and visible ignorables between the two are passed over.
-    // Whether a pair moved a glyph across the line.
-    private static bool Kern(GlyphBuffer buffer, KerningSubtable subtable, uint kernMask, bool vertical, bool rightToLeft)
-    {
-        var info = buffer.Info;
-        var placements = buffer.Placements;
-        var last = buffer.Length - 1;
-        var across = false;
-        var index = 0;
-        while (index < buffer.Length)
-        {
-            var i = rightToLeft ? last - index : index;
-            if ((info[i].Mask & kernMask) == 0)
-            {
-                index++;
-                continue;
-            }
-
-            var next = index + 1;
-            while (next < buffer.Length && PassedOver(info[rightToLeft ? last - next : next]))
-            {
-                next++;
-            }
-
-            var j = rightToLeft ? last - next : next;
-            if (next >= buffer.Length || (info[j].Mask & kernMask) == 0)
-            {
-                index++;
-                continue;
-            }
-
-            var key = SfntParser.GenerateKerningKey((ushort)info[i].Glyph, (ushort)info[j].Glyph);
-            if (subtable.KerningValues.TryGetValue(key, out var value) && value != 0)
-            {
-                int kern = value;
-                var first = kern >> 1;
-                var second = kern - first;
-                across |= subtable.CrossStream;
-                if (subtable.CrossStream && vertical)
-                {
-                    placements[j].XOffset = kern;
-                }
-                else if (subtable.CrossStream)
-                {
-                    placements[j].YOffset = kern;
-                }
-                else if (vertical)
-                {
-                    placements[i].YAdvance += first;
-                    placements[j].YAdvance += second;
-                    placements[j].YOffset += second;
-                }
-                else
-                {
-                    placements[i].XAdvance += first;
-                    placements[j].XAdvance += second;
-                    placements[j].XOffset += second;
-                }
-            }
-
-            index = next;
-        }
-
-        return across;
-    }
-
-    private static bool PassedOver(in GlyphInfo info) => info.IsMark || info.IsDefaultIgnorableAndNotHidden;
 
     private static void PropagateAttachment(GlyphPlacement[] placements, int length, int i, int nesting, bool rightToLeft,
         bool vertical)

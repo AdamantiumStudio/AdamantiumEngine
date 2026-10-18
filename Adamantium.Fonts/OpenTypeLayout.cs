@@ -20,6 +20,9 @@ internal sealed class OpenTypeLayout
 
     public bool HasCrossKerning { get; set; }
 
+    // A subtable of format 1, a state machine: HarfBuzz then leaves marks their width.
+    public bool HasMachineKerning { get; set; }
+
     public ConcurrentDictionary<string, ShapePlan> Plans { get; } = new();
 
     public bool HasGlyphClasses => Gdef?.GlyphClassDefTable != null;

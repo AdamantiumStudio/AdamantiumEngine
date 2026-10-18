@@ -311,10 +311,11 @@ Name 'Source', under the SIL Open Font License 1.1, whose text is `source-sans-3
 ## Adamantium Marks Test
 
 **Where:** `Tests/Adamantium.FontTests/ScriptFonts/AdamantiumMarksTest-Regular.ttf`,
-`AdamantiumMarksTest-EmptyGpos.ttf`, `AdamantiumMarksTest-Dev2.ttf` and `AdamantiumMarksTest-Kern.ttf`, made for the
-tests from Source Sans 3 Regular: its basic Latin and combining marks, some Thai and Lao characters mapped to them,
-without its `GPOS` table, with one of no lookups, with a `dev2` script of no features, and with a `kern` table of
-made-up pairs; renamed as the license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font Name 'Source', under the SIL Open Font License 1.1, whose text
+`AdamantiumMarksTest-EmptyGpos.ttf`, `AdamantiumMarksTest-Dev2.ttf`, `AdamantiumMarksTest-Kern.ttf`,
+`AdamantiumMarksTest-Kern2.ttf` and `AdamantiumMarksTest-AppleKern.ttf`, made for the tests from Source Sans 3 Regular:
+its basic Latin and combining marks, some Thai and Lao characters mapped to them, without its `GPOS` table, with one of
+no lookups, with a `dev2` script of no features, and with `kern` tables of made-up pairs, classes and state machines;
+renamed as the license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font Name 'Source', under the SIL Open Font License 1.1, whose text
 is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 
 ---

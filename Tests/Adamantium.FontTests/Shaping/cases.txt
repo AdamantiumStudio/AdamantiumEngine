@@ -138,6 +138,11 @@ ScriptFonts/AdamantiumMarksTest-Kern.ttf	Latn			AVAVA To VA A{U+0301}V A{U+200C}
 ScriptFonts/AdamantiumMarksTest-Kern.ttf	Hebr			AVAVA To VA
 ScriptFonts/AdamantiumMarksTest-Kern.ttf	Latn:TTB			AV A{U+0301}V a{U+0323}
 ScriptFonts/AdamantiumMarksTest-Kern.ttf	Latn:TTB		vkrn	AV
+ScriptFonts/AdamantiumMarksTest-Kern2.ttf	Latn			AVATAR To Ao Tx xA
+ScriptFonts/AdamantiumMarksTest-Kern2.ttf	Hebr			AVATAR To Ao
+ScriptFonts/AdamantiumMarksTest-AppleKern.ttf	Latn			AVATAR To LT VA AAV A{U+0301}V AxV a{U+0301}
+ScriptFonts/AdamantiumMarksTest-AppleKern.ttf	Hebr			AVATAR To LT VA
+ScriptFonts/AdamantiumMarksTest-AppleKern.ttf	Latn:TTB			AV A{U+0301}V
 ScriptFonts/AdamantiumMarksTest-Regular.ttf	Runr:TTB			fi{U+0301} ffl{U+0323}{U+0300}
 ScriptFonts/AdamantiumMarksTest-Regular.ttf	Tfng:TTB			fi{U+0301} ffl{U+0323}{U+0300}
 ScriptFonts/AdamantiumMarksTest-Regular.ttf	Latn:TTB			fi{U+0301} ffl{U+0323}{U+0300}
