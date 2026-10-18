@@ -27,8 +27,8 @@ public static class ParagraphComposer
     /// <summary>The items <paramref name="items"/> breaks at, each line no worse than <paramref name="tolerance"/>
     /// (TeX's badness: 100 when its spaces stretch or shrink by all they may); null when no breaking keeps to it. The
     /// items end with a forced penalty, which is the last break. At most <paramref name="hyphenLimit"/> lines in a row
-    /// end at a flagged penalty with a width - a hyphen the break adds - unless a line has no other place to break, a
-    /// piece of a word wider than it; 0 sets no limit.</summary>
+    /// end at a flagged penalty that adds a hyphen - one with a width, or one made with an after - unless a line has no
+    /// other place to break, a piece of a word wider than it; 0 sets no limit.</summary>
     public static int[] Break(IReadOnlyList<ComposerItem> items, double lineWidth, double tolerance, int hyphenLimit = 0)
     {
         return Run(items, [lineWidth], tolerance, 0, false, hyphenLimit);
@@ -145,7 +145,10 @@ public static class ParagraphComposer
                     continue;
                 }
 
-                var length = widths[b] - widths[start] + (isPenalty ? item.Width : 0);
+                var length = widths[b] - widths[start] + (isPenalty ? item.Width : 0)
+                             + (from.Position >= 0 && items[from.Position].Kind == ComposerItemKind.Penalty
+                                 ? items[from.Position].After
+                                 : 0);
                 var stretch = stretches[b] - stretches[start] + emergencyStretch;
                 var shrink = shrinks[b] - shrinks[start];
                 var fill = fills[b] - fills[start];
@@ -167,7 +170,7 @@ public static class ParagraphComposer
                     i++;
                 }
 
-                var hyphens = isPenalty && item.Flagged && item.Width > 0 ? from.Hyphens + 1 : 0;
+                var hyphens = isPenalty && item.Flagged && (item.Width > 0 || item.Discretionary) ? from.Hyphens + 1 : 0;
                 var overLimit = hyphenLimit > 0 && hyphens > hyphenLimit && plainBreaks[b] > plainBreaks[start];
                 if ((badness > tolerance || overLimit) && !artificial)
                 {

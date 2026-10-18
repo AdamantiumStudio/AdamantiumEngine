@@ -123,6 +123,10 @@ public class TextLayout : DisposableObject
     /// it was laid out.</summary>
     public int OversetIndex { get; private set; }
 
+    /// <summary>The index in <see cref="Frames"/> of the frame a line stands in; -1 without frames.</summary>
+    public int GetLineFrame(int lineIndex) =>
+        _laid?.LineFrames is { } frames && lineIndex >= 0 && lineIndex < frames.Length ? frames[lineIndex] : -1;
+
     /// <summary>
     /// Which way lines run: across (the default), or down and stacked from right to left. A vertical line is as long as
     /// the text area is high, and the lines fill its width from the right; <see cref="HorizontalTextAlignment"/> places
@@ -169,6 +173,15 @@ public class TextLayout : DisposableObject
     /// or a sad where the word has one, else nearest its end, up to an em each. The extender is the font's
     /// justification glyph ('JSTF'), else its tatweel (U+0640). True by default.</summary>
     public bool Kashidas { get; set; } = true;
+
+    /// <summary>When fullwidth CJK punctuation is set half-width, its blank half trimmed, as CSS's
+    /// <c>text-spacing-trim</c>: by default, punctuation side by side collapses its blanks and a closing one at the end
+    /// of a line that would not fit otherwise is trimmed.</summary>
+    public TextSpacingTrim SpacingTrim { get; set; }
+
+    /// <summary>Whether an ideographic comma or full stop at the end of a line hangs past it, as Japanese burasage:
+    /// by default it hangs when the line would not fit with it otherwise.</summary>
+    public HangingPunctuation HangingPunctuation { get; set; } = HangingPunctuation.AllowEnd;
 
     /// <summary>Where the last line of a justified paragraph stands, as InDesign sets it: at its start (the default; on
     /// the right in a right-to-left paragraph), centered, at its end, or justified too
@@ -450,11 +463,21 @@ public class TextLayout : DisposableObject
     /// <see cref="NextWordStop"/> follows the reading order.</summary>
     public CaretPosition MoveWordVisually(CaretPosition from, bool toRight) => _navigator.MoveWordVisually(from, toRight);
 
-    /// <summary>The grapheme nearest to a point in layout coordinates, and where a click there puts the caret.</summary>
+    /// <summary>The grapheme nearest to a point in layout coordinates, and where a click there puts the caret. Down
+    /// vertical lines the point is where the text is shown, as <see cref="GetRangeRects"/> gives it.</summary>
     public TextHit HitTest(double x, double y) => _navigator.HitTest(x, y);
 
-    /// <summary>Where the caret stands for a position, in layout coordinates, and on which visual line.</summary>
+    /// <summary>The grapheme nearest to a place along a visual line, as <see cref="GetCaretPoint"/> gives it: where the
+    /// caret goes on the line before or after, keeping its column.</summary>
+    public TextHit HitTestLine(int lineIndex, double x) => _navigator.HitTestLine(lineIndex, x);
+
+    /// <summary>Where the caret stands for a position along its visual line, and on which line. The X runs along the
+    /// line - down a vertical one.</summary>
     public (double X, int LineIndex) GetCaretPoint(CaretPosition position) => _navigator.GetCaretPoint(position);
+
+    /// <summary>The caret for a position where the text is shown: across the whole of its line, <paramref name="thickness"/>
+    /// along it - a bar on a horizontal line, a dash down a vertical one.</summary>
+    public RectangleF GetCaretRect(CaretPosition position, double thickness) => _navigator.GetCaretRect(position, thickness);
 
     /// <summary>The caret position one grapheme to the left or the right of <paramref name="from"/> on screen, whichever
     /// way the text there runs; past a line's edge, the nearer edge of the line the reading goes on to.</summary>
@@ -519,6 +542,8 @@ public class TextLayout : DisposableObject
         LastLineAlignment = LastLineAlignment,
         SingleWordJustification = SingleWordJustification,
         Kashidas = Kashidas,
+        SpacingTrim = SpacingTrim,
+        HangingPunctuation = HangingPunctuation,
         Tracking = Tracking,
         Kerning = Kerning,
         BaselineGrid = BaselineGrid,

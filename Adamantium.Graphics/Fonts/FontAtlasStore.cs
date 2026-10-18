@@ -13,6 +13,11 @@ namespace Adamantium.Graphics.Fonts
         /// text to fill in. Threads filling inline at once upload into an atlas one at a time.</summary>
         public static bool SynchronousFill { get; set; }
 
+        /// <summary>The layers of video memory, some 5.6 MB each, the images of color glyphs (emoji of 'sbix' and 'CBDT')
+        /// take before the ones no text shows any longer are let go for new ones: 16 by default, some 90 MB - about 500
+        /// of Noto Color Emoji's. When the images text shows take more, the atlas grows past it.</summary>
+        public static int ColorImageLayerBudget { get; set; } = 16;
+
         /// <summary>The atlas rasterized with <paramref name="fontParameters"/>, shared by all text in every font: a glyph
         /// is found in it by its typeface and index.</summary>
         public static FontAtlas GetOrCreateFrom(IGraphicsDevice graphicsDevice, FontParameters fontParameters)

@@ -204,10 +204,10 @@ public class BaselineGridTests
                         $"line {i} is below the one before");
                 }
 
-                var overlapsExclusion = i != 1 && line.Top < exclusion.Bottom && line.Top + line.Height > exclusion.Top
+                var overlapsExclusion = line.Top < exclusion.Bottom && line.Top + line.Height > exclusion.Top
                                         && glyphs.Any(glyph => glyph.LineIndex == i && glyph.Rect.Width > 0
                                                                && glyph.Rect.Left < exclusion.Right);
-                Assert.That(overlapsExclusion, Is.False, $"line {i} after the larger one keeps out of the exclusion");
+                Assert.That(overlapsExclusion, Is.False, $"line {i}, the larger one too, keeps out of the exclusion");
             }
 
             if (gridded)

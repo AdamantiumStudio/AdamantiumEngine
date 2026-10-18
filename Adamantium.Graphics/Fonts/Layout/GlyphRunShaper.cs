@@ -32,13 +32,86 @@ internal sealed class GlyphRunShaper
         bool[] graphemes, out bool hasPendingFonts)
     {
         _pending = false;
+        _pieceSegments = null;
         var items = text.Length > MostKept ? new List<ShapedItem>(text.Length) : _items;
         items.Clear();
         items.EnsureCapacity(text.Length);
-        var runIndex = 0;
-        foreach (var (start, end, attributes) in SplitAt(SplitAtRubies(ShapingSegments(text, runs, fontSize,
-                     options.Kerning), attributed), split))
+        ShapeInto(items, text, attributed, runs, fontSize, split, vertical, options, paragraphs, graphemes, 0,
+            text.Length, null,
+            SplitAt(SplitAtRubies(ShapingSegments(text, runs, fontSize, options.Kerning), attributed), split));
+        hasPendingFonts = _pending;
+        return items;
+    }
+
+    // The shaping segments of the text the pieces are cut from, found once for all of its pieces.
+    private (string Text, AttributedText Attributed, IReadOnlyList<AttributeRun> Runs, double FontSize,
+        TextKerning Kerning, List<(int Start, int End, TextAttributes Attributes)> Segments)? _pieceSegments;
+
+    private IEnumerable<(int Start, int End, TextAttributes Attributes)> SegmentsOver(string text,
+        AttributedText attributed, IReadOnlyList<AttributeRun> runs, double fontSize, TextKerning kerning, int from,
+        int to)
+    {
+        if (_pieceSegments is not { } known || !ReferenceEquals(known.Text, text)
+            || !ReferenceEquals(known.Attributed, attributed) || !ReferenceEquals(known.Runs, runs)
+            || !known.FontSize.Equals(fontSize) || known.Kerning != kerning)
         {
+            known = (text, attributed, runs, fontSize, kerning,
+                [.. SplitAtRubies(ShapingSegments(text, runs, fontSize, kerning), attributed)]);
+            _pieceSegments = known;
+        }
+
+        var segments = known.Segments;
+        var low = 0;
+        var high = segments.Count;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (segments[middle].End <= from)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        for (var k = low; k < segments.Count && segments[k].Start < to; k++)
+        {
+            yield return segments[k];
+        }
+    }
+
+    /// <summary>A piece of the text shaped by itself, as if nothing came before or after it: the halves of a word a
+    /// line breaks, each ending or starting as a word does - no ligature or joining across the break.</summary>
+    public List<ShapedItem> ShapePiece(string text, AttributedText attributed, IReadOnlyList<AttributeRun> runs,
+        double fontSize, int from, int to, bool vertical, TextLayoutOptions options, TextParagraphs paragraphs,
+        bool[] graphemes)
+    {
+        var pending = _pending;
+        var items = new List<ShapedItem>(to - from);
+        ShapeInto(items, text, attributed, runs, fontSize, 0, vertical, options, paragraphs, graphemes, from, to,
+            text.Substring(from, to - from), SegmentsOver(text, attributed, runs, fontSize, options.Kerning, from, to));
+        _pending = pending;
+        return items;
+    }
+
+    // The items of the text from `from` to `to`; `piece`, when given, is that range alone, what the shaper sees.
+    private void ShapeInto(List<ShapedItem> items, string text, AttributedText attributed, IReadOnlyList<AttributeRun> runs,
+        double fontSize, int split, bool vertical, TextLayoutOptions options, TextParagraphs paragraphs,
+        bool[] graphemes, int from, int to, string piece,
+        IEnumerable<(int Start, int End, TextAttributes Attributes)> segments)
+    {
+        var runIndex = 0;
+        foreach (var (segmentStart, segmentEnd, attributes) in segments)
+        {
+            var start = Math.Max(segmentStart, from);
+            var end = Math.Min(segmentEnd, to);
+            if (start >= end)
+            {
+                continue;
+            }
+
             var language = attributes?.Language ?? options.Language;
             var kerning = attributes?.Kerning ?? options.Kerning;
             var unkerned = kerning == TextKerning.Metrics
@@ -96,11 +169,13 @@ internal sealed class GlyphRunShaper
                 var newlineAttributes = AttributesAt(newline);
                 if (text[newline] == ObjectReplacement)
                 {
+                    // Down a vertical line an object stands upright: its height along the line.
+                    var objectSize = newlineAttributes.ObjectSize.Value;
+                    var verticalLine = options.WritingMode == WritingMode.VerticalRightToLeft;
                     items.Add(new ShapedItem(font.GetGlyphByCharacter(' '), ObjectReplacement, newline,
-                        newlineAttributes.ObjectSize.Value.Width, 0,
-                        Raise(newlineAttributes, font, newlineAttributes.FontSize ?? fontSize, fontSize,
-                            newlineAttributes.ObjectSize.Value.Height),
-                        newlineAttributes, font, newlineAttributes.FontSize ?? fontSize));
+                        verticalLine ? objectSize.Height : objectSize.Width, 0,
+                        Raise(newlineAttributes, font, newlineAttributes.FontSize ?? fontSize, fontSize, objectSize.Height),
+                        newlineAttributes, font, newlineAttributes.FontSize ?? fontSize, upright: verticalLine));
                 }
                 else
                 {
@@ -112,8 +187,10 @@ internal sealed class GlyphRunShaper
             }
         }
 
-        hasPendingFonts = _pending;
-        return items;
+        // A range shaped in the text, its letters joining across its edges, or within the piece alone.
+        ShapedGlyph[] Shaped(IFont runFont, int start, int end, ShapingOptions shaping) => piece == null
+            ? TextShaper.Shape(runFont, text, start, end, shaping)
+            : TextShaper.Shape(runFont, piece, start - from, end - from, shaping);
 
         double Raise(TextAttributes raised, IFont raisedFont, double size, double baseSize,
             double objectHeight = double.NaN) =>
@@ -141,8 +218,8 @@ internal sealed class GlyphRunShaper
             bool kernsOptically)
         {
             var shaped = direction == TextDirection.Auto
-                ? TextShaper.Shape(runFont, text, start, end, shaping)
-                : TextShaper.Shape(runFont, text, start, end,
+                ? Shaped(runFont, start, end, shaping)
+                : Shaped(runFont, start, end,
                     new ShapingOptions(shaping.Script, shaping.Language, shaping.Features, direction));
             if (direction == TextDirection.RightToLeft)
             {
@@ -222,7 +299,7 @@ internal sealed class GlyphRunShaper
 
         void AddUpright(ShapingOptions shaping, IFont runFont, Glyph blank, int start, int end)
         {
-            var shaped = TextShaper.Shape(runFont, text, start, end,
+            var shaped = Shaped(runFont, start, end,
                 new ShapingOptions(shaping.Script, shaping.Language, shaping.Features, vertical: true));
             for (var k = 0; k < shaped.Length; k++)
             {
@@ -244,7 +321,7 @@ internal sealed class GlyphRunShaper
 
         void AddCombined(ShapingOptions shaping, IFont runFont, Glyph blank, int start, int end)
         {
-            var shaped = TextShaper.Shape(runFont, text, start, end, shaping);
+            var shaped = Shaped(runFont, start, end, shaping);
             var size = AttributesAt(start)?.FontSize ?? fontSize;
             var width = shaped.Sum(glyph => glyph.XAdvance) * size / runFont.UnitsPerEm;
             var fitted = width > size ? size * size / width : size;

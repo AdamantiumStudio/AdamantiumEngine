@@ -28,6 +28,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="Adamantium.Engine.GraphicsTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Compile Remove="obj\**" />
 	</ItemGroup>
 

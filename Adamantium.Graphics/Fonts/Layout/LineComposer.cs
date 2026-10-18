@@ -48,31 +48,50 @@ internal sealed class LineComposer
         // A text trimmed and wrapped in a fixed height takes only lines that fit whole. A line raised by larger
         // text in it is known only once laid, so a text whose last line came out taller than the room is laid again up
         // to the lines that fit - until its last line fits, or only one is left.
-        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, null);
+        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, null, null);
         var limit = TrimmedLinesThatFit(laid, renderingParameters, options);
         while (limit > 0)
         {
-            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit, null);
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit, null, null);
             var fit = TrimmedLinesThatFit(laid, renderingParameters, options);
             limit = fit < limit ? fit : 0;
         }
 
         // In frames a line is given the room of its paragraph's line height: raised by larger text or a taller object,
-        // it can come out past the bottom of its frame. The text is laid again with that line in the next frame on.
+        // it can come out into an exclusion, or past the bottom of its frame. The text is laid again with that line's
+        // room found for its height, or with it in the next frame on. Each pass settles the first such line, the lines
+        // before it staying as they were.
         Dictionary<int, int> pushed = null;
-        for (var pass = 0; options.Frames is { Length: > 0 } && pass <= options.Frames.Length; pass++)
+        Dictionary<int, double> tall = null;
+        var pushes = 0;
+        for (var pass = 0; options.Frames is { Length: > 0 } && pass < MostFramePasses; pass++)
         {
-            if (LineOverItsFrame(laid) is not var (line, frame))
+            if (laid.LineOverAnExclusion is var (tallLine, height)
+                && (tall == null || !tall.TryGetValue(tallLine, out var known) || height > known + 0.5))
+            {
+                (tall ??= [])[tallLine] = height;
+            }
+            else if (pushes++ <= options.Frames.Length && LineOverItsFrame(laid) is var (line, frame))
+            {
+                (pushed ??= [])[line] = frame + 1;
+                // The lines from it on take other text in the next frame: their heights are found again.
+                foreach (var stale in tall?.Keys.Where(index => index >= line).ToList() ?? [])
+                {
+                    tall.Remove(stale);
+                }
+            }
+            else
             {
                 break;
             }
 
-            (pushed ??= [])[line] = frame + 1;
-            laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, pushed);
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, pushed, tall);
         }
 
         return laid;
     }
+
+    private const int MostFramePasses = 64;
 
     // The first line that ends past the bottom of its frame and is not the first in it: the next frame may hold it.
     private static (int Line, int Frame)? LineOverItsFrame(LaidOutText laid)
@@ -121,7 +140,7 @@ internal sealed class LineComposer
 
     private LaidOutText Lay(string text, AttributedText attributed, double fontSize,
         TextRenderingParameters renderingParameters, TextLayoutOptions options, int lineLimit,
-        IReadOnlyDictionary<int, int> pushed)
+        IReadOnlyDictionary<int, int> pushed, IReadOnlyDictionary<int, double> tall)
     {
         var laidOutParameters = renderingParameters;
 
@@ -250,6 +269,11 @@ internal sealed class LineComposer
         }
 
         int[] rubyAt = null;
+        bool[] boundaries = null;
+        // Where a fullwidth CJK punctuation is set half-width, its blank half trimmed; the comma or full stop each line
+        // hangs past its end.
+        var trimmedPunctuation = new HashSet<int>();
+        Dictionary<int, GlyphWordData> hungEnds = null;
         int[] rubyOther = null;
         List<Ruby> rubies = null;
         bool[] rubyShown = null;
@@ -274,6 +298,12 @@ internal sealed class LineComposer
             rubies = SetUpRubies();
         }
 
+        var punctuated = CjkPunctuation.Appears(text);
+        if (punctuated && options.SpacingTrim != TextSpacingTrim.SpaceAll)
+        {
+            CollapsePunctuation();
+        }
+
         cursorPosition = LineIndent(0);
         if (lineBreaks != null && options.LineBreaking == LineBreaking.Paragraph
                                && (slots != null || textArea.Width < Int32.MaxValue))
@@ -292,7 +322,11 @@ internal sealed class LineComposer
         while (wordStart <= items.Count)
         {
             var wordEnd = WordEnd(wordStart);
-            if (!ProcessWord(wordStart, wordEnd))
+            // A word hyphenated is set again in its halves: its end moves by the items that took.
+            var itemCount = items.Count;
+            var processed = ProcessWord(wordStart, wordEnd);
+            wordEnd += items.Count - itemCount;
+            if (!processed)
             {
                 break;
             }
@@ -340,6 +374,11 @@ internal sealed class LineComposer
 
             wordIndex++;
             wordStart = wordEnd + 1;
+        }
+
+        if (punctuated)
+        {
+            FinishLineEnds();
         }
 
         paragraphs?.ReorderLines(glyphsData);
@@ -456,9 +495,11 @@ internal sealed class LineComposer
             lineTops[i] += verticalShift;
         }
 
+        (int Line, double Height)? lineOverAnExclusion = null;
         if (slots != null)
         {
             PlaceInFrames();
+            lineOverAnExclusion = LineOverAnExclusion();
             if (renderingParameters.TextArea.Height == Int32.MaxValue)
             {
                 var bottom = dropGlyphs != null ? DropBaseline() + lineHeight - baseLine : 0.0;
@@ -525,6 +566,7 @@ internal sealed class LineComposer
             ColumnsRight = columnsRight,
             LineFrames = laidOutLineFrames,
             FrameRects = frameRects,
+            LineOverAnExclusion = lineOverAnExclusion,
             Paragraphs = paragraphs,
             Graphemes = graphemes,
             OversetIndex = oversetIndex,
@@ -711,8 +753,10 @@ internal sealed class LineComposer
         int WordEnd(int start)
         {
             var end = start;
+            // A break opportunity is where a cluster starts: the second glyph of a letter shaped in two is not one.
             while (end < items.Count && (!IsBlank(items[end].Symbol) || InsideABase(end))
-                   && (end == start || lineBreaks == null || lineBreaks[items[end].Cluster] == LineBreakKind.None))
+                   && (end == start || lineBreaks == null || items[end].Cluster == items[end - 1].Cluster
+                       || lineBreaks[items[end].Cluster] == LineBreakKind.None))
             {
                 end++;
             }
@@ -1321,9 +1365,16 @@ internal sealed class LineComposer
             var ownSize = setHeight && glyph.FontSize == fontSize;
             var above = ownSize ? ownBaseline : BaselineInLine(glyph.Font, glyphScale);
             var below = ownSize ? ownHeight - ownBaseline : LineAdvance(glyph.Font, glyph.FontSize) - above;
-            if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize)
+            if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize && vertical)
             {
-                above = Math.Max(above, objectSize.Height + glyph.OffsetY);
+                // Upright down a vertical line, centered across it on the middle of the text's own.
+                var middle = (below - above) / 2;
+                above = Math.Max(above, objectSize.Width / 2 - middle);
+                below = Math.Max(below, objectSize.Width / 2 + middle);
+            }
+            else if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } standing)
+            {
+                above = Math.Max(above, standing.Height + glyph.OffsetY);
                 below = Math.Max(below, -glyph.OffsetY);
             }
 
@@ -1366,7 +1417,7 @@ internal sealed class LineComposer
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
         void ForgetSlotsFrom(int line, double gap)
         {
-            if (slots != null && line < slots.Count && slotBases[line] != (gap, OwnLineHeight(line), GridsLine(line)))
+            if (slots != null && line < slots.Count && slotBases[line] != (gap, SlotHeight(line), GridsLine(line)))
             {
                 slots.RemoveRange(line, slots.Count - line);
                 slotCursors.RemoveRange(line, slotCursors.Count - line);
@@ -1375,6 +1426,11 @@ internal sealed class LineComposer
         }
 
         double OwnSetHeight(int line) => LineState(line).Paragraph?.LineHeight ?? double.NaN;
+
+        // The height a line's slot is found for: its paragraph's, or what an earlier layout found the line takes.
+        double SlotHeight(int line) => tall != null && tall.TryGetValue(line, out var measured)
+            ? Math.Max(OwnLineHeight(line), measured)
+            : OwnLineHeight(line);
 
         // A paragraph's own line height, or the layout's.
         double OwnLineHeight(int line)
@@ -1473,7 +1529,7 @@ internal sealed class LineComposer
         {
             var line = slots.Count;
             var gap = line < lineStates.Count ? lineStates[line].Gap : line == paragraphOpenLine ? pendingGap : 0;
-            var rowHeight = OwnLineHeight(line);
+            var rowHeight = SlotHeight(line);
             var (f, top, rows) = line == 0 ? (0, (double)frames[0].Top, 0) : slotCursors[line - 1];
             if (rows > 0)
             {
@@ -1661,7 +1717,21 @@ internal sealed class LineComposer
         {
             var newline = end > start && items[end - 1].Symbol == '\n' ? end - 1 : end;
             var trims = renderingParameters.TextTrimming != TextTrimming.None;
-            if (composedStarts.Contains(start) && LineHasContent())
+            // The hyphens the composer chose in this word: it is set again in the pieces they cut.
+            var wordFrom = CharAt(start);
+            var wordTo = CharAt(newline);
+            var cuts = composedCuts.Where(cut => cut > wordFrom && cut < wordTo).OrderBy(cut => cut).ToList();
+            if (cuts.Count > 0)
+            {
+                var grown = Recut(start, newline, cuts);
+                newline += grown;
+                end += grown;
+            }
+
+            bool IsCut(int k) => k > start && k < newline && items[k].Cluster != items[k - 1].Cluster
+                                 && composedCuts.Contains(items[k].Cluster);
+
+            if (composedStarts.Contains(wordFrom) && LineHasContent())
             {
                 if (HasRoomBelow())
                 {
@@ -1684,7 +1754,7 @@ internal sealed class LineComposer
             }
 
             var firstCut = start + 1;
-            while (firstCut < newline && !composedCuts.Contains(firstCut))
+            while (firstCut < newline && !IsCut(firstCut))
             {
                 firstCut++;
             }
@@ -1701,7 +1771,7 @@ internal sealed class LineComposer
 
             for (var k = start + 1; k < newline; k++)
             {
-                if (!composedCuts.Contains(k) || k == passedCut)
+                if (!IsCut(k) || k == passedCut)
                 {
                     continue;
                 }
@@ -1770,11 +1840,35 @@ internal sealed class LineComposer
                 List<int> points = options.Hyphens == Hyphens.None ? [] : HyphenationPoints(start, newline);
                 var automatic = options.Hyphens == Hyphens.Auto && !HasSoftHyphen(start, newline);
                 var piece = start;
+                var wordFrom = CharAt(start);
+                var wordTo = CharAt(newline);
+                var reshaped = !HasRuby(start, newline);
                 foreach (var point in points)
                 {
-                    AddWordPiece(paragraph, piece, point, justified, false);
-                    paragraph.Add((ComposerItem.Penalty(HyphenAdvance(items[point - 1]), 50, true), point, true, automatic));
-                    piece = point;
+                    // The word broken there is set again in its halves: the line it ends takes the first with the
+                    // hyphen, the next line starts with the rest - what they take more or less than the word's pieces.
+                    // A word with a ruby base is cut as it is.
+                    var cut = ItemAt(piece, newline, point);
+                    if (cut > piece)
+                    {
+                        AddWordPiece(paragraph, piece, cut, justified, false);
+                    }
+
+                    if (reshaped)
+                    {
+                        var before = Piece(wordFrom, point);
+                        var after = Piece(point, wordTo);
+                        var hyphen = before.Count > 0 ? HyphenAdvance(before[^1]) : 0;
+                        paragraph.Add((ComposerItem.Penalty(Width(before) + hyphen - Advance(start, cut), 50, true,
+                            Width(after) - Advance(cut, newline)), point, true, automatic));
+                    }
+                    else
+                    {
+                        paragraph.Add((ComposerItem.Penalty(cut > start ? HyphenAdvance(items[cut - 1]) : 0, 50, true),
+                            point, true, automatic));
+                    }
+
+                    piece = cut;
                 }
 
                 var lastLetter = 0.0;
@@ -1798,27 +1892,37 @@ internal sealed class LineComposer
                     next++;
                 }
 
+                // Where the line after a break here starts, in the text: its places stay where they are when a word
+                // is set again in pieces.
+                var nextAt = CharAt(next);
                 if (next == end)
                 {
                     var hyphen = items[end - 1].Symbol is '-' or '‐';
-                    AddBreak(paragraph, next, ComposerItem.Penalty(0, hyphen ? 50 : 0, hyphen), justified, raggedStretch);
+                    // A line ending here may hang its comma or full stop, or trim its closing punctuation's blank half.
+                    AddBreak(paragraph, nextAt, ComposerItem.Penalty(-EndLeeway(start, newline), hyphen ? 50 : 0, hyphen),
+                        justified, raggedStretch);
                     // Words with no space between them - ideographs, a word after a hyphen - keep the letter spacing
-                    // of the gap between them, which a space's glue carries elsewhere; at a break it is dropped.
-                    if (justified && lastLetter > 0)
+                    // of the gap between them, which a space's glue carries elsewhere; at a break it is dropped. CJK
+                    // letters widen between them when justified, as the lines are - a quarter of an em, so a line closed
+                    // up is still taken before one spread, as JLREQ prefers.
+                    var cjkGap = next < items.Count && (CjkPunctuation.IsCjk(CodepointAt(text, items[end - 1].Cluster))
+                                                        || CjkPunctuation.IsCjk(CodepointAt(text, items[next].Cluster)));
+                    if (justified && (lastLetter > 0 || cjkGap))
                     {
                         paragraph.Add((ComposerItem.Glue(0,
-                            lastLetter * (options.LetterSpacing.Maximum - options.LetterSpacing.Desired),
-                            lastLetter * (options.LetterSpacing.Desired - options.LetterSpacing.Minimum)), next, false, false));
+                            lastLetter * (options.LetterSpacing.Maximum - options.LetterSpacing.Desired)
+                            + (cjkGap ? items[end - 1].FontSize / 4 : 0),
+                            lastLetter * (options.LetterSpacing.Desired - options.LetterSpacing.Minimum)), nextAt, false, false));
                     }
                 }
                 else
                 {
-                    AddBreak(paragraph, next, WordGlue(end, lastLetter), justified, raggedStretch);
+                    AddBreak(paragraph, nextAt, WordGlue(end, lastLetter), justified, raggedStretch);
                     NoteTab(end);
                     for (var k = end + 1; k < next; k++)
                     {
                         var glue = WordGlue(k, 0);
-                        paragraph.Add((justified ? glue : ComposerItem.Glue(glue.Width, 0, 0), next, false, false));
+                        paragraph.Add((justified ? glue : ComposerItem.Glue(glue.Width, 0, 0), nextAt, false, false));
                         NoteTab(k);
                     }
                 }
@@ -1996,7 +2100,8 @@ internal sealed class LineComposer
 
             var space = gap.Kind == ComposerItemKind.Glue ? gap.Width : 0;
             paragraph.Add((ComposerItem.Glue(0, raggedStretch, 0), next, false, false));
-            paragraph.Add((ComposerItem.Penalty(0, gap.Kind == ComposerItemKind.Penalty ? gap.Cost : 0,
+            paragraph.Add((ComposerItem.Penalty(gap.Kind == ComposerItemKind.Penalty ? gap.Width : 0,
+                gap.Kind == ComposerItemKind.Penalty ? gap.Cost : 0,
                 gap.Kind == ComposerItemKind.Penalty && gap.Flagged), next, false, false));
             paragraph.Add((ComposerItem.Glue(space, -raggedStretch, 0), next, false, false));
         }
@@ -2110,9 +2215,9 @@ internal sealed class LineComposer
 
             var wrapsByWords = renderingParameters.TextWrapping == TextWrapping.WrapByWords;
             var wordWidth = wrapsByWords ? WordWidth(start, end) : 0;
-            if (wrapsByWords && options.Hyphens != Hyphens.None && Overflows(wordWidth))
+            if (wrapsByWords && options.Hyphens != Hyphens.None && Overflows(EndWidth(start, end)))
             {
-                var rest = HyphenateWord(start, end);
+                var rest = HyphenateWord(start, ref end);
                 if (rest < 0)
                 {
                     return false;
@@ -2127,10 +2232,12 @@ internal sealed class LineComposer
 
             // Wrapped at the word boundary, before any glyph is laid: a word that does not fit starts a new line, and
             // a word wider than the line only overflows as the first on its line.
+            // A comma or full stop that may hang, or a closing punctuation that may give up its blank half, does not take
+            // the word to the next line.
             if (wrapsByWords
                 && wordIndex > 0
                 && LineHasContent()
-                && Overflows(wordWidth))
+                && Overflows(EndWidth(start, end)))
             {
                 if (HasRoomBelow())
                 {
@@ -2197,6 +2304,36 @@ internal sealed class LineComposer
             laidOutLineFrames = lineFrames;
         }
 
+        // The first line that came out taller than the room its slot was found for and reaches into an exclusion beside
+        // or below that room, with its height.
+        (int Line, double Height)? LineOverAnExclusion()
+        {
+            for (var i = 0; i < lineCount && i < slots.Count; i++)
+            {
+                if (lineHeights[i] <= slotBases[i].Height + 0.5)
+                {
+                    continue;
+                }
+
+                var slot = slots[i];
+                var frame = frames[slot.Frame];
+                var left = frame.Left + slot.Left;
+                var right = frame.Left + slot.Right;
+                var top = lineTops[i];
+                var bottom = top + lineHeights[i];
+                foreach (var exclusion in exclusions ?? [])
+                {
+                    if (exclusion.Top < bottom - 0.5 && exclusion.Bottom > top + 0.5
+                        && exclusion.Left < right && exclusion.Right > left)
+                    {
+                        return (i, lineHeights[i]);
+                    }
+                }
+            }
+
+            return null;
+        }
+
         RectangleF AlongColumns(RectangleF rect) =>
             new(rect.Y, (float)(columnsRight - rect.Right), rect.Height, rect.Width);
 
@@ -2214,6 +2351,14 @@ internal sealed class LineComposer
                 var line = Math.Min(glyph.LineIndex, lineCount - 1);
                 var axis = lineTops[line] + (lineAxes != null ? lineAxes[line] : lineHeights[line] / 2);
                 var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
+                if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize)
+                {
+                    // Upright, centered across its line, from where the line has come to down its height.
+                    glyph.Rect = new RectangleF((float)Math.Round(right - axis - objectSize.Width / 2),
+                        (float)Math.Round(glyph.PenX), (float)objectSize.Width, (float)objectSize.Height);
+                    continue;
+                }
+
                 if (glyph.Upright)
                 {
                     var down = glyph.PenX + glyph.OffsetX;
@@ -2352,7 +2497,9 @@ internal sealed class LineComposer
             return right;
         }
 
-        int HyphenateWord(int start, int end)
+        // A word wider than the room hyphenated where its first part, set again by itself with the hyphen, fits: the
+        // word's items are set again in the two halves, so the end of the word moves with them.
+        int HyphenateWord(int start, ref int end)
         {
             var newline = start;
             while (newline < end && items[newline].Symbol != '\n')
@@ -2361,25 +2508,27 @@ internal sealed class LineComposer
             }
 
             List<int> points = null;
-            while (Overflows(WordWidth(start, newline))
+            while (Overflows(EndWidth(start, newline))
                    && (HasRoomBelow() || (CutsOverflow() && renderingParameters.TextTrimming == TextTrimming.None)))
             {
                 points ??= HyphenationPoints(start, newline);
                 var cut = -1;
-                var pen = cursorPosition;
-                var k = start;
                 var room = LineRight(lineIndex) + LineShrink();
+                var from = CharAt(start);
                 foreach (var point in MayHyphenate() ? points : [])
                 {
-                    for (; k < point; k++)
+                    if (point <= from)
                     {
-                        pen += items[k].Advance;
+                        continue;
                     }
 
-                    if (point > start && pen + HyphenInk(items[point - 1]) <= room)
+                    var half = Piece(from, point);
+                    if (half.Count == 0 || cursorPosition + Width(half) + HyphenInk(half[^1]) > room)
                     {
-                        cut = point;
+                        break;
                     }
+
+                    cut = point;
                 }
 
                 if (cut < 0)
@@ -2393,16 +2542,20 @@ internal sealed class LineComposer
                     break;
                 }
 
-                LayItems(start, cut);
-                AddHyphen(items[cut - 1]);
+                var grown = Recut(start, newline, [cut]);
+                newline += grown;
+                end += grown;
+                var cutIndex = ItemAt(start, newline, cut);
+                LayItems(start, cutIndex);
+                AddHyphen(items[cutIndex - 1]);
                 if (!HasRoomBelow())
                 {
-                    Overset(cut);
+                    Overset(cutIndex);
                     return -1;
                 }
 
                 NewLine();
-                start = cut;
+                start = cutIndex;
             }
 
             return start;
@@ -2487,15 +2640,301 @@ internal sealed class LineComposer
                 }
             }
 
-            for (var k = start + 1; k < end; k++)
+            // Where the text may break, in order: between two graphemes, inside a ligature too - the halves are set
+            // again by themselves - but not inside a ruby base.
+            boundaries ??= graphemes ?? TextBoundaries.Graphemes(text);
+            for (var c = first + 1; c < last; c++)
             {
-                if (items[k].Cluster != items[k - 1].Cluster && breaks.Contains(items[k].Cluster) && !InsideABase(k - 1))
+                if (breaks.Contains(c) && boundaries[c] && !(rubyAt != null && SameBase(c - 1, c)))
                 {
-                    points.Add(k);
+                    points.Add(c);
                 }
             }
 
             return points;
+        }
+
+        // Where an item starts in the text; past the last, the text's end.
+        int CharAt(int k) => k < items.Count ? items[k].Cluster : text.Length;
+
+        // A piece of the text set by itself: the half of a word before or after a hyphen.
+        List<ShapedItem> Piece(int from, int to) =>
+            _shaper.ShapePiece(text, attributed, attributeRuns, fontSize, from, to, vertical, options, paragraphs, graphemes);
+
+        // The items of a word from start to end set again in pieces cut at the given places, as the lines break it;
+        // how many more items it takes. A word with a ruby base keeps its items, spread and kerned to the annotation.
+        int Recut(int start, int end, IReadOnlyList<int> cuts)
+        {
+            if (HasRuby(start, end))
+            {
+                return 0;
+            }
+
+            var from = CharAt(start);
+            var pieces = new List<ShapedItem>(end - start + 4);
+            foreach (var cut in cuts)
+            {
+                pieces.AddRange(Piece(from, cut));
+                from = cut;
+            }
+
+            pieces.AddRange(Piece(from, CharAt(end)));
+            items.RemoveRange(start, end - start);
+            items.InsertRange(start, pieces);
+
+            // Set again full-width: the punctuation trimmed before is trimmed again.
+            for (var k = start; k < start + pieces.Count; k++)
+            {
+                if ((k == start || items[k - 1].Cluster != items[k].Cluster) && FullWidth(items[k])
+                    && trimmedPunctuation.Remove(items[k].Cluster))
+                {
+                    Trim(k, true);
+                }
+            }
+
+            return pieces.Count - (end - start);
+        }
+
+        // The first item at or after a place in the text.
+        int ItemAt(int start, int end, int at)
+        {
+            var k = start;
+            while (k < end && items[k].Cluster < at)
+            {
+                k++;
+            }
+
+            return k;
+        }
+
+        // A piece's width as the line sets it: its punctuation trimmed as the word's was.
+        double Width(List<ShapedItem> piece)
+        {
+            double width = 0;
+            for (var k = 0; k < piece.Count; k++)
+            {
+                var item = piece[k];
+                width += item.Advance;
+                if ((k == 0 || piece[k - 1].Cluster != item.Cluster) && FullWidth(item)
+                    && trimmedPunctuation.Contains(item.Cluster))
+                {
+                    width -= item.FontSize / 2;
+                }
+            }
+
+            return width;
+        }
+
+        bool HasRuby(int start, int end)
+        {
+            for (var k = start; rubyAt != null && k < end; k++)
+            {
+                if (RubyIndex(items[k].Cluster) >= 0 || OtherRuby(items[k].Cluster) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        bool IsCjkCluster(GlyphWordData[] cluster) =>
+            cluster[0].PositionInString >= 0 && CjkPunctuation.IsCjk(CodepointAt(text, cluster[0].PositionInString));
+
+        // The comma or full stop a line hangs past its end, left out when the line is aligned.
+        bool HungAtEnd(GlyphWordData glyph) =>
+            hungEnds != null && hungEnds.TryGetValue(glyph.LineIndex, out var hung) && ReferenceEquals(hung, glyph);
+
+        CjkPunctuationClass PunctuationOf(ShapedItem item) =>
+            CjkPunctuation.Of(CodepointAt(text, item.Cluster), item.Attributes?.Language ?? options.Language);
+
+        // A punctuation glyph set on a full em: one with half of it blank. A proportional one is never trimmed.
+        static bool FullWidth(ShapedItem item) => Math.Abs(item.Advance - item.FontSize) <= item.FontSize * 0.05;
+
+        static ShapedItem Spaced(ShapedItem item, double advance, double offsetX) => new(item.Glyph, item.Symbol,
+            item.Cluster, advance, offsetX, item.OffsetY, item.Attributes, item.Font, item.FontSize, item.Upright,
+            item.HorizontalScale, item.Tail);
+
+        // The blank half of a fullwidth punctuation taken away, or given back: an opening one's is before its ink, a
+        // closing one's after it, a middle dot's a quarter on either side.
+        void Trim(int k, bool half)
+        {
+            var item = items[k];
+            if (trimmedPunctuation.Contains(item.Cluster) == half)
+            {
+                return;
+            }
+
+            var amount = (half ? -1 : 1) * item.FontSize / 2;
+            var before = PunctuationOf(item) switch
+            {
+                CjkPunctuationClass.Opening => amount,
+                CjkPunctuationClass.MiddleDot => amount / 2,
+                _ => 0,
+            };
+            items[k] = Spaced(item, item.Advance + amount, item.OffsetX + before);
+            if (half)
+            {
+                trimmedPunctuation.Add(item.Cluster);
+            }
+            else
+            {
+                trimmedPunctuation.Remove(item.Cluster);
+            }
+        }
+
+        // Fullwidth punctuation side by side, as CSS's text-spacing-trim collapses it: an opening one after an opening
+        // one, a middle dot, an ideographic space or a closing one no smaller, half-width; a closing one before a
+        // closing one, a middle dot, an ideographic space or a larger opening one, half-width. TrimAll trims them all.
+        void CollapsePunctuation()
+        {
+            for (var k = dropItems; k < items.Count; k++)
+            {
+                var item = items[k];
+                var kind = PunctuationOf(item);
+                if (kind is CjkPunctuationClass.None or CjkPunctuationClass.IdeographicSpace || !FullWidth(item)
+                    || (k > 0 && items[k - 1].Cluster == item.Cluster))
+                {
+                    continue;
+                }
+
+                if (options.SpacingTrim == TextSpacingTrim.TrimAll)
+                {
+                    Trim(k, true);
+                    continue;
+                }
+
+                var previous = k > dropItems && items[k - 1].Symbol != '\n' ? items[k - 1] : (ShapedItem?)null;
+                var next = k + 1 < items.Count && items[k + 1].Symbol != '\n' ? items[k + 1] : (ShapedItem?)null;
+                var trim = kind switch
+                {
+                    CjkPunctuationClass.Opening => previous is { } before && (PunctuationOf(before) switch
+                    {
+                        CjkPunctuationClass.Opening or CjkPunctuationClass.MiddleDot
+                            or CjkPunctuationClass.IdeographicSpace => true,
+                        CjkPunctuationClass.Closing => before.FontSize >= item.FontSize,
+                        _ => CharUnicodeInfo.GetUnicodeCategory(CodepointAt(text, before.Cluster))
+                             == UnicodeCategory.OpenPunctuation,
+                    }),
+                    CjkPunctuationClass.Closing => next is { } after && (PunctuationOf(after) switch
+                    {
+                        CjkPunctuationClass.Closing or CjkPunctuationClass.MiddleDot
+                            or CjkPunctuationClass.IdeographicSpace => true,
+                        CjkPunctuationClass.Opening => after.FontSize > item.FontSize,
+                        _ => CharUnicodeInfo.GetUnicodeCategory(CodepointAt(text, after.Cluster))
+                             == UnicodeCategory.ClosePunctuation,
+                    }),
+                    _ => false,
+                };
+                if (trim)
+                {
+                    Trim(k, true);
+                }
+            }
+        }
+
+        // An opening punctuation starting a line: full-width, as Normal sets it, or half-width - always for TrimStart and
+        // TrimBoth, past the first line of a paragraph for SpaceFirst.
+        void StartLine(int k)
+        {
+            var item = items[k];
+            if (options.SpacingTrim is TextSpacingTrim.SpaceAll or TextSpacingTrim.TrimAll
+                || PunctuationOf(item) != CjkPunctuationClass.Opening || !FullWidth(item) && !trimmedPunctuation.Contains(item.Cluster))
+            {
+                return;
+            }
+
+            var opensParagraph = k == dropItems || (k > 0 && items[k - 1].Symbol == '\n');
+            Trim(k, options.SpacingTrim switch
+            {
+                TextSpacingTrim.TrimStart or TextSpacingTrim.TrimBoth => true,
+                TextSpacingTrim.SpaceFirst => !opensParagraph,
+                _ => false,
+            });
+        }
+
+        // The end of each line: a closing punctuation set half-width where the line would not fit otherwise, or at the
+        // end of every line for TrimBoth; a comma or full stop hanging past the end, left out when the line is aligned.
+        void FinishLineEnds()
+        {
+            Dictionary<int, GlyphWordData> lastOfLine = null;
+            foreach (var glyph in glyphsData)
+            {
+                if (glyph.PositionInString >= 0 && !IsBlank(glyph.Symbol) && glyph.Symbol != '\n')
+                {
+                    (lastOfLine ??= [])[glyph.LineIndex] = glyph;
+                }
+            }
+
+            foreach (var (line, glyph) in lastOfLine ?? [])
+            {
+                var codepoint = CodepointAt(text, glyph.PositionInString);
+                var over = glyph.PenX + glyph.Advance > LineRight(line) + 0.01;
+                if (CjkPunctuation.IsStopOrComma(codepoint)
+                    && (options.HangingPunctuation == HangingPunctuation.ForceEnd
+                        || (options.HangingPunctuation == HangingPunctuation.AllowEnd && over)))
+                {
+                    (hungEnds ??= [])[line] = glyph;
+                    continue;
+                }
+
+                var trimsEnd = options.SpacingTrim is TextSpacingTrim.TrimBoth or TextSpacingTrim.TrimAll
+                               || (options.SpacingTrim != TextSpacingTrim.SpaceAll && over);
+                if (trimsEnd && !trimmedPunctuation.Contains(glyph.PositionInString)
+                    && CjkPunctuation.Of(codepoint, glyph.Attributes?.Language ?? options.Language) == CjkPunctuationClass.Closing
+                    && Math.Abs(glyph.Advance - glyph.FontSize) <= glyph.FontSize * 0.05)
+                {
+                    glyph.Advance -= glyph.FontSize / 2;
+                    trimmedPunctuation.Add(glyph.PositionInString);
+                }
+            }
+        }
+
+        // What the last character of a word may give up at the end of a line that would not fit otherwise: a comma or
+        // full stop hanging past it whole, a closing punctuation its blank half.
+        double EndLeeway(int start, int end)
+        {
+            var last = end - 1;
+            while (last >= start && items[last].Symbol == '\n')
+            {
+                last--;
+            }
+
+            if (last < start)
+            {
+                return 0;
+            }
+
+            var item = items[last];
+            if (options.HangingPunctuation != HangingPunctuation.None && CjkPunctuation.IsStopOrComma(CodepointAt(text, item.Cluster)))
+            {
+                return item.Advance;
+            }
+
+            return options.SpacingTrim != TextSpacingTrim.SpaceAll && PunctuationOf(item) == CjkPunctuationClass.Closing
+                   && FullWidth(item) && !trimmedPunctuation.Contains(item.Cluster)
+                ? item.Advance / 2
+                : 0;
+        }
+
+        // The width a word takes at the end of a line: its ink, with what its last character may give up left out. A
+        // closing punctuation's ink is off its blank half already; set upright, the whole advance counts.
+        double EndWidth(int start, int end)
+        {
+            var width = WordWidth(start, end);
+            var leeway = EndLeeway(start, end);
+            if (leeway <= 0)
+            {
+                return width;
+            }
+
+            var last = end - 1;
+            while (items[last].Symbol == '\n')
+            {
+                last--;
+            }
+
+            return Math.Max(WordWidth(start, last), Math.Min(width, Advance(start, last) + items[last].Advance - leeway));
         }
 
         double HyphenInk(ShapedItem last)
@@ -2566,6 +3005,12 @@ internal sealed class LineComposer
                         break;
                     default:
                     {
+                        if (!LineHasContent())
+                        {
+                            StartLine(i);
+                            item = items[i];
+                        }
+
                         var glyphBase = height + baseLine;
                         var glyphRect = ObjectSizeOf(item.Symbol, item.Attributes) is { } objectSize
                             ? ObjectRect(cursorPosition, glyphBase - item.OffsetY, objectSize)
@@ -2664,7 +3109,7 @@ internal sealed class LineComposer
                         // By the ink, so leading/trailing spaces don't pull the line off-center.
                         var tab = LastTab(glyphsForLine, 0, glyphsForLine.Length, LineState(i).RightToLeft);
                         var from = AfterTab(tab);
-                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol) && Aligned(x, from)).ToArray();
+                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol) && Aligned(x, from) && !HungAtEnd(x)).ToArray();
                         if (ink.Length == 0 || PlacesWhatFollows(tab)) continue;
                         var minX = ink.Min(LeftOf);
                         var maxX = ink.Max(RightOf);
@@ -2701,7 +3146,7 @@ internal sealed class LineComposer
 
                         var tab = LastTab(glyphsForLine, 0, glyphsForLine.Length, LineState(i).RightToLeft);
                         var from = AfterTab(tab);
-                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol) && Aligned(x, from)).ToArray();
+                        var ink = glyphsForLine.Where(x => !IsBlank(x.Symbol) && Aligned(x, from) && !HungAtEnd(x)).ToArray();
                         if (ink.Length == 0 || PlacesWhatFollows(tab))
                         {
                             continue;
@@ -2764,7 +3209,9 @@ internal sealed class LineComposer
 
                         var lastTab = Array.FindLastIndex(lineGlyphs, lastInk, lastInk + 1, glyph => glyph.Symbol == '\t');
                         var clusters = VisualClusters(byLine[i]);
-                        var lastInkCluster = clusters.FindLastIndex(IsInk);
+                        // A comma or full stop hanging past the end is left out: the line is justified without it.
+                        var hungEnd = hungEnds != null && hungEnds.TryGetValue(i, out var hungGlyph) ? hungGlyph : null;
+                        var lastInkCluster = clusters.FindLastIndex(cluster => IsInk(cluster) && !cluster.Contains(hungEnd));
                         var fromCluster = lastInkCluster < 0 ? 0 : Math.Max(clusters.FindIndex(IsInk),
                             clusters.FindLastIndex(lastInkCluster, lastInkCluster + 1, cluster => cluster[0].Symbol == '\t'));
                         var spaces = new double[clusters.Count];
@@ -2782,6 +3229,18 @@ internal sealed class LineComposer
                             }
                         }
 
+                        // CJK lines, with no spaces, widen between their letters, as CSS's inter-character justification.
+                        var cjk = new double[clusters.Count];
+                        for (var c = fromCluster; c < lastInkCluster; c++)
+                        {
+                            if (IsInk(clusters[c]) && IsInk(clusters[c + 1])
+                                && (IsCjkCluster(clusters[c]) || IsCjkCluster(clusters[c + 1])))
+                            {
+                                cjk[c] = 1;
+                            }
+                        }
+
+                        var cjkUnits = cjk.Sum();
                         var natural = new double[clusters.Count];
                         for (var c = fromCluster; c <= lastInkCluster; c++)
                         {
@@ -2807,12 +3266,14 @@ internal sealed class LineComposer
                         var hangs = options.OpticalMarginAlignment && !rightToLeft;
                         var leftHang = hangs && firstInk == 0 && lastTab < 0 ? Hang(lineGlyphs[firstInk], true) : 0;
                         var rightHang = hangs ? Hang(lineGlyphs[lastInk], false) : 0;
-                        var inkRight = lineGlyphs.Where(glyph => !IsBlank(glyph.Symbol) && glyph.Symbol != '\n')
+                        var inkRight = lineGlyphs.Where(glyph => !IsBlank(glyph.Symbol) && glyph.Symbol != '\n'
+                                                                 && !ReferenceEquals(glyph, hungEnd))
                             .Select(RightOf).DefaultIfEmpty(lineGlyphs[lastInk].Rect.Right).Max();
                         var extra = AlignRight(i) + leftHang + rightHang - (inkRight - lead);
 
                         double wordShare;
                         double letterShare;
+                        double cjkShare = 0;
                         double kashidaShare = 0;
                         double alternateShare = 0;
                         double scaleShare;
@@ -2826,6 +3287,8 @@ internal sealed class LineComposer
                             wordShare = Math.Min(extra, wordStretch);
                             letterShare = Math.Min(extra - wordShare, letterStretch);
                             var rest = extra - wordShare - letterShare;
+                            cjkShare = stretches && cjkUnits > 0 ? rest : 0;
+                            rest -= cjkShare;
                             kashidaShare = Math.Min(rest, kashidaRoom);
                             rest -= kashidaShare;
                             if (options.JustificationAlternates && rest > 0 && stretches)
@@ -2836,7 +3299,7 @@ internal sealed class LineComposer
 
                             scaleShare = Math.Min(rest - alternateShare, scaleStretch);
                             wordShare = spaceUnits > 0
-                                ? extra - letterShare - kashidaShare - alternateShare - scaleShare
+                                ? extra - letterShare - cjkShare - kashidaShare - alternateShare - scaleShare
                                 : wordShare;
                         }
                         else
@@ -2852,7 +3315,7 @@ internal sealed class LineComposer
                         double offset = 0;
                         if (singleWord)
                         {
-                            var rest = extra - wordShare - letterShare - kashidaShare - alternateShare - scaleShare;
+                            var rest = extra - wordShare - letterShare - cjkShare - kashidaShare - alternateShare - scaleShare;
                             if (options.SingleWordJustification == HorizontalTextAlignment.Justify && letterUnits > 0)
                             {
                                 letterShare += rest;
@@ -2868,8 +3331,8 @@ internal sealed class LineComposer
                             }
                         }
 
-                        var unspread = wordShare == 0 && letterShare == 0 && kashidaShare == 0 && alternateShare == 0
-                                       && scaleShare == 0 && offset == 0;
+                        var unspread = wordShare == 0 && letterShare == 0 && cjkShare == 0 && kashidaShare == 0
+                                       && alternateShare == 0 && scaleShare == 0 && offset == 0;
                         if (!hasInk || (!singleWord && (unspread || (extra > 0 && !stretches))))
                         {
                             var placement = hasInk && extra > 0 && !stretches && lastTab < 0
@@ -2929,9 +3392,9 @@ internal sealed class LineComposer
                                 shift += stretch;
                             }
 
-                            var widening = spaces[c] > 0 ? wordShare * spaces[c] / spaceUnits
+                            var widening = (spaces[c] > 0 ? wordShare * spaces[c] / spaceUnits
                                 : letters[c] > 0 ? Math.Max(letterShare * letters[c] / letterUnits, -clusters[c].Sum(glyph => glyph.Advance))
-                                : 0;
+                                : 0) + (cjk[c] > 0 ? cjkShare * cjk[c] / cjkUnits : 0);
                             if (widening == 0)
                             {
                                 continue;

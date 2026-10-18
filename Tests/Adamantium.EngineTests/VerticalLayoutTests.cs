@@ -199,7 +199,7 @@ public class VerticalLayoutTests
         var layout = new TextLayout(NotoSansCjk.Value, Font)
         {
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, Tracking = 200,
-            LetterSpacing = new SpacingRange(0, 0, 1),
+            LetterSpacing = new SpacingRange(0, 0, 1), HangingPunctuation = HangingPunctuation.None,
         };
         layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな、", 12)), FontSize, new Size(400, 301),
             TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
@@ -259,6 +259,70 @@ public class VerticalLayoutTests
         Assert.That(rect.Width, Is.EqualTo(LineHeight).Within(0.01));
         Assert.That(rect.Y, Is.EqualTo(0).Within(0.01));
         Assert.That(rect.Height, Is.EqualTo(2 * FontSize).Within(0.01));
+    }
+
+    // A click where a character is shown finds it, on every line, its upper half before it and its lower half after.
+    [Test]
+    public void AClick_FindsTheCharacterWhereItIsShown()
+    {
+        const string text = "漢字かなカナ漢字かなカナ漢字かな";
+        var layout = Lay(text, 200, 100);
+
+        Assert.That(layout.LineCount, Is.GreaterThan(2));
+        for (var i = 0; i < text.Length; i++)
+        {
+            var rect = layout.GetRangeRects(i, i + 1).Single();
+            var x = rect.X + rect.Width / 2;
+            var upper = layout.HitTest(x, rect.Y + rect.Height * 0.25);
+            var lower = layout.HitTest(x, rect.Y + rect.Height * 0.75);
+
+            Assert.That((upper.Index, upper.CaretIndex, upper.IsInside), Is.EqualTo((i, i, true)), $"the upper half of {i}");
+            Assert.That((lower.Index, lower.CaretIndex, lower.IsInside), Is.EqualTo((i, i + 1, true)), $"the lower half of {i}");
+        }
+    }
+
+    // The caret lies across its line, at the top of the character after it.
+    [Test]
+    public void TheCaret_LiesAcrossItsLine()
+    {
+        var layout = Lay("漢字かな", 200, 400);
+        var caret = layout.GetCaretRect(new CaretPosition(2), 1);
+        var line = layout.GetRangeRects(0, 4).Single();
+
+        Assert.That(caret.X, Is.EqualTo(line.X).Within(0.01));
+        Assert.That(caret.Width, Is.EqualTo(line.Width).Within(0.01));
+        Assert.That(caret.Y, Is.EqualTo(2 * FontSize).Within(0.01));
+        Assert.That(caret.Height, Is.EqualTo(1).Within(1e-6));
+    }
+
+    // Left of a line is the next one: where the caret stands down it is kept.
+    [Test]
+    public void TheLineAfter_KeepsTheCaretsPlaceDownTheLine()
+    {
+        var layout = Lay("漢字かなカナ漢字かなカ", 200, 100);
+        var (down, line) = layout.GetCaretPoint(new CaretPosition(2));
+        var hit = layout.HitTestLine(line + 1, down);
+
+        Assert.That(hit.CaretIndex, Is.EqualTo(7), "two characters down the next line");
+    }
+
+    [Test]
+    public void AClickOnADropCap_FindsIt_OnEveryLineItSpans()
+    {
+        var layout = new TextLayout(NotoSansCjk.Value, Font)
+        {
+            Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, DropCap = new DropCap(3),
+        };
+        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな", 20)), FontSize, new Size(1000, 200),
+            TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var cap = layout.GetTextData().Single(glyph => glyph.PositionInString == 0);
+
+        for (var line = 0; line < 3; line++)
+        {
+            var x = 1000 - (line + 0.5) * LineHeight;
+            var hit = layout.HitTest(x, cap.FontSize * 0.25);
+            Assert.That((hit.Index, hit.CaretIndex), Is.EqualTo((0, 0)), $"the cap from line {line}");
+        }
     }
 
     [Test]

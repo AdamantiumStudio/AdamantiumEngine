@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Adamantium.Fonts;
 using Adamantium.Fonts.TextureGeneration;
@@ -39,7 +40,8 @@ namespace Adamantium.Graphics.Fonts
             {
                 lock (_asyncGate)
                 {
-                    return _inFlight.Count > 0 || _ready.Count > 0 || _imagesInFlight.Count > 0 || _imagesDecoding > 0;
+                    return _inFlight.Count > 0 || _ready.Count > 0 || _imagesInFlight.Count > 0 || _imagesDecoding > 0
+                           || _imagesWaiting.Count > 0;
                 }
             }
         }
@@ -52,19 +54,40 @@ namespace Adamantium.Graphics.Fonts
 
         private readonly ColorBitmapAtlas _bitmaps;
 
-        private readonly Dictionary<ulong, (ColorBitmapCell Cell, double Left, double Bottom, double Width, double Height)> _imagesInFlight = new();
+        private readonly Dictionary<ulong, (ColorBitmapCell Cell, ImagePlace Place)> _imagesInFlight = new();
 
         private readonly HashSet<ulong> _imagesRequested = new();
+
+        // The images in the atlas, each with the pump it was last drawn at: text built since asked for it.
+        private readonly Dictionary<ulong, ResidentImage> _imagesResident = new();
+
+        // Images with no room left under the budget, landing once the ones no text shows are let go.
+        private readonly List<(ulong Key, ColorBitmapImage Image, ImagePlace Place)> _imagesWaiting = [];
 
         private int _imagesDecoding;
 
         private bool _imagesFailed;
+
+        private long _pumps;
+
+        // The pump that bumped the version so that every block drawn builds again and marks its images: -1 when no
+        // images are being let go. A few frames and a quarter of a second later, every cache drawing has built its
+        // blocks again - however many windows and overlays pump each frame; one that drew none since asks again.
+        private long _sweepStart = -1;
+
+        private long _sweepStartedAt;
+
+        private const int SweepPumps = 4;
+
+        private static readonly TimeSpan SweepTime = TimeSpan.FromMilliseconds(250);
 
         protected FontAtlasData AtlasData { get; }
 
         internal Texture Atlas => _layers.Texture;
 
         internal Texture ColorAtlas => _bitmaps.Texture ?? Atlas;
+
+        internal ColorBitmapAtlas ColorImages => _bitmaps;
 
         /// <summary>The layers of the atlas texture in use, and allocated: it starts with <see cref="InitialLayerCount"/>
         /// and doubles as glyphs fill it.</summary>
@@ -214,7 +237,7 @@ namespace Adamantium.Graphics.Fonts
         /// when something landed, which is the caller's cue that text built earlier is now out of date.</summary>
         public bool PumpReady()
         {
-            var images = PumpImages();
+            var images = PumpImages(true);
             List<GlyphTextureData> ready;
             ulong[] generated;
             lock (_asyncGate)
@@ -431,14 +454,22 @@ namespace Adamantium.Graphics.Fonts
         internal bool TryGetImageProgram(IFont font, uint glyph, out int program)
         {
             var key = GlyphTextureData.KeyOf(font.Typeface, glyph);
-            if (_paints.TryGetProgram(key, out program))
+            if (_paints.TryGetProgram(key, out program) && program < 0)
             {
-                return program >= 0;
+                return false;
             }
 
             program = -1;
             lock (_asyncGate)
             {
+                if (_imagesResident.TryGetValue(key, out var resident))
+                {
+                    resident.LastDrawn = _pumps;
+                    program = resident.Program;
+                    return true;
+                }
+
+                // On its way, or let go and asked for again.
                 if (!_imagesRequested.Add(key))
                 {
                     return true;
@@ -464,12 +495,19 @@ namespace Adamantium.Graphics.Fonts
             }
 
             Land(key, bitmap, font.UnitsPerEm);
-            if (PumpImages())
+            if (PumpImages(false))
             {
                 Version++;
             }
 
-            _paints.TryGetProgram(key, out program);
+            lock (_asyncGate)
+            {
+                if (_imagesResident.TryGetValue(key, out var landed))
+                {
+                    program = landed.Program;
+                }
+            }
+
             return program >= 0;
         }
 
@@ -477,34 +515,76 @@ namespace Adamantium.Graphics.Fonts
         {
             var image = ColorBitmapAtlas.Prepare(bitmap.Png);
             var unitsPerPixel = unitsPerEm / bitmap.PixelsPerEm;
+            var place = new ImagePlace(bitmap.Left * unitsPerPixel, (bitmap.Top - bitmap.Height) * unitsPerPixel,
+                bitmap.Width * unitsPerPixel, bitmap.Height * unitsPerPixel);
             lock (_asyncGate)
             {
                 _imagesDecoding--;
-                var cell = image == null ? null : _bitmaps.Add(image);
-                if (cell == null)
+                if (image == null)
                 {
-                    _paints.AddNone(key);
-                    _imagesFailed = true;
+                    LandNowhere(key);
                     return;
                 }
 
-                _imagesInFlight[key] = (cell, bitmap.Left * unitsPerPixel, (bitmap.Top - bitmap.Height) * unitsPerPixel,
-                    bitmap.Width * unitsPerPixel, bitmap.Height * unitsPerPixel);
+                // A render with no next frame cannot wait for images to be let go: it takes the room past the budget.
+                var cell = _bitmaps.Add(image, FontAtlasStore.SynchronousFill);
+                if (cell == null && (_imagesResident.Count > 0 || _sweepStart >= 0))
+                {
+                    _imagesWaiting.Add((key, image, place));
+                    return;
+                }
+
+                LandIn(key, cell ?? _bitmaps.Add(image, true), place);
             }
         }
 
-        private bool PumpImages()
+        private void LandIn(ulong key, ColorBitmapCell cell, ImagePlace place)
         {
-            bool failed;
+            if (cell == null)
+            {
+                LandNowhere(key);
+                return;
+            }
+
+            _imagesInFlight[key] = (cell, place);
+        }
+
+        private void LandNowhere(ulong key)
+        {
+            _paints.SetNone(key);
+            _imagesFailed = true;
+        }
+
+        // A frame's pump moves a sweep on; an inline fill only uploads what it landed.
+        private bool PumpImages(bool frame)
+        {
+            bool changed;
             lock (_asyncGate)
             {
-                failed = _imagesFailed;
+                changed = _imagesFailed;
                 _imagesFailed = false;
+                if (frame)
+                {
+                    _pumps++;
+                    if (_imagesWaiting.Count > 0 && _sweepStart < 0)
+                    {
+                        // Every block drawn builds again on the new version and marks the images it shows.
+                        _sweepStart = _pumps;
+                        _sweepStartedAt = Stopwatch.GetTimestamp();
+                        changed = true;
+                    }
+                    else if (_sweepStart >= 0 && _pumps >= _sweepStart + SweepPumps
+                             && Stopwatch.GetElapsedTime(_sweepStartedAt) >= SweepTime)
+                    {
+                        LetGoOfUndrawnImages();
+                        changed = true;
+                    }
+                }
             }
 
             if (!_bitmaps.HasPending)
             {
-                return failed;
+                return changed;
             }
 
             HashSet<ColorBitmapCell> cells;
@@ -517,18 +597,52 @@ namespace Adamantium.Graphics.Fonts
             {
                 foreach (var pair in _imagesInFlight.ToArray())
                 {
-                    var image = pair.Value;
-                    if (!cells.Contains(image.Cell))
+                    var (cell, place) = pair.Value;
+                    if (!cells.Contains(cell))
                     {
                         continue;
                     }
 
-                    _paints.AddImage(pair.Key, image.Left, image.Bottom, image.Width, image.Height, image.Cell);
                     _imagesInFlight.Remove(pair.Key);
+                    var program = _paints.AddImage(pair.Key, place.Left, place.Bottom, place.Width, place.Height, cell);
+                    if (program < 0)
+                    {
+                        _bitmaps.Free(cell);
+                        continue;
+                    }
+
+                    _imagesResident[pair.Key] = new ResidentImage(cell, program) { LastDrawn = _pumps };
                 }
             }
 
-            return failed || cells.Count > 0;
+            return changed || cells.Count > 0;
+        }
+
+        // The images no block has asked for since the sweep began give their cells to the ones waiting; those that
+        // still find no room take it past the budget.
+        private void LetGoOfUndrawnImages()
+        {
+            foreach (var pair in _imagesResident.ToArray())
+            {
+                var resident = pair.Value;
+                if (resident.LastDrawn >= _sweepStart)
+                {
+                    continue;
+                }
+
+                _imagesResident.Remove(pair.Key);
+                _imagesRequested.Remove(pair.Key);
+                _paints.ClearImage(resident.Program);
+                _bitmaps.Free(resident.Cell);
+            }
+
+            foreach (var (key, image, place) in _imagesWaiting)
+            {
+                LandIn(key, _bitmaps.Add(image, false) ?? _bitmaps.Add(image, true), place);
+            }
+
+            _imagesWaiting.Clear();
+            _sweepStart = -1;
         }
 
         private bool IsSettled(IFont font, Glyph glyph)
@@ -543,5 +657,17 @@ namespace Adamantium.Graphics.Fonts
         {
             return _paints.Upload(GraphicsDevice);
         }
+
+        private sealed class ResidentImage(ColorBitmapCell cell, int program)
+        {
+            public ColorBitmapCell Cell { get; } = cell;
+
+            public int Program { get; } = program;
+
+            public long LastDrawn { get; set; }
+        }
+
+        // Where an image lies in its glyph's space, in font units.
+        private readonly record struct ImagePlace(double Left, double Bottom, double Width, double Height);
     }
 }

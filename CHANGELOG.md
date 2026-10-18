@@ -62,7 +62,30 @@ All packages share one version.
   camera and ahead, set apart from a perspective's.
 - A first-person camera looks where its host faces, turned by its own `Rotation`, and keeps its view when it is freed;
   it stood still.
-
+- Japanese set as JLREQ and CSS Text 4 set it. `TextLayout.SpacingTrim` (`TextSpacingTrim`, as `text-spacing-trim`):
+  `Normal` (the default) sets an opening bracket after a closing one, or two closing ones side by side, half-width and
+  gives up a closing punctuation's blank half where the line would not fit otherwise; `TrimStart`, `TrimBoth`,
+  `TrimAll` trim the start and end of lines as well, `SpaceAll` none. `TextLayout.HangingPunctuation`
+  (`HangingPunctuation`, as `hanging-punctuation`): `AllowEnd` (the default) hangs a comma or full stop past the end of
+  the line where it would not fit, `ForceEnd` at the end of every line, `None` never; a justified line leaves the hung
+  one out. A justified CJK line reaches the edge widened between its letters, where spaces are none.
+- `TextLayout.GetLineFrame`: the frame of `Frames` a line stands in. `FrozenGlyphRun.AtlasVersion` and `IsStale`: the
+  atlas version a run was built at, and whether glyphs landed since - for holders of runs of one layout, each building
+  its own window of it.
+- `FontAtlasStore.ColorImageLayerBudget`: the layers (some 5.6 MB each) the images of color glyphs ('sbix', 'CBDT')
+  take before the ones no text draws are let go - 16 by default, about 500 of Noto Color Emoji's. A new image that
+  finds no room has every text drawn build again and mark its images; a few frames and a quarter of a second later -
+  however many windows draw - the unmarked ones give their
+  cells, a layer left empty goes to images of any size, and an image let go lands again under its old program when
+  text draws it. When the drawn ones take more, the atlas grows past the budget. The atlas kept every image it was
+  ever asked for: a thousand of Noto's took some 250 MB.
+- `ComposerItem.Penalty(width, cost, flagged, after)` and `ComposerItem.After`: what a break there adds to the line
+  after it, as TeX's discretionary break - the rest of a word set again by itself. Such a break counts toward
+  `ParagraphComposer`'s hyphen limit whatever its width comes to (a hyphen inside a ligature may narrow the line).
+- Carets, clicks and selections down vertical lines: `TextLayout.HitTest` takes a point where vertical text is shown
+  (a click on a drop cap included), `GetCaretRect` gives the caret there - a dash across a vertical line, a bar across
+  a horizontal one - and `HitTestLine` the place along a line, as `GetCaretPoint` gives it, for the caret moving to
+  the line before or after and keeping its column.
 - `TextLayout.MoveWordVisually`: the caret a word to the right or left on the screen, as Ctrl+arrows move it - to the
   nearest place that way on its line where a word starts, past the last one to the first on the next line the plain
   arrows go to. In mixed text it follows the screen, where `NextWordStop` follows the reading order; both ways stop at
@@ -622,6 +645,22 @@ All packages share one version.
   transitions jerked and ran too fast, and the `AppTime.Fps` its services got read wrong.
 - Mouse look turns a camera by the distance the mouse moved, the same at any frame rate; it was scaled by the frame
   time as well, and turned slower the faster the frames came.
+- A word hyphenated is set again in its two halves, each by itself: a hyphenation point inside a ligature (of-fice,
+  the ffi one glyph) is a place to break, where it was passed over, and an Arabic letter before the break takes its
+  final form and the one after its initial form, where they kept the forms joining them across it. Paragraph breaking
+  weighs the halves as they come out; CJK punctuation in them stays trimmed as it was, and a word with a ruby base is
+  cut as it is, spread to its annotation.
+- A letter shaped in two glyphs at the start of a word no longer counts as a place to break between them: the word
+  was taken as two, and a line could end inside the letter.
+- An object set into vertical text (U+FFFC with an `ObjectSize`) stands upright down its line: its height along the
+  line, centered across it, and a line it is wider than grows to hold it. `GetInlineObjects` gives it: there were none
+  down vertical lines, and a control set there was given no room.
+- In frames, a line raised by larger text or a taller object keeps out of an exclusion: its room was found for its
+  paragraph's line height, and its lower part could reach into an exclusion just below. The text is laid again with
+  that line's room found for its height.
+- A WOFF2 font with a transformed `hmtx` loads: its transformed length went unread, so every table after it was read
+  from the wrong place, and the table itself - the advances, the side bearings the glyphs' left edges stand for - was
+  read as a plain one.
 - Shaping takes a script under its newer tag first, as HarfBuzz: Devanagari and the other Indic scripts under `dev3`,
   `dev2`, then `deva`; Myanmar under `mym2`, then `mymr`. A font with `dev2` and `DFLT` got `DFLT`.
 - Hebrew in a font whose `GPOS` has no `hebr` script is not positioned by it, as HarfBuzz: its marks are placed by
