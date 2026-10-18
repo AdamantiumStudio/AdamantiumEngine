@@ -268,7 +268,6 @@ internal sealed class LineComposer
         var lineTops = new double[lineCount];
         var lineHeights = new double[lineCount];
         var lineBaselines = new double[lineCount];
-        var lineAscents = new double[lineCount];
         double[] lineCoreAbove = null;
         double[] lineCoreBelow = null;
         if (rubies != null)
@@ -291,6 +290,12 @@ internal sealed class LineComposer
         }
 
         PlaceLines();
+        var trimsLines = !vertical && slots == null && options.LineBounds != TextLineBounds.Full;
+        if (trimsLines)
+        {
+            TrimLineBounds();
+        }
+
         // The middle of each vertical line's own text: an annotation's room beside it does not move it.
         double[] lineAxes = null;
         if (lineCoreAbove != null)
@@ -301,12 +306,10 @@ internal sealed class LineComposer
                 lineAxes[i] = lineBaselines[i] + (lineCoreBelow[i] - lineCoreAbove[i]) / 2;
             }
         }
-        var lastBaseline = lineTops[lineCount - 1] + lineBaselines[lineCount - 1];
         height = lineTops[lineCount - 1] + lineHeights[lineCount - 1];
         if (dropGlyphs != null)
         {
-            lastBaseline = Math.Max(lastBaseline, DropBaseline());
-            height = Math.Max(height, DropBaseline() + lineHeight - baseLine);
+            height = Math.Max(height, DropBottom());
         }
 
         var _b3 = System.GC.GetAllocatedBytesForCurrentThread();
@@ -604,6 +607,12 @@ internal sealed class LineComposer
                 : lineTops[lineTops.Length - 1] + lineBaselines[lineTops.Length - 1]
                                                 + (dropLines - lineTops.Length) * DropPitch();
         }
+
+        // The bottom of the cap's last line, or its baseline where the last line ends on it.
+        double DropBottom() => DropBaseline()
+                               + (trimsLines && options.LineBounds is TextLineBounds.TrimToBaseline or TextLineBounds.Tight
+                                   ? 0
+                                   : lineHeight - baseLine);
 
         // A drop cap spans lines of the first paragraph, as far apart as its lines are.
         double DropPitch()
@@ -1030,18 +1039,16 @@ internal sealed class LineComposer
         }
 
         // How far a glyph reaches above and below its line's baseline when lines grow to hold their text.
-        (double Above, double Below, double Ascent) GlyphExtent(GlyphWordData glyph, bool setHeight, double ownBaseline,
+        (double Above, double Below) GlyphExtent(GlyphWordData glyph, bool setHeight, double ownBaseline,
             double ownHeight, bool withRuby = true)
         {
             var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
             var ownSize = setHeight && glyph.FontSize == fontSize;
             var above = ownSize ? ownBaseline : BaselineInLine(glyph.Font, glyphScale);
             var below = ownSize ? ownHeight - ownBaseline : LineAdvance(glyph.Font, glyph.FontSize) - above;
-            var ascent = glyph.Font.Ascender * glyphScale;
             if (ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize)
             {
                 above = Math.Max(above, objectSize.Height + glyph.OffsetY);
-                ascent = Math.Max(ascent, objectSize.Height + glyph.OffsetY);
                 below = Math.Max(below, -glyph.OffsetY);
             }
 
@@ -1067,7 +1074,7 @@ internal sealed class LineComposer
                 }
             }
 
-            return (above, below, ascent);
+            return (above, below);
         }
 
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
@@ -2553,29 +2560,19 @@ internal sealed class LineComposer
                 HangMargins(hung);
             }
 
-            switch (slots == null ? renderingParameters.VerticalTextAlignment : VerticalTextAlignment.Top)
+            // The lines, not their ink, are placed, so same-size text does not wobble and nothing leaves the box; a text
+            // that sets its own height has no room to place them in.
+            var linesAlignment = slots == null && (vertical || renderingParameters.TextArea.Height != Int32.MaxValue)
+                ? renderingParameters.VerticalTextAlignment
+                : VerticalTextAlignment.Top;
+            switch (linesAlignment)
             {
                 case VerticalTextAlignment.Center:
                 {
-                    // Centered by ascent above the baseline, not the ink: ink differs per string and made same-size
-                    // text wobble. No descent reserve, so descenders hang below.
+                    // Vertical lines centered across the block leave out an empty last column.
                     var lastInk = glyphsData.Max(x => x.LineIndex);
-                    var ascent = lineAscents[0];
-                    var firstBaseline = lineTops[0] - textArea.Y + lineBaselines[0];
-                    var lastInkBaseline = lineTops[lastInk] + lineBaselines[lastInk];
-                    if (dropGlyphs != null)
-                    {
-                        lastInkBaseline = Math.Max(lastInkBaseline, DropBaseline());
-                    }
-
-                    var blockHeight = lastInkBaseline - textArea.Y - firstBaseline + ascent;
-                    var blockTop = firstBaseline - ascent;
-                    if (vertical)
-                    {
-                        blockTop = lineTops[0] - textArea.Y;
-                        blockHeight = lineTops[lastInk] + lineHeights[lastInk] - lineTops[0];
-                    }
-
+                    var blockTop = lineTops[0] - textArea.Y;
+                    var blockHeight = (vertical ? lineTops[lastInk] + lineHeights[lastInk] : height) - lineTops[0];
                     var diff = GridSteps((finalRect.Height - blockHeight) / 2 - blockTop);
                     verticalShift = diff;
                     foreach (var glyphWordData in glyphsData)
@@ -2588,8 +2585,7 @@ internal sealed class LineComposer
                 break;
                 case VerticalTextAlignment.Bottom:
                 {
-                    // The last baseline on the bottom edge, not the lowest ink, for the same reason.
-                    var diff = GridSteps(finalRect.Height - (vertical ? height : lastBaseline));
+                    var diff = GridSteps(finalRect.Height - (height - textArea.Y));
                     verticalShift = diff;
                     foreach (var glyphWordData in glyphsData)
                     {
@@ -2943,7 +2939,6 @@ internal sealed class LineComposer
             {
                 var own = OwnLineHeight(i);
                 var setsOwn = OwnSetHeight(i) is > 0 and var set && double.IsFinite(set);
-                lineAscents[i] = _font.Ascender * scale;
                 lineHeights[i] = own;
                 lineBaselines[i] = setsOwn ? BaselineInLine(_font, scale) + (own - naturalHeight) / 2 : baseLine;
                 ownBaselines[i] = lineBaselines[i];
@@ -2979,7 +2974,6 @@ internal sealed class LineComposer
                     var extent = GlyphExtent(glyph, setHeights[line], ownBaselines[line], lineHeights[line]);
                     lineBaselines[line] = Math.Max(lineBaselines[line], extent.Above);
                     below[line] = Math.Max(below[line], extent.Below);
-                    lineAscents[line] = Math.Max(lineAscents[line], extent.Ascent);
                     if (lineCoreAbove != null)
                     {
                         var core = GlyphExtent(glyph, setHeights[line], ownBaselines[line], lineHeights[line], false);
@@ -3049,6 +3043,65 @@ internal sealed class LineComposer
                         glyph.HorizontalScale);
                 }
             }
+        }
+
+        // The last line ends on its baseline; the first starts at the top of its tallest capitals, or of an object or an
+        // annotation reaching higher, and every glyph moves up with it - by whole units, so the letters stay as sharp. A
+        // text on a baseline grid keeps its first line whole.
+        void TrimLineBounds()
+        {
+            var last = lineCount - 1;
+            if (options.LineBounds is TextLineBounds.TrimToBaseline or TextLineBounds.Tight)
+            {
+                lineHeights[last] = Math.Min(lineHeights[last], lineBaselines[last]);
+            }
+
+            if (options.LineBounds is not (TextLineBounds.TrimToCapHeight or TextLineBounds.Tight) || grid != null)
+            {
+                return;
+            }
+
+            var cap = CapHeight(_font, fontSize);
+            foreach (var glyph in glyphsData)
+            {
+                if (glyph.LineIndex != 0 || IsBlank(glyph.Symbol) || glyph.Symbol == '\n')
+                {
+                    continue;
+                }
+
+                var reach = ObjectSizeOf(glyph.Symbol, glyph.Attributes) is { } objectSize
+                    ? objectSize.Height + glyph.OffsetY
+                    : CapHeight(glyph.Font, glyph.FontSize) + glyph.OffsetY;
+                if (rubies != null && RubyIndex(glyph.PositionInString) is var r and >= 0
+                    && rubies[r].Annotation is { Position: RubyPosition.Over } && !rubies[r].Pending
+                    && (rubyShown == null || rubyShown[r]))
+                {
+                    reach = Math.Max(reach, BaseReach(glyph, true) + rubies[r].Ascent + rubies[r].Descent);
+                }
+
+                cap = Math.Max(cap, reach);
+            }
+
+            var trim = Math.Floor(lineBaselines[0] - cap);
+            if (trim <= 0)
+            {
+                return;
+            }
+
+            lineBaselines[0] -= trim;
+            lineHeights[0] -= trim;
+            for (var i = 1; i < lineCount; i++)
+            {
+                lineTops[i] -= trim;
+            }
+
+            foreach (var glyph in glyphsData)
+            {
+                glyph.Rect.Y -= (float)trim;
+            }
+
+            static double CapHeight(IFont font, double size) =>
+                (font.CapsHeight > 0 ? font.CapsHeight : font.Ascender * 0.7) * size / font.UnitsPerEm;
         }
 
         // Moves the glyphs past the right edge of the line they left onto the new line.

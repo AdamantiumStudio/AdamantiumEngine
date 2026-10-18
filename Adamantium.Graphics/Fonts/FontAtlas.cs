@@ -400,7 +400,7 @@ namespace Adamantium.Graphics.Fonts
 
         internal int GetPaintProgram(IFont font, uint colorGlyph, int palette, IReadOnlyList<ColorPaintOperation> operations)
         {
-            var key = GlyphTextureData.KeyOf(font.Typeface, colorGlyph) | (ulong)(ushort)palette << 16;
+            var key = (ulong)(uint)font.Typeface.Id << 32 | colorGlyph | (ulong)(ushort)palette << 16;
             if (_paints.TryGetProgram(key, out var known))
             {
                 return known;

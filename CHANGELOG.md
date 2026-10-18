@@ -7,11 +7,17 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.LineBounds` (`TextLineBounds`), as WinUI's: `Full` (the default) takes whole lines; `TrimToCapHeight`
+  starts the first line at the top of its tallest capitals, `TrimToBaseline` ends the last on its baseline, `Tight`
+  does both. The size and a vertical alignment take the trimmed box, so a label centered by its layout has its capitals
+  in the middle. Horizontal text outside frames; a text on a baseline grid keeps its first line whole.
 - `GroundGrid`, the editor's ground: the plane y = 0 ruled into cells, as editors show it. Cells of 1, 10, 100...
   times `CellSize` are shown by how big they are on screen, the smaller ones fading as the eye moves away, the X axis
   runs red along it and the Z axis blue, and the grid fades out towards its edge; what stands on it hides it. Drawn by
   the editor overlay with its own `GridEffect`, from the eye's place modulo each level's cells, so the lines hold still
   however far the eye has gone. Colors, line width, the cell size and the plane's y (`PlaneY`) are settings.
+- `Typeface.OutlinesId`: the typeface whose glyphs it draws with the same outlines. `GlyphTextureData.KeyOf` keys atlas
+  cells by it.
 
 - `PlacementTool`, an editor tool that places a new object with the mouse: a see-through ghost of it
   (`EditorOverlayProcessor.DrawGhost`) follows the pointer, resting by its lowest point on the surface under it or, past
@@ -553,10 +559,20 @@ All packages share one version.
   it stood off by the object's diameter times the field of view in degrees, far out of sight, measured the diameter
   without the object's scale, and flew into an object with no bounds.
 - The editor overlay outlines and shows icons for disabled entities too: an editor works on what is switched off.
+- An empty line between two hard breaks (a line feed, U+2028 or U+2029) starts after the first of them: the line
+  before took both breaks, so `"ab\n\ncd"` gave lines 0..4, 4..4, 4..6, and a caret at the start of the empty line
+  stood on the line before; the breaks also took shares of the width of the letter before them. Lines are now 0..3,
+  3..4, 4..6 whether or not the layout emits newline carets.
 - A hidden entity (`Visible` false) hides what is under it: the scene drew its children, and the selection outline
   drew them too, as hiding was checked inside the walk's action, which could not stop the walk. Picking skips it with
   its subtree as well: a hidden model still took the pointer and stopped the ray from reaching what is behind it.
   `Entity.VisitInDepth` walks a tree whose visit says whether to go under the entity it is given.
+- Curves of a glyph are cut into as many chords as keep each within 1/1024 of the glyph's size: a long curve, cut into a
+  fixed five, sagged inside it - a quarter arc of radius 480 by some four units - and a cubic curve could lose its last
+  chord. Arcs of SVG glyphs are cut by a quarter turn instead of an eighth.
+- An instance of a variable font that varies only advances, metrics or colors - no outline variations - draws with its
+  font's glyphs and atlas cells: each instance rasterized the same outlines again, and animating such an axis filled
+  the atlas.
 - Trimmed text in a fixed height sets only lines that fit whole: at two and a half lines high the third line stood half
   shown, its ellipsis with it. Untrimmed, a line that starts inside is still set and cut by the area, as CSS clips it.
 - A composite glyph flagged `USE_MY_METRICS` takes its component's advance and origin in a variable font without
@@ -812,6 +828,11 @@ All packages share one version.
 
 ### Changed
 
+- A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
+  the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text
+  whose height is its own (no height given) is not moved at all: it was moved by half its descent under `Center` and by
+  its descent under `Bottom`, so its letters, selection and backgrounds came out of its size - 56 pixels for Poppins at
+  320.
 - Laying text out again allocates about half of what it did, and takes less time: the shaper and its normalizer keep
   their buffers between runs, and a layout keeps its list of shaped glyphs (for text of up to 16,384 characters). A
   paragraph of 1300 characters in Segoe UI laid out again went from 543 KB to 237 KB, in Source Sans 3 from 663 KB to
