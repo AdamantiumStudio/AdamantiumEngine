@@ -583,4 +583,154 @@ public class RubyTests
         text.SetRuby(0, Text.Length, new RubyAnnotation(string.Empty));
         Assert.That(text.Rubies, Is.Empty);
     }
+
+    private static TextLayout LayDoubleSided(int overLength, string over, string under)
+    {
+        var typeface = NotoSansCjk.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        var attributed = new AttributedText(Text);
+        attributed.SetRuby(Base, overLength, new RubyAnnotation(over));
+        attributed.SetRuby(Base, 2, new RubyAnnotation(under, RubyPosition.Under));
+        layout.ProcessText(attributed, FontSize, new Size(400, double.NaN), TextWrapping.WrapByWords,
+            TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        return layout;
+    }
+
+    // A base takes one annotation over it and one under it: the second does not take the first one's place.
+    [TestCase(2)]
+    [TestCase(1)]
+    public void ADoubleSidedRuby_ShowsBothAnnotations(int overLength)
+    {
+        var layout = LayDoubleSided(overLength, "かん", "kanji");
+        var annotation = Annotation(layout);
+        var bases = BaseGlyphs(layout);
+        var top = bases.Min(glyph => glyph.Rect.Top);
+        var bottom = bases.Max(glyph => glyph.Rect.Bottom);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.AttributedText.Rubies, Has.Count.EqualTo(2));
+            Assert.That(annotation.Count(glyph => glyph.Rect.Bottom <= top + 0.5), Is.EqualTo(2), "the reading over it");
+            Assert.That(annotation.Count(glyph => glyph.Rect.Top >= bottom - 0.5), Is.EqualTo(5), "the gloss under it");
+        });
+    }
+
+    [Test]
+    public void ARubyOnTheSameSide_StillTakesThePlaceOfTheOneItOverlaps()
+    {
+        var text = new AttributedText(Text);
+        text.SetRuby(0, 2, new RubyAnnotation("にほん"));
+        text.SetRuby(1, 2, new RubyAnnotation("ほんの"));
+
+        Assert.That(text.Rubies.Select(run => run.Annotation.Text), Is.EqualTo(new[] { "ほんの" }));
+    }
+
+    // No annotation clears a range of the rubies on both sides; an empty one only those on its own.
+    [Test]
+    public void NoAnnotation_ClearsBothSides_AnEmptyOneItsOwn()
+    {
+        var text = new AttributedText(Text);
+        text.SetRuby(0, 2, new RubyAnnotation("にほん"));
+        text.SetRuby(0, 2, new RubyAnnotation("nihon", Position: RubyPosition.Under));
+        text.SetRuby(0, 5, new RubyAnnotation(""));
+
+        Assert.That(text.Rubies.Select(run => run.Annotation.Text), Is.EqualTo(new[] { "nihon" }));
+
+        text.SetRuby(0, 5, null);
+        Assert.That(text.Rubies, Is.Empty);
+    }
+
+    // A base spread to its annotation does not hang its punctuation past the margin: the annotation would go with it.
+    [Test]
+    public void ASpreadBaseOpeningALine_DoesNotHangItsAnnotationPastTheMargin()
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "SourceSans3-Regular.ttf"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, OpticalMarginAlignment = true };
+        var attributed = new AttributedText("“Ab cd");
+        attributed.SetRuby(0, 3, new RubyAnnotation("annotation", FontSize: 20));
+        layout.ProcessText(attributed, 40, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(Annotation(layout).Min(glyph => glyph.Rect.Left), Is.GreaterThanOrEqualTo(-0.5));
+    }
+
+    // Shaping is cut at a base's edge; the pair across it keeps the kerning the font gives it.
+    [Test]
+    public void APairAcrossABasesEdge_KeepsItsKerning()
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "SourceSans3-Regular.ttf"));
+        TextLayout LayAva(bool ruby)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+            var attributed = new AttributedText("AVA");
+            if (ruby)
+            {
+                attributed.SetRuby(1, 1, new RubyAnnotation("v", FontSize: 4));
+            }
+
+            layout.ProcessText(attributed, 40, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        var plain = LayAva(false).GetTextData().Where(glyph => glyph.PositionInString >= 0).ToArray();
+        var annotated = LayAva(true).GetTextData().Where(glyph => glyph.PositionInString >= 0).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(annotated[1].PenX, Is.EqualTo(plain[1].PenX).Within(0.01), "A and V kerned");
+            Assert.That(annotated[2].PenX, Is.EqualTo(plain[2].PenX).Within(0.01), "V and A kerned");
+        });
+    }
+
+    // Right to left too, a narrow annotation leaves its base's letters where they stand, kerned as without it.
+    [TestCase(1)]
+    [TestCase(2)]
+    public void ANarrowAnnotation_RightToLeft_MovesNoLetter(int at)
+    {
+        const string text = "שלום";
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansHebrew-Regular.ttf"));
+        GlyphWordData[] Letters(bool ruby)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+            var attributed = new AttributedText(text);
+            if (ruby)
+            {
+                attributed.SetRuby(at, 1, new RubyAnnotation("x", FontSize: 2));
+            }
+
+            layout.ProcessText(attributed, 40, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout.GetTextData().Where(glyph => glyph.PositionInString >= 0).ToArray();
+        }
+
+        var plain = Letters(false);
+        var annotated = Letters(true);
+
+        Assert.That(annotated.Select(glyph => glyph.Advance), Is.EqualTo(plain.Select(glyph => glyph.Advance)).Within(0.01));
+        Assert.That(annotated.Select(glyph => glyph.PenX + glyph.OffsetX),
+            Is.EqualTo(plain.Select(glyph => glyph.PenX + glyph.OffsetX)).Within(0.01));
+    }
+
+    // A box trimmed to the capitals keeps an annotation over the first line inside it, and is trimmed as without one
+    // when the annotation is under the line.
+    [Test]
+    public void TrimToCapHeight_KeepsAnAnnotationOverTheFirstLineInside()
+    {
+        var layout = Lay("にほん", setUp: l => l.LineBounds = TextLineBounds.TrimToCapHeight, start: 0);
+
+        Assert.That(Annotation(layout).Min(glyph => glyph.Rect.Y), Is.GreaterThanOrEqualTo(-1));
+    }
+
+    [Test]
+    public void TrimToCapHeight_TrimsALineWhoseAnnotationIsUnder()
+    {
+        var plain = Lay(null, setUp: l => l.LineBounds = TextLineBounds.TrimToCapHeight);
+        var under = Lay("にほん", RubyPosition.Under, setUp: l => l.LineBounds = TextLineBounds.TrimToCapHeight, start: 0);
+
+        Assert.That(under.GetLine(0).Baseline, Is.EqualTo(plain.GetLine(0).Baseline));
+    }
 }

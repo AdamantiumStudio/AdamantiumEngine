@@ -7,11 +7,26 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.MoveWordVisually`: the caret a word to the right or left on the screen, as Ctrl+arrows move it - to the
+  nearest place that way on its line where a word starts, past the last one to the first on the next line the plain
+  arrows go to. In mixed text it follows the screen, where `NextWordStop` follows the reading order; both ways stop at
+  the same places, a wrapped line once.
+- Double-sided ruby: a base takes one annotation over it and one under it (`AttributedText.SetRuby` replaces only the
+  rubies on its side, and a null annotation clears both); the two bases may differ, one inside the other. The line
+  grows on both sides.
+- Drop caps in vertical text: the cap stands upright at the head of the lines it spans, its em as wide as they are
+  from the right of the first line's em to the left of the last's, and those lines start below it.
+- `TextLayout.LineBounds` (`TextLineBounds`), as WinUI's: `Full` (the default) takes whole lines; `TrimToCapHeight`
+  starts the first line at the top of its tallest capitals, `TrimToBaseline` ends the last on its baseline, `Tight`
+  does both. The size and a vertical alignment take the trimmed box, so a label centered by its layout has its capitals
+  in the middle. Horizontal text outside frames; a text on a baseline grid keeps its first line whole.
 - `GroundGrid`, the editor's ground: the plane y = 0 ruled into cells, as editors show it. Cells of 1, 10, 100...
   times `CellSize` are shown by how big they are on screen, the smaller ones fading as the eye moves away, the X axis
   runs red along it and the Z axis blue, and the grid fades out towards its edge; what stands on it hides it. Drawn by
   the editor overlay with its own `GridEffect`, from the eye's place modulo each level's cells, so the lines hold still
   however far the eye has gone. Colors, line width, the cell size and the plane's y (`PlaneY`) are settings.
+- `Typeface.OutlinesId`: the typeface whose glyphs it draws with the same outlines. `GlyphTextureData.KeyOf` keys atlas
+  cells by it.
 
 - `PlacementTool`, an editor tool that places a new object with the mouse: a see-through ghost of it
   (`EditorOverlayProcessor.DrawGhost`) follows the pointer, resting by its lowest point on the surface under it or, past
@@ -553,10 +568,65 @@ All packages share one version.
   it stood off by the object's diameter times the field of view in degrees, far out of sight, measured the diameter
   without the object's scale, and flew into an object with no bounds.
 - The editor overlay outlines and shows icons for disabled entities too: an editor works on what is switched off.
+- The Syriac abbreviation mark (U+070F) stretches over its word in a font with `stch`: the pieces the feature cuts it
+  into stood once each; the repeating ones are now copied to the word's width, as HarfBuzz does.
+- Hebrew in a font that positions no marks (no GPOS `mark`) sets a letter and its point as the presentation form the
+  font has (U+FB1D-FB4F), as HarfBuzz composes them: the point stood where the font drew it.
+- A font with no GPOS places its marks around their base by their combining classes and the glyphs' boxes, as
+  HarfBuzz's fallback does - above, below, to a side, stacked, on a ligature's component - in the scripts whose
+  HarfBuzz shaper does so (Latin and the other default ones, Arabic, Syriac, Hebrew): a mark stood where the font drew
+  it, over the space after its letter. Right to left, a mark's advance is zeroed without moving it, as in HarfBuzz.
+- A text wrapped by symbols and trimmed in a fixed height stops at the bottom as one wrapped by words does: lines
+  after a hard break, and a line raised by larger text, were set past it.
+- Arabic in a font with no joining forms of its own (no `init`, `medi`, `fina`, `isol`) joins by the presentation
+  forms the font maps (U+FB50-FDFF, U+FE70-FEFF), lam with alef and the other ligatures of HarfBuzz's fallback among
+  them: the letters stood apart, in their isolated forms.
+- In frames, a line raised by larger text or a taller object past the bottom of its frame goes on to the next frame
+  (or, from the last, into the overset): it was given the room of its paragraph's line height and drawn past the
+  frame's edge.
+- The paragraph composer takes a tab as wide as it is on its line: it took one step of the default stops, so a line it
+  planned with a tab to a stop far along did not fit, the layout broke it again, and the next line, cut where the plan
+  said, came out loose. The spaces before the last tab of a justified line take no stretch, as justification widens
+  only what follows it.
+- The paragraph composer counts the letter spacing between words with no space between them - ideographs, a word after
+  a hyphen - and closes them up as the greedy breaker does: it knew none of it there.
+- A pair of letters across a ruby base's edge keeps the kerning the font gives it, left to right and right to left:
+  shaping is cut at the edge, so a ligature never joins a base to its neighbors, and the pair lost its kerning there.
+  Letters that join (Arabic) are left as they are cut.
+- `MoveVisually` and `MoveWordVisually` go from line to line as the text reads, by its first paragraph: across
+  paragraphs running different ways the arrows went back up at a paragraph of the other direction and came round
+  again, never reaching the end.
+- A combining grapheme joiner (U+034F) that keeps no marks from being reordered is skipped by lookups, as HarfBuzz
+  skips it: lam, the joiner and alef made no ligature, nor a shadda and its vowel. One that does keep a mark from being
+  reordered stands as a base to it, as in HarfBuzz 8.3.1: the mark was attached past it to the letter.
+- A click on a drop cap below its first line finds the cap: it found the line beside it, its first or last character.
+- A ruby base at the start or end of a line does not hang its punctuation past the margin with optical margin
+  alignment: its annotation, spread over it, went past the margin with it.
+- Text trimmed and wrapped by words in a fixed height no longer sets a line that larger text in it raises past the
+  bottom: the fit was checked at the paragraph's line height, so such a line stood half shown with the ellipsis on it.
+  The text is laid again up to the lines that fit, the last of them ending in the ellipsis, and a word cut to the
+  ellipsis keeps no letters that would raise the last line past the bottom. A first line taller than the area by its
+  own words is set all the same.
+- A trimming ellipsis is set as the text it follows - its font and size, colors and decorations, and baseline shift -
+  where it took the layout's font and size, its default color and the line's baseline. After a font with no full stop
+  the dots are the text's own, at its own size; after upright letters of vertical text they take only their colors.
+- A number keeps the ideograph or kana after it only while the two fit a line they may stand on (the widest frame,
+  between the paragraph's margins, past its indent when the number opens the paragraph): `1234567890年` in a narrow
+  column ran past its edge, held together.
+- An empty line between two hard breaks (a line feed, U+2028 or U+2029) starts after the first of them: the line
+  before took both breaks, so `"ab\n\ncd"` gave lines 0..4, 4..4, 4..6, and a caret at the start of the empty line
+  stood on the line before; the breaks also took shares of the width of the letter before them. Lines are now 0..3,
+  3..4, 4..6 whether or not the layout emits newline carets.
 - A hidden entity (`Visible` false) hides what is under it: the scene drew its children, and the selection outline
   drew them too, as hiding was checked inside the walk's action, which could not stop the walk. Picking skips it with
   its subtree as well: a hidden model still took the pointer and stopped the ray from reaching what is behind it.
   `Entity.VisitInDepth` walks a tree whose visit says whether to go under the entity it is given.
+- Curves of a glyph are cut into as many chords as keep each within 1/1024 of the glyph's size: a long curve, cut into a
+  fixed five, sagged inside it - a quarter arc of radius 480 by some four units - and a cubic curve could lose its last
+  chord. Arcs of SVG glyphs are cut by a quarter turn instead of an eighth.
+- An instance of a variable font that varies only advances, metrics or colors - no outline variations - draws with its
+  font's glyphs and atlas cells: each instance rasterized the same outlines again, and animating such an axis filled
+  the atlas.
 - Trimmed text in a fixed height sets only lines that fit whole: at two and a half lines high the third line stood half
   shown, its ellipsis with it. Untrimmed, a line that starts inside is still set and cut by the area, as CSS clips it.
 - A composite glyph flagged `USE_MY_METRICS` takes its component's advance and origin in a variable font without
@@ -812,6 +882,11 @@ All packages share one version.
 
 ### Changed
 
+- A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
+  the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text
+  whose height is its own (no height given) is not moved at all: it was moved by half its descent under `Center` and by
+  its descent under `Bottom`, so its letters, selection and backgrounds came out of its size - 56 pixels for Poppins at
+  320.
 - Laying text out again allocates about half of what it did, and takes less time: the shaper and its normalizer keep
   their buffers between runs, and a layout keeps its list of shaped glyphs (for text of up to 16,384 characters). A
   paragraph of 1300 characters in Segoe UI laid out again went from 543 KB to 237 KB, in Source Sans 3 from 663 KB to

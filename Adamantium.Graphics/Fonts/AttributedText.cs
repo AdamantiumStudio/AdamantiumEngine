@@ -193,11 +193,13 @@ public sealed class AttributedText
         return null;
     }
 
-    /// <summary>The ruby bases, in text order, not overlapping.</summary>
+    /// <summary>The ruby bases, in order of their starts; those on one side do not overlap.</summary>
     public IReadOnlyList<RubyRun> Rubies => _rubies;
 
     /// <summary>Sets a ruby annotation over a range, its base, widened to whole characters: the base stays on one line
-    /// and the annotation stands centered over it. It replaces any ruby it overlaps; an empty annotation removes them.</summary>
+    /// and the annotation stands centered over (or under) it. It replaces any ruby on its side it overlaps, and keeps
+    /// those on the other side - a double-sided ruby; an empty annotation removes those on its side, and null those on
+    /// both.</summary>
     public AttributedText SetRuby(int start, int length, RubyAnnotation annotation)
     {
         var end = EndOf(start, length);
@@ -211,7 +213,10 @@ public sealed class AttributedText
         start = _graphemes[start] ? start : TextBoundaries.Previous(_graphemes, start);
         end = _graphemes[end] ? end : TextBoundaries.Next(_graphemes, end);
 
-        _rubies.RemoveAll(run => run.Start < end && run.End > start);
+        // One annotation over a base and one under it, as a double-sided ruby: a new one takes the place of those on its
+        // side only.
+        _rubies.RemoveAll(run => run.Start < end && run.End > start
+                                 && (annotation == null || run.Annotation.Position == annotation.Position));
         if (string.IsNullOrEmpty(annotation?.Text))
         {
             return this;

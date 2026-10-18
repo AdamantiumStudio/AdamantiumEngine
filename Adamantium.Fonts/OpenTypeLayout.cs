@@ -16,6 +16,8 @@ internal sealed class OpenTypeLayout
 
     public bool HasKernTable { get; set; }
 
+    public bool HasCrossKerning { get; set; }
+
     public ConcurrentDictionary<string, ShapePlan> Plans { get; } = new();
 
     public bool HasGlyphClasses => Gdef?.GlyphClassDefTable != null;

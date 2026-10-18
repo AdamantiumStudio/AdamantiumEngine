@@ -72,6 +72,23 @@ public class VariationTests
         Assert.That(bold.Weight.Value, Is.EqualTo(700));
         Assert.That(font.GetInstance([new FontVariation("wght", font.Axes[0].DefaultValue)]), Is.SameAs(font));
         Assert.That(bold.GetGlyphByUnicode('a').Index, Is.EqualTo(font.GetGlyphByUnicode('a').Index));
+        Assert.That(bold.Typeface.OutlinesId, Is.Not.EqualTo(font.Typeface.OutlinesId), "its outlines are its own");
+    }
+
+    // Animating an axis that only moves advances made a typeface, and so atlas cells, for every value it passed.
+    [Test]
+    public void AnInstanceThatVariesOnlyAdvances_DrawsWithItsFontsGlyphs()
+    {
+        var font = Fonts.GetOrAdd("Variations/RobotoFlex-NoGvar.subset.ttf", p => Typeface.LoadFont(p, 3).GetFont(0));
+        var narrow = font.GetInstance([new FontVariation("wdth", 25), new FontVariation("wght", 900)]);
+        var glyph = font.GetGlyphByUnicode('o').Index;
+
+        Assert.That(narrow, Is.Not.SameAs(font));
+        Assert.That(narrow.GetAdvanceWidth(glyph), Is.Not.EqualTo(font.GetAdvanceWidth(glyph)), "its advances vary");
+        Assert.That(narrow.Typeface.Id, Is.Not.EqualTo(font.Typeface.Id));
+        Assert.That(Adamantium.Fonts.TextureGeneration.GlyphTextureData.KeyOf(narrow.Typeface, glyph),
+            Is.EqualTo(Adamantium.Fonts.TextureGeneration.GlyphTextureData.KeyOf(font.Typeface, glyph)), "one atlas cell");
+        Assert.That(narrow.GetGlyphByIndex(glyph), Is.SameAs(font.GetGlyphByIndex(glyph)), "sampled once");
     }
 
     // A glyph whose 'hmtx' bearing differs from its outline's xMin is drawn shifted to the bearing, as rasterizers do;

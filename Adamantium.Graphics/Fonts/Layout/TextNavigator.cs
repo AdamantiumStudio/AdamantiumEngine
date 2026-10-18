@@ -29,7 +29,7 @@ internal sealed class TextNavigator
         var text = Text ?? string.Empty;
         var stops = new CaretStop[text.Length + 1];
         var data = _laid.Glyphs;
-        if (data == null || data.Count == 0)
+        if (data == null || text.Length == 0)
         {
             return stops;
         }
@@ -68,7 +68,19 @@ internal sealed class TextNavigator
                 ? data[after].PositionInString
                 : Math.Max(cluster + 1, Math.Min(_laid.OversetIndex, text.Length));
             var rightToLeft = _laid.IsRightToLeftAt(cluster);
-            DistributeCluster(text, cluster, next, x, width, line, rightToLeft, stops, filled);
+            var lineEnd = cluster + 1;
+            while (lineEnd < next && !IsHardBreak(text[lineEnd]))
+            {
+                lineEnd++;
+            }
+
+            DistributeCluster(text, cluster, lineEnd, x, width, line, rightToLeft, stops, filled);
+            if (lineEnd < next && !filled[lineEnd])
+            {
+                stops[lineEnd] = new CaretStop(rightToLeft ? x : x + width, line, 0, rightToLeft);
+                filled[lineEnd] = true;
+            }
+
             endX = rightToLeft ? x : x + width;
             endLine = line;
             i = j;
@@ -86,37 +98,39 @@ internal sealed class TextNavigator
             }
         }
 
-        var options = _laid.Options;
-        if (text[text.Length - 1] is '\n' or LineSeparator or ParagraphSeparator
-            && _laid.OversetIndex >= text.Length && (options.MaxLines <= 0 || endLine + 1 < options.MaxLines))
+        // A break with no glyph of its own that does not end a line of text ends an empty line: the one after the break
+        // before it, or the first - if it was laid out: trimming leaves lines after its ellipsis unlaid.
+        var laidLines = _laid.LineTops?.Length ?? 0;
+        var laid = Math.Min(_laid.OversetIndex, text.Length);
+        for (var k = 0; k < laid; k++)
         {
-            var rightToLeft = options.Direction == TextDirection.RightToLeft
-                || (options.Direction == TextDirection.Auto && _laid.IsRightToLeftParagraph(text.Length - 1));
-            var right = 0.0;
-            for (var k = 0; k < text.Length && rightToLeft; k++)
+            if (filled[k] || !IsHardBreak(text[k]) || (k > 0 && (!filled[k - 1] || !IsHardBreak(text[k - 1]))))
             {
-                right = filled[k] ? Math.Max(right, stops[k].Right) : right;
+                continue;
             }
 
-            // The empty last line stands as its paragraph says: between its margins, and its indent at its start when
-            // a paragraph separator opened it; after a line break it goes on with the last paragraph.
-            var opens = text[text.Length - 1] == ParagraphSeparator;
-            var paragraph = AttributedText.ParagraphIn(_laid.ParagraphRuns, opens ? text.Length : text.Length - 1,
-                text.Length)?.Attributes;
-            var indent = opens ? Finite(paragraph?.TextIndent) : 0;
-            var left = Math.Max(0, Finite(paragraph?.MarginLeft) + (rightToLeft ? 0 : indent));
-            var edge = _laid.Size.Width - Math.Max(0, Finite(paragraph?.MarginRight) + (rightToLeft ? indent : 0));
-            var alignment = paragraph?.Alignment ?? _laid.RenderingParameters?.HorizontalTextAlignment;
-            var last = _laid.RenderingParameters?.JustifyLastLine == true
-                ? HorizontalTextAlignment.Left
-                : options.LastLineAlignment;
-            var x = (alignment == HorizontalTextAlignment.Justify ? last : alignment) switch
+            var line = k == 0 ? 0 : stops[k - 1].LineIndex + 1;
+            if (line >= laidLines)
             {
-                HorizontalTextAlignment.Center => (left + edge) / 2,
-                HorizontalTextAlignment.Right => rightToLeft ? left : edge,
-                _ => rightToLeft ? (paragraph != null ? edge : right) : left,
-            };
-            stops[text.Length] = new CaretStop(x, endLine + 1);
+                break;
+            }
+
+            stops[k] = EmptyLineStop(k, line, stops, filled);
+            filled[k] = true;
+            if (line > endLine)
+            {
+                endLine = line;
+                endX = stops[k].X;
+            }
+        }
+
+        var options = _laid.Options;
+        // The empty last line stands below a frame with no room for it, but not after an ellipsis.
+        var trimmed = (_laid.RenderingParameters?.TextTrimming ?? TextTrimming.None) != TextTrimming.None;
+        if (IsHardBreak(text[text.Length - 1]) && (endLine + 1 < laidLines || !trimmed)
+            && _laid.OversetIndex >= text.Length && (options.MaxLines <= 0 || endLine + 1 < options.MaxLines))
+        {
+            stops[text.Length] = EmptyLineStop(text.Length, endLine + 1, stops, filled);
             filled[text.Length] = true;
         }
 
@@ -130,6 +144,45 @@ internal sealed class TextNavigator
 
         return stops;
     }
+
+    // An empty line stands as its paragraph says: between its margins, in its own frame, and its indent at its start when
+    // a paragraph separator opened it; after a line break it goes on with the paragraph before.
+    private CaretStop EmptyLineStop(int at, int line, CaretStop[] stops, bool[] filled)
+    {
+        var frames = _laid.FrameRects;
+        var lineFrames = _laid.LineFrames;
+        var inFrame = frames != null && lineFrames != null && line < lineFrames.Length;
+        double areaLeft = inFrame ? frames[lineFrames[line]].Left : 0;
+        double areaRight = inFrame ? frames[lineFrames[line]].Right : _laid.Size.Width;
+        var text = Text;
+        var options = _laid.Options;
+        var rightToLeft = options.Direction == TextDirection.RightToLeft
+            || (options.Direction == TextDirection.Auto && _laid.IsRightToLeftParagraph(Math.Min(at, text.Length - 1)));
+        var right = inFrame ? areaRight : 0.0;
+        for (var k = 0; k < text.Length && rightToLeft && !inFrame; k++)
+        {
+            right = filled[k] ? Math.Max(right, stops[k].Right) : right;
+        }
+
+        var opens = at == 0 || text[at - 1] == ParagraphSeparator;
+        var paragraph = AttributedText.ParagraphIn(_laid.ParagraphRuns, opens ? at : at - 1, text.Length)?.Attributes;
+        var indent = opens ? Finite(paragraph?.TextIndent) : 0;
+        var left = areaLeft + Math.Max(0, Finite(paragraph?.MarginLeft) + (rightToLeft ? 0 : indent));
+        var edge = areaRight - Math.Max(0, Finite(paragraph?.MarginRight) + (rightToLeft ? indent : 0));
+        var alignment = paragraph?.Alignment ?? _laid.RenderingParameters?.HorizontalTextAlignment;
+        var last = _laid.RenderingParameters?.JustifyLastLine == true
+            ? HorizontalTextAlignment.Left
+            : options.LastLineAlignment;
+        var x = (alignment == HorizontalTextAlignment.Justify ? last : alignment) switch
+        {
+            HorizontalTextAlignment.Center => (left + edge) / 2,
+            HorizontalTextAlignment.Right => rightToLeft ? left : edge,
+            _ => rightToLeft ? (paragraph != null ? edge : right) : left,
+        };
+        return new CaretStop(x, line);
+    }
+
+    private static bool IsHardBreak(char symbol) => symbol is '\n' or LineSeparator or ParagraphSeparator;
 
     public int LineCount => LineStarts().Length - 1;
 
@@ -365,6 +418,64 @@ internal sealed class TextNavigator
         return stop;
     }
 
+    // A word to the right or left on the screen, as Ctrl+arrows go: the nearest place on the caret's line, that way, where
+    // a word or a mark starts - a word's left edge in left-to-right text, its right edge in right-to-left. Past the last
+    // of them the caret goes on to the line the plain arrows go to, at its first such place that way, or, on the last
+    // line, to its edge.
+    public CaretPosition MoveWordVisually(CaretPosition from, bool toRight)
+    {
+        var (x, lineIndex) = GetCaretPoint(from);
+        if (NearestWordStart(lineIndex, x, toRight) is { } onTheLine)
+        {
+            return onTheLine;
+        }
+
+        var target = lineIndex + (toRight != ReadsRightToLeft() ? 1 : -1);
+        var boxes = LineBoxes(lineIndex);
+        if (target < 0 || target >= LineCount)
+        {
+            if (boxes.Count == 0)
+            {
+                return from;
+            }
+
+            var edge = toRight ? RightEdgeOf(boxes[boxes.Count - 1]) : LeftEdgeOf(boxes[0]);
+            var edgeX = GetCaretPoint(edge).X;
+            return (toRight ? edgeX > x + 1e-6 : edgeX < x - 1e-6) ? edge : from;
+        }
+
+        return NearestWordStart(target, toRight ? double.NegativeInfinity : double.PositiveInfinity, toRight)
+               ?? MoveVisually(from, toRight);
+    }
+
+    private CaretPosition? NearestWordStart(int lineIndex, double x, bool toRight)
+    {
+        var text = Text ?? string.Empty;
+        var words = Words();
+        var stops = Stops();
+        var line = GetLine(lineIndex);
+        CaretPosition? nearest = null;
+        var nearestX = 0.0;
+        for (var i = line.Start; i < line.End && i < text.Length; i++)
+        {
+            if (stops[i].LineIndex != lineIndex || !words[i] || char.IsWhiteSpace(text[i]))
+            {
+                continue;
+            }
+
+            var position = new CaretPosition(i);
+            var at = GetCaretPoint(position).X;
+            if ((toRight ? at > x + 1e-6 : at < x - 1e-6)
+                && (nearest == null || (toRight ? at < nearestX : at > nearestX)))
+            {
+                nearest = position;
+                nearestX = at;
+            }
+        }
+
+        return nearest;
+    }
+
     public TextHit HitTest(double x, double y)
     {
         var text = Text ?? string.Empty;
@@ -376,6 +487,12 @@ internal sealed class TextNavigator
         var stops = Stops();
         var graphemes = _laid.Graphemes;
         var lineIndex = _laid.LineFrames != null ? LineInFrames(x, y) : LineAt(y);
+        // The drop cap stands across the lines it spans; its characters are on the first.
+        if (lineIndex > 0 && lineIndex < Math.Min(_laid.DropCapLines, LineCount) && !_laid.Vertical && OverTheDropCap(x, stops))
+        {
+            lineIndex = 0;
+        }
+
         var insideY = lineIndex >= 0 && lineIndex < LineCount;
         lineIndex = Math.Max(0, Math.Min(lineIndex, LineCount - 1));
         var line = GetLine(lineIndex);
@@ -448,6 +565,19 @@ internal sealed class TextNavigator
             : new TextHit(nearest, false, false, nearest);
     }
 
+    private bool OverTheDropCap(double x, CaretStop[] stops)
+    {
+        for (var c = 0; c < _laid.DropCapEnd && c < stops.Length; c++)
+        {
+            if (x >= stops[c].Left && x < stops[c].Right)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public (double X, int LineIndex) GetCaretPoint(CaretPosition position)
     {
         var stops = Stops();
@@ -505,8 +635,7 @@ internal sealed class TextNavigator
             }
         }
 
-        var forward = toRight != _laid.IsRightToLeftParagraph(GetLine(lineIndex).Start);
-        var target = lineIndex + (forward ? 1 : -1);
+        var target = lineIndex + (toRight != ReadsRightToLeft() ? 1 : -1);
         if (target < 0 || target >= LineCount)
         {
             return from;
@@ -520,6 +649,10 @@ internal sealed class TextNavigator
 
         return toRight ? LeftEdgeOf(targetBoxes[0]) : RightEdgeOf(targetBoxes[targetBoxes.Count - 1]);
     }
+
+    // From line to line the arrows go as the text reads, by its first paragraph: a paragraph running the other way in it
+    // sends them on, not back, so they never come round again.
+    private bool ReadsRightToLeft() => _laid.IsRightToLeftParagraph(0);
 
     public CaretPosition GetLineStart(int lineIndex)
     {

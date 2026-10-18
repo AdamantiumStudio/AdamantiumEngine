@@ -584,14 +584,9 @@ namespace Adamantium.Fonts
         {
             var typeface = new Typeface { Parser = Typeface.Parser };
             var source = variable.Vary(this, normalized, typeface);
-            if (source == null)
+            if (source == null && MetricsVariations == null && FontMetricsVariations == null && ColorPaints?.Varies != true)
             {
-                if (MetricsVariations == null && FontMetricsVariations == null && ColorPaints?.Varies != true)
-                {
-                    return this;
-                }
-
-                source = (IGlyphOutlineSource)variable;
+                return this;
             }
 
             var instance = (Font)MemberwiseClone();
@@ -618,7 +613,15 @@ namespace Adamantium.Fonts
 
             instance.instances = new Dictionary<string, Font>();
             instance.glyphs = null;
-            typeface.SetGlyphFactory(count, index => VariedGlyph(index, source));
+            if (source == null)
+            {
+                typeface.OutlinesId = Typeface.OutlinesId;
+                typeface.SetGlyphFactory(count, index => Typeface.GetGlyphByIndex(index, out var same) ? same : null);
+            }
+            else
+            {
+                typeface.SetGlyphFactory(count, index => VariedGlyph(index, source));
+            }
             typeface.AddFont(instance);
             typeface.SetDefaultFont();
             if (FontMetricsVariations != null)

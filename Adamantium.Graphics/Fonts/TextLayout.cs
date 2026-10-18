@@ -206,6 +206,12 @@ public class TextLayout : DisposableObject
     /// negative one draws lines closer, down to a pitch of one unit.</summary>
     public double LineSpacing { get; set; }
 
+    /// <summary>Where the text's box starts and ends, as WinUI's: <see cref="TextLineBounds.Full"/> (the default) takes
+    /// whole lines; the others trim the first line to the top of its capitals or the last to its baseline, so the
+    /// size, and a vertical alignment, take only that. Horizontal text in one area: text laid into
+    /// <see cref="Frames"/> keeps whole lines.</summary>
+    public TextLineBounds LineBounds { get; set; }
+
     /// <summary>The most lines laid out; 0 (the default) for any number. What does not fit is not laid out
     /// (<see cref="OversetIndex"/>), or, with trimming, the last line ends in an ellipsis. A drop cap taller than the
     /// most lines is not set.</summary>
@@ -438,6 +444,12 @@ public class TextLayout : DisposableObject
     /// <summary>The start of the word before <paramref name="index"/>: where Ctrl+Left goes.</summary>
     public int PreviousWordStop(int index) => _navigator.PreviousWordStop(index);
 
+    /// <summary>The caret one word to the right or left on the screen, as Ctrl+arrows move it: stepped as
+    /// <see cref="MoveVisually"/> steps it until it stands where a word or a mark starts (its left edge in left-to-right
+    /// text, its right edge in right-to-left), or at the end of the text. In mixed text it follows the screen, where
+    /// <see cref="NextWordStop"/> follows the reading order.</summary>
+    public CaretPosition MoveWordVisually(CaretPosition from, bool toRight) => _navigator.MoveWordVisually(from, toRight);
+
     /// <summary>The grapheme nearest to a point in layout coordinates, and where a click there puts the caret.</summary>
     public TextHit HitTest(double x, double y) => _navigator.HitTest(x, y);
 
@@ -513,6 +525,7 @@ public class TextLayout : DisposableObject
         LineHeight = LineHeight,
         LineStacking = LineStacking,
         LineSpacing = LineSpacing,
+        LineBounds = LineBounds,
         MaxLines = MaxLines,
         Language = Language,
         Fallback = Fallback,
