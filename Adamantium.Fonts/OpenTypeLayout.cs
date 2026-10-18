@@ -14,7 +14,9 @@ internal sealed class OpenTypeLayout
 
     public GlyphDefinitionTable Gdef { get; set; }
 
-    public bool HasKernTable { get; set; }
+    public KerningSubtable[] KernSubtables { get; set; }
+
+    public bool HasKernTable => KernSubtables is { Length: > 0 };
 
     public bool HasCrossKerning { get; set; }
 

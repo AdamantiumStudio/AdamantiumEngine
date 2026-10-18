@@ -256,7 +256,8 @@ without its `HVAR` and layout tables, and with the phantom-point variations of o
 https://github.com/notofonts/hebrew, used only by the tests. Copyright 2022 The Noto Project Authors, under the SIL
 Open Font License 1.1, whose text is `LICENSE-NotoSansHebrew.txt` beside it. `NotoSansHebrew-NoGpos.subset.ttf` beside
 it is a modified version of that font, made for the tests: its Hebrew letters, points and presentation forms, without
-its `GPOS` table.
+its `GPOS` table. `NotoSansHebrew-DfltGpos.subset.ttf` is another: the same characters, its `GPOS` kept for the `DFLT`
+script only.
 
 ---
 
@@ -309,10 +310,11 @@ Name 'Source', under the SIL Open Font License 1.1, whose text is `source-sans-3
 
 ## Adamantium Marks Test
 
-**Where:** `Tests/Adamantium.FontTests/ScriptFonts/AdamantiumMarksTest-Regular.ttf` and
-`AdamantiumMarksTest-EmptyGpos.ttf`, made for the tests from Source Sans 3 Regular: its basic Latin and combining marks,
-some Thai and Lao characters mapped to them, without its `GPOS` table, and with one of no lookups; renamed as the
-license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font Name 'Source', under the SIL Open Font License 1.1, whose text
+**Where:** `Tests/Adamantium.FontTests/ScriptFonts/AdamantiumMarksTest-Regular.ttf`,
+`AdamantiumMarksTest-EmptyGpos.ttf`, `AdamantiumMarksTest-Dev2.ttf` and `AdamantiumMarksTest-Kern.ttf`, made for the
+tests from Source Sans 3 Regular: its basic Latin and combining marks, some Thai and Lao characters mapped to them,
+without its `GPOS` table, with one of no lookups, with a `dev2` script of no features, and with a `kern` table of
+made-up pairs; renamed as the license asks of a modified version. Copyright 2010-2020 Adobe, with Reserved Font Name 'Source', under the SIL Open Font License 1.1, whose text
 is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 
 ---

@@ -1609,8 +1609,9 @@ namespace Adamantium.Fonts.Parsers
                 kernSubtables[i] = kernSubtable;
 
                 CurrentFont.KerningData = kernSubtables;
-                CurrentFont.Layout.HasKernTable = true;
             }
+
+            CurrentFont.Layout.KernSubtables = kernSubtables;
         }
 
         protected virtual void ReadGDEFTable(TableEntry entry)

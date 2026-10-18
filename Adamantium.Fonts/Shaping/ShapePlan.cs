@@ -62,13 +62,13 @@ internal sealed class ShapePlan
 
     public uint[] JoiningMasks { get; private set; } = [];
 
-    public static ShapePlan Create(OpenTypeLayout layout, string scriptTag, string languageTag,
+    public static ShapePlan Create(OpenTypeLayout layout, string[] scriptTags, string languageTag,
         IReadOnlyList<FontFeature> userFeatures, int gsubVariation = -1, int gposVariation = -1, bool rightToLeft = false,
         string script = null, bool vertical = false)
     {
         var plan = new ShapePlan();
-        var gsub = Select(layout.Gsub, scriptTag, languageTag, gsubVariation);
-        var gpos = Select(layout.Gpos, scriptTag, languageTag, gposVariation);
+        var gsub = Select(layout.Gsub, scriptTags, languageTag, gsubVariation);
+        var gpos = Select(layout.Gpos, scriptTags, languageTag, gposVariation);
         plan.JoiningScript = !vertical && ArabicShaper.Shapes(script, gsub.Script != null && gsub.Script != "DFLT")
             ? script
             : null;
@@ -144,11 +144,13 @@ internal sealed class ShapePlan
         plan.GposLookups = CollectLookups(layout.Gpos, (gpos.LangSys, gpos.Required), requiredGposStage, maps, false, 1,
             gposVariation)[0];
 
-        var kern = plan.GetFeature("kern");
-        plan.ApplyGpos = layout.Gpos?.LookupList?.Length > 0;
-        plan.ApplyKernTable = !vertical && layout.HasKernTable && (kern == null || kern.GposIndex < 0);
-        // As HarfBuzz, by the table being there: one with no lookups (only 'size', say) still positions.
-        plan.AdjustMarksWhenZeroing = layout.Gpos == null && (!plan.ApplyKernTable || !layout.HasCrossKerning);
+        var kern = plan.GetFeature(vertical ? "vkrn" : "kern");
+        // As HarfBuzz, by the table being there: one with no lookups (only 'size', say) still positions. HarfBuzz's
+        // Hebrew shaper takes a GPOS only for 'hebr'.
+        var positions = layout.Gpos != null && (script != "Hebr" || gpos.Script == "hebr");
+        plan.ApplyGpos = positions && layout.Gpos.LookupList?.Length > 0;
+        plan.ApplyKernTable = layout.HasKernTable && (!positions || kern is not { GposIndex: >= 0 });
+        plan.AdjustMarksWhenZeroing = !positions && (!plan.ApplyKernTable || !layout.HasCrossKerning);
         plan.FallbackMarkPositioning = plan.AdjustMarksWhenZeroing && PlacesMarks(script, gsub.Script);
         plan.KernMask = kern?.Mask ?? 0;
         plan.FracMask = plan.GetFeature("frac")?.Mask ?? 0;
@@ -398,15 +400,20 @@ internal sealed class ShapePlan
         table.FeatureVariations?.Substitute(variation, index, table.FeatureList[index]) ?? table.FeatureList[index];
 
     internal static (LangSysTable LangSys, FeatureTable Required, string Script) Select(IFontLayout table,
-        string scriptTag, string languageTag, int variation)
+        string[] scriptTags, string languageTag, int variation)
     {
         if (table?.ScriptList == null)
         {
             return (null, null, null);
         }
 
-        var script = FindScript(table, scriptTag) ?? FindScript(table, "DFLT") ?? FindScript(table, "dflt")
-            ?? FindScript(table, "latn");
+        ScriptTable script = null;
+        foreach (var tag in scriptTags)
+        {
+            script ??= FindScript(table, tag);
+        }
+
+        script ??= FindScript(table, "DFLT") ?? FindScript(table, "dflt") ?? FindScript(table, "latn");
         if (script == null)
         {
             return (null, null, null);

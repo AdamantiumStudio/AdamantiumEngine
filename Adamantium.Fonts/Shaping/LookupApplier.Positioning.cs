@@ -164,7 +164,14 @@ internal sealed partial class LookupApplier
         var exit = cursive.ExitAnchors[previousIndex];
         var entry = cursive.EntryAnchors[thisIndex];
 
-        if (RightToLeft)
+        if (Vertical)
+        {
+            placements[i].YAdvance = Y(exit) + placements[i].YOffset;
+            var d = Y(entry) + placements[j].YOffset;
+            placements[j].YAdvance -= d;
+            placements[j].YOffset -= d;
+        }
+        else if (RightToLeft)
         {
             var d = X(exit) + placements[i].XOffset;
             placements[i].XAdvance -= d;
@@ -179,31 +186,44 @@ internal sealed partial class LookupApplier
             placements[j].XOffset -= d;
         }
 
+        // Across the line: the child set against its parent, by Y on horizontal lines and by X down vertical ones.
         var child = i;
         var parent = j;
-        var yOffset = Y(entry) - Y(exit);
+        var offset = Vertical ? X(entry) - X(exit) : Y(entry) - Y(exit);
         if ((_lookupProps & (uint)LookupFlags.RightToLeft) == 0)
         {
             child = j;
             parent = i;
-            yOffset = -yOffset;
+            offset = -offset;
         }
 
-        ReverseCursiveMinorOffset(placements, child, parent);
+        ReverseCursiveMinorOffset(placements, child, parent, Vertical);
         placements[child].AttachType = GlyphPlacement.AttachCursive;
         placements[child].AttachChain = parent - child;
-        placements[child].YOffset = yOffset;
         if (placements[parent].AttachChain == -placements[child].AttachChain)
         {
             placements[parent].AttachChain = 0;
-            placements[parent].YOffset = 0;
+            SetMinorOffset(ref placements[parent], 0, Vertical);
         }
 
+        SetMinorOffset(ref placements[child], offset, Vertical);
         _index++;
         return true;
     }
 
-    private static void ReverseCursiveMinorOffset(GlyphPlacement[] placements, int i, int newParent)
+    private static void SetMinorOffset(ref GlyphPlacement placement, int offset, bool vertical)
+    {
+        if (vertical)
+        {
+            placement.XOffset = offset;
+        }
+        else
+        {
+            placement.YOffset = offset;
+        }
+    }
+
+    private static void ReverseCursiveMinorOffset(GlyphPlacement[] placements, int i, int newParent, bool vertical)
     {
         var chain = placements[i].AttachChain;
         var type = placements[i].AttachType;
@@ -219,8 +239,8 @@ internal sealed partial class LookupApplier
             return;
         }
 
-        ReverseCursiveMinorOffset(placements, j, newParent);
-        placements[j].YOffset = -placements[i].YOffset;
+        ReverseCursiveMinorOffset(placements, j, newParent, vertical);
+        SetMinorOffset(ref placements[j], vertical ? -placements[i].XOffset : -placements[i].YOffset, vertical);
         placements[j].AttachChain = -chain;
         placements[j].AttachType = type;
     }
