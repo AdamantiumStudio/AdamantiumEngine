@@ -8,4 +8,11 @@ public sealed class FrozenGlyphRun(FontItem[] glyphs, int count, FontAtlas atlas
     public int Count { get; } = count;
     public FontAtlas Atlas { get; } = atlas;
     public float FontSize { get; } = fontSize;
+
+    /// <summary>The atlas's <see cref="FontAtlas.Version"/> the run was built at.</summary>
+    public int AtlasVersion { get; init; }
+
+    /// <summary>Glyphs have landed in the atlas since the run was built: what each holder of a run of a layout shared
+    /// with others rebuilds on.</summary>
+    public bool IsStale => Atlas != null && (Atlas.IsDisposed || Atlas.Version != AtlasVersion);
 }

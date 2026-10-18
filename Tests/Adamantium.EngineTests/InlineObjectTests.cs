@@ -147,13 +147,31 @@ public class InlineObjectTests
         Assert.That(after.Min(glyph => glyph.Rect.X), Is.GreaterThanOrEqualTo(placed.Rect.Right - 1e-3));
     }
 
+    // Down a vertical line an object stands upright: its height along the line, centered across it, and a line it is
+    // wider than grows to hold it. There were none, and a control set there was given no room.
     [Test]
-    public void InVerticalText_ThereAreNone()
+    public void InVerticalText_ItStandsUprightAcrossItsLine()
     {
-        var layout = Lay("ab" + Object, new Size(12, 8), height: 200,
+        var text = "ab" + Object + "cd";
+        var plain = Lay("abcd", null, height: 200, setUp: set => set.WritingMode = WritingMode.VerticalRightToLeft);
+        var layout = Lay(text, new Size(60, 30), height: 200,
             setUp: set => set.WritingMode = WritingMode.VerticalRightToLeft);
+        var placed = layout.GetInlineObjects().Single();
+        var line = layout.GetRangeRects(0, text.Length).Single();
+        var before = layout.GetRangeRects(1, 2).Single();
+        var after = layout.GetRangeRects(3, 4).Single();
 
-        Assert.That(layout.GetInlineObjects(), Is.Empty);
+        Assert.Multiple(() =>
+        {
+            Assert.That(placed.Index, Is.EqualTo(2));
+            Assert.That((placed.Rect.Width, placed.Rect.Height), Is.EqualTo((60f, 30f)), "upright, as it is");
+            Assert.That(placed.Rect.Top, Is.EqualTo(before.Bottom).Within(1), "after b down the line");
+            Assert.That(after.Top, Is.EqualTo(placed.Rect.Bottom).Within(1), "and c after it");
+            Assert.That(line.Width, Is.GreaterThanOrEqualTo(60 - 1e-3), "the line as wide as it");
+            Assert.That(line.Width, Is.GreaterThan(plain.GetRangeRects(0, 4).Single().Width), "grown for it");
+            Assert.That(placed.Rect.Left + placed.Rect.Width / 2, Is.EqualTo(line.Left + line.Width / 2).Within(4),
+                "centered across it");
+        });
     }
 
     [Test]

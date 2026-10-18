@@ -63,6 +63,27 @@ public class ParagraphComposerTests
         Assert.That(demerits.Value, Is.EqualTo(best.Value).Within(1e-6 * Math.Max(1, best.Value)));
     }
 
+    // A hyphen at a break whose halves take less than the word did still counts toward the limit.
+    [Test]
+    public void Break_WithAHyphenLimit_CountsHyphensThatNarrowTheLine([Range(0, 99)] int seed)
+    {
+        var random = new Random(seed);
+        var items = RandomParagraph(random, splitOneIn: 1, narrowing: true);
+        List<double> widths = [random.Next(100, 200)];
+
+        var breaks = ParagraphComposer.Break(items, widths, 1000, 1);
+        var best = BestByEveryBreaking(items, widths, 1000, 1);
+
+        if (best == null)
+        {
+            Assert.That(breaks, Is.Null);
+            return;
+        }
+
+        Assert.That(breaks, Is.Not.Null);
+        Assert.That(Demerits(items, widths, 1000, breaks, 1), Is.Not.Null, "no two lines in a row end in a hyphen");
+    }
+
     [Test]
     public void BreakAnyway_SetsAWordWiderThanTheLineOnALineOfItsOwn()
     {
@@ -91,6 +112,22 @@ public class ParagraphComposerTests
         Assert.That(ParagraphComposer.BreakAnyway(bare, 100, 40), Is.Not.Null);
     }
 
+    // A break whose rest of the word takes more set by itself makes the next line that much longer: here too long.
+    [TestCase(0, true)]
+    [TestCase(20, false)]
+    public void APenaltysAfter_LengthensTheNextLine(double after, bool breaks)
+    {
+        List<ComposerItem> items =
+        [
+            ComposerItem.Box(60), ComposerItem.Penalty(10, 0, true, after), ComposerItem.Box(60),
+            ComposerItem.Glue(0, Fill, 0), ComposerItem.Penalty(0, ParagraphComposer.Forced, false),
+        ];
+
+        var found = ParagraphComposer.Break(items, 70, 100);
+
+        Assert.That(found, breaks ? Is.EqualTo(new[] { 1, 4 }) : Is.Null);
+    }
+
     [Test]
     public void AnEmptyParagraph_IsOneLine()
     {
@@ -105,7 +142,7 @@ public class ParagraphComposerTests
         Assert.Throws<ArgumentException>(() => ParagraphComposer.Break([ComposerItem.Box(10)], 100, 100));
     }
 
-    private static List<ComposerItem> RandomParagraph(Random random, int splitOneIn = 3)
+    private static List<ComposerItem> RandomParagraph(Random random, int splitOneIn = 3, bool narrowing = false)
     {
         List<ComposerItem> items = [];
         var words = random.Next(4, 10);
@@ -129,7 +166,8 @@ public class ParagraphComposerTests
             {
                 var head = random.Next(10, length - 10);
                 items.Add(ComposerItem.Box(head));
-                items.Add(ComposerItem.Penalty(6, 50, true));
+                // A word broken inside a ligature set again in halves: the line may come out narrower for the hyphen.
+                items.Add(narrowing ? ComposerItem.Penalty(-2, 50, true, 0) : ComposerItem.Penalty(6, 50, true));
                 items.Add(ComposerItem.Box(length - head));
             }
             else
@@ -287,7 +325,7 @@ public class ParagraphComposerTests
                 demerits += 10000;
             }
 
-            hyphens = flagged && item.Width > 0 ? hyphens + 1 : 0;
+            hyphens = flagged && (item.Width > 0 || item.Discretionary) ? hyphens + 1 : 0;
             if (hyphenLimit > 0 && hyphens > hyphenLimit && Enumerable.Range(start, b - start).Any(i =>
                     items[i].Kind == ComposerItemKind.Glue
                         ? i > 0 && items[i - 1].Kind == ComposerItemKind.Box

@@ -266,6 +266,43 @@ public class TextFrameTests
         }
     }
 
+    // A line raised by larger text found its room at its paragraph's line height: its lower part reached into an
+    // exclusion just under that room.
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void ALineRaisedByLargerText_KeepsOutOfAnExclusion(LineBreaking breaking)
+    {
+        var text = new AttributedText(Prose);
+        text.Apply(Prose.IndexOf("times", StringComparison.Ordinal), 5, new TextAttributes { FontSize = 48 });
+        var exclusion = new RectangleF(0, (float)LineHeight + 4, 120, 60);
+        var typeface = SourceSans.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, Frames = [new RectangleF(0, 0, 300, 600)], Exclusions = [exclusion], LineBreaking = breaking,
+        };
+        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.Multiple(() =>
+        {
+            for (var i = 0; i < layout.LineCount; i++)
+            {
+                var line = layout.GetLine(i);
+                var reaches = line.Top < exclusion.Bottom && line.Top + line.Height > exclusion.Top
+                              && Ink(layout, i).Any(glyph => glyph.Rect.Left < exclusion.Right);
+                Assert.That(reaches, Is.False, $"line {i} reaches into the exclusion");
+                if (i > 0)
+                {
+                    var before = layout.GetLine(i - 1);
+                    Assert.That(line.Top, Is.GreaterThanOrEqualTo(before.Top + before.Height - 0.5), $"line {i} over line {i - 1}");
+                }
+            }
+
+            Assert.That(Enumerable.Range(0, 2).Any(i => Ink(layout, i).Any(glyph => glyph.FontSize > FontSize)), Is.True,
+                "the larger text is on one of the first two lines, beside the exclusion");
+        });
+    }
+
     [Test]
     public void ADropCap_StandsAtTheStartOfTheFirstFrame()
     {

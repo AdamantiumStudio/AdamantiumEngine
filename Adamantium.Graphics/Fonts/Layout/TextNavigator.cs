@@ -357,11 +357,6 @@ internal sealed class TextNavigator
     public IReadOnlyList<TextInlineObject> GetInlineObjects()
     {
         List<TextInlineObject> objects = [];
-        if (WritingMode == WritingMode.VerticalRightToLeft)
-        {
-            return objects;
-        }
-
         foreach (var word in _laid.Glyphs ?? [])
         {
             if (ObjectSizeOf(word.Symbol, word.Attributes) != null)
@@ -476,7 +471,33 @@ internal sealed class TextNavigator
         return nearest;
     }
 
+    // A point where the text is shown: down vertical lines, along them by Y and across them from the right.
     public TextHit HitTest(double x, double y)
+    {
+        if ((Text ?? string.Empty).Length == 0)
+        {
+            return new TextHit(0, false, false, 0);
+        }
+
+        if (WritingMode == WritingMode.VerticalRightToLeft)
+        {
+            (x, y) = (y, _laid.ColumnsRight - x);
+        }
+
+        var lineIndex = _laid.LineFrames != null ? LineInFrames(x, y) : LineAt(y);
+        // The drop cap stands across the lines it spans; its characters are on the first.
+        if (lineIndex > 0 && lineIndex < Math.Min(_laid.DropCapLines, LineCount) && OverTheDropCap(x, Stops()))
+        {
+            lineIndex = 0;
+        }
+
+        return HitTestLine(lineIndex, x, lineIndex >= 0 && lineIndex < LineCount);
+    }
+
+    // A place along a line, as GetCaretPoint gives it: where the line above or below keeps the caret's column.
+    public TextHit HitTestLine(int lineIndex, double x) => HitTestLine(lineIndex, x, true);
+
+    private TextHit HitTestLine(int lineIndex, double x, bool insideY)
     {
         var text = Text ?? string.Empty;
         if (text.Length == 0)
@@ -486,14 +507,6 @@ internal sealed class TextNavigator
 
         var stops = Stops();
         var graphemes = _laid.Graphemes;
-        var lineIndex = _laid.LineFrames != null ? LineInFrames(x, y) : LineAt(y);
-        // The drop cap stands across the lines it spans; its characters are on the first.
-        if (lineIndex > 0 && lineIndex < Math.Min(_laid.DropCapLines, LineCount) && !_laid.Vertical && OverTheDropCap(x, stops))
-        {
-            lineIndex = 0;
-        }
-
-        var insideY = lineIndex >= 0 && lineIndex < LineCount;
         lineIndex = Math.Max(0, Math.Min(lineIndex, LineCount - 1));
         var line = GetLine(lineIndex);
 
@@ -622,6 +635,14 @@ internal sealed class TextNavigator
         }
 
         return (stops[index].X, line);
+    }
+
+    // The caret where the text is shown: across its line, as thick as asked along it.
+    public RectangleF GetCaretRect(CaretPosition position, double thickness)
+    {
+        var (x, line) = GetCaretPoint(position);
+        return Placed(new RectangleF((float)x, (float)LineTop(line), (float)thickness,
+            (float)LineMetric(_laid.LineHeights, line)));
     }
 
     public CaretPosition MoveVisually(CaretPosition from, bool toRight)

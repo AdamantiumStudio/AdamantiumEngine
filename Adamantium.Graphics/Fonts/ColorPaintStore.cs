@@ -20,6 +20,7 @@ internal sealed class ColorPaintStore : IDisposable
     private const float PopGroupCode = 4;
     private const float FillCode = 5;
     private const float ImageCode = 6;
+    private const int ImageProgramLength = 6;
 
     private readonly object _gate = new();
     private readonly Dictionary<ulong, int> _programs = new();
@@ -56,13 +57,16 @@ internal sealed class ColorPaintStore : IDisposable
         }
     }
 
+    // An image glyph keeps its program for good: landed again after it was let go, it is written over its old one, so
+    // text built before draws it again.
     public int AddImage(ulong colorGlyph, double left, double bottom, double width, double height, ColorBitmapCell cell)
     {
         lock (_gate)
         {
-            if (_programs.TryGetValue(colorGlyph, out var known))
+            var known = _programs.TryGetValue(colorGlyph, out var program);
+            if (known && program < 0)
             {
-                return known;
+                return program;
             }
 
             if (width <= 0 || height <= 0)
@@ -74,17 +78,33 @@ internal sealed class ColorPaintStore : IDisposable
             const float size = ColorBitmapAtlas.LayerSize;
             var scaleU = cell.Width / width / size;
             var scaleV = cell.Height / height / size;
-            var program = _programData.Count;
-            _programData.Add(new Vector4F((float)left, (float)bottom, (float)width, (float)height));
-            _programData.Add(new Vector4F(4, 0, 0, 0));
-            _programData.Add(new Vector4F(ImageCode, 4, cell.Layer, size));
-            _programData.Add(new Vector4F((float)scaleU, 0, 0, (float)-scaleV));
-            _programData.Add(new Vector4F((float)(cell.X / size - left * scaleU), (float)(cell.Y / size + (bottom + height) * scaleV),
-                cell.Levels - 1, 0));
-            _programData.Add(new Vector4F(cell.X / size, cell.Y / size, (cell.X + cell.CellWidth) / size,
-                (cell.Y + cell.CellHeight) / size));
-            _programs[colorGlyph] = program;
+            if (!known)
+            {
+                program = _programData.Count;
+                CollectionsMarshal.SetCount(_programData, program + ImageProgramLength);
+                _programs[colorGlyph] = program;
+            }
+
+            _programData[program] = new Vector4F((float)left, (float)bottom, (float)width, (float)height);
+            _programData[program + 1] = new Vector4F(4, 0, 0, 0);
+            _programData[program + 2] = new Vector4F(ImageCode, 4, cell.Layer, size);
+            _programData[program + 3] = new Vector4F((float)scaleU, 0, 0, (float)-scaleV);
+            _programData[program + 4] = new Vector4F((float)(cell.X / size - left * scaleU),
+                (float)(cell.Y / size + (bottom + height) * scaleV), cell.Levels - 1, 0);
+            _programData[program + 5] = new Vector4F(cell.X / size, cell.Y / size, (cell.X + cell.CellWidth) / size,
+                (cell.Y + cell.CellHeight) / size);
+            _programsUploaded = Math.Min(_programsUploaded, program);
             return program;
+        }
+    }
+
+    // An image let go: its program draws nothing - an empty box - until the image lands again.
+    public void ClearImage(int program)
+    {
+        lock (_gate)
+        {
+            _programData[program] = Vector4F.Zero;
+            _programsUploaded = Math.Min(_programsUploaded, program);
         }
     }
 
@@ -93,6 +113,15 @@ internal sealed class ColorPaintStore : IDisposable
         lock (_gate)
         {
             _programs.TryAdd(colorGlyph, -1);
+        }
+    }
+
+    // A glyph whose image found no room even when it was let go and asked for again: drawn by none from now on.
+    public void SetNone(ulong colorGlyph)
+    {
+        lock (_gate)
+        {
+            _programs[colorGlyph] = -1;
         }
     }
 

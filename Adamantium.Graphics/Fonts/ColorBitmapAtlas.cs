@@ -22,6 +22,9 @@ internal sealed class ColorBitmapAtlas : DisposableObject
     private readonly object _gate = new();
     private readonly List<(ColorBitmapCell Cell, byte[] Levels)> _pending = [];
     private readonly Dictionary<(int Width, int Height), (uint Layer, int Next)> _shelves = new();
+    private readonly Dictionary<(int Width, int Height), List<ColorBitmapCell>> _freeCells = new();
+    private readonly Dictionary<uint, int> _cellsInLayer = new();
+    private readonly List<uint> _freeLayers = [];
     private readonly uint _maxLayers;
     private GrowingTextureArray _layers;
     private uint _layersTaken;
@@ -33,6 +36,17 @@ internal sealed class ColorBitmapAtlas : DisposableObject
     }
 
     public Texture Texture => _layers?.Texture;
+
+    public uint LayersTaken
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _layersTaken;
+            }
+        }
+    }
 
     public bool HasPending
     {
@@ -66,31 +80,84 @@ internal sealed class ColorBitmapAtlas : DisposableObject
             cellHeight));
     }
 
-    public ColorBitmapCell Add(ColorBitmapImage image)
+    // A cell for the image: one given back first, then the next of its size's layer, then a new layer while the atlas
+    // takes fewer than the budget (or the device's limit, past the budget). Null when there is none.
+    public ColorBitmapCell Add(ColorBitmapImage image, bool pastBudget)
     {
         lock (_gate)
         {
             var size = (image.CellWidth, image.CellHeight);
-            var perRow = LayerSize / image.CellWidth;
-            var perLayer = perRow * (LayerSize / image.CellHeight);
-            if (!_shelves.TryGetValue(size, out var shelf) || shelf.Next == perLayer)
+            ColorBitmapCell cell;
+            if (_freeCells.TryGetValue(size, out var free) && free.Count > 0)
             {
-                if (_layersTaken == _maxLayers)
+                cell = free[^1] with { Width = image.Width, Height = image.Height };
+                free.RemoveAt(free.Count - 1);
+            }
+            else
+            {
+                var perRow = LayerSize / image.CellWidth;
+                var perLayer = perRow * (LayerSize / image.CellHeight);
+                if (!_shelves.TryGetValue(size, out var shelf) || shelf.Next == perLayer)
                 {
-                    return null;
+                    if (_freeLayers.Count > 0)
+                    {
+                        shelf = (_freeLayers[^1], 0);
+                        _freeLayers.RemoveAt(_freeLayers.Count - 1);
+                    }
+                    else if (_layersTaken < LayerLimit(pastBudget))
+                    {
+                        shelf = (_layersTaken++, 0);
+                    }
+                    else
+                    {
+                        return null;
+                    }
                 }
 
-                shelf = (_layersTaken++, 0);
+                cell = new ColorBitmapCell(shelf.Layer, shelf.Next % perRow * image.CellWidth,
+                    shelf.Next / perRow * image.CellHeight, image.Width, image.Height, image.CellWidth, image.CellHeight,
+                    LevelsOf(image.CellWidth, image.CellHeight));
+                _shelves[size] = (shelf.Layer, shelf.Next + 1);
             }
 
-            var cell = new ColorBitmapCell(shelf.Layer, shelf.Next % perRow * image.CellWidth,
-                shelf.Next / perRow * image.CellHeight, image.Width, image.Height, image.CellWidth, image.CellHeight,
-                LevelsOf(image.CellWidth, image.CellHeight));
-            _shelves[size] = (shelf.Layer, shelf.Next + 1);
+            _cellsInLayer[cell.Layer] = _cellsInLayer.GetValueOrDefault(cell.Layer) + 1;
             _pending.Add((cell, image.Levels));
             return cell;
         }
     }
+
+    // Gives a cell back for another image of its size; a layer with none left taken is given back whole, for any size.
+    public void Free(ColorBitmapCell cell)
+    {
+        lock (_gate)
+        {
+            var size = (cell.CellWidth, cell.CellHeight);
+            var left = _cellsInLayer[cell.Layer] - 1;
+            if (left > 0)
+            {
+                _cellsInLayer[cell.Layer] = left;
+                if (!_freeCells.TryGetValue(size, out var free))
+                {
+                    _freeCells[size] = free = [];
+                }
+
+                free.Add(cell);
+                return;
+            }
+
+            _cellsInLayer.Remove(cell.Layer);
+            _freeCells.GetValueOrDefault(size)?.RemoveAll(other => other.Layer == cell.Layer);
+            if (_shelves.TryGetValue(size, out var shelf) && shelf.Layer == cell.Layer)
+            {
+                _shelves.Remove(size);
+            }
+
+            _freeLayers.Add(cell.Layer);
+        }
+    }
+
+    private uint LayerLimit(bool pastBudget) =>
+        pastBudget ? _maxLayers : Math.Min(_maxLayers, (uint)Math.Max(1, FontAtlasStore.ColorImageLayerBudget));
 
     public List<ColorBitmapCell> Upload()
     {

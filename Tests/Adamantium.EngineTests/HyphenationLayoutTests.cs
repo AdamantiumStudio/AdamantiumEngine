@@ -182,4 +182,71 @@ public class HyphenationLayoutTests
         Assert.That(layout.LineCount, Is.EqualTo(1));
         Assert.That(HyphenGlyphs(layout), Is.Empty);
     }
+
+    private static TextLayout Broken(Typeface typeface, string text, double width, LineBreaking breaking,
+        Hyphens hyphens = Hyphens.Manual, string language = null)
+    {
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, Hyphens = hyphens, Language = language, LineBreaking = breaking,
+        };
+        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        return layout;
+    }
+
+    // A hyphenation point inside a ligature - "of-fice", the ffi one glyph - is a place to break: the halves are set
+    // again by themselves. It was passed over, and the word was not broken there.
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void AWordBreaksInsideALigature(LineBreaking breaking)
+    {
+        const string text = "office";
+        var typeface = LoadTypeface();
+        var whole = Broken(typeface, text, double.NaN, breaking, Hyphens.Auto, "en-US");
+        Assert.That(whole.GetTextData().Count(), Is.LessThan(text.Length), "ffi is one glyph whole");
+
+        var layout = Broken(typeface, text, whole.CalculatedLayoutSize.Width * 0.75, breaking, Hyphens.Auto, "en-US");
+        var lines = LineOfEachCharacter(layout);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lines[1], Is.EqualTo(0), "of on the first line");
+            Assert.That(lines[2], Is.EqualTo(1), "fice on the next");
+            Assert.That(HyphenGlyphs(layout).Single().LineIndex, Is.EqualTo(0), "a hyphen after of");
+            Assert.That(layout.GetTextData().Where(glyph => glyph.LineIndex == 0).Select(glyph => glyph.PositionInString),
+                Is.EquivalentTo(new[] { 0, 1, -1 }), "o, f and the hyphen: the f set by itself");
+        });
+    }
+
+    // An Arabic letter before the break ends its half - its final form - and the one after starts the rest - its
+    // initial form; they kept the forms joining them across the break.
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void ArabicHalves_TakeTheFormsOfTheirEnds(LineBreaking breaking)
+    {
+        var text = "مكت" + SoftHyphen + "بات";
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansArabic-Regular.ttf"));
+        var font = typeface.Fonts[0];
+        var whole = Broken(typeface, text, double.NaN, breaking);
+        var half = Broken(typeface, "مكت-", double.NaN, breaking).CalculatedLayoutSize.Width;
+        Assert.That(half, Is.LessThan(whole.CalculatedLayoutSize.Width - 2), "the first half and its hyphen fit");
+        var layout = Broken(typeface, text, half + 2, breaking);
+        // A letter's glyphs - its dots may be glyphs of their own.
+        uint[] Of(Adamantium.Fonts.Shaping.ShapedGlyph[] glyphs, int cluster) =>
+            glyphs.Where(glyph => glyph.Cluster == cluster).Select(glyph => glyph.GlyphIndex).ToArray();
+        uint[] Laid(TextLayout laid, int index) =>
+            laid.GetTextData().Where(glyph => glyph.PositionInString == index).Select(glyph => glyph.Glyph.Index).ToArray();
+        var final = Of(Adamantium.Fonts.Shaping.TextShaper.Shape(font, "مكت"), 2);
+        var initial = Of(Adamantium.Fonts.Shaping.TextShaper.Shape(font, "بات"), 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.LineCount, Is.EqualTo(2));
+            Assert.That(Laid(whole, 2), Is.Not.EquivalentTo(final), "whole, ت joins on");
+            Assert.That(Laid(layout, 2), Is.EquivalentTo(final), "ت ends the first half");
+            Assert.That(Laid(layout, 4), Is.EquivalentTo(initial), "ب starts the rest");
+        });
+    }
 }
