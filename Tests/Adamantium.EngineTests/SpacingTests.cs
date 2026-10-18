@@ -285,4 +285,31 @@ public class SpacingTests
     {
         Assert.Throws<FormatException>(() => SpacingRange.Parse(text));
     }
+
+    // Ideographs stand with no space between them: the paragraph composer knew none of the letter spacing at their gaps
+    // and could not close them up to take one more onto a line.
+    [Test]
+    public void TheParagraphComposer_ClosesUpTheGapsBetweenIdeographs()
+    {
+        const string text = "日本語の文章日本語の文章日本語の文章日本語の文章";
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
+            "NotoSansCJK-Regular.ttc"));
+        TextLayout Lay(LineBreaking breaking)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, LineBreaking = breaking, LetterSpacing = new SpacingRange(-0.5, 0, 0.5),
+            };
+            layout.ProcessText(text, 20, new Size(196, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        var greedy = Lay(LineBreaking.Greedy);
+        var composed = Lay(LineBreaking.Paragraph);
+
+        Assert.That(greedy.GetLine(0).End - greedy.GetLine(0).Start, Is.EqualTo(10), "the greedy breaker closes them up");
+        Assert.That(composed.GetLine(0).End - composed.GetLine(0).Start, Is.EqualTo(10), "ten, their gaps closed up");
+        Assert.That(composed.GetTextData().Where(g => g.LineIndex == 0).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(196.5));
+    }
 }

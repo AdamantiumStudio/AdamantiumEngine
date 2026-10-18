@@ -271,6 +271,34 @@ public class VerticalLayoutTests
         Assert.That(layout.GetTextData().Any(glyph => glyph.Upright || glyph.Sideways), Is.False);
     }
 
+    [TestCase(2)]
+    [TestCase(3)]
+    public void ADropCap_StandsAtTheHeadOfItsLines_ItsEmAcrossThemAll(int lines)
+    {
+        var layout = new TextLayout(NotoSansCjk.Value, Font)
+        {
+            Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, DropCap = new DropCap(lines),
+        };
+        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな", 20)), FontSize, new Size(1000, 200),
+            TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var glyphs = layout.GetTextData();
+        var cap = glyphs.Single(glyph => glyph.PositionInString == 0);
+        var right = 1000 - LineHeight / 2 + FontSize / 2;
+        var left = 1000 - (lines - 0.5) * LineHeight - FontSize / 2;
+
+        Assert.That(cap.Upright, Is.True);
+        Assert.That(cap.FontSize, Is.EqualTo(right - left).Within(1e-3), "its em from the first line's to the last's");
+        Assert.That(UprightCenter(cap), Is.EqualTo((right + left) / 2).Within(0.01));
+        Assert.That(cap.Rect.Top, Is.GreaterThan(-0.5));
+        Assert.That(cap.Rect.Bottom, Is.LessThan(cap.FontSize + 0.5), "inside its em at the head of the lines");
+        for (var line = 0; line <= lines; line++)
+        {
+            var head = glyphs.Where(glyph => glyph.LineIndex == line && glyph.PositionInString > 0).Min(glyph => glyph.PenX);
+            Assert.That(head, Is.EqualTo(line < lines ? cap.FontSize : 0).Within(1e-3),
+                line < lines ? "the lines beside it start below it" : "the next line at the head");
+        }
+    }
+
     private static TextLayout Lay(string text, double width, double height,
         HorizontalTextAlignment alignment = HorizontalTextAlignment.Left,
         VerticalTextAlignment across = VerticalTextAlignment.Top, TextWrapping wrapping = TextWrapping.WrapByWords,

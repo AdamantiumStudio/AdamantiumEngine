@@ -17,6 +17,9 @@ internal struct GlyphInfo
     public UnicodeFlags Flags;
     public SpaceKind Space;
 
+    // A piece of a stretched Syriac abbreviation mark: 1 set once, 2 repeated to the width of its word; 0 neither.
+    public byte Stretch;
+
     public bool IsMark => (Props & GlyphProps.Mark) != 0;
 
     public bool IsBaseGlyph => (Props & GlyphProps.BaseGlyph) != 0;

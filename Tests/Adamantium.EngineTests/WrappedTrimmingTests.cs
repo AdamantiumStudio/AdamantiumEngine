@@ -62,6 +62,49 @@ public class WrappedTrimmingTests
         Assert.That(layout.GetTextData().Max(g => g.Rect.Bottom), Is.LessThanOrEqualTo(height));
     }
 
+    // Wrapped by symbols, a line raised by larger text is laid again as one wrapped by words is.
+    [Test]
+    public void ALineRaisedPastTheBottom_WrappedBySymbols_IsNotSet()
+    {
+        const string text = "one\ntwo BIG\nthree";
+        var height = Layout("one", TextTrimming.None).GetLine(0).Height * 2.4;
+        var attributed = new AttributedText(text);
+        attributed.Apply(text.IndexOf("BIG", StringComparison.Ordinal), 3, new TextAttributes { FontSize = 50 });
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+        layout.ProcessText(attributed, FontSize, new Size(Width, height), TextWrapping.WrapBySymbols,
+            TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.LineCount, Is.EqualTo(1));
+        Assert.That(Dots(layout).Select(g => g.LineIndex), Is.All.EqualTo(0));
+        Assert.That(layout.GetTextData().Max(g => g.Rect.Bottom), Is.LessThanOrEqualTo(height));
+    }
+
+    // On a grid a line goes down to the grid line at or below its baseline: a little larger text in it takes it a row
+    // lower, and past the bottom, where without the grid it fits.
+    [TestCase(false, 3)]
+    [TestCase(true, 2)]
+    public void ALineTheGridTakesPastTheBottom_IsNotSet(bool onTheGrid, int lines)
+    {
+        const string text = "one\ntwo\nthree BIG\nfour";
+        var line = Layout("one", TextTrimming.None).GetLine(0).Height;
+        var height = line * 3.2;
+        var attributed = new AttributedText(text);
+        attributed.Apply(text.IndexOf("BIG", StringComparison.Ordinal), 3, new TextAttributes { FontSize = 21 });
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, BaselineGrid = onTheGrid ? new BaselineGrid(line, line * 0.4) : null,
+        };
+        layout.ProcessText(attributed, FontSize, new Size(Width, height), TextWrapping.WrapByWords,
+            TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var last = layout.GetLine(layout.LineCount - 1);
+
+        Assert.That(layout.LineCount, Is.EqualTo(lines));
+        Assert.That(last.Top + last.Height, Is.LessThan(height + 1));
+        Assert.That(Dots(layout).Select(g => g.LineIndex), Is.All.EqualTo(lines - 1));
+    }
+
     [Test]
     public void TheEllipsis_IsSetAsTheTextItFollows()
     {
@@ -105,10 +148,10 @@ public class WrappedTrimmingTests
     }
 
     // Lines that do not wrap never stopped at the bottom: they are not laid again.
-    [TestCase(TextWrapping.NoWrap)]
-    [TestCase(TextWrapping.WrapBySymbols)]
-    public void UnwrappedLines_AreNotCutAtTheBottom(TextWrapping wrapping)
+    [Test]
+    public void UnwrappedLines_AreNotCutAtTheBottom()
     {
+        const TextWrapping wrapping = TextWrapping.NoWrap;
         const string text = "first line\nsecond line\nthird line";
         var height = Layout("one", TextTrimming.None).GetLine(0).Height * 2.4;
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
