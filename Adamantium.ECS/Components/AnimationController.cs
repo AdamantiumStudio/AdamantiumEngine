@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Serilog;
 
 namespace Adamantium.ECS.Components
 {
-   public class AnimationController : ActivatableComponent
+   [ViewModel]
+   public partial class AnimationController : ActivatableComponent
    {
       public AnimationController()
       {
@@ -19,7 +21,8 @@ namespace Adamantium.ECS.Components
 
       public Matrix4x4F BindShapeMatrix { get; set; }
 
-      public String ControllerId { get; set; }
+      [Bindable]
+      public partial String ControllerId { get; set; }
 
       /// <summary>
       /// Contains a set of joints with its IBM`s (inverse bind matrices)

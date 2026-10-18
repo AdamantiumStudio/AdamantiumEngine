@@ -223,7 +223,10 @@ public class EntityImportTemplate : IEntityTemplate
             {
                 var material = new Material();
                 material.AmbientColor = materialData.AmbientColor;
-                material.DiffuseColor = materialData.DiffuseColor;
+                if (materialData.DiffuseColor != default)
+                {
+                    material.DiffuseColor = materialData.DiffuseColor;
+                }
                 material.SpecularColor = materialData.SpecularColor;
                 material.Emission = materialData.Emission;
                 material.Reflective = materialData.Reflective;

@@ -55,13 +55,13 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 vertexArray.Add(p3);
 
                 List<Vector2F> uvs = new List<Vector2F>();
-                uvs.Add(Vector2F.One);
-                uvs.Add(Vector2F.UnitY);
-                uvs.Add(Vector2F.UnitX);
                 uvs.Add(Vector2F.Zero);
+                uvs.Add(Vector2F.UnitX);
+                uvs.Add(Vector2F.UnitY);
+                uvs.Add(Vector2F.One);
                 
-                // Two triangles wound to face -Z, toward a camera looking along +Z.
-                List<int> indicesArray = [0, 2, 1, 1, 2, 3];
+                // Two triangles clockwise on screen to a camera looking along +Z, the side the GPU takes for the front.
+                List<int> indicesArray = [0, 1, 2, 2, 1, 3];
 
                 var mesh = new Mesh();
                 mesh.SetTopology(primitiveType).

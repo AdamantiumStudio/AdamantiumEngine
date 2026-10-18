@@ -127,8 +127,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 {
                     var point = points[i];
                     var uv = new Vector2F(
-                        1.0f - (float)(0.5 + (point.X - center.X) / diameter.X),
-                        1.0f - (float)(0.5 + (point.Y - center.Y) / diameter.Y));
+                        (float)(0.5 + (point.X - center.X) / diameter.X),
+                        (float)(0.5 + (point.Y - center.Y) / diameter.Y));
                     uvs.Add(uv);
                 }
                 

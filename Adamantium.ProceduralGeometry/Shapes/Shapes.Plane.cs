@@ -82,7 +82,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (int x = 0; x < lineWidth; ++x)
                     {
                         var pos = new Vector3(-sizeX + deltaX * x, 0, -sizeZ + deltaZ * z);
-                        var uv = new Vector2F(1.0f - (1.0f * x / tessellation * uvFactor.X), 1.0f * z / tessellation * uvFactor.Y);
+                        var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * (tessellation - z) / tessellation * uvFactor.Y);
                         vertices[vertexCount] = pos;
                         uvs[vertexCount] = uv;
                         vertexCount++;

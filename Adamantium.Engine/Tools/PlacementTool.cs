@@ -11,16 +11,17 @@ namespace Adamantium.Engine.Tools;
 
 /// <summary>
 /// Places a new object with the mouse: a ghost of it follows the pointer, resting on the surface under it or, past every
-/// surface, on the ground grid - in perspective out to the camera's focus, or as far as the ground is seen from above
-/// at 6°, and past that, or looking along the ground or above it, on the ground under what the pointer shows there.
-/// A click places it; with Shift held the tool stays to place another, else it is done. Esc
+/// surface, on the ground grid wherever it is seen. Where the pointer then leaves the scene - above the horizon, past
+/// the grid - the ghost stays where it last touched it; from an eye standing on the ground, which the pointer never
+/// meets in front of it, the ghost goes on the ground under what the pointer shows at the camera's focus. A click
+/// places it; with Shift held the tool stays to place another, else it is done. Esc
 /// or a right click gives up; a right drag still turns the camera.
 /// </summary>
 public sealed class PlacementTool : ToolProcessor
 {
     private static readonly Vector4F GhostTint = new(0.35f, 0.75f, 1f, 0.45f);
     private const float ClickSlop = 4;
-    private static readonly double GrazingTangent = Math.Tan(6 * Math.PI / 180);
+    private Vector3? lastTouch;
     private readonly float lowest;
     private bool finished;
     private Vector2F rightPressedAt;
@@ -98,6 +99,7 @@ public sealed class PlacementTool : ToolProcessor
         if (hit.IsHit)
         {
             point = (Vector3)hit.Point + camera.WorldPosition;
+            lastTouch = point;
             Under = Modifier(Keys.Alt) ? RootOf(hit.Entity) : hit.Entity;
             if (NeedsSomethingUnder)
             {
@@ -111,14 +113,22 @@ public sealed class PlacementTool : ToolProcessor
         else
         {
             var planeY = GroundY(grid);
-            var reach = grid.LayoutFor(camera).Reach;
+            var layout = grid.LayoutFor(camera);
+            var reach = layout.Reach + layout.Center.Length();
             var eye = camera.WorldPosition;
             var flat = camera.ProjectionMatrix.M44 > 0.5f;
-            var farthest = flat ? reach : Math.Min(Math.Max(ViewDepth(camera), Math.Abs(planeY - eye.Y) / GrazingTangent), reach);
-            var onGround = OnGround(ray.Ray, eye, planeY, reach, out point);
-            if (!onGround || Vector3.Dot(point - eye, camera.Forward) > farthest)
+            var eyeOnGround = !flat && Math.Abs(eye.Y - planeY) < camera.ZNear * 2;
+            if (!eyeOnGround && OnGround(ray.Ray, eye, planeY, reach, out point))
             {
-                point = UnderFocus(ray.Ray, camera, planeY, flat ? ViewDepth(camera) : farthest);
+                lastTouch = point;
+            }
+            else if (!eyeOnGround && !NeedsSomethingUnder && lastTouch is { } kept && InView(kept, camera))
+            {
+                point = kept;
+            }
+            else
+            {
+                point = UnderFocus(ray.Ray, camera, planeY, ViewDepth(camera));
                 if (!InView(point, camera))
                 {
                     return;

@@ -131,4 +131,53 @@ public class ProceduralShapeTests
             Assert.That(entity.GetComponent<Collider>().Bounds.Size.Z, Is.EqualTo(Size3.Z).Within(1e-3), "its collider follows");
         });
     }
+
+    // A hexagon's corners lie on the circle its size is the diameter of, as the other shapes fill theirs.
+    [Test]
+    public void APolygon_StaysInItsSize()
+    {
+        var size = new PolygonShape { Size = new Vector2(2, 3), Tessellation = 6 }.Build().Bounds.Size;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(size.X, Is.EqualTo(2).Within(0.05));
+            Assert.That(size.Y, Is.LessThanOrEqualTo(3.0001));
+        });
+    }
+
+    [Test]
+    public void ACapsule_IsHeldByACapsule_StandingAsItDoes()
+    {
+        var entity = new ShapeTemplate(new CapsuleShape()).BuildEntity(new Entity(null, "Capsule")).GetAwaiter().GetResult();
+
+        var collider = entity.GetComponent<Collider>();
+
+        Assert.That(collider, Is.TypeOf<CapsuleCollider>());
+        var capsule = (CapsuleCollider)collider;
+        Assert.Multiple(() =>
+        {
+            Assert.That(capsule.Direction, Is.EqualTo(CapsuleDirection.Y));
+            Assert.That(capsule.Radius, Is.EqualTo(0.5f).Within(1e-3));
+            Assert.That(capsule.Height, Is.EqualTo(2).Within(1e-3));
+        });
+    }
+
+    [Test]
+    public void ACubeAndASphere_KeepTheirBox()
+    {
+        var cube = new ShapeTemplate(new CubeShape()).BuildEntity(new Entity(null, "Cube")).GetAwaiter().GetResult();
+        var sphere = new ShapeTemplate(new SphereShape()).BuildEntity(new Entity(null, "Sphere")).GetAwaiter().GetResult();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cube.GetComponent<Collider>(), Is.TypeOf<BoxCollider>());
+            Assert.That(sphere.GetComponent<Collider>(), Is.TypeOf<BoxCollider>());
+        });
+    }
+
+    [Test]
+    public void ANewSphere_IsMadeOfRings()
+    {
+        Assert.That(new SphereShape().Type, Is.EqualTo(SphereType.UVSphere));
+    }
 }

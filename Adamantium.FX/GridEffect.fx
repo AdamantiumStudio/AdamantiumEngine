@@ -1,4 +1,4 @@
-// The editor's ground grid: a square laid flat on the ground under the eye, ruled into cells by the pixel shader.
+// The editor's ground grid: a square laid flat on the ground round its center, ruled into cells by the pixel shader.
 // Everything is in the camera-relative space the eye sits at the origin of.
 
 // Places the square: one copy is drawn.
@@ -7,7 +7,7 @@ float4x4 viewProjection;
 // The eye's place in the plane modulo the cells of each level, 1, 10, 100... times the smallest, two levels to an entry
 // (xy, then zw): worked out on the CPU, so what a level's lines are drawn from stays small however far the eye has gone.
 float4 phases[4];
-// x: the smallest cell; y: how far from the eye the grid reaches.
+// x: the smallest cell; y: how far from its center the grid reaches; zw: its center relative to the eye, along x and z.
 float4 layout;
 // xy: where the X axis (z = 0) and the Z axis (x = 0) cross the plane relative to the eye, along x and z, held to the
 // grid's reach; z: a line's width in pixels; w: how wide a level's cells are on screen, in pixels, when it starts to show.
@@ -114,7 +114,7 @@ float4 Ground_PS(PS_INPUT input) : SV_TARGET
     shade = float4(axisXColor.rgb * alongX, alongX) + shade * (1.0f - alongX);
     shade = float4(axisZColor.rgb * alongZ, alongZ) + shade * (1.0f - alongZ);
 
-    shade *= 1.0f - smoothstep(layout.y * 0.4f, layout.y, length(input.plane));
+    shade *= 1.0f - smoothstep(layout.y * 0.4f, layout.y, length(input.plane - layout.zw));
     if (shade.a <= 0.0f)
     {
         discard;

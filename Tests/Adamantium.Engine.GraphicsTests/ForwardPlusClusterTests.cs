@@ -93,6 +93,8 @@ public class ForwardPlusClusterTests
         effect.Parameters["ClusterDepth"].SetValue(
             new Vector4F(Near, Far, ClusterZ / MathF.Log(Far / Near), MathF.Log(Near)));
         effect.Parameters["InverseScale"].SetValue(new Vector2F(1, 1));
+        // A perspective: w is the depth itself.
+        effect.Parameters["ClusterW"].SetValue(new Vector2F(1, 0));
         effect.Parameters["ViewportRect"].SetValue(new Vector4F(0, 0, 160, 90));
 
         var parameters = new PresentationParameters(PresenterType.RenderTarget, 16, 16, IntPtr.Zero);

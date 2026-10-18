@@ -129,11 +129,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 private List<int> indexList;
 
-                private List<Vector3> vertices;
-                private List<Vector2F> uvs;
-
-                private unsafe int* indices;
-
                 // Key: an edge
                 // Value: the index of the vertex which lies midway between the two vertices pointed to by the key value
                 // This map is used to avoid duplicating vertices when subdividing triangles along edges.
@@ -159,7 +154,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 /// <param name="size">The size along each axis.</param>
                 /// <param name="tessellation">The tessellation.</param>
                 /// <returns>A Geodesic sphere.</returns>
-                private unsafe Mesh GenerateSphere(
+                private Mesh GenerateSphere(
                     Vector3 size,
                     int tessellation = 3)
                 {
@@ -170,13 +165,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     // Start with an octahedron; copy the data into the vertex/index collection.
                     vertexPositions = new List<Vector3>(OctahedronVertices);
                     indexList = new List<int>(OctahedronIndices);
-                    uvs = new List<Vector2F>();
-
-                    // We know these values by looking at the above index list for the octahedron. Despite the subdivisions that are
-                    // about to go on, these values aren't ever going to change because the vertices don't move around in the array.
-                    // We'll need these values later on to fix the singularities that show up at the poles.
-                    const int northPoleIndex = 0;
-                    const int southPoleIndex = 5;
 
                     for (int iSubdivision = 0; iSubdivision < tessellation; ++iSubdivision)
                     {
@@ -192,8 +180,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                             // Indices of the vertices making up this triangle
                             int iv0 = indexList[iTriangle * 3 + 0];
-                            int iv1 = indexList[iTriangle * 3 + 2];
-                            int iv2 = indexList[iTriangle * 3 + 1];
+                            int iv1 = indexList[iTriangle * 3 + 1];
+                            int iv2 = indexList[iTriangle * 3 + 2];
 
                             // Get the new vertices
                             Vector3 v01; // vertex on the midpoint of v0 and v1
@@ -243,201 +231,88 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     }
 
                     // Now that we've completed subdivision, fill in the final vertex collection
-                    vertices = new List<Vector3>(vertexPositions.Count);
-                    for (int i = 0; i < vertexPositions.Count; i++)
+                    var directions = new List<Vector3>(vertexPositions.Count);
+                    var points = new List<Vector3>(vertexPositions.Count);
+                    var normals = new List<Vector3F>(vertexPositions.Count);
+                    var uvs = new List<Vector2F>(vertexPositions.Count);
+                    foreach (var position in vertexPositions)
                     {
-                        var vertexValue = vertexPositions[i];
+                        var direction = Vector3.Normalize(position);
+                        directions.Add(direction);
+                        points.Add(direction * radius);
+                        normals.Add((Vector3F)Vector3.Normalize(direction / radius));
 
-                        var normal = vertexValue;
-                        normal.Normalize();
-
-                        var pos = normal * radius;
-
-                        // calculate texture coordinates for this vertex
-                        float longitude = (float) Math.Atan2(normal.X, -normal.Z);
-                        float latitude = (float) Math.Acos(normal.Y);
-
-                        float u = (float) (longitude / (Math.PI * 2.0) + 0.5);
-                        float v = (float) (latitude / Math.PI);
-
-                        var texcoord = new Vector2F(u, 1.0f - v);
-                        vertices.Add(pos);
-                        uvs.Add(texcoord);
+                        var longitude = Math.Atan2(direction.X, -direction.Z);
+                        var latitude = Math.Acos(Math.Clamp(direction.Y, -1, 1));
+                        uvs.Add(new Vector2F((float)(longitude / (Math.PI * 2.0) + 0.5), (float)(1.0 - latitude / Math.PI)));
                     }
 
-                    // There are a couple of fixes to do. One is a texture coordinate wraparound fixup. At some point, there will be
-                    // a set of triangles somewhere in the mesh with texture coordinates such that the wraparound across 0.0/1.0
-                    // occurs across that triangle. Eg. when the left hand side of the triangle has a U coordinate of 0.98 and the
-                    // right hand side has a U coordinate of 0.0. The intent is that such a triangle should render with a U of 0.98 to
-                    // 1.0, not 0.98 to 0.0. If we don't do this fixup, there will be a visible seam across one side of the sphere.
-                    // 
-                    // Luckily this is relatively easy to fix. There is a straight edge which runs down the prime meridian of the
-                    // completed sphere. If you imagine the vertices along that edge, they circumscribe a semicircular arc starting at
-                    // y=1 and ending at y=-1, and sweeping across the range of z=0 to z=1. x stays zero. It's along this edge that we
-                    // need to duplicate our vertices - and provide the correct texture coordinates.
-                    /*
-                    int preCount = vertices.Count;
-                    var indicesArray = indexList.ToArray();
-                    fixed (void* pIndices = indicesArray)
+                    var copies = new Dictionary<(int, float), int>();
+                    var finalIndices = new int[indexList.Count];
+                    var u = new float[3];
+                    for (int i = 0; i < indexList.Count; i += 3)
                     {
-                        indices = (int*) pIndices;
-
-                        for (int i = 0; i < preCount; ++i)
+                        float open = 0;
+                        int openCount = 0;
+                        for (int k = 0; k < 3; k++)
                         {
-                            // This vertex is on the prime meridian if position.x and texcoord.u are both zero (allowing for small epsilon).
-                            bool isOnPrimeMeridian = MathHelper.WithinEpsilon(vertices[i].X, 0, XMVectorSplatEpsilon)
-                                                     && MathHelper.WithinEpsilon(uvs[i].X, 0, XMVectorSplatEpsilon);
-
-                            if (isOnPrimeMeridian)
+                            var index = indexList[i + k];
+                            u[k] = uvs[index].X;
+                            if (!OnPole(directions[index]) && !OnSeam(directions[index]))
                             {
-                                int newIndex = vertices.Count;
-
-                                // copy this vertex, correct the texture coordinate, and add the vertex
-                                var uv = uvs[i];
-                                uv.X = 1.0f;
-                                uvs[i] = uv;
-
-                                // Now find all the triangles which contain this vertex and update them if necessary
-                                for (int j = 0; j < indexList.Count; j += 3)
-                                {
-                                    try
-                                    {
-                                        var triIndex0 = &indices[j + 0];
-                                        var triIndex1 = &indices[j + 1];
-                                        var triIndex2 = &indices[j + 2];
-
-                                        if (*triIndex0 == i)
-                                        {
-                                            // nothing; just keep going
-                                        }
-                                        else if (*triIndex1 == i)
-                                        {
-                                            Utilities.Swap(ref *triIndex0, ref *triIndex1);
-                                            Utilities.Swap(ref *triIndex1, ref *triIndex2);
-                                        }
-                                        else if (*triIndex2 == i)
-                                        {
-                                            Utilities.Swap(ref *triIndex0, ref *triIndex2);
-                                            Utilities.Swap(ref *triIndex1, ref *triIndex2);
-                                        }
-                                        else
-                                        {
-                                            // this triangle doesn't use the vertex we're interested in
-                                            continue;
-                                        }
-
-                                        // check the other two vertices to see if we might need to fix this triangle
-                                        try
-                                        {
-                                            if (Math.Abs(uvs[*triIndex0].X - uvs[*triIndex1].X) > 0.5f ||
-                                                Math.Abs(uvs[*triIndex0].X - uvs[*triIndex2].X) > 0.5f)
-                                            {
-                                                // yep; replace the specified index to point to the new, corrected vertex
-                                                indices[j + 0] = newIndex;
-                                            }
-                                        }
-                                        catch (Exception e)
-                                        {
-                                            Console.WriteLine(e);
-                                            throw;
-                                        }
-                                    }
-                                    catch (Exception e)
-                                    {
-                                        Console.WriteLine(e);
-                                        throw;
-                                    }
-                                }
+                                open += u[k];
+                                openCount++;
                             }
                         }
 
-                        //FixPole(northPoleIndex);
-                        //FixPole(southPoleIndex);
+                        var side = openCount > 0 ? open / openCount : 0.5f;
+                        for (int k = 0; k < 3; k++)
+                        {
+                            var direction = directions[indexList[i + k]];
+                            if (OnSeam(direction) && !OnPole(direction)) u[k] = side < 0.5f ? 0 : 1;
+                        }
 
-                        // Clear indices as it will not be accessible outside the fixed statement
-                        indices = (int*) 0;
+                        for (int k = 0; k < 3; k++)
+                        {
+                            if (OnPole(directions[indexList[i + k]])) u[k] = (u[(k + 1) % 3] + u[(k + 2) % 3]) / 2;
+                        }
+
+                        for (int k = 0; k < 3; k++)
+                        {
+                            var index = indexList[i + k];
+                            var at = i + (3 - k) % 3;
+                            if (u[k] == uvs[index].X)
+                            {
+                                finalIndices[at] = index;
+                                continue;
+                            }
+
+                            if (!copies.TryGetValue((index, u[k]), out var copy))
+                            {
+                                copy = points.Count;
+                                points.Add(points[index]);
+                                normals.Add(normals[index]);
+                                uvs.Add(new Vector2F(u[k], uvs[index].Y));
+                                copies[(index, u[k])] = copy;
+                            }
+
+                            finalIndices[at] = copy;
+                        }
                     }
-                    */
-                    
-                    FixPole(northPoleIndex);
-                    FixPole(southPoleIndex);
 
                     var mesh = new Mesh();
                     mesh.SetTopology(PrimitiveType).
-                        SetPoints(vertices).
+                        SetPoints(points).
+                        SetNormals(normals).
                         SetUVs(0, uvs).
-                        SetIndices(indexList.ToArray()).
-                        CalculateNormals();
+                        SetIndices(finalIndices);
 
                     return mesh;
                 }
 
-                private unsafe void FixPole(int poleIndex)
-                {
-                    var indicesArray = indexList.ToArray();
-                    fixed (void* pIndices = indicesArray)
-                    {
-                        indices = (int*) pIndices;
-                        var poleUV = uvs[poleIndex];
-                        bool overwrittenPoleVertex = false; // overwriting the original pole vertex saves us one vertex
+                private static bool OnPole(Vector3 direction) => Math.Abs(direction.Y) > 1 - 1e-9;
 
-                        for (var i = 0; i < indexList.Count; i += 3)
-                        {
-                            // These pointers point to the three indices which make up this triangle. pPoleIndex is the pointer to the
-                            // entry in the index array which represents the pole index, and the other two pointers point to the other
-                            // two indices making up this triangle.
-                            try
-                            {
-                                int* pPoleIndex;
-                                int* pOtherIndex0;
-                                int* pOtherIndex1;
-                                if (indices[i + 0] == poleIndex)
-                                {
-                                    pPoleIndex = &indices[i + 0];
-                                    pOtherIndex0 = &indices[i + 1];
-                                    pOtherIndex1 = &indices[i + 2];
-                                }
-                                else if (indices[i + 1] == poleIndex)
-                                {
-                                    pPoleIndex = &indices[i + 1];
-                                    pOtherIndex0 = &indices[i + 2];
-                                    pOtherIndex1 = &indices[i + 0];
-                                }
-                                else if (indices[i + 2] == poleIndex)
-                                {
-                                    pPoleIndex = &indices[i + 2];
-                                    pOtherIndex0 = &indices[i + 0];
-                                    pOtherIndex1 = &indices[i + 1];
-                                }
-                                else
-                                {
-                                    continue;
-                                }
-
-                                // Calculate the texcoords for the new pole vertex, add it to the vertices and update the index
-                                var newPoleUV = poleUV;
-                                newPoleUV.X = (float)(vertices[*pOtherIndex0].X + vertices[*pOtherIndex1].X) * 0.5f;
-                                newPoleUV.Y = poleUV.Y;
-
-                                if (!overwrittenPoleVertex)
-                                {
-                                    uvs[poleIndex] = newPoleUV;
-                                    overwrittenPoleVertex = true;
-                                }
-                                else
-                                {
-                                    *pPoleIndex = vertices.Count;
-                                    uvs.Add(newPoleUV);
-                                }
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine(e);
-                                throw;
-                            }
-                        }
-                    }
-                }
+                private static bool OnSeam(Vector3 direction) => Math.Abs(direction.X) < 1e-9 && direction.Z > 0;
 
                 // Function that, when given the index of two vertices, creates a new vertex at the midpoint of those vertices.
                 private void DivideEdge(
@@ -592,45 +467,28 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Vector3 size,
                 int tessellation = 40)
             {
-                var primitiveType = PrimitiveType.LineStrip;
-
                 var vertices = new List<Vector3>();
                 var indices = new List<int>();
-                int lastIndex = 0;
                 var radius = size / 2;
 
-                for (int i = 0; i <= tessellation; ++i)
+                for (int ring = 0; ring < 3; ring++)
                 {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-                    var cos = Math.Cos(angle);
-                    var sin = Math.Sin(angle);
-                    vertices.Add(new Vector3(radius.X * cos, 0, radius.Z * sin));
-                    indices.Add(lastIndex++);
-                }
-                indices.Add(PrimitiveRestartValue);
-
-                for (int i = 0; i <= tessellation; ++i)
-                {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-                    var cos = Math.Cos(angle);
-                    var sin = Math.Sin(angle);
-                    vertices.Add(new Vector3(radius.X * cos, radius.Y * sin, 0));
-                    indices.Add(lastIndex++);
-                }
-
-                indices.Add(PrimitiveRestartValue);
-
-                for (int i = 0; i <= tessellation; ++i)
-                {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-                    var cos = Math.Cos(angle);
-                    var sin = Math.Sin(angle);
-                    vertices.Add(new Vector3(0, radius.Y * cos, radius.Z * sin));
-                    indices.Add(lastIndex++);
+                    var start = vertices.Count;
+                    for (int i = 0; i < tessellation; ++i)
+                    {
+                        var angle = Math.PI * 2 / tessellation * i;
+                        var cos = Math.Cos(angle);
+                        var sin = Math.Sin(angle);
+                        vertices.Add(ring == 0 ? new Vector3(radius.X * cos, 0, radius.Z * sin)
+                            : ring == 1 ? new Vector3(radius.X * cos, radius.Y * sin, 0)
+                            : new Vector3(0, radius.Y * cos, radius.Z * sin));
+                        indices.Add(start + i);
+                        indices.Add(start + (i + 1) % tessellation);
+                    }
                 }
 
                 Mesh mesh = new Mesh();
-                mesh.MeshTopology = primitiveType;
+                mesh.MeshTopology = PrimitiveType.LineList;
                 mesh.SetPoints(vertices);
                 mesh.SetIndices(indices);
 

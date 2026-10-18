@@ -17,6 +17,7 @@ namespace Adamantium.ECS.Components
         protected Component()
         {
             uid = UidGenerator.Generate();
+            IsExpanded = true;
         }
 
         private Entity owner;
@@ -54,6 +55,10 @@ namespace Adamantium.ECS.Components
         
         [Bindable]
         public partial string Name { get; set; }
+
+        /// <summary>Whether an inspector shows the component's section open; open to begin with.</summary>
+        [Bindable]
+        public partial bool IsExpanded { get; set; }
 
         protected void Traverse(Action<Entity> action)
         {

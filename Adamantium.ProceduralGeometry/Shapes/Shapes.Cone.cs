@@ -13,7 +13,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
             // facing out.
             private static readonly Vector3 Up = -Vector3.UnitY;
 
-            //Computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
+            //Computes a point on a unit circle, aligned to the x/z plane and centered on the origin, starting at the back
+            //(+Z), where the side's picture meets itself out of a camera in front's sight.
             private static Vector3 GetCircleVector(
                 int i,
                 int tessellation)
@@ -22,7 +23,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var dx = (float) Math.Sin(angle);
                 var dz = (float) Math.Cos(angle);
 
-                return new Vector3(dx, 0, -dz);
+                return new Vector3(-dx, 0, dz);
             }
 
             // A point and its normal of the round shape, as they stand once it is stretched along z by depth over width.
@@ -62,14 +63,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 // Which end of the cylinder is this?
                 var normal = Up;
-                var textureScale = new Vector2F(-0.5f);
+                var downTheTexture = -1.0;
 
                 if (!isTop)
                 {
                     normal = -normal;
-                    textureScale.X = -textureScale.X;
+                    downTheTexture = 1.0;
                 }
-                
+
                 var diameter = new Vector2F((float)radius * 2);
                 // Create cap vertices.
                 for (int i = 0; i < tessellation; i++)
@@ -78,7 +79,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var position = (circleVector * radius) + (normal * height);
                     var uv = new Vector2F(
                         0.5f + (float)(position.X / diameter.X),
-                        0.5f + (float)(position.Z / diameter.Y));
+                        0.5f + (float)(downTheTexture * position.Z / diameter.Y));
 
                     positions.Add(Stretch(position, depth));
                     // A cap is FLAT: its whole face looks one way, which is also what keeps the rim a hard edge rather
@@ -188,6 +189,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     positions.Add(Stretch(sideOffsetBottom - topOffset, depth));
                     normals.Add(sideNormal);
                     uvs.Add(uv + Vector2F.UnitY);
+
+                    if (i == tessellation) continue;
 
                     indices.Add(i * 2);
                     indices.Add((i * 2 + 2) % (stride * 2));

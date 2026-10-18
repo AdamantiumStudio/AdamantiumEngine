@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine.EntityServices;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
@@ -13,14 +14,15 @@ namespace Adamantium.Engine.Tools;
 /// The ground of the editor's scene: the plane y = <see cref="PlaneY"/> ruled into cells, as editors show it. Cells of 1, 10, 100... times
 /// <see cref="CellSize"/> are shown by how big they are on screen, the smaller ones fading as the eye moves away; the X
 /// axis runs red along it and the Z axis blue. The grid fades out towards its edge, and what stands or lies on it hides
-/// it. The axes are drawn as lines too, seen from any side, and so are the grid's lines while the plane is seen edge on
-/// - the eye in it, or a flat view along it - where its pixels have nothing to rule.
+/// it. The axes are drawn as lines too, seen from any side, and so are the grid's lines while a perspective's eye is in
+/// the plane, where its pixels have nothing to rule.
 /// </summary>
 public class GroundGrid : EditorProcessor
 {
     private const float ReachPerHeight = 60;
     private const float LeastReachInCells = 200;
     private const float FlatReachPerShown = 3;
+    private const float WholeShare = 0.4f;
     private const float DefaultCellSize = 1;
     private const float DefaultShownCellPoints = 10;
     private const int EdgeLines = 50;
@@ -86,12 +88,15 @@ public class GroundGrid : EditorProcessor
     {
         var layout = LayoutFor(camera);
         var eye = camera.WorldPosition;
+        var offX = layout.Center.X;
+        var offZ = layout.Center.Y;
+        var center = new Vector3(eye.X + offX, eye.Y, eye.Z + offZ);
         var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
         var reach = layout.Reach;
-        Place(axisX, camera, Math.Abs(eye.Z) < reach,
-            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation(0, below, (float)-eye.Z), AxisXColor, 1);
-        Place(axisZ, camera, Math.Abs(eye.X) < reach,
-            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation((float)-eye.X, below, 0), AxisZColor, 1);
+        Place(axisX, camera, Math.Abs(center.Z) < reach,
+            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation(offX, below, (float)-eye.Z), AxisXColor, 1);
+        Place(axisZ, camera, Math.Abs(center.X) < reach,
+            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation((float)-eye.X, below, offZ), AxisZColor, 1);
 
         var cell = layout.Cell;
         while (cell * EdgeLines < reach)
@@ -100,15 +105,85 @@ public class GroundGrid : EditorProcessor
         }
 
         var edgeOn = EdgeOn(camera, below, cell);
-        var phaseX = (float)Modulo(eye.X, cell);
-        var phaseZ = (float)Modulo(eye.Z, cell);
+        var phaseX = (float)Modulo(center.X, cell);
+        var phaseZ = (float)Modulo(center.Z, cell);
         Place(lines, camera, edgeOn > 0.01f,
-            Matrix4x4F.Scaling(cell, 1, cell) * Matrix4x4F.Translation(-phaseX, below, -phaseZ), MajorColor, edgeOn);
+            Matrix4x4F.Scaling(cell, 1, cell) * Matrix4x4F.Translation(offX - phaseX, below, offZ - phaseZ), MajorColor, edgeOn);
+    }
+
+    /// <summary>
+    /// Where in the world the grid is centered for <paramref name="camera"/>, on the ground: under the eye in a
+    /// perspective, as a perspective's ground runs out from it. In a flat view - which shows the same wherever along its
+    /// view the eye stands, often far behind what it looks at - far enough past the ground at the screen's near edge
+    /// that the grid shows whole down to that edge and fades only far off, as toward a horizon; looking straight down,
+    /// under the point the camera looks at.
+    /// </summary>
+    public Vector3 CenterFor(CameraBase camera)
+    {
+        var eye = camera.WorldPosition;
+        if (camera.ProjectionMatrix.M44 < 0.5f)
+        {
+            return eye;
+        }
+
+        var forward = camera.Forward;
+        var focused = new Vector3(eye.X + forward.X * camera.FocusDistance, eye.Y, eye.Z + forward.Z * camera.FocusDistance);
+        var heading = new Vector3F((float)forward.X, 0, (float)forward.Z);
+        if (heading.Length() < 1e-3f)
+        {
+            return focused;
+        }
+
+        heading = Vector3F.Normalize(heading);
+        var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
+        Vector3F? nearest = null;
+        for (int edge = 0; edge < 2; edge++)
+        {
+            var row = edge == 0 ? 0f : camera.Height;
+            var ray = PickRay.FromCamera(camera, new Vector2F(camera.Width / 2f, row)).Ray;
+            if (Math.Abs(ray.Direction.Y) < 1e-6f)
+            {
+                continue;
+            }
+
+            var along = (below - ray.Position.Y) / ray.Direction.Y;
+            if (along < 0)
+            {
+                continue;
+            }
+
+            var met = ray.Position + ray.Direction * along;
+            if (nearest is not { } kept || Vector3F.Dot(met, heading) < Vector3F.Dot(kept, heading))
+            {
+                nearest = met;
+            }
+        }
+
+        if (nearest is not { } near)
+        {
+            return focused;
+        }
+
+        var center = near + heading * (WholeShare * FlatReach(camera));
+        return new Vector3(eye.X + center.X, eye.Y, eye.Z + center.Z);
+    }
+
+    private float FlatReach(CameraBase camera)
+    {
+        var projection = camera.ProjectionMatrix;
+        var slope = Math.Max(Math.Abs((float)camera.Forward.Y), 1e-3f);
+        var reach = FlatReachPerShown * Math.Max(1 / projection.M11, 1 / projection.M22 / slope);
+        return Math.Min(Math.Max(reach, Cell * LeastReachInCells), Math.Min(camera.ZFar * 0.9f, camera.OrthoFar * 0.6f));
     }
 
     private static float EdgeOn(CameraBase camera, float below, float cell)
     {
         var forward = (Vector3F)camera.Forward;
+        if (camera.ProjectionMatrix.M44 > 0.5f)
+        {
+            return 0;
+        }
+
         var across = new Vector3F(forward.X, 0, forward.Z);
         if (across.Length() < 0.1f)
         {
@@ -182,29 +257,26 @@ public class GroundGrid : EditorProcessor
         return mesh;
     }
 
-    /// <summary>Where the grid lies for <paramref name="camera"/>: it reaches sixty times the eye's height above the
-    /// grid, never less than two hundred cells - in a flat view far enough past all it shows that it fades only off
-    /// screen - and never past nine tenths of the far plane.</summary>
+    /// <summary>Where the grid lies for <paramref name="camera"/>, round <see cref="CenterFor"/>: in a perspective it
+    /// reaches sixty times the eye's height above the grid, in a flat view one and a half times the view's width or the
+    /// ground its height covers, whichever is longer; never less than two hundred cells and never past nine tenths of the
+    /// far plane - in a flat view, six tenths of its own, the grid's center standing ahead - fading out toward its edge in
+    /// either, as ground does toward a horizon.</summary>
     public GroundGridLayout LayoutFor(CameraBase camera)
     {
         var eye = camera.WorldPosition;
+        var center = CenterFor(camera);
         var cell = Cell;
         var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
-        var reach = Math.Max(Math.Abs(below) * ReachPerHeight, cell * LeastReachInCells);
-        var projection = camera.ProjectionMatrix;
-        if (projection.M44 > 0.5f)
-        {
-            var forward = camera.Forward;
-            var drop = Math.Max(Math.Abs((float)forward.Y), 0.05f);
-            var shown = Math.Max(1 / projection.M11, 1 / projection.M22 / drop);
-            var off = (float)(Math.Sqrt(forward.X * forward.X + forward.Z * forward.Z) * camera.FocusDistance);
-            reach = Math.Max(reach, FlatReachPerShown * (shown + off));
-        }
-
-        reach = Math.Min(reach, camera.ZFar * 0.9f);
-        var placement = Matrix4x4F.Scaling(reach) * Matrix4x4F.RotationX(MathF.PI / 2) * Matrix4x4F.Translation(0, below, 0);
-        var axes = new Vector2F(Math.Clamp((float)-eye.X, -2 * reach, 2 * reach), Math.Clamp((float)-eye.Z, -2 * reach, 2 * reach));
-        return new GroundGridLayout(placement, axes, reach, cell);
+        var reach = camera.ProjectionMatrix.M44 > 0.5f
+            ? FlatReach(camera)
+            : Math.Min(Math.Max(Math.Abs(below) * ReachPerHeight, cell * LeastReachInCells), camera.ZFar * 0.9f);
+        var offset = new Vector2F((float)(center.X - eye.X), (float)(center.Z - eye.Z));
+        var placement = Matrix4x4F.Scaling(reach) * Matrix4x4F.RotationX(MathF.PI / 2)
+                        * Matrix4x4F.Translation(offset.X, below, offset.Y);
+        var axes = new Vector2F(Math.Clamp((float)-eye.X, offset.X - 2 * reach, offset.X + 2 * reach),
+            Math.Clamp((float)-eye.Z, offset.Y - 2 * reach, offset.Y + 2 * reach));
+        return new GroundGridLayout(placement, axes, reach, cell) { Center = offset };
     }
 
     /// <summary>

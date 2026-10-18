@@ -200,7 +200,7 @@ public class EditorOverlayProcessor : RenderingProcessor
         gridEffect.InstanceWorld.SetValue(gridWorld);
         gridEffect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         gridEffect.Phases.SetValue(gridPhases);
-        gridEffect.Layout.SetValue(new Vector4F(layout.Cell, layout.Reach, 0, 0));
+        gridEffect.Layout.SetValue(new Vector4F(layout.Cell, layout.Reach, layout.Center.X, layout.Center.Y));
         gridEffect.Lines.SetValue(new Vector4F(layout.Axes, MathF.Max(1, MathF.Round(grid.LineWidth * pointPixels)),
             grid.ShownCellPointsOrDefault * pointPixels));
         gridEffect.MinorColor.SetValue(grid.MinorColor);

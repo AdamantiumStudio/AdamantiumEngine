@@ -37,6 +37,7 @@ namespace Adamantium.ECS
             }
             IsEnabled = true;
             Visible = true;
+            IsExpanded = true;
             Name = name;
             IconKey = EntityIconKeys.Entity;
             Transform = new Transform();
@@ -82,6 +83,10 @@ namespace Adamantium.ECS
 
         [Bindable]
         public partial bool IsSelected { get; set; }
+
+        /// <summary>Whether an inspector shows the entity's own section open; open to begin with.</summary>
+        [Bindable]
+        public partial bool IsExpanded { get; set; }
 
         /// <summary>The entity this one hangs under; null for a root. Changed through
         /// <see cref="EntityManager.SetOwner"/> and <see cref="EntityManager.RemoveOwner"/>.</summary>

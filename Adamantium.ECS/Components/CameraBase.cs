@@ -92,14 +92,15 @@ namespace Adamantium.ECS.Components
 
         public Vector3? LookAt { get; set; }
 
-        public Double Velocity { get; set; }
+        [Bindable]
+        public partial Double Velocity { get; set; }
 
         public Double DragVelocity { get; set; }
 
         public Double CurrentVelocity { get; set; }
 
         /// <summary>How many times larger one wheel notch makes what a camera looks at, near or far, in either projection.</summary>
-        public Double ZoomStep { get; set; } = 1.15;
+        public Double ZoomStep { get; set; } = 1.08;
 
         public Single RotationSpeed { get; set; }
 

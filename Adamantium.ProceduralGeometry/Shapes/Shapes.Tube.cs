@@ -45,12 +45,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     var sideOffset = normal * radius;
 
-                    var uv = new Vector2F((float)i / tessellation, 0);
+                    var across = (float)i / tessellation;
+                    var uv = new Vector2F(isInnerCylinder ? across : 1 - across, 0);
 
                     vertices.Add(Stretch(sideOffset + topOffset, depth));
-                    uvs.Add(uv);
-                    vertices.Add(Stretch(sideOffset - topOffset, depth));
                     uvs.Add(uv + Vector2F.UnitY);
+                    vertices.Add(Stretch(sideOffset - topOffset, depth));
+                    uvs.Add(uv);
+
+                    if (i == tessellation) continue;
 
                     int index = 0;
                     if (isInnerCylinder)
@@ -102,13 +105,13 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 // Which end of the cylinder is this?
                 var normal = Vector3.UnitY;
-                var textureScale = new Vector2F(-0.5f);
-
                 if (!isTop)
                 {
                     normal = -normal;
-                    textureScale.X = -textureScale.X;
                 }
+
+                var diameter = (radius + thickness) * 2;
+                var downTheTexture = normal.Y;
 
                 // Create cap vertices.
                 for (int i = 0; i <= tessellation; i++)
@@ -116,20 +119,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var circleVector = GetCircleVector(i, tessellation);
 
                     var position = (circleVector * (radius + thickness)) + (normal * height);
-                    var textureCoordinate = new Vector2F(
-                        (float)circleVector.X * textureScale.X + 0.5f,
-                        (float)circleVector.Z * textureScale.Y + 0.5f);
-
                     vertices.Add(Stretch(position, depth));
-                    uvs.Add(textureCoordinate);
+                    uvs.Add(new Vector2F(0.5f + (float)(position.X / diameter), 0.5f + (float)(downTheTexture * position.Z / diameter)));
 
                     position = (circleVector * radius) + (normal * height);
-                    textureCoordinate = new Vector2F(
-                        (float)(circleVector.X * textureScale.X + 0.5f - (1 / radius)),
-                        (float)(circleVector.Z * textureScale.Y + 0.5f - (1 / radius)));
-
                     vertices.Add(Stretch(position, depth));
-                    uvs.Add(textureCoordinate);
+                    uvs.Add(new Vector2F(0.5f + (float)(position.X / diameter), 0.5f + (float)(downTheTexture * position.Z / diameter)));
+
+                    if (i == tessellation) continue;
 
                     int index = 0;
                     if (isTop)

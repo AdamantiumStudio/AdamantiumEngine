@@ -23,7 +23,7 @@ public class PolygonTemplate : PrimitiveTemplate
 
     public override Task<Entity> BuildEntity(Entity owner)
     {
-        var primitive = Shapes.Polygon.GenerateGeometry(GeometryType, diameter, Tessellation, transform: Transform);
+        var primitive = Shapes.Polygon.GenerateGeometry(GeometryType, diameter / 2, Tessellation, transform: Transform);
         return Task.FromResult(BuildEntityFromPrimitive(owner, primitive));
     }
 }

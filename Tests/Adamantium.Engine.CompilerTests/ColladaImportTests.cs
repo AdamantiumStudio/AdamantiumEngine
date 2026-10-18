@@ -90,10 +90,13 @@ namespace Adamantium.Engine.CompilerTests
 
             Assert.That(mesh.Normals.Length, Is.EqualTo(mesh.Points.Length), "every vertex must have a normal");
 
+            // The quad runs counter-clockwise seen from +Z: that is the side the file means as its front.
+            var front = Vector3F.Normalize(Vector3F.TransformNormal(Vector3F.UnitZ, AxisConversion.Between(UpAxis.Y_UP_RH, UpAxis.Y_DOWN_RH)));
             foreach (var (normal, face) in FaceSamples(mesh))
             {
                 Assert.That(Vector3F.Dot(normal, face), Is.GreaterThan(0.99f),
                     "a derived normal has to agree with the face it was derived from");
+                Assert.That(Vector3F.Dot(normal, front), Is.GreaterThan(0.99f), "the front the file meant, kept on import");
             }
         }
 
@@ -228,6 +231,8 @@ namespace Adamantium.Engine.CompilerTests
             return ordered;
         }
 
+        // The way each triangle's front faces, as the engine takes it: the side it is clockwise on screen from, which
+        // cross(b - a, c - a) points away from.
         private static System.Collections.Generic.IEnumerable<(Vector3F Normal, Vector3F Face)> FaceSamples(Mesh mesh)
         {
             for (var t = 0; t + 2 < mesh.Indices.Length; t += 3)
@@ -235,7 +240,7 @@ namespace Adamantium.Engine.CompilerTests
                 var a = (Vector3F)mesh.Points[mesh.Indices[t]];
                 var b = (Vector3F)mesh.Points[mesh.Indices[t + 1]];
                 var c = (Vector3F)mesh.Points[mesh.Indices[t + 2]];
-                var face = Vector3F.Cross(b - a, c - a);
+                var face = Vector3F.Cross(c - a, b - a);
                 if (face.LengthSquared() < 1e-10f) continue;
                 face.Normalize();
 

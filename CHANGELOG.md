@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `Component.IsExpanded` and `Entity.IsExpanded`: whether an inspector shows the object's section open, each object its
+  own; open to begin with.
 - A camera's projection changes smoothly: setting `CameraBase.ProjectionType` flows from the old projection into the
   new over `ProjectionTransitionTime` milliseconds (300; 0 switches at once), keeping the plane at `FocusDistance` - a
   third-person camera's `Radius` - the same size on screen all the way, as Unity's scene view does. Coming back from a
@@ -617,10 +619,15 @@ All packages share one version.
 - A free third-person orbit stays where it is when its host turns: its offset is the view's, in the world, turned back
   by the host's own turn. It swung round with the host while its view stayed, so it looked away, and the rotation tool,
   used while looking through it, chased the swing and shook the camera.
-- Placing an object looking along the ground, or above it, puts it on the ground under what the pointer shows: the
-  ground met under the pointer out to the camera's focus (its subject, for an orbit) or as far as the ground is seen
-  from above at 6°, and past that the ground under the pointer's ray at that depth (`PlacementTool.UnderFocus`), the
-  two meeting without a jump; a point out of view places nothing. Looking along the ground nothing could be placed.
+- Placing an object, the pointer leaving the scene - above the horizon, past the grid - leaves the ghost where it last
+  touched the scene; with an eye standing on the ground, which the pointer never meets ahead, the ghost goes on the
+  ground under what the pointer shows at the camera's focus (its subject, for an orbit; `PlacementTool.UnderFocus`),
+  nothing placed out of view. The ghost vanished there, and from an eye on the ground nothing could be placed.
+- In a flat view the ground grid shows whole from the screen's near edge and fades only far off, as ground does toward
+  a horizon in a perspective (`GroundGrid.CenterFor`, `GroundGridLayout.Center`); looking straight down it lies round
+  what the camera looks at. It lay round the eye, often far behind what a flat view shows, reached by how low the view
+  lay, and came out a wall of stripes or a band faded at both ends with its axis broken off. Its lines drawn edge-on
+  show only in a perspective, where they fold into one line toward the horizon; a flat view squeezed them into a band.
 - The ground grid's lines take their place as they are drawn, from the camera drawing them; placed in the tools'
   update, they kept the eye of before a camera moved later in the frame, and doubled beside the cells.
 - Picking what to place onto - a camera's host - outlines what the click would take, and with Alt takes the whole a
@@ -630,6 +637,9 @@ All packages share one version.
   which the tools' update does after a tool moved or turned what it orbits; until its next frame the camera was swung
   along, and the view doubled while turning. A camera locked behind a turned host looks at it: its offset was turned
   by the host twice.
+- `Material`, `AnimationComponent` (its key frames, speed, pause and option), `AnimationController.ControllerId` and
+  `CameraBase.Velocity` say when they change (`[Bindable]`), as the other components do: an inspector showing them
+  did not follow a change made elsewhere.
 - The ground grid's axes, and its lines seen edge-on, are hidden behind what stands on the ground, as its cells are;
   they were drawn over it (`EditorOverlayProcessor.DrawFlatBehindScene`).
 - Panning with the middle button keeps what was under the pointer under it: the camera moves by the depth of what the
@@ -638,6 +648,43 @@ All packages share one version.
   coming that much nearer the point at its focus distance - in perspective by moving, the point pushed on ahead within
   a metre of it, in an orthographic view by scaling, between a millionth and a million. It moved a perspective camera a fixed distance a notch, a little for what was far and a lot for what was
   near, while an orthographic view scaled by `ZoomStep`, so the two zoomed far apart.
+- A picture laid on a generated shape reads as on screen, seen from outside: u to the right, v down, and on a flat cap
+  of a cube, plane, cylinder, cone or tube its top away from a camera in front, seen from above. A rectangle's
+  coordinates run from 0 to 1 across it, from its own shape, whatever transform places it; they ran from -0.5, so the
+  picture's corners met in its middle. A cube's, plane's, ellipse's, polygon's and line's picture was turned upside
+  down, an arc's, a cylinder's and cone's top cap and a torus mirrored, a tube upside down, its outside mirrored and its
+  caps' coordinates past 1. A cylinder's and cone's side meets itself at the back, as a sphere's does; it met in
+  front. (The teapot is laid as before.) A geosphere's picture comes round its back without a smear and meets at its poles: its seam was left unmade,
+  and its poles took their u from the vertices' positions, on copies their triangles never used. It carries the exact
+  normals of its shape, as the UV sphere does.
+- A torus, and a cone's or cylinder's side, have no triangles from their last ring back to their first: they had no
+  area.
+- A rectangle, ellipse, polygon, arc and line show their front to a camera in front of them, and a geosphere outward
+  at every subdivision, so culling the back keeps them: the flat ones were wound the other way, toward -Z, taken for
+  the front by mistake, and each subdivision of a geosphere turned its triangles over.
+  `Mesh.CalculateNormals` points normals out of the front, the side a triangle is clockwise on screen from, as the GPU
+  takes it; they pointed out of the back - into a cube, down from a plane. An imported model is wound with the front
+  its file meant clockwise (`ConverterBase` turns the winding round after the axis change, into the engine's axes):
+  it kept the file's counter-clockwise front, and showed its inside once its back was culled. The scene's shading hid
+  all of this, turning a normal to the eye and culling nothing; the editor's lit overlay pass does not turn it.
+  An arc going counter-clockwise faces the camera too, its inner point first.
+- A new `Material` is an opaque grey (`Material.DefaultDiffuseColor`), and one imported with no diffuse color of its
+  own - its diffuse given as a texture, say - keeps it: it was clear black, which an inspector shows as nothing and a
+  color picked for it kept clear. Such a material no longer follows `ForwardPlusRenderingProcessor.UntexturedColor`,
+  the same grey, which only a material with a black diffuse still takes.
+- A new `SphereShape` is a UV sphere: its `Type` was none of the kinds - drawn as a UV sphere, but shown as nothing.
+- A capsule made by `ShapeTemplate` is held by a `CapsuleCollider` (`ProceduralShape.CreateCollider`); it was a box.
+- A capsule's and a sphere's outline - what a `CapsuleCollider` and a `SphereCollider` are drawn with - is a list of
+  closed loops of segments: as strips parted by restarts, which the overlay does not turn on, its loops were drawn
+  joined by lines to a point past the end of its vertices.
+- A `PolygonShape` and a `PolygonTemplate` stay in their size: the polygon generator takes radii, which they gave their
+  size as, and came out twice as large as the other shapes. The generator's parameter is named `radii`.
+- A flat view looking low at the ground grid shows it whole round what it looks at: the grid reached as far as the view
+  is wide, while the screen's height covers ground the longer the lower the view, so it faded out short of the focus
+  and its axes ended in the open.
+- Placing with the eye on the ground - told by the eye's height now, not by how near the ground under the pointer is -
+  puts the object under the pointer at the focus. The point last touched is held while the pointer is off the scene
+  only while it is in view, and not when picking onto something, which a held point is not.
 - Moving a free camera along an orthographic view (W and S) zooms it as moving along a perspective does; it moved the
   camera along its view, which a flat view does not show. A free camera moved along its view keeps looking at the same
   point (`FocusDistance` follows), so going flat and back keeps what it looks at as large.
@@ -1043,6 +1090,7 @@ All packages share one version.
 
 ### Changed
 
+- `CameraBase.ZoomStep` is 1.08 a wheel notch, in either projection; 1.15 jumped.
 - A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
   the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text
   whose height is its own (no height given) is not moved at all: it was moved by half its descent under `Center` and by

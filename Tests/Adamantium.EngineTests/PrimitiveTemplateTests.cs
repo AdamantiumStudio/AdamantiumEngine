@@ -84,7 +84,28 @@ public class PrimitiveTemplateTests
         });
     }
 
-    // A camera looks along +Z: a flat shape faces it when its triangles and normals face -Z.
+    // What a collider is drawn with: loops of segments joined by nothing, as no draw of them turns restarts on.
+    [TestCase("Capsule")]
+    [TestCase("Sphere")]
+    public void AColliderOutline_IsALineListOfClosedLoops_WithNoRestart(string shape)
+    {
+        var mesh = shape == "Capsule"
+            ? Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, 1, 1, 16)
+            : Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, 2, 16);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mesh.MeshTopology, Is.EqualTo(PrimitiveType.LineList));
+            Assert.That(mesh.Indices.Length % 2, Is.Zero);
+            Assert.That(mesh.Indices, Is.All.InRange(0, mesh.Points.Length - 1));
+            var ends = new int[mesh.Points.Length];
+            foreach (var index in mesh.Indices) ends[index]++;
+            Assert.That(ends, Is.All.EqualTo(2), "every point ends two segments: each loop closes, none runs off");
+        });
+    }
+
+    // A camera looks along +Z: a flat shape faces it when its triangles are clockwise on its screen - the GPU's front,
+    // up being -Y - and its normals point back at it, along -Z.
     [TestCase("Rectangle")]
     [TestCase("Ellipse")]
     [TestCase("Polygon")]
@@ -111,7 +132,7 @@ public class PrimitiveTemplateTests
                 var (b, c) = strip && i % 2 == 1 ? (i + 2, i + 1) : (i + 1, i + 2);
                 var a = mesh.Points[mesh.Indices[i]];
                 var facing = Vector3.Cross(mesh.Points[mesh.Indices[b]] - a, mesh.Points[mesh.Indices[c]] - a);
-                Assert.That(facing.Z, Is.LessThanOrEqualTo(1e-9), $"triangle {i}");
+                Assert.That(facing.Z, Is.GreaterThanOrEqualTo(-1e-9), $"triangle {i}");
             }
 
             Assert.That((mesh.Normals ?? []).Select(n => n.Z), Is.All.EqualTo(-1).Within(1e-4), "normals, where it has them");

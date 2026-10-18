@@ -996,17 +996,19 @@ public class Mesh
         return this;
     }
 
+    /// <summary>Normals out of the triangles' front: the side they are clockwise on screen from, which the GPU draws as
+    /// the front.</summary>
     public Mesh CalculateNormals(bool smoothNormals = true)
     {
         if (MeshTopology != PrimitiveType.TriangleList || Points.Length < 3 || Indices.Length % 3 != 0)
             return this;
-            
+
         Vector3F[] normalsNew = new Vector3F[Points.Length];
         for (int i = 0; i < Indices.Length; i += 3)
         {
             var v0 = Points[Indices[i + 1]] - Points[Indices[i]];
             var v1 = Points[Indices[i + 2]] - Points[Indices[i]];
-            var n = Vector3F.Cross(v0, v1);
+            var n = Vector3F.Cross(v1, v0);
             if (smoothNormals)
             {
                 normalsNew[Indices[i]] += n;

@@ -100,7 +100,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (var x = 0; x < lineWidth; x++)
                     {
                         var pos = new Vector3(-sizeX + deltaX * x, -sizeY + deltaY * y, -sizeZ);
-                        var uv = new Vector2F(1.0f - (1.0f * x / tessellation * uvFactor.X), 1.0f - (1.0f * y / tessellation * uvFactor.Y));
+                        var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         front.Add(pos);
                         frontUV.Add(uv);
                     }
@@ -108,7 +108,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (var z = 0; z < lineWidth; z++)
                     {
                         var pos = new Vector3(sizeX, -sizeY + deltaY * y, -sizeZ + deltaZ * z);
-                        var uv = new Vector2F(1.0f - (1.0f * z / tessellation * uvFactor.X), 1.0f - (1.0f * y / tessellation * uvFactor.Y));
+                        var uv = new Vector2F(1.0f * z / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         right.Add(pos);
                         rightUV.Add(uv);
                     }
@@ -116,7 +116,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (var x = 0; x < lineWidth; x++)
                     {
                         var pos = new Vector3(sizeX - deltaX * x, -sizeY + deltaY * y, sizeZ);
-                        var uv = new Vector2F(1.0f - (1.0f * x / tessellation * uvFactor.X), 1.0f - (1.0f * y / tessellation * uvFactor.Y));
+                        var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         back.Add(pos);
                         backUV.Add(uv);
                     }
@@ -124,7 +124,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (var z = 0; z < lineWidth; z++)
                     {
                         var pos = new Vector3(-sizeX, -sizeY + deltaY * y, sizeZ - deltaZ * z);
-                        var uv = new Vector2F(1.0f - (1.0f * z / tessellation * uvFactor.X), 1.0f - (1.0f * y / tessellation * uvFactor.Y));
+                        var uv = new Vector2F(1.0f * z / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         left.Add(pos);
                         leftUV.Add(uv);
                     }
@@ -136,7 +136,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (var x = 0; x < lineWidth; x++)
                     {
                         var pos = new Vector3(-sizeX + deltaX * x, sizeY, -sizeZ + deltaZ * z);
-                        var uv = new Vector2F( 1.0f - (1.0f * x / tessellation * uvFactor.X), 1.0f - (1.0f * z / tessellation * uvFactor.Y));
+                        var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * z / tessellation * uvFactor.Y);
                         top.Add(pos);
                         topUV.Add(uv);
                     }
@@ -150,7 +150,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (var x = 0; x < lineWidth; x++)
                     {
                         var pos = new Vector3(-sizeX + deltaX * x, sizeY, -sizeZ + deltaZ * z);
-                        var uv = new Vector2F( 1.0f - (1.0f * x / tessellation * uvFactor.X), 1.0f - (1.0f * z / tessellation * uvFactor.Y));
+                        var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * z / tessellation * uvFactor.Y);
                         pos = Vector3.TransformCoordinate(pos, rotationMatrix);
                         bottom.Add(pos);
                         bottomUV.Add(uv);
