@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.EntityServices;
@@ -74,18 +73,12 @@ public class GroundGrid : EditorProcessor
         axisZ = LineEntity("Z axis", Segment(Vector3.UnitZ));
     }
 
-    public override void Update(AppTime appTime)
-    {
-        var cameras = Tools.Observatory.CurrentCameras;
-        for (int i = 0; i < cameras.Count; i++)
-        {
-            PlaceLines(cameras[i]);
-        }
-    }
-
+    // The lines take their place as they are drawn, from the camera drawing them: placed in Update, they kept the eye of
+    // before a camera moved later in the frame, and showed beside the cells the shader drew from the eye of now.
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
         overlay.DrawGrid(this);
+        PlaceLines(overlay.Camera);
         overlay.DrawFlatBehindScene(edges);
     }
 

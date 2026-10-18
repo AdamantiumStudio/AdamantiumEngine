@@ -582,26 +582,8 @@ namespace Adamantium.ECS.Components
                     return;
                 }
 
-                QuaternionF tmpRotation;
-
-                if (Type == CameraType.ThirdPersonLocked)
-                {
-                    tmpRotation = SyncRotationWithEntityForwardLH();
-                    tmpRotation = QuaternionF.Multiply(Rotation, tmpRotation);
-                }
-                else
-                {
-                    tmpRotation = Rotation;
-                }
-
-                Matrix4x4F rotMatrix = Matrix4x4F.RotationQuaternion(tmpRotation);
-
-                var back = Vector3.Multiply(new Vector3(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33), Radius);
-
-                // In the subject's space, from its CENTER: an offset from the origin orbits whatever point the model
-                // was authored around, not the thing on screen.
-                var center = (Vector3)Subject.GetLocalCenter();
-                Owner.Transform.Position = center - back;
+                var back = OrbitBack(out var rotMatrix);
+                PlaceInOrbit(back);
 
                 ViewMatrix = Matrix4x4F.LookAtLH(
                     Vector3F.Zero,
@@ -614,6 +596,51 @@ namespace Adamantium.ECS.Components
             GetAxisFromViewMatrix();
             UpdateFrustum();
             _viewProjectionMatrix = ViewMatrix * ProjectionMatrix;
+        }
+
+        /// <summary>
+        /// Puts a camera orbiting a subject back in its place round it at once: for after the subject moved or turned
+        /// within a frame, past the camera's own <see cref="Update"/>, so nothing is drawn with the camera swung along. A
+        /// free orbit keeps its view; one locked behind its subject turns its view with it. Does nothing for any other
+        /// camera.
+        /// </summary>
+        public void Reorbit()
+        {
+            if (!Type.IsThirdPerson() || Subject == null)
+            {
+                return;
+            }
+
+            var back = OrbitBack(out var rotMatrix);
+            PlaceInOrbit(back);
+            if (Type == CameraType.ThirdPersonLocked && !travelling)
+            {
+                ViewMatrix = Matrix4x4F.LookAtLH(
+                    Vector3F.Zero,
+                    LookAt != null ? (Vector3)LookAt - Owner.Transform.Position : back,
+                    new Vector3F(rotMatrix.M12, rotMatrix.M22, rotMatrix.M32));
+                GetAxisFromViewMatrix();
+                UpdateFrustum();
+                _viewProjectionMatrix = ViewMatrix * ProjectionMatrix;
+            }
+        }
+
+        private Vector3 OrbitBack(out Matrix4x4F rotMatrix)
+        {
+            var turn = Type == CameraType.ThirdPersonLocked
+                ? QuaternionF.Multiply(Rotation, SyncRotationWithEntityForwardLH())
+                : Rotation;
+            rotMatrix = Matrix4x4F.RotationQuaternion(turn);
+            return Vector3.Multiply(new Vector3(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33), Radius);
+        }
+
+        // In the subject's space, from its CENTER: an offset from the origin orbits whatever point the model was authored
+        // around, not the thing on screen. The offset is the view's, in the world: turned back by the host's own turn, so
+        // a host turned - by the rotation tool, say - does not swing a free orbit round.
+        private void PlaceInOrbit(Vector3 back)
+        {
+            var center = (Vector3)Subject.GetLocalCenter();
+            Owner.Transform.Position = center - (Vector3)Vector3F.TransformNormal((Vector3F)back, HostTurnBack());
         }
 
         private void FollowEntityTurn()
@@ -851,6 +878,21 @@ namespace Adamantium.ECS.Components
 
         private static QuaternionF Pitched(QuaternionF rotation, float degrees) =>
             QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(degrees)), rotation);
+
+        private Matrix4x4F HostTurnBack()
+        {
+            if (Owner.Owner is not { } host)
+            {
+                return Matrix4x4F.Identity;
+            }
+
+            var world = host.Transform.GetWorldMatrixF();
+            var turn = Matrix4x4F.Identity;
+            turn.Right = Vector3F.Normalize(world.Right);
+            turn.Up = Vector3F.Normalize(world.Up);
+            turn.Forward = Vector3F.Normalize(world.Forward);
+            return Matrix4x4F.Transpose(turn);
+        }
 
         private static Vector3 ForwardOf(QuaternionF rotation)
         {

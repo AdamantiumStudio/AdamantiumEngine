@@ -223,6 +223,86 @@ public class CameraProjectionChangeTests
         });
     }
 
+    // Its host turned - by the rotation tool, while seen through the camera - a free orbit stays where it is and keeps
+    // looking at the host: it swung round with the host while its view stayed, and the tool chased the swing.
+    [Test]
+    public void AFreeOrbit_StaysPut_WhenItsHostTurns()
+    {
+        var camera = FreeCamera();
+        var host = new Entity(null, "Host");
+        host.Transform.Position = new Vector3(0, 0, 10);
+        var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
+        world.EntityManager.AddEntity(host);
+        world.EntityManager.AddEntity(camera.Owner);
+        world.EntityManager.SetOwner(camera.Owner, host);
+        camera.HostChangeTime = 0;
+        camera.SetThirdPersonCamera(host, Vector3F.Zero, Graphics.Core.CameraType.ThirdPersonFree, distanceToObject: 8);
+        Step(camera, 16);
+        Step(camera, 16);
+        var standing = camera.WorldPosition;
+        var looking = camera.Forward;
+
+        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.8f);
+        Step(camera, 16);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((camera.WorldPosition - standing).Length(), Is.LessThan(1e-3), "it stays where it is");
+            Assert.That(Vector3.Dot(camera.Forward, looking), Is.GreaterThan(0.9999), "looking the same way");
+        });
+    }
+
+    // Turned past the camera's own update within a frame - by a tool - the host would carry the orbit along until the
+    // next frame; put back at once, nothing is drawn with it swung.
+    [Test]
+    public void AHostTurnedAfterTheCameraUpdated_ReorbitPutsItBackAtOnce()
+    {
+        var camera = FreeCamera();
+        var host = new Entity(null, "Host");
+        host.Transform.Position = new Vector3(0, 0, 10);
+        var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
+        world.EntityManager.AddEntity(host);
+        world.EntityManager.AddEntity(camera.Owner);
+        world.EntityManager.SetOwner(camera.Owner, host);
+        camera.HostChangeTime = 0;
+        camera.SetThirdPersonCamera(host, Vector3F.Zero, Graphics.Core.CameraType.ThirdPersonFree, distanceToObject: 8);
+        Step(camera, 16);
+        Step(camera, 16);
+        var standing = camera.WorldPosition;
+
+        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.8f);
+        var swung = camera.WorldPosition;
+        camera.Reorbit();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((swung - standing).Length(), Is.GreaterThan(1), "the turn carried it along");
+            Assert.That((camera.WorldPosition - standing).Length(), Is.LessThan(1e-3), "and it is back at once");
+        });
+    }
+
+    [Test]
+    public void ALockedOrbit_ReorbitedAfterItsHostTurned_LooksAtItsHostAtOnce()
+    {
+        var camera = FreeCamera();
+        var host = new Entity(null, "Host");
+        host.Transform.Position = new Vector3(0, 0, 10);
+        var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
+        world.EntityManager.AddEntity(host);
+        world.EntityManager.AddEntity(camera.Owner);
+        world.EntityManager.SetOwner(camera.Owner, host);
+        camera.HostChangeTime = 0;
+        camera.SetThirdPersonCamera(host, Vector3F.Zero, Graphics.Core.CameraType.ThirdPersonLocked, distanceToObject: 8);
+        Step(camera, 16);
+        Step(camera, 16);
+
+        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.9f);
+        camera.Reorbit();
+
+        var toHost = Vector3.Normalize(host.GetCenterAbsolute() - camera.WorldPosition);
+        Assert.That(Vector3.Dot(camera.Forward, toHost), Is.GreaterThan(0.999));
+    }
+
     // A face of the orientation cube turns the camera there and it stays: the entity it rides kept its old turn through
     // the animation, and the camera took that back the moment it was free again.
     [Test]

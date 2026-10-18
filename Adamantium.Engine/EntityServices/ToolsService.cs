@@ -235,5 +235,11 @@ public class ToolsService : EntityService
         IsPointerTaken = false;
         Hovered = null;
         base.Update(appTime);
+
+        var cameras = Observatory?.CurrentCameras ?? [];
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            cameras[i].Reorbit();
+        }
     }
 }

@@ -11,13 +11,16 @@ namespace Adamantium.Engine.Tools;
 
 /// <summary>
 /// Places a new object with the mouse: a ghost of it follows the pointer, resting on the surface under it or, past every
-/// surface, on the ground grid. A click places it; with Shift held the tool stays to place another, else it is done. Esc
+/// surface, on the ground grid - in perspective out to the camera's focus, or as far as the ground is seen from above
+/// at 6°, and past that, or looking along the ground or above it, on the ground under what the pointer shows there.
+/// A click places it; with Shift held the tool stays to place another, else it is done. Esc
 /// or a right click gives up; a right drag still turns the camera.
 /// </summary>
 public sealed class PlacementTool : ToolProcessor
 {
     private static readonly Vector4F GhostTint = new(0.35f, 0.75f, 1f, 0.45f);
     private const float ClickSlop = 4;
+    private static readonly double GrazingTangent = Math.Tan(6 * Math.PI / 180);
     private readonly float lowest;
     private bool finished;
     private Vector2F rightPressedAt;
@@ -34,10 +37,11 @@ public sealed class PlacementTool : ToolProcessor
 
     public Entity Ghost { get; }
 
-    /// <summary>Where the ghost's origin stands now, in the world, or null while the pointer finds no ground.</summary>
+    /// <summary>Where the ghost's origin stands now, in the world, or null while the pointer finds no place for it in view.</summary>
     public Vector3? Position { get; private set; }
 
-    /// <summary>The scene entity the ghost rests on, or null on the ground.</summary>
+    /// <summary>The scene entity the ghost rests on - the part under the pointer, or with Alt held the whole it belongs
+    /// to, its root - or null on the ground. Picked for <see cref="NeedsSomethingUnder"/>, it is outlined as hovered.</summary>
     public Entity Under { get; private set; }
 
     /// <summary>Whether the ghost is placed only on a scene entity, as a camera riding on one is; a click on the ground
@@ -94,11 +98,32 @@ public sealed class PlacementTool : ToolProcessor
         if (hit.IsHit)
         {
             point = (Vector3)hit.Point + camera.WorldPosition;
-            Under = hit.Entity;
+            Under = Modifier(Keys.Alt) ? RootOf(hit.Entity) : hit.Entity;
+            if (NeedsSomethingUnder)
+            {
+                Tools.Hovered = Under;
+            }
         }
-        else if (Ground() is not { } grid || !OnGround(ray.Ray, camera.WorldPosition, GroundY(grid), grid.LayoutFor(camera).Reach, out point))
+        else if (Ground() is not { } grid)
         {
             return;
+        }
+        else
+        {
+            var planeY = GroundY(grid);
+            var reach = grid.LayoutFor(camera).Reach;
+            var eye = camera.WorldPosition;
+            var flat = camera.ProjectionMatrix.M44 > 0.5f;
+            var farthest = flat ? reach : Math.Min(Math.Max(ViewDepth(camera), Math.Abs(planeY - eye.Y) / GrazingTangent), reach);
+            var onGround = OnGround(ray.Ray, eye, planeY, reach, out point);
+            if (!onGround || Vector3.Dot(point - eye, camera.Forward) > farthest)
+            {
+                point = UnderFocus(ray.Ray, camera, planeY, flat ? ViewDepth(camera) : farthest);
+                if (!InView(point, camera))
+                {
+                    return;
+                }
+            }
         }
 
         var position = RestOn(point, lowest);
@@ -174,6 +199,51 @@ public sealed class PlacementTool : ToolProcessor
 
         point = met;
         return true;
+    }
+
+    /// <summary>
+    /// Where a ray in render space reaches <paramref name="depth"/> ahead of the eye along its view, dropped straight
+    /// onto the plane y = <paramref name="planeY"/>: the ground under what the pointer shows there, for a ray that runs
+    /// along the ground or above it and meets it far off or never. A ray meeting the ground at that depth gives that
+    /// very point, so the ground near and this beyond join.
+    /// </summary>
+    public static Vector3 UnderFocus(in Ray ray, CameraBase camera, double planeY, double depth)
+    {
+        var forward = (Vector3F)camera.Forward;
+        var facing = Vector3F.Dot(ray.Direction, forward);
+        var along = facing > 1e-6f ? ((float)depth - Vector3F.Dot(ray.Position, forward)) / facing : (float)depth;
+        var met = (Vector3)ray.Position + (Vector3)ray.Direction * along + camera.WorldPosition;
+        return new Vector3(met.X, planeY, met.Z);
+    }
+
+    private static Entity RootOf(Entity entity)
+    {
+        while (entity.Owner != null)
+        {
+            entity = entity.Owner;
+        }
+
+        return entity;
+    }
+
+    private static double ViewDepth(CameraBase camera)
+    {
+        var depth = camera.Type.IsThirdPerson() && camera.Subject != null
+            ? (camera.Subject.GetCenterAbsolute() - camera.WorldPosition).Length()
+            : camera.FocusDistance;
+        return Math.Max(depth, camera.ZNear * 2);
+    }
+
+    private static bool InView(Vector3 point, CameraBase camera)
+    {
+        var inRender = ScreenSpace.InRender(point, camera);
+        if (Vector3F.Dot(inRender, (Vector3F)camera.Forward) <= 0 && camera.ProjectionMatrix.M44 < 0.5f)
+        {
+            return false;
+        }
+
+        var pixel = ScreenSpace.ToPixel(inRender, camera);
+        return pixel.X >= 0 && pixel.Y >= 0 && pixel.X <= camera.Width && pixel.Y <= camera.Height;
     }
 
     /// <summary>Where an object's origin stands for its lowest point, <paramref name="lowest"/> in its own space, to rest

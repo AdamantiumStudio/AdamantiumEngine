@@ -59,6 +59,58 @@ public class PlacementToolTests
         Assert.That(point.Z, Is.EqualTo(10).Within(1e-2));
     }
 
+    // Looking along the ground, or up, the pointer meets it far off or never: the object goes onto the ground under
+    // what the pointer shows at the camera's focus depth.
+    [TestCase(0f)]
+    [TestCase(-0.5f)]
+    public void ARayAlongTheGroundOrAbove_GoesOntoTheGroundUnderTheFocus(float up)
+    {
+        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = 12 };
+        new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
+        camera.Update(new Adamantium.Core.AppTime());
+        var ray = new Ray(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0.2f, up, 1)));
+
+        var point = PlacementTool.UnderFocus(ray, camera, 0, camera.FocusDistance);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(point.Y, Is.EqualTo(0), "on the ground");
+            Assert.That(point.Z, Is.EqualTo(12).Within(1e-3), "at the focus depth along the view");
+            Assert.That(point.X, Is.EqualTo(2.4).Within(1e-3), "under the pointer");
+        });
+    }
+
+    // A flat view's ray starts far behind the eye: the depth still counts from the eye.
+    [Test]
+    public void AFlatViewsRay_GoesOntoTheGroundAtTheDepthFromTheEye()
+    {
+        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
+        new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
+        camera.Owner.Transform.Position = new Vector3(4, -3, 1);
+        camera.Update(new Adamantium.Core.AppTime());
+        var ray = new Ray(new Vector3F(0.5f, 0, -10000), Vector3F.UnitZ);
+
+        var point = PlacementTool.UnderFocus(ray, camera, 0, 12);
+
+        Assert.That(point, Is.EqualTo(new Vector3(4.5, 0, 13)).Using<Vector3>((a, b) => (a - b).Length() < 1e-2));
+    }
+
+    // Where the ground under the pointer is as deep as the depth asked, the two points are one: no jump between them.
+    [Test]
+    public void TheGroundAtTheDepth_IsTheVeryPointBeyondIt()
+    {
+        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
+        new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
+        camera.Owner.Transform.Position = new Vector3(0, -3, 0);
+        camera.Update(new Adamantium.Core.AppTime());
+        var ray = new Ray(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0, 3, 20)));
+
+        PlacementTool.OnGround(ray, camera.WorldPosition, 0, 500, out var onGround);
+        var beyond = PlacementTool.UnderFocus(ray, camera, 0, 20);
+
+        Assert.That((onGround - beyond).Length(), Is.LessThan(1e-3));
+    }
+
     [Test]
     public void AnObject_RestsOnThePointByItsLowestPoint_UpBeingMinusY()
     {

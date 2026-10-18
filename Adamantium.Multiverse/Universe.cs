@@ -778,7 +778,7 @@ public class Universe : IUniverse
         var entity = new CameraTemplate().BuildEntity(
             null, $"Main camera for {output.Name}", Vector3.Zero, Vector3.ForwardLH, -Vector3.Up,
             output.Width, output.Height, 0.1f, 1000000.0f);
-        entity.Transform.Position = new Vector3(0, 0, -20);
+        entity.Transform.Position = new Vector3(0, -3, -20);
         var camera = entity.GetComponent<Camera>();
         camera.SetFreeLookAt(Vector3.Zero);
         EntityWorld.EntityManager.AddEntity(entity);
