@@ -278,6 +278,11 @@ namespace Adamantium.Fonts.Parsers
                     var table = new TableEntry();
                     table.Name = fontEntry.Tables[i].Name;
                     table.Offset = fontEntry.Tables[i].ExpectedOffset;
+                    // What the table takes in the decompressed stream: a transformed one (glyf and loca with transform 0,
+                    // any other with one) its transformed length, which is 0 for loca.
+                    var transform = fontEntry.Tables[i].PreprocessingTransform;
+                    var transformed = table.Name is "glyf" or "loca" ? transform == 0 : transform != 0;
+                    table.Length = transformed ? fontEntry.Tables[i].TransformLength : fontEntry.Tables[i].OrigLength;
                     table.PreprocessingTransform = fontEntry.Tables[i].PreprocessingTransform;
                     
                     otfTableDirectory.Tables[i] = table;

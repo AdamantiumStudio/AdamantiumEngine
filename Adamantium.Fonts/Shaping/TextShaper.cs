@@ -140,8 +140,10 @@ public static class TextShaper
                 ArabicFallback.Apply(font, plan, applier);
             }
         });
-        // A ligature's components run the way the text does, or, down vertical lines, as its script reads.
-        Positioner.Position(font, buffer, plan, applier, rightToLeft, options.Vertical ? IsRightToLeft(script) : rightToLeft);
+        // A ligature's components run the way the text does, or, down vertical lines, as its script reads; HarfBuzz
+        // gives Old Italic, Runic and Tifinagh no direction and takes them as right to left.
+        Positioner.Position(font, buffer, plan, applier, rightToLeft,
+            options.Vertical ? IsRightToLeft(script) || script is "Ital" or "Runr" or "Tfng" : rightToLeft);
         HideDefaultIgnorables(font, buffer);
 
         var result = new ShapedGlyph[buffer.Length];
@@ -359,16 +361,15 @@ public static class TextShaper
     private static ShapePlan GetPlan(OpenTypeLayout layout, string script, ShapingOptions options, float[] coordinates,
         bool rightToLeft)
     {
-        var scriptTag = OpenTypeTags.ScriptTag(script);
         var languageTag = OpenTypeTags.LanguageTag(options.Language);
         var features = string.Join(",", options.Features.Select(f => $"{f.Tag}={f.Value}{(f.IsGlobal ? "g" : "r")}"));
         var gsubVariation = layout.Gsub?.FeatureVariations?.Find(coordinates) ?? -1;
         var gposVariation = layout.Gpos?.FeatureVariations?.Find(coordinates) ?? -1;
-        var key = $"{script}|{scriptTag}|{languageTag}|{features}|{gsubVariation}|{gposVariation}|" +
+        var key = $"{script}|{languageTag}|{features}|{gsubVariation}|{gposVariation}|" +
                   (options.Vertical ? "ttb" : rightToLeft ? "rtl" : "ltr");
         return layout.Plans.GetOrAdd(key,
-            _ => ShapePlan.Create(layout, scriptTag, languageTag, options.Features, gsubVariation, gposVariation,
-                rightToLeft, script, options.Vertical));
+            _ => ShapePlan.Create(layout, OpenTypeTags.ScriptTags(script), languageTag, options.Features, gsubVariation,
+                gposVariation, rightToLeft, script, options.Vertical));
     }
 
     private static void SetupMasks(GlyphBuffer buffer, ShapePlan plan, ShapingOptions options, string text, int start,

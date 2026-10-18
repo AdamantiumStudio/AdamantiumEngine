@@ -46,6 +46,23 @@ public class ShapingTests
         Assert.That(string.Join(" ", glyphs.Select(g => g.ToString())), Is.EqualTo(expected));
     }
 
+    // A web font shapes as its TrueType original: the WOFF parsers gave their tables no length, and a table read by its
+    // length - 'kern', COLR, JSTF - read as empty.
+    [TestCase("woff")]
+    [TestCase("woff2")]
+    public void AWebFont_ShapesAsItsOriginal(string flavor)
+    {
+        var folder = Path.Combine(TestContext.CurrentContext.TestDirectory, "ScriptFonts");
+        var original = Typeface.LoadFont(Path.Combine(folder, "AdamantiumMarksTest-Kern2.ttf"), 3).GetFont(0);
+        var web = Typeface.LoadFont(Path.Combine(folder, "AdamantiumMarksTest-Kern2." + flavor), 3).GetFont(0);
+        var options = new ShapingOptions("Latn", null, FontFeature.ParseList(""));
+
+        string Shaped(IFont font) => string.Join(" ", TextShaper.Shape(font, "AVATAR To Ao", options).Select(g => g.ToString()));
+
+        Assert.That(Shaped(original), Does.Contain("@-40,0"), "the original is kerned");
+        Assert.That(Shaped(web), Is.EqualTo(Shaped(original)));
+    }
+
     public static IEnumerable<TestCaseData> VariedCases()
     {
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Shaping", "variations-expected.txt");

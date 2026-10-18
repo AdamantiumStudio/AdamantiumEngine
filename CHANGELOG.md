@@ -535,6 +535,26 @@ All packages share one version.
 
 ### Fixed
 
+- Shaping takes a script under its newer tag first, as HarfBuzz: Devanagari and the other Indic scripts under `dev3`,
+  `dev2`, then `deva`; Myanmar under `mym2`, then `mymr`. A font with `dev2` and `DFLT` got `DFLT`.
+- Hebrew in a font whose `GPOS` has no `hebr` script is not positioned by it, as HarfBuzz: its marks are placed by
+  their classes around the letter.
+- The `kern` table, as HarfBuzz applies it: each subtable of the text's direction (vertical lines took none, and so
+  had marks placed as for a font with no positioning), a pair across the line moving the glyph up or down - and the
+  rest of the line with it - where it narrowed the pair, the pairs of right-to-left text taken left to right on the
+  line, and a visible ignorable between two letters passed over (`A`, ZWNJ, `V` kerned). Its subtables of classes
+  (format 2) are read, and Apple's `kern` (version 1.0), which read as empty, with its compact classes (format 3) and
+  its state machine (format 1), along the line and across it; with a state machine, marks keep their width, as
+  HarfBuzz leaves them.
+- A glyph cursively attached down a vertical line is set against its neighbor across the line, by X, and along it by
+  its anchors' Y; it was set as on a horizontal line. An ignorable glyph keeps its place in such a chain.
+- Down vertical lines, the components of a ligature in Old Italic, Runic and Tifinagh are taken right to left for
+  their marks, as HarfBuzz takes them.
+- A click between a drop cap and centered or right-aligned text beside it goes to the nearer of the two: on the first
+  line it put the caret at the line's end.
+- A WOFF or WOFF2 font's tables know their length, as a TrueType font's do: those read by it - `kern`, COLR version 1,
+  JSTF - read as empty, so such a font lost its kerning, its color glyphs and its justification glyphs.
+
 - An effect compiled from its file finds a header by its path from the file's folder (`#include "Includes/X.fxh"`),
   nested headers included; only those beside it were found. Headers are `.fxh` only: `.hlsl` ones beside it are no
   longer gathered. A request names a header by its whole name: `#include "Tint.fxh"` took the first header whose path

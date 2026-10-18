@@ -122,6 +122,7 @@ namespace Adamantium.Fonts.Parsers
                 var table = new TableEntry();
                 table.Name = tables[i].Tag;
                 table.Offset = tables[i].ExpectedOffset;
+                table.Length = tables[i].OrigLength;
 
                 otfTableDirectory.Tables[i] = table;
             }

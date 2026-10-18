@@ -38,11 +38,11 @@ internal static class Positioner
 
         if (plan.ApplyKernTable)
         {
-            KernTable(font, buffer, plan.KernMask);
+            KernTable.Apply(buffer, font.Layout, plan, rightToLeft);
         }
 
         var adjustOffsets = plan.AdjustMarksWhenZeroing && !rightToLeft;
-        for (var i = 0; i < buffer.Length; i++)
+        for (var i = 0; plan.ZeroMarks && i < buffer.Length; i++)
         {
             if (!info[i].IsMark)
             {
@@ -65,14 +65,15 @@ internal static class Positioner
             {
                 if (info[i].IsDefaultIgnorable)
                 {
-                    placements[i] = default;
+                    placements[i].XAdvance = placements[i].YAdvance = 0;
+                    placements[i].XOffset = placements[i].YOffset = 0;
                 }
             }
         }
 
         for (var i = 0; i < buffer.Length; i++)
         {
-            PropagateAttachment(placements, buffer.Length, i, 64, rightToLeft);
+            PropagateAttachment(placements, buffer.Length, i, 64, rightToLeft, plan.Vertical);
         }
 
         if (plan.FallbackMarkPositioning)
@@ -435,46 +436,8 @@ internal static class Positioner
         }
     }
 
-    private static void KernTable(IFont font, GlyphBuffer buffer, uint kernMask)
-    {
-        var info = buffer.Info;
-        var placements = buffer.Placements;
-        var index = 0;
-        while (index < buffer.Length)
-        {
-            if ((info[index].Mask & kernMask) == 0)
-            {
-                index++;
-                continue;
-            }
-
-            var next = index + 1;
-            while (next < buffer.Length && (info[next].IsMark || (info[next].IsDefaultIgnorable && !info[next].IsZwnj)))
-            {
-                next++;
-            }
-
-            if (next >= buffer.Length || (info[next].Mask & kernMask) == 0)
-            {
-                index++;
-                continue;
-            }
-
-            int kern = font.GetKerningValue((ushort)info[index].Glyph, (ushort)info[next].Glyph);
-            if (kern != 0)
-            {
-                var first = kern >> 1;
-                var second = kern - first;
-                placements[index].XAdvance += first;
-                placements[next].XAdvance += second;
-                placements[next].XOffset += second;
-            }
-
-            index = next;
-        }
-    }
-
-    private static void PropagateAttachment(GlyphPlacement[] placements, int length, int i, int nesting, bool rightToLeft)
+    private static void PropagateAttachment(GlyphPlacement[] placements, int length, int i, int nesting, bool rightToLeft,
+        bool vertical)
     {
         var chain = placements[i].AttachChain;
         var type = placements[i].AttachType;
@@ -490,7 +453,13 @@ internal static class Positioner
             return;
         }
 
-        PropagateAttachment(placements, length, j, nesting - 1, rightToLeft);
+        PropagateAttachment(placements, length, j, nesting - 1, rightToLeft, vertical);
+        if ((type & GlyphPlacement.AttachCursive) != 0 && vertical)
+        {
+            placements[i].XOffset += placements[j].XOffset;
+            return;
+        }
+
         if ((type & GlyphPlacement.AttachCursive) != 0)
         {
             placements[i].YOffset += placements[j].YOffset;

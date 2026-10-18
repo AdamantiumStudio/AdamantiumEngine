@@ -141,6 +141,27 @@ public class DropCapTests
             "past it, the start of the line beside it");
     }
 
+    // Centered lines stand away from the cap: a click between the two on the first line was taken as past its end.
+    [TestCase(0, 0.1)]
+    [TestCase(0, 0.9)]
+    [TestCase(1, 0.5)]
+    [TestCase(2, 0.5)]
+    public void AClickBetweenTheDropCapAndTheText_GoesToTheNearerOfThem(int line, double across)
+    {
+        var layout = Layout(Prose, new DropCap(3), alignment: HorizontalTextAlignment.Center);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var body = Body(layout).Where(g => g.LineIndex == line).ToArray();
+        var capRight = cap.PenX + cap.Advance;
+        var bodyLeft = body.Min(g => g.PenX);
+        var y = layout.GetLine(line).Top + layout.GetLine(line).Height / 2;
+
+        var hit = layout.HitTest(capRight + (bodyLeft - capRight) * across, y);
+
+        Assert.That(bodyLeft - capRight, Is.GreaterThan(1), "the text stands away from the cap");
+        Assert.That((hit.CaretIndex, hit.IsInside), Is.EqualTo((body.Min(g => g.PositionInString), false)),
+            "where the text beside the cap starts");
+    }
+
     [Test]
     public void AClickBelowAShortText_IsNotOnTheDropCap()
     {

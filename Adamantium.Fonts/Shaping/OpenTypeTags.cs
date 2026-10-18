@@ -8,7 +8,35 @@ internal static class OpenTypeTags
 {
     private static readonly Lazy<Dictionary<string, string>> TwoLetterLanguages = new(LoadTwoLetterLanguages);
 
-    public static string ScriptTag(string script)
+    // The tags a font may have the script under, in the order HarfBuzz tries them: the Indic scripts and Myanmar under
+    // their newer tags first ('dev3', 'dev2', then 'deva'; 'mym2', then 'mymr').
+    public static string[] ScriptTags(string script)
+    {
+        var tag = ScriptTag(script);
+        var newer = script switch
+        {
+            "Beng" => "bng2",
+            "Deva" => "dev2",
+            "Gujr" => "gjr2",
+            "Guru" => "gur2",
+            "Knda" => "knd2",
+            "Mlym" => "mlm2",
+            "Orya" => "ory2",
+            "Taml" => "tml2",
+            "Telu" => "tel2",
+            "Mymr" => "mym2",
+            _ => null,
+        };
+
+        if (newer == null)
+        {
+            return [tag];
+        }
+
+        return newer == "mym2" ? [newer, tag] : [newer.Substring(0, 3) + "3", newer, tag];
+    }
+
+    private static string ScriptTag(string script)
     {
         switch (script)
         {
