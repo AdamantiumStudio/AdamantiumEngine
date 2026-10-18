@@ -158,6 +158,167 @@ public class SvgGlyphTests
         Assert.That(Kinds(operations), Is.EqualTo("PushClip PushClip Fill PopClip PopClip"));
     }
 
+    // A box from 20,10 to 60,50 in its own units: the clip's 0 to 1 spans it.
+    [TestCase("", TestName = "Of a shape")]
+    [TestCase(" transform=\"translate(0 0)\"", TestName = "Of a group")]
+    public void AClipPathInBoundingBoxUnits_SpansWhatItClips(string group)
+    {
+        var operations = Convert(
+            "<defs><clipPath id=\"c\" clipPathUnits=\"objectBoundingBox\"><rect width=\"0.5\" height=\"1\"/></clipPath></defs>" +
+            $"<g id=\"glyph5\"{group}><g clip-path=\"url(#c)\"><rect x=\"20\" y=\"10\" width=\"40\" height=\"40\" fill=\"red\"/></g></g>");
+
+        Assert.That(Kinds(operations), Is.EqualTo("PushClip PushClip Fill PopClip PopClip"));
+        var clip = outlines[0].SelectMany(contour => contour).ToList();
+        Assert.That(clip.Min(p => p.X), Is.EqualTo(20).Within(1e-9));
+        Assert.That(clip.Max(p => p.X), Is.EqualTo(40).Within(1e-9), "half the box across");
+        Assert.That(clip.Min(p => p.Y), Is.EqualTo(-50).Within(1e-9));
+        Assert.That(clip.Max(p => p.Y), Is.EqualTo(-10).Within(1e-9), "all of it down, y up in the font");
+    }
+
+    private const string HalfClip =
+        "<clipPath id=\"c\" clipPathUnits=\"objectBoundingBox\"><rect width=\"0.5\" height=\"1\"/></clipPath>";
+
+    private (double Left, double Right) ClipAcross()
+    {
+        var clip = outlines[0].SelectMany(contour => contour).ToList();
+        return (clip.Min(p => p.X), clip.Max(p => p.X));
+    }
+
+    // The box placed as the walk draws it: a use's place and its target's transform once, a symbol only where used.
+    [TestCase("<rect id=\"r\" x=\"20\" width=\"40\" height=\"40\"/>",
+        "<use id=\"glyph5\" href=\"#r\" x=\"100\" clip-path=\"url(#c)\" fill=\"red\"/>", 120, 140, TestName = "A use moved")]
+    [TestCase("<rect id=\"r\" transform=\"translate(100 0)\" x=\"20\" width=\"40\" height=\"40\"/>",
+        "<g id=\"glyph5\" clip-path=\"url(#c)\"><use href=\"#r\" fill=\"red\"/></g>", 120, 140,
+        TestName = "A use of a moved target")]
+    [TestCase("<symbol id=\"s\"><rect x=\"500\" width=\"10\" height=\"10\"/></symbol>",
+        "<g id=\"glyph5\" clip-path=\"url(#c)\"><rect x=\"20\" width=\"40\" height=\"40\" fill=\"red\"/></g>", 20, 40,
+        TestName = "A symbol nothing uses")]
+    public void AClipPathInBoundingBoxUnits_TakesTheBoxAsItIsDrawn(string defs, string glyph, double left, double right)
+    {
+        Convert($"<defs>{HalfClip}{defs}</defs>{glyph}");
+
+        Assert.That(ClipAcross(), Is.EqualTo((left, right)));
+    }
+
+    // Browsers map the box first, then the clip's own transform, in the units the box gives.
+    [Test]
+    public void AClipPathInBoundingBoxUnits_MovesByItsTransformAfterTheBox()
+    {
+        Convert("<defs><clipPath id=\"c\" clipPathUnits=\"objectBoundingBox\" transform=\"translate(0.25 0)\">" +
+                "<rect width=\"0.5\" height=\"1\"/></clipPath></defs>" +
+                "<rect id=\"glyph5\" x=\"20\" width=\"40\" height=\"40\" clip-path=\"url(#c)\" fill=\"red\"/>");
+
+        var (left, right) = ClipAcross();
+        Assert.That(left, Is.EqualTo(20.25).Within(1e-6));
+        Assert.That(right, Is.EqualTo(40.25).Within(1e-6));
+    }
+
+    [Test]
+    public void AClipPathInBoundingBoxUnits_OfUsesOfUses_IsFoundInTime()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        Convert($"<defs>{HalfClip}<g id=\"a\"><use href=\"#a\"/><use href=\"#a\"/><use href=\"#a\"/><use href=\"#a\"/>" +
+                "<rect width=\"1\" height=\"1\"/></g></defs><g id=\"glyph5\" clip-path=\"url(#c)\"><use href=\"#a\"/></g>");
+
+        Assert.That(watch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(2)));
+    }
+
+    // A use in a clip path takes its target's transform; the clip path's clip-rule reaches its children.
+    [Test]
+    public void AClipPath_TakesItsUsesTransformsAndItsOwnClipRule()
+    {
+        Convert("<defs><rect id=\"r\" transform=\"translate(100 0)\" width=\"10\" height=\"10\"/>" +
+                "<clipPath id=\"c\" clip-rule=\"evenodd\"><use href=\"#r\"/></clipPath></defs>" +
+                "<rect id=\"glyph5\" width=\"200\" height=\"10\" clip-path=\"url(#c)\" fill=\"red\"/>");
+
+        Assert.That(ClipAcross(), Is.EqualTo((100.0, 110.0)));
+    }
+
+    // A presentation attribute of a value it does not take is dropped: the fill is inherited, black at the top.
+    [Test]
+    public void AWrongFillAttribute_LeavesTheFillInherited()
+    {
+        var operations = Convert("<g id=\"glyph5\" fill=\"lime\"><rect width=\"1\" height=\"1\" fill=\"bogus\"/></g>");
+
+        Assert.That(operations.Single(o => o.Kind == ColorPaintOperationKind.Fill).Fill.Stops.Single().Color,
+            Is.EqualTo(Color.FromRgba(0, 255, 0, 255)));
+    }
+
+    [Test]
+    public void AGlyphUnderAHiddenAncestor_DrawsNothing()
+    {
+        Assert.That(Convert("<g display=\"none\"><rect id=\"glyph5\" width=\"1\" height=\"1\"/></g>"), Is.Empty);
+    }
+
+    [Test]
+    public void AnAncestorsClipPath_ClipsTheGlyph()
+    {
+        var operations = Convert("<defs><clipPath id=\"c\"><rect x=\"2\" width=\"3\" height=\"10\"/></clipPath></defs>" +
+                                 "<g clip-path=\"url(#c)\"><rect id=\"glyph5\" width=\"10\" height=\"10\" fill=\"red\"/></g>");
+
+        Assert.That(Kinds(operations), Is.EqualTo("PushClip PushClip Fill PopClip PopClip"));
+        Assert.That(ClipAcross(), Is.EqualTo((2.0, 5.0)));
+    }
+
+    [Test]
+    public void AClipPathInBoundingBoxUnits_OfNothing_ClipsEverything()
+    {
+        var operations = Convert(
+            "<defs><clipPath id=\"c\" clipPathUnits=\"objectBoundingBox\"><rect width=\"1\" height=\"1\"/></clipPath></defs>" +
+            "<g id=\"glyph5\" clip-path=\"url(#c)\"/>");
+
+        Assert.That(Kinds(operations), Is.EqualTo("PushClip PopClip"));
+        Assert.That(outlines[0], Is.Empty);
+    }
+
+    [Test]
+    public void AStyleSheet_StylesByTagClassAndId()
+    {
+        var operations = Convert(
+            "<style>/* a sheet */ .a { fill: #00ff00 } rect.b { fill-opacity: 50% } #c { fill: blue }</style>" +
+            "<g id=\"glyph5\"><rect class=\"a\" width=\"1\" height=\"1\"/><rect class=\"a b\" width=\"1\" height=\"1\"/>" +
+            "<rect id=\"c\" class=\"a\" width=\"1\" height=\"1\"/></g>");
+        var fills = operations.Where(o => o.Kind == ColorPaintOperationKind.Fill).Select(o => o.Fill.Stops.Single()).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fills[0].Color, Is.EqualTo(Color.FromRgba(0, 255, 0, 255)), "by class");
+            Assert.That(fills[1].Color, Is.EqualTo(Color.FromRgba(0, 255, 0, 128)), "half opaque by tag and class");
+            Assert.That(fills[2].Color, Is.EqualTo(Color.FromRgba(0, 0, 255, 255)), "the id outranks the class");
+        });
+    }
+
+    // Important in the sheet, then the style attribute, the sheet, the presentation attribute.
+    [TestCase(".a { fill: red }", "fill=\"blue\"", "", 255, 0, 0)]
+    [TestCase(".a { fill: red }", "", "fill: lime", 0, 255, 0)]
+    [TestCase(".a { fill: red !important }", "", "fill: lime", 255, 0, 0)]
+    [TestCase(".a { fill: red } .a { fill: blue }", "", "", 0, 0, 255)]
+    [TestCase("g .a { fill: red } .a:hover { fill: red } [x] { fill: red } @media print { .a { fill: red } }",
+        "fill=\"blue\"", "", 0, 0, 255, TestName = "Selectors left out")]
+    [TestCase(".a, g > .a { fill: red }", "fill=\"blue\"", "", 0, 0, 255, TestName = "A rule with one selector left out")]
+    [TestCase(".a { fill: red; fill: blue }", "", "", 0, 0, 255, TestName = "The later declaration of a rule")]
+    [TestCase("@charset \"utf-8\"; @import url(\"x.css\"); .a { fill: red }", "fill=\"blue\"", "", 255, 0, 0,
+        TestName = "After statement at-rules")]
+    [TestCase("", "", "fill: red !important; fill: blue", 255, 0, 0, TestName = "Important in the style attribute")]
+    [TestCase(".a { fill: red ! important }", "", "fill: blue", 255, 0, 0, TestName = "Important spaced")]
+    [TestCase(".a { FILL: red }", "fill=\"blue\"", "", 255, 0, 0, TestName = "A property in capitals")]
+    [TestCase("#glyph5#glyph5 { fill: red } #glyph5.a { fill: blue }", "", "", 255, 0, 0, TestName = "Two ids")]
+    [TestCase(".a.b.c.d.e.f.g.h.i.j.k { fill: blue } #glyph5 { fill: red }", "", "", 255, 0, 0,
+        TestName = "An id over many classes")]
+    [TestCase(".a { font-family: \"x{;}\"; fill: red } .z { fill: blue }", "fill=\"blue\"", "", 255, 0, 0,
+        TestName = "Braces and semicolons in quotes")]
+    [TestCase(".a { fill: bogus }", "fill=\"blue\"", "", 0, 0, 255, TestName = "A value the sheet gets wrong")]
+    [TestCase(".a { fill: red } #glyph5 { fill: 12px }", "", "", 255, 0, 0, TestName = "A wrong value of a stronger rule")]
+    [TestCase(".a { fill: red }", "", "fill: nonsense", 255, 0, 0, TestName = "A value the style gets wrong")]
+    public void AStyleSheet_CascadesAsCssDoes(string sheet, string attribute, string style, int r, int g, int b)
+    {
+        var operations = Convert($"<style>{sheet}</style><rect id=\"glyph5\" class=\"a b c d e f g h i j k\" width=\"1\" " +
+                                 $"height=\"1\" {attribute} style=\"{style}\"/>");
+
+        Assert.That(operations.Single(o => o.Kind == ColorPaintOperationKind.Fill).Fill.Stops.Single().Color,
+            Is.EqualTo(Color.FromRgba((byte)r, (byte)g, (byte)b, 255)));
+    }
+
     [Test]
     public void EvenOdd_TurnsAContourInsideAnotherTheOtherWay()
     {

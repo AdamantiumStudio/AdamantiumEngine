@@ -2515,20 +2515,38 @@ internal sealed class LineComposer
                 var cut = -1;
                 var room = LineRight(lineIndex) + LineShrink();
                 var from = CharAt(start);
-                foreach (var point in MayHyphenate() ? points : [])
+                if (MayHyphenate())
                 {
-                    if (point <= from)
+                    // The points measured in the word's items find the last that fits; set again by itself the half
+                    // differs only where a ligature or a joining letter is cut, so it is set again from one point past
+                    // that one back until a half fits.
+                    var first = 0;
+                    while (first < points.Count && points[first] <= from)
                     {
-                        continue;
+                        first++;
                     }
 
-                    var half = Piece(from, point);
-                    if (half.Count == 0 || cursorPosition + Width(half) + HyphenInk(half[^1]) > room)
+                    var estimate = first - 1;
+                    for (var p = first; p < points.Count; p++)
                     {
-                        break;
+                        var cutAt = ItemAt(start, newline, points[p]);
+                        if (cutAt <= start || cursorPosition + Advance(start, cutAt) + HyphenInk(items[cutAt - 1]) > room)
+                        {
+                            break;
+                        }
+
+                        estimate = p;
                     }
 
-                    cut = point;
+                    for (var p = Math.Min(estimate + 1, points.Count - 1); p >= first; p--)
+                    {
+                        var half = Piece(from, points[p]);
+                        if (half.Count > 0 && cursorPosition + Width(half) + HyphenInk(half[^1]) <= room)
+                        {
+                            cut = points[p];
+                            break;
+                        }
+                    }
                 }
 
                 if (cut < 0)
