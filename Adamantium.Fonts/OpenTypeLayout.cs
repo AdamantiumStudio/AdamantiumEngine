@@ -14,9 +14,14 @@ internal sealed class OpenTypeLayout
 
     public GlyphDefinitionTable Gdef { get; set; }
 
-    public bool HasKernTable { get; set; }
+    public KerningSubtable[] KernSubtables { get; set; }
+
+    public bool HasKernTable => KernSubtables is { Length: > 0 };
 
     public bool HasCrossKerning { get; set; }
+
+    // A subtable of format 1, a state machine: HarfBuzz then leaves marks their width.
+    public bool HasMachineKerning { get; set; }
 
     public ConcurrentDictionary<string, ShapePlan> Plans { get; } = new();
 

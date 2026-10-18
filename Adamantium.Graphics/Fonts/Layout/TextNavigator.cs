@@ -502,6 +502,10 @@ internal sealed class TextNavigator
         var rightmost = -1;
         var lineLeft = double.MaxValue;
         var lineRight = double.MinValue;
+        var nearest = -1;
+        var nearestNext = 0;
+        var nearestDistance = double.MaxValue;
+        var leftOfNearest = false;
         for (var g = line.Start; g < line.End && g < text.Length; g = TextBoundaries.Next(graphemes, g))
         {
             if (text[g] is '\n' or '\r' or LineSeparator or ParagraphSeparator)
@@ -531,6 +535,15 @@ internal sealed class TextNavigator
                 rightmost = g;
             }
 
+            var distance = x < left ? left - x : x - right;
+            if (distance < nearestDistance)
+            {
+                nearest = g;
+                nearestNext = next;
+                nearestDistance = distance;
+                leftOfNearest = x < left;
+            }
+
             if (x < left || x >= right)
             {
                 continue;
@@ -546,8 +559,17 @@ internal sealed class TextNavigator
             return new TextHit(at, false, false, at);
         }
 
+        // Between two of the line's graphemes - a drop cap and the text set away from it: the nearer one's edge.
+        if (x >= lineLeft && x < lineRight)
+        {
+            var leading = leftOfNearest != stops[nearest].IsRightToLeft;
+            return leading
+                ? new TextHit(nearest, false, false, nearest)
+                : new TextHit(nearest, true, false, Math.Min(nearestNext, line.End));
+        }
+
         var onLeft = x < lineLeft;
-        var nearest = onLeft ? leftmost : rightmost;
+        nearest = onLeft ? leftmost : rightmost;
         var logicalEnd = LogicalLineEnd(line);
         if (logicalEnd >= 0 && onLeft == _laid.IsRightToLeftParagraph(line.Start))
         {

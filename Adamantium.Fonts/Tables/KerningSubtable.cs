@@ -22,6 +22,17 @@ namespace Adamantium.Fonts.Tables
         public UInt16 RangeShift { get; internal set; }
         public Dictionary<UInt32, Int16> KerningValues { get; } // key is  "left | right" glyph indexes
 
+        // Apple's 'kern' (version 1.0): a longer header, a state machine (format 1) and compact classes (format 3).
+        public bool Apple { get; internal set; }
+
+        // An Apple subtable for a variation tuple: HarfBuzz leaves it out.
+        public bool Variation { get; internal set; }
+
+        // The subtable as written, its header included: what formats 1, 2 and 3 are read from.
+        public byte[] Data { get; internal set; }
+
+        public int HeaderSize => Apple ? 8 : 6;
+
         public KerningSubtable()
         {
             KerningValues = new Dictionary<uint, short>();

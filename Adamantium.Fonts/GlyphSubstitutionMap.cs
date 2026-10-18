@@ -74,7 +74,7 @@ internal sealed class GlyphSubstitutionMap
         var map = new Dictionary<uint, uint[]>();
         var gsub = font.Layout.Gsub;
         var variation = key.Variation;
-        var langSys = ShapePlan.Select(gsub, OpenTypeTags.ScriptTag(key.Script), OpenTypeTags.LanguageTag(key.Language),
+        var langSys = ShapePlan.Select(gsub, OpenTypeTags.ScriptTags(key.Script), OpenTypeTags.LanguageTag(key.Language),
             variation).LangSys;
         var index = ShapePlan.FindFeature(gsub, langSys, key.Feature);
         if (index < 0)
