@@ -9,6 +9,11 @@ internal sealed class SvgDocument
 
     public SvgDocument(XDocument document)
     {
+        if (SvgStyleSheet.Parse(document) is { } sheet)
+        {
+            document.AddAnnotation(sheet);
+        }
+
         foreach (var element in document.Descendants())
         {
             var id = (string)element.Attribute("id");

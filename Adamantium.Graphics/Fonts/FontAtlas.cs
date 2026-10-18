@@ -81,6 +81,12 @@ namespace Adamantium.Graphics.Fonts
 
         private static readonly TimeSpan SweepTime = TimeSpan.FromMilliseconds(250);
 
+        private static readonly TimeSpan SweepRest = TimeSpan.FromSeconds(1);
+
+        private int _lastSweepFreed = -1;
+
+        private long _lastSweepEnded;
+
         protected FontAtlasData AtlasData { get; }
 
         internal Texture Atlas => _layers.Texture;
@@ -88,6 +94,17 @@ namespace Adamantium.Graphics.Fonts
         internal Texture ColorAtlas => _bitmaps.Texture ?? Atlas;
 
         internal ColorBitmapAtlas ColorImages => _bitmaps;
+
+        internal int ColorImageCount
+        {
+            get
+            {
+                lock (_asyncGate)
+                {
+                    return _imagesResident.Count;
+                }
+            }
+        }
 
         /// <summary>The layers of the atlas texture in use, and allocated: it starts with <see cref="InitialLayerCount"/>
         /// and doubles as glyphs fill it.</summary>
@@ -527,8 +544,11 @@ namespace Adamantium.Graphics.Fonts
                 }
 
                 // A render with no next frame cannot wait for images to be let go: it takes the room past the budget.
+                // Right after a sweep that let nothing go, the drawn images take more than the budget: another would only
+                // build every text again for nothing.
                 var cell = _bitmaps.Add(image, FontAtlasStore.SynchronousFill);
-                if (cell == null && (_imagesResident.Count > 0 || _sweepStart >= 0))
+                var sweptInVain = _lastSweepFreed == 0 && Stopwatch.GetElapsedTime(_lastSweepEnded) < SweepRest;
+                if (cell == null && !sweptInVain && (_imagesResident.Count > 0 || _sweepStart >= 0))
                 {
                     _imagesWaiting.Add((key, image, place));
                     return;
@@ -622,6 +642,8 @@ namespace Adamantium.Graphics.Fonts
         // still find no room take it past the budget.
         private void LetGoOfUndrawnImages()
         {
+            _lastSweepFreed = 0;
+            _lastSweepEnded = Stopwatch.GetTimestamp();
             foreach (var pair in _imagesResident.ToArray())
             {
                 var resident = pair.Value;
@@ -630,6 +652,7 @@ namespace Adamantium.Graphics.Fonts
                     continue;
                 }
 
+                _lastSweepFreed++;
                 _imagesResident.Remove(pair.Key);
                 _imagesRequested.Remove(pair.Key);
                 _paints.ClearImage(resident.Program);

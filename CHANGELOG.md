@@ -67,6 +67,17 @@ All packages share one version.
   camera and ahead, set apart from a perspective's.
 - A first-person camera looks where its host faces, turned by its own `Rotation`, and keeps its view when it is freed;
   it stood still.
+- Color glyphs of 'SVG': the document's `<style>` sheets style its elements, by tag, `*`, `.class`, `#id` and their
+  compounds, as CSS cascades them - an `!important` declaration of the `style` attribute, then of the sheet, then the
+  `style` attribute, the sheet by specificity and order, and the presentation attribute last; selectors with
+  combinators, pseudo-classes or attributes leave their rule out, and at-rules are skipped.
+  `clipPathUnits="objectBoundingBox"` clips in the units of the box of what it clips, as it is drawn, the clip's own
+  transform after the box, as browsers place it (a clip of nothing clips all of it); such a clip was left out.
+  Strokes, masks, patterns and filters stay unsupported.
+- `FontAtlasStore.ColorImageLayers` and `ColorImages`: the layers the images of color glyphs take, against
+  `ColorImageLayerBudget`, and how many images they hold.
+  For a second after a sweep of the color atlas that let no image go, new images take room past the budget at once:
+  each waited for another sweep, which built every text again for nothing.
 - Japanese set as JLREQ and CSS Text 4 set it. `TextLayout.SpacingTrim` (`TextSpacingTrim`, as `text-spacing-trim`):
   `Normal` (the default) sets an opening bracket after a closing one, or two closing ones side by side, half-width and
   gives up a closing punctuation's blank half where the line would not fit otherwise; `TrimStart`, `TrimBoth`,
@@ -724,11 +735,17 @@ All packages share one version.
   transitions jerked and ran too fast, and the `AppTime.Fps` its services got read wrong.
 - Mouse look turns a camera by the distance the mouse moved, the same at any frame rate; it was scaled by the frame
   time as well, and turned slower the faster the frames came.
+- A `use` inside an 'SVG' glyph's `clipPath` takes its target's own transform, and a `clip-rule` set on the `clipPath`
+  reaches the shapes in it; the clip stood where the target would without its transform, and the rule was read only
+  from each shape. An 'SVG' glyph under an ancestor with `display="none"` draws nothing, and an ancestor's `clip-path`
+  clips it; both were passed over. A value a property does not take (`fill="bogus"`) is dropped, as CSS drops it, the
+  property inherited: such a glyph drew no fill.
 - A word hyphenated is set again in its two halves, each by itself: a hyphenation point inside a ligature (of-fice,
   the ffi one glyph) is a place to break, where it was passed over, and an Arabic letter before the break takes its
   final form and the one after its initial form, where they kept the forms joining them across it. Paragraph breaking
   weighs the halves as they come out; CJK punctuation in them stays trimmed as it was, and a word with a ruby base is
-  cut as it is, spread to its annotation.
+  cut as it is, spread to its annotation. A line finds its hyphen by the word's own widths and sets again only the
+  half at its end, not one at every hyphenation point.
 - A letter shaped in two glyphs at the start of a word no longer counts as a place to break between them: the word
   was taken as two, and a line could end inside the letter.
 - An object set into vertical text (U+FFFC with an `ObjectSize`) stands upright down its line: its height along the

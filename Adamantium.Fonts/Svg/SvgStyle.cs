@@ -44,22 +44,63 @@ internal sealed class SvgStyle
         };
     }
 
+    // A property as CSS cascades it: an !important declaration of the style attribute, then of the document's style
+    // sheet, then the style attribute, the sheet, and last the presentation attribute.
     public static string Property(XElement element, string name)
     {
         var style = (string)element.Attribute("style");
-        if (style != null)
+        var inline = style != null ? SvgStyleSheet.Pick(SvgStyleSheet.Declarations(style), name) : null;
+
+        if (inline is { Important: true })
         {
-            foreach (var declaration in style.Split(';'))
-            {
-                var colon = declaration.IndexOf(':');
-                if (colon > 0 && declaration.Substring(0, colon).Trim() == name)
-                {
-                    return declaration.Substring(colon + 1).Replace("!important", string.Empty).Trim();
-                }
-            }
+            return inline.Value;
         }
 
-        return ((string)element.Attribute(name))?.Trim();
+        var sheet = element.Document?.Annotation<SvgStyleSheet>()?.Property(element, name);
+        if (sheet is { Important: true })
+        {
+            return sheet.Value;
+        }
+
+        var attribute = ((string)element.Attribute(name))?.Trim();
+        return inline?.Value ?? sheet?.Value ?? (Valid(name, attribute) ? attribute : null);
+    }
+
+    // Whether a value is one the property takes: one it does not is dropped, as CSS drops it, and the property is set
+    // by what comes after in the cascade, or inherited.
+    public static bool Valid(string name, string value)
+    {
+        value = value?.Trim();
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        if (value == "inherit")
+        {
+            return true;
+        }
+
+        switch (name.ToLowerInvariant())
+        {
+            case "fill":
+                return value is "none" or "currentColor" || IsUrl(value) || IsColor(value);
+            case "color" or "stop-color":
+                return value == "currentColor" || IsColor(value);
+            case "opacity" or "fill-opacity" or "stop-opacity":
+                return Fraction(value) != null;
+            case "fill-rule" or "clip-rule":
+                return value is "nonzero" or "evenodd";
+            case "clip-path":
+                return value == "none" || IsUrl(value);
+            default:
+                return true;
+        }
+
+        static bool IsUrl(string text) => text.StartsWith("url(", StringComparison.Ordinal) && text.IndexOf(')') > 0;
+
+        static bool IsColor(string text) =>
+            text.StartsWith("var(", StringComparison.Ordinal) || SvgPaint.TryParseColor(text, null, 0, out _);
     }
 
     public static double? Fraction(string text)
