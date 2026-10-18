@@ -676,6 +676,8 @@ All packages share one version.
   `Mesh.ApplyTransform` turns the triangles back over, `Mesh.ReverseWinding` turns a strip over too (its first point
   of each run said twice), a rectangle placed by a mirror is turned over, and `Mesh.Merge` turns over a mirrored
   instance's triangles, listed or in a strip; a mirrored cube, arc or rectangle showed only its back.
+- A camera a view is seen through, selected, takes no tool: its handles stood in its own eye, and a flat view, seeing
+  behind its eye too, showed them as a disc over the whole view and turned the camera by them.
 - A polyline is a band along its points, centered on them, a quad a segment listed as triangles facing the camera,
   its picture running along the whole line: it was a strip parted by restarts, on one side of the line, facing away.
 - A teapot's patches read down where they face out from its axis, whatever the tessellation: one whose picture ran up

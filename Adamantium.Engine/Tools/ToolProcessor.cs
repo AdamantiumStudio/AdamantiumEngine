@@ -173,7 +173,7 @@ public abstract class ToolProcessor : EditorProcessor
         var items = selection.Items;
         if (!WorksGroups || items.Count < 2)
         {
-            return selection.Current;
+            return LookedThrough(selection.Current) ? null : selection.Current;
         }
 
         if (dragged == null || dragTarget != group)
@@ -190,6 +190,25 @@ public abstract class ToolProcessor : EditorProcessor
         }
 
         return group;
+    }
+
+    private bool LookedThrough(Entity entity)
+    {
+        if (entity == null)
+        {
+            return false;
+        }
+
+        var cameras = Tools.Observatory.CurrentCameras;
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            if (cameras[i].Owner == entity)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void HoldGroup()
