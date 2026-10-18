@@ -51,6 +51,7 @@ public class InputService : EntityService
     private bool panning;
     private Vector2F panFrom;
     private Camera panCamera;
+    private double panDepth;
 
     public InputService(EntityWorld world) : base(world)
     {
@@ -229,15 +230,34 @@ public class InputService : EntityService
         if (panning && camera == panCamera)
         {
             var moved = at - panFrom;
-            var focus = camera.WorldPosition + camera.Forward * camera.FocusDistance;
-            var unitsPerPixel = ScreenSpace.UnitsPerPixel(camera, focus);
+            var grabbed = camera.WorldPosition + camera.Forward * panDepth;
+            var unitsPerPixel = ScreenSpace.UnitsPerPixel(camera, grabbed);
             camera.TranslateRight(-moved.X * unitsPerPixel);
             camera.TranslateUp(-moved.Y * unitsPerPixel);
+        }
+        else
+        {
+            panDepth = DepthUnder(camera, at);
         }
 
         panFrom = at;
         panCamera = camera;
         panning = true;
+    }
+
+    private double DepthUnder(Camera camera, Vector2F pixel)
+    {
+        var hit = Picking.Pick(EntityWorld.RootEntities, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
+        if (hit.IsHit)
+        {
+            var depth = Vector3F.Dot(hit.Point, (Vector3F)camera.Forward);
+            if (depth > camera.ZNear)
+            {
+                return depth;
+            }
+        }
+
+        return camera.FocusDistance;
     }
 
     private void HandleKeyboard(UniverseOutput output, Camera currentCamera, AppTime appTime)

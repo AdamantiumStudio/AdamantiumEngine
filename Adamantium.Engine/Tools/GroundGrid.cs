@@ -86,7 +86,7 @@ public class GroundGrid : EditorProcessor
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
         overlay.DrawGrid(this);
-        overlay.DrawFlatInScene(edges);
+        overlay.DrawFlatBehindScene(edges);
     }
 
     private void PlaceLines(CameraBase camera)
@@ -154,7 +154,7 @@ public class GroundGrid : EditorProcessor
     private Entity LineEntity(string name, Mesh mesh)
     {
         var entity = new Entity(edges, name);
-        entity.AddComponent(new MeshData { Mesh = mesh });
+        entity.AddComponent(new MeshData { Mesh = mesh, DepthTestEnabled = true, DepthWriteEnabled = false });
         entity.AddComponent(new Material { HighlightColor = Vector4F.One, Transparency = 1 });
         return entity;
     }

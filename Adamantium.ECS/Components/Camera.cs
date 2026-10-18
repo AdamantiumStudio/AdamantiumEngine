@@ -29,6 +29,19 @@ namespace Adamantium.ECS.Components
         // How far a jump stands from an object with no bounds to frame: an empty entity, a group.
         private const double UnframedDistance = 5;
 
+        private const double FocusFloor = 1;
+        private const float SmallestOrthoScale = 1e-6f;
+        private const float LargestOrthoScale = 1e6f;
+
+        private void ScaleOrtho(double factor)
+        {
+            var scaled = OrthoScale * (float)factor;
+            if (scaled.X is >= SmallestOrthoScale and <= LargestOrthoScale && scaled.Y is >= SmallestOrthoScale and <= LargestOrthoScale)
+            {
+                OrthoScale = scaled;
+            }
+        }
+
         private static readonly float IsometricAxis = 1 / MathF.Sqrt(3);
 
         private CameraProjectionType shownProjection;
@@ -43,6 +56,10 @@ namespace Adamantium.ECS.Components
         private QuaternionF turnTo;
         private Vector3 turnPivot;
         private double turnDistance;
+        private double turnElapsed;
+        private double turnTime;
+        private bool isometricShown;
+        private bool isometricTurned;
         private QuaternionF rotationBeforeIsometric;
         private QuaternionF isometricRotation;
         private Entity shownSubject;
@@ -79,7 +96,6 @@ namespace Adamantium.ECS.Components
             Up = -Vector3.UnitY;
             Velocity = 1;
             CurrentVelocity = 0;
-            WheelVelocity = 1;
             DragVelocity = 200;
             Width = width;
             Height = height;
@@ -119,7 +135,6 @@ namespace Adamantium.ECS.Components
             Up = up;
             Velocity = 1;
             CurrentVelocity = 0;
-            WheelVelocity = 1;
             DragVelocity = 200;
             Width = width;
             Height = height;
@@ -203,9 +218,18 @@ namespace Adamantium.ECS.Components
         private void FollowProjection(AppTime appTime)
         {
             var wanted = ProjectionType;
+            var isometric = IsIsometric;
+            if (isometricTurned && !turning && Math.Abs(QuaternionF.Dot(Rotation, isometricRotation)) < 0.9999f)
+            {
+                isometricTurned = false;
+                isometricShown = false;
+                IsIsometric = isometric = false;
+            }
+
             if (!projectionShown)
             {
                 shownProjection = wanted;
+                isometricShown = false;
                 projectionShown = true;
             }
             else if (wanted != shownProjection)
@@ -214,30 +238,33 @@ namespace Adamantium.ECS.Components
                 shownProjection = wanted;
             }
 
-            if (!blending && !turning)
+            if (isometric != isometricShown || (isometric && !isometricTurned && !turning && TurnsToIsometric()))
             {
-                return;
+                StartIsometricTurn(isometric);
+                isometricShown = isometric;
             }
 
-            changeElapsed += appTime.FrameTime * 1000;
-            var done = changeTime > 0 ? Math.Min(changeElapsed / changeTime, 1) : 1;
-            var eased = (float)(done * done * (3 - 2 * done));
+            var step = appTime.FrameTime * 1000;
             if (blending)
             {
-                blendedProjection = Matrix4x4F.Lerp(blendFrom, BlendableProjection(wanted), eased);
+                changeElapsed += step;
+                var done = Done(changeElapsed, changeTime);
+                blendedProjection = Matrix4x4F.Lerp(blendFrom, BlendableProjection(wanted), Eased(done));
+                blending = done < 1;
             }
 
             if (turning)
             {
-                TurnAbout(QuaternionF.Slerp(turnFrom, turnTo, eased));
-            }
-
-            if (done >= 1)
-            {
-                blending = false;
-                turning = false;
+                turnElapsed += step;
+                var done = Done(turnElapsed, turnTime);
+                TurnAbout(QuaternionF.Slerp(turnFrom, turnTo, Eased(done)));
+                turning = done < 1;
             }
         }
+
+        private static double Done(double elapsed, double time) => time > 0 ? Math.Min(elapsed / time, 1) : 1;
+
+        private static float Eased(double done) => (float)(done * done * (3 - 2 * done));
 
         private void StartProjectionChange(CameraProjectionType from, CameraProjectionType to)
         {
@@ -254,35 +281,50 @@ namespace Adamantium.ECS.Components
             {
                 var matching = Math.Clamp(Width * PerspectiveProjection.M11 / (2 * OrthoScale.X), ZNear * 2, ZFar / 2);
                 StepToFocus(depth, matching);
-                depth = matching;
+                if (turning)
+                {
+                    turnDistance = matching;
+                }
             }
 
             blendFrom = shown;
             blending = blending || wasFlat != flat;
-            QuaternionF? turnTarget = null;
-            if (TurnsToIsometric() && to == CameraProjectionType.Isometric && from != CameraProjectionType.Isometric)
-            {
-                rotationBeforeIsometric = Rotation;
-                isometricRotation = IsometricRotation();
-                turnTarget = isometricRotation;
-            }
-            else if (TurnsToIsometric() && from == CameraProjectionType.Isometric && to != CameraProjectionType.Isometric
-                     && (turning || Math.Abs(QuaternionF.Dot(Rotation, isometricRotation)) > 0.9999f))
-            {
-                turnTarget = rotationBeforeIsometric;
-            }
-
-            turning = turnTarget != null;
-            if (turning)
-            {
-                turnFrom = Rotation;
-                turnTo = turnTarget.Value;
-                turnPivot = Owner.Transform.Position + Forward * depth;
-                turnDistance = depth;
-            }
-
             changeElapsed = 0;
             changeTime = ProjectionTransitionTime;
+        }
+
+        private void StartIsometricTurn(bool toIsometric)
+        {
+            var wasTurned = isometricTurned;
+            isometricTurned = toIsometric && TurnsToIsometric();
+            QuaternionF target;
+            if (isometricTurned)
+            {
+                if (!wasTurned && !turning)
+                {
+                    rotationBeforeIsometric = Rotation;
+                }
+
+                isometricRotation = IsometricRotation();
+                target = isometricRotation;
+            }
+            else if (!toIsometric && wasTurned && TurnsToIsometric())
+            {
+                target = rotationBeforeIsometric;
+            }
+            else
+            {
+                return;
+            }
+
+            var depth = FocusDepth();
+            turning = true;
+            turnFrom = Rotation;
+            turnTo = target;
+            turnPivot = Owner.Transform.Position + ForwardOf(Rotation) * depth;
+            turnDistance = depth;
+            turnElapsed = 0;
+            turnTime = ProjectionTransitionTime;
         }
 
         private double FocusDepth()
@@ -440,7 +482,7 @@ namespace Adamantium.ECS.Components
             endingPosition = lookAtObject.GetCenterAbsolute() - (Vector3)Forward * away;
             Type = CameraType.Free;
             FocusDistance = away;
-            if (ProjectionType is CameraProjectionType.Ortho or CameraProjectionType.Isometric)
+            if (ProjectionType == CameraProjectionType.Ortho)
             {
                 OrthoScale = OrthoScaleAt(away);
             }
@@ -483,6 +525,7 @@ namespace Adamantium.ECS.Components
                 BuildUiProjection();
             }
 
+            FollowEntityTurn();
             FollowProjection(appTime);
 
             // Rotation is a STRUCT behind a property: Rotation.Normalize() normalized a copy and dropped it, so the
@@ -497,7 +540,6 @@ namespace Adamantium.ECS.Components
             // Whatever the camera type is. It used to tick only inside the Special branch, so the orientation gizmo
             // armed a turn the free camera never performed - the click registered and nothing moved.
             ContiniousRotation(appTime);
-            FollowEntityTurn();
             if (Type == CameraType.Free)
             {
                 ViewMatrix = Matrix4x4F.RotationQuaternion(Rotation);
@@ -576,6 +618,13 @@ namespace Adamantium.ECS.Components
 
         private void FollowEntityTurn()
         {
+            if (Type == CameraType.Special && Owner.Owner == null && entityTurnKnown)
+            {
+                Owner.Transform.Rotation = QuaternionF.Conjugate(Rotation);
+                knownEntityTurn = Owner.Transform.Rotation;
+                return;
+            }
+
             if (Type != CameraType.Free || Owner.Owner != null)
             {
                 entityTurnKnown = false;
@@ -672,9 +721,18 @@ namespace Adamantium.ECS.Components
         /// <inheritdoc />
         public override void TranslateForward(Double relativeZ)
         {
-            if (Type == CameraType.Free)
+            if (Type == CameraType.Free && ProjectionType == CameraProjectionType.Ortho)
+            {
+                ScaleOrtho(Math.Exp(relativeZ / FocusDepth()));
+            }
+            else if (Type == CameraType.Free)
             {
                 Owner.Transform.Position += Vector3.Multiply(Forward, relativeZ);
+                var focus = FocusDistance - relativeZ;
+                if (focus >= Math.Max(FocusFloor, ZNear * 2) || focus > FocusDistance)
+                {
+                    FocusDistance = Math.Min(focus, ZFar / 2);
+                }
             }
             else if (Type == CameraType.FirstPerson)
             {
@@ -687,20 +745,20 @@ namespace Adamantium.ECS.Components
         }
 
         /// <summary>
-        /// Wheel notches, forward positive: an orthographic or isometric view zooms by <see cref="CameraBase.ZoomStep"/>
-        /// a notch, scaling <see cref="CameraBase.OrthoScale"/>; else a camera orbiting a subject comes closer by it, never
-        /// nearer than twice its near plane, and a free camera moves along its view by
-        /// <see cref="CameraBase.WheelVelocity"/> seconds of travel a notch.
+        /// Wheel notches, forward positive: what the camera looks at grows by <see cref="CameraBase.ZoomStep"/> a notch,
+        /// evenly however near or far. A flat view scales <see cref="CameraBase.OrthoScale"/>, without limit; a free camera
+        /// in perspective comes that much nearer the point at its focus distance, and past a metre short of it pushes the
+        /// point on ahead; a camera orbiting a subject comes nearer it.
         /// </summary>
         public void Zoom(double notches)
         {
-            if (ProjectionType is CameraProjectionType.Ortho or CameraProjectionType.Isometric)
+            if (ProjectionType == CameraProjectionType.Ortho)
             {
-                OrthoScale *= (float)Math.Pow(ZoomStep, notches);
+                ScaleOrtho(Math.Pow(ZoomStep, notches));
             }
             else if (Type == CameraType.Free)
             {
-                TranslateForward(notches * Velocity * WheelVelocity);
+                TranslateForward(FocusDistance * (1 - Math.Pow(ZoomStep, -notches)));
             }
             else if (Type.IsThirdPerson())
             {
@@ -735,6 +793,10 @@ namespace Adamantium.ECS.Components
                       Rotation);
                 Rotation = QuaternionF.Multiply(Rotation, QuaternionF.RotationAxis(HostUpVector, MathHelper.DegreesToRadians(angleY)));
             }
+            else if (Type == CameraType.Free)
+            {
+                TurnLevel(angleX, angleY);
+            }
             else
             {
                 Rotation =
@@ -744,6 +806,62 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        private void TurnLevel(float pitchDegrees, float yawDegrees)
+        {
+            var yaw = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(yawDegrees));
+            if (HoldsIsometric())
+            {
+                if (yawDegrees == 0)
+                {
+                    return;
+                }
+
+                var depth = FocusDepth();
+                var pivot = Owner.Transform.Position + ForwardOf(Rotation) * depth;
+                Rotation = QuaternionF.Multiply(Rotation, yaw);
+                Owner.Transform.Position = pivot - ForwardOf(Rotation) * depth;
+                isometricRotation = Rotation;
+                return;
+            }
+
+            var turned = QuaternionF.Multiply(Rotation, yaw);
+            Rotation = turned;
+            if (pitchDegrees == 0)
+            {
+                return;
+            }
+
+            var before = Matrix4x4F.RotationQuaternion(turned);
+            var upright = before.M22 >= 0;
+            var share = 1f;
+            for (var i = 0; i < 12; i++)
+            {
+                var pitched = Pitched(turned, pitchDegrees * share);
+                var view = Matrix4x4F.RotationQuaternion(pitched);
+                var steepEnough = Math.Abs(view.M23) < MaxLevelPitchSine || Math.Abs(view.M23) < Math.Abs(before.M23);
+                if (steepEnough && (!upright || view.M22 >= 0))
+                {
+                    Rotation = pitched;
+                    return;
+                }
+
+                share /= 2;
+            }
+        }
+
+        private static QuaternionF Pitched(QuaternionF rotation, float degrees) =>
+            QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(degrees)), rotation);
+
+        private static Vector3 ForwardOf(QuaternionF rotation)
+        {
+            var view = Matrix4x4F.RotationQuaternion(rotation);
+            return new Vector3(view.M13, view.M23, view.M33);
+        }
+
+        private bool HoldsIsometric() => isometricTurned && IsIsometric && TurnsToIsometric() && !turning;
+
+        private static readonly float MaxLevelPitchSine = MathF.Sin(MathHelper.DegreesToRadians(89f));
+
         /// <inheritdoc />
         public override void RotateRight(float angle)
         {
@@ -751,6 +869,12 @@ namespace Adamantium.ECS.Components
                 (Type == CameraType.ThirdPersonLocked))
             {
                 angle = -angle;
+            }
+
+            if (Type == CameraType.Free)
+            {
+                TurnLevel(angle, 0);
+                return;
             }
 
             Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(angle)), Rotation);
@@ -771,6 +895,10 @@ namespace Adamantium.ECS.Components
                 {
                     Rotation = QuaternionF.Multiply(Rotation, QuaternionF.RotationAxis(HostUpVector, MathHelper.DegreesToRadians(angle)));
                 }
+                else if (Type == CameraType.Free)
+                {
+                    TurnLevel(0, angle);
+                }
                 else
                 {
                     Rotation =
@@ -783,7 +911,7 @@ namespace Adamantium.ECS.Components
         /// <inheritdoc />
         public override void RotateForward(float angle)
         {
-            if (Type != CameraType.ThirdPersonLocked)
+            if (Type != CameraType.ThirdPersonLocked && !HoldsIsometric())
             {
                 Rotation =
                    QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians(angle)),

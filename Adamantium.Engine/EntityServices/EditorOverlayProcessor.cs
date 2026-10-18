@@ -128,6 +128,14 @@ public class EditorOverlayProcessor : RenderingProcessor
         DrawParts(ActiveCamera.ViewProjectionMatrix, true, Look.Flat);
     }
 
+    /// <summary>Draws an entity in its colors, unlit, where the scene does not stand in front of it: its meshes' own
+    /// depth test and write, as the ground grid's lines are hidden behind what stands on the ground.</summary>
+    public void DrawFlatBehindScene(Entity root)
+    {
+        Collect(root);
+        DrawParts(ActiveCamera.ViewProjectionMatrix, false, Look.Flat);
+    }
+
     /// <summary>
     /// Draws a ring - a line mesh round a circle, flat in its own space - as the circle itself, in front of everything
     /// the scene drew: each pixel's distance to the true circle, so the edge is even at any turn. The center lands on the
@@ -242,17 +250,13 @@ public class EditorOverlayProcessor : RenderingProcessor
     }
 
     /// <summary>
-    /// Outlines an entity and what is under it together with <paramref name="alone"/>, an entity without what is under
-    /// it - an icon without its rays: a band <paramref name="points"/> wide round their joint silhouette.
+    /// Outlines an entity alone, without what is under it - an icon without its rays: a band <paramref name="points"/>
+    /// wide round its silhouette, in front of everything the scene drew.
     /// </summary>
-    public void DrawOutline(Entity root, Entity alone, Vector4F color, float points)
+    public void DrawOutlineAlone(Entity entity, Vector4F color, float points)
     {
-        Collect(root);
-        if (alone != null)
-        {
-            CollectInto(alone, descend: false);
-        }
-
+        parts.Clear();
+        CollectInto(entity, descend: false);
         DrawCollectedOutline(color, points);
     }
 

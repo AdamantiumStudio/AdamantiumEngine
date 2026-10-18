@@ -487,6 +487,37 @@ namespace Adamantium.ECS.Components
             return localMatrix;
         }
 
+        /// <summary>
+        /// Rewrites this entity's position, rotation and scale for <paramref name="newOwner"/> - null for none - so that
+        /// it stays where it stands in the world once it hangs there; called before the owner changes. The turn and even
+        /// scale between the two owners join the entity's own, its shape - pivot, uneven or mirrored scale - kept; an
+        /// uneven scale between them is taken as its mean. False, and the transform untouched, when no transform could
+        /// keep it: between owners one of which is flattened or mirrored against the other.
+        /// </summary>
+        public bool StayInWorldUnder(Entity newOwner)
+        {
+            var oldParent = Owner?.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+            var newParent = newOwner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+            if (oldParent == newParent)
+            {
+                return true;
+            }
+
+            Matrix4x4F.Invert(ref newParent, out var inverse);
+            var between = oldParent * inverse;
+            if (between.Determinant() <= 1e-12f || !between.Decompose(out var scale, out var turn, out _))
+            {
+                return false;
+            }
+
+            var target = (GetLocalMatrixF() * between).TranslationVector;
+            Rotation = QuaternionF.Multiply(turn, Rotation);
+            ScaleFactor *= (scale.X + scale.Y + scale.Z) / 3;
+            Position = Vector3.Zero;
+            Position = (Vector3)(target - GetLocalMatrixF().TranslationVector);
+            return true;
+        }
+
         /// <summary>Where this entity stands in the world, through its parents; the same matrix it is drawn with.</summary>
         public Matrix4x4F GetWorldMatrixF()
         {

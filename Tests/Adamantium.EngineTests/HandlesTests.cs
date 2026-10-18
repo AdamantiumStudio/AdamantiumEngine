@@ -187,6 +187,112 @@ public class HandlesTests
             Is.EqualTo(1).Within(1e-3));
     }
 
+    // Pulled far out along the ring, the pointer keeps turning as fast: by the angle round the center, a pointer
+    // far away turned the target slower and slower, and then not at all.
+    [Test]
+    public void Rotate_PulledFarAlongARing_KeepsTurningAsFast()
+    {
+        var scene = new ToolScene();
+        var target = ToolScene.Target(At);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
+        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        var along = Vector2F.Normalize(scene.PixelOf(At + new Vector3(radius, radius * 0.01, 0)) - grab);
+        var radiusInPixels = (grab - scene.PixelOf(At)).Length();
+        handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
+
+        var turns = new double[3];
+        for (var step = 1; step <= 60; step++)
+        {
+            handles.Drag(target, scene.RayAt(grab + along * (radiusInPixels * step / 10)));
+            if (step is 40 or 50 or 60)
+            {
+                var turned = Vector3F.TransformNormal(Vector3F.UnitX, target.Transform.GetLocalMatrixF());
+                turns[step / 10 - 4] = Math.Atan2(turned.Y, turned.X);
+            }
+        }
+
+        var fifth = Math.IEEERemainder(turns[1] - turns[0], 2 * Math.PI);
+        var sixth = Math.IEEERemainder(turns[2] - turns[1], 2 * Math.PI);
+        Assert.Multiple(() =>
+        {
+            Assert.That(sixth, Is.GreaterThan(0.5), "the sixth radius pulled still turns");
+            Assert.That(sixth, Is.EqualTo(fifth).Within(1e-3), "as fast as the fifth");
+        });
+    }
+
+    // A ring seen at a slant is an ellipse on screen: following it round still turns as far as the pointer went round.
+    [Test]
+    public void Rotate_GoingRoundATiltedRing_TurnsAsFarAsItWent()
+    {
+        var scene = new ToolScene();
+        scene.LookFrom(At + new Vector3(10 * 0.6, 0, -10 * 0.8), At);
+        var target = ToolScene.Target(At);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "RightAxisOrbit", scene);
+        var start = MathHelper.DegreesToRadians(-60f);
+        var grab = scene.PixelOf(At + new Vector3(0, radius * Math.Cos(start), radius * Math.Sin(start)));
+        handles.BeginDrag(target, handles.Shape.Get("RightAxisOrbit"), scene.RayAt(grab));
+
+        for (var degrees = -30; degrees <= 210; degrees += 30)
+        {
+            var angle = MathHelper.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(0, radius * Math.Cos(angle), radius * Math.Sin(angle)))));
+        }
+
+        var turn = MathHelper.DegreesToRadians(270f);
+        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, QuaternionF.RotationAxis(Vector3F.UnitX, turn))),
+            Is.EqualTo(1).Within(1e-3));
+    }
+
+    // Out past two radii and round, then back near the ring: no lurch on the way back in.
+    [Test]
+    public void Rotate_BackNearTheRingFromFarOut_TurnsOnWithoutALurch()
+    {
+        var scene = new ToolScene();
+        var target = ToolScene.Target(At);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
+        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
+        handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * 3, 0, 0))));
+        for (var degrees = 10; degrees <= 150; degrees += 10)
+        {
+            var angle = MathHelper.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * 3 * Math.Cos(angle), radius * 3 * Math.Sin(angle), 0))));
+        }
+
+        var before = target.Transform.Rotation;
+        var back = MathHelper.DegreesToRadians(150f);
+        handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * Math.Cos(back), radius * Math.Sin(back), 0))));
+
+        var lurch = 2 * Math.Acos(Math.Clamp(Math.Abs(QuaternionF.Dot(before, target.Transform.Rotation)), 0, 1));
+        Assert.That(lurch, Is.LessThan(0.05));
+    }
+
+    [Test]
+    public void Rotate_ThroughTheRingsCenter_DoesNotSpin()
+    {
+        var scene = new ToolScene();
+        var target = ToolScene.Target(At);
+        var handles = new RotationHandles();
+        handles.Place(target, scene.Camera);
+        var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
+        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        var center = scene.PixelOf(At);
+        handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
+        handles.Drag(target, scene.RayAt(center + new Vector2F(1, 0.3f)));
+        var before = target.Transform.Rotation;
+
+        handles.Drag(target, scene.RayAt(center + new Vector2F(0, -0.3f)));
+
+        var spin = 2 * Math.Acos(Math.Clamp(Math.Abs(QuaternionF.Dot(before, target.Transform.Rotation)), 0, 1));
+        Assert.That(spin, Is.LessThan(0.01));
+    }
+
     [Test]
     public void Rotate_GoingRoundARing_TheOtherWay_TurnsTheOtherWay()
     {

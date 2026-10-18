@@ -33,21 +33,28 @@ namespace Adamantium.ECS.Components
 
         [Bindable] private CameraProjectionType projectionType;
 
+        /// <summary>Whether the camera looks down a cube's diagonal, from above: a free camera turns to that angle about the
+        /// point it looks at, smoothly - one on a host once it is free - and back to where it looked when this is let
+        /// go; going round the point meanwhile is part of it. Turned away by anything else, a face of the orientation
+        /// cube or a reset, it is no longer isometric and this clears. Either projection: orthographic, it is the
+        /// isometric view of drawings; in perspective, the same angle with depth.</summary>
+        [Bindable] private bool isIsometric;
+
         /// <summary>Whether the user's mouse and keys leave the camera where it stands, even looked through; it still
         /// moves with what it rides on.</summary>
         [Bindable] private bool isLocked;
 
-        /// <summary>How much an orthographic or isometric view is zoomed: its projection scaled along X and Y, never Z, so
+        /// <summary>How much an orthographic view is zoomed: its projection scaled along X and Y, never Z, so
         /// nothing is clipped away however close it comes. 1 is a world unit to a pixel; the wheel multiplies it.</summary>
         [Bindable] private Vector2F orthoScale = Vector2F.One;
 
         partial void OnOrthoScaleChanged(Vector2F value) => ProjectionStale = true;
 
-        /// <summary>The near plane of an orthographic or isometric view: behind the camera, as a flat view shows the same
+        /// <summary>The near plane of an orthographic view: behind the camera, as a flat view shows the same
         /// wherever along its view the camera stands, so nothing behind it is cut away.</summary>
         [Bindable] private float orthoNear = -10000;
 
-        /// <summary>The far plane of an orthographic or isometric view.</summary>
+        /// <summary>The far plane of an orthographic view.</summary>
         [Bindable] private float orthoFar = 10000;
 
         partial void OnOrthoNearChanged(float value) => ProjectionStale = true;
@@ -60,7 +67,7 @@ namespace Adamantium.ECS.Components
         public int ProjectionTransitionTime { get; set; } = 300;
 
         /// <summary>How far ahead lies the plane the camera looks at: a change of projection keeps it the same size on
-        /// screen, and an isometric view turns about the point on it. A camera orbiting a subject uses its distance to
+        /// screen, and turning to <see cref="IsIsometric"/> goes about the point on it. A camera orbiting a subject uses its distance to
         /// it.</summary>
         public double FocusDistance { get; set; } = 10;
 
@@ -76,7 +83,7 @@ namespace Adamantium.ECS.Components
         public Matrix4x4F UiProjection { get; set; }
 
         /// <summary>The orthographic projection, scaled by <see cref="OrthoScale"/>, from <see cref="OrthoNear"/> to
-        /// <see cref="OrthoFar"/>; an isometric view draws with it too.</summary>
+        /// <see cref="OrthoFar"/>.</summary>
         public Matrix4x4F OrthoProjection { get; set; } = Matrix4x4F.Identity;
 
         public Matrix4x4F RotationMatrix => Matrix4x4F.RotationQuaternion(Rotation);
@@ -91,10 +98,7 @@ namespace Adamantium.ECS.Components
 
         public Double CurrentVelocity { get; set; }
 
-        /// <summary>How far one wheel notch moves a free camera, in seconds of travel at its <see cref="Velocity"/>.</summary>
-        public Double WheelVelocity { get; set; }
-
-        /// <summary>How much one wheel notch closes the distance to the subject a camera orbits: it is divided by this.</summary>
+        /// <summary>How many times larger one wheel notch makes what a camera looks at, near or far, in either projection.</summary>
         public Double ZoomStep { get; set; } = 1.15;
 
         public Single RotationSpeed { get; set; }
@@ -176,14 +180,12 @@ namespace Adamantium.ECS.Components
 
         public virtual Matrix4x4F ProjectionMatrix => ProjectionOf(ProjectionType);
 
-        /// <summary>The projection a camera draws with for the kind: an isometric view is orthographic, seen from the
-        /// isometric angle the camera turns to.</summary>
+        /// <summary>The projection a camera draws with for the kind.</summary>
         public Matrix4x4F ProjectionOf(CameraProjectionType type)
         {
             switch (type)
             {
                 case CameraProjectionType.Ortho:
-                case CameraProjectionType.Isometric:
                     return OrthoProjection;
                 case CameraProjectionType.UI:
                     return UiProjection;
@@ -277,7 +279,10 @@ namespace Adamantium.ECS.Components
         ///Rotate camera around X and Y axis.
         ///</summary>
         ///<remarks>
-        ///Angles must be in degrees.
+        ///Angles must be in degrees. A free camera turns as an editor's does: about the world's vertical, and up or down
+        ///about its own right short of straight up or down, so its horizon stays level (so do <see cref="RotateRight"/>
+        ///and <see cref="RotateUp"/>). <see cref="IsIsometric"/>, it only goes round the point it looks at, its angle
+        ///down kept, and <see cref="RotateForward"/> leaves it.
         ///</remarks>
         public abstract void RotateRelativeXY(float angleX, float angleY);
 

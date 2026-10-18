@@ -112,13 +112,16 @@ public class CameraProjectionChangeTests
         });
     }
 
-    [Test]
-    public void AnIsometricView_TurnsDownACubesDiagonal_AboutThePointItLooksAt()
+    [TestCase(CameraProjectionType.Perspective)]
+    [TestCase(CameraProjectionType.Ortho)]
+    public void AnIsometricView_TurnsDownACubesDiagonal_AboutThePointItLooksAt_InEitherProjection(CameraProjectionType projection)
     {
         var camera = FreeCamera();
-        var pivot = camera.WorldPosition + camera.Forward * Focus;
+        camera.ProjectionType = projection;
+        Step(camera, 1000);
+        var pivot = camera.WorldPosition + camera.Forward * camera.FocusDistance;
 
-        camera.ProjectionType = CameraProjectionType.Isometric;
+        camera.IsIsometric = true;
         Step(camera, 1000);
         Step(camera, 16);
 
@@ -129,8 +132,8 @@ public class CameraProjectionChangeTests
             Assert.That(forward.Y, Is.EqualTo(1 / Math.Sqrt(3)).Within(1e-4), "down, as up is -Y");
             Assert.That(Math.Abs(forward.Z), Is.EqualTo(1 / Math.Sqrt(3)).Within(1e-4));
             Assert.That(camera.Up.Y, Is.GreaterThan(0), "upright, its view's up along +Y as the orientation cube's views");
-            Assert.That((camera.WorldPosition + camera.Forward * Focus - pivot).Length(), Is.LessThan(1e-3));
-            Assert.That(camera.ProjectionMatrix, Is.EqualTo(camera.OrthoProjection));
+            Assert.That((camera.WorldPosition + camera.Forward * camera.FocusDistance - pivot).Length(), Is.LessThan(1e-3));
+            Assert.That(camera.ProjectionMatrix, Is.EqualTo(camera.ProjectionOf(projection)), "the projection stays as it was");
         });
     }
 
@@ -140,9 +143,9 @@ public class CameraProjectionChangeTests
         var camera = FreeCamera();
         var before = camera.Rotation;
 
-        camera.ProjectionType = CameraProjectionType.Isometric;
+        camera.IsIsometric = true;
         Step(camera, 1000);
-        camera.ProjectionType = CameraProjectionType.Ortho;
+        camera.IsIsometric = false;
         Step(camera, 1000);
         Step(camera, 16);
 
@@ -150,19 +153,240 @@ public class CameraProjectionChangeTests
     }
 
     [Test]
-    public void TurnedWhileIsometric_TheCameraKeepsItsTurnWhenItLeaves()
+    public void GoneRoundWhileIsometric_TheCameraStillTurnsBackWhenItLeaves()
     {
         var camera = FreeCamera();
-        camera.ProjectionType = CameraProjectionType.Isometric;
+        var before = camera.Rotation;
+        camera.IsIsometric = true;
         Step(camera, 1000);
         camera.RotateRelativeXY(0, 30);
         Step(camera, 16);
+
+        camera.IsIsometric = false;
+        Step(camera, 1000);
+
+        Assert.That(Math.Abs(QuaternionF.Dot(camera.Rotation, before)), Is.GreaterThan(0.9999f));
+    }
+
+    [Test]
+    public void TurnedByOthersWhileIsometric_TheCameraKeepsThatTurnWhenItLeaves()
+    {
+        var camera = FreeCamera();
+        camera.IsIsometric = true;
+        Step(camera, 1000);
+        camera.Rotation = QuaternionF.Multiply(camera.Rotation, QuaternionF.RotationAxis(Vector3F.UnitX, 0.3f));
         var turned = camera.Rotation;
 
-        camera.ProjectionType = CameraProjectionType.Perspective;
+        camera.IsIsometric = false;
         Step(camera, 1000);
 
         Assert.That(Math.Abs(QuaternionF.Dot(camera.Rotation, turned)), Is.GreaterThan(0.9999f));
+    }
+
+    // Turned this way and that, a free camera keeps its horizon level, as an editor's does: turns about its own axes
+    // gathered a roll.
+    [Test]
+    public void AFreeCameraTurnedEveryWay_KeepsItsHorizonLevel()
+    {
+        var camera = FreeCamera();
+        camera.Rotation = QuaternionF.Identity;
+        Step(camera, 16);
+
+        for (var i = 0; i < 200; i++)
+        {
+            camera.RotateRelativeXY(i % 2 == 0 ? 7 : -5, i % 3 == 0 ? 11 : -4);
+            camera.RotateRight(i % 5 == 0 ? 3 : -2);
+            camera.RotateUp(6);
+        }
+
+        Step(camera, 16);
+        Assert.That(Math.Abs(camera.Right.Y), Is.LessThan(1e-3), "its right stays level");
+    }
+
+    [Test]
+    public void AFreeCameraTurnedUp_StopsShortOfStraightUp()
+    {
+        var camera = FreeCamera();
+        camera.Rotation = QuaternionF.Identity;
+        Step(camera, 16);
+
+        for (var i = 0; i < 100; i++)
+        {
+            camera.RotateRelativeXY(5, 0);
+        }
+
+        Step(camera, 16);
+        Assert.Multiple(() =>
+        {
+            Assert.That(Math.Abs(camera.Forward.Y), Is.LessThan(1).And.GreaterThan(0.99));
+            Assert.That(Math.Abs(camera.Right.Y), Is.LessThan(1e-3), "and never rolls over");
+        });
+    }
+
+    // A face of the orientation cube turns the camera there and it stays: the entity it rides kept its old turn through
+    // the animation, and the camera took that back the moment it was free again.
+    [Test]
+    public void TurnedByTheOrientationCube_TheCameraStaysWhereItWasTurned()
+    {
+        var camera = FreeCamera();
+        var target = QuaternionF.RotationYawPitchRoll(1.0f, 0.3f, 0);
+
+        camera.RotateAroundSelectedObject(target, 200);
+        Step(camera, 100);
+        Step(camera, 150);
+        Step(camera, 16);
+        Step(camera, 16);
+
+        Assert.That(Math.Abs(QuaternionF.Dot(camera.Rotation, target)), Is.GreaterThan(0.9999f));
+    }
+
+    // Moved along its view, a free camera keeps looking at the same point: going flat and back then leaves it where it
+    // stood; a focus left behind sent it far away, and made the flat view much smaller or larger than the perspective.
+    [Test]
+    public void MovedForward_ThenFlatAndBack_TheCameraStaysWhereItStood()
+    {
+        var camera = FreeCamera();
+        camera.TranslateForward(5);
+        Step(camera, 16);
+        var stood = camera.WorldPosition;
+
+        camera.ProjectionType = CameraProjectionType.Ortho;
+        Step(camera, 1000);
+        camera.ProjectionType = CameraProjectionType.Perspective;
+        Step(camera, 1000);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.FocusDistance, Is.EqualTo(Focus - 5).Within(1e-3));
+            Assert.That((camera.WorldPosition - stood).Length(), Is.LessThan(1e-3));
+        });
+    }
+
+    [TestCase(4f)]
+    [TestCase(7f)]
+    [TestCase(-6f)]
+    public void AFreeCameraTurnedUpOrDownInBigSteps_NeverGoesOverTheTop(float step)
+    {
+        var camera = FreeCamera();
+        camera.Rotation = QuaternionF.Identity;
+        Step(camera, 16);
+
+        for (var i = 0; i < 60; i++)
+        {
+            camera.RotateRelativeXY(step, 0);
+            Step(camera, 16);
+            Assert.That(camera.Up.Y, Is.GreaterThanOrEqualTo(0), $"upright after step {i}");
+        }
+
+        Assert.That(Math.Abs(camera.Forward.Y), Is.GreaterThan(0.99));
+    }
+
+    [Test]
+    public void LookingStraightDown_AFreeCameraTurnsAwayUpright_EitherWay()
+    {
+        foreach (var step in new[] { 5f, -5f })
+        {
+            var camera = FreeCamera();
+            camera.Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(90));
+            Step(camera, 16);
+
+            camera.RotateRelativeXY(step, 0);
+            Step(camera, 16);
+
+            Assert.That(camera.Up.Y, Is.GreaterThanOrEqualTo(0), $"upright after {step}");
+        }
+    }
+
+    [Test]
+    public void AnIsometricCamera_TurnedRoundTwiceInAFrame_KeepsGoingRoundTheSamePoint()
+    {
+        var camera = FreeCamera();
+        camera.IsIsometric = true;
+        Step(camera, 1000);
+        Step(camera, 16);
+        var pivot = camera.WorldPosition + camera.Forward * camera.FocusDistance;
+
+        for (var i = 0; i < 60; i++)
+        {
+            camera.RotateUp(2);
+            camera.RotateRight(2);
+            Step(camera, 16);
+        }
+
+        Assert.That((camera.WorldPosition + camera.Forward * camera.FocusDistance - pivot).Length(), Is.LessThan(1e-2));
+    }
+
+    [Test]
+    public void TurnedAwayByOthersWhileIsometric_TheCameraIsNoLongerIsometric()
+    {
+        var camera = FreeCamera();
+        camera.IsIsometric = true;
+        Step(camera, 1000);
+
+        camera.Rotation = QuaternionF.Identity;
+        Step(camera, 16);
+
+        Assert.That(camera.IsIsometric, Is.False);
+    }
+
+    [Test]
+    public void IsometricWhileOnAHost_TheCameraTurnsOnceItIsFree()
+    {
+        var camera = FreeCamera();
+        var host = new Entity(null, "Host");
+        var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
+        world.EntityManager.AddEntity(host);
+        world.EntityManager.AddEntity(camera.Owner);
+        world.EntityManager.SetOwner(camera.Owner, host);
+        camera.HostChangeTime = 0;
+        camera.SetFirstPersonCamera(Vector3.Zero, QuaternionF.Identity, 0);
+        Step(camera, 16);
+        camera.IsIsometric = true;
+        Step(camera, 1000);
+
+        world.EntityManager.RemoveOwner(camera.Owner);
+        world.EntityManager.AddEntity(camera.Owner);
+        camera.SetFreeCamera();
+        Step(camera, 1000);
+        Step(camera, 16);
+
+        Assert.That(camera.Forward.Y, Is.EqualTo(1 / Math.Sqrt(3)).Within(1e-3));
+    }
+
+    [Test]
+    public void AnIsometricCamera_TurnsOnlyRoundThePointItLooksAt_ItsAngleDownKept()
+    {
+        var camera = FreeCamera();
+        camera.IsIsometric = true;
+        Step(camera, 1000);
+        Step(camera, 16);
+        var pivot = camera.WorldPosition + camera.Forward * camera.FocusDistance;
+        var down = camera.Forward.Y;
+
+        camera.RotateRelativeXY(20, 35);
+        camera.RotateForward(15);
+        Step(camera, 16);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.Forward.Y, Is.EqualTo(down).Within(1e-4), "its angle down kept");
+            Assert.That(Math.Abs(camera.Right.Y), Is.LessThan(1e-3), "no roll");
+            Assert.That((camera.WorldPosition + camera.Forward * camera.FocusDistance - pivot).Length(), Is.LessThan(1e-3));
+        });
+    }
+
+    [Test]
+    public void ChangingTheProjectionWhileIsometric_KeepsTheIsometricAngle()
+    {
+        var camera = FreeCamera();
+        camera.IsIsometric = true;
+        Step(camera, 1000);
+        var isometric = camera.Rotation;
+
+        camera.ProjectionType = CameraProjectionType.Ortho;
+        Step(camera, 1000);
+
+        Assert.That(Math.Abs(QuaternionF.Dot(camera.Rotation, isometric)), Is.GreaterThan(0.9999f));
     }
 
     [Test]
@@ -211,10 +435,10 @@ public class CameraProjectionChangeTests
         Step(camera, 100);
         var midway = camera.ProjectionMatrix.M44;
 
-        camera.ProjectionType = CameraProjectionType.Isometric;
+        camera.ProjectionType = CameraProjectionType.Perspective;
         Step(camera, 16);
 
-        Assert.That(camera.ProjectionMatrix.M44, Is.GreaterThan(midway).And.LessThan(0.95f));
+        Assert.That(camera.ProjectionMatrix.M44, Is.LessThan(midway).And.GreaterThan(0.05f));
     }
 
     [Test]
