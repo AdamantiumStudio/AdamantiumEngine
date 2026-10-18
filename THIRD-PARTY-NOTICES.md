@@ -58,17 +58,22 @@ JPEG 2000 — that is a different format built on wavelets, and there is no code
 
 ---
 
-## HarfBuzz — Arabic shaper, modified combining classes, vertical forms
+## HarfBuzz — Arabic shaper, modified combining classes, vertical forms, `stch`, fallback marks, Hebrew composition
 
 **Where:** `Adamantium.Fonts/Shaping/ArabicShaper.cs`, `Adamantium.Fonts/Shaping/ArabicFallback.cs`, `GetModifiedCombiningClass` in
-`Adamantium.Fonts/Shaping/UnicodeData.cs`, and `Adamantium.Fonts/Shaping/VerticalForms.cs`
+`Adamantium.Fonts/Shaping/UnicodeData.cs`, `Adamantium.Fonts/Shaping/VerticalForms.cs`, the stretched marks of
+`Adamantium.Fonts/Shaping/TextShaper.cs`, the fallback mark placement of `Adamantium.Fonts/Shaping/Positioner.cs`, and
+`TryComposeHebrew` in `Adamantium.Fonts/Shaping/Normalizer.cs`
 
 The joining state table, the list of modifier combining marks and the order the Arabic features apply in follow
 HarfBuzz's Arabic shaper (`src/hb-ot-shaper-arabic.cc`, https://github.com/harfbuzz/harfbuzz); the combining classes
 remapped for Hebrew, Arabic, Thai and Tibetan follow its `hb-unicode.hh`; the vertical presentation forms text set
 top to bottom falls back to without a 'vert' feature follow its `hb_vert_char_for` (`src/hb-ot-shape.cc`); the
 presentation forms and ligatures of `Adamantium.Fonts/Shaping/ArabicFallback.cs`, for a font with no Arabic joining
-forms, are its tables and lookups (`src/hb-ot-shaper-arabic-table.hh`, `src/hb-ot-shaper-arabic-fallback.hh`). All are
+forms, are its tables and lookups (`src/hb-ot-shaper-arabic-table.hh`, `src/hb-ot-shaper-arabic-fallback.hh`); the
+stretched marks ('stch') follow its `record_stch` and `apply_stch` (`src/hb-ot-shaper-arabic.cc`); the marks placed
+around their base in a font that positions none follow its `hb-ot-shape-fallback.cc`; the Hebrew presentation forms
+composed for a font without mark positioning follow its `compose_hebrew` (`src/hb-ot-shaper-hebrew.cc`). All are
 ported to C#. HarfBuzz is under the
 "Old MIT" licence:
 
