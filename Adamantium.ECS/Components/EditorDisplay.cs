@@ -8,20 +8,24 @@ namespace Adamantium.ECS.Components;
 public partial class EditorDisplay : ActivatableComponent
 {
     [Bindable] private EntityDisplay display;
-
-    /// <summary>A wireframe drawn over the shaded mesh as well.</summary>
-    [Bindable] private bool wireOver;
 }
 
-/// <summary>What an editor draws of an entity's mesh.</summary>
+/// <summary>What an editor draws of an entity's mesh: as the whole view is drawn, or one of the view's own ways in
+/// its place, whichever way the view is drawn.</summary>
 public enum EntityDisplay
 {
     /// <summary>As the whole view is drawn.</summary>
     AsView,
 
+    /// <summary>Shaded.</summary>
+    Shaded,
+
     /// <summary>Only its wireframe.</summary>
     Wireframe,
 
-    /// <summary>Only the box its collider holds.</summary>
-    Bounds
+    /// <summary>Shaded, with its wireframe over.</summary>
+    ShadedWireframe,
+
+    /// <summary>Only its collider, the mesh left out.</summary>
+    Collider
 }

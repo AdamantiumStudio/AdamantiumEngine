@@ -73,7 +73,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 // First we loop around the main ring of the torus.
                 for (int i = 0; i <= tessellation; i++)
                 {
-                    float u = (float)i / tessellation;
+                    float u = 1 - (float)i / tessellation;
 
                     float outerAngle = i * MathHelper.TwoPi / tessellation - MathHelper.PiOverTwo;
 
@@ -100,9 +100,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         vertices.Add(position * stretch);
                         uvs.Add(uv);
 
+                        if (i == tessellation || j == tessellation) continue;
+
                         //Create indices for 2 triangles
-                        int nextI = (i + 1) % stride;
-                        int nextJ = (j + 1) % stride;
+                        int nextI = i + 1;
+                        int nextJ = j + 1;
 
                         indices.Add(i * stride + j);
                         indices.Add(i * stride + nextJ);

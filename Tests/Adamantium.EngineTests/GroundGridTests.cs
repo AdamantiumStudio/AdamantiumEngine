@@ -51,6 +51,23 @@ public class GroundGridTests
         });
     }
 
+    // Looking low, a flat view's height covers a long way of ground: the grid still lies whole round what it looks at.
+    [Test]
+    public void AFlatViewLookingLow_ReachesWellPastWhatItLooksAt()
+    {
+        var scene = new ToolScene();
+        scene.Camera.ProjectionTransitionTime = 0;
+        scene.Camera.ProjectionType = Adamantium.ECS.Components.CameraProjectionType.Ortho;
+        scene.LookFrom(new Vector3(0, -10, 0), new Vector3(0, 0, 57));
+        var grid = new GroundGrid();
+
+        var layout = grid.LayoutFor(scene.Camera);
+
+        var lookedAt = new Vector2F(0, 57);
+        var center = layout.Center + new Vector2F((float)scene.Camera.WorldPosition.X, (float)scene.Camera.WorldPosition.Z);
+        Assert.That(Vector2F.Distance(center, lookedAt), Is.LessThan(layout.Reach / 2));
+    }
+
     [Test]
     public void ARaisedGrid_LiesAtItsY_AndReachesByTheEyesHeightAboveIt()
     {

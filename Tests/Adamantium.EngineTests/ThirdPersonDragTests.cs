@@ -61,6 +61,7 @@ public class ThirdPersonDragTests
     [Test]
     public void DraggingWhatTheCameraFollows_StopsWhereThePointerStops()
     {
+        camera.HostChangeTime = 0;
         universe.EntityWorld.EntityManager.SetOwner(camera.Owner, target);
         camera.SetThirdPersonCamera(target, Vector3F.Zero, CameraType.ThirdPersonFree);
         selection.Current = target;
@@ -86,6 +87,35 @@ public class ThirdPersonDragTests
         Assert.That((moved - start).Length(), Is.GreaterThan(0.1), "the drag moves the target");
         Assert.That((target.Transform.Position - moved).Length(), Is.LessThan(1e-4),
             "the pointer stood still, and so does the target");
+    }
+
+    // The camera looked through, selected, stands its handles in its own eye: they are left out of its view, and a press
+    // in it takes none of them.
+    [TestCase(CameraProjectionType.Perspective)]
+    [TestCase(CameraProjectionType.Ortho)]
+    public void TheCameraLookedThrough_TakesNoHandlesOfItsOwn(CameraProjectionType projection)
+    {
+        camera.ProjectionTransitionTime = 0;
+        camera.ProjectionType = projection;
+        selection.Current = camera.Owner;
+        tools.Tool = new RotationTool();
+        Frame();
+        var turn = camera.Owner.Transform.Rotation;
+
+        var middle = new Vector2F(camera.Width / 2f, camera.Height / 2f);
+        foreach (var at in new[] { middle, middle + new Vector2F(30, 10), middle + new Vector2F(-80, 40) })
+        {
+            output.Pointer = at;
+            Frame();
+            output.Button(MouseButton.Left, InputType.Down);
+            Frame();
+            output.Pointer = at + new Vector2F(60, 25);
+            Frame();
+            output.Button(MouseButton.Left, InputType.Up);
+            Frame();
+        }
+
+        Assert.That(camera.Owner.Transform.Rotation, Is.EqualTo(turn), "the camera was turned by a handle of its own");
     }
 
     private void Frame()

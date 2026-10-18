@@ -31,6 +31,46 @@ namespace Adamantium.ECS.Components
 
         partial void OnHeightChanged(uint value) => ProjectionStale = true;
 
+        [Bindable] private CameraProjectionType projectionType;
+
+        /// <summary>Whether the camera looks down a cube's diagonal, from above: a free camera turns to that angle about the
+        /// point it looks at, smoothly - one on a host once it is free - and back to where it looked when this is let
+        /// go; going round the point meanwhile is part of it. Turned away by anything else, a face of the orientation
+        /// cube or a reset, it is no longer isometric and this clears. Either projection: orthographic, it is the
+        /// isometric view of drawings; in perspective, the same angle with depth.</summary>
+        [Bindable] private bool isIsometric;
+
+        /// <summary>Whether the user's mouse and keys leave the camera where it stands, even looked through; it still
+        /// moves with what it rides on.</summary>
+        [Bindable] private bool isLocked;
+
+        /// <summary>How much an orthographic view is zoomed: its projection scaled along X and Y, never Z, so
+        /// nothing is clipped away however close it comes. 1 is a world unit to a pixel; the wheel multiplies it.</summary>
+        [Bindable] private Vector2F orthoScale = Vector2F.One;
+
+        partial void OnOrthoScaleChanged(Vector2F value) => ProjectionStale = true;
+
+        /// <summary>The near plane of an orthographic view: behind the camera, as a flat view shows the same
+        /// wherever along its view the camera stands, so nothing behind it is cut away.</summary>
+        [Bindable] private float orthoNear = -10000;
+
+        /// <summary>The far plane of an orthographic view.</summary>
+        [Bindable] private float orthoFar = 10000;
+
+        partial void OnOrthoNearChanged(float value) => ProjectionStale = true;
+
+        partial void OnOrthoFarChanged(float value) => ProjectionStale = true;
+
+        /// <summary>How long a change of <see cref="ProjectionType"/> takes on screen, in milliseconds: the projection
+        /// flows from one to the other keeping the plane at <see cref="FocusDistance"/> the same size. 0 changes it at
+        /// once.</summary>
+        public int ProjectionTransitionTime { get; set; } = 300;
+
+        /// <summary>How far ahead lies the plane the camera looks at: a change of projection keeps it the same size on
+        /// screen, and turning to <see cref="IsIsometric"/> goes about the point on it. A camera orbiting a subject uses its distance to
+        /// it.</summary>
+        public double FocusDistance { get; set; } = 10;
+
         /// <summary>A value the projections are built from changed - the field of view, a clipping plane or the size - and
         /// the next <see cref="Update"/> builds them again, on the world's thread.</summary>
         protected bool ProjectionStale { get; set; }
@@ -42,9 +82,9 @@ namespace Adamantium.ECS.Components
 
         public Matrix4x4F UiProjection { get; set; }
 
+        /// <summary>The orthographic projection, scaled by <see cref="OrthoScale"/>, from <see cref="OrthoNear"/> to
+        /// <see cref="OrthoFar"/>.</summary>
         public Matrix4x4F OrthoProjection { get; set; } = Matrix4x4F.Identity;
-
-        public Matrix4x4F IsometricProjection { get; set; }
 
         public Matrix4x4F RotationMatrix => Matrix4x4F.RotationQuaternion(Rotation);
 
@@ -52,17 +92,15 @@ namespace Adamantium.ECS.Components
 
         public Vector3? LookAt { get; set; }
 
-        public Double Velocity { get; set; }
+        [Bindable]
+        public partial Double Velocity { get; set; }
 
         public Double DragVelocity { get; set; }
 
         public Double CurrentVelocity { get; set; }
 
-        /// <summary>How far one wheel notch moves a free camera, in seconds of travel at its <see cref="Velocity"/>.</summary>
-        public Double WheelVelocity { get; set; }
-
-        /// <summary>How much one wheel notch closes the distance to the subject a camera orbits: it is divided by this.</summary>
-        public Double ZoomStep { get; set; } = 1.15;
+        /// <summary>How many times larger one wheel notch makes what a camera looks at, near or far, in either projection.</summary>
+        public Double ZoomStep { get; set; } = 1.08;
 
         public Single RotationSpeed { get; set; }
 
@@ -101,8 +139,16 @@ namespace Adamantium.ECS.Components
         public Double FramingMargin { get; set; } = 2;
 
         /// <summary>Where the camera is IN THE WORLD. Its own <c>Transform.Position</c> is relative to its parent, and
-        /// a third-person camera hangs off the object it follows - the scene is shifted by THIS one.</summary>
-        public Vector3 WorldPosition => Owner?.Transform.WorldPosition ?? Vector3.Zero;
+        /// a third-person camera hangs off the object it follows - the scene is shifted by THIS one. Hung on another
+        /// entity, it is still on its way there for <see cref="HostChangeTime"/>.</summary>
+        public Vector3 WorldPosition => (Owner?.Transform.WorldPosition ?? Vector3.Zero) + TravelOffset;
+
+        /// <summary>How long, in milliseconds, a camera hung on another entity or taken off one takes to get from where it
+        /// stood and looked to its new place and view; 0 jumps there.</summary>
+        public int HostChangeTime { get; set; } = 250;
+
+        /// <summary>How far the camera still is from its place while it travels to a new host.</summary>
+        protected Vector3 TravelOffset { get; set; }
 
         /// <summary>
         /// Gets or Sets value indicating does ZNear and ZFar planes should be reversed for inverted depth buffer
@@ -133,25 +179,19 @@ namespace Adamantium.ECS.Components
         [Bindable]
         public partial CameraType Type { get; set; }
 
-        public CameraProjectionType ProjectionType { get; set; }
+        public virtual Matrix4x4F ProjectionMatrix => ProjectionOf(ProjectionType);
 
-        public virtual Matrix4x4F ProjectionMatrix
+        /// <summary>The projection a camera draws with for the kind.</summary>
+        public Matrix4x4F ProjectionOf(CameraProjectionType type)
         {
-            get
+            switch (type)
             {
-                switch (ProjectionType)
-                {
-                    case CameraProjectionType.Perspective:
-                        return PerspectiveProjection;
-                    case CameraProjectionType.Ortho:
-                        return OrthoProjection;
-                    case CameraProjectionType.UI:
-                        return UiProjection;
-                    case CameraProjectionType.Isometric:
-                        return IsometricProjection;
-                    default:
-                        return PerspectiveProjection;
-                }
+                case CameraProjectionType.Ortho:
+                    return OrthoProjection;
+                case CameraProjectionType.UI:
+                    return UiProjection;
+                default:
+                    return PerspectiveProjection;
             }
         }
 
@@ -167,9 +207,14 @@ namespace Adamantium.ECS.Components
                     return Matrix4x4F.Identity;
                 }
 
-                // The SUBJECT's rotation. The guard used to ask about the host and the answer described the camera
-                // (Owner.Transform is the camera's own), so every caller got the camera's rotation handed back.
-                return Matrix4x4F.RotationQuaternion(Subject.Transform.Rotation);
+                // The SUBJECT's rotation, in the world: a part of a model turns with what it hangs on. The guard used to
+                // ask about the host and the answer described the camera (Owner.Transform is the camera's own).
+                var world = Subject.Transform.GetWorldMatrixF();
+                var turn = Matrix4x4F.Identity;
+                turn.Right = Vector3F.Normalize(world.Right);
+                turn.Up = Vector3F.Normalize(world.Up);
+                turn.Forward = Vector3F.Normalize(world.Forward);
+                return turn;
             }
         }
 
@@ -235,7 +280,10 @@ namespace Adamantium.ECS.Components
         ///Rotate camera around X and Y axis.
         ///</summary>
         ///<remarks>
-        ///Angles must be in degrees.
+        ///Angles must be in degrees. A free camera turns as an editor's does: about the world's vertical, and up or down
+        ///about its own right short of straight up or down, so its horizon stays level (so do <see cref="RotateRight"/>
+        ///and <see cref="RotateUp"/>). <see cref="IsIsometric"/>, it only goes round the point it looks at, its angle
+        ///down kept, and <see cref="RotateForward"/> leaves it.
         ///</remarks>
         public abstract void RotateRelativeXY(float angleX, float angleY);
 
@@ -317,7 +365,8 @@ namespace Adamantium.ECS.Components
         /// <summary>
         /// Flies, keeping the way it looks, over <paramref name="time"/> milliseconds to where
         /// <paramref name="lookAtObject"/> fills the view with <see cref="FramingMargin"/> to spare; an object with no
-        /// bounds is looked at from a few units away.
+        /// bounds is looked at from a few units away. That distance becomes the <see cref="FocusDistance"/>, and a flat
+        /// view is scaled to show the object as large.
         /// </summary>
         public abstract void JumpToObject(Entity lookAtObject, int time);
 

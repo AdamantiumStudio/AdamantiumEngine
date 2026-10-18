@@ -7,6 +7,66 @@ All packages share one version.
 
 ### Added
 
+- `Entity.Source` and `SceneData.Source`: the file an entity was made from, as it was asked for. A model loaded through
+  the content manager is named by its file (`SceneDataContentReader`) and keeps the path here; it was named by the
+  whole path.
+- `Component.IsExpanded` and `Entity.IsExpanded`: whether an inspector shows the object's section open, each object its
+  own; open to begin with.
+- A camera's projection changes smoothly: setting `CameraBase.ProjectionType` flows from the old projection into the
+  new over `ProjectionTransitionTime` milliseconds (300; 0 switches at once), keeping the plane at `FocusDistance` - a
+  third-person camera's `Radius` - the same size on screen all the way, as Unity's scene view does. Coming back from a
+  zoomed flat view, the camera steps along its view to where the perspective shows that plane as large. A projection
+  set before a camera's first frame is taken as it is.
+- `CameraBase.IsIsometric`: the camera looks down a cube's diagonal, whatever its projection - orthographic, the
+  isometric view of drawings; perspective, the same angle with depth. A free camera turns smoothly to the diagonal
+  nearest to where it looks, about the point at its focus distance, and can turn on from there.
+- `CameraBase.OrthoScale`: an orthographic view's zoom, scaling its projection along X and Y and never Z,
+  so nothing is clipped away however close it comes, as a CAD view zooms. The wheel multiplies it by `ZoomStep` a
+  notch; going flat from a perspective sets it to show the focus plane as large, and `JumpToObject` to show the object
+  as large. `JumpToObject` also makes its distance the focus distance.
+- A camera hung on another entity, or taken off one, travels from where it stood and looked to its new place and view
+  over `CameraBase.HostChangeTime` milliseconds (250; 0 jumps), as `WorldPosition` and its view show it.
+- `EntityManager.Cameras`: the world's cameras in a group of their own, wherever they hang - an entity with a camera
+  joins as its tree joins the world and leaves with it; `EntityGroup.Count`. Every camera of the group moves on each
+  frame, not only those an output shows: a third-person camera follows its subject, a hung one travels.
+- `EntityIcons` draws a camera's view beside its icon: a pyramid for a perspective view, as wide as its field of view,
+  or a box for a flat one, running where the camera looks, with a mark over its top edge
+  (`CameraFrustumTemplate`).
+- `PlacementTool` with no ghost picks what a click lands on (`Under`), drawing only its `Icon`, if it has one: a pick
+  of what to place onto.
+- Forward+ clusters follow a flat or flowing projection, and the first one reaches behind the camera, as a flat view
+  sees what is there.
+- A free camera with no owner turns with its entity: the rotation tool turns its view, and its view turns the entity.
+- Leaving an isometric view, a camera turns back to where it looked before it, unless it was turned meanwhile.
+- `CameraBase.IsLocked`: the user's mouse and keys leave the camera where it stands, even looked through
+  (`Observatory.Controls`).
+- The middle mouse button drags a free camera across its screen plane with the pointer, as far as the plane at its
+  focus distance moves under it.
+- In a flat view the ground grid reaches past all the view shows, fading only off screen.
+- `Universe.Fps`: the frames a universe actually runs a second, beside what its rendering could sustain (`RenderFps`);
+  0 while it is paused.
+- `Transform.StayInWorldUnder(newOwner)`: rewrites an entity's position, rotation and scale for the owner it is about
+  to hang on, so it stays where it stands in the world - as an entity dragged into a group in a hierarchy does.
+- `Transform.Angles`: the rotation in degrees about X, Y and Z, as an inspector types it; the angles set come back as
+  set until something else turns the entity. `QuaternionF.ToYawPitchRoll` takes a rotation apart into the angles
+  `RotationYawPitchRoll` makes it from.
+- `Selection` holds several entities: `Items`, the current one last; `Select`, `Add`, `Remove`, `Contains`.
+  `Current` stays the one chosen last, and setting it selects it alone. Every selected entity is outlined, round their
+  joint silhouette (`EditorOverlayProcessor.DrawOutline` takes several).
+- A click with Shift adds what it lands on to the selection, with Control takes it out. `SelectTool` draws a frame
+  across the screen from a press on nothing, selecting CAD style (`ScreenFrame`): drawn to the right, solid and blue,
+  what lies wholly inside; to the left, dashed and green, whatever it touches - with Shift adding, Control taking out.
+  It takes what a click would (`ToolsService.PickEntities`, `EditorProcessor.PickEntities`): the scene's parts with a
+  form, by their points and triangles on screen, and the icons of lights, cameras and markers.
+- The move, rotation and scale tools work several selected entities together, about their common center
+  (`ToolProcessor.WorksGroups`).
+- `ToolProcessor.PressedOnNothing` and `ContinueGesture`: a tool's own gesture begun from a press on nothing.
+- The ground grid's axes are drawn as lines, seen from any side, and so are its lines while the plane is seen edge
+  on - the eye in it, or a flat view along it.
+- `CameraBase.OrthoNear` and `OrthoFar` (-10 000 and 10 000): an orthographic view's planes, behind the
+  camera and ahead, set apart from a perspective's.
+- A first-person camera looks where its host faces, turned by its own `Rotation`, and keeps its view when it is freed;
+  it stood still.
 - Color glyphs of 'SVG': the document's `<style>` sheets style its elements, by tag, `*`, `.class`, `#id` and their
   compounds, as CSS cascades them - an `!important` declaration of the `style` attribute, then of the sheet, then the
   `style` attribute, the sheet by specificity and order, and the presentation attribute last; selectors with
@@ -83,8 +143,10 @@ All packages share one version.
 
 - `ForwardPlusRenderingProcessor.Display` (`ViewDisplay`): a view draws its meshes shaded, as wireframes, or shaded
   with the wireframe over them, in `WireColor`. With `FollowsEditorDisplay` on, as in an editor, an entity's
-  `EditorDisplay` sets how its subtree is drawn - as the view, only as a wireframe, or only as its collider's box, with
-  `WireOver` adding the wireframe to a shaded mesh; a part's own setting overrides its owner's. A game leaves it off.
+  `EditorDisplay` sets how its subtree is drawn (`EntityDisplay`) - as the view, or in one of the view's own ways in its
+  place, either way (`Shaded`, `Wireframe`, `ShadedWireframe`), or only as its collider (`Collider`)
+  (`ForwardPlusRenderingProcessor.Drawn`); a part's own setting overrides its owner's. A game leaves it off.
+  `ShowColliders` draws every collider, besides those each `Collider.DisplayCollider` shows.
   Over a shaded mesh the wireframe is drawn in the same pass (`ForwardPlusWireEffect`), from where each pixel lies in
   its triangle, smooth and `WireWidth` pixels wide, on a GPU with VK_KHR_fragment_shader_barycentric
   (`MainGraphicsDevice.FragmentBarycentricSupported`); without it, and for a wireframe alone, as lines of one pixel,
@@ -570,6 +632,109 @@ All packages share one version.
 
 ### Fixed
 
+- A free third-person orbit stays where it is when its host turns: its offset is the view's, in the world, turned back
+  by the host's own turn. It swung round with the host while its view stayed, so it looked away, and the rotation tool,
+  used while looking through it, chased the swing and shook the camera.
+- Placing an object, the pointer leaving the scene - above the horizon, past the grid - leaves the ghost where it last
+  touched the scene; with an eye standing on the ground, which the pointer never meets ahead, the ghost goes on the
+  ground under what the pointer shows at the camera's focus (its subject, for an orbit; `PlacementTool.UnderFocus`),
+  nothing placed out of view. The ghost vanished there, and from an eye on the ground nothing could be placed.
+- In a flat view the ground grid shows whole from the screen's near edge and fades only far off, as ground does toward
+  a horizon in a perspective (`GroundGrid.CenterFor`, `GroundGridLayout.Center`); looking straight down it lies round
+  what the camera looks at. It lay round the eye, often far behind what a flat view shows, reached by how low the view
+  lay, and came out a wall of stripes or a band faded at both ends with its axis broken off. Its lines drawn edge-on
+  show only in a perspective, where they fold into one line toward the horizon; a flat view squeezed them into a band.
+- The ground grid's lines take their place as they are drawn, from the camera drawing them; placed in the tools'
+  update, they kept the eye of before a camera moved later in the frame, and doubled beside the cells.
+- Picking what to place onto - a camera's host - outlines what the click would take, and with Alt takes the whole a
+  part belongs to, its root (`PlacementTool.Under`); nothing showed which part was meant, and a model's root could not
+  be picked in the scene.
+- `Camera.Reorbit`: an orbiting camera put back round its subject at once - a locked one turning its view with it -
+  which the tools' update does after a tool moved or turned what it orbits; until its next frame the camera was swung
+  along, and the view doubled while turning. A camera locked behind a turned host looks at it: its offset was turned
+  by the host twice.
+- `Material`, `AnimationComponent` (its key frames, speed, pause and option), `AnimationController.ControllerId` and
+  `CameraBase.Velocity` say when they change (`[Bindable]`), as the other components do: an inspector showing them
+  did not follow a change made elsewhere.
+- The ground grid's axes, and its lines seen edge-on, are hidden behind what stands on the ground, as its cells are;
+  they were drawn over it (`EditorOverlayProcessor.DrawFlatBehindScene`).
+- Panning with the middle button keeps what was under the pointer under it: the camera moves by the depth of what the
+  press landed on, else of its focus; it moved by its focus only, and lagged behind the pointer over a far model.
+- The wheel zooms a free camera evenly: a notch makes what it looks at `ZoomStep` times larger however near or far,
+  coming that much nearer the point at its focus distance - in perspective by moving, the point pushed on ahead within
+  a metre of it, in an orthographic view by scaling, between a millionth and a million. It moved a perspective camera a fixed distance a notch, a little for what was far and a lot for what was
+  near, while an orthographic view scaled by `ZoomStep`, so the two zoomed far apart.
+- A picture laid on a generated shape reads as on screen, seen from outside: u to the right, v down, and on a flat cap
+  of a cube, plane, cylinder, cone or tube its top away from a camera in front, seen from above. A rectangle's
+  coordinates run from 0 to 1 across it, from its own shape, whatever transform places it; they ran from -0.5, so the
+  picture's corners met in its middle. A cube's, plane's, ellipse's, polygon's and line's picture was turned upside
+  down, an arc's, a cylinder's and cone's top cap and a torus mirrored, a tube upside down, its outside mirrored and its
+  caps' coordinates past 1. A cylinder's and cone's side meets itself at the back, as a sphere's does; it met in
+  front. (The teapot is laid as before.) A geosphere's picture comes round its back without a smear and meets at its poles: its seam was left unmade,
+  and its poles took their u from the vertices' positions, on copies their triangles never used. It carries the exact
+  normals of its shape, as the UV sphere does.
+- A torus, and a cone's or cylinder's side, have no triangles from their last ring back to their first: they had no
+  area.
+- A rectangle, ellipse, polygon, arc and line show their front to a camera in front of them, and a geosphere outward
+  at every subdivision, so culling the back keeps them: the flat ones were wound the other way, toward -Z, taken for
+  the front by mistake, and each subdivision of a geosphere turned its triangles over.
+  `Mesh.CalculateNormals` points normals out of the front, the side a triangle is clockwise on screen from, as the GPU
+  takes it; they pointed out of the back - into a cube, down from a plane. An imported model is wound with the front
+  its file meant clockwise (`ConverterBase` turns the winding round after the axis change, into the engine's axes):
+  it kept the file's counter-clockwise front, and showed its inside once its back was culled. The scene's shading hid
+  all of this, turning a normal to the eye and culling nothing; the editor's lit overlay pass does not turn it.
+  An arc going counter-clockwise faces the camera too, its inner point first. A mirror keeps the front outside:
+  `Mesh.ApplyTransform` turns the triangles back over, `Mesh.ReverseWinding` turns a strip over too (its first point
+  of each run said twice), a rectangle placed by a mirror is turned over, and `Mesh.Merge` turns over a mirrored
+  instance's triangles, listed or in a strip; a mirrored cube, arc or rectangle showed only its back.
+- A camera a view is seen through, selected, takes no tool: its handles stood in its own eye, and a flat view, seeing
+  behind its eye too, showed them as a disc over the whole view and turned the camera by them.
+- A polyline is a band along its points, centered on them, a quad a segment listed as triangles facing the camera,
+  its picture running along the whole line: it was a strip parted by restarts, on one side of the line, facing away.
+- A teapot's patches read down where they face out from its axis, whatever the tessellation: one whose picture ran up
+  there is turned round, u with v - its spout and bottom; the inside of the rim, under the lid, has no say. Only the
+  spout's curling lip still reads up in part. A teapot carries its patches' own normals, taken a step inside a patch
+  where its control points meet, in place of ones averaged off its triangles.
+- A new `Material` is an opaque grey (`Material.DefaultDiffuseColor`), and one imported with no diffuse color of its
+  own - its diffuse given as a texture, say - keeps it: it was clear black, which an inspector shows as nothing and a
+  color picked for it kept clear. Such a material no longer follows `ForwardPlusRenderingProcessor.UntexturedColor`,
+  the same grey, which only a material with a black diffuse still takes.
+- A new `SphereShape` is a UV sphere: its `Type` was none of the kinds - drawn as a UV sphere, but shown as nothing.
+- A capsule made by `ShapeTemplate` is held by a `CapsuleCollider` (`ProceduralShape.CreateCollider`); it was a box.
+- A capsule's and a sphere's outline - what a `CapsuleCollider` and a `SphereCollider` are drawn with - is a list of
+  closed loops of segments: as strips parted by restarts, which the overlay does not turn on, its loops were drawn
+  joined by lines to a point past the end of its vertices.
+- A `PolygonShape` and a `PolygonTemplate` stay in their size: the polygon generator takes radii, which they gave their
+  size as, and came out twice as large as the other shapes. The generator's parameter is named `radii`.
+- A flat view looking low at the ground grid shows it whole round what it looks at: the grid reached as far as the view
+  is wide, while the screen's height covers ground the longer the lower the view, so it faded out short of the focus
+  and its axes ended in the open.
+- Placing with the eye on the ground - told by the eye's height now, not by how near the ground under the pointer is -
+  puts the object under the pointer at the focus. The point last touched is held while the pointer is off the scene
+  only while it is in view, and not when picking onto something, which a held point is not.
+- Moving a free camera along an orthographic view (W and S) zooms it as moving along a perspective does; it moved the
+  camera along its view, which a flat view does not show. A free camera moved along its view keeps looking at the same
+  point (`FocusDistance` follows), so going flat and back keeps what it looks at as large.
+- A free camera turns as an editor's does: about the world's vertical, and up or down about its own right short of
+  straight up or down, so its horizon stays level; its turns about its own axes gathered a roll, and it toppled over.
+  An isometric one only goes round the point it looks at, its angle down kept, and takes no roll.
+- A ring of the rotation and pivot tools turns, near it, by the angle the pointer goes round the ring's center in the
+  ring's own plane, so following the ring round turns a whole turn a loop, tilted or not and however fast; past two
+  radii, by the pointer's way along the ring's tangent where it left, as fast however far it is pulled. By the tangent
+  where it was grabbed, a pointer past a quarter turn turned the target back. A ring seen nearly edge-on, in a flat view
+  too, still turns by that tangent.
+- A face of the orientation cube turns the camera there for good: the camera took back its entity's old turn the
+  moment the animation ended.
+- The pointer over a light's, a camera's or a marker's icon outlines the icon, in a color of its own
+  (`SelectionOutline.IconHoverColor`, sky blue: the icons are white), so it reads as something a click takes
+  (`EntityIcons.IconOf`, `EditorOverlayProcessor.DrawOutlineAlone`).
+- A group's icon in the scene is a tree of cubes, one over two, each cube three faces apart, as in a hierarchy; it was
+  a folder.
+- A hosted universe keeps time by its own frames, a gap without frames counting as a quarter of a second at most: it
+  took the frame time of the loop hosting it, which runs at its own rate and sleeps while idle, so camera moves and
+  transitions jerked and ran too fast, and the `AppTime.Fps` its services got read wrong.
+- Mouse look turns a camera by the distance the mouse moved, the same at any frame rate; it was scaled by the frame
+  time as well, and turned slower the faster the frames came.
 - A `use` inside an 'SVG' glyph's `clipPath` takes its target's own transform, and a `clip-rule` set on the `clipPath`
   reaches the shapes in it; the clip stood where the target would without its transform, and the rule was read only
   from each shape. An 'SVG' glyph under an ancestor with `display="none"` draws nothing, and an ancestor's `clip-path`
@@ -611,7 +776,6 @@ All packages share one version.
   line it put the caret at the line's end.
 - A WOFF or WOFF2 font's tables know their length, as a TrueType font's do: those read by it - `kern`, COLR version 1,
   JSTF - read as empty, so such a font lost its kerning, its color glyphs and its justification glyphs.
-
 - An effect compiled from its file finds a header by its path from the file's folder (`#include "Includes/X.fxh"`),
   nested headers included; only those beside it were found. Headers are `.fxh` only: `.hlsl` ones beside it are no
   longer gathered. A request names a header by its whole name: `#include "Tint.fxh"` took the first header whose path
@@ -959,6 +1123,7 @@ All packages share one version.
 
 ### Changed
 
+- `CameraBase.ZoomStep` is 1.08 a wheel notch, in either projection; 1.15 jumped.
 - A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
   the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text
   whose height is its own (no height given) is not moved at all: it was moved by half its descent under `Center` and by
@@ -973,8 +1138,7 @@ All packages share one version.
   turns about that origin; the tools' handles sit there too. It moved the model's center there instead, through a
   pivot that shifted the position: the F-15, its center 122 centimeters above its origin, stood at y = 122, and setting
   its y to 0 sent it up. Each part below the root still turns about its own center.
-- A universe's output camera opens above the ground, at (0, -8, -20), looking at the scene's center. It stood on the
-  ground, which it then saw only edge-on: the grid did not show until the camera was first moved.
+- A universe's output camera opens at (0, -3, -20), three metres above the ground, looking at the scene's center.
 - The observable properties of `Entity` and of the components - `Light`, `Transform`, `CameraBase`, `Collider`,
   `CapsuleCollider`, `ActivatableComponent`, `MeshMetadata` - are generated by the MVVM generator (`[Bindable]`), their
   side effects in `OnXChanged` hooks and `Transform.Scale` raised through `[Affects]`; they behave as before.
@@ -1065,6 +1229,11 @@ All packages share one version.
 
 ### Removed
 
+- `CameraBase.WheelVelocity`: a wheel notch zooms by `ZoomStep` now, near or far, not a distance of travel.
+- `Camera.OrthoScaleFactor`, a field only the orthographic projection divided its size by; `CameraBase.OrthoScale`
+  zooms it now. `CameraBase.IsometricProjection` and `Camera.BuildIsometricProjection`: an oblique matrix that flattened
+  depth to nothing and had no near or far plane. `CameraProjectionType.Isometric`: the isometric angle is
+  `CameraBase.IsIsometric` now, apart from the projection; an orthographic projection with it is the isometric view.
 - `MeshMetadata` and `MeshData.Metadata` / `MetadataChanged`, with the primitive templates' `FillMetadata`: one bag of
   every shape's numbers that the templates filled and nothing read. A shape's parameters are its `ProceduralShape` now.
 - `FontRenderer.UseDirectTextDraw`, `DrawLayout`, `SetState`, `RestoreState` and `RenderScale`: the old way of drawing a

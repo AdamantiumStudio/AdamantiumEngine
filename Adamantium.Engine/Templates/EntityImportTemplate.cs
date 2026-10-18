@@ -56,6 +56,7 @@ public class EntityImportTemplate : IEntityTemplate
 
             var nameToEntityId = new Dictionary<string, Entity>();
             owner.Name = sceneData.Name;
+            owner.Source = sceneData.Source;
             owner.IconKey = EntityIconKeys.Model;
             nameToEntityId.Add(sceneData.Models.ToString(), owner);
             var stack = new Stack<SceneData.Model>();
@@ -223,7 +224,10 @@ public class EntityImportTemplate : IEntityTemplate
             {
                 var material = new Material();
                 material.AmbientColor = materialData.AmbientColor;
-                material.DiffuseColor = materialData.DiffuseColor;
+                if (materialData.DiffuseColor != default)
+                {
+                    material.DiffuseColor = materialData.DiffuseColor;
+                }
                 material.SpecularColor = materialData.SpecularColor;
                 material.Emission = materialData.Emission;
                 material.Reflective = materialData.Reflective;

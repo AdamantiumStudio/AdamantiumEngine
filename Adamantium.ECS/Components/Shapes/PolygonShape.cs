@@ -22,5 +22,5 @@ public partial class PolygonShape : ProceduralShape
     partial void OnSizeChanged(Vector2 value) => Changed();
 
     protected override Mesh Generate() =>
-        Shapes.Polygon.GenerateGeometry(GeometryType.Solid, Positive(Size), TessellationFrom(3));
+        Shapes.Polygon.GenerateGeometry(GeometryType.Solid, Positive(Size) / 2, TessellationFrom(3));
 }

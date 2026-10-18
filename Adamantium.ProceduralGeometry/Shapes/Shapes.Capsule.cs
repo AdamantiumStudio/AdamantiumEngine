@@ -161,78 +161,37 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double depth,
                 int tessellation)
             {
-                var primitiveType = PrimitiveType.LineStrip;
                 var vertices = new List<Vector3>();
                 var indices = new List<int>();
-                var center = Vector3F.Zero;
-                int lastIndex = 0;
-                var topOffset = Vector3.UnitY * height / 2;
+                var half = height / 2;
 
-                //draw top hemicircle
+                var profile = new List<Vector3>();
                 for (int i = 0; i <= tessellation / 2; ++i)
                 {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = topOffset.X + radius * (float) Math.Cos(angle);
-                    var y = topOffset.Y + radius * (float) Math.Sin(angle);
-                    vertices.Add(new Vector3(x, y, 0));
-                    indices.Add(lastIndex++);
+                    var angle = Math.PI * 2 / tessellation * i;
+                    profile.Add(new Vector3(radius * Math.Cos(angle), half + radius * Math.Sin(angle), 0));
                 }
 
-                //draw bottom hemicircle
                 for (int i = tessellation / 2; i <= tessellation; ++i)
                 {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = -topOffset.X + radius * (float) Math.Cos(angle);
-                    var y = -topOffset.Y + radius * (float) Math.Sin(angle);
-                    vertices.Add(new Vector3(x, y, 0));
-                    indices.Add(lastIndex++);
+                    var angle = Math.PI * 2 / tessellation * i;
+                    profile.Add(new Vector3(radius * Math.Cos(angle), -half + radius * Math.Sin(angle), 0));
                 }
 
-                indices.Add(0);
-                indices.Add(PrimitiveRestartValue);
-                var startPos = vertices.Count;
-
-                var rot = Quaternion.RotationAxis(Vector3.UnitY, MathHelper.DegreesToRadians(90));
-                var rotMatrix = Matrix4x4.RotationQuaternion(rot);
-                var secondPart = new List<Vector3>();
-                for (int i = 0; i < vertices.Count; i++)
+                var quarter = Matrix4x4.RotationY(MathHelper.DegreesToRadians(90));
+                var top = new List<Vector3>();
+                var bottom = new List<Vector3>();
+                for (int i = 0; i < tessellation; ++i)
                 {
-                    var pos = Vector3.TransformCoordinate(vertices[i], rotMatrix);
-                    secondPart.Add(pos);
-                    indices.Add(lastIndex++);
+                    var angle = Math.PI * 2 / tessellation * i;
+                    top.Add(new Vector3(radius * Math.Cos(angle), -half, radius * Math.Sin(angle)));
+                    bottom.Add(new Vector3(radius * Math.Cos(angle), half, radius * Math.Sin(angle)));
                 }
 
-                vertices.AddRange(secondPart);
-
-                indices.Add(startPos);
-                indices.Add(PrimitiveRestartValue);
-
-
-                for (int i = 0; i <= tessellation; ++i)
-                {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = center.X + radius * (float) Math.Cos(angle);
-                    var y = center.Y + radius * (float) Math.Sin(angle);
-
-                    vertices.Add(new Vector3(x, -topOffset.Y, y));
-                    indices.Add(lastIndex++);
-                }
-
-                indices.Add(PrimitiveRestartValue);
-
-                for (int i = 0; i <= tessellation; ++i)
-                {
-                    float angle = (float) Math.PI * 2 / tessellation * i;
-
-                    var x = center.X + radius * (float) Math.Cos(angle);
-                    var y = center.Y + radius * (float) Math.Sin(angle);
-
-                    vertices.Add(new Vector3(x, topOffset.Y, y));
-                    indices.Add(lastIndex++);
-                }
+                AddLoop(vertices, indices, profile);
+                AddLoop(vertices, indices, profile.Select(point => Vector3.TransformCoordinate(point, quarter)).ToList());
+                AddLoop(vertices, indices, top);
+                AddLoop(vertices, indices, bottom);
 
                 for (int i = 0; i < vertices.Count; i++)
                 {
@@ -240,11 +199,22 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
 
                 var mesh = new Mesh();
-                mesh.SetTopology(primitiveType).
+                mesh.SetTopology(PrimitiveType.LineList).
                     SetPoints(vertices).
                     SetIndices(indices);
 
                 return mesh;
+            }
+
+            private static void AddLoop(List<Vector3> vertices, List<int> indices, List<Vector3> loop)
+            {
+                var start = vertices.Count;
+                vertices.AddRange(loop);
+                for (int i = 0; i < loop.Count; i++)
+                {
+                    indices.Add(start + i);
+                    indices.Add(start + (i + 1) % loop.Count);
+                }
             }
         }
     }

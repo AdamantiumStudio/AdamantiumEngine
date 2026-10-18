@@ -20,5 +20,7 @@ public partial class CapsuleShape : ProceduralShape
 
     partial void OnSizeChanged(Vector3 value) => Changed();
 
+    public override Collider CreateCollider() => new CapsuleCollider();
+
     protected override Mesh Generate() => Shapes.Capsule.GenerateGeometry(GeometryType.Solid, Positive(Size), TessellationFrom(8));
 }

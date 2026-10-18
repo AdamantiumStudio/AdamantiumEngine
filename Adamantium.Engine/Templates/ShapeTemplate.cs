@@ -7,7 +7,7 @@ namespace Adamantium.Engine.Templates;
 
 /// <summary>
 /// An entity drawing a <see cref="ProceduralShape"/>: the shape itself, kept on it to change later, the mesh made from
-/// it, and a box collider round it.
+/// it, and the collider the shape asks for round it.
 /// </summary>
 public class ShapeTemplate : IEntityTemplate
 {
@@ -21,7 +21,7 @@ public class ShapeTemplate : IEntityTemplate
     public Task<Entity> BuildEntity(Entity owner)
     {
         owner.AddComponent(new MeshData { Mesh = shape.Build() });
-        owner.AddComponent(new BoxCollider());
+        owner.AddComponent(shape.CreateCollider());
         owner.AddComponent(shape);
         owner.IconKey = EntityIconKeys.Mesh;
         return Task.FromResult(owner);

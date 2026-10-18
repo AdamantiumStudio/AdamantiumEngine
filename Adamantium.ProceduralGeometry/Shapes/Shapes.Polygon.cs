@@ -11,7 +11,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
         {
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
-                Vector2 diameter,
+                Vector2 radii,
                 int tessellation = 40,
                 double startAngle = 0,
                 Matrix4x4? transform = null)
@@ -25,19 +25,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 switch (geometryType)
                 {
                     case GeometryType.Solid:
-                        mesh = GenerateSolidGeometry(diameter, tessellation, startAngle);
+                        mesh = GenerateSolidGeometry(radii, tessellation, startAngle);
                         break;
                     // BOTH means both: the filled mesh AND the outline contour a stroke reads. It used to fall through to
                     // the outline alone, so anything asking for Both got a line strip and no fill at all - which is what a
                     // filled polygon drawing as a thin ring turned out to be.
                     case GeometryType.Both:
                     {
-                        mesh = GenerateSolidGeometry(diameter, tessellation, startAngle);
-                        mesh.AddContour(Corners(diameter, tessellation, startAngle), true);   // a closed loop
+                        mesh = GenerateSolidGeometry(radii, tessellation, startAngle);
+                        mesh.AddContour(Corners(radii, tessellation, startAngle), true);   // a closed loop
                         break;
                     }
                     default:
-                        mesh = GenerateOutlinedGeometry(diameter, tessellation, startAngle);
+                        mesh = GenerateOutlinedGeometry(radii, tessellation, startAngle);
                         break;
                 }
 
@@ -77,19 +77,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var y = center.Y + diameter.Y * (float)Math.Sin(angle);
                     vertices.Add(new Vector3(x, y, 0));
                     var uv = new Vector2F(
-                       0.5f + (float)((center.X - x) / (2 * diameter.X)),
-                       0.5f + (float)((center.Y - y) / (2 * diameter.Y)));
+                       0.5f + (float)((x - center.X) / (2 * diameter.X)),
+                       0.5f + (float)((y - center.Y) / (2 * diameter.Y)));
                     uvs.Add(uv);
                 }
 
                 int basicIndex = 0;
 
-                // Wound to face -Z, toward a camera looking along +Z.
+                // Clockwise on screen to a camera looking along +Z, the side the GPU takes for the front.
                 for (int i = 0; i < tessellation-2; i++)
                 {
                     indices.Add(basicIndex);
-                    indices.Add(i + 2);
                     indices.Add(i + 1);
+                    indices.Add(i + 2);
                 }
 
                 var mesh = new Mesh();

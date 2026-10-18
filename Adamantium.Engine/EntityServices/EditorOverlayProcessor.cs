@@ -128,6 +128,14 @@ public class EditorOverlayProcessor : RenderingProcessor
         DrawParts(ActiveCamera.ViewProjectionMatrix, true, Look.Flat);
     }
 
+    /// <summary>Draws an entity in its colors, unlit, where the scene does not stand in front of it: its meshes' own
+    /// depth test and write, as the ground grid's lines are hidden behind what stands on the ground.</summary>
+    public void DrawFlatBehindScene(Entity root)
+    {
+        Collect(root);
+        DrawParts(ActiveCamera.ViewProjectionMatrix, false, Look.Flat);
+    }
+
     /// <summary>
     /// Draws a ring - a line mesh round a circle, flat in its own space - as the circle itself, in front of everything
     /// the scene drew: each pixel's distance to the true circle, so the edge is even at any turn. The center lands on the
@@ -192,7 +200,7 @@ public class EditorOverlayProcessor : RenderingProcessor
         gridEffect.InstanceWorld.SetValue(gridWorld);
         gridEffect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         gridEffect.Phases.SetValue(gridPhases);
-        gridEffect.Layout.SetValue(new Vector4F(layout.Cell, layout.Reach, 0, 0));
+        gridEffect.Layout.SetValue(new Vector4F(layout.Cell, layout.Reach, layout.Center.X, layout.Center.Y));
         gridEffect.Lines.SetValue(new Vector4F(layout.Axes, MathF.Max(1, MathF.Round(grid.LineWidth * pointPixels)),
             grid.ShownCellPointsOrDefault * pointPixels));
         gridEffect.MinorColor.SetValue(grid.MinorColor);
@@ -223,6 +231,37 @@ public class EditorOverlayProcessor : RenderingProcessor
     public void DrawOutline(Entity root, Vector4F color, float points)
     {
         Collect(root);
+        DrawCollectedOutline(color, points);
+    }
+
+    /// <summary>
+    /// Outlines several entities and what is under each: a band <paramref name="points"/> wide round their joint
+    /// silhouette, in front of everything the scene drew.
+    /// </summary>
+    public void DrawOutline(IReadOnlyList<Entity> roots, Vector4F color, float points)
+    {
+        parts.Clear();
+        for (int i = 0; i < roots.Count; i++)
+        {
+            CollectInto(roots[i]);
+        }
+
+        DrawCollectedOutline(color, points);
+    }
+
+    /// <summary>
+    /// Outlines an entity alone, without what is under it - an icon without its rays: a band <paramref name="points"/>
+    /// wide round its silhouette, in front of everything the scene drew.
+    /// </summary>
+    public void DrawOutlineAlone(Entity entity, Vector4F color, float points)
+    {
+        parts.Clear();
+        CollectInto(entity, descend: false);
+        DrawCollectedOutline(color, points);
+    }
+
+    private void DrawCollectedOutline(Vector4F color, float points)
+    {
         if (parts.Count == 0)
         {
             return;
@@ -256,6 +295,11 @@ public class EditorOverlayProcessor : RenderingProcessor
     private void Collect(Entity root)
     {
         parts.Clear();
+        CollectInto(root);
+    }
+
+    private void CollectInto(Entity root, bool descend = true)
+    {
         root.VisitInDepth(current =>
         {
             if (!current.Visible)
@@ -266,7 +310,7 @@ public class EditorOverlayProcessor : RenderingProcessor
             var transformation = current.Transform.GetMetadata(ActiveCamera);
             if (!transformation.Enabled)
             {
-                return true;
+                return descend;
             }
 
             var color = ColorOf(current, transformation);
@@ -283,7 +327,7 @@ public class EditorOverlayProcessor : RenderingProcessor
                 parts.Add(new Part(data, transformation.WorldMatrixF, color, line || !data.Mesh.IsNormalsPresent, line));
             }
 
-            return true;
+            return descend;
         });
     }
 

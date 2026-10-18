@@ -80,6 +80,8 @@ namespace Adamantium.ECS
             }
         }
 
+        public int Count => entities.Count;
+
         public Entity this[int index]
         {
             get => entities[index];

@@ -154,6 +154,38 @@ public class EntityImportTests
         Assert.That(Find(model, part).GetComponent<Material>().SpecularColor, Is.EqualTo(specular));
     }
 
+    [Test]
+    public void ADiffuseGivenAsATexture_LeavesTheMaterialItsOpaqueGrey()
+    {
+        var scene = NewScene();
+        scene.Images.Add("paint", new SceneData.Image("paint", "no such paint.png"));
+        scene.Materials.Add("painted", new SceneData.Material { ID = "painted", DiffuseMap = "paint" });
+        var box = Box(1);
+        box.MaterialID = "painted";
+        var part = scene.CreateMesh(scene.Models, "part", "Part");
+        part.Meshes.Add(box);
+
+        var model = Import(scene, Vector3.Zero);
+
+        Assert.That(Find(model, part).GetComponent<Material>().DiffuseColor, Is.EqualTo(Material.DefaultDiffuseColor));
+    }
+
+    [Test]
+    public void ADiffuseColor_IsCarried()
+    {
+        var scene = NewScene();
+        var diffuse = new Vector4F(0.5f, 0.25f, 0, 1);
+        scene.Materials.Add("red", new SceneData.Material { ID = "red", DiffuseColor = diffuse });
+        var box = Box(1);
+        box.MaterialID = "red";
+        var part = scene.CreateMesh(scene.Models, "part", "Part");
+        part.Meshes.Add(box);
+
+        var model = Import(scene, Vector3.Zero);
+
+        Assert.That(Find(model, part).GetComponent<Material>().DiffuseColor, Is.EqualTo(diffuse));
+    }
+
     private static SceneData NewScene()
     {
         var scene = new SceneData();

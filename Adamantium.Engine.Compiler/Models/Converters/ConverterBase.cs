@@ -101,6 +101,10 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
                   destinationUpAxis = UpAxis.Y_UP_RH;
                }
                mesh.ChangeCoordinateSystem(destinationUpAxis);
+               if (destinationUpAxis == UpAxis.Y_DOWN_RH)
+               {
+                  mesh.ReverseWinding();
+               }
 
                // Only when the file gave none: averaging over triangles erases the hard edges the artist authored
                // those normals for.

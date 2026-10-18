@@ -17,6 +17,7 @@ public partial class SphereShape : ProceduralShape
     public SphereShape()
     {
         Size = new Vector3(1);
+        Type = SphereType.UVSphere;
         Tessellation = 32;
     }
 

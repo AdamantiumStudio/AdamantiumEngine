@@ -61,6 +61,9 @@ public abstract partial class ProceduralShape : ActivatableComponent
         Owner.Transform.IsWorldDirty = true;
     }
 
+    /// <summary>A new collider of the form that holds the shape best; a box, unless the shape has a closer one.</summary>
+    public virtual Collider CreateCollider() => new BoxCollider();
+
     protected abstract Mesh Generate();
 
     /// <summary>Called by a shape when one of its parameters changed.</summary>

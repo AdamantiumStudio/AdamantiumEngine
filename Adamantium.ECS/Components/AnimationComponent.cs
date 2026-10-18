@@ -4,30 +4,37 @@ using System.Linq;
 using Adamantium.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Serilog;
 
 namespace Adamantium.ECS.Components
 {
 
-    public class AnimationComponent : ActivatableComponent
+    [ViewModel]
+    public partial class AnimationComponent : ActivatableComponent
     {
         public SceneData.AnimationCollection Animations { get; set; }
 
         public SceneData.SkeletonCollection Skeletons { get; set; }
 
-        public Int32 StartingKeyFrame { get; set; }
+        [Bindable]
+        public partial Int32 StartingKeyFrame { get; set; }
 
-        public Int32 EndingKeyFrame { get; set; }
+        [Bindable]
+        public partial Int32 EndingKeyFrame { get; set; }
 
         public TimeSpan AnimationStartTime { get; set; }
 
         public Boolean IsAnimationStarted { get; set; }
 
-        public Double AnimationSpeed { get; set; }
+        [Bindable]
+        public partial Double AnimationSpeed { get; set; }
 
-        public Boolean IsPaused { get; set; }
+        [Bindable]
+        public partial Boolean IsPaused { get; set; }
 
-        public CalculateOptions Option { get; set; }
+        [Bindable]
+        public partial CalculateOptions Option { get; set; }
 
         public AnimationComponent()
         {

@@ -40,23 +40,25 @@ namespace Adamantium.Engine.CompilerTests
                 $"{pair.From} -> {pair.To}: the mesh and the matrix sent the point to different places");
         }
 
-        /// <summary>A normal the importer works out itself has to agree with the winding the mesh ENDS UP with, so
-        /// it can only be derived after the axis change. This is what ConverterBase relies on when it tells Optimize
-        /// not to compute normals.</summary>
+        private static readonly (UpAxis From, UpAxis To)[] IntoTheEngine = Pairs.Where(p => p.To == UpAxis.Y_DOWN_RH).ToArray();
+
+        /// <summary>A normal the importer works out itself points out of the side the file meant as the front. As
+        /// ConverterBase does it: the axis change, then the winding turned round - a file's front is the side it is
+        /// counter-clockwise from, the engine's the side it is clockwise from - and only then the normal, which
+        /// Optimize was told not to compute.</summary>
         [Test]
-        public void ANormalDerivedAfterTheAxisChangeAgreesWithItsFace(
-            [ValueSource(nameof(Pairs))] (UpAxis From, UpAxis To) pair)
+        public void ANormalDerivedOnImport_PointsOutOfTheFilesFront(
+            [ValueSource(nameof(IntoTheEngine))] (UpAxis From, UpAxis To) pair)
         {
             var mesh = Triangle(pair.From);
+            var front = Vector3F.Normalize(
+               Vector3F.TransformNormal(Vector3F.Normalize(Facing(mesh)), AxisConversion.Between(pair.From, pair.To)));
+
             mesh.ChangeCoordinateSystem(pair.To);
+            mesh.ReverseWinding();
             mesh.CalculateNormals();
 
-            var a = (Vector3F)mesh.Points[mesh.Indices[0]];
-            var b = (Vector3F)mesh.Points[mesh.Indices[1]];
-            var c = (Vector3F)mesh.Points[mesh.Indices[2]];
-            var face = Vector3F.Normalize(Vector3F.Cross(b - a, c - a));
-
-            Assert.That(Vector3F.Dot(face, Vector3F.Normalize(mesh.Normals[0])), Is.GreaterThan(0.99f),
+            Assert.That(Vector3F.Dot(front, Vector3F.Normalize(mesh.Normals[0])), Is.GreaterThan(0.99f),
                 $"{pair.From} -> {pair.To}");
         }
 

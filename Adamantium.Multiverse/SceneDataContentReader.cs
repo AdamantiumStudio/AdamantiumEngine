@@ -29,7 +29,8 @@ public class SceneDataContentReader : IContentReader
 
         if (scene != null)
         {
-            scene.Name = parameters.AssetName;
+            scene.Name = Path.GetFileName(parameters.AssetName);
+            scene.Source = parameters.AssetName;
             PointImagesAtTheModel(scene, parameters.AssetPath);
         }
 

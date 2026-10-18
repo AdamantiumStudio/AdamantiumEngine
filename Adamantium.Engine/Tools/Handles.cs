@@ -60,6 +60,12 @@ public abstract class Handles
         handle?.TraverseInDepth(part => part.IsSelected = true);
     }
 
+    internal static Vector3 PivotOf(Entity target) => PivotInWorld(target);
+
+    internal static Vector3F ParentVector(Entity target, Vector3F worldVector) => ToParent(target, worldVector);
+
+    internal static QuaternionF WorldRotationOf(Entity target, QuaternionF local) => RotationInWorld(target, local);
+
     protected static Vector3 PivotInWorld(Entity target)
     {
         var pivot = target.Transform.Pivot;
@@ -253,14 +259,31 @@ public abstract class Handles
     }
 
     /// <summary>
-    /// Turning by a ring, as in Unity: the pointer's way along the ring's tangent where it was grabbed, a radian per
-    /// radius on screen - even for a ring seen edge-on.
+    /// Turning by a ring: near it, by the angle the pointer goes round the ring's center in the ring's own plane, so
+    /// following the ring round turns a whole turn a loop, tilted or not, however fast the pointer moves; past two radii,
+    /// by the pointer's way along the ring's tangent where it left, as fast however far it is pulled. A ring seen nearly
+    /// edge-on draws no circle to follow: it turns by the pointer's way along its tangent where it was grabbed, a radian
+    /// per radius on screen, as in Unity.
     /// </summary>
     protected sealed class RingDrag
     {
+        private const float EdgeOn = 0.25f;
+        private const float FollowedRadii = 2;
+        private const float NearCenterPixels = 4;
+
         private Vector2F startPixel;
         private Vector2F tangentOnScreen;
         private float radiusInPixels;
+        private bool round;
+        private Vector3F axisUnit;
+        private Vector3F alongGrab;
+        private Vector3F acrossGrab;
+        private float ringRadius;
+        private float lastTurn;
+        private bool following;
+        private Vector2F lastPixel;
+        private Vector2F pixelsPerRadian;
+        private float swept;
 
         /// <summary>
         /// Grabs <paramref name="ring"/>, turning about <paramref name="axis"/> in the camera-relative space, where
@@ -287,6 +310,25 @@ public abstract class Handles
             {
                 tangentOnScreen = Vector2F.Normalize(onScreen);
             }
+
+            var flat = ray.Camera.ProjectionMatrix.M44 > 0.5f;
+            var sight = flat ? Vector3F.Normalize((Vector3F)ray.Camera.Forward) : Vector3F.Normalize(origin);
+            axisUnit = Vector3F.Normalize(axis);
+            round = Math.Abs(Vector3F.Dot(axisUnit, sight)) >= EdgeOn && radial.LengthSquared() > 1e-12f;
+            if (!round)
+            {
+                return;
+            }
+
+            ringRadius = radial.Length();
+            alongGrab = radial / ringRadius;
+            acrossGrab = Vector3F.Cross(axisUnit, alongGrab);
+            var grabbedTurn = TurnOf(ray.Ray, origin, out _);
+            lastTurn = grabbedTurn ?? 0;
+            following = grabbedTurn != null;
+            pixelsPerRadian = PixelsPerRadian(lastTurn, origin, ray.Camera);
+            lastPixel = startPixel;
+            swept = 0;
         }
 
         /// <summary>The turn so far, in radians; 0 when the grab found no way along the ring on screen.</summary>
@@ -297,7 +339,56 @@ public abstract class Handles
                 return 0;
             }
 
-            return Vector2F.Dot(PointerPixel(ray, origin) - startPixel, tangentOnScreen) / radiusInPixels;
+            var pixel = PointerPixel(ray, origin);
+            if (!round)
+            {
+                return Vector2F.Dot(pixel - startPixel, tangentOnScreen) / radiusInPixels;
+            }
+
+            var step = 0f;
+            var nearCenter = (pixel - ScreenSpace.ToPixel(origin, ray.Camera)).Length() < NearCenterPixels;
+            if (nearCenter)
+            {
+                following = false;
+            }
+            else if (TurnOf(ray.Ray, origin, out var away) is { } turn && away <= ringRadius * FollowedRadii)
+            {
+                step = following ? MathF.IEEERemainder(turn - lastTurn, 2 * MathF.PI) : 0;
+                lastTurn = following ? lastTurn + step : turn;
+                following = true;
+                pixelsPerRadian = PixelsPerRadian(turn, origin, ray.Camera);
+            }
+            else
+            {
+                var length = pixelsPerRadian.LengthSquared();
+                step = length > 1e-6f ? Vector2F.Dot(pixel - lastPixel, pixelsPerRadian) / length : 0;
+                following = false;
+            }
+
+            swept += step;
+            lastPixel = pixel;
+            return swept;
+        }
+
+        private float? TurnOf(in Ray ray, Vector3F origin, out float away)
+        {
+            away = float.MaxValue;
+            if (!OnPlane(ray, origin, axisUnit, out var hit))
+            {
+                return null;
+            }
+
+            var inPlane = hit - origin;
+            away = inPlane.Length();
+            return away < 1e-6f ? null : MathF.Atan2(Vector3F.Dot(inPlane, acrossGrab), Vector3F.Dot(inPlane, alongGrab));
+        }
+
+        private Vector2F PixelsPerRadian(float turn, Vector3F origin, CameraBase camera)
+        {
+            const float step = 0.01f;
+            var at = origin + (alongGrab * MathF.Cos(turn) + acrossGrab * MathF.Sin(turn)) * ringRadius;
+            var on = origin + (alongGrab * MathF.Cos(turn + step) + acrossGrab * MathF.Sin(turn + step)) * ringRadius;
+            return (ScreenSpace.ToPixel(on, camera) - ScreenSpace.ToPixel(at, camera)) / step;
         }
 
         private static Vector2F PointerPixel(in PickRay pick, Vector3F origin)

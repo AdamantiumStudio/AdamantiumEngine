@@ -63,13 +63,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 if (shapeType == GeometryType.Solid)
                 {
-                    // Inner point first, so the strip faces -Z, toward a camera looking along +Z.
+                    // Outer point first going clockwise, inner first the other way, so the strip is clockwise on screen
+                    // to a camera looking along +Z, the side the GPU takes for the front.
+                    var (first, second) = isClockWise ? (0.0, thickness) : (thickness, 0.0);
                     for (int i = 0; i <= tessellation; ++i)
                     {
-                        vertex = CreatePoint(center, radiusX, radiusY, thickness, angle);
+                        vertex = CreatePoint(center, radiusX, radiusY, first, angle);
                         vertices.Add(vertex);
                         indices.Add(indices.Count);
-                        vertex = CreatePoint(center, radiusX, radiusY, 0, angle);
+                        vertex = CreatePoint(center, radiusX, radiusY, second, angle);
                         vertices.Add(vertex);
                         indices.Add(indices.Count);
                         angle += angleItem;
@@ -85,7 +87,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         var position = mesh.Points[i];
                         var uv = new Vector2(
                            0.5f + (position.X - center.X) / (2 * radiusX),
-                           0.5f - (position.Y - center.Y) / (2 * radiusY));
+                           0.5f + (position.Y - center.Y) / (2 * radiusY));
                         uvs.Add(uv);
                     }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
@@ -190,6 +191,9 @@ public class Universe : IUniverse
     /// host ticks it at.</summary>
     public Single RenderFps { get; private set; }
 
+    /// <summary>Frames the universe has actually run a second, over the last second: what the eye sees.</summary>
+    public Single Fps { get; private set; }
+
     /// <summary>
     /// Condition on which the loop will be exited
     /// </summary>
@@ -286,15 +290,31 @@ public class Universe : IUniverse
         if (IsPaused)
         {
             platform.RemoveWindowsInternal();
+            hostedFrameAt = 0;
+            Fps = 0;
             return;
         }
 
-        UpdateAppTime(time.FrameTime);
+        UpdateAppTime(HostedFrameTime());
         MakePreparations();
         Update(SimulationTime());
         ExecuteDrawSequence2(appTime);
         FrameFinished?.Invoke(this, EventArgs.Empty);
     }
+
+    // A hosted universe may run several frames to one of its host's, or one to several: its clock is its own frames.
+    // A gap without frames - a minimized window, a stalled render thread - moves it by one long frame at most.
+    private double HostedFrameTime()
+    {
+        var now = Stopwatch.GetTimestamp();
+        var elapsed = hostedFrameAt == 0 ? 0 : Stopwatch.GetElapsedTime(hostedFrameAt, now).TotalSeconds;
+        hostedFrameAt = now;
+        return Math.Min(elapsed, LongestHostedFrame);
+    }
+
+    private const double LongestHostedFrame = 0.25;
+
+    private long hostedFrameAt;
 
     /// <summary>
     /// Run the loop on the selected control
@@ -471,6 +491,7 @@ public class Universe : IUniverse
         if (fpsTime >= 1.0d)
         {
             appTime.Fps = (fpsCounter) / (Single)fpsTime;
+            Fps = appTime.Fps;
             fpsCounter = 0;
             fpsTime = 0;
         }
@@ -757,7 +778,7 @@ public class Universe : IUniverse
         var entity = new CameraTemplate().BuildEntity(
             null, $"Main camera for {output.Name}", Vector3.Zero, Vector3.ForwardLH, -Vector3.Up,
             output.Width, output.Height, 0.1f, 1000000.0f);
-        entity.Transform.Position = new Vector3(0, -8, -20);
+        entity.Transform.Position = new Vector3(0, -3, -20);
         var camera = entity.GetComponent<Camera>();
         camera.SetFreeLookAt(Vector3.Zero);
         EntityWorld.EntityManager.AddEntity(entity);

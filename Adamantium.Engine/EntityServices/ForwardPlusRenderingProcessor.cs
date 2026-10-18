@@ -69,8 +69,27 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     /// editor; a game leaves it off and draws the scene as it is.</summary>
     public bool FollowsEditorDisplay { get; set; }
 
+    /// <summary>Whether every collider is drawn over what it holds, as each one's own
+    /// <see cref="Collider.DisplayCollider"/> draws it.</summary>
+    public bool ShowColliders { get; set; }
+
     /// <summary>The color wireframes are drawn in.</summary>
     public Vector3F WireColor { get; set; } = new(0.55f, 0.65f, 0.8f);
+
+    /// <summary>Whether a mesh is shaded and whether its wireframe is drawn, the view drawn as <paramref name="view"/>
+    /// and the entity set to <paramref name="entity"/>: anything but <see cref="EntityDisplay.AsView"/> takes the
+    /// view's place, either way.</summary>
+    public static (bool Shaded, bool Wired) Drawn(ViewDisplay view, EntityDisplay entity)
+    {
+        return entity switch
+        {
+            EntityDisplay.Shaded => (true, false),
+            EntityDisplay.Wireframe => (false, true),
+            EntityDisplay.ShadedWireframe => (true, true),
+            EntityDisplay.Collider => (false, false),
+            _ => (view != ViewDisplay.Wireframe, view != ViewDisplay.Shaded),
+        };
+    }
 
     /// <summary>The width in pixels of a wireframe drawn over a shaded mesh. Without VK_KHR_fragment_shader_barycentric
     /// the wireframe is drawn as lines of one pixel.</summary>
@@ -200,6 +219,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["DirectionalCount"].SetValue((uint)directional);
         parameters["ClusterDepth"].SetValue(new Vector4F(near, far, ClusterSlices / MathF.Log(far / near), MathF.Log(near)));
         parameters["InverseScale"].SetValue(new Vector2F(1f / projection.M11, 1f / projection.M22));
+        parameters["ClusterW"].SetValue(new Vector2F(projection.M34, projection.M44));
         parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
         parameters["Ambient"].SetValue(Ambient);
     }
@@ -264,14 +284,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
                 return true;
             }
 
-            if (collider.DisplayCollider || shown == EntityDisplay.Bounds)
+            if (collider.DisplayCollider || ShowColliders || shown == EntityDisplay.Collider)
             {
                 DrawCollider(entity, collider);
             }
         }
 
         var meshData = entity.GetComponent<MeshData>();
-        if (meshData?.Mesh == null || !meshData.IsEnabled || shown == EntityDisplay.Bounds)
+        if (meshData?.Mesh == null || !meshData.IsEnabled || shown == EntityDisplay.Collider)
         {
             return true;
         }
@@ -282,8 +302,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return true;
         }
 
-        var shaded = shown == EntityDisplay.AsView && Display != ViewDisplay.Wireframe;
-        var wired = shown == EntityDisplay.Wireframe || Display != ViewDisplay.Shaded || display is { WireOver: true };
+        var (shaded, wired) = Drawn(Display, shown);
         if (meshData.RenderMode == MeshRenderMode.Skinned)
         {
             shaded = true;

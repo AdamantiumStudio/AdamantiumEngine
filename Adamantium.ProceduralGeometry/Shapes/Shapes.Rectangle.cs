@@ -107,49 +107,38 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     vertices.Add(new Vector3(-halfWidth, halfHeight));
                 }
 
-                if (transform is { IsIdentity: false })
-                {
-                    vertices = Mesh.ApplyTransform(vertices, transform.Value).ToList();
-                }
-                else
+                var placed = transform is { IsIdentity: false };
+                if (!placed)
                 {
                     vertices = vertices.Round().ToList();
                 }
 
                 var mesh = new Mesh(primitiveType);
-                switch (type)
+                if (type != GeometryType.Solid)
                 {
-                    case GeometryType.Solid:
-                    {
-                        var points = Triangulate(vertices);
-                        mesh.SetPoints(points).SetIndices(FacingTheEye(points.Count));
-                        break;
-                    }
-                    case GeometryType.Both:
-                    {
-                        mesh.AddContour(vertices, true);
-                        var points = Triangulate(vertices);
-                        mesh.SetPoints(points).SetIndices(FacingTheEye(points.Count));
-                        break;
-                    }
-                    case GeometryType.Outlined:
-                    {
-                        mesh.AddContour(vertices, true);
-                        mesh.GenerateBasicIndices();
-                        break;
-                    }
+                    mesh.AddContour(placed ? Mesh.ApplyTransform(vertices, transform.Value) : vertices, true);
                 }
-                
-                var uvs = new List<Vector2F>();
-                
-                foreach (var vertex in mesh.Points)
+
+                if (type == GeometryType.Outlined)
                 {
-                    var u = (float)((vertex.X - left) / width);
-                    var v = (float)((vertex.Y - top) / height);
-                    uvs.Add(new Vector2F(u, v));
+                    mesh.GenerateBasicIndices();
+                    return mesh;
                 }
-                
-                mesh.SetUVs(0, uvs);
+
+                var points = Triangulate(vertices);
+                var uvs = new List<Vector2F>(points.Count);
+                foreach (var point in points)
+                {
+                    uvs.Add(new Vector2F((float)((point.X + halfWidth) / width), (float)((point.Y + halfHeight) / height)));
+                }
+
+                mesh.SetPoints(placed ? Mesh.ApplyTransform(points, transform.Value) : points)
+                    .SetIndices(FacingTheEye(points.Count))
+                    .SetUVs(0, uvs);
+                if (placed && transform.Value.Determinant() < 0)
+                {
+                    mesh.ReverseWinding();
+                }
 
                 return mesh;
             }
