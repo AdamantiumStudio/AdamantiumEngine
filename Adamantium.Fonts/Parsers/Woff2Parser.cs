@@ -201,29 +201,19 @@ namespace Adamantium.Fonts.Parsers
 
                 table.ExpectedOffset = expectedOffset;
 
-                switch (table.PreprocessingTransform)
+                // A transformed table - glyf and loca under any transform but 3, any other under any but 0 - is followed
+                // by its transformed length, and takes that much of the stream.
+                var transformed = table.Name is "glyf" or "loca"
+                    ? table.PreprocessingTransform != 3
+                    : table.PreprocessingTransform != 0;
+                if (transformed && reader.ReadUIntBase128(out var length))
                 {
-                    case 0:
-                        switch (table.Name)
-                        {
-                            case "glyf":
-                            case "loca":
-                                if (reader.ReadUIntBase128(out var length))
-                                {
-                                    table.TransformLength = length;
-                                    expectedOffset += table.TransformLength;
-                                }
-                                break;
-                            default:
-                                expectedOffset += table.OrigLength;
-                                break;
-                        }
-                        break;
-                    case 1:
-                    case 2:
-                    case 3:
-                        expectedOffset += table.OrigLength;
-                        break;
+                    table.TransformLength = length;
+                    expectedOffset += table.TransformLength;
+                }
+                else
+                {
+                    expectedOffset += table.OrigLength;
                 }
 
                 fontEntry.Tables[i] = table;
@@ -278,10 +268,10 @@ namespace Adamantium.Fonts.Parsers
                     var table = new TableEntry();
                     table.Name = fontEntry.Tables[i].Name;
                     table.Offset = fontEntry.Tables[i].ExpectedOffset;
-                    // What the table takes in the decompressed stream: a transformed one (glyf and loca with transform 0,
-                    // any other with one) its transformed length, which is 0 for loca.
+                    // What the table takes in the decompressed stream: a transformed one its transformed length, which is
+                    // 0 for loca.
                     var transform = fontEntry.Tables[i].PreprocessingTransform;
-                    var transformed = table.Name is "glyf" or "loca" ? transform == 0 : transform != 0;
+                    var transformed = table.Name is "glyf" or "loca" ? transform != 3 : transform != 0;
                     table.Length = transformed ? fontEntry.Tables[i].TransformLength : fontEntry.Tables[i].OrigLength;
                     table.PreprocessingTransform = fontEntry.Tables[i].PreprocessingTransform;
                     
@@ -308,6 +298,40 @@ namespace Adamantium.Fonts.Parsers
             }
         }
         
+        // The transformed hmtx (WOFF2 5.4): a flags byte, the advances, then the side bearings the flags do not leave to
+        // the glyphs' own left edge - bit 0 those of the glyphs with an advance, bit 1 those of the rest.
+        protected override void ReadHorizontalMetricsTable(TableEntry entry)
+        {
+            if (entry.PreprocessingTransform != 1)
+            {
+                base.ReadHorizontalMetricsTable(entry);
+                return;
+            }
+
+            FontReader.Position = entry.Offset;
+            var flags = FontReader.ReadByte();
+            var count = GlyphCount;
+            var metrics = Math.Min(HorizontalMetricsCount, count);
+            var advanceWidths = new ushort[count];
+            var leftSideBearings = new short[count];
+            for (var i = 0; i < count; i++)
+            {
+                advanceWidths[i] = i < metrics ? FontReader.ReadUInt16() : metrics > 0 ? advanceWidths[metrics - 1] : (ushort)0;
+            }
+
+            for (var i = 0; i < count; i++)
+            {
+                var fromEdge = (flags & (i < metrics ? 1 : 2)) != 0;
+                leftSideBearings[i] = fromEdge ? LeftEdge((uint)i) : FontReader.ReadInt16();
+            }
+
+            SetHorizontalMetrics(advanceWidths, leftSideBearings);
+        }
+
+        // A glyph's xMin, 0 for an empty one.
+        private short LeftEdge(uint index) =>
+            Typeface.GetGlyphByIndex(index, out var glyph) && !glyph.IsEmpty ? (short)glyph.BoundingRectangle.Left : (short)0;
+
         protected override void ReadTTFGlyphs(TableEntry entry)
         {
             CurrentFont.MarkTrueTypeOutlines();

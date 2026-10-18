@@ -50,6 +50,7 @@ public class ShapingTests
     // length - 'kern', COLR, JSTF - read as empty.
     [TestCase("woff")]
     [TestCase("woff2")]
+    [TestCase("hmtx.woff2")]
     public void AWebFont_ShapesAsItsOriginal(string flavor)
     {
         var folder = Path.Combine(TestContext.CurrentContext.TestDirectory, "ScriptFonts");

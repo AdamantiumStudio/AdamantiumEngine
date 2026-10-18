@@ -48,6 +48,9 @@ internal sealed record LaidOutText
 
     public RectangleF[] FrameRects { get; init; }
 
+    // A line taller than the room it was given that reaches into an exclusion, and its height: laid again to fit.
+    internal (int Line, double Height)? LineOverAnExclusion { get; init; }
+
     public TextParagraphs Paragraphs { get; init; }
 
     public int OversetIndex { get; init; }

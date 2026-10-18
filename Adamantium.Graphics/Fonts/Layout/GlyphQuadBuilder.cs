@@ -137,7 +137,7 @@ internal sealed class GlyphQuadBuilder
         var n = (int)ElementsCount;
         var copy = new FontItem[n];
         Array.Copy(_items, copy, n);
-        return new FrozenGlyphRun(copy, n, FontAtlas, fontSize);
+        return new FrozenGlyphRun(copy, n, FontAtlas, fontSize) { AtlasVersion = _atlasVersion };
     }
 
     internal static RectangleF CellSource(GlyphTextureData cell)

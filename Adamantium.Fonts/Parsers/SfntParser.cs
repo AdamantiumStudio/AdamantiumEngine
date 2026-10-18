@@ -944,39 +944,50 @@ namespace Adamantium.Fonts.Parsers
 
         protected virtual void ReadHorizontalMetricsTable(TableEntry entry)
         {
-            hmtx = new HorizontalMetricsTable();
-            
             FontReader.Position = entry.Offset;
 
             ushort lastAdvanceWidth = 0;
 
-            hmtx.AdvanceWidths = new ushort[maxp.NumGlyphs];
-            hmtx.LeftSideBearings = new short[maxp.NumGlyphs];
+            var advanceWidths = new ushort[maxp.NumGlyphs];
+            var leftSideBearings = new short[maxp.NumGlyphs];
 
             for (var i = 0; i < maxp.NumGlyphs; ++i)
             {
                 if (i < hhea.NumberOfHMetrics)
                 {
                     var advanceWidth = FontReader.ReadUInt16();
-                    hmtx.AdvanceWidths[i] = advanceWidth;
+                    advanceWidths[i] = advanceWidth;
 
                     lastAdvanceWidth = advanceWidth; // last advanceWidth entry is propagated for all glyph indexes beyond 'numberOfHMetrics' count
                 }
                 else
                 {
-                    hmtx.AdvanceWidths[i] = lastAdvanceWidth;
+                    advanceWidths[i] = lastAdvanceWidth;
                 }
 
-                var leftSideBearing = FontReader.ReadInt16();
-                hmtx.LeftSideBearings[i] = leftSideBearing;
-                if (ReferenceEquals(CurrentFont, Typeface.Fonts[0]) && Typeface.GetGlyphByIndex((uint)i, out var glyph))
+                leftSideBearings[i] = FontReader.ReadInt16();
+            }
+
+            SetHorizontalMetrics(advanceWidths, leftSideBearings);
+        }
+
+        protected int GlyphCount => maxp.NumGlyphs;
+
+        protected int HorizontalMetricsCount => hhea.NumberOfHMetrics;
+
+        protected void SetHorizontalMetrics(ushort[] advanceWidths, short[] leftSideBearings)
+        {
+            hmtx = new HorizontalMetricsTable { AdvanceWidths = advanceWidths, LeftSideBearings = leftSideBearings };
+            for (var i = 0; ReferenceEquals(CurrentFont, Typeface.Fonts[0]) && i < advanceWidths.Length; ++i)
+            {
+                if (Typeface.GetGlyphByIndex((uint)i, out var glyph))
                 {
-                    glyph.AdvanceWidth = lastAdvanceWidth;
-                    glyph.LeftSideBearing = leftSideBearing;
+                    glyph.AdvanceWidth = advanceWidths[i];
+                    glyph.LeftSideBearing = leftSideBearings[i];
                 }
             }
 
-            CurrentFont.SetHorizontalMetrics(hmtx.AdvanceWidths, hmtx.LeftSideBearings);
+            CurrentFont.SetHorizontalMetrics(advanceWidths, leftSideBearings);
         }
         
         protected virtual void ReadVerticalHeaderTable(TableEntry entry)

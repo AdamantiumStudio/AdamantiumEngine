@@ -42,6 +42,10 @@ internal sealed class TextLayoutOptions
 
     public bool Kashidas { get; init; }
 
+    public TextSpacingTrim SpacingTrim { get; init; }
+
+    public HangingPunctuation HangingPunctuation { get; init; }
+
     public double Tracking { get; init; }
 
     public TextKerning Kerning { get; init; }
@@ -81,6 +85,7 @@ internal sealed class TextLayoutOptions
                && JustificationAlternates == other.JustificationAlternates
                && LastLineAlignment == other.LastLineAlignment
                && SingleWordJustification == other.SingleWordJustification && Kashidas == other.Kashidas
+               && SpacingTrim == other.SpacingTrim && HangingPunctuation == other.HangingPunctuation
                && LineHeight.Equals(other.LineHeight) && LineStacking == other.LineStacking
                && LineSpacing.Equals(other.LineSpacing) && LineBounds == other.LineBounds && MaxLines == other.MaxLines
                && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? []);
