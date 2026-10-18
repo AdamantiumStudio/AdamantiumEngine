@@ -84,6 +84,11 @@ namespace Adamantium.ECS
         [Bindable]
         public partial bool IsSelected { get; set; }
 
+        /// <summary>The file the entity was made from - a model's path, say; null for one made in the scene. An editor
+        /// shows it beside the entity's name rather than in it.</summary>
+        [Bindable]
+        public partial string Source { get; set; }
+
         /// <summary>Whether an inspector shows the entity's own section open; open to begin with.</summary>
         [Bindable]
         public partial bool IsExpanded { get; set; }
@@ -387,7 +392,7 @@ namespace Adamantium.ECS
 
         public Entity Duplicate()
         {
-            Entity root = new Entity(null, $"{this.Name} (1)") { IconKey = IconKey };
+            Entity root = new Entity(null, $"{this.Name} (1)") { IconKey = IconKey, Source = Source };
             var entities = new Dictionary<UInt128, Entity>();
             entities.Add(Uid, root);
             CloneComponents(root, this);
@@ -401,7 +406,7 @@ namespace Adamantium.ECS
                 if (entities.ContainsKey(current.Owner.Uid))
                 {
                     var currentOwner = entities[current.Owner.Uid];
-                    var entity = new Entity(currentOwner, current.Name) { IconKey = current.IconKey };
+                    var entity = new Entity(currentOwner, current.Name) { IconKey = current.IconKey, Source = current.Source };
                     entities.Add(current.Uid, entity);
                     CloneComponents(entity, current);
                 }

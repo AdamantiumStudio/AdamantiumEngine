@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `Entity.Source` and `SceneData.Source`: the file an entity was made from, as it was asked for. A model loaded through
+  the content manager is named by its file (`SceneDataContentReader`) and keeps the path here; it was named by the
+  whole path.
 - `Component.IsExpanded` and `Entity.IsExpanded`: whether an inspector shows the object's section open, each object its
   own; open to begin with.
 - A camera's projection changes smoothly: setting `CameraBase.ProjectionType` flows from the old projection into the
@@ -129,8 +132,10 @@ All packages share one version.
 
 - `ForwardPlusRenderingProcessor.Display` (`ViewDisplay`): a view draws its meshes shaded, as wireframes, or shaded
   with the wireframe over them, in `WireColor`. With `FollowsEditorDisplay` on, as in an editor, an entity's
-  `EditorDisplay` sets how its subtree is drawn - as the view, only as a wireframe, or only as its collider's box, with
-  `WireOver` adding the wireframe to a shaded mesh; a part's own setting overrides its owner's. A game leaves it off.
+  `EditorDisplay` sets how its subtree is drawn (`EntityDisplay`) - as the view, or in one of the view's own ways in its
+  place, either way (`Shaded`, `Wireframe`, `ShadedWireframe`), or only as its collider (`Collider`)
+  (`ForwardPlusRenderingProcessor.Drawn`); a part's own setting overrides its owner's. A game leaves it off.
+  `ShowColliders` draws every collider, besides those each `Collider.DisplayCollider` shows.
   Over a shaded mesh the wireframe is drawn in the same pass (`ForwardPlusWireEffect`), from where each pixel lies in
   its triangle, smooth and `WireWidth` pixels wide, on a GPU with VK_KHR_fragment_shader_barycentric
   (`MainGraphicsDevice.FragmentBarycentricSupported`); without it, and for a wireframe alone, as lines of one pixel,
@@ -667,7 +672,16 @@ All packages share one version.
   its file meant clockwise (`ConverterBase` turns the winding round after the axis change, into the engine's axes):
   it kept the file's counter-clockwise front, and showed its inside once its back was culled. The scene's shading hid
   all of this, turning a normal to the eye and culling nothing; the editor's lit overlay pass does not turn it.
-  An arc going counter-clockwise faces the camera too, its inner point first.
+  An arc going counter-clockwise faces the camera too, its inner point first. A mirror keeps the front outside:
+  `Mesh.ApplyTransform` turns the triangles back over, `Mesh.ReverseWinding` turns a strip over too (its first point
+  of each run said twice), a rectangle placed by a mirror is turned over, and `Mesh.Merge` turns over a mirrored
+  instance's triangles, listed or in a strip; a mirrored cube, arc or rectangle showed only its back.
+- A polyline is a band along its points, centered on them, a quad a segment listed as triangles facing the camera,
+  its picture running along the whole line: it was a strip parted by restarts, on one side of the line, facing away.
+- A teapot's patches read down where they face out from its axis, whatever the tessellation: one whose picture ran up
+  there is turned round, u with v - its spout and bottom; the inside of the rim, under the lid, has no say. Only the
+  spout's curling lip still reads up in part. A teapot carries its patches' own normals, taken a step inside a patch
+  where its control points meet, in place of ones averaged off its triangles.
 - A new `Material` is an opaque grey (`Material.DefaultDiffuseColor`), and one imported with no diffuse color of its
   own - its diffuse given as a texture, say - keeps it: it was clear black, which an inspector shows as nothing and a
   color picked for it kept clear. Such a material no longer follows `ForwardPlusRenderingProcessor.UntexturedColor`,

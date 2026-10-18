@@ -166,6 +166,10 @@ public partial class SceneData
    }
 
    public String Name { get; set; }
+
+   /// <summary>Where the scene was loaded from, as it was asked for; null for one made in memory.</summary>
+   public String Source { get; set; }
+
    public Unit Units { get; set; }
 
    private readonly Dictionary<String, Model> meshesDictionary;

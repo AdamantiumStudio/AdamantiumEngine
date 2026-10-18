@@ -10,60 +10,57 @@ namespace Adamantium.ProceduralGeometry.Shapes
         // TODO: integrate StrokeGeometry in Graphics layer
         public class Polyline
         {
+            /// <summary>A band <paramref name="thickness"/> wide along <paramref name="points"/>, a quad a segment, facing
+            /// a camera looking along +Z; its picture runs along the whole line, across it from its top edge.</summary>
             public static Mesh GenerateGeometry(Vector2[] points, float thickness, Matrix4x4? transform = null)
             {
-                var primitiveType = PrimitiveType.TriangleStrip;
                 var vertexArray = new List<Vector3>();
                 var indicesArray = new List<int>();
-                var interrupt = -1;
-                var lastIndex = 0;
+                var uvs = new List<Vector2F>();
 
-                List<Vector2F> uvs = new List<Vector2F>();
-
+                var length = 0.0;
                 for (int i = 0; i < points.Length - 1; ++i)
                 {
-                    var endPoint = points[i + 1];
-                    var startPoint = points[i];
+                    length += (points[i + 1] - points[i]).Length();
+                }
 
+                var travelled = 0.0;
+                for (int i = 0; i < points.Length - 1; ++i)
+                {
+                    var startPoint = points[i];
+                    var endPoint = points[i + 1];
                     var direction = endPoint - startPoint;
                     var normal = new Vector2(-direction.Y, direction.X);
                     normal.Normalize();
-                    // if p0 = point1 - normal, then rectangle will be drawn above the line
-                    //else if p0 = point1 + normal, then rectangle will be drawn under the line
-                    var p0 = startPoint - normal * thickness;
-                    var p1 = endPoint - normal * thickness;
+                    var half = normal * (thickness * 0.5);
 
-                    //top left corner
-                    vertexArray.Add(new Vector3(startPoint, 0));
-                    //top right corner
-                    vertexArray.Add(new Vector3(endPoint, 0));
-                    //Bottom left corner
-                    vertexArray.Add(new Vector3(p0, 0));
-                    //Bottom right corner
-                    vertexArray.Add(new Vector3(p1, 0));
+                    var start = vertexArray.Count;
+                    vertexArray.Add(new Vector3(startPoint - half, 0));
+                    vertexArray.Add(new Vector3(endPoint - half, 0));
+                    vertexArray.Add(new Vector3(startPoint + half, 0));
+                    vertexArray.Add(new Vector3(endPoint + half, 0));
 
-                    uvs.Add(Vector2F.UnitX);
-                    uvs.Add(Vector2F.Zero);
-                    
-                    uvs.Add(Vector2F.UnitY);
-                    uvs.Add(Vector2F.One);
+                    var from = length > 0 ? (float)(travelled / length) : 0;
+                    travelled += direction.Length();
+                    var to = length > 0 ? (float)(travelled / length) : 0;
+                    uvs.Add(new Vector2F(from, 0));
+                    uvs.Add(new Vector2F(to, 0));
+                    uvs.Add(new Vector2F(from, 1));
+                    uvs.Add(new Vector2F(to, 1));
 
-                    indicesArray.Add(lastIndex++);
-                    indicesArray.Add(lastIndex++);
-                    indicesArray.Add(lastIndex++);
-                    indicesArray.Add(lastIndex++);
-                    indicesArray.Add(interrupt);
+                    // Clockwise on screen to a camera looking along +Z, the side the GPU takes for the front.
+                    indicesArray.AddRange([start, start + 1, start + 2, start + 2, start + 1, start + 3]);
                 }
 
                 var mesh = new Mesh();
-                mesh.SetTopology(primitiveType).
+                mesh.SetTopology(PrimitiveType.TriangleList).
                     SetPoints(vertexArray).
                     SetUVs(0, uvs).
                     SetIndices(indicesArray).
+                    CalculateNormals().
                     ApplyTransform(transform);
 
                 return mesh;
-
             }
         }
     }

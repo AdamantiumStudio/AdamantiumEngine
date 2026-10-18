@@ -56,6 +56,7 @@ public class EntityImportTemplate : IEntityTemplate
 
             var nameToEntityId = new Dictionary<string, Entity>();
             owner.Name = sceneData.Name;
+            owner.Source = sceneData.Source;
             owner.IconKey = EntityIconKeys.Model;
             nameToEntityId.Add(sceneData.Models.ToString(), owner);
             var stack = new Stack<SceneData.Model>();

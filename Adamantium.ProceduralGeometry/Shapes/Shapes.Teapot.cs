@@ -188,10 +188,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
             // Tessellates the specified bezier patch.
             private static void TessellatePatch(
                 GeometryType geometryType,
-                List<Vector3> vertices, 
-                List<Vector2F> uvs, 
-                List<int> indices, 
-                ref TeapotPatch patch, 
+                List<Vector3> vertices,
+                List<Vector3F> normals,
+                List<Vector2F> uvs,
+                List<int> indices,
+                ref TeapotPatch patch,
                 int tessellation, 
                 Vector3 scale, 
                 bool isMirrored)
@@ -215,7 +216,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     indices.AddRange(CreateOutlinePatchIndices(tessellation, isMirrored, vbase));
                 }
 
-                CreatePatchVertices(controlPoints, tessellation, isMirrored, vertices, uvs);
+                CreatePatchVertices(controlPoints, tessellation, isMirrored, vertices, normals, uvs);
             }
 
             public static Mesh GenerateGeometry(
@@ -235,6 +236,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Matrix4x4? transform = null)
             {
                 var vertices = new List<Vector3>();
+                var normals = new List<Vector3F>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
 
@@ -256,16 +258,16 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     // Because the teapot is symmetrical from left to right, we only store
                     // data for one side, then tessellate each patch twice, mirroring in X.
-                    TessellatePatch(geometryType, vertices, uvs, indices, ref patch, tessellation, scaleVector, false);
-                    TessellatePatch(geometryType, vertices, uvs, indices, ref patch, tessellation, scaleNegateX, true);
+                    TessellatePatch(geometryType, vertices, normals, uvs, indices, ref patch, tessellation, scaleVector, false);
+                    TessellatePatch(geometryType, vertices, normals, uvs, indices, ref patch, tessellation, scaleNegateX, true);
 
                     if (patch.mirrorZ)
                     {
                         // Some parts of the teapot (the body, lid, and rim, but not the
                         // handle or spout) are also symmetrical from front to back, so
                         // we tessellate them four times, mirroring in Z as well as X.
-                        TessellatePatch(geometryType, vertices, uvs, indices, ref patch, tessellation, scaleNegateZ, true);
-                        TessellatePatch(geometryType, vertices, uvs, indices, ref patch, tessellation, scaleNegateXZ, false);
+                        TessellatePatch(geometryType, vertices, normals, uvs, indices, ref patch, tessellation, scaleNegateZ, true);
+                        TessellatePatch(geometryType, vertices, normals, uvs, indices, ref patch, tessellation, scaleNegateXZ, false);
                     }
                 }
 
@@ -277,9 +279,13 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
                 mesh.SetPoints(vertices).
                     SetUVs(0, uvs).
-                    SetIndices(indices).
-                    CalculateNormals().
-                    ApplyTransform(transform);
+                    SetIndices(indices);
+                if (geometryType == GeometryType.Solid)
+                {
+                    mesh.SetNormals(normals);
+                }
+
+                mesh.ApplyTransform(transform);
 
                 return mesh;
             }
@@ -313,8 +319,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
             // Creates vertices for a patch that is tessellated at the specified level.
             // Calls the specified outputVertex function for each generated vertex,
             // passing the position, normal, and texture coordinate as parameters.
-            private static void CreatePatchVertices(Vector3[] patch, int tessellation, bool isMirrored, List<Vector3> positions, List<Vector2F> uvs)
+            private static void CreatePatchVertices(Vector3[] patch, int tessellation, bool isMirrored, List<Vector3> positions,
+                List<Vector3F> normals, List<Vector2F> uvs)
             {
+                var first = positions.Count;
                 for (int i = 0; i <= tessellation; i++)
                 {
                     float u = (float)i / tessellation;
@@ -334,58 +342,87 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         // previous horizontal interpolations, to compute the position.
                         var position = CubicInterpolate(ref p1, ref p2, ref p3, ref p4, v);
 
-                        // Perform another four bezier interpolations between the control
-                        // points, but this time vertically rather than horizontally.
-                        var q1 = CubicInterpolate(ref patch[0], ref patch[4], ref patch[8], ref patch[12], v);
-                        var q2 = CubicInterpolate(ref patch[1], ref patch[5], ref patch[9], ref patch[13], v);
-                        var q3 = CubicInterpolate(ref patch[2], ref patch[6], ref patch[10], ref patch[14], v);
-                        var q4 = CubicInterpolate(ref patch[3], ref patch[7], ref patch[11], ref patch[15], v);
-
-                        // Compute vertical and horizontal tangent vectors.
-                        var tangent1 = CubicTangent(ref p1, ref p2, ref p3, ref p4, v);
-                        var tangent2 = CubicTangent(ref q1, ref q2, ref q3, ref q4, u);
-
-                        // Cross the two tangent vectors to compute the normal.
-                        var normal = Vector3.Cross(tangent1, tangent2);
-
-                        if (!Vector3.NearEqual(normal, Vector3.Zero, new Vector3(1e-7f)))
+                        // The classic teapot is not tidy: at its top and bottom a patch has several control points
+                        // in one place, where the tangents vanish. The normal is taken a step inside the patch there.
+                        var normal = SurfaceNormal(patch, u, v);
+                        if (Vector3.NearEqual(normal, Vector3.Zero, new Vector3(1e-7f)))
                         {
-                            normal.Normalize();
-
-                            // If this patch is mirrored, we must invert the normal.
-                            if (isMirrored)
-                            {
-                                normal = -normal;
-                            }
+                            normal = SurfaceNormal(patch, u < 0.5f ? u + 0.01f : u - 0.01f, v < 0.5f ? v + 0.01f : v - 0.01f);
                         }
-                        else
+
+                        normal.Normalize();
+
+                        // If this patch is mirrored, we must invert the normal.
+                        if (isMirrored)
                         {
-                            // In a tidy and well constructed bezier patch, the preceding
-                            // normal computation will always work. But the classic teapot
-                            // model is not tidy or well constructed! At the top and bottom
-                            // of the teapot, it contains degenerate geometry where a patch
-                            // has several control points in the same place, which causes
-                            // the tangent computation to fail and produce a zero normal.
-                            // We 'fix' these cases by just hard-coding a normal that points
-                            // either straight up or straight down, depending on whether we
-                            // are on the top or bottom of the teapot. This is not a robust
-                            // solution for all possible degenerate bezier patches, but hey,
-                            // it's good enough to make the teapot work correctly!
-                            normal.X = 0.0f;
-                            normal.Y = position.Y < 0.0f ? -1.0f : 1.0f;
-                            normal.Z = 0.0f;
+                            normal = -normal;
                         }
 
                         // Compute the texture coordinate.
                         float mirroredU = isMirrored ? 1.0f - u : u;
 
-                        var textureCoordinate = new Vector2F(mirroredU, v);
-
                         // Output this vertex.
                         positions.Add(position);
-                        uvs.Add(textureCoordinate);
+                        normals.Add((Vector3F)normal);
+                        uvs.Add(new Vector2F(mirroredU, v));
                     }
                 }
+
+                if (ReadsUp(patch, isMirrored))
+                {
+                    for (var at = first; at < positions.Count; at++)
+                    {
+                        uvs[at] = new Vector2F(1 - uvs[at].X, 1 - uvs[at].Y);
+                    }
+                }
+            }
+
+            private static Vector3 SurfaceNormal(Vector3[] patch, float u, float v)
+            {
+                var p1 = CubicInterpolate(ref patch[0], ref patch[1], ref patch[2], ref patch[3], u);
+                var p2 = CubicInterpolate(ref patch[4], ref patch[5], ref patch[6], ref patch[7], u);
+                var p3 = CubicInterpolate(ref patch[8], ref patch[9], ref patch[10], ref patch[11], u);
+                var p4 = CubicInterpolate(ref patch[12], ref patch[13], ref patch[14], ref patch[15], u);
+                var q1 = CubicInterpolate(ref patch[0], ref patch[4], ref patch[8], ref patch[12], v);
+                var q2 = CubicInterpolate(ref patch[1], ref patch[5], ref patch[9], ref patch[13], v);
+                var q3 = CubicInterpolate(ref patch[2], ref patch[6], ref patch[10], ref patch[14], v);
+                var q4 = CubicInterpolate(ref patch[3], ref patch[7], ref patch[11], ref patch[15], v);
+                return Vector3.Cross(CubicTangent(ref p1, ref p2, ref p3, ref p4, v), CubicTangent(ref q1, ref q2, ref q3, ref q4, u));
+            }
+
+            private static Vector3 PatchPoint(Vector3[] patch, float u, float v)
+            {
+                var p1 = CubicInterpolate(ref patch[0], ref patch[1], ref patch[2], ref patch[3], u);
+                var p2 = CubicInterpolate(ref patch[4], ref patch[5], ref patch[6], ref patch[7], u);
+                var p3 = CubicInterpolate(ref patch[8], ref patch[9], ref patch[10], ref patch[11], u);
+                var p4 = CubicInterpolate(ref patch[12], ref patch[13], ref patch[14], ref patch[15], u);
+                return CubicInterpolate(ref p1, ref p2, ref p3, ref p4, v);
+            }
+
+            private const int ReadingSamples = 16;
+
+            private static bool ReadsUp(Vector3[] patch, bool isMirrored)
+            {
+                var rise = 0.0;
+                for (var i = 0; i <= ReadingSamples; i++)
+                {
+                    var u = (float)i / ReadingSamples;
+                    for (var j = 0; j < ReadingSamples; j++)
+                    {
+                        var v = (j + 0.5f) / ReadingSamples;
+                        var along = PatchPoint(patch, u, v + 0.5f / ReadingSamples) - PatchPoint(patch, u, v - 0.5f / ReadingSamples);
+                        var at = PatchPoint(patch, u, v);
+                        var radial = new Vector3(at.X, 0, at.Z);
+                        var normal = SurfaceNormal(patch, u, v);
+                        if (along.LengthSquared() < 1e-12 || radial.LengthSquared() < 1e-12 || normal.LengthSquared() < 1e-12) continue;
+
+                        if (isMirrored) normal = -normal;
+                        var facing = Math.Max(0, Vector3.Dot(Vector3.Normalize(normal), Vector3.Normalize(radial)));
+                        rise += facing * along.Y / along.Length();
+                    }
+                }
+
+                return rise < 0;
             }
 
             // Creates indices for a patch that is tessellated at the specified level.

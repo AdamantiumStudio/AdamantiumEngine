@@ -135,6 +135,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 mesh.SetPoints(placed ? Mesh.ApplyTransform(points, transform.Value) : points)
                     .SetIndices(FacingTheEye(points.Count))
                     .SetUVs(0, uvs);
+                if (placed && transform.Value.Determinant() < 0)
+                {
+                    mesh.ReverseWinding();
+                }
 
                 return mesh;
             }

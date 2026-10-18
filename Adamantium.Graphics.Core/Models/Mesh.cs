@@ -566,6 +566,21 @@ public class Mesh
 
             int startIndex = indices.Count;
             indices.AddRange(mesh.Indices);
+            if (instance.ApplyTransform && instance.Transform.Determinant() < 0)
+            {
+                if (MeshTopology == PrimitiveType.TriangleList)
+                {
+                    for (var i = startIndex; i + 2 < indices.Count; i += 3)
+                    {
+                        (indices[i + 1], indices[i + 2]) = (indices[i + 2], indices[i + 1]);
+                    }
+                }
+                else if (MeshTopology == PrimitiveType.TriangleStrip)
+                {
+                    TurnStripOver(indices, startIndex);
+                }
+            }
+
             if (MeshTopology == PrimitiveType.LineStrip || MeshTopology == PrimitiveType.TriangleStrip)
             {
                 indices.Add(StripIndicesSeparator);
@@ -719,12 +734,17 @@ public class Mesh
         foreach (var meshContour in Contours)
         {
             var points = meshContour.Points;
-            
+
             var transformed = new Vector2[points.Length];
             Vector2.TransformCoordinate(points, ref transformMatrix, transformed);
             meshContour.SetPoints(transformed, false);
         }
-            
+
+        if (transformMatrix.Determinant() < 0)
+        {
+            ReverseWinding();
+        }
+
         // Normals the mesh already CARRIES are moved, not re-derived: a generator's exact normals survive being placed,
         // and a plain translation leaves them alone. Re-averaging them off the triangles here threw that away.
         if (Normals.Length == Points.Length) TransformNormals(ref transformMatrix);
@@ -1289,6 +1309,8 @@ public class Mesh
         return this;
     }
 
+    /// <summary>Turns every triangle over. A strip has its first point of each run said twice, which turns over every
+    /// triangle after it and adds one with no area.</summary>
     public Mesh ReverseWinding()
     {
         Vector3F temp = new Vector3F();
@@ -1302,8 +1324,31 @@ public class Mesh
                 Indices[i + 2] = (int)temp.Y;
             }
         }
+        else if (MeshTopology == PrimitiveType.TriangleStrip && Indices.Length > 0)
+        {
+            var reversed = new List<int>(Indices);
+            TurnStripOver(reversed, 0);
+            Indices = reversed.ToArray();
+        }
 
         return this;
+    }
+
+    // Says the first point of each run of the strip from `from` on twice: every triangle after it turns over.
+    private static void TurnStripOver(List<int> indices, int from)
+    {
+        var runStarts = true;
+        for (var i = from; i < indices.Count; i++)
+        {
+            var index = indices[i];
+            if (runStarts && index != StripIndicesSeparator)
+            {
+                indices.Insert(i, index);
+                i++;
+            }
+
+            runStarts = index == StripIndicesSeparator;
+        }
     }
 
     // The same axis change the points get. A normal is a direction, so it takes the rotation and nothing else - but it
