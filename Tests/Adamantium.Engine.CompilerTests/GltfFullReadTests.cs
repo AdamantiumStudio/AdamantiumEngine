@@ -315,11 +315,11 @@ public class GltfFullReadTests
         Assert.Multiple(() =>
         {
             Assert.That(sampler.Name, Is.EqualTo("Crisp"));
-            Assert.That(sampler.MagFilter, Is.EqualTo(SceneData.TextureFilter.Nearest));
-            Assert.That(sampler.MinFilter, Is.EqualTo(SceneData.TextureFilter.Nearest));
-            Assert.That(sampler.MipFilter, Is.EqualTo(SceneData.TextureFilter.Linear));
-            Assert.That(sampler.WrapS, Is.EqualTo(SceneData.TextureWrap.ClampToEdge));
-            Assert.That(sampler.WrapT, Is.EqualTo(SceneData.TextureWrap.MirroredRepeat));
+            Assert.That(sampler.MagFilter, Is.EqualTo(TextureFilter.Nearest));
+            Assert.That(sampler.MinFilter, Is.EqualTo(TextureFilter.Nearest));
+            Assert.That(sampler.MipFilter, Is.EqualTo(TextureFilter.Linear));
+            Assert.That(sampler.WrapS, Is.EqualTo(TextureWrap.ClampToEdge));
+            Assert.That(sampler.WrapT, Is.EqualTo(TextureWrap.MirroredRepeat));
             Assert.That(texture.Name, Is.EqualTo("Bark texture"));
             Assert.That(texture.Image, Is.EqualTo(GltfConverter.ImageId(0)));
             Assert.That(texture.Sampler, Is.EqualTo(GltfConverter.SamplerId(0)));

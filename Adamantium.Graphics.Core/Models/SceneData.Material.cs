@@ -116,21 +116,21 @@ public partial class SceneData
       /// <summary>KHR_materials_unlit: shown as its color, with no light on it.</summary>
       public Boolean Unlit { get; set; }
 
-      public Clearcoat Clearcoat { get; set; }
+      public ClearcoatLayer Clearcoat { get; set; }
 
-      public Sheen Sheen { get; set; }
+      public SheenLayer Sheen { get; set; }
 
-      public Transmission Transmission { get; set; }
+      public TransmissionLayer Transmission { get; set; }
 
-      public DiffuseTransmission DiffuseTransmission { get; set; }
+      public DiffuseTransmissionLayer DiffuseTransmission { get; set; }
 
-      public Volume Volume { get; set; }
+      public VolumeLayer Volume { get; set; }
 
-      public Specular Specular { get; set; }
+      public SpecularLayer Specular { get; set; }
 
-      public Iridescence Iridescence { get; set; }
+      public IridescenceLayer Iridescence { get; set; }
 
-      public Anisotropy Anisotropy { get; set; }
+      public AnisotropyLayer Anisotropy { get; set; }
 
       public SpecularGlossiness SpecularGlossiness { get; set; }
 

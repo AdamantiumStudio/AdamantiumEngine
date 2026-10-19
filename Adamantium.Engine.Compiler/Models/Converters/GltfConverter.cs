@@ -264,11 +264,11 @@ public class GltfConverter : ConverterBase
         }
 
         var count = Math.Max(translations?.Length / 3 ?? 0, Math.Max(rotations?.Length / 4 ?? 0, scales?.Length / 3 ?? 0));
-        model.Instances = new List<SceneData.InstanceTransform>(count);
+        model.Instances = new List<InstanceTransform>(count);
         for (int i = 0; i < count; i++)
         {
             // An attribute shorter than the others leaves the copies past its end as they are by default.
-            var copy = new SceneData.InstanceTransform();
+            var copy = new InstanceTransform();
             if (translations != null && (i + 1) * 3 <= translations.Length)
             {
                 copy.Position = new Vector3F(translations[i * 3], translations[i * 3 + 1], translations[i * 3 + 2]);
@@ -488,7 +488,7 @@ public class GltfConverter : ConverterBase
             var times = GltfAccessors.ReadFloats(file, sampler.Input, out _);
             var values = GltfAccessors.ReadFloats(file, sampler.Output, out _);
             var perKey = sampler.Interpolation == "CUBICSPLINE" ? 3 * times.Length : times.Length;
-            source.Channels.Add(new SceneData.AnimationChannel
+            source.Channels.Add(new AnimationChannel
             {
                 Node = channel.Target.Node is { } node ? NodeId(node) : null,
                 Path = channel.Target.Path,
@@ -850,13 +850,13 @@ public class GltfConverter : ConverterBase
             var sampler = samplers[i];
             var (min, mip) = sampler.MinFilter switch
             {
-                9728 => (SceneData.TextureFilter.Nearest, (SceneData.TextureFilter?)null),
-                9729 => (SceneData.TextureFilter.Linear, null),
-                9984 => (SceneData.TextureFilter.Nearest, SceneData.TextureFilter.Nearest),
-                9985 => (SceneData.TextureFilter.Linear, SceneData.TextureFilter.Nearest),
-                9986 => (SceneData.TextureFilter.Nearest, SceneData.TextureFilter.Linear),
-                9987 => (SceneData.TextureFilter.Linear, SceneData.TextureFilter.Linear),
-                _ => ((SceneData.TextureFilter?)null, (SceneData.TextureFilter?)null)
+                9728 => (TextureFilter.Nearest, (TextureFilter?)null),
+                9729 => (TextureFilter.Linear, null),
+                9984 => (TextureFilter.Nearest, TextureFilter.Nearest),
+                9985 => (TextureFilter.Linear, TextureFilter.Nearest),
+                9986 => (TextureFilter.Nearest, TextureFilter.Linear),
+                9987 => (TextureFilter.Linear, TextureFilter.Linear),
+                _ => ((TextureFilter?)null, (TextureFilter?)null)
             };
             SceneDataContainer.Samplers[SamplerId(i)] = new SceneData.Sampler
             {
@@ -864,8 +864,8 @@ public class GltfConverter : ConverterBase
                 Name = sampler.Name,
                 MagFilter = sampler.MagFilter switch
                 {
-                    9728 => SceneData.TextureFilter.Nearest,
-                    9729 => SceneData.TextureFilter.Linear,
+                    9728 => TextureFilter.Nearest,
+                    9729 => TextureFilter.Linear,
                     _ => null
                 },
                 MinFilter = min,
@@ -876,11 +876,11 @@ public class GltfConverter : ConverterBase
             };
         }
 
-        static SceneData.TextureWrap Wrap(int mode) => mode switch
+        static TextureWrap Wrap(int mode) => mode switch
         {
-            33071 => SceneData.TextureWrap.ClampToEdge,
-            33648 => SceneData.TextureWrap.MirroredRepeat,
-            _ => SceneData.TextureWrap.Repeat
+            33071 => TextureWrap.ClampToEdge,
+            33648 => TextureWrap.MirroredRepeat,
+            _ => TextureWrap.Repeat
         };
     }
 
@@ -1133,7 +1133,7 @@ public class GltfConverter : ConverterBase
                 material.Unlit = true;
                 break;
             case "KHR_materials_clearcoat":
-                material.Clearcoat = new SceneData.Clearcoat
+                material.Clearcoat = new ClearcoatLayer
                 {
                     Factor = Number(e, "clearcoatFactor", 0),
                     Texture = Reference(e, "clearcoatTexture"),
@@ -1144,7 +1144,7 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_sheen":
-                material.Sheen = new SceneData.Sheen
+                material.Sheen = new SheenLayer
                 {
                     ColorFactor = Vector3(e, "sheenColorFactor", Vector3F.Zero),
                     ColorTexture = Reference(e, "sheenColorTexture"),
@@ -1153,14 +1153,14 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_transmission":
-                material.Transmission = new SceneData.Transmission
+                material.Transmission = new TransmissionLayer
                 {
                     Factor = Number(e, "transmissionFactor", 0),
                     Texture = Reference(e, "transmissionTexture")
                 };
                 break;
             case "KHR_materials_diffuse_transmission":
-                material.DiffuseTransmission = new SceneData.DiffuseTransmission
+                material.DiffuseTransmission = new DiffuseTransmissionLayer
                 {
                     Factor = Number(e, "diffuseTransmissionFactor", 0),
                     Texture = Reference(e, "diffuseTransmissionTexture"),
@@ -1169,7 +1169,7 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_volume":
-                material.Volume = new SceneData.Volume
+                material.Volume = new VolumeLayer
                 {
                     ThicknessFactor = Number(e, "thicknessFactor", 0),
                     ThicknessTexture = Reference(e, "thicknessTexture"),
@@ -1178,7 +1178,7 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_specular":
-                material.Specular = new SceneData.Specular
+                material.Specular = new SpecularLayer
                 {
                     Factor = Number(e, "specularFactor", 1),
                     Texture = Reference(e, "specularTexture"),
@@ -1187,7 +1187,7 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_iridescence":
-                material.Iridescence = new SceneData.Iridescence
+                material.Iridescence = new IridescenceLayer
                 {
                     Factor = Number(e, "iridescenceFactor", 0),
                     Texture = Reference(e, "iridescenceTexture"),
@@ -1198,7 +1198,7 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_anisotropy":
-                material.Anisotropy = new SceneData.Anisotropy
+                material.Anisotropy = new AnisotropyLayer
                 {
                     Strength = Number(e, "anisotropyStrength", 0),
                     Rotation = Number(e, "anisotropyRotation", 0),
@@ -1206,7 +1206,7 @@ public class GltfConverter : ConverterBase
                 };
                 break;
             case "KHR_materials_pbrSpecularGlossiness":
-                material.SpecularGlossiness = new SceneData.SpecularGlossiness
+                material.SpecularGlossiness = new SpecularGlossiness
                 {
                     DiffuseFactor = e.TryGetProperty("diffuseFactor", out var diffuse) && diffuse.ValueKind == JsonValueKind.Array
                                     && diffuse.GetArrayLength() == 4
@@ -1230,14 +1230,14 @@ public class GltfConverter : ConverterBase
             : otherwise;
 
     // A material's reference to a texture as the file makes it; null when there is none.
-    private SceneData.TextureReference Reference(GltfTextureInfo info)
+    private TextureReference Reference(GltfTextureInfo info)
     {
         if (info == null || (uint)info.Index >= (uint)file.Root.Textures.Count)
         {
             return null;
         }
 
-        return new SceneData.TextureReference
+        return new TextureReference
         {
             Texture = TextureId(info.Index),
             TexCoord = info.TexCoord,
@@ -1248,7 +1248,7 @@ public class GltfConverter : ConverterBase
         };
     }
 
-    private SceneData.TextureReference Reference(JsonElement owner, string name)
+    private TextureReference Reference(JsonElement owner, string name)
     {
         if (!owner.TryGetProperty(name, out var info) || info.ValueKind != JsonValueKind.Object
             || !info.TryGetProperty("index", out var indexElement) || !indexElement.TryGetInt32(out var index)
@@ -1257,7 +1257,7 @@ public class GltfConverter : ConverterBase
             return null;
         }
 
-        var reference = new SceneData.TextureReference
+        var reference = new TextureReference
         {
             Texture = TextureId(index),
             TexCoord = info.TryGetProperty("texCoord", out var set) && set.TryGetInt32(out var texCoord) ? texCoord : 0,
@@ -1272,14 +1272,14 @@ public class GltfConverter : ConverterBase
         return reference;
     }
 
-    private static SceneData.TextureTransform KeptTransform(JsonElement extension)
+    private static TextureTransform KeptTransform(JsonElement extension)
     {
         if (extension.ValueKind != JsonValueKind.Object)
         {
             return null;
         }
 
-        return new SceneData.TextureTransform
+        return new TextureTransform
         {
             Offset = Pair(extension, "offset", Vector2F.Zero),
             Rotation = Number(extension, "rotation", 0),
@@ -1430,7 +1430,7 @@ public class GltfConverter : ConverterBase
     }
 
     // The transform is glTF's, about the image's top left, so it is laid on before v is turned over.
-    private Vector2F[] TextureCoordinates(int accessor, TextureTransform? transform)
+    private Vector2F[] TextureCoordinates(int accessor, UvTransform? transform)
     {
         var values = Floats(accessor, 2);
         var vectors = new Vector2F[values.Length / 2];
@@ -1449,11 +1449,11 @@ public class GltfConverter : ConverterBase
         return vectors;
     }
 
-    private readonly record struct TextureTransform(Vector2F Offset, float Cos, float Sin, Vector2F Scale, int TexCoord);
+    private readonly record struct UvTransform(Vector2F Offset, float Cos, float Sin, Vector2F Scale, int TexCoord);
 
     /// <summary>The KHR_texture_transform of a material's base color texture, the one drawn; the texture coordinates it
     /// reads take it. Another texture of the material transformed otherwise is told, as those coordinates hold one.</summary>
-    private TextureTransform? BaseColorTransform(int? materialIndex)
+    private UvTransform? BaseColorTransform(int? materialIndex)
     {
         if (materialIndex is not { } index || (uint)index >= (uint)file.Root.Materials.Count) return null;
 
@@ -1475,7 +1475,7 @@ public class GltfConverter : ConverterBase
         return drawn;
     }
 
-    private static TextureTransform? TransformOf(GltfTextureInfo info)
+    private static UvTransform? TransformOf(GltfTextureInfo info)
     {
         if (info?.Extensions == null || !info.Extensions.TryGetValue("KHR_texture_transform", out var extension)
             || extension.ValueKind != JsonValueKind.Object)
@@ -1487,7 +1487,7 @@ public class GltfConverter : ConverterBase
         var scale = Pair(extension, "scale", Vector2F.One);
         var rotation = extension.TryGetProperty("rotation", out var r) && r.TryGetSingle(out var radians) ? radians : 0;
         var texCoord = extension.TryGetProperty("texCoord", out var c) && c.TryGetInt32(out var set) ? set : info.TexCoord;
-        return new TextureTransform(offset, MathF.Cos(rotation), MathF.Sin(rotation), scale, texCoord);
+        return new UvTransform(offset, MathF.Cos(rotation), MathF.Sin(rotation), scale, texCoord);
     }
 
     private Color[] Colors(int accessor)

@@ -22,8 +22,8 @@ public partial class SceneData
       Units = new Unit();
       Scenes = [];
       AnimationSources = [];
-      Samplers = new Dictionary<String, Sampler>();
-      Textures = new Dictionary<String, Texture>();
+      Samplers = new SamplerCollection();
+      Textures = new TextureCollection();
       MaterialVariants = [];
       XmpPackets = [];
       ExtensionsUsed = [];
@@ -222,10 +222,10 @@ public partial class SceneData
    public ImageCollection Images { get; set; }
 
    /// <summary>The source file's samplers, by key.</summary>
-   public Dictionary<String, Sampler> Samplers { get; set; }
+   public SamplerCollection Samplers { get; set; }
 
    /// <summary>The source file's textures, by key: an image with its sampler.</summary>
-   public Dictionary<String, Texture> Textures { get; set; }
+   public TextureCollection Textures { get; set; }
 
    /// <summary>The names of the source file's material variants (KHR_materials_variants): the looks a model can be
    /// switched between; each mesh says its material in each.</summary>

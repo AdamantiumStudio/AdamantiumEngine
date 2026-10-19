@@ -24,8 +24,10 @@ All packages share one version.
     the node's (`Model.MorphWeights`);
   - samplers and textures (`SceneData.Samplers`, `Textures`, with images in KTX2, WebP or AVIF as `Texture.Sources`);
     each material slot's texture with its texture coordinates and transform (`TextureReference`); the emissive factor
-    and strength apart; every `KHR_materials_*` - ior, dispersion, unlit, clearcoat, sheen, transmission, diffuse
-    transmission, volume, specular, iridescence, anisotropy, specular-glossiness; the metallic-roughness part's own
+    and strength apart; every `KHR_materials_*` - ior, dispersion, unlit, and as layers of the material
+    (`ClearcoatLayer`, `SheenLayer`, `TransmissionLayer`, `DiffuseTransmissionLayer`, `VolumeLayer`, `SpecularLayer`,
+    `IridescenceLayer`, `AnisotropyLayer`, `SpecularGlossiness`) clearcoat, sheen, transmission, diffuse transmission,
+    volume, specular, iridescence, anisotropy, specular-glossiness; the metallic-roughness part's own
     data (`Material.PbrExtra`); material variants (`SceneData.MaterialVariants`, `Mesh.VariantMaterials` by the
     variant's index);
   - `KHR_mesh_quantization`, now opened; copies of a mesh (`EXT_mesh_gpu_instancing`: `Model.Instances`,
