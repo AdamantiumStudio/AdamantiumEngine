@@ -128,3 +128,17 @@ LIT_PIXEL Lit_VS(MESH_VERTEX input)
     output.uv = input.uv0;
     return output;
 }
+
+#include "Skinning.fxh"
+
+LIT_PIXEL LitSkinned_VS(SKINNED_VERTEX input)
+{
+    float4x4 skin = SkinOf(input.jointIndices, input.jointWeights);
+    LIT_PIXEL output;
+    float4 placed = mul(mul(float4(input.position.xyz, 1.0f), skin), world);
+    output.position = mul(placed, viewProjection);
+    output.viewPosition = mul(placed, view).xyz;
+    output.viewNormal = mul(mul(mul(input.normal, (float3x3)skin), (float3x3)world), (float3x3)view);
+    output.uv = input.uv0;
+    return output;
+}

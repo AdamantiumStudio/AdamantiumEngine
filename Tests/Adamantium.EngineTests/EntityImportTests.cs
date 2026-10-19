@@ -171,6 +171,85 @@ public class EntityImportTests
     }
 
     [Test]
+    public void APbrMaterial_IsCarried_AndAnImageInsideIsNamedByItsModel()
+    {
+        var scene = NewScene();
+        scene.Source = "Models/Robot/robot.glb";
+        scene.Images.Add("image0", new SceneData.Image { ID = "image0", Data = [1, 2, 3], MimeType = "image/png" });
+        scene.Materials.Add("metal", new SceneData.Material
+        {
+            ID = "metal",
+            DiffuseColor = new Vector4F(1, 1, 1, 1),
+            DiffuseMap = "image0",
+            MetallicFactor = 0.9f,
+            RoughnessFactor = 0.2f,
+            NormalMap = "image0",
+            NormalScale = 0.5f,
+            AlphaMode = AlphaMode.Mask,
+            AlphaCutoff = 0.4f,
+            DoubleSided = true
+        });
+        var box = Box(1);
+        box.MaterialID = "metal";
+        var part = scene.CreateMesh(scene.Models, "part", "Part");
+        part.Meshes.Add(box);
+
+        var material = Find(Import(scene, Vector3.Zero), part).GetComponent<Material>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(material.MetallicFactor, Is.EqualTo(0.9f));
+            Assert.That(material.RoughnessFactor, Is.EqualTo(0.2f));
+            Assert.That(material.NormalScale, Is.EqualTo(0.5f));
+            Assert.That(material.AlphaMode, Is.EqualTo(AlphaMode.Mask));
+            Assert.That(material.AlphaCutoff, Is.EqualTo(0.4f));
+            Assert.That(material.DoubleSided, Is.True);
+            Assert.That(material.TexturePath, Does.StartWith("Models/Robot/robot.glb#image0:"));
+            Assert.That(material.NormalMapPath, Is.EqualTo(material.TexturePath));
+        });
+    }
+
+    // The content manager keeps what it loaded by name: the model saved again with another picture inside must not get
+    // the old picture's texture.
+    [Test]
+    public void AnImageInside_SavedAgainOtherwise_IsNamedOtherwise()
+    {
+        string PathFor(byte[] picture)
+        {
+            var scene = NewScene();
+            scene.Source = "Models/Robot/robot.glb";
+            scene.Images.Add("image0", new SceneData.Image { ID = "image0", Data = picture });
+            scene.Materials.Add("skin", new SceneData.Material { ID = "skin", DiffuseMap = "image0" });
+            var box = Box(1);
+            box.MaterialID = "skin";
+            var part = scene.CreateMesh(scene.Models, "part", "Part");
+            part.Meshes.Add(box);
+            return Find(Import(scene, Vector3.Zero), part).GetComponent<Material>().TexturePath;
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PathFor([1, 2, 3]), Is.EqualTo(PathFor([1, 2, 3])));
+            Assert.That(PathFor([1, 2, 3]), Is.Not.EqualTo(PathFor([1, 2, 4])));
+        });
+    }
+
+    [Test]
+    public void AMaterialPointingAtAnImageThereIsNot_StillImports()
+    {
+        var scene = NewScene();
+        scene.Materials.Add("lost", new SceneData.Material { ID = "lost", DiffuseMap = "nowhere" });
+        var box = Box(1);
+        box.MaterialID = "lost";
+        var part = scene.CreateMesh(scene.Models, "part", "Part");
+        part.Meshes.Add(box);
+
+        var material = Find(Import(scene, Vector3.Zero), part).GetComponent<Material>();
+
+        Assert.That(material.TexturePath, Is.Null);
+    }
+
+    [Test]
     public void ADiffuseColor_IsCarried()
     {
         var scene = NewScene();

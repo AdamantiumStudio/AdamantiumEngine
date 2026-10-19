@@ -6,8 +6,8 @@
 		<Configurations>Debug;Release</Configurations>
 		<LangVersion>latest</LangVersion>
 		<IsPackable>true</IsPackable>
-		<Description>Imports 3D models - Collada, Wavefront OBJ, 3DS - into the mesh and scene data of the Adamantium engine.</Description>
-		<PackageTags>adamantium;engine;3d;models;collada;obj</PackageTags>
+		<Description>Imports 3D models - glTF 2.0, Collada, Wavefront OBJ, 3DS - into the mesh and scene data of the Adamantium engine.</Description>
+		<PackageTags>adamantium;engine;3d;models;gltf;collada;obj</PackageTags>
 	</PropertyGroup>
 	<ItemGroup>
 		<Folder Include="Models\" />

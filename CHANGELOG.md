@@ -7,6 +7,47 @@ All packages share one version.
 
 ### Added
 
+- glTF 2.0 import, `.gltf` and `.glb` (`GltfConverter`, through `ModelConverter` and the content project's model
+  importer): the scene's node tree, placed by TRS or matrix; each primitive of a mesh as a mesh of its own with its
+  material - triangles, strips and fans as lists of triangles, lines and points as they are - with normals, four sets
+  of texture coordinates and vertex colors; buffers in files beside the asset, in data URIs or in a `.glb`'s binary
+  chunk; accessors of every component type, normalized, interleaved by their stride, matrices by their columns, and
+  sparse. An extension the asset requires and the reader does not know stops the import with its name; one it only uses
+  is told (`UnsupportedFeatures`), and so is anything else not read - morph targets, a second scene.
+  `KHR_texture_transform` on the base color texture is laid on the coordinates it reads. The node tree is walked
+  without recursion, so a chain however deep imports, and a node reached twice is told.
+- glTF skins, animation, cameras and lights. A skin is its joint nodes with their inverse bind matrices
+  (`SceneData.Controller.JointsAreNodes`), each vertex's first four joints and weights read; every animation is a clip
+  of its own in `SceneData.Clips`, by name, each node's translation, rotation and scale channels brought to one list of
+  keys - a key wherever any has one, thirty a second along a cubic spline (at most a minute's worth between two keys),
+  and a stepped channel beside a blended one holding up to each step; a camera (perspective or orthographic) and a
+  `KHR_lights_punctual` light where their nodes stand. A skin with more joints than are drawn
+  (`SceneData.Controller.MaxDrawnJoints`, 128) is told.
+- GPU skinning: `Skin` holds a skinned mesh's joint entities and inverse bind matrices and fills the palette its draw
+  bends it with - each joint where it stands now, against the mesh - and the forward renderer draws a skinned mesh lit
+  and textured with it (`ForwardPlusEffect`'s `SkinnedColored` and `SkinnedTextured` passes, up to
+  `ForwardPlusRenderingProcessor.MaxJoints`, 128). A skinned mesh was drawn through a pass that did not exist. The
+  palette is a constant buffer of its own (`Includes/Skinning.fxh`), uploaded by skinned passes only; a skinned mesh is
+  not culled by its bind pose's box; the editor's selection outline and ghost follow the skin (`BasicEffect`'s
+  `SkinnedLitInstanced`, `SkinnedFlatInstanced` and `SkinnedOutlineInstanced` passes).
+- Animation of nodes: `AnimationComponent.Clips`, `CurrentClip` (bindable, choosing one starts it), `ClipNames`,
+  `Duration`, and `Targets` - the entities a clip poses by their node's key; a clip with targets poses them each frame
+  (`Pose`, `Sample`), a joint and a wheel alike, through `Transform.SetPose`, which stands an entity as a node is posed
+  whatever its pivot. `EntityImportTemplate` gives a model with clips one, its targets found among its nodes; a format
+  with a single clip has it in `Clips` too, under the model's name. `RestPoses` keep how each target stands with no
+  clip on it: choosing another clip, or none (`null`, an unknown name - which stops the play), stands them there first
+  (`Rest`). `TimeAt` plays a clip by every `CalculateOptions`, back-and-forth ones included.
+- `SceneData.Material` and `Material` keep glTF's PBR: metallic and roughness factors and their map, normal map and its
+  scale, occlusion map and its strength, emissive map (`KHR_materials_emissive_strength` taken), `AlphaMode`,
+  `AlphaCutoff` and `DoubleSided`. The forward renderer still draws the base color, its texture and emission.
+- `SceneData.Image.Data` and `MimeType`: an image a model carries inside - a `.glb`'s, a data URI's - as its bytes,
+  written to the `.aemf` with the model; `EntityImportTemplate` embeds them in the content manager under the model's
+  and the image's key and a hash of the bytes (`robot.glb#image0:1A2B3C…`), the material's image path, and loads the
+  texture from there - the model saved again with another picture gets that picture. A picture
+  that cannot be read leaves its part untextured instead of failing the whole model.
+- `IContentManager.Embed`: makes bytes loadable as an asset of a name, as an image inside a model is; the content
+  manager then loads it (`ContentReaderParameters.Data`), keeps it and loads it again for a new device like one read from
+  a file. `TextureContentReader` reads such a texture from its bytes.
 - `Entity.Source` and `SceneData.Source`: the file an entity was made from, as it was asked for. A model loaded through
   the content manager is named by its file (`SceneDataContentReader`) and keeps the path here; it was named by the
   whole path.
@@ -632,6 +673,8 @@ All packages share one version.
 
 ### Fixed
 
+- A material pointing at an image the model does not have imports without its texture; the import of the whole model
+  failed on it.
 - A free third-person orbit stays where it is when its host turns: its offset is the view's, in the world, turned back
   by the host's own turn. It swung round with the host while its view stayed, so it looked away, and the rotation tool,
   used while looking through it, chased the swing and shook the camera.
@@ -1123,6 +1166,8 @@ All packages share one version.
 
 ### Changed
 
+- `Adamantium.Graphics.Core.Models.CameraProjectionType.Pespective` is renamed `Perspective`. Saved `.aemf` files are
+  unaffected: the value is stored as a number.
 - `CameraBase.ZoomStep` is 1.08 a wheel notch, in either projection; 1.15 jumped.
 - A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
   the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text

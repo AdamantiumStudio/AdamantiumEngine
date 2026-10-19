@@ -67,4 +67,34 @@ public class ContentResolverTests
     {
         Assert.That(new CookedContentResolver().Exists(_folder + "/m.dae"), Is.False);
     }
+
+    // An image carried inside a model has no file: it is embedded under a name, and loads and is kept like a file.
+    [Test]
+    public void AnEmbeddedAsset_IsReadFromItsBytes_AndKept()
+    {
+        var manager = new ContentManager(new AdamantiumDependencyContainer(), new Satellites());
+        manager.Resolvers.Add(new FileSystemContentResolver());
+        manager.Readers[typeof(Blob)] = new BlobReader();
+        var bytes = new byte[] { 1, 2, 3 };
+        var options = new ContentLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
+
+        manager.Embed("model.glb#image0", bytes);
+        var first = manager.Load<Blob>("model.glb#image0", options);
+        var again = manager.Load<Blob>("model.glb#image0", options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(manager.Exists("model.glb#image0"), Is.True);
+            Assert.That(first.Bytes, Is.SameAs(bytes));
+            Assert.That(again, Is.SameAs(first), "kept");
+        });
+    }
+
+    private sealed record Blob(byte[] Bytes);
+
+    private sealed class BlobReader : IContentReader
+    {
+        public System.Threading.Tasks.Task<object> ReadContentAsync(IContentManager contentManager,
+            ContentReaderParameters parameters) => System.Threading.Tasks.Task.FromResult<object>(new Blob(parameters.Data));
+    }
 }

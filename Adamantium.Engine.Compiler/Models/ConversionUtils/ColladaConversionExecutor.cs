@@ -1501,7 +1501,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                 var perspective = cameraItem as cameraOpticsTechnique_commonPerspective;
                 cameraData.ZNear = (Single)perspective.znear.Value;
                 cameraData.ZFar = (Single)perspective.zfar.Value;
-                cameraData.ProjectionType = CameraProjectionType.Pespective;
+                cameraData.ProjectionType = CameraProjectionType.Perspective;
                 for (int i = 0; i < perspective.Items.Length; i++)
                 {
                     if (perspective.ItemsElementName[i] == ItemsChoiceType1.xfov)

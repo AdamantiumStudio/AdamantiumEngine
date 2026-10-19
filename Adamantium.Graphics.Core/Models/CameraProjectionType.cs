@@ -3,6 +3,6 @@
 //Тип проекции камеры
 public enum CameraProjectionType
 {
-   Pespective,
+   Perspective,
    Orthogonal
 }

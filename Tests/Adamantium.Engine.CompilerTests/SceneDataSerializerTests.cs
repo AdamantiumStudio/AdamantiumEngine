@@ -77,5 +77,40 @@ namespace Adamantium.Engine.CompilerTests
             Assert.That(loadedRootJoint.Children.Count, Is.EqualTo(1));
             Assert.That(loadedRootJoint.Children[0].ParentJoint, Is.SameAs(loadedRootJoint));
         }
+
+        // A picture carried inside a model goes into the artifact with it; a material's PBR values with it too.
+        [Test]
+        public void RoundTrip_KeepsAnImageCarriedInside_AndAMaterialsPbrValues()
+        {
+            var scene = new SceneData { Name = "Carried" };
+            scene.Images["image0"] = new SceneData.Image { ID = "image0", Data = [0x89, 0x50, 0x4E, 0x47], MimeType = "image/png" };
+            scene.Materials["material0"] = new SceneData.Material
+            {
+                ID = "material0",
+                DiffuseMap = "image0",
+                MetallicFactor = 0.25f,
+                RoughnessFactor = 0.5f,
+                NormalMap = "image0",
+                AlphaMode = AlphaMode.Mask,
+                AlphaCutoff = 0.3f,
+                DoubleSided = true
+            };
+
+            var loaded = SceneDataSerializer.Deserialize(SceneDataSerializer.Serialize(scene));
+
+            var image = loaded.Images["image0"];
+            var material = loaded.Materials["material0"];
+            Assert.Multiple(() =>
+            {
+                Assert.That(image.Data, Is.EqualTo(new byte[] { 0x89, 0x50, 0x4E, 0x47 }));
+                Assert.That(image.MimeType, Is.EqualTo("image/png"));
+                Assert.That(material.MetallicFactor, Is.EqualTo(0.25f));
+                Assert.That(material.RoughnessFactor, Is.EqualTo(0.5f));
+                Assert.That(material.NormalMap, Is.EqualTo("image0"));
+                Assert.That(material.AlphaMode, Is.EqualTo(AlphaMode.Mask));
+                Assert.That(material.AlphaCutoff, Is.EqualTo(0.3f));
+                Assert.That(material.DoubleSided, Is.True);
+            });
+        }
     }
 }

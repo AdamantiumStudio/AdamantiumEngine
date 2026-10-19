@@ -19,6 +19,9 @@ namespace Adamantium.Engine.Compiler.Converter
                return new ObjConverter(filePath, config);
             case ".3ds":
                return new Autodesk3DSConverter(filePath, config);
+            case ".gltf":
+            case ".glb":
+               return new GltfConverter(filePath, config);
             default:
                throw new NotSupportedException("This converter type is not supported");
          }

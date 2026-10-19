@@ -27,6 +27,7 @@ public static class SceneDataSerializer
                     new DictionarySubclassFormatter<SceneData.CameraCollection, string, SceneData.Camera>(),
                     new DictionarySubclassFormatter<SceneData.LightCollection, string, SceneData.Light>(),
                     new DictionarySubclassFormatter<SceneData.AnimationCollection, string, SceneData.FrameCollection>(),
+                    new DictionarySubclassFormatter<SceneData.AnimationSetCollection, string, SceneData.AnimationCollection>(),
                     new DictionarySubclassFormatter<SceneData.SkeletonCollection, string, List<SceneData.Joint>>(),
                     new ListSubclassFormatter<SceneData.FrameCollection, SceneData.KeyFrame>()
                 ],

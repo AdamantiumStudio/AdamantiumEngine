@@ -476,6 +476,21 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        /// <summary>Stands the entity in its parent as a model's node is posed - an animation's key, say: scaled by
+        /// <paramref name="baseScale"/> (the user's <see cref="ScaleFactor"/> on top) and turned about its own origin, then
+        /// moved to <paramref name="position"/>. Its pivot stays where it is on it, and only moves the position kept.</summary>
+        public void SetPose(Vector3 position, QuaternionF rotation, Vector3F baseScale)
+        {
+            Rotation = rotation;
+            BaseScale = baseScale;
+            var scaling = Scale;
+            var center = (Vector3F)pivot;
+            var unmoved = Vector3F.Zero;
+            Matrix4x4F.Transformation(ref center, ref pivotRotation, ref scaling, ref center, ref this.rotation, ref unmoved,
+                out var aboutPivot);
+            Position = position - (Vector3)aboutPivot.TranslationVector;
+        }
+
         /// <summary>Where this entity stands in its parent: scaled and turned about its pivot, then moved to its position.</summary>
         public Matrix4x4F GetLocalMatrixF()
         {

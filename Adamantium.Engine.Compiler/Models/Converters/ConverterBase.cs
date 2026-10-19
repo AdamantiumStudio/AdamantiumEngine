@@ -48,6 +48,11 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
             return null;
          }
 
+         if (SceneDataContainer.Clips.Count == 0 && SceneDataContainer.Animation.Count > 0)
+         {
+            SceneDataContainer.Clips[Path.GetFileNameWithoutExtension(FileName)] = SceneDataContainer.Animation;
+         }
+
          AssembleModel();
          return SceneDataContainer;
       }
@@ -198,7 +203,7 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
             }
          }
 
-         foreach (var frames in SceneDataContainer.Animation.Values)
+         foreach (var frames in AllFrames())
          {
             foreach (var frame in frames)
             {
@@ -207,6 +212,24 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
                frame.Position = position;
                frame.Scale = scale;
                frame.Rotation = rotation;
+            }
+         }
+      }
+
+      // Each list of frames once: the one clip of a format with one is both the animation and a clip.
+      private IEnumerable<SceneData.FrameCollection> AllFrames()
+      {
+         var seen = new HashSet<SceneData.FrameCollection>(ReferenceEqualityComparer.Instance);
+         foreach (var frames in SceneDataContainer.Animation.Values)
+         {
+            if (seen.Add(frames)) yield return frames;
+         }
+
+         foreach (var clip in SceneDataContainer.Clips.Values)
+         {
+            foreach (var frames in clip.Values)
+            {
+               if (seen.Add(frames)) yield return frames;
             }
          }
       }

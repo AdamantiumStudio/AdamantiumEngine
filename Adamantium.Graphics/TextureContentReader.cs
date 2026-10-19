@@ -1,3 +1,4 @@
+using System.IO;
 using System.Threading.Tasks;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Content;
@@ -13,7 +14,12 @@ public class TextureContentReader : IContentReader
     public Task<object> ReadContentAsync(IContentManager contentManager, ContentReaderParameters parameters)
     {
         var device = (GraphicsDevice)contentManager.Satellites.Get<IGraphicsDeviceService>().ResourceLoaderDevice;
-        var texture = Texture.Load(device, parameters.AssetPath);
-        return Task.FromResult((object)texture);
+        if (parameters.Data != null)
+        {
+            using var stream = new MemoryStream(parameters.Data, false);
+            return Task.FromResult((object)Texture.Load(device, stream));
+        }
+
+        return Task.FromResult((object)Texture.Load(device, parameters.AssetPath));
     }
 }

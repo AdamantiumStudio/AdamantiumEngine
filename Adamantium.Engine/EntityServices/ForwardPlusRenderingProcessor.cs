@@ -9,6 +9,7 @@ using Adamantium.Engine.Rendering;
 using Adamantium.FX;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.Graphics.Core.Vertices;
 using Adamantium.Mathematics;
 using Adamantium.Vulkan.Core;
@@ -40,12 +41,16 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private ForwardPlusEffect effect;
     private ForwardPlusWireEffect wireEffect;
     private readonly Stack<(Entity Entity, EditorDisplay Display)> walk = new();
+    private readonly Matrix4x4F[] palette = new Matrix4x4F[MaxJoints];
     private BasicEffect basicEffect;
     private MeshGeometryCache geometryCache;
     private bool prepared;
 
     /// <summary>The most lights one frame takes, directional ones included; the rest are left out.</summary>
     public const int MaxLights = 1024;
+
+    /// <summary>The most joints a skinned mesh is drawn with; a skin with more bends with the first of them.</summary>
+    public const int MaxJoints = SceneData.Controller.MaxDrawnJoints;
 
     /// <summary>What the scene is drawn over: black by default, so only the lights show the surfaces.</summary>
     public Color ClearColor { get; set; } = Colors.Black;
@@ -279,7 +284,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var shown = display?.Display ?? EntityDisplay.AsView;
         if (collider.ContainsDataFor(ActiveCamera))
         {
-            if (collider.IsInsideCameraFrustum(ActiveCamera) == ContainmentType.Disjoint)
+            // A skin goes where its joints take it, not where its bind pose's box stands.
+            if (collider.IsInsideCameraFrustum(ActiveCamera) == ContainmentType.Disjoint && !entity.ContainsComponent<Skin>())
             {
                 return true;
             }
@@ -359,8 +365,20 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var material = entity.GetComponent<Material>();
         if (meshData.RenderMode == MeshRenderMode.Skinned)
         {
-            basicEffect.Wvp.SetValue(transformation.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
-            basicEffect.Techniques["Basic"].Passes["Skinned"].Apply();
+            FillPalette(entity.GetComponent<Skin>());
+            effect.World.SetValue(transformation.WorldMatrixF);
+            effect.Joints.SetValue(palette);
+            if (material?.Texture != null)
+            {
+                effect.SampleType.SetResource(SamplerStates.LinearRepeat);
+                effect.ShaderTexture.SetResource(material.Texture);
+                effect.ForwardPlusSkinnedTexturedPass.Apply();
+            }
+            else
+            {
+                effect.Albedo.SetValue(AlbedoOf(material));
+                effect.ForwardPlusSkinnedColoredPass.Apply();
+            }
         }
         else if (withWire)
         {
@@ -413,6 +431,15 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         basicEffect.BasicColoredPass.UnApply();
+    }
+
+    private void FillPalette(Skin skin)
+    {
+        var filled = skin?.FillPalette(palette) ?? 0;
+        for (int i = filled; i < palette.Length; i++)
+        {
+            palette[i] = Matrix4x4F.Identity;
+        }
     }
 
     private Vector3F AlbedoOf(Material material)

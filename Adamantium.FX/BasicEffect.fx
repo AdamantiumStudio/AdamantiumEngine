@@ -1,4 +1,6 @@
-﻿float4x4 wvp;
+﻿#include "Includes/Skinning.fxh"
+
+float4x4 wvp;
 // Rotation for NORMALS. wvp bakes the projection in, and a normal put through that is no longer a direction - lighting
 // has to be done in a space the light is fixed in, and for a head-lit gizmo that space is the view.
 float4x4 world;
@@ -327,6 +329,37 @@ PS_OUTPUT_BASIC OutlineInstanced_VS(MESH_VERTEX input, uint instanceId : SV_Inst
     return output;
 }
 
+// The skinned twins: the vertex goes where its joints carry it first, then the copy places it. A skin has one palette,
+// so a skinned mesh is drawn one copy at a time.
+PS_OUTPUT_BASIC SkinnedLitInstanced_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
+{
+    PS_OUTPUT_BASIC output;
+
+    float4x4 placement = mul(SkinOf(input.jointIndices, input.jointWeights), instanceWorld[instanceId]);
+    output.position = mul(mul(float4(input.position.xyz, 1.0f), placement), viewProjection);
+    output.uv = input.uv0;
+    output.color = instanceColor[instanceId];
+    output.normal = mul(mul(input.normal, (float3x3)placement), (float3x3)view);
+    return output;
+}
+
+PS_OUTPUT_BASIC SkinnedOutlineInstanced_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
+{
+    PS_OUTPUT_BASIC output;
+
+    uint copy = instanceId / outlineDirections;
+    float angle = (instanceId % outlineDirections) * (6.2831853f / outlineDirections);
+    float4x4 placement = mul(SkinOf(input.jointIndices, input.jointWeights), instanceWorld[copy]);
+    float4 position = mul(mul(float4(input.position.xyz, 1.0f), placement), viewProjection);
+    position.xy += float2(cos(angle), sin(angle)) * outlineStep * position.w;
+
+    output.position = position;
+    output.uv = input.uv0;
+    output.color = instanceColor[copy];
+    output.normal = input.normal;
+    return output;
+}
+
 float4 BasicColored_PS(PS_OUTPUT_BASIC input) : SV_TARGET
 {
     float4 color = float4(meshColor, 1);
@@ -402,6 +435,24 @@ technique Basic
     pass OutlineInstanced
     {
         VertexShader = OutlineInstanced_VS;
+        PixelShader = BasicVertexColored_PS;
+    }
+
+    pass SkinnedLitInstanced
+    {
+        VertexShader = SkinnedLitInstanced_VS;
+        PixelShader = BasicLit_PS;
+    }
+
+    pass SkinnedFlatInstanced
+    {
+        VertexShader = SkinnedLitInstanced_VS;
+        PixelShader = BasicVertexColored_PS;
+    }
+
+    pass SkinnedOutlineInstanced
+    {
+        VertexShader = SkinnedOutlineInstanced_VS;
         PixelShader = BasicVertexColored_PS;
     }
 

@@ -80,4 +80,16 @@ technique ForwardPlus
         VertexShader = Lit_VS;
         PixelShader = LitTextured_PS;
     }
+
+    pass SkinnedColored
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitColored_PS;
+    }
+
+    pass SkinnedTextured
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitTextured_PS;
+    }
 }

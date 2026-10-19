@@ -15,6 +15,7 @@ public partial class SceneData
       CameraData = new CameraCollection();
       LightData = new LightCollection();
       Animation = new AnimationCollection();
+      Clips = new AnimationSetCollection();
       Materials = new MaterialCollection();
       Controllers = new ControllerCollection();
       Skeletons = new SkeletonCollection();
@@ -182,6 +183,11 @@ public partial class SceneData
    public CameraCollection CameraData { get; set; }
    public LightCollection LightData { get; set; }
    public AnimationCollection Animation { get; set; }
+
+   /// <summary>Every clip of the model by name - walking, running - each its frames by what they move: a joint of a
+   /// skeleton (<see cref="FrameCollection.FullName"/>) or a node of the model (its <see cref="Model.ID"/>). A format
+   /// with one clip has it here too, under the model's name.</summary>
+   public AnimationSetCollection Clips { get; set; }
    /// <summary>
    /// List of Hierarchical joints. One root for one skeleton
    /// </summary>
