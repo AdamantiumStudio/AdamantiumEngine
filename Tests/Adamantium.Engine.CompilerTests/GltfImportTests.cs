@@ -19,7 +19,7 @@ public class GltfImportTests
     private const int Float = 5126;
     private const int UnsignedByte = 5121;
     private const int UnsignedShort = 5123;
-    private static readonly Matrix4x4F ToEngine = AxisConversion.Between(UpAxis.Y_UP_RH, UpAxis.Y_DOWN_RH);
+    private static readonly Matrix4x4F ToEngine = AxisConversion.Between(UpAxis.Y_UP_RH_FRONT_Z, UpAxis.Y_DOWN_RH);
     private string folder;
 
     [SetUp]
@@ -79,6 +79,20 @@ public class GltfImportTests
             Assert.That(Vector3F.Dot(engineFront, fileFront), Is.GreaterThan(0.99f), "the front the file meant");
             Assert.That(Vector3F.Dot(Vector3F.Normalize(mesh.Normals[0]), fileFront), Is.GreaterThan(0.99f), "its normal");
         });
+    }
+
+    // A glTF model's front faces +Z; in the engine it faces as the engine's models do, -Z.
+    [Test]
+    public void AModel_FacesAsTheEnginesModelsFace()
+    {
+        var mesh = SingleMesh(Import(Triangle().WriteGltf(folder)));
+
+        var a = (Vector3F)mesh.Points[mesh.Indices[0]];
+        var b = (Vector3F)mesh.Points[mesh.Indices[1]];
+        var c = (Vector3F)mesh.Points[mesh.Indices[2]];
+        var front = Vector3F.Normalize(Vector3F.Cross(c - a, b - a));
+
+        Assert.That(Vector3F.Dot(front, Matrix4x4F.Identity.Forward), Is.GreaterThan(0.99f));
     }
 
     [Test]
@@ -571,6 +585,8 @@ public class GltfImportTests
             Assert.That(camera.Fov, Is.EqualTo(60).Within(1e-3), "degrees, as Collada's");
             Assert.That(camera.FovType, Is.EqualTo(FovType.YFov));
             Assert.That(camera.Translation, Is.EqualTo(InEngine(0, 0, 5)).Using<Vector3F>(Near));
+            Assert.That(Vector3F.Dot(Vector3F.TransformNormal(Vector3F.UnitZ, Matrix4x4F.RotationQuaternion(camera.Rotation)),
+                Vector3F.Normalize(-camera.Translation)), Is.GreaterThan(0.99f), "an engine camera looks along its +Z: at the model, as in the file");
             Assert.That(light.LightType, Is.EqualTo(LightType.Spot));
             Assert.That(light.Color, Is.EqualTo(new Vector3F(2, 1, 0)));
             Assert.That(light.FalloffAngle, Is.EqualTo(45).Within(1e-3));

@@ -15,7 +15,9 @@ All packages share one version.
   sparse. An extension the asset requires and the reader does not know stops the import with its name; one it only uses
   is told (`UnsupportedFeatures`), and so is anything else not read - morph targets, a second scene.
   `KHR_texture_transform` on the base color texture is laid on the coordinates it reads. The node tree is walked
-  without recursion, so a chain however deep imports, and a node reached twice is told.
+  without recursion, so a chain however deep imports, and a node reached twice is told. A glTF model's front, +Z,
+  comes in facing -Z, as the engine's models face (`UpAxis.Y_UP_RH_FRONT_Z`, changed by (-x, -y, -z) with the
+  points' order reversed).
 - glTF skins, animation, cameras and lights. A skin is its joint nodes with their inverse bind matrices
   (`SceneData.Controller.JointsAreNodes`), each vertex's first four joints and weights read; every animation is a clip
   of its own in `SceneData.Clips`, by name, each node's translation, rotation and scale channels brought to one list of

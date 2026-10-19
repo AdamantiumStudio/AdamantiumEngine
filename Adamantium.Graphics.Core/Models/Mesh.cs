@@ -1447,6 +1447,20 @@ public class Mesh
                         break;
                 }
                 break;
+
+            case UpAxis.Y_UP_RH_FRONT_Z:
+                switch (destinationUpAxis)
+                {
+                    case UpAxis.Y_DOWN_RH:
+                        for (int i = 0; i < Points.Length; i++)
+                        {
+                            Points[i] = -Points[i];
+                            ConvertUVs(i);
+                        }
+                        TurnNormals(n => -n);
+                        break;
+                }
+                break;
         }
 
         // Re-wind the faces only when the change MIRRORS the mesh, which negating or swapping an axis does and a

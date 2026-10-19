@@ -24,7 +24,7 @@ public class GltfConverter : ConverterBase
     private GltfFile file;
     private readonly HashSet<string> told = [];
 
-    public GltfConverter(string filePath, ConversionConfig config) : base(filePath, config, UpAxis.Y_UP_RH)
+    public GltfConverter(string filePath, ConversionConfig config) : base(filePath, config, UpAxis.Y_UP_RH_FRONT_Z)
     {
     }
 

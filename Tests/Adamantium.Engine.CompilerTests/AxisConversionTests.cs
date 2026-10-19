@@ -21,6 +21,7 @@ namespace Adamantium.Engine.CompilerTests
             (UpAxis.Z_UP, UpAxis.Y_DOWN_RH),
             (UpAxis.Y_UP_RH, UpAxis.Y_UP_LH),
             (UpAxis.Y_UP_RH, UpAxis.Y_DOWN_RH),
+            (UpAxis.Y_UP_RH_FRONT_Z, UpAxis.Y_DOWN_RH),
         };
 
         [Test]
