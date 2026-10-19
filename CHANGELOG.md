@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- A tool can do its own thing with a click and a frame instead of selecting: `ToolProcessor.Clicked` and
+  `SelectTool.Framed` are virtual, `ToolProcessor.PressedOn` lets a press on an entity start a gesture,
+  `SelectTool.ClicksOnRelease` clicks on the release and draws a frame when the pointer moves away first, and
+  `ToolProcessor.ShowsLightHandles` leaves a selected light's handles out of a tool that drags nothing - an editor's
+  delete tool is built on `SelectTool` so.
 - glTF import opens meshopt-compressed assets, `EXT_meshopt_compression` and `KHR_meshopt_compression`, with a decoder
   of our own (`GltfMeshopt`): vertex data of versions 0 and 1, triangles and index sequences, and the octahedral,
   quaternion, exponential and color filters. Compressed buffer views are unpacked as the file is read; a buffer no
@@ -720,6 +725,10 @@ All packages share one version.
 
 ### Fixed
 
+- `EntityManager.RemoveEntity` took out only the world's own entities: a part of one's tree - a mesh of an imported
+  model - stayed where it was. It now leaves its owner with its tree, announced by `EntityRemoved`, and a camera
+  following it leaves the world with it. `InputService.UserControlledEntity` is let go of once it, or what holds it,
+  leaves the world: the camera keys followed it into nothing.
 - `Mesh.Optimize` left tangents on the old vertex numbering when it kept them; it now carries them, and keeps apart
   vertices that differ in what it does not weigh - tangents it keeps, attributes beyond, morph targets.
 - A baked mesh with tangents and no bitangents came back without its tangents. A mesh given tangents or normals now

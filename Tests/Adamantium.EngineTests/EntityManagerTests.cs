@@ -92,6 +92,120 @@ public class EntityManagerTests
         Assert.That(manager.RootEntities, Is.Empty);
     }
 
+    // A mesh of a model is no entity of the world's own, only a branch of the model's tree: taken out, it leaves the
+    // model, announced once however often asked in a frame, and the camera following it goes with it.
+    [Test]
+    public void APartOfAModel_IsTakenOutOfIt_WithWhatFollowsIt()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var model = new Entity(null, "Model");
+        var part = new Entity(model, "Part");
+        var camera = new Entity(null, "Camera");
+        manager.AddEntity(model);
+        manager.AddEntity(camera);
+        manager.SetOwner(camera, part);
+        NextFrame(universe);
+        var removed = new List<Entity>();
+        manager.EntityRemoved += (_, e) => removed.Add(e.Entity);
+
+        manager.RemoveEntity(part);
+        manager.RemoveEntity(part);
+        NextFrame(universe);
+
+        Assert.That(model.Dependencies, Does.Not.Contain(part));
+        Assert.That(manager.RootEntities, Is.EqualTo(new[] { model }));
+        Assert.That(manager.FindEntity(camera.Uid), Is.Null);
+        Assert.That(removed, Is.EqualTo(new[] { part, camera }));
+    }
+
+    // Taken out, the part has no owner left: asked again it is outside the world, and it can be hung anywhere anew.
+    [Test]
+    public void APartTakenOut_IsAnnouncedOnce_AndCanBeHungAgain()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var model = new Entity(null, "Model");
+        var part = new Entity(model, "Part");
+        var mesh = new Entity(part, "Mesh");
+        manager.AddEntity(model);
+        NextFrame(universe);
+        var removed = new List<Entity>();
+        manager.EntityRemoved += (_, e) => removed.Add(e.Entity);
+
+        manager.RemoveEntity(part);
+        NextFrame(universe);
+        manager.RemoveEntity(part);
+        manager.RemoveEntity(mesh);
+        NextFrame(universe);
+
+        Assert.That(removed, Is.EqualTo(new[] { part }));
+        Assert.That(part.Owner, Is.Null);
+        Assert.That(part.Dependencies, Does.Contain(mesh));
+
+        manager.SetOwner(part, model);
+        NextFrame(universe);
+
+        Assert.That(model.Dependencies, Does.Contain(part));
+    }
+
+    // Asked twice in a frame, or for a part and the model holding it, the world announces each entity once.
+    [Test]
+    public void AModelTakenOutTwice_OrWithItsPart_IsAnnouncedOnce()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var model = new Entity(null, "Model");
+        var part = new Entity(model, "Part");
+        manager.AddEntity(model);
+        NextFrame(universe);
+        var removed = new List<Entity>();
+        manager.EntityRemoved += (_, e) => removed.Add(e.Entity);
+
+        manager.RemoveEntity(part);
+        manager.RemoveEntity(model);
+        manager.RemoveEntity(model);
+        NextFrame(universe);
+
+        Assert.That(removed, Is.EqualTo(new[] { model }));
+        Assert.That(manager.RootEntities, Is.Empty);
+    }
+
+    // The part stays in place until the frame: nothing walking the model's tree meanwhile sees it go.
+    [Test]
+    public void APartTakenOut_StaysUntilTheNextFrame()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var model = new Entity(null, "Model");
+        var part = new Entity(model, "Part");
+        manager.AddEntity(model);
+        NextFrame(universe);
+
+        manager.RemoveEntity(part);
+
+        Assert.That(model.Dependencies, Does.Contain(part));
+        NextFrame(universe);
+        Assert.That(model.Dependencies, Does.Not.Contain(part));
+    }
+
+    [Test]
+    public void AnEntityOutsideTheWorld_IsLeftAlone()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var owner = new Entity(null, "Owner");
+        var part = new Entity(owner, "Part");
+        var removed = new List<Entity>();
+        manager.EntityRemoved += (_, e) => removed.Add(e.Entity);
+
+        manager.RemoveEntity(part);
+        NextFrame(universe);
+
+        Assert.That(owner.Dependencies, Does.Contain(part));
+        Assert.That(removed, Is.Empty);
+    }
+
     private static void NextFrame(TestUniverse universe)
     {
         universe.EntityWorld.ForceUpdate();

@@ -31,4 +31,21 @@ public class CameraGroupTests
             Assert.That(world.EntityManager.Cameras.Count, Is.Zero);
         });
     }
+
+    [Test]
+    public void ACameraInAPartTakenOut_LeavesWithThePart()
+    {
+        var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
+        var model = new Entity(null, "Model");
+        var body = new Entity(model, "Body");
+        var cockpit = new Entity(body, "Cockpit");
+        cockpit.AddComponent(new Camera(60, 800, 600, 0.1f, 1000f));
+        world.EntityManager.AddEntity(model);
+        world.ForceUpdate();
+
+        world.EntityManager.RemoveEntity(body);
+        world.ForceUpdate();
+
+        Assert.That(world.EntityManager.Cameras.Count, Is.Zero);
+    }
 }

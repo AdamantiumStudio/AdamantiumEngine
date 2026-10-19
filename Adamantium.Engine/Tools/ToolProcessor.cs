@@ -48,6 +48,10 @@ public abstract class ToolProcessor : EditorProcessor
     /// stand-in at the center takes the handles, and each entity follows what is done to it.</summary>
     protected virtual bool WorksGroups => false;
 
+    /// <summary>Whether a selected light brings its own handles to the tool; a tool that changes nothing by dragging
+    /// leaves them out.</summary>
+    protected virtual bool ShowsLightHandles => true;
+
     public override void Update(AppTime appTime)
     {
         var target = TargetOf(Tools.Selection);
@@ -139,32 +143,39 @@ public abstract class ToolProcessor : EditorProcessor
             return;
         }
 
-        if (under.Entity == null && PressedOnNothing(input, camera))
+        if (under.Entity == null ? PressedOnNothing(input, camera) : PressedOn(under.Entity, input, camera))
         {
             return;
         }
 
+        Clicked(under.Entity);
+        if (!Modifier(Keys.Shift) && !Modifier(Keys.Control) && DragsClicked(under.Entity) is { } mover)
+        {
+            dragged = mover;
+            dragTarget = under.Entity;
+            dragCamera = camera;
+            dragEye = camera.WorldPosition;
+            dragBegun = false;
+            pressRay = ray;
+            pressedAt = input.RelativePosition;
+        }
+    }
+
+    /// <summary>A click on <paramref name="entity"/>, or on nothing for null: selects it - with Shift adding it to the
+    /// selection, with Control taking it out.</summary>
+    protected virtual void Clicked(Entity entity)
+    {
         if (Modifier(Keys.Shift))
         {
-            Tools.Selection.Add([under.Entity]);
+            Tools.Selection.Add([entity]);
         }
         else if (Modifier(Keys.Control))
         {
-            Tools.Selection.Remove([under.Entity]);
+            Tools.Selection.Remove([entity]);
         }
         else
         {
-            Tools.Selection.Current = under.Entity;
-            if (DragsClicked(under.Entity) is { } mover)
-            {
-                dragged = mover;
-                dragTarget = under.Entity;
-                dragCamera = camera;
-                dragEye = camera.WorldPosition;
-                dragBegun = false;
-                pressRay = ray;
-                pressedAt = input.RelativePosition;
-            }
+            Tools.Selection.Current = entity;
         }
     }
 
@@ -278,6 +289,11 @@ public abstract class ToolProcessor : EditorProcessor
     /// selection.</summary>
     protected virtual bool PressedOnNothing(InputWormhole input, Camera camera) => false;
 
+    /// <summary>A press of the left button on <paramref name="entity"/>, no handle taken: true when the tool takes it as
+    /// the start of a gesture of its own, which <see cref="ContinueGesture"/> then carries on; false clicks it at
+    /// once.</summary>
+    protected virtual bool PressedOn(Entity entity, InputWormhole input, Camera camera) => false;
+
     /// <summary>Carries on a gesture of the tool's own each frame, before anything else the pointer does; true while it
     /// lasts.</summary>
     protected virtual bool ContinueGesture(InputWormhole input, Camera camera) => false;
@@ -306,7 +322,10 @@ public abstract class ToolProcessor : EditorProcessor
     {
         active.Clear();
         AddApplying(own, target);
-        AddApplying(lightHandles, target);
+        if (ShowsLightHandles)
+        {
+            AddApplying(lightHandles, target);
+        }
     }
 
     private void AddApplying(Handles[] handles, Entity target)
