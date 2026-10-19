@@ -29,13 +29,21 @@ All packages share one version.
   `ForwardPlusRenderingProcessor.MaxJoints`, 128). A skinned mesh was drawn through a pass that did not exist. The
   palette is a constant buffer of its own (`Includes/Skinning.fxh`), uploaded by skinned passes only; a skinned mesh is
   not culled by its bind pose's box; the editor's selection outline and ghost follow the skin (`BasicEffect`'s
-  `SkinnedLitInstanced`, `SkinnedFlatInstanced` and `SkinnedOutlineInstanced` passes).
+  `SkinnedLitInstanced`, `SkinnedFlatInstanced` and `SkinnedOutlineInstanced` passes). A weight below zero, which
+  glTF forbids, is taken as none and a joint index below zero as the first joint, on the GPU and off it.
+- A mesh drawn skinned (`Skin.DrawnOn`) is clicked, pointed at and framed where the skin puts it now, not where it was
+  bound. `Skin.PosePoints` gives its points so, posed again only when a joint, the mesh or its node has moved;
+  `Skin.PosedBounds` a box round them found without posing them, which a ray is tried against first; `Skin.Intersect`
+  looks through a triangle tree of the skin's own that `TriangleTree.Refit` lays on the posed points.
+- `Entity.Duplicate` gives the copy's skin its own copied joints and its clips their copied nodes
+  (`ICloneableComponent.CloneReferences`); an entity outside what was copied is kept as it is.
 - Animation of nodes: `AnimationComponent.Clips`, `CurrentClip` (bindable, choosing one starts it), `ClipNames`,
   `Duration`, and `Targets` - the entities a clip poses by their node's key; a clip with targets poses them each frame
   (`Pose`, `Sample`), a joint and a wheel alike, through `Transform.SetPose`, which stands an entity as a node is posed
   whatever its pivot. `EntityImportTemplate` gives a model with clips one, its targets found among its nodes; a format
-  with a single clip has it in `Clips` too, under the model's name. `RestPoses` keep how each target stands with no
-  clip on it: choosing another clip, or none (`null`, an unknown name - which stops the play), stands them there first
+  with a single clip - Collada - has it in `Clips`, under the model's name, and no longer in `SceneData.Animation`,
+  which only a scene saved before keeps. `RestPoses` keep how each target stands with no clip on it: choosing another
+  clip, or none (`null`, an unknown name - which stops the play), stands them there first
   (`Rest`). `TimeAt` plays a clip by every `CalculateOptions`, back-and-forth ones included.
 - `SceneData.Material` and `Material` keep glTF's PBR: metallic and roughness factors and their map, normal map and its
   scale, occlusion map and its strength, emissive map (`KHR_materials_emissive_strength` taken), `AlphaMode`,
@@ -673,6 +681,10 @@ All packages share one version.
 
 ### Fixed
 
+- `Entity.Duplicate` lost every entity's place: the copied `Transform` was dropped for the one each new entity comes
+  with, so the copy and all under it stood at the origin, unturned. A copy now stands in its owner as the original
+  stands in its own, is shown, switched and picked as it is, and an animation copied stands as the original does,
+  paused or playing, with its own list of clips.
 - A material pointing at an image the model does not have imports without its texture; the import of the whole model
   failed on it.
 - A free third-person orbit stays where it is when its host turns: its offset is the view's, in the world, turned back
@@ -1168,6 +1180,9 @@ All packages share one version.
 
 - `Adamantium.Graphics.Core.Models.CameraProjectionType.Pespective` is renamed `Perspective`. Saved `.aemf` files are
   unaffected: the value is stored as a number.
+- `Mesh.IsTangetBinormalsPresent` is renamed `IsTangentBinormalsPresent`.
+- `ICloneableComponent` has a new member, `CloneReferences`: a component that implements it without deriving from
+  `Component` implements that too.
 - `CameraBase.ZoomStep` is 1.08 a wheel notch, in either projection; 1.15 jumped.
 - A vertical alignment places whole lines, as WinUI's: `Center` centers the lines' box in the area and `Bottom` puts
   the last line's bottom on its edge, where they placed the ascent above the baseline and the last baseline. A text

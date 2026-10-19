@@ -113,7 +113,7 @@ public static class Picking
 
         if ((mode & PickMode.Triangles) != 0 && IsTriangles(mesh.MeshTopology))
         {
-            PickTriangles(entity, mesh, in world, ray.Ray, ref nearest);
+            PickTriangles(entity, mesh, Skin.DrawnOn(entity), in world, ray.Ray, ref nearest);
         }
 
         if ((mode & PickMode.Lines) != 0 && IsLines(mesh.MeshTopology))
@@ -132,20 +132,23 @@ public static class Picking
         return topology == PrimitiveType.LineList || topology == PrimitiveType.LineStrip;
     }
 
-    private static void PickTriangles(Entity entity, Mesh mesh, in Matrix4x4F world, in Ray ray, ref PickHit nearest)
+    private static void PickTriangles(Entity entity, Mesh mesh, Skin skin, in Matrix4x4F world, in Ray ray, ref PickHit nearest)
     {
         if (!ToLocal(in ray, in world, out var local))
         {
             return;
         }
 
-        BoundingBox bounds = mesh.Bounds;
+        var bounds = skin != null ? skin.PosedBounds(mesh) : (BoundingBox)mesh.Bounds;
         if (!Collision.RayIntersectsBox(ref local, ref bounds, out float _))
         {
             return;
         }
 
-        if (mesh.GetTriangleTree().Intersect(local, out var distance))
+        var hit = skin != null
+            ? skin.Intersect(mesh, local, out var distance)
+            : mesh.GetTriangleTree().Intersect(local, out distance);
+        if (hit)
         {
             nearest = PickHit.Nearest(nearest, new PickHit(entity, ray.Position + ray.Direction * distance, distance));
         }

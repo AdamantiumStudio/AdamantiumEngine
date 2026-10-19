@@ -125,7 +125,7 @@ public class Mesh
         
     public bool IsColorPresent => Semantic.HasFlag(VertexSemantic.Color);
 
-    public bool IsTangetBinormalsPresent => Semantic.HasFlag(VertexSemantic.TangentBiNormal);
+    public bool IsTangentBinormalsPresent => Semantic.HasFlag(VertexSemantic.TangentBiNormal);
 
     public bool IsAnimationPresent => Semantic.HasFlag(VertexSemantic.JointIndices) &&
                                       Semantic.HasFlag(VertexSemantic.JointWeights);

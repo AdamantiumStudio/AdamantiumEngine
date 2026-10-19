@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Templates;
@@ -172,6 +173,157 @@ public class SkinAndClipTests
             Assert.That(halfwayBending, Is.EqualTo(new Vector3F(1, -1, 0)).Using<Vector3F>(Near), "blended halfway");
             Assert.That(kicked, Is.EqualTo(new Vector3F(0, -1, 4)).Using<Vector3F>(Near), "the clip chosen plays");
             Assert.That(animation.Duration, Is.EqualTo(1));
+        });
+    }
+
+    // A copy bends with its own joints and its clips pose its own nodes; the original is left as it was.
+    [Test]
+    public void ADuplicate_BendsWithItsOwnJoints_AndPlaysOnItsOwnNodes()
+    {
+        var scene = SkinnedScene();
+        scene.Clips["Bend"] = Clip("knee", (0, new Vector3F(0, -1, 0)), (1, new Vector3F(2, -1, 0)));
+        var model = Import(scene, out var leg, out var hip, out var knee);
+
+        var copy = model.Duplicate();
+        var copiedLeg = copy.Dependencies.Single(e => e.Name.StartsWith("Leg"));
+        var copiedHip = copy.Dependencies.Single(e => e.Name.StartsWith("Hip"));
+        var copiedKnee = copiedHip.Dependencies.Single();
+        var skin = copiedLeg.GetComponent<Skin>();
+        var animation = copy.GetComponent<AnimationComponent>();
+        animation.Pose(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(skin.Joints, Is.EqualTo(new[] { copiedHip, copiedKnee }));
+            Assert.That(skin.InverseBindMatrices, Is.EqualTo(leg.GetComponent<Skin>().InverseBindMatrices));
+            Assert.That(animation.Targets["knee"], Is.SameAs(copiedKnee));
+            Assert.That(animation.RestPoses.Keys, Is.EquivalentTo(model.GetComponent<AnimationComponent>().RestPoses.Keys));
+            Assert.That(copiedKnee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(2, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(knee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(0, -1, 0)).Using<Vector3F>(Near),
+                "the original's knee stays");
+            Assert.That(leg.GetComponent<Skin>().Joints, Is.EqualTo(new[] { hip, knee }));
+        });
+    }
+
+    [Test]
+    public void ADuplicate_StandsWhereTheOriginalStands()
+    {
+        var model = Import(SkinnedScene(), out _, out _, out var knee);
+        model.Transform.Position = new Vector3(4, 0, 0);
+        knee.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitZ, 0.5f);
+
+        var copy = model.Duplicate();
+        var copiedKnee = copy.Dependencies.Single(e => e.Name.StartsWith("Hip")).Dependencies.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(copy.Transform.Position, Is.EqualTo(new Vector3(4, 0, 0)));
+            Assert.That(copiedKnee.Transform.GetLocalMatrixF(), Is.EqualTo(knee.Transform.GetLocalMatrixF()).Using<Matrix4x4F>(Near));
+        });
+    }
+
+    // A copy of a model paused mid-clip stands as the original does, and choosing its clips leaves the original's alone.
+    [Test]
+    public void ADuplicate_OfAPausedModel_KeepsItsPose_AndItsOwnClips()
+    {
+        var scene = SkinnedScene();
+        scene.Clips["Bend"] = Clip("knee", (0, new Vector3F(0, -1, 0)), (1, new Vector3F(2, -1, 0)));
+        var model = Import(scene, out _, out _, out _);
+        var animation = model.GetComponent<AnimationComponent>();
+        animation.Pose(1);
+        animation.IsPaused = true;
+
+        var copy = model.Duplicate();
+        var copiedAnimation = copy.GetComponent<AnimationComponent>();
+        copiedAnimation.Update(new AppTime());
+        copiedAnimation.Clips.Remove("Bend");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(copy.Dependencies.Single(e => e.Name.StartsWith("Hip")).Dependencies.Single().Transform.GetLocalMatrixF().TranslationVector,
+                Is.EqualTo(new Vector3F(2, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(animation.ClipNames, Is.EquivalentTo(new[] { "Bend" }));
+        });
+    }
+
+    // A joint index below zero, which a signed accessor can hold, is taken as the first joint, as the draw takes it:
+    // the hip carries the point three along, where the knee would carry it thirteen and no joint would leave it.
+    [Test]
+    public void AJointIndexBelowZero_IsTheFirstJoint()
+    {
+        Import(SkinnedScene(), out var leg, out var hip, out var knee);
+        var mesh = leg.GetComponent<MeshData>().Mesh;
+        mesh.SetJointIndices([new Vector4F(-1, 0, 0, 0), new Vector4F(-1, 0, 0, 0), new Vector4F(-1, 0, 0, 0)]);
+        mesh.SetJointWeights([Vector4F.UnitX, Vector4F.UnitX, Vector4F.UnitX]);
+        hip.Transform.Position = new Vector3(3, 0, 0);
+        knee.Transform.Position += new Vector3(10, 0, 0);
+
+        var posed = leg.GetComponent<Skin>().PosePoints(mesh);
+
+        Assert.That(posed[1], Is.EqualTo(new Vector3F(4, 0, 0)).Using<Vector3F>(Near));
+    }
+
+    // glTF forbids a weight below zero; one is taken as none, as the draw takes it, so the box round the pose holds.
+    [Test]
+    public void AWeightBelowZero_IsNone_AndThePoseStaysInsideItsBox()
+    {
+        Import(SkinnedScene(), out var leg, out var hip, out _);
+        var mesh = leg.GetComponent<MeshData>().Mesh;
+        mesh.SetJointWeights([new Vector4F(1.5f, -0.5f, 0, 0), new Vector4F(1.5f, -0.5f, 0, 0), new Vector4F(1.5f, -0.5f, 0, 0)]);
+        hip.Transform.Position = new Vector3(4, 0, 0);
+        var skin = leg.GetComponent<Skin>();
+
+        var posed = skin.PosePoints(mesh);
+        var box = skin.PosedBounds(mesh);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(posed[1], Is.EqualTo(new Vector3F(5, 0, 0)).Using<Vector3F>(Near), "carried by the hip alone");
+            Assert.That(posed, Has.All.Matches<Vector3F>(p => box.Contains(p) != ContainmentType.Disjoint));
+        });
+    }
+
+    // A pose that holds is looked through with a tree fitted to it; when the joints move again, the tree follows.
+    [Test]
+    public void ARay_FindsTheSkinWhereItStands_AsItStandsStill_AndAsItMoves()
+    {
+        Import(SkinnedScene(), out var leg, out var hip, out _);
+        var mesh = leg.GetComponent<MeshData>().Mesh;
+        var skin = leg.GetComponent<Skin>();
+        var down = new Ray(new Vector3F(0.25f, -0.25f, -5), Vector3F.UnitZ);
+        var movedDown = new Ray(new Vector3F(4.25f, -0.25f, -5), Vector3F.UnitZ);
+
+        var atRest = skin.Intersect(mesh, down, out _);
+        hip.Transform.Position = new Vector3(4, 0, 0);
+        var whereItWas = skin.Intersect(mesh, down, out _);
+        var whereItWent = skin.Intersect(mesh, movedDown, out var distance);
+        var again = skin.Intersect(mesh, movedDown, out _);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(atRest, Is.True);
+            Assert.That(whereItWas, Is.False);
+            Assert.That(whereItWent, Is.True);
+            Assert.That(distance, Is.EqualTo(5).Within(1e-4f));
+            Assert.That(again, Is.True);
+        });
+    }
+
+    [Test]
+    public void ADuplicate_IsShownAndSwitchedAsTheOriginal()
+    {
+        var model = Import(SkinnedScene(), out var leg, out _, out _);
+        leg.Visible = false;
+        leg.IsEnabled = false;
+        leg.IgnoreInCollisionDetection = true;
+
+        var copiedLeg = model.Duplicate().Dependencies.Single(e => e.Name.StartsWith("Leg"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(copiedLeg.Visible, Is.False);
+            Assert.That(copiedLeg.IsEnabled, Is.False);
+            Assert.That(copiedLeg.IgnoreInCollisionDetection, Is.True);
         });
     }
 

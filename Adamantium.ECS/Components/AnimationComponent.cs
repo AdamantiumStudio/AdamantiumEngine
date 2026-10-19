@@ -13,6 +13,8 @@ namespace Adamantium.ECS.Components
     [ViewModel]
     public partial class AnimationComponent : ActivatableComponent
     {
+        private volatile bool restPending;
+
         /// <summary>The frames of the clip playing - <see cref="CurrentClip"/>'s - by what they move.</summary>
         public SceneData.AnimationCollection Animations { get; set; }
 
@@ -43,8 +45,6 @@ namespace Adamantium.ECS.Components
             IsAnimationStarted = false;
             restPending = true;
         }
-
-        private volatile bool restPending;
 
         private void RestIfClipChanged()
         {
@@ -100,12 +100,7 @@ namespace Adamantium.ECS.Components
         {
             Animations = new SceneData.AnimationCollection(copy.Animations);
             Skeletons = new SceneData.SkeletonCollection(copy.Skeletons);
-            Clips = new SceneData.AnimationSetCollection();
-            foreach (var clip in copy.Clips)
-            {
-                Clips[clip.Key] = clip.Value;
-            }
-
+            Clips = CopyClips(copy.Clips);
             CurrentClip = copy.CurrentClip;
             StartingKeyFrame = copy.StartingKeyFrame;
             EndingKeyFrame = copy.EndingKeyFrame;
@@ -114,6 +109,43 @@ namespace Adamantium.ECS.Components
         }
 
         public Dictionary<string, Matrix4x4F> InterpolatedMatrices { get; private set; }
+
+        public override void CloneValues(IComponent clone)
+        {
+            base.CloneValues(clone);
+            var animation = (AnimationComponent)clone;
+            animation.Clips = CopyClips(Clips);
+            animation.Skeletons = new SceneData.SkeletonCollection(Skeletons);
+            animation.Animations = Animations;
+            animation.IsAnimationStarted = IsAnimationStarted;
+            animation.AnimationStartTime = AnimationStartTime;
+            animation.restPending = restPending;
+            animation.InterpolatedMatrices = new Dictionary<string, Matrix4x4F>();
+            foreach (var (key, rest) in RestPoses)
+            {
+                animation.RestPoses[key] = rest;
+            }
+        }
+
+        public override void CloneReferences(IComponent clone, IReadOnlyDictionary<Entity, Entity> copies)
+        {
+            var animation = (AnimationComponent)clone;
+            foreach (var (key, target) in Targets)
+            {
+                animation.Targets[key] = CopyOf(target, copies);
+            }
+        }
+
+        private static SceneData.AnimationSetCollection CopyClips(SceneData.AnimationSetCollection clips)
+        {
+            var copy = new SceneData.AnimationSetCollection();
+            foreach (var (name, clip) in clips)
+            {
+                copy[name] = clip;
+            }
+
+            return copy;
+        }
 
         public void Update(AppTime appTime)
         {

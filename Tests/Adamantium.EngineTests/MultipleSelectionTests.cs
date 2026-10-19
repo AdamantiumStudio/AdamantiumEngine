@@ -2,9 +2,12 @@ using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine;
 using Adamantium.Engine.EntityServices;
 using Adamantium.Engine.Tools;
+using Adamantium.Graphics.Core;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse;
 using Adamantium.Multiverse.Input;
@@ -107,6 +110,90 @@ public class MultipleSelectionTests
         tools.PickEntities(camera, new ScreenFrame(rightPixel + new Vector2F(0, 5), leftPixel - new Vector2F(0, 5)), into);
 
         Assert.That(into, Is.EquivalentTo(new[] { left, right }));
+    }
+
+    [Test]
+    public void AFrame_TakesASkinWhereItsJointCarriedIt_NotWhereItWasBound()
+    {
+        var skinned = CarriedSkin(out var bound, out var drawn);
+        var aroundBound = new List<Entity>();
+        var aroundDrawn = new List<Entity>();
+
+        tools.PickEntities(camera, new ScreenFrame(bound - new Vector2F(100), bound + new Vector2F(100)), aroundBound);
+        tools.PickEntities(camera, new ScreenFrame(drawn - new Vector2F(100), drawn + new Vector2F(100)), aroundDrawn);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(aroundBound, Does.Not.Contain(skinned));
+            Assert.That(aroundDrawn, Does.Contain(skinned));
+        });
+    }
+
+    [Test]
+    public void AClick_HitsASkinWhereItsJointCarriedIt_NotWhereItWasBound()
+    {
+        var skinned = CarriedSkin(out var bound, out var drawn);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tools.PickEntity(PickRay.FromCamera(camera, bound)).Entity, Is.Not.SameAs(skinned));
+            Assert.That(tools.PickEntity(PickRay.FromCamera(camera, drawn)).Entity, Is.SameAs(skinned));
+        });
+    }
+
+    // Drawn as it is, unbent, it is clicked where it is drawn.
+    [Test]
+    public void AClick_HitsASkinDrawnUnbent_WhereItWasBound()
+    {
+        var skinned = CarriedSkin(out var bound, out var drawn);
+        skinned.GetComponent<MeshData>().RenderMode = MeshRenderMode.Static;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tools.PickEntity(PickRay.FromCamera(camera, bound)).Entity, Is.SameAs(skinned));
+            Assert.That(tools.PickEntity(PickRay.FromCamera(camera, drawn)).Entity, Is.Not.SameAs(skinned));
+        });
+    }
+
+    // A crossing frame over the drawn skin's middle takes it.
+    [Test]
+    public void ACrossingFrame_TakesASkinWhereItsJointCarriedIt()
+    {
+        var skinned = CarriedSkin(out var bound, out var drawn);
+        var overBound = new List<Entity>();
+        var overDrawn = new List<Entity>();
+
+        tools.PickEntities(camera, new ScreenFrame(bound + new Vector2F(5), bound - new Vector2F(5)), overBound);
+        tools.PickEntities(camera, new ScreenFrame(drawn + new Vector2F(5), drawn - new Vector2F(5)), overDrawn);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(overBound, Does.Not.Contain(skinned));
+            Assert.That(overDrawn, Does.Contain(skinned));
+        });
+    }
+
+    // A triangle bound to one joint at its middle, the joint then moved five units up: the skin is drawn there.
+    private Entity CarriedSkin(out Vector2F bound, out Vector2F drawn)
+    {
+        var skinned = new Entity(null, "Skinned");
+        skinned.Transform.Position = new Vector3(0, 2.5, 15);
+        var mesh = new Mesh(PrimitiveType.TriangleList);
+        mesh.SetPoints([new Vector3(-1, 1, 0), new Vector3(1, 1, 0), new Vector3(0, -1, 0)]).SetIndices([0, 1, 2]);
+        mesh.SetJointIndices([Vector4F.Zero, Vector4F.Zero, Vector4F.Zero]);
+        mesh.SetJointWeights([Vector4F.UnitX, Vector4F.UnitX, Vector4F.UnitX]);
+        skinned.AddComponent(new MeshData { Mesh = mesh, RenderMode = MeshRenderMode.Skinned });
+        var joint = new Entity(skinned, "Joint");
+        var skin = new Skin();
+        skin.Joints.Add(joint);
+        skin.InverseBindMatrices.Add(Matrix4x4F.Identity);
+        skinned.AddComponent(skin);
+        universe.EntityWorld.EntityManager.AddEntity(skinned);
+        joint.Transform.Position = new Vector3(0, -5, 0);
+        Frame();
+        bound = PixelOf(skinned.Transform.Position);
+        drawn = PixelOf(skinned.Transform.Position + new Vector3(0, -5, 0));
+        return skinned;
     }
 
     [Test]

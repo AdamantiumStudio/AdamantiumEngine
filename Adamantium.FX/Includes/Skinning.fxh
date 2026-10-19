@@ -25,15 +25,17 @@ struct SKINNED_VERTEX
     float4 jointWeights : BLENDWEIGHT;
 };
 
-// The joints' matrices blended by the vertex's weights; a vertex weighed to none stays where it is.
+// The joints' matrices blended by the vertex's weights, a weight below zero taken as none; a vertex weighed to none
+// stays where it is.
 float4x4 SkinOf(float4 indices, float4 weights)
 {
+    weights = max(weights, 0);
     float total = weights.x + weights.y + weights.z + weights.w;
     if (total < 1e-6f)
     {
         return float4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
     }
 
-    uint4 at = min((uint4)indices, (uint4)(MAX_JOINTS - 1));
+    uint4 at = (uint4)clamp(indices, 0, MAX_JOINTS - 1);
     return (joints[at.x] * weights.x + joints[at.y] * weights.y + joints[at.z] * weights.z + joints[at.w] * weights.w) / total;
 }

@@ -588,6 +588,7 @@ namespace Adamantium.ECS.Components
                 transform.pivot = pivot;
                 transform.IsWorldDirty = true;
                 transform.PivotRotation = PivotRotation;
+                transform.IsEnabled = IsEnabled;
             }
         }
     }

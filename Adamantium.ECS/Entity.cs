@@ -392,38 +392,63 @@ namespace Adamantium.ECS
 
         public Entity Duplicate()
         {
-            Entity root = new Entity(null, $"{this.Name} (1)") { IconKey = IconKey, Source = Source };
-            var entities = new Dictionary<UInt128, Entity>();
-            entities.Add(Uid, root);
-            CloneComponents(root, this);
+            var root = Copy(null, this, $"{Name} (1)");
+            var entities = new Dictionary<Entity, Entity>();
+            var clones = new List<(ICloneableComponent Original, IComponent Clone)>();
+            entities.Add(this, root);
+            CloneComponents(root, this, clones);
             TraverseByLayer(current =>
             {
-                if (current.Uid == Uid)
+                if (current == this)
                 {
                     return;
                 }
 
-                if (entities.ContainsKey(current.Owner.Uid))
+                if (entities.TryGetValue(current.Owner, out var currentOwner))
                 {
-                    var currentOwner = entities[current.Owner.Uid];
-                    var entity = new Entity(currentOwner, current.Name) { IconKey = current.IconKey, Source = current.Source };
-                    entities.Add(current.Uid, entity);
-                    CloneComponents(entity, current);
+                    var entity = Copy(currentOwner, current, current.Name);
+                    entities.Add(current, entity);
+                    CloneComponents(entity, current, clones);
                 }
             });
-            entities.Clear();
+
+            foreach (var (original, clone) in clones)
+            {
+                original.CloneReferences(clone, entities);
+            }
+
             return root;
         }
 
-        private void CloneComponents(Entity clonedEntity, Entity originalEntity)
+        private static Entity Copy(Entity owner, Entity original, string name)
+        {
+            return new Entity(owner, name)
+            {
+                IconKey = original.IconKey,
+                Source = original.Source,
+                Visible = original.Visible,
+                IsEnabled = original.IsEnabled,
+                IsExpanded = original.IsExpanded,
+                IgnoreInCollisionDetection = original.IgnoreInCollisionDetection,
+                Tag = original.Tag
+            };
+        }
+
+        private static void CloneComponents(Entity clonedEntity, Entity originalEntity,
+            List<(ICloneableComponent Original, IComponent Clone)> clones)
         {
             foreach (var component in originalEntity.Components)
             {
-                if (component is ICloneableComponent cloneable)
+                if (component is Transform transform)
+                {
+                    transform.CloneValues(clonedEntity.Transform);
+                }
+                else if (component is ICloneableComponent cloneable)
                 {
                     var cloned = cloneable.Clone();
                     cloneable.CloneValues(cloned);
                     clonedEntity.AddComponent(cloned);
+                    clones.Add((cloneable, cloned));
                 }
             }
         }

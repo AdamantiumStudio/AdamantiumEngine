@@ -57,6 +57,20 @@ namespace Adamantium.Engine.CompilerTests
         }
 
         [Test]
+        public void TheOneClip_IsKeptOnce_UnderTheModelsName()
+        {
+            var scene = Import(Document(
+                Bone("Bone", translate: "0 0 0"),
+                Channel("Bone/location.X", "0 1", "0 4", stride: 1)));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(scene.Clips.Keys, Is.EqualTo(new[] { "model" }));
+                Assert.That(scene.Animation, Is.Empty, "not a second copy beside the clip");
+            });
+        }
+
+        [Test]
         public void Animation_MergesChannelsOfOneJointFromSeparateAnimations()
         {
             // Blender puts every channel in its OWN <animation>. The animation dictionary used to take the first one
@@ -203,7 +217,7 @@ namespace Adamantium.Engine.CompilerTests
 
         private static SceneData.FrameCollection Frames(SceneData scene, string jointId)
         {
-            var frames = scene.Animation.Values.FirstOrDefault(x => x.JointId == jointId);
+            var frames = scene.Clips.Values.SelectMany(clip => clip.Values).FirstOrDefault(x => x.JointId == jointId);
             Assert.That(frames, Is.Not.Null, $"no animation found for joint '{jointId}'");
             return frames;
         }

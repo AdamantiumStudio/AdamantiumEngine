@@ -21,6 +21,7 @@ public sealed class TriangleTree
     private readonly int[] indices;
     private readonly PrimitiveType topology;
     private readonly Vector3F[] corners;
+    private readonly int[] cornerPoints;
     private readonly Node[] nodes;
     private int nodeCount;
 
@@ -30,8 +31,14 @@ public sealed class TriangleTree
         this.indices = indices;
         this.topology = topology;
 
-        var gathered = Gather(points, indices, topology);
-        var count = gathered.Length / 3;
+        var triangles = Gather(points.Length, indices, topology);
+        var gathered = new Vector3F[triangles.Length];
+        for (int i = 0; i < triangles.Length; i++)
+        {
+            gathered[i] = (Vector3F)points[triangles[i]];
+        }
+
+        var count = triangles.Length / 3;
         var scratch = new Scratch(gathered, count);
         nodes = new Node[Math.Max(1, 2 * count - 1)];
         if (count > 0)
@@ -40,12 +47,15 @@ public sealed class TriangleTree
         }
 
         corners = new Vector3F[count * 3];
+        cornerPoints = new int[count * 3];
         for (int i = 0; i < count; i++)
         {
             var triangle = scratch.Order[i];
-            corners[i * 3] = gathered[triangle * 3];
-            corners[i * 3 + 1] = gathered[triangle * 3 + 1];
-            corners[i * 3 + 2] = gathered[triangle * 3 + 2];
+            for (int corner = 0; corner < 3; corner++)
+            {
+                corners[i * 3 + corner] = gathered[triangle * 3 + corner];
+                cornerPoints[i * 3 + corner] = triangles[triangle * 3 + corner];
+            }
         }
     }
 
@@ -135,17 +145,65 @@ public sealed class TriangleTree
         return found;
     }
 
-    private static Vector3F[] Gather(Vector3[] points, int[] indices, PrimitiveType topology)
+    /// <summary>
+    /// Lays the triangles on <paramref name="moved"/> - the points the tree was built from, standing elsewhere, as a skin
+    /// bends them - and fits its boxes round them again. The tree keeps its shape, so a ray finds a triangle as fast as
+    /// before while the points keep close to where they were.
+    /// </summary>
+    public void Refit(Vector3F[] moved)
     {
-        if (topology != PrimitiveType.TriangleList && topology != PrimitiveType.TriangleStrip)
+        for (int i = 0; i < corners.Length; i++)
+        {
+            corners[i] = moved[cornerPoints[i]];
+        }
+
+        for (int i = nodeCount - 1; i >= 0; i--)
+        {
+            ref var node = ref nodes[i];
+            if (node.Count > 0)
+            {
+                var min = new Vector3F(float.MaxValue);
+                var max = new Vector3F(float.MinValue);
+                for (int corner = node.First * 3; corner < (node.First + node.Count) * 3; corner++)
+                {
+                    min = Vector3F.Min(min, corners[corner]);
+                    max = Vector3F.Max(max, corners[corner]);
+                }
+
+                var extent = max - min;
+                var pad = new Vector3F(Math.Max(extent.X, Math.Max(extent.Y, extent.Z)) * Padding);
+                node.Min = min - pad;
+                node.Max = max + pad;
+            }
+            else
+            {
+                node.Min = Vector3F.Min(nodes[i + 1].Min, nodes[node.First].Min);
+                node.Max = Vector3F.Max(nodes[i + 1].Max, nodes[node.First].Max);
+            }
+        }
+    }
+
+    private static int StepOf(PrimitiveType topology)
+    {
+        if (topology == PrimitiveType.TriangleList)
+        {
+            return 3;
+        }
+
+        return topology == PrimitiveType.TriangleStrip ? 1 : 0;
+    }
+
+    private static int[] Gather(int pointCount, int[] indices, PrimitiveType topology)
+    {
+        var step = StepOf(topology);
+        if (step == 0)
         {
             return [];
         }
 
-        List<Vector3F> gathered = [];
+        List<int> gathered = [];
         var indexed = indices.Length > 0;
-        var count = indexed ? indices.Length : points.Length;
-        var step = topology == PrimitiveType.TriangleStrip ? 1 : 3;
+        var count = indexed ? indices.Length : pointCount;
         for (int i = 0; i + 2 < count; i += step)
         {
             var a = indexed ? indices[i] : i;
@@ -156,9 +214,9 @@ public sealed class TriangleTree
                 continue;
             }
 
-            gathered.Add((Vector3F)points[a]);
-            gathered.Add((Vector3F)points[b]);
-            gathered.Add((Vector3F)points[c]);
+            gathered.Add(a);
+            gathered.Add(b);
+            gathered.Add(c);
         }
 
         return gathered.ToArray();
