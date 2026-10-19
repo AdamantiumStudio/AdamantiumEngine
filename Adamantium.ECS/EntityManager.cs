@@ -17,6 +17,7 @@ public sealed class EntityManager
     private readonly Dictionary<String, EntityGroup> entitiesByGroup;
     private readonly List<Entity> entitiesToAdd;
     private readonly List<Entity> entitiesToRemove;
+    private readonly List<Entity> branchesToRemove;
     private readonly List<Entity> entitiesReowned;
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
@@ -29,6 +30,7 @@ public sealed class EntityManager
         entitiesByGroup = new Dictionary<String, EntityGroup>();
         entitiesToAdd = new List<Entity>();
         entitiesToRemove = new List<Entity>();
+        branchesToRemove = new List<Entity>();
         entitiesReowned = new List<Entity>();
         entityParametersMap = new Dictionary<UInt128, EntityParameters>();
         availableProjectionTypes = new List<CameraProjectionType>();
@@ -71,10 +73,27 @@ public sealed class EntityManager
             {
                 foreach (var entity in entitiesToRemove)
                 {
-                    RemoveEntityInternal(entity);
+                    if (availableEntities.ContainsKey(entity.Uid))
+                    {
+                        entity.Owner?.RemoveDependency(entity);
+                        RemoveEntityInternal(entity);
+                    }
                 }
 
                 entitiesToRemove.Clear();
+            }
+
+            if (branchesToRemove.Count > 0)
+            {
+                foreach (var branch in branchesToRemove)
+                {
+                    if (InWorld(branch))
+                    {
+                        RemoveBranch(branch);
+                    }
+                }
+
+                branchesToRemove.Clear();
             }
 
             if (entitiesToAdd.Count > 0)
@@ -169,6 +188,27 @@ public sealed class EntityManager
         });
     }
 
+    private void RemoveBranch(Entity branch)
+    {
+        branch.Owner = null;
+        branch.TraverseInDepth(leaveCameras);
+        OnEntityRemoved(branch);
+        branch.TraverseInDepth(held =>
+        {
+            if (held != branch) RemoveEntityInternal(held);
+        });
+    }
+
+    private bool InWorld(Entity entity)
+    {
+        for (var current = entity; current != null; current = current.Owner)
+        {
+            if (availableEntities.ContainsKey(current.Uid)) return true;
+        }
+
+        return false;
+    }
+
     public Entity CreateEntity(string name, Entity owner = null, bool createDisabled = false)
     {
         lock (this)
@@ -230,18 +270,27 @@ public sealed class EntityManager
         return availableProjectionTypes.ToArray();
     }
 
-    public void RemoveEntity(Entity root)
+    /// <summary>Takes <paramref name="entity"/> out of the world with its tree, from the next frame: one of the world's
+    /// own, or any part of its trees - a mesh of a model. Nothing for one outside the world.</summary>
+    public void RemoveEntity(Entity entity)
     {
-        if (root == null)
+        if (entity == null)
             return;
 
         lock (syncObject)
         {
-            if (!availableEntities.ContainsKey(root.Uid)) return;
-
-            entityParametersMap.Remove(root.RootUid);
-            root.Owner?.RemoveDependency(root);
-            entitiesToRemove.Add(root);
+            if (availableEntities.ContainsKey(entity.Uid))
+            {
+                if (!entitiesToRemove.Contains(entity))
+                {
+                    entityParametersMap.Remove(entity.RootUid);
+                    entitiesToRemove.Add(entity);
+                }
+            }
+            else if (InWorld(entity) && !branchesToRemove.Contains(entity))
+            {
+                branchesToRemove.Add(entity);
+            }
         }
     }
 

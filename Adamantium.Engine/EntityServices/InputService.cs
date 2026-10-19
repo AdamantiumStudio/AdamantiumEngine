@@ -466,11 +466,29 @@ public class InputService : EntityService
             var cameras = outputs[i].Cameras;
             for (int j = 0; j < cameras.Count; j++)
             {
-                if (e.Entity == cameras[j].Owner)
+                if (IsUnder(cameras[j].Owner, e.Entity))
                 {
                     cameras[j].Type = CameraType.Free;
                 }
             }
         }
+
+        if (IsUnder(UserControlledEntity, e.Entity))
+        {
+            UserControlledEntity = null;
+        }
+    }
+
+    private static bool IsUnder(Entity entity, Entity ancestor)
+    {
+        for (var current = entity; current != null; current = current.Owner)
+        {
+            if (current == ancestor)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

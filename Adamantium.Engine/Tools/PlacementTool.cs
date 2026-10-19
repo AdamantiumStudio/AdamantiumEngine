@@ -14,18 +14,15 @@ namespace Adamantium.Engine.Tools;
 /// surface, on the ground grid wherever it is seen. Where the pointer then leaves the scene - above the horizon, past
 /// the grid - the ghost stays where it last touched it; from an eye standing on the ground, which the pointer never
 /// meets in front of it, the ghost goes on the ground under what the pointer shows at the camera's focus. A click
-/// places it; with Shift held the tool stays to place another, else it is done. Esc
-/// or a right click gives up; a right drag still turns the camera.
+/// places it; with Shift held the tool stays to place another, else it is done. Esc gives up; the right button turns the
+/// camera.
 /// </summary>
 public sealed class PlacementTool : ToolProcessor
 {
     private static readonly Vector4F GhostTint = new(0.35f, 0.75f, 1f, 0.45f);
-    private const float ClickSlop = 4;
     private Vector3? lastTouch;
     private readonly float lowest;
     private bool finished;
-    private Vector2F rightPressedAt;
-    private bool rightClicking;
 
     /// <param name="ghost">What is placed, standing at its origin; it is only drawn and never joins the world. Null draws
     /// no ghost, only the <see cref="Icon"/> if there is one: the tool then picks what to place onto, <see cref="Under"/>,
@@ -79,12 +76,6 @@ public sealed class PlacementTool : ToolProcessor
 
         if (Tools.Observatory.PointerOutput is not { Camera: { } camera, Input: { CanLocatePointer: true } input })
         {
-            return;
-        }
-
-        if (IsRightClick(input, camera))
-        {
-            Finish();
             return;
         }
 
@@ -274,35 +265,6 @@ public sealed class PlacementTool : ToolProcessor
     {
         finished = true;
         Finished?.Invoke(this, EventArgs.Empty);
-    }
-
-    // A right press let go about where it was pressed; one that moved further turned the camera.
-    private bool IsRightClick(InputWormhole input, Camera camera)
-    {
-        if (input.IsMouseButtonPressed(MouseButton.Right))
-        {
-            rightPressedAt = input.RelativePosition;
-            rightClicking = true;
-        }
-
-        if (!rightClicking)
-        {
-            return false;
-        }
-
-        if (Vector2F.Distance(input.RelativePosition, rightPressedAt) > ClickSlop * camera.PixelsPerPoint)
-        {
-            rightClicking = false;
-            return false;
-        }
-
-        if (!input.IsMouseButtonReleased(MouseButton.Right))
-        {
-            return false;
-        }
-
-        rightClicking = false;
-        return true;
     }
 
     // The ground is the grid's plane, as far as the grid is drawn; without a grid there is only what the pointer hits.

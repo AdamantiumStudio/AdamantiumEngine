@@ -38,6 +38,7 @@ public class SelectTool : ToolProcessor
     private readonly List<int> borderIndices = [];
     private bool pressed;
     private bool framing;
+    private Entity pressedOn;
     private Camera frameCamera;
     private Vector2F frameFrom;
     private Vector2F frameTo;
@@ -53,10 +54,20 @@ public class SelectTool : ToolProcessor
         return entity?.GetComponent<Marker>() is { IsEnabled: true } ? mover : null;
     }
 
-    protected override bool PressedOnNothing(InputWormhole input, Camera camera)
+    /// <summary>Whether a press on an entity waits for the release to click it, and draws a frame instead once the
+    /// pointer moves away: for a tool whose click cannot be taken back.</summary>
+    protected virtual bool ClicksOnRelease => false;
+
+    protected override bool PressedOnNothing(InputWormhole input, Camera camera) => BeginGesture(input, camera, null);
+
+    protected override bool PressedOn(Entity entity, InputWormhole input, Camera camera) =>
+        ClicksOnRelease && BeginGesture(input, camera, entity);
+
+    private bool BeginGesture(InputWormhole input, Camera camera, Entity entity)
     {
         pressed = true;
         framing = false;
+        pressedOn = entity;
         frameCamera = camera;
         frameFrom = input.RelativePosition;
         frameTo = frameFrom;
@@ -74,6 +85,7 @@ public class SelectTool : ToolProcessor
         {
             pressed = false;
             framing = false;
+            pressedOn = null;
             return false;
         }
 
@@ -88,31 +100,44 @@ public class SelectTool : ToolProcessor
         pressed = false;
         if (!framing)
         {
-            if (!Modifier(Keys.Shift) && !Modifier(Keys.Control))
+            if (pressedOn != null)
             {
-                Tools.Selection.Current = null;
+                Clicked(pressedOn);
+            }
+            else if (!Modifier(Keys.Shift) && !Modifier(Keys.Control))
+            {
+                Clicked(null);
             }
 
+            pressedOn = null;
             return true;
         }
+
+        pressedOn = null;
 
         framing = false;
         framed.Clear();
         Tools.PickEntities(camera, new ScreenFrame(frameFrom, frameTo), framed);
+        Framed(framed);
+        return true;
+    }
+
+    /// <summary>What a frame drawn across the screen took: selects it - with Shift adding it to the selection, with
+    /// Control taking it out.</summary>
+    protected virtual void Framed(IReadOnlyList<Entity> entities)
+    {
         if (Modifier(Keys.Shift))
         {
-            Tools.Selection.Add(framed);
+            Tools.Selection.Add(entities);
         }
         else if (Modifier(Keys.Control))
         {
-            Tools.Selection.Remove(framed);
+            Tools.Selection.Remove(entities);
         }
         else
         {
-            Tools.Selection.Select(framed);
+            Tools.Selection.Select(entities);
         }
-
-        return true;
     }
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
@@ -137,6 +162,7 @@ public class SelectTool : ToolProcessor
     {
         pressed = false;
         framing = false;
+        pressedOn = null;
         base.OnDetached();
     }
 

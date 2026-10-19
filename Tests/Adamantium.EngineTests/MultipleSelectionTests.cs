@@ -216,6 +216,73 @@ public class MultipleSelectionTests
         Assert.That(selection.Items, Is.EquivalentTo(new[] { left, right }));
     }
 
+    // A tool built on the select tool - one that deletes - is handed what a click or a frame takes, and selects none of
+    // it; its click waits for the release, so a frame can start on an entity.
+    [Test]
+    public void AToolOnTheSelectTool_IsHandedWhatAClickOrAFrameTakes()
+    {
+        var tool = new TakingTool();
+        tools.Tool = tool;
+        Frame();
+
+        output.Pointer = PixelOf(left.Transform.Position) - new Vector2F(120);
+        Frame();
+        output.Button(MouseButton.Left, InputType.Down);
+        Frame();
+        output.Pointer = PixelOf(right.Transform.Position) + new Vector2F(120);
+        Frame();
+        output.Button(MouseButton.Left, InputType.Up);
+        Frame();
+        var framed = new List<Entity>(tool.Taken);
+        tool.Taken.Clear();
+
+        output.Pointer = PixelOf(left.Transform.Position);
+        Frame();
+        output.Button(MouseButton.Left, InputType.Down);
+        Frame();
+        var takenWhilePressed = tool.Taken.Count;
+        output.Button(MouseButton.Left, InputType.Up);
+        Frame();
+        var clicked = new List<Entity>(tool.Taken);
+        tool.Taken.Clear();
+
+        // Pressed on the right one and drawn to the left past the other: a frame, taking whatever it touches.
+        output.Pointer = PixelOf(right.Transform.Position);
+        Frame();
+        output.Button(MouseButton.Left, InputType.Down);
+        Frame();
+        output.Pointer = PixelOf(left.Transform.Position) - new Vector2F(120);
+        Frame();
+        output.Button(MouseButton.Left, InputType.Up);
+        Frame();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(framed, Is.EquivalentTo(new[] { left, right }));
+            Assert.That(takenWhilePressed, Is.Zero, "a click waits for the release");
+            Assert.That(clicked, Is.EqualTo(new[] { left }));
+            Assert.That(tool.Taken, Is.EquivalentTo(new[] { left, right }));
+            Assert.That(selection.Items, Is.Empty);
+        });
+    }
+
+    private sealed class TakingTool : SelectTool
+    {
+        public List<Entity> Taken { get; } = [];
+
+        protected override bool ClicksOnRelease => true;
+
+        protected override void Clicked(Entity entity)
+        {
+            if (entity != null)
+            {
+                Taken.Add(entity);
+            }
+        }
+
+        protected override void Framed(IReadOnlyList<Entity> entities) => Taken.AddRange(entities);
+    }
+
     [Test]
     public void TheMoveTool_MovesEverythingSelected_Together()
     {
