@@ -685,6 +685,10 @@ All packages share one version.
   with, so the copy and all under it stood at the origin, unturned. A copy now stands in its owner as the original
   stands in its own, is shown, switched and picked as it is, and an animation copied stands as the original does,
   paused or playing, with its own list of clips.
+- `AnimationComponent.IsEnabled` did nothing: switched off, an animation now stands its nodes at rest once and leaves
+  them be, and plays from the start when switched on. `IsPaused` stopped the pose but not the clip's clock, so play went
+  on from where the clip would have got; it now goes on from where it was paused. A new `AnimationSpeed` goes on from
+  the pose it finds, where it jumped the clip as if it had played at that speed from the start.
 - A material pointing at an image the model does not have imports without its texture; the import of the whole model
   failed on it.
 - A free third-person orbit stays where it is when its host turns: its offset is the view's, in the world, turned back

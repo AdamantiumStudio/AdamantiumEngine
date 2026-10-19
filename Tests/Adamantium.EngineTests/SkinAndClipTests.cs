@@ -246,6 +246,89 @@ public class SkinAndClipTests
         });
     }
 
+    // A pause stops the clip's clock: played on, the clip goes from where it was paused, not from where it would have got.
+    [Test]
+    public void APause_StopsTheClipsClock()
+    {
+        var scene = SkinnedScene();
+        scene.Clips["Bend"] = Clip("knee", (0, new Vector3F(0, -1, 0)), (2, new Vector3F(4, -1, 0)));
+        var model = Import(scene, out _, out _, out var knee);
+        var animation = model.GetComponent<AnimationComponent>();
+
+        animation.Update(At(0));
+        animation.Update(At(0.5));
+        animation.IsPaused = true;
+        animation.Update(At(0.6));
+        animation.Update(At(1.5));
+        var paused = knee.Transform.GetLocalMatrixF().TranslationVector;
+        animation.IsPaused = false;
+        animation.Update(At(1.5));
+        var resumed = knee.Transform.GetLocalMatrixF().TranslationVector;
+        animation.Update(At(1.75));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(paused, Is.EqualTo(new Vector3F(1, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(resumed, Is.EqualTo(new Vector3F(1, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(knee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(1.5f, -1, 0)).Using<Vector3F>(Near));
+        });
+    }
+
+    // A speed set in a pause goes on from the paused pose, at the new speed.
+    [Test]
+    public void ASpeedSetInAPause_GoesOnFromThePausedPose()
+    {
+        var scene = SkinnedScene();
+        scene.Clips["Bend"] = Clip("knee", (0, new Vector3F(0, -1, 0)), (2, new Vector3F(4, -1, 0)));
+        var model = Import(scene, out _, out _, out var knee);
+        var animation = model.GetComponent<AnimationComponent>();
+
+        animation.Update(At(0));
+        animation.Update(At(0.5));
+        animation.IsPaused = true;
+        animation.Update(At(0.6));
+        animation.AnimationSpeed = 2;
+        animation.IsPaused = false;
+        animation.Update(At(1));
+        var resumed = knee.Transform.GetLocalMatrixF().TranslationVector;
+        animation.Update(At(1.25));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resumed, Is.EqualTo(new Vector3F(1, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(knee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(2, -1, 0)).Using<Vector3F>(Near));
+        });
+    }
+
+    // Switched off, an animation stands its nodes at rest once and leaves them be; switched on, it plays from the start.
+    [Test]
+    public void ASwitchedOffAnimation_StandsAtRest_AndSwitchedOnPlaysFromTheStart()
+    {
+        var scene = SkinnedScene();
+        scene.Clips["Bend"] = Clip("knee", (0, new Vector3F(2, -1, 0)), (2, new Vector3F(6, -1, 0)));
+        var model = Import(scene, out _, out _, out var knee);
+        var animation = model.GetComponent<AnimationComponent>();
+
+        animation.Update(At(0));
+        animation.Update(At(0.5));
+        animation.IsEnabled = false;
+        animation.Update(At(0.6));
+        var off = knee.Transform.GetLocalMatrixF().TranslationVector;
+        knee.Transform.Position = new Vector3(7, -1, 0);
+        animation.Update(At(0.7));
+        var moved = knee.Transform.GetLocalMatrixF().TranslationVector;
+        animation.IsEnabled = true;
+        animation.Update(At(3));
+        animation.Update(At(3.5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(off, Is.EqualTo(new Vector3F(0, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(moved, Is.EqualTo(new Vector3F(7, -1, 0)).Using<Vector3F>(Near), "a node moved by hand stays where it was put");
+            Assert.That(knee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(3, -1, 0)).Using<Vector3F>(Near));
+        });
+    }
+
     // A joint index below zero, which a signed accessor can hold, is taken as the first joint, as the draw takes it:
     // the hip carries the point three along, where the knee would carry it thirteen and no joint would leave it.
     [Test]
@@ -375,6 +458,8 @@ public class SkinAndClipTests
 
         return new SceneData.AnimationCollection { [node] = frames };
     }
+
+    private static AppTime At(double seconds) => new() { TotalTime = TimeSpan.FromSeconds(seconds) };
 
     private static Entity Import(SceneData scene, out Entity leg, out Entity hip, out Entity knee)
     {

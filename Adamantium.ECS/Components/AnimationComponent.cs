@@ -14,6 +14,10 @@ namespace Adamantium.ECS.Components
     public partial class AnimationComponent : ActivatableComponent
     {
         private volatile bool restPending;
+        private bool paused;
+        private bool switchedOff;
+        private TimeSpan lastPlayed;
+        private double played;
 
         /// <summary>The frames of the clip playing - <see cref="CurrentClip"/>'s - by what they move.</summary>
         public SceneData.AnimationCollection Animations { get; set; }
@@ -120,6 +124,10 @@ namespace Adamantium.ECS.Components
             animation.IsAnimationStarted = IsAnimationStarted;
             animation.AnimationStartTime = AnimationStartTime;
             animation.restPending = restPending;
+            animation.paused = paused;
+            animation.switchedOff = switchedOff;
+            animation.lastPlayed = lastPlayed;
+            animation.played = played;
             animation.InterpolatedMatrices = new Dictionary<string, Matrix4x4F>();
             foreach (var (key, rest) in RestPoses)
             {
@@ -147,21 +155,43 @@ namespace Adamantium.ECS.Components
             return copy;
         }
 
+        /// <summary>Plays the clip on to <paramref name="appTime"/>. Paused, its clock stands still; switched off, its
+        /// targets stand at rest once and it plays from the start when switched on again.</summary>
         public void Update(AppTime appTime)
         {
             RestIfClipChanged();
+            if (!IsEnabled)
+            {
+                SwitchOff();
+                return;
+            }
+
+            switchedOff = false;
+            if (IsPaused)
+            {
+                paused = true;
+                return;
+            }
+
+            var sincePlayed = appTime.TotalTime - lastPlayed;
+            if (paused)
+            {
+                paused = false;
+                AnimationStartTime += sincePlayed;
+                sincePlayed = TimeSpan.Zero;
+            }
+
+            lastPlayed = appTime.TotalTime;
             if (Animations.Count == 0)
             {
                 return;
             }
 
-            if (!IsPaused && Targets.Count > 0)
+            if (Targets.Count > 0)
             {
-                PoseTargets(appTime);
-                return;
+                PoseTargets(appTime, sincePlayed);
             }
-
-            if (!IsPaused)
+            else
             {
                 try
                 {
@@ -326,6 +356,20 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        private void SwitchOff()
+        {
+            if (switchedOff)
+            {
+                return;
+            }
+
+            switchedOff = true;
+            paused = false;
+            IsAnimationStarted = false;
+            InterpolatedMatrices.Clear();
+            Rest();
+        }
+
         /// <summary>How long the clip playing runs, in seconds: to its latest key.</summary>
         public Double Duration
         {
@@ -341,15 +385,20 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        private void PoseTargets(AppTime appTime)
+        private void PoseTargets(AppTime appTime, TimeSpan sincePlayed)
         {
             if (!IsAnimationStarted)
             {
                 IsAnimationStarted = true;
                 AnimationStartTime = appTime.TotalTime;
+                played = 0;
+            }
+            else
+            {
+                played += sincePlayed.TotalSeconds * AnimationSpeed;
             }
 
-            var time = TimeAt((appTime.TotalTime - AnimationStartTime).TotalSeconds * AnimationSpeed, Duration, Option);
+            var time = TimeAt(played, Duration, Option);
             if (time is { } at)
             {
                 Pose(at);
