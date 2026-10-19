@@ -219,7 +219,7 @@ All packages share one version.
 - `PlacementTool`, an editor tool that places a new object with the mouse: a see-through ghost of it
   (`EditorOverlayProcessor.DrawGhost`) follows the pointer, resting by its lowest point on the surface under it or, past
   every surface, on the ground grid as far as the grid is drawn. A click raises `Placed`; with Shift held the tool stays,
-  else it is done (`Finished`), as it is on Esc or a right click; a right drag still turns the camera.
+  else it is done (`Finished`), as it is on Esc; the right button turns the camera.
   `NeedsSomethingUnder` places only on a scene entity, as a camera riding on one is. `Icon` draws an icon with the ghost
   for what the scene shows by an icon.
 
