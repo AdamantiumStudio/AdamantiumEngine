@@ -1184,6 +1184,8 @@ All packages share one version.
 
 ### Changed
 
+- A content project keeps `ACB005` - what an import does not read, such as morph targets - a warning where warnings are
+  errors: it tells about the asset, not a fault of the build.
 - `Adamantium.Graphics.Core.Models.CameraProjectionType.Pespective` is renamed `Perspective`. Saved `.aemf` files are
   unaffected: the value is stored as a number.
 - `Mesh.IsTangetBinormalsPresent` is renamed `IsTangentBinormalsPresent`.
