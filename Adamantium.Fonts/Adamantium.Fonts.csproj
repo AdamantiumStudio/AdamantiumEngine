@@ -43,4 +43,10 @@
       <EmbeddedResource Include="Data\Hyphenation\*.tex" LogicalName="Adamantium.Fonts.Data.Hyphenation.%(Filename)%(Extension)" />
     </ItemGroup>
 
+    <!-- Part of this package is derived from third-party code and data; the notices travel with it. -->
+    <ItemGroup>
+      <None Include="..\NOTICE" Pack="true" PackagePath="\" Visible="false" />
+      <None Include="..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+    </ItemGroup>
+
 </Project>

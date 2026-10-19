@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using Adamantium.Engine.Compiler.Models.Gltf.Draco;
 
 namespace Adamantium.Engine.Compiler.Models.Gltf;
 
@@ -13,6 +14,9 @@ public sealed class GltfFile
     private const uint GlbMagic = 0x46546C67;
     private const uint JsonChunk = 0x4E4F534A;
     private const uint BinaryChunk = 0x004E4942;
+    private const string Meshopt = "KHR_meshopt_compression";
+    private const string MeshoptVendor = "EXT_meshopt_compression";
+    private const string Draco = "KHR_draco_mesh_compression";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -20,11 +24,15 @@ public sealed class GltfFile
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
-    private GltfFile(string path, GltfRoot root, IReadOnlyList<byte[]> buffers)
+    private readonly byte[][] unpackedViews;
+    private byte[][] unpackedAccessors;
+
+    private GltfFile(string path, GltfRoot root, IReadOnlyList<byte[]> buffers, byte[][] unpackedViews)
     {
         Path = path;
         Root = root;
         Buffers = buffers;
+        this.unpackedViews = unpackedViews;
     }
 
     /// <summary>The file read.</summary>
@@ -33,7 +41,8 @@ public sealed class GltfFile
     /// <summary>The asset's JSON.</summary>
     public GltfRoot Root { get; }
 
-    /// <summary>Each of <see cref="GltfRoot.Buffers"/>, its bytes.</summary>
+    /// <summary>Each of <see cref="GltfRoot.Buffers"/>, its bytes; null for one no buffer view reads, such as the
+    /// placeholder behind meshopt-compressed views.</summary>
     public IReadOnlyList<byte[]> Buffers { get; }
 
     /// <summary>The extensions this reader understands; one the asset requires beyond these makes it unreadable.</summary>
@@ -61,7 +70,10 @@ public sealed class GltfFile
         "KHR_animation_pointer",
         "KHR_mesh_quantization",
         "EXT_mesh_gpu_instancing",
-        "KHR_xmp_json_ld"
+        "KHR_xmp_json_ld",
+        Meshopt,
+        MeshoptVendor,
+        Draco
     };
 
     /// <summary>Reads a <c>.gltf</c> or <c>.glb</c>, told apart by its first bytes rather than its name.</summary>
@@ -105,18 +117,52 @@ public sealed class GltfFile
             }
         }
 
+        var compressions = new GltfMeshoptCompression[root.BufferViews.Count];
+        var read = new bool[root.Buffers.Count];
+        for (int i = 0; i < compressions.Length; i++)
+        {
+            try
+            {
+                compressions[i] = MeshoptOf(root.BufferViews[i]);
+            }
+            catch (InvalidDataException e)
+            {
+                throw new InvalidDataException($"{path}: buffer view {i}: {e.Message}", e);
+            }
+
+            var buffer = compressions[i]?.Buffer ?? root.BufferViews[i].Buffer;
+            if ((uint)buffer < (uint)read.Length)
+            {
+                read[buffer] = true;
+            }
+        }
+
         var buffers = new byte[root.Buffers.Count][];
         for (int i = 0; i < buffers.Length; i++)
         {
-            buffers[i] = LoadBuffer(path, root.Buffers[i], i, glbBinary);
+            if (read[i])
+            {
+                buffers[i] = LoadBuffer(path, root.Buffers[i], i, glbBinary);
+            }
         }
 
-        return new GltfFile(path, root, buffers);
+        var file = new GltfFile(path, root, buffers, Unpack(path, root, buffers, compressions));
+        file.UnpackDraco();
+        return file;
     }
 
-    /// <summary>The bytes <paramref name="bufferView"/> covers.</summary>
+    /// <summary>The accessor's elements, tightly packed, when a Draco-compressed primitive gave them; null for one
+    /// read from its buffer view.</summary>
+    public byte[] UnpackedAccessor(int accessor) => unpackedAccessors?[accessor];
+
+    /// <summary>The bytes <paramref name="bufferView"/> covers, unpacked when it is meshopt-compressed.</summary>
     public ReadOnlySpan<byte> View(int bufferView)
     {
+        if (unpackedViews?[bufferView] is { } unpacked)
+        {
+            return unpacked;
+        }
+
         var view = Root.BufferViews[bufferView];
         return Buffers[view.Buffer].AsSpan(view.ByteOffset, view.ByteLength);
     }
@@ -138,6 +184,183 @@ public sealed class GltfFile
     }
 
     private string Directory() => System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(Path)) ?? string.Empty;
+
+    private void UnpackDraco()
+    {
+        for (int m = 0; m < Root.Meshes.Count; m++)
+        {
+            for (int p = 0; p < Root.Meshes[m].Primitives.Count; p++)
+            {
+                var primitive = Root.Meshes[m].Primitives[p];
+                if (primitive.Extensions == null || !primitive.Extensions.TryGetValue(Draco, out var json))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    UnpackDraco(primitive, json);
+                }
+                catch (InvalidDataException e)
+                {
+                    throw new InvalidDataException($"{Path}: mesh {m} primitive {p}: {e.Message}", e);
+                }
+            }
+        }
+    }
+
+    private void UnpackDraco(GltfPrimitive primitive, JsonElement json)
+    {
+        var compression = Deserialize<GltfDracoCompression>(json, Draco);
+        if (compression?.Attributes == null || (uint)compression.BufferView >= (uint)Root.BufferViews.Count)
+        {
+            throw new InvalidDataException($"its {Draco} names no buffer view or no attributes");
+        }
+
+        if (primitive.Mode is not (GltfPrimitiveMode.Triangles or GltfPrimitiveMode.TriangleStrip))
+        {
+            throw new InvalidDataException($"a Draco mesh is drawn as mode {primitive.Mode}, not triangles");
+        }
+
+        if (primitive.Indices is not { } indices || (uint)indices >= (uint)Root.Accessors.Count)
+        {
+            throw new InvalidDataException("a Draco mesh has no indices accessor");
+        }
+
+        var attributes = new List<(string Name, int Accessor, uint Id)>();
+        var maxPoints = 0;
+        foreach (var (name, id) in compression.Attributes)
+        {
+            if (!primitive.Attributes.TryGetValue(name, out var accessor))
+            {
+                continue;
+            }
+
+            if ((uint)accessor >= (uint)Root.Accessors.Count)
+            {
+                throw new InvalidDataException($"its {name} accessor {accessor} is not in the asset");
+            }
+
+            attributes.Add((name, accessor, (uint)id));
+            maxPoints = Math.Max(maxPoints, Root.Accessors[accessor].Count);
+        }
+
+        var mesh = DracoDecoder.Decode(View(compression.BufferView).ToArray(), Root.Accessors[indices].Count / 3,
+            attributes.Count > 0 ? maxPoints : int.MaxValue);
+        unpackedAccessors ??= new byte[Root.Accessors.Count][];
+        unpackedAccessors[indices] = IndexBytes(mesh, Root.Accessors[indices]);
+        foreach (var (name, accessor, id) in attributes)
+        {
+            var attribute = mesh.Attribute(id) ?? throw new InvalidDataException($"its Draco mesh has no attribute {id} for {name}");
+            var info = Root.Accessors[accessor];
+            if (info.Count != mesh.PointCount || GltfAccessors.ComponentsOf(info.Type) != attribute.Components
+                || info.ComponentType != ComponentTypeOf(attribute.DataType))
+            {
+                throw new InvalidDataException($"its {name} is {info.Count} {info.Type} of type {info.ComponentType}, " +
+                                               $"Draco gives {mesh.PointCount} of {attribute.Components} {attribute.DataType}");
+            }
+
+            unpackedAccessors[accessor] = attribute.PointValues(mesh.PointCount);
+        }
+    }
+
+    private static T Deserialize<T>(JsonElement json, string extension)
+    {
+        try
+        {
+            return json.Deserialize<T>(JsonOptions);
+        }
+        catch (JsonException e)
+        {
+            throw new InvalidDataException($"{extension} is not what the extension says: {e.Message}", e);
+        }
+    }
+
+    private static byte[] IndexBytes(DracoMesh mesh, GltfAccessor accessor)
+    {
+        var type = accessor.ComponentType;
+        var unsigned = type is GltfComponentType.UnsignedByte or GltfComponentType.UnsignedShort or GltfComponentType.UnsignedInt;
+        var size = unsigned ? GltfAccessors.SizeOf(type) : 0;
+        if (!unsigned || accessor.Count != mesh.Indices.Length || (size < 4 && mesh.PointCount > 1 << (8 * size)))
+        {
+            throw new InvalidDataException($"its indices are {accessor.Count} of type {type}, " +
+                                           $"Draco gives {mesh.Indices.Length} over {mesh.PointCount} points");
+        }
+
+        var bytes = new byte[(long)mesh.Indices.Length * size];
+        for (int i = 0; i < mesh.Indices.Length; i++)
+        {
+            for (int b = 0; b < size; b++)
+            {
+                bytes[i * size + b] = (byte)(mesh.Indices[i] >> (8 * b));
+            }
+        }
+
+        return bytes;
+    }
+
+    private static int ComponentTypeOf(DracoDataType type) => type switch
+    {
+        DracoDataType.Int8 => GltfComponentType.Byte,
+        DracoDataType.UInt8 => GltfComponentType.UnsignedByte,
+        DracoDataType.Int16 => GltfComponentType.Short,
+        DracoDataType.UInt16 => GltfComponentType.UnsignedShort,
+        DracoDataType.UInt32 => GltfComponentType.UnsignedInt,
+        DracoDataType.Float32 => GltfComponentType.Float,
+        _ => -1
+    };
+
+    private static GltfMeshoptCompression MeshoptOf(GltfBufferView view)
+    {
+        if (view.Extensions == null
+            || !(view.Extensions.TryGetValue(Meshopt, out var json) || view.Extensions.TryGetValue(MeshoptVendor, out json)))
+        {
+            return null;
+        }
+
+        return Deserialize<GltfMeshoptCompression>(json, Meshopt);
+    }
+
+    private static byte[][] Unpack(string path, GltfRoot root, IReadOnlyList<byte[]> buffers,
+        GltfMeshoptCompression[] compressions)
+    {
+        byte[][] unpacked = null;
+        for (int i = 0; i < compressions.Length; i++)
+        {
+            if (compressions[i] is not { } compression)
+            {
+                continue;
+            }
+
+            var source = (uint)compression.Buffer < (uint)buffers.Count ? buffers[compression.Buffer] : null;
+            if (source == null || compression.ByteOffset < 0 || compression.ByteLength < 0
+                || (long)compression.ByteOffset + compression.ByteLength > source.Length)
+            {
+                throw new InvalidDataException($"{path}: buffer view {i}'s compressed bytes lie past buffer {compression.Buffer}");
+            }
+
+            if ((long)compression.Count * compression.ByteStride != root.BufferViews[i].ByteLength)
+            {
+                throw new InvalidDataException($"{path}: buffer view {i} unpacks into {compression.Count} elements " +
+                                               $"of {compression.ByteStride} bytes, {root.BufferViews[i].ByteLength} are said");
+            }
+
+            byte[] bytes;
+            try
+            {
+                bytes = GltfMeshopt.Decode(compression, source.AsSpan(compression.ByteOffset, compression.ByteLength));
+            }
+            catch (InvalidDataException e)
+            {
+                throw new InvalidDataException($"{path}: buffer view {i}: {e.Message}", e);
+            }
+
+            unpacked ??= new byte[compressions.Length][];
+            unpacked[i] = bytes;
+        }
+
+        return unpacked;
+    }
 
     private static (byte[] Json, byte[] Binary) SplitGlb(byte[] bytes)
     {

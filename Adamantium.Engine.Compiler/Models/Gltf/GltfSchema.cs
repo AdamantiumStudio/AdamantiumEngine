@@ -143,6 +143,7 @@ public sealed class GltfBufferView
     [JsonPropertyName("byteOffset")] public int ByteOffset { get; set; }
     [JsonPropertyName("byteLength")] public int ByteLength { get; set; }
     [JsonPropertyName("byteStride")] public int? ByteStride { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
 }
 
 public sealed class GltfBuffer

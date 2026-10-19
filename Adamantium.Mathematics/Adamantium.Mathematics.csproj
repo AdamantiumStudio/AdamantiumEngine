@@ -37,4 +37,10 @@
     <None Remove="obj\**" />
   </ItemGroup>
 
+  <!-- Part of this package is derived from third-party code; the notices travel with it. -->
+  <ItemGroup>
+    <None Include="..\NOTICE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
 </Project>

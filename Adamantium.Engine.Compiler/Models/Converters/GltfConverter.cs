@@ -22,6 +22,7 @@ public class GltfConverter : ConverterBase
     private const int CubicSamplesPerSecond = 30;
     private const int MaxCubicSamplesPerKey = 30 * 60;
     private const string OtherNodesId = "otherNodes";
+    private const string DracoExtension = "KHR_draco_mesh_compression";
 
     // The attributes a Mesh has arrays of; any other is kept by its name.
     private static readonly HashSet<string> DrawnAttributes =
@@ -709,7 +710,10 @@ public class GltfConverter : ConverterBase
         {
             foreach (var extension in primitive.Extensions.Keys)
             {
-                Tell($"the primitive extension {extension} is kept as the file has it, not used");
+                if (extension != DracoExtension)
+                {
+                    Tell($"the primitive extension {extension} is kept as the file has it, not used");
+                }
             }
         }
 
