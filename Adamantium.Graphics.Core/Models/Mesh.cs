@@ -52,6 +52,9 @@ public class Mesh
         JointWeights = [];
         JointIndices = [];
         Indices = [];
+        Attributes = new Dictionary<string, VertexAttribute>();
+        MorphTargets = [];
+        MorphWeights = [];
 
         Contours = [];
     }
@@ -83,7 +86,18 @@ public class Mesh
     public Vector4F[] JointWeights { get; private set; }
 
     public int[] Indices { get; private set; }
-        
+
+    /// <summary>Per-vertex data beyond the arrays above, by the source's name for it - TEXCOORD_4, COLOR_1, JOINTS_1, a
+    /// custom _ID: kept as the source has it, in its own axes.</summary>
+    public Dictionary<string, VertexAttribute> Attributes { get; private set; }
+
+    /// <summary>The shapes the mesh can blend toward, in the mesh's axes.</summary>
+    public List<MorphTarget> MorphTargets { get; private set; }
+
+    /// <summary>How much of each of <see cref="MorphTargets"/> the mesh shows when nothing says otherwise; empty for
+    /// none of any.</summary>
+    public float[] MorphWeights { get; set; }
+
     public Bounds Bounds { get; private set; }
 
     public PrimitiveType MeshTopology { get; set; }
@@ -108,6 +122,14 @@ public class Mesh
     public int Version => version;
 
     public string MaterialID { get; set; }
+
+    /// <summary>What the source file says of this part of a model beyond its geometry - a glTF primitive's own data
+    /// and extensions; null when it says nothing.</summary>
+    public ExtraData Extra { get; set; }
+
+    /// <summary>The mesh's material in each material variant that changes it, by the variant's index in
+    /// <see cref="SceneData.MaterialVariants"/>; the material's key as <see cref="MaterialID"/> is.</summary>
+    public Dictionary<int, string> VariantMaterials { get; set; } = new();
 
     public VertexSemantic Semantic { get; private set; }
 
@@ -311,6 +333,7 @@ public class Mesh
 
         Normals = inNormals as Vector3F[] ?? inNormals.ToArray();
         Semantic |= VertexSemantic.Normal;
+        DeriveBiTangents();
         IsModified = true;
 
         return this;
@@ -366,9 +389,19 @@ public class Mesh
             
         Tangents = inTangents as Vector4F[] ?? inTangents.ToArray();
         Semantic |= VertexSemantic.TangentBiNormal;
+        DeriveBiTangents();
         IsModified = true;
 
         return this;
+    }
+
+    // A bitangent is cross(normal, tangent) times the tangent's w; derived whenever both are there a vertex.
+    private void DeriveBiTangents()
+    {
+        if (Tangents.Length > 0 && Tangents.Length == Normals.Length)
+        {
+            BiTangents = MeshBlobs.Derive(Normals, Tangents);
+        }
     }
 
     public Mesh SetTangentsAndBiTangents(IEnumerable<Vector4F> inTangents, IEnumerable<Vector3F> inBiTangents)
@@ -380,6 +413,21 @@ public class Mesh
         Semantic |= VertexSemantic.TangentBiNormal;
         IsModified = true;
 
+        return this;
+    }
+
+    /// <summary>Keeps per-vertex data under <paramref name="name"/>, beyond the arrays the mesh names.</summary>
+    public Mesh SetAttribute(string name, VertexAttribute attribute)
+    {
+        Attributes[name] = attribute;
+        IsModified = true;
+        return this;
+    }
+
+    public Mesh SetMorphTargets(IEnumerable<MorphTarget> targets)
+    {
+        MorphTargets = targets.ToList();
+        IsModified = true;
         return this;
     }
 
@@ -681,6 +729,20 @@ public class Mesh
             JointWeights = [];
             Semantic &= ~(VertexSemantic.JointIndices | VertexSemantic.JointWeights);
         }
+
+        foreach (var name in Attributes.Where(a => a.Value.Values.Length != count * a.Value.Components).Select(a => a.Key).ToList())
+        {
+            Attributes.Remove(name);
+        }
+
+        if (MorphTargets.Any(t => OutOfStep(t.Positions) || OutOfStep(t.Normals) || OutOfStep(t.Tangents)
+                                  || t.Attributes.Values.Any(a => a.Values.Length != count * a.Components)))
+        {
+            MorphTargets = [];
+            MorphWeights = [];
+        }
+
+        bool OutOfStep(Vector3F[] values) => values.Length > 0 && values.Length != count;
     }
 
     private void ShiftIndices(List<int> indices, int startIndex, int shiftValue)
@@ -750,12 +812,34 @@ public class Mesh
         if (Normals.Length == Points.Length) TransformNormals(ref transformMatrix);
         else CalculateNormals();
 
+        // A morph target's moves are directions: they take the transform without its translation, and its normals'
+        // moves the inverse transpose the normals take.
+        if (MorphTargets.Count > 0)
+        {
+            var linear = (Matrix4x4F)transformMatrix;
+            var forNormals = Matrix4x4F.Transpose(Matrix4x4F.Invert(linear));
+            foreach (var target in MorphTargets)
+            {
+                Move(target.Positions, linear);
+                Move(target.Normals, forNormals);
+                Move(target.Tangents, linear);
+            }
+        }
+
         CalculateTangentsAndBinormals();
         CalculateBoundingVolumes();
 
         IsModified = true;
 
         return this;
+    }
+
+    private static void Move(Vector3F[] directions, Matrix4x4F matrix)
+    {
+        for (int i = 0; i < directions.Length; i++)
+        {
+            directions[i] = Vector3F.TransformNormal(directions[i], matrix);
+        }
     }
 
     // Normals follow the inverse transpose, which is what keeps them perpendicular through a non-uniform scale.
@@ -794,6 +878,9 @@ public class Mesh
         JointIndices = source.JointIndices;
         JointWeights = source.JointWeights;
         Indices = source.Indices;
+        Attributes = source.Attributes;
+        MorphTargets = source.MorphTargets;
+        MorphWeights = source.MorphWeights;
         Bounds = source.Bounds;
         IsOptimized = source.IsOptimized;
         Semantic = source.Semantic;
@@ -844,6 +931,14 @@ public class Mesh
         clonedMesh.JointWeights = new Vector4F[JointWeights.Length];
         JointWeights.CopyTo(clonedMesh.JointWeights, 0);
 
+        foreach (var (name, attribute) in Attributes)
+        {
+            clonedMesh.Attributes[name] = attribute.Clone();
+        }
+
+        clonedMesh.MorphTargets = MorphTargets.Select(t => t.Clone()).ToList();
+        clonedMesh.MorphWeights = (float[])MorphWeights.Clone();
+
         clonedMesh.IsOptimized = IsOptimized;
         clonedMesh.IsModified = true;
         clonedMesh.Semantic = Semantic;
@@ -870,7 +965,15 @@ public class Mesh
             GenerateBasicIndices();
         }
 
-        var vertexDict = new Dictionary<Vertex, int>();
+        // What a Vertex does not hold - tangents, the attributes beyond, the morph targets - joins it only where it is
+        // the same: a vertex differing in it is kept apart, and it follows the vertices to their new numbers.
+        var oldCount = Points.Length;
+        var keepTangents = !recalculateTangents;
+        var sameData = CarriesMoreThanAVertex(keepTangents)
+            ? new Dictionary<int, int>(new SameVertexData(this, keepTangents))
+            : null;
+        var firstOld = new List<int>();
+        var vertexDict = new Dictionary<(Vertex, int), int>();
 
         int uniqueIndex = 0;
         var optimizedPositions = new List<Vector3>();
@@ -903,10 +1006,12 @@ public class Mesh
             Vector4F jointIndex = JointIndices != null && JointIndices.Length - 1 >= index ? JointIndices[index] : Vector4F.Zero;
             Vector4F jointWeight = JointWeights != null && JointWeights.Length - 1 >= index ? JointWeights[index] : Vector4F.Zero;
             var vertex = new Vertex(position, normal, uv0, uv1, uv2, uv3, color, jointIndex, jointWeight);
+            var key = (vertex, SameAs(sameData, index));
 
-            if (!vertexDict.ContainsKey(vertex))
+            if (!vertexDict.ContainsKey(key))
             {
-                vertexDict.Add(vertex, uniqueIndex);
+                vertexDict.Add(key, uniqueIndex);
+                firstOld.Add(index);
                 optimizedPositions.Add(position);
                 indices.Add(uniqueIndex);
                 uniqueIndex++;
@@ -945,12 +1050,16 @@ public class Mesh
             }
             else
             {
-                index = vertexDict[vertex];
+                index = vertexDict[key];
                 indices.Add(index);
             }
         }
 
         vertexDict.Clear();
+        if (sameData != null)
+        {
+            CarryOver(firstOld, oldCount);
+        }
 
         Points = optimizedPositions.ToArray();
         Indices = indices.ToArray();
@@ -1004,6 +1113,179 @@ public class Mesh
         return this;
     }
 
+    private bool CarriesMoreThanAVertex(bool tangents) =>
+        tangents && (Tangents.Length > 0 || BiTangents.Length > 0) || Attributes.Count > 0 || MorphTargets.Count > 0;
+
+    private static int SameAs(Dictionary<int, int> sameData, int index)
+    {
+        if (sameData == null)
+        {
+            return 0;
+        }
+
+        if (!sameData.TryGetValue(index, out var first))
+        {
+            sameData[index] = first = index;
+        }
+
+        return first;
+    }
+
+    // Puts what a Vertex does not hold on the new vertex numbering: new vertex n takes what old vertex firstOld[n] had.
+    // An array not one value a vertex is left as it is.
+    private void CarryOver(List<int> firstOld, int oldCount)
+    {
+        Tangents = Pick(Tangents, firstOld, oldCount);
+        BiTangents = Pick(BiTangents, firstOld, oldCount);
+        foreach (var attribute in Attributes.Values)
+        {
+            PickComponents(attribute, firstOld, oldCount);
+        }
+
+        foreach (var target in MorphTargets)
+        {
+            target.Positions = Pick(target.Positions, firstOld, oldCount);
+            target.Normals = Pick(target.Normals, firstOld, oldCount);
+            target.Tangents = Pick(target.Tangents, firstOld, oldCount);
+            foreach (var attribute in target.Attributes.Values)
+            {
+                PickComponents(attribute, firstOld, oldCount);
+            }
+        }
+    }
+
+    private static T[] Pick<T>(T[] values, List<int> from, int oldCount)
+    {
+        if (values.Length != oldCount || oldCount == 0)
+        {
+            return values;
+        }
+
+        var picked = new T[from.Count];
+        for (int i = 0; i < picked.Length; i++)
+        {
+            picked[i] = values[from[i]];
+        }
+
+        return picked;
+    }
+
+    private static void PickComponents(VertexAttribute attribute, List<int> from, int oldCount)
+    {
+        var components = attribute.Components;
+        if (attribute.Values.Length != oldCount * components || oldCount == 0)
+        {
+            return;
+        }
+
+        var picked = new float[from.Count * components];
+        for (int i = 0; i < from.Count; i++)
+        {
+            System.Array.Copy(attribute.Values, from[i] * components, picked, i * components, components);
+        }
+
+        attribute.Values = picked;
+    }
+
+    // Two old vertices are the same here when everything a Vertex does not hold is the same at both.
+    // A value past the end of its array reads as the default, in the comparison and the hash alike.
+    private sealed class SameVertexData(Mesh mesh, bool tangents) : IEqualityComparer<int>
+    {
+        public bool Equals(int a, int b)
+        {
+            if (tangents && (!SameAt(mesh.Tangents, a, b) || !SameAt(mesh.BiTangents, a, b)))
+            {
+                return false;
+            }
+
+            foreach (var attribute in mesh.Attributes.Values)
+            {
+                if (!SameComponents(attribute, a, b))
+                {
+                    return false;
+                }
+            }
+
+            foreach (var target in mesh.MorphTargets)
+            {
+                if (!SameAt(target.Positions, a, b) || !SameAt(target.Normals, a, b) || !SameAt(target.Tangents, a, b))
+                {
+                    return false;
+                }
+
+                foreach (var attribute in target.Attributes.Values)
+                {
+                    if (!SameComponents(attribute, a, b))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        public int GetHashCode(int index)
+        {
+            var hash = new System.HashCode();
+            if (tangents)
+            {
+                hash.Add(At(mesh.Tangents, index));
+                hash.Add(At(mesh.BiTangents, index));
+            }
+
+            foreach (var attribute in mesh.Attributes.Values)
+            {
+                AddComponents(ref hash, attribute, index);
+            }
+
+            foreach (var target in mesh.MorphTargets)
+            {
+                hash.Add(At(target.Positions, index));
+                hash.Add(At(target.Normals, index));
+                hash.Add(At(target.Tangents, index));
+                foreach (var attribute in target.Attributes.Values)
+                {
+                    AddComponents(ref hash, attribute, index);
+                }
+            }
+
+            return hash.ToHashCode();
+        }
+
+        private static T At<T>(T[] values, int index) => index < values.Length ? values[index] : default;
+
+        private static float Component(VertexAttribute attribute, int index, int component)
+        {
+            var at = index * attribute.Components + component;
+            return at < attribute.Values.Length ? attribute.Values[at] : 0;
+        }
+
+        private static bool SameAt<T>(T[] values, int a, int b) =>
+            EqualityComparer<T>.Default.Equals(At(values, a), At(values, b));
+
+        private static bool SameComponents(VertexAttribute attribute, int a, int b)
+        {
+            for (int c = 0; c < attribute.Components; c++)
+            {
+                if (!Component(attribute, a, c).Equals(Component(attribute, b, c)))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void AddComponents(ref System.HashCode hash, VertexAttribute attribute, int index)
+        {
+            for (int c = 0; c < attribute.Components; c++)
+            {
+                hash.Add(Component(attribute, index, c));
+            }
+        }
+    }
+
     public Mesh CalculateBoundingVolumes()
     {
         if (Points.Length == 0)
@@ -1050,6 +1332,7 @@ public class Mesh
         }
 
         Semantic |= VertexSemantic.Normal;
+        DeriveBiTangents();
 
         return this;
     }
@@ -1085,10 +1368,19 @@ public class Mesh
                 float s2 = uv3.X - uv1.X;
                 float t2 = uv3.Y - uv1.Y;
 
+                // Divided by the texture coordinates' determinant: without it a triangle whose texture is laid on
+                // mirrored had its u and v directions reversed both.
+                var determinant = s1 * t2 - s2 * t1;
+                if (determinant == 0)
+                {
+                    continue;
+                }
+
+                var r = 1 / determinant;
                 Vector3F uDirection = new Vector3F((t2 * v1v0.X - t1 * v2v0.X), (t2 * v1v0.Y - t1 * v2v0.Y),
-                    (t2 * v1v0.Z - t1 * v2v0.Z));
+                    (t2 * v1v0.Z - t1 * v2v0.Z)) * r;
                 Vector3F vDirection = new Vector3F((s1 * v2v0.X - s2 * v1v0.X), (s1 * v2v0.Y - s2 * v1v0.Y),
-                    (s1 * v2v0.Z - s2 * v1v0.Z));
+                    (s1 * v2v0.Z - s2 * v1v0.Z)) * r;
 
                 tan1[index0] += uDirection;
                 tan1[index1] += uDirection;
@@ -1107,6 +1399,10 @@ public class Mesh
 
                 // Gram-Schmidt orthogonalize
                 var value = tan1[k] - normal * Vector3F.Dot(normal, tan1[k]);
+                if (value.LengthSquared() > 0)
+                {
+                    value = Vector3F.Normalize(value);
+                }
 
                 // Calculate handedness (for case if tangent is Vector4F)
                 var handedness = Vector3F.Dot(Vector3F.Cross(normal, tan1[k]), tan2[k]) < 0.0f ? -1.0f : 1.0f;
@@ -1463,6 +1759,12 @@ public class Mesh
                 break;
         }
 
+        var conversion = AxisConversion.Between(UpAxis, destinationUpAxis);
+        if (conversion != Matrix4x4F.Identity)
+        {
+            TurnTangentsAndTargets(conversion);
+        }
+
         // Re-wind the faces only when the change MIRRORS the mesh, which negating or swapping an axis does and a
         // plain rotation does not. Every branch used to do it unconditionally, so on Z_UP -> Y_UP_RH - a proper
         // rotation - every triangle came out facing backwards. Nothing caught it while normals were re-derived
@@ -1474,6 +1776,36 @@ public class Mesh
 
         IsModified = true;
         return this;
+    }
+
+    // Tangents and morph targets take the turn the normals take. A tangent's w says which way its bitangent runs, as
+    // cross(normal, tangent) * w: a mirroring turn reverses that cross, and the texture coordinates' v turned over
+    // reverses the bitangent - so w changes only under a turn that does not mirror. The bitangents are derived anew.
+    private void TurnTangentsAndTargets(Matrix4x4F conversion)
+    {
+        var handedness = AxisConversion.MirrorsHandedness(conversion) ? 1f : -1f;
+        for (int i = 0; i < Tangents.Length; i++)
+        {
+            var tangent = Tangents[i];
+            var turned = Vector3F.TransformNormal(new Vector3F(tangent.X, tangent.Y, tangent.Z), conversion);
+            Tangents[i] = new Vector4F(turned, tangent.W * handedness);
+        }
+
+        DeriveBiTangents();
+        foreach (var target in MorphTargets)
+        {
+            Turn(target.Positions, conversion);
+            Turn(target.Normals, conversion);
+            Turn(target.Tangents, conversion);
+        }
+
+        static void Turn(Vector3F[] vectors, Matrix4x4F conversion)
+        {
+            for (int i = 0; i < vectors.Length; i++)
+            {
+                vectors[i] = Vector3F.TransformNormal(vectors[i], conversion);
+            }
+        }
     }
 
     private Mesh ConvertUVs(int index)

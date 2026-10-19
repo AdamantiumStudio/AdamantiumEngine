@@ -7,6 +7,30 @@ All packages share one version.
 
 ### Added
 
+- glTF import keeps everything the file says, used or not yet:
+  - every object's `extras` and extensions as JSON (`ExtraData`, the `Extra` of the scene, its asset, scenes, nodes,
+    meshes and their parts, materials, images, textures, samplers, skins, cameras, lights, animations and channels);
+  - `SceneData.Asset` (version, generator, copyright), `ExtensionsUsed` and `ExtensionsRequired`, every scene
+    (`Scenes`, `DefaultScene`), and the nodes outside the scene shown under `OtherNodes`, with the meshes no node
+    shows; cameras and skins no node uses by keys of their own (`camera0`, `skin0`); clips are made only of what the
+    shown scene moves;
+  - each animation as the file has it (`AnimationSources`: targets, pointers of `KHR_animation_pointer`,
+    interpolation, times and values, cubic tangents too) beside the clips made of it;
+  - `skin.skeleton` (`Controller.SkeletonRoot`), an orthographic camera's `XMag`/`YMag`, a light's `Intensity`,
+    `Range` and `InnerConeAngle`;
+  - the file's tangents, in the engine's axes, used instead of computed ones; any vertex attribute a `Mesh` has no
+    array for, by its name (`Mesh.Attributes`, `VertexAttribute`): `TEXCOORD_4`, `COLOR_1`, `JOINTS_1`, `_ID`;
+  - morph targets (`Mesh.MorphTargets`, `MorphTarget`) with their names, the mesh's weights (`Mesh.MorphWeights`) and
+    the node's (`Model.MorphWeights`);
+  - samplers and textures (`SceneData.Samplers`, `Textures`, with images in KTX2, WebP or AVIF as `Texture.Sources`);
+    each material slot's texture with its texture coordinates and transform (`TextureReference`); the emissive factor
+    and strength apart; every `KHR_materials_*` - ior, dispersion, unlit, clearcoat, sheen, transmission, diffuse
+    transmission, volume, specular, iridescence, anisotropy, specular-glossiness; the metallic-roughness part's own
+    data (`Material.PbrExtra`); material variants (`SceneData.MaterialVariants`, `Mesh.VariantMaterials` by the
+    variant's index);
+  - `KHR_mesh_quantization`, now opened; copies of a mesh (`EXT_mesh_gpu_instancing`: `Model.Instances`,
+    `InstanceAttributes`); metadata packets (`KHR_xmp_json_ld`: `SceneData.XmpPackets`).
+  All of it is written to `.aemf` and read back.
 - glTF 2.0 import, `.gltf` and `.glb` (`GltfConverter`, through `ModelConverter` and the content project's model
   importer): the scene's node tree, placed by TRS or matrix; each primitive of a mesh as a mesh of its own with its
   material - triangles, strips and fans as lists of triangles, lines and points as they are - with normals, four sets
@@ -683,6 +707,15 @@ All packages share one version.
 
 ### Fixed
 
+- `Mesh.Optimize` left tangents on the old vertex numbering when it kept them; it now carries them, and keeps apart
+  vertices that differ in what it does not weigh - tangents it keeps, attributes beyond, morph targets.
+- A baked mesh with tangents and no bitangents came back without its tangents. A mesh given tangents or normals now
+  derives its bitangents, `cross(normal, tangent) * w`, whenever it has both a vertex.
+- `Mesh.CalculateTangentsAndBinormals` reversed the tangent and the bitangent on a triangle whose texture is laid on
+  mirrored (the texture coordinates' determinant below zero) - after a glTF import nearly every one; the tangent is now
+  also of unit length.
+- `Mesh.Merge` left per-vertex data of one of the meshes beside the merged vertices; what only some of them had is
+  dropped, as their colors and texture coordinates already were.
 - `Entity.Duplicate` lost every entity's place: the copied `Transform` was dropped for the one each new entity comes
   with, so the copy and all under it stood at the origin, unturned. A copy now stands in its owner as the original
   stands in its own, is shown, switched and picked as it is, and an animation copied stands as the original does,
@@ -1184,6 +1217,9 @@ All packages share one version.
 
 ### Changed
 
+- A baked mesh is format version 2 (its extra data, attributes, morph targets and material variants): a `.aemf` baked
+  before is refused and baked again.
+- A glTF light's `Color` is its color alone, its brightness in `Intensity`; it was the two multiplied.
 - A content project keeps `ACB005` - what an import does not read, such as morph targets - a warning where warnings are
   errors: it tells about the asset, not a fault of the build.
 - `Adamantium.Graphics.Core.Models.CameraProjectionType.Pespective` is renamed `Perspective`. Saved `.aemf` files are

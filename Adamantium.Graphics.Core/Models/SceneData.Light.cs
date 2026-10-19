@@ -48,5 +48,18 @@ public partial class SceneData
       public Single FalloffAngle { get; set; }
 
       public Single FalloffExponent { get; set; }
+
+      /// <summary>How bright the light is, apart from its <see cref="Color"/>: candela for a point or spot light, lux
+      /// for a directional one, as glTF has it; 1 for a light that gives none.</summary>
+      public Single Intensity { get; set; } = 1;
+
+      /// <summary>How far the light reaches; 0 for no end.</summary>
+      public Single Range { get; set; }
+
+      /// <summary>A spot light's full-strength cone, in degrees; its <see cref="FalloffAngle"/> is where it ends.</summary>
+      public Single InnerConeAngle { get; set; }
+
+      /// <summary>What the source file says of the light beyond the rest.</summary>
+      public ExtraData Extra { get; set; }
    }
 }

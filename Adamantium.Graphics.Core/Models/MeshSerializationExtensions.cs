@@ -49,6 +49,8 @@ public static class MeshSerializationExtensions
         if (geometry.UV3 is { Length: > 0 }) mesh.SetUVs(3, geometry.UV3);
         if (geometry.Tangents is { Length: > 0 } && geometry.BiTangents is { Length: > 0 })
             mesh.SetTangentsAndBiTangents(geometry.Tangents, geometry.BiTangents);
+        else if (geometry.Tangents is { Length: > 0 })
+            mesh.SetTangents(geometry.Tangents);
         if (geometry.JointIndices is { Length: > 0 }) mesh.SetJointIndices(geometry.JointIndices);
         if (geometry.JointWeights is { Length: > 0 }) mesh.SetJointWeights(geometry.JointWeights);
 

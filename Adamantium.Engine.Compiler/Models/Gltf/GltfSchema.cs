@@ -26,6 +26,7 @@ public sealed class GltfRoot
     [JsonPropertyName("extensionsUsed")] public List<string> ExtensionsUsed { get; set; } = [];
     [JsonPropertyName("extensionsRequired")] public List<string> ExtensionsRequired { get; set; } = [];
     [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfAsset
@@ -33,12 +34,17 @@ public sealed class GltfAsset
     [JsonPropertyName("version")] public string Version { get; set; }
     [JsonPropertyName("minVersion")] public string MinVersion { get; set; }
     [JsonPropertyName("generator")] public string Generator { get; set; }
+    [JsonPropertyName("copyright")] public string Copyright { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfScene
 {
     [JsonPropertyName("name")] public string Name { get; set; }
     [JsonPropertyName("nodes")] public List<int> Nodes { get; set; } = [];
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfNode
@@ -54,6 +60,7 @@ public sealed class GltfNode
     [JsonPropertyName("scale")] public float[] Scale { get; set; }
     [JsonPropertyName("weights")] public float[] Weights { get; set; }
     [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfMesh
@@ -61,6 +68,8 @@ public sealed class GltfMesh
     [JsonPropertyName("name")] public string Name { get; set; }
     [JsonPropertyName("primitives")] public List<GltfPrimitive> Primitives { get; set; } = [];
     [JsonPropertyName("weights")] public float[] Weights { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfPrimitive
@@ -71,6 +80,7 @@ public sealed class GltfPrimitive
     [JsonPropertyName("mode")] public int Mode { get; set; } = GltfPrimitiveMode.Triangles;
     [JsonPropertyName("targets")] public List<Dictionary<string, int>> Targets { get; set; }
     [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public static class GltfPrimitiveMode
@@ -153,6 +163,7 @@ public sealed class GltfMaterial
     [JsonPropertyName("alphaCutoff")] public float AlphaCutoff { get; set; } = 0.5f;
     [JsonPropertyName("doubleSided")] public bool DoubleSided { get; set; }
     [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfPbrMetallicRoughness
@@ -162,6 +173,8 @@ public sealed class GltfPbrMetallicRoughness
     [JsonPropertyName("metallicFactor")] public float MetallicFactor { get; set; } = 1;
     [JsonPropertyName("roughnessFactor")] public float RoughnessFactor { get; set; } = 1;
     [JsonPropertyName("metallicRoughnessTexture")] public GltfTextureInfo MetallicRoughnessTexture { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public class GltfTextureInfo
@@ -169,6 +182,7 @@ public class GltfTextureInfo
     [JsonPropertyName("index")] public int Index { get; set; }
     [JsonPropertyName("texCoord")] public int TexCoord { get; set; }
     [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfNormalTextureInfo : GltfTextureInfo
@@ -187,6 +201,7 @@ public sealed class GltfTexture
     [JsonPropertyName("sampler")] public int? Sampler { get; set; }
     [JsonPropertyName("name")] public string Name { get; set; }
     [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfImage
@@ -195,6 +210,8 @@ public sealed class GltfImage
     [JsonPropertyName("mimeType")] public string MimeType { get; set; }
     [JsonPropertyName("bufferView")] public int? BufferView { get; set; }
     [JsonPropertyName("name")] public string Name { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfSampler
@@ -203,6 +220,9 @@ public sealed class GltfSampler
     [JsonPropertyName("minFilter")] public int? MinFilter { get; set; }
     [JsonPropertyName("wrapS")] public int WrapS { get; set; } = 10497;
     [JsonPropertyName("wrapT")] public int WrapT { get; set; } = 10497;
+    [JsonPropertyName("name")] public string Name { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfSkin
@@ -211,6 +231,8 @@ public sealed class GltfSkin
     [JsonPropertyName("inverseBindMatrices")] public int? InverseBindMatrices { get; set; }
     [JsonPropertyName("skeleton")] public int? Skeleton { get; set; }
     [JsonPropertyName("joints")] public List<int> Joints { get; set; } = [];
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfAnimation
@@ -218,18 +240,24 @@ public sealed class GltfAnimation
     [JsonPropertyName("name")] public string Name { get; set; }
     [JsonPropertyName("channels")] public List<GltfAnimationChannel> Channels { get; set; } = [];
     [JsonPropertyName("samplers")] public List<GltfAnimationSampler> Samplers { get; set; } = [];
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfAnimationChannel
 {
     [JsonPropertyName("sampler")] public int Sampler { get; set; }
     [JsonPropertyName("target")] public GltfAnimationTarget Target { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfAnimationTarget
 {
     [JsonPropertyName("node")] public int? Node { get; set; }
     [JsonPropertyName("path")] public string Path { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfAnimationSampler
@@ -237,6 +265,8 @@ public sealed class GltfAnimationSampler
     [JsonPropertyName("input")] public int Input { get; set; }
     [JsonPropertyName("output")] public int Output { get; set; }
     [JsonPropertyName("interpolation")] public string Interpolation { get; set; } = "LINEAR";
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfCamera
@@ -245,6 +275,8 @@ public sealed class GltfCamera
     [JsonPropertyName("type")] public string Type { get; set; }
     [JsonPropertyName("perspective")] public GltfPerspective Perspective { get; set; }
     [JsonPropertyName("orthographic")] public GltfOrthographic Orthographic { get; set; }
+    [JsonPropertyName("extensions")] public Dictionary<string, JsonElement> Extensions { get; set; }
+    [JsonPropertyName("extras")] public JsonElement? Extras { get; set; }
 }
 
 public sealed class GltfPerspective

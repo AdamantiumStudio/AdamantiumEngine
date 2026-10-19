@@ -563,7 +563,8 @@ public class GltfImportTests
                     ["type"] = "spot",
                     ["color"] = new JsonArray(1f, 0.5f, 0f),
                     ["intensity"] = 2f,
-                    ["spot"] = new JsonObject { ["outerConeAngle"] = MathF.PI / 4 }
+                    ["range"] = 7f,
+                    ["spot"] = new JsonObject { ["innerConeAngle"] = MathF.PI / 6, ["outerConeAngle"] = MathF.PI / 4 }
                 })
             }
         };
@@ -588,8 +589,11 @@ public class GltfImportTests
             Assert.That(Vector3F.Dot(Vector3F.TransformNormal(Vector3F.UnitZ, Matrix4x4F.RotationQuaternion(camera.Rotation)),
                 Vector3F.Normalize(-camera.Translation)), Is.GreaterThan(0.99f), "an engine camera looks along its +Z: at the model, as in the file");
             Assert.That(light.LightType, Is.EqualTo(LightType.Spot));
-            Assert.That(light.Color, Is.EqualTo(new Vector3F(2, 1, 0)));
+            Assert.That(light.Color, Is.EqualTo(new Vector3F(1, 0.5f, 0)));
+            Assert.That(light.Intensity, Is.EqualTo(2));
+            Assert.That(light.Range, Is.EqualTo(7));
             Assert.That(light.FalloffAngle, Is.EqualTo(45).Within(1e-3));
+            Assert.That(light.InnerConeAngle, Is.EqualTo(30).Within(1e-3));
             Assert.That(light.Position, Is.EqualTo(InEngine(0, 3, 0)).Using<Vector3F>(Near));
         });
     }

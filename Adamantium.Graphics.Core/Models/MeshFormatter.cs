@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.Mathematics;
 using MessagePack;
 using MessagePack.Formatters;
@@ -11,9 +12,10 @@ public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
 {
     /// <summary>Bumped whenever the row below changes shape. A file written by an older engine is refused by
     /// name instead of being read as nonsense.</summary>
-    private const int Version = 1;
+    private const int Version = 2;
 
-    private const int Fields = 17;
+    // Points, indices and bitangents take two items each: a tag of their form, then the blob.
+    private const int Fields = 25;
 
     private const byte BitangentsNone = 0;
     private const byte BitangentsDerived = 1;
@@ -64,6 +66,48 @@ public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
         MeshBlobs.WriteColors(ref writer, geometry.Colors);
         MeshBlobs.WriteSingles(ref writer, MeshBlobs.Flatten(geometry.JointIndices));
         MeshBlobs.WriteSingles(ref writer, MeshBlobs.Flatten(geometry.JointWeights));
+        MessagePackSerializer.Serialize(ref writer, value.Extra, options);
+        MessagePackSerializer.Serialize(ref writer, value.Attributes, options);
+        WriteMorphTargets(ref writer, value.MorphTargets, options);
+        MeshBlobs.WriteSingles(ref writer, value.MorphWeights);
+        MessagePackSerializer.Serialize(ref writer, value.VariantMaterials, options);
+    }
+
+    private static void WriteMorphTargets(ref MessagePackWriter writer, List<MorphTarget> targets,
+        MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(targets.Count);
+        foreach (var target in targets)
+        {
+            writer.WriteArrayHeader(5);
+            writer.Write(target.Name);
+            MeshBlobs.WriteSingles(ref writer, MeshBlobs.Flatten(target.Positions));
+            MeshBlobs.WriteSingles(ref writer, MeshBlobs.Flatten(target.Normals));
+            MeshBlobs.WriteSingles(ref writer, MeshBlobs.Flatten(target.Tangents));
+            MessagePackSerializer.Serialize(ref writer, target.Attributes, options);
+        }
+    }
+
+    private static List<MorphTarget> ReadMorphTargets(ref MessagePackReader reader,
+        MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        var targets = new List<MorphTarget>(count);
+        for (int i = 0; i < count; i++)
+        {
+            reader.ReadArrayHeader();
+            targets.Add(new MorphTarget
+            {
+                Name = reader.ReadString(),
+                Positions = MeshBlobs.ToVector3(MeshBlobs.ReadSingles(ref reader)) ?? [],
+                Normals = MeshBlobs.ToVector3(MeshBlobs.ReadSingles(ref reader)) ?? [],
+                Tangents = MeshBlobs.ToVector3(MeshBlobs.ReadSingles(ref reader)) ?? [],
+                Attributes = MessagePackSerializer.Deserialize<Dictionary<string, VertexAttribute>>(ref reader, options)
+                             ?? new Dictionary<string, VertexAttribute>()
+            });
+        }
+
+        return targets;
     }
 
     public Mesh Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
@@ -116,6 +160,20 @@ public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
         geometry.JointIndices = MeshBlobs.ToVector4(MeshBlobs.ReadSingles(ref reader));
         geometry.JointWeights = MeshBlobs.ToVector4(MeshBlobs.ReadSingles(ref reader));
 
-        return geometry.ToMesh();
+        var mesh = geometry.ToMesh();
+        mesh.Extra = MessagePackSerializer.Deserialize<ExtraData>(ref reader, options);
+        var attributes = MessagePackSerializer.Deserialize<Dictionary<string, VertexAttribute>>(ref reader, options);
+        if (attributes != null)
+        {
+            foreach (var (name, attribute) in attributes)
+            {
+                mesh.SetAttribute(name, attribute);
+            }
+        }
+
+        mesh.SetMorphTargets(ReadMorphTargets(ref reader, options));
+        mesh.MorphWeights = MeshBlobs.ReadSingles(ref reader) ?? [];
+        mesh.VariantMaterials = MessagePackSerializer.Deserialize<Dictionary<int, string>>(ref reader, options) ?? new();
+        return mesh;
     }
 }

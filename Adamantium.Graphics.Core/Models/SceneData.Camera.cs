@@ -26,5 +26,14 @@ public partial class SceneData
       public Vector3F Translation { get; set; }
 
       public QuaternionF Rotation { get; set; }
+
+      /// <summary>An orthographic camera's half width, as the file gives it.</summary>
+      public Single XMag { get; set; }
+
+      /// <summary>An orthographic camera's half height, as the file gives it.</summary>
+      public Single YMag { get; set; }
+
+      /// <summary>What the source file says of the camera beyond the rest.</summary>
+      public ExtraData Extra { get; set; }
    }
 }
