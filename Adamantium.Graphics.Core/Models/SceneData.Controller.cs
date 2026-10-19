@@ -46,5 +46,11 @@ public partial class SceneData
       /// vertex's order, <see cref="JointMatrices"/> their inverse bind matrices - as glTF has them, rather than a
       /// skeleton of their own.</summary>
       public Boolean JointsAreNodes { get; set; }
+
+      /// <summary>The ID of the node the source file names the skeleton's root; null when it names none.</summary>
+      public String SkeletonRoot { get; set; }
+
+      /// <summary>What the source file says of the skin beyond the rest.</summary>
+      public ExtraData Extra { get; set; }
    }
 }

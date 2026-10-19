@@ -35,5 +35,10 @@ public partial class SceneData
 
       /// <summary>What <see cref="Data"/> is encoded as, <c>image/png</c> say; null if the model did not say.</summary>
       public String MimeType { get; set; }
+
+      public String Name { get; set; }
+
+      /// <summary>What the source file says of the image beyond the rest.</summary>
+      public ExtraData Extra { get; set; }
    }
 }

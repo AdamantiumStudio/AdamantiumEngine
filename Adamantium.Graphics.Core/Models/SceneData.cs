@@ -20,6 +20,14 @@ public partial class SceneData
       Controllers = new ControllerCollection();
       Skeletons = new SkeletonCollection();
       Units = new Unit();
+      Scenes = [];
+      AnimationSources = [];
+      Samplers = new SamplerCollection();
+      Textures = new TextureCollection();
+      MaterialVariants = [];
+      XmpPackets = [];
+      ExtensionsUsed = [];
+      ExtensionsRequired = [];
    }
 
    public Model CreateMesh(Model parent, String id = "", String name = "")
@@ -122,10 +130,15 @@ public partial class SceneData
       meshesDictionary.Clear();
       meshToId.Clear();
 
-      if (Models != null)
+      foreach (var root in new[] { Models, OtherNodes })
       {
+         if (root == null)
+         {
+            continue;
+         }
+
          var stack = new Stack<Model>();
-         stack.Push(Models);
+         stack.Push(root);
          while (stack.Count > 0)
          {
             var node = stack.Pop();
@@ -177,7 +190,46 @@ public partial class SceneData
    private readonly Dictionary<String, Model> meshToId; 
 
    public Model Models { get; set; }
+
+   /// <summary>The nodes of the source file outside the scene in <see cref="Models"/> - those of its other scenes and
+   /// those of none - under a root of their own; null when there are none. Kept, not shown.</summary>
+   public Model OtherNodes { get; set; }
+
+   /// <summary>The scenes of the source file; <see cref="DefaultScene"/> is the one in <see cref="Models"/>.</summary>
+   public List<Scene> Scenes { get; set; }
+
+   /// <summary>The index in <see cref="Scenes"/> of the scene in <see cref="Models"/>; -1 when the file has none.</summary>
+   public Int32 DefaultScene { get; set; } = -1;
+
+   public AssetInfo Asset { get; set; }
+
+   /// <summary>What the source file says of itself beyond the rest: its own data and its extensions.</summary>
+   public ExtraData Extra { get; set; }
+
+   /// <summary>The extensions the source file says it uses.</summary>
+   public List<String> ExtensionsUsed { get; set; }
+
+   /// <summary>The extensions the source file says a reader must know to read it.</summary>
+   public List<String> ExtensionsRequired { get; set; }
+
+   /// <summary>The source file's metadata packets (KHR_xmp_json_ld), each as JSON-LD text; an object points at one
+   /// by its index from its own <see cref="ExtraData"/>.</summary>
+   public List<String> XmpPackets { get; set; }
+
+   /// <summary>The animations of the source file as it has them; <see cref="Clips"/> are made of them.</summary>
+   public List<AnimationSource> AnimationSources { get; set; }
+
    public ImageCollection Images { get; set; }
+
+   /// <summary>The source file's samplers, by key.</summary>
+   public SamplerCollection Samplers { get; set; }
+
+   /// <summary>The source file's textures, by key: an image with its sampler.</summary>
+   public TextureCollection Textures { get; set; }
+
+   /// <summary>The names of the source file's material variants (KHR_materials_variants): the looks a model can be
+   /// switched between; each mesh says its material in each.</summary>
+   public List<String> MaterialVariants { get; set; }
    public ControllerCollection Controllers { get; set; }
    public MaterialCollection Materials { get; set; }
    public CameraCollection CameraData { get; set; }

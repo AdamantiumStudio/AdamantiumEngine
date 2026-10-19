@@ -71,6 +71,11 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 
          Stack<SceneData.Model> stack = new Stack<SceneData.Model>();
          stack.Push(SceneDataContainer.Models);
+         if (SceneDataContainer.OtherNodes != null)
+         {
+            stack.Push(SceneDataContainer.OtherNodes);
+         }
+
          while (stack.Count > 0)
          {
             var currentModel = stack.Pop();
@@ -113,7 +118,7 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
                   mesh.CalculateNormals();
                }
 
-               if (Config.CalculateTangentsBitangentsIfNotPresent)
+               if (Config.CalculateTangentsBitangentsIfNotPresent && mesh.Tangents.Length != mesh.Points.Length)
                {
                   mesh.CalculateTangentsAndBinormals();
                }
@@ -155,6 +160,15 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
             model.Scale = scale;
             model.Rotation = rotation;
             model.Position = position;
+
+            foreach (var copy in model.Instances ?? [])
+            {
+               var placed = AxisConversion.Convert(Compose(copy.Scale, copy.Rotation, copy.Position), conversion);
+               placed.Decompose(out var copyScale, out var copyRotation, out var copyPosition);
+               copy.Scale = copyScale;
+               copy.Rotation = copyRotation;
+               copy.Position = copyPosition;
+            }
          }
 
          foreach (var light in SceneDataContainer.LightData.Values)
@@ -234,6 +248,11 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 
          var stack = new Stack<SceneData.Model>();
          stack.Push(SceneDataContainer.Models);
+         if (SceneDataContainer.OtherNodes != null)
+         {
+            stack.Push(SceneDataContainer.OtherNodes);
+         }
+
          while (stack.Count > 0)
          {
             var model = stack.Pop();

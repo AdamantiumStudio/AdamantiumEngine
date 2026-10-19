@@ -86,5 +86,58 @@ public partial class SceneData
 
       /// <summary>Whether both sides of the surface are drawn and lit.</summary>
       public Boolean DoubleSided { get; set; }
+
+      public String Name { get; set; }
+
+      /// <summary>The base color texture as the file refers to it; its transform is already laid on the texture
+      /// coordinates it reads.</summary>
+      public TextureReference BaseColorTexture { get; set; }
+
+      public TextureReference MetallicRoughnessTexture { get; set; }
+
+      public TextureReference NormalTexture { get; set; }
+
+      public TextureReference OcclusionTexture { get; set; }
+
+      public TextureReference EmissiveTexture { get; set; }
+
+      /// <summary>The emission's color before <see cref="EmissiveStrength"/>; <see cref="Emission"/> has both.</summary>
+      public Vector3F EmissiveFactor { get; set; }
+
+      /// <summary>KHR_materials_emissive_strength: how many times brighter than its color the emission is.</summary>
+      public Single EmissiveStrength { get; set; } = 1;
+
+      /// <summary>KHR_materials_ior: the index of refraction; 1.5 when the file gives none.</summary>
+      public Single Ior { get; set; } = 1.5f;
+
+      /// <summary>KHR_materials_dispersion: how far colors part on refraction, in 20/Abbe number; 0 for none.</summary>
+      public Single Dispersion { get; set; }
+
+      /// <summary>KHR_materials_unlit: shown as its color, with no light on it.</summary>
+      public Boolean Unlit { get; set; }
+
+      public ClearcoatLayer Clearcoat { get; set; }
+
+      public SheenLayer Sheen { get; set; }
+
+      public TransmissionLayer Transmission { get; set; }
+
+      public DiffuseTransmissionLayer DiffuseTransmission { get; set; }
+
+      public VolumeLayer Volume { get; set; }
+
+      public SpecularLayer Specular { get; set; }
+
+      public IridescenceLayer Iridescence { get; set; }
+
+      public AnisotropyLayer Anisotropy { get; set; }
+
+      public SpecularGlossiness SpecularGlossiness { get; set; }
+
+      /// <summary>What the source file says of the material beyond the rest.</summary>
+      public ExtraData Extra { get; set; }
+
+      /// <summary>What the source file says of the metallic-roughness part of the material beyond its values.</summary>
+      public ExtraData PbrExtra { get; set; }
    }
 }
