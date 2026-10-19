@@ -7,6 +7,17 @@ All packages share one version.
 
 ### Added
 
+- glTF import opens meshopt-compressed assets, `EXT_meshopt_compression` and `KHR_meshopt_compression`, with a decoder
+  of our own (`GltfMeshopt`): vertex data of versions 0 and 1, triangles and index sequences, and the octahedral,
+  quaternion, exponential and color filters. Compressed buffer views are unpacked as the file is read; a buffer no
+  view reads - the placeholder or fallback behind compressed views - is not loaded.
+- glTF import opens Draco-compressed meshes, `KHR_draco_mesh_compression`, with a decoder of our own
+  (`DracoDecoder`, Draco bitstream 2.2): sequential and edgebreaker connectivity (standard and valence traversal,
+  topology splits, attribute seams), rANS-coded symbols, quantized, octahedral-normal, integer and plain attributes,
+  and the parallelogram, constrained multi-parallelogram, texture-coordinate and geometric-normal predictions. A
+  compressed primitive's accessors take the decoded data in place of their buffer views
+  (`GltfFile.UnpackedAccessor`). A Draco mesh larger than its primitive's accessors say is refused before anything is
+  allocated for it.
 - glTF import keeps everything the file says, used or not yet:
   - every object's `extras` and extensions as JSON (`ExtraData`, the `Extra` of the scene, its asset, scenes, nodes,
     meshes and their parts, materials, images, textures, samplers, skins, cameras, lights, animations and channels);
@@ -1219,6 +1230,9 @@ All packages share one version.
 
 ### Changed
 
+- The packages that hold code or data derived from third-party work - `Adamantium.Core`, `Adamantium.Mathematics`,
+  `Adamantium.Imaging`, `Adamantium.Fonts`, `Adamantium.Engine.Compiler` - carry `NOTICE` and `THIRD-PARTY-NOTICES.md`;
+  the other packages have none in them and carry neither.
 - A baked mesh is format version 2 (its extra data, attributes, morph targets and material variants): a `.aemf` baked
   before is refused and baked again.
 - A glTF light's `Color` is its color alone, its brightness in `Intensity`; it was the two multiplied.

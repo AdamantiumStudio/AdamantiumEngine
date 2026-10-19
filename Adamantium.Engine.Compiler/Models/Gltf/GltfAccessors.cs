@@ -29,15 +29,11 @@ public static class GltfAccessors
         var info = file.Root.Accessors[accessor];
         components = ComponentsOf(info.Type);
         var values = new float[info.Count * components];
-        if (info.BufferView is { } view)
+        if (Base(file, accessor, ElementSize(info.Type, info.ComponentType), out var bytes, out var offset, out var stride))
         {
-            var bytes = file.View(view);
-            var bufferView = file.Root.BufferViews[view];
-            var element = ElementSize(info.Type, info.ComponentType);
-            var stride = bufferView.ByteStride is > 0 ? bufferView.ByteStride.Value : element;
             for (int i = 0; i < info.Count; i++)
             {
-                ReadElement(bytes, info.ByteOffset + i * stride, info, components, values.AsSpan(i * components));
+                ReadElement(bytes, offset + i * stride, info, components, values.AsSpan(i * components));
             }
         }
 
@@ -75,11 +71,9 @@ public static class GltfAccessors
         var components = ComponentsOf(info.Type);
         var size = SizeOf(info.ComponentType);
         var integers = new int[info.Count * components];
-        if (info.BufferView is { } view)
+        if (Base(file, accessor, components * size, out var bytes, out var offset, out var stride))
         {
-            var bytes = file.View(view);
-            var stride = file.Root.BufferViews[view].ByteStride is > 0 ? file.Root.BufferViews[view].ByteStride.Value : components * size;
-            ReadIntegers(bytes, info.ByteOffset, stride, info.Count, components, info.ComponentType, integers, null);
+            ReadIntegers(bytes, offset, stride, info.Count, components, info.ComponentType, integers, null);
         }
 
         if (info.Sparse is { Count: > 0 } sparse)
@@ -102,6 +96,33 @@ public static class GltfAccessors
         return integers;
     }
 
+    private static bool Base(GltfFile file, int accessor, int element, out ReadOnlySpan<byte> bytes, out int offset, out int stride)
+    {
+        offset = 0;
+        stride = element;
+        if (file.UnpackedAccessor(accessor) is { } unpacked)
+        {
+            bytes = unpacked;
+            return true;
+        }
+
+        var info = file.Root.Accessors[accessor];
+        if (info.BufferView is not { } view)
+        {
+            bytes = default;
+            return false;
+        }
+
+        bytes = file.View(view);
+        offset = info.ByteOffset;
+        if (file.Root.BufferViews[view].ByteStride is > 0 and var given)
+        {
+            stride = given;
+        }
+
+        return true;
+    }
+
     private static void ReadIntegers(ReadOnlySpan<byte> bytes, int offset, int stride, int count, int components,
         int componentType, int[] into, int[] targets)
     {
@@ -121,7 +142,7 @@ public static class GltfAccessors
         }
     }
 
-    private static int SizeOf(int componentType) => componentType switch
+    internal static int SizeOf(int componentType) => componentType switch
     {
         GltfComponentType.Byte or GltfComponentType.UnsignedByte => 1,
         GltfComponentType.Short or GltfComponentType.UnsignedShort => 2,

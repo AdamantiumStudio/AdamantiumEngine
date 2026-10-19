@@ -3,7 +3,8 @@ Copyright © 2019-2026 Adamantium Studio
 
 This product includes software developed by Adamantium Studio.
 
-Parts of this software are derived from third-party work under the MIT licence.
+Parts of this software are derived from third-party work under the MIT licence
+and the Apache License 2.0.
 Those files carry their original copyright notices in their headers, and the
 licence texts they refer to are collected in THIRD-PARTY-NOTICES.md. Both the
 headers and that file must travel with the code.
