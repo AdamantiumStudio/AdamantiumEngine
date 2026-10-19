@@ -37,6 +37,7 @@ public class EditorOverlayProcessor : RenderingProcessor
     private readonly Dictionary<Mesh, Ribbon> ribbons = [];
     private readonly Matrix4x4F[] gridWorld = new Matrix4x4F[1];
     private readonly Vector4F[] gridPhases = new Vector4F[GroundGrid.Levels / 2];
+    private readonly Matrix4x4F[] palette = new Matrix4x4F[SceneData.Controller.MaxDrawnJoints];
     private bool[] drawn = [];
     private uint outlineMark;
     private BasicEffect effect;
@@ -324,7 +325,8 @@ public class EditorOverlayProcessor : RenderingProcessor
 
                 var topology = data.Mesh.MeshTopology;
                 var line = topology == PrimitiveType.LineList || topology == PrimitiveType.LineStrip;
-                parts.Add(new Part(data, transformation.WorldMatrixF, color, line || !data.Mesh.IsNormalsPresent, line));
+                var skin = data.RenderMode == MeshRenderMode.Skinned ? current.GetComponent<Skin>() : null;
+                parts.Add(new Part(data, transformation.WorldMatrixF, color, line || !data.Mesh.IsNormalsPresent, line, skin));
             }
 
             return descend;
@@ -378,9 +380,10 @@ public class EditorOverlayProcessor : RenderingProcessor
             var head = parts[i];
             var count = 0;
 
-            for (var j = i; j < parts.Count && count < capacity; ++j)
+            // A skin bends its mesh with its own palette, so its part is drawn alone.
+            for (var j = i; j < parts.Count && count < (head.Skin != null ? 1 : capacity); ++j)
             {
-                if (drawn[j] || !ReferenceEquals(parts[j].Data.Mesh, head.Data.Mesh))
+                if (drawn[j] || !ReferenceEquals(parts[j].Data.Mesh, head.Data.Mesh) || parts[j].Skin != head.Skin)
                 {
                     continue;
                 }
@@ -402,7 +405,14 @@ public class EditorOverlayProcessor : RenderingProcessor
                 continue;
             }
 
-            PassFor(look, head.Flat).Apply();
+            if (head.Skin != null)
+            {
+                var filled = head.Skin.FillPalette(palette);
+                Array.Fill(palette, Matrix4x4F.Identity, filled, palette.Length - filled);
+                effect.Joints.SetValue(palette);
+            }
+
+            PassFor(look, head.Flat, head.Skin != null).Apply();
             if (inFront)
             {
                 var data = head.Data;
@@ -445,8 +455,18 @@ public class EditorOverlayProcessor : RenderingProcessor
         return ribbon.Mesh;
     }
 
-    private IEffectPass PassFor(Look look, bool flat)
+    private IEffectPass PassFor(Look look, bool flat, bool skinned)
     {
+        if (skinned)
+        {
+            return look switch
+            {
+                Look.Outline => effect.BasicSkinnedOutlineInstancedPass,
+                Look.Mask or Look.Flat => effect.BasicSkinnedFlatInstancedPass,
+                _ => flat ? effect.BasicSkinnedFlatInstancedPass : effect.BasicSkinnedLitInstancedPass
+            };
+        }
+
         return look switch
         {
             Look.Outline => effect.BasicOutlineInstancedPass,
@@ -463,7 +483,7 @@ public class EditorOverlayProcessor : RenderingProcessor
         Outline
     }
 
-    private readonly record struct Part(MeshData Data, Matrix4x4F World, Vector4F Color, bool Flat, bool Line);
+    private readonly record struct Part(MeshData Data, Matrix4x4F World, Vector4F Color, bool Flat, bool Line, Skin Skin);
 
     private readonly record struct Ribbon(Vector3[] Points, int[] Indices, Mesh Mesh);
 }

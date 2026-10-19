@@ -198,15 +198,18 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
             }
          }
 
-         foreach (var frames in SceneDataContainer.Animation.Values)
+         foreach (var clip in SceneDataContainer.Clips.Values)
          {
-            foreach (var frame in frames)
+            foreach (var frames in clip.Values)
             {
-               var pose = AxisConversion.Convert(frame.ComposeMatrix(), conversion);
-               pose.Decompose(out var scale, out var rotation, out var position);
-               frame.Position = position;
-               frame.Scale = scale;
-               frame.Rotation = rotation;
+               foreach (var frame in frames)
+               {
+                  var pose = AxisConversion.Convert(frame.ComposeMatrix(), conversion);
+                  pose.Decompose(out var scale, out var rotation, out var position);
+                  frame.Position = position;
+                  frame.Scale = scale;
+                  frame.Rotation = rotation;
+               }
             }
          }
       }

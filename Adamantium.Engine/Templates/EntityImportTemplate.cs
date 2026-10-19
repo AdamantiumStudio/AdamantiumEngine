@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
 using Adamantium.ECS.Templates;
 using Adamantium.Graphics;
+using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Content;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
@@ -55,6 +58,10 @@ public class EntityImportTemplate : IEntityTemplate
             }
 
             var nameToEntityId = new Dictionary<string, Entity>();
+            var nodeEntities = new Dictionary<string, Entity>();
+            var restPoses = new Dictionary<string, SceneData.KeyFrame>();
+            var drawnOf = new Dictionary<Entity, List<Entity>>();
+            var skinned = new List<(Entity Node, SceneData.Controller Skin)>();
             owner.Name = sceneData.Name;
             owner.Source = sceneData.Source;
             owner.IconKey = EntityIconKeys.Model;
@@ -78,10 +85,17 @@ public class EntityImportTemplate : IEntityTemplate
                     }
                 }
 
+                if (entity != null && !string.IsNullOrEmpty(currentMesh.ID))
+                {
+                    nodeEntities[currentMesh.ID] = entity;
+                }
+
+                var drawn = new List<Entity>();
                 if (currentMesh.Meshes.Count == 1)
                 {
                     var mesh = currentMesh.Meshes[0];
                     WriteMeshData(entity, mesh);
+                    drawn.Add(entity);
                 }
                 //Если меш разбит на части, тогда создаём дополнительные энтити, которые будут дочерними по отношению к текущему
                 else
@@ -92,15 +106,29 @@ public class EntityImportTemplate : IEntityTemplate
                         var entityPart = new Entity(entity, $"{currentMesh.Name} ({count})");
                         count++;
                         WriteMeshData(entityPart, mesh);
+                        drawn.Add(entityPart);
                     }
+                }
+
+                if (entity != null)
+                {
+                    drawnOf[entity] = drawn;
                 }
 
                 var scale = currentMesh.Parent == null
                     ? currentMesh.Scale * new Vector3F(sceneData.Units.Value)
                     : currentMesh.Scale;
                 SetTransformation(entity, (Vector3)currentMesh.Position, scale, currentMesh.Rotation);
+                if (!string.IsNullOrEmpty(currentMesh.ID))
+                {
+                    restPoses[currentMesh.ID] = new SceneData.KeyFrame(scale, currentMesh.Position, currentMesh.Rotation);
+                }
 
-                if (sceneData.Controllers.ContainsKey(currentMesh.ID))
+                if (sceneData.Controllers.TryGetValue(currentMesh.ID, out var nodeSkin) && nodeSkin.JointsAreNodes)
+                {
+                    skinned.Add((entity, nodeSkin));
+                }
+                else if (sceneData.Controllers.ContainsKey(currentMesh.ID))
                 {
                     var controllerData = sceneData.Controllers[currentMesh.ID];
                     var controller = new AnimationController();
@@ -117,7 +145,43 @@ public class EntityImportTemplate : IEntityTemplate
                 }
             }
 
-            if (sceneData.Animation.Count > 0)
+            foreach (var (node, skinData) in skinned)
+            {
+                if (node == null || !drawnOf.TryGetValue(node, out var drawnEntities)) continue;
+
+                foreach (var drawnEntity in drawnEntities)
+                {
+                    var skin = new Skin();
+                    foreach (var joint in skinData.JointNames)
+                    {
+                        skin.Joints.Add(nodeEntities.GetValueOrDefault(joint));
+                    }
+
+                    skin.InverseBindMatrices.AddRange(skinData.JointMatrices);
+                    drawnEntity.AddComponent(skin);
+                }
+            }
+
+            if (sceneData.Clips is { Count: > 0 })
+            {
+                var animation = new AnimationComponent { Skeletons = sceneData.Skeletons };
+                foreach (var (name, clip) in sceneData.Clips)
+                {
+                    animation.Clips[name] = clip;
+                    foreach (var key in clip.Keys)
+                    {
+                        if (nodeEntities.TryGetValue(key, out var target))
+                        {
+                            animation.Targets[key] = target;
+                            animation.RestPoses[key] = restPoses[key];
+                        }
+                    }
+                }
+
+                animation.CurrentClip = sceneData.Clips.Keys.First();
+                owner.AddComponent(animation);
+            }
+            else if (sceneData.Animation.Count > 0)
             {
                 var animation = new AnimationComponent();
                 animation.Animations = sceneData.Animation;
@@ -236,19 +300,23 @@ public class EntityImportTemplate : IEntityTemplate
                 material.Shininess = materialData.Shininess;
                 material.Transparent = materialData.Transparent;
                 material.Transparency = materialData.Transparency;
+                material.MetallicFactor = materialData.MetallicFactor;
+                material.RoughnessFactor = materialData.RoughnessFactor;
+                material.MetallicRoughnessPath = PathOf(materialData.MetallicRoughnessMap);
+                material.NormalMapPath = PathOf(materialData.NormalMap);
+                material.NormalScale = materialData.NormalScale;
+                material.OcclusionMapPath = PathOf(materialData.OcclusionMap);
+                material.OcclusionStrength = materialData.OcclusionStrength;
+                material.EmissiveMapPath = PathOf(materialData.EmissiveMap);
+                material.AlphaMode = materialData.AlphaMode;
+                material.AlphaCutoff = materialData.AlphaCutoff;
+                material.DoubleSided = materialData.DoubleSided;
 
-                if (!String.IsNullOrEmpty(materialData.DiffuseMap))
+                if (!String.IsNullOrEmpty(materialData.DiffuseMap)
+                    && sceneData.Images.TryGetValue(materialData.DiffuseMap, out var image))
                 {
-                    material.TexturePath = sceneData.Images[materialData.DiffuseMap].FilePath;
-                    if (File.Exists(material.TexturePath))
-                    {
-                        var options = new ContentLoadOptions()
-                        {
-                            AllowDuplication = false,
-                            IgnoreRootDirectory = true
-                        };
-                        material.Texture = contentManager.Load<Texture>(material.TexturePath, options);
-                    }
+                    material.TexturePath = PathOf(materialData.DiffuseMap);
+                    material.Texture = LoadTexture(image, material.TexturePath);
                 }
                 entity.AddComponent(material);
             }
@@ -262,6 +330,43 @@ public class EntityImportTemplate : IEntityTemplate
         {
             var material = new Material();
             entity.AddComponent(material);
+        }
+    }
+
+    private string PathOf(string imageKey)
+    {
+        if (string.IsNullOrEmpty(imageKey) || !sceneData.Images.TryGetValue(imageKey, out var image)) return null;
+
+        if (image.FilePath != null || image.ImageName != null) return image.FilePath ?? image.ImageName;
+
+        // Named by what it holds too, so a model saved again with another picture does not get the old one's texture.
+        var content = image.Data is { Length: > 0 } data ? ":" + Convert.ToHexString(SHA256.HashData(data), 0, 6) : "";
+        return $"{sceneData.Source ?? sceneData.Name}#{image.ID ?? imageKey}{content}";
+    }
+
+    // An image carried inside the model is embedded under its path, so the content manager owns its texture as it owns
+    // one read from a file, and loads it again for a new device. A picture that cannot be read leaves the part untextured.
+    private Texture LoadTexture(SceneData.Image image, string path)
+    {
+        if (contentManager == null) return null;
+
+        try
+        {
+            var options = new ContentLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
+            if (File.Exists(image.FilePath))
+            {
+                return contentManager.Load<Texture>(image.FilePath, options);
+            }
+
+            if (image.Data is not { Length: > 0 } data) return null;
+
+            contentManager.Embed(path, data);
+            return contentManager.Load<Texture>(path, options);
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Warning(exception, "The picture {Path} of an imported model could not be loaded", path);
+            return null;
         }
     }
 }

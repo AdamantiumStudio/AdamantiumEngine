@@ -11,6 +11,7 @@ namespace Adamantium.Graphics.Core.Content;
 public class ContentManager : DisposableObject, IContentManager
 {
     private readonly Dictionary<AssetKey, object> assetLockers;
+    private readonly Dictionary<string, byte[]> embedded = new();
     protected readonly Dictionary<AssetKey, object> LoadedAssets;
 
     public ContentManager(IDependencyResolver serviceProvider, Satellites satellites)
@@ -51,12 +52,37 @@ public class ContentManager : DisposableObject, IContentManager
         return Path.Combine(RootDirectory ?? string.Empty, assetPath);
     }
 
+    public void Embed(string assetName, byte[] data)
+    {
+        if (String.IsNullOrEmpty(assetName)) throw new ArgumentNullException(nameof(assetName));
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        lock (embedded)
+        {
+            embedded[assetName] = data;
+        }
+    }
+
+    private byte[] EmbeddedData(string assetName)
+    {
+        lock (embedded)
+        {
+            return embedded.GetValueOrDefault(assetName);
+        }
+    }
+
     public bool Exists(string assetName)
     {
         if (String.IsNullOrEmpty(assetName))
         {
             throw new ArgumentNullException(nameof(assetName));
         }
+
+        if (EmbeddedData(assetName) != null)
+        {
+            return true;
+        }
+
         lock (Resolvers)
         {
             //First resolve asset path
@@ -125,31 +151,8 @@ public class ContentManager : DisposableObject, IContentManager
                 assetPath = assetName;
             }
 
-            string finalAssetPath = string.Empty;
-            lock (Resolvers)
-            {
-                //First resolve asset path
-                if (Resolvers.Count == 0)
-                {
-                    throw new InvalidOperationException("No content resolver registered to this content manager");
-                }
-
-                foreach (var contentResolver in Resolvers)
-                {
-                    try
-                    {
-                        if (contentResolver.Exists(assetPath))
-                        {
-                            finalAssetPath = contentResolver.Resolve(assetPath);
-                            break;
-                        }
-                    }
-                    catch (AssetNotFoundException exception)
-                    {
-                        Debug.WriteLine(exception);
-                    }
-                }
-            }
+            var data = EmbeddedData(assetName);
+            var finalAssetPath = data != null ? assetName : ResolvePath(assetPath);
 
             if (String.IsNullOrEmpty(finalAssetPath))
             {
@@ -159,6 +162,7 @@ public class ContentManager : DisposableObject, IContentManager
             ContentReaderParameters parameters = new ContentReaderParameters();
             parameters.AssetName = assetName;
             parameters.AssetPath = finalAssetPath;
+            parameters.Data = data;
             parameters.AssetType = assetType;
             parameters.OutputPath = OutputDirectory;
 
@@ -175,6 +179,35 @@ public class ContentManager : DisposableObject, IContentManager
         }
 
         return result;
+    }
+
+    private string ResolvePath(string assetPath)
+    {
+        lock (Resolvers)
+        {
+            //First resolve asset path
+            if (Resolvers.Count == 0)
+            {
+                throw new InvalidOperationException("No content resolver registered to this content manager");
+            }
+
+            foreach (var contentResolver in Resolvers)
+            {
+                try
+                {
+                    if (contentResolver.Exists(assetPath))
+                    {
+                        return contentResolver.Resolve(assetPath);
+                    }
+                }
+                catch (AssetNotFoundException exception)
+                {
+                    Debug.WriteLine(exception);
+                }
+            }
+        }
+
+        return string.Empty;
     }
 
     protected object GetAssetLocker(AssetKey assetKey, bool create)

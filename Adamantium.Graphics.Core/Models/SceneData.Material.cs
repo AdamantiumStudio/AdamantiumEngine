@@ -54,5 +54,37 @@ public partial class SceneData
 
       public String ReflectionMap { get; set; }
 
+      /// <summary>How metallic the surface is, 0 to 1, times the blue of <see cref="MetallicRoughnessMap"/>.</summary>
+      public Single MetallicFactor { get; set; }
+
+      /// <summary>How rough the surface is, 0 to 1, times the green of <see cref="MetallicRoughnessMap"/>.</summary>
+      public Single RoughnessFactor { get; set; } = 1;
+
+      /// <summary>The image of roughness (green) and metalness (blue), as glTF packs them.</summary>
+      public String MetallicRoughnessMap { get; set; }
+
+      /// <summary>The tangent-space normal map.</summary>
+      public String NormalMap { get; set; }
+
+      /// <summary>How strongly <see cref="NormalMap"/> bends the normal.</summary>
+      public Single NormalScale { get; set; } = 1;
+
+      /// <summary>The ambient occlusion map, in its red.</summary>
+      public String OcclusionMap { get; set; }
+
+      /// <summary>How much of <see cref="OcclusionMap"/> is applied, 0 to 1.</summary>
+      public Single OcclusionStrength { get; set; } = 1;
+
+      /// <summary>The image of the light the surface gives off, times <see cref="Emission"/>.</summary>
+      public String EmissiveMap { get; set; }
+
+      /// <summary>How the alpha of the base color is taken.</summary>
+      public AlphaMode AlphaMode { get; set; }
+
+      /// <summary>Below this alpha a <see cref="AlphaMode.Mask"/> surface is not drawn.</summary>
+      public Single AlphaCutoff { get; set; } = 0.5f;
+
+      /// <summary>Whether both sides of the surface are drawn and lit.</summary>
+      public Boolean DoubleSided { get; set; }
    }
 }

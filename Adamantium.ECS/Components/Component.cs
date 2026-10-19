@@ -163,5 +163,15 @@ namespace Adamantium.ECS.Components
                 property.SetValue(clone, value);
             }
         }
+
+        public virtual void CloneReferences(IComponent clone, IReadOnlyDictionary<Entity, Entity> copies)
+        {
+        }
+
+        /// <summary>The copy of <paramref name="entity"/> in <paramref name="copies"/>, or the entity itself when it was not copied.</summary>
+        protected static Entity CopyOf(Entity entity, IReadOnlyDictionary<Entity, Entity> copies)
+        {
+            return entity != null && copies.TryGetValue(entity, out var copy) ? copy : entity;
+        }
     }
 }

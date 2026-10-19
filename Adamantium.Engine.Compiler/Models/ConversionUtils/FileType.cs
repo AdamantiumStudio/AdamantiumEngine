@@ -5,6 +5,7 @@
       Undefinied, 
       Collada, 
       AutoDesk3DS, 
-      Obj
+      Obj,
+      Gltf
    }
 }

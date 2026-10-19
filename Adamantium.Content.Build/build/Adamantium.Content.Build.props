@@ -6,6 +6,12 @@
     <AdamantiumContentName Condition="'$(AdamantiumContentName)' == ''">$(MSBuildProjectName.Substring($([MSBuild]::Add($(MSBuildProjectName.LastIndexOf('.')), 1))))</AdamantiumContentName>
   </PropertyGroup>
 
+  <!-- What an import does not read (ACB005, e.g. morph targets) says something about the asset, not about the build:
+       it stays a warning even where warnings are errors. -->
+  <PropertyGroup>
+    <MSBuildWarningsNotAsErrors>$(MSBuildWarningsNotAsErrors);ACB005</MSBuildWarningsNotAsErrors>
+  </PropertyGroup>
+
   <!-- Every file of the project is content, but its code, its build files, hidden files and the manifest of asset
        settings. Here, before the project's own items, so the project can Remove what it does not want. -->
   <ItemGroup>

@@ -125,7 +125,7 @@ public class Mesh
         
     public bool IsColorPresent => Semantic.HasFlag(VertexSemantic.Color);
 
-    public bool IsTangetBinormalsPresent => Semantic.HasFlag(VertexSemantic.TangentBiNormal);
+    public bool IsTangentBinormalsPresent => Semantic.HasFlag(VertexSemantic.TangentBiNormal);
 
     public bool IsAnimationPresent => Semantic.HasFlag(VertexSemantic.JointIndices) &&
                                       Semantic.HasFlag(VertexSemantic.JointWeights);
@@ -1444,6 +1444,20 @@ public class Mesh
                             ConvertUVs(i);
                         }
                         TurnNormals(n => new Vector3F(n.X, -n.Y, n.Z));
+                        break;
+                }
+                break;
+
+            case UpAxis.Y_UP_RH_FRONT_Z:
+                switch (destinationUpAxis)
+                {
+                    case UpAxis.Y_DOWN_RH:
+                        for (int i = 0; i < Points.Length; i++)
+                        {
+                            Points[i] = -Points[i];
+                            ConvertUVs(i);
+                        }
+                        TurnNormals(n => -n);
                         break;
                 }
                 break;

@@ -8,6 +8,9 @@ public partial class SceneData
 {
    public class Controller
    {
+      /// <summary>How many joints of one skin move its vertices when it is drawn; joints past them do not.</summary>
+      public const int MaxDrawnJoints = 128;
+
       public Controller()
       {
          BindShapeMatrix = Matrix4x4F.Identity;
@@ -39,5 +42,9 @@ public partial class SceneData
 
       public List<Matrix4x4F> JointMatrices { get; set; }
 
+      /// <summary>Whether the joints are nodes of the model - <see cref="JointNames"/> their <see cref="Model.ID"/>s, in a
+      /// vertex's order, <see cref="JointMatrices"/> their inverse bind matrices - as glTF has them, rather than a
+      /// skeleton of their own.</summary>
+      public Boolean JointsAreNodes { get; set; }
    }
 }

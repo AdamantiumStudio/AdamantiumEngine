@@ -38,6 +38,14 @@ public static class AxisConversion
                case UpAxis.Y_DOWN_RH: return Axes(1, 0, 0, 0, -1, 0, 0, 0, 1);
             }
             break;
+
+         case UpAxis.Y_UP_RH_FRONT_Z:
+            switch (to)
+            {
+               //(-x, -y, -z): the front turns to -Z, where the engine's models face
+               case UpAxis.Y_DOWN_RH: return Axes(-1, 0, 0, 0, -1, 0, 0, 0, -1);
+            }
+            break;
       }
 
       return Matrix4x4F.Identity;

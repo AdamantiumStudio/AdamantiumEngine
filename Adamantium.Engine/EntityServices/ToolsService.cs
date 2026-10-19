@@ -123,10 +123,11 @@ public class ToolsService : EntityService
 
         var toClip = metadata.WorldMatrixF * viewProjection;
         var points = mesh.Points;
+        var posed = Skin.DrawnOn(entity)?.PosePoints(mesh);
         shown.Clear();
         for (int i = 0; i < points.Length; i++)
         {
-            var point = (Vector3F)points[i];
+            var point = posed != null ? posed[i] : (Vector3F)points[i];
             var w = point.X * toClip.M14 + point.Y * toClip.M24 + point.Z * toClip.M34 + toClip.M44;
             var pixel = Vector3F.Project(point, 0, 0, camera.Width, camera.Height, 0, 1, toClip);
             var inFront = w > 1e-6f;
