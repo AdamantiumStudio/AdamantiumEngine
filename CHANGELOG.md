@@ -1295,6 +1295,9 @@ All packages share one version.
 
 ### Removed
 
+- `AnimationComponent.StartingKeyFrame` and `EndingKeyFrame`: nothing read what was set in them, and a key's number
+  is no range of a clip whose channels key at their own times. A clip is chosen by name and played by speed, pause and
+  `Option`.
 - `CameraBase.WheelVelocity`: a wheel notch zooms by `ZoomStep` now, near or far, not a distance of travel.
 - `Camera.OrthoScaleFactor`, a field only the orthographic projection divided its size by; `CameraBase.OrthoScale`
   zooms it now. `CameraBase.IsometricProjection` and `Camera.BuildIsometricProjection`: an oblique matrix that flattened

@@ -71,12 +71,6 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        [Bindable]
-        public partial Int32 StartingKeyFrame { get; set; }
-
-        [Bindable]
-        public partial Int32 EndingKeyFrame { get; set; }
-
         public TimeSpan AnimationStartTime { get; set; }
 
         public Boolean IsAnimationStarted { get; set; }
@@ -106,8 +100,6 @@ namespace Adamantium.ECS.Components
             Skeletons = new SceneData.SkeletonCollection(copy.Skeletons);
             Clips = CopyClips(copy.Clips);
             CurrentClip = copy.CurrentClip;
-            StartingKeyFrame = copy.StartingKeyFrame;
-            EndingKeyFrame = copy.EndingKeyFrame;
             Option = CalculateOptions.CyclicForward;
             InterpolatedMatrices = new Dictionary<string, Matrix4x4F>();
         }
@@ -234,10 +226,8 @@ namespace Adamantium.ECS.Components
                             {
                                 foreach (var animationData in Animations)
                                 {
-                                    StartingKeyFrame = animationData.Value.Count - 1;
-                                    EndingKeyFrame = 1;
-                                    var keyFrameIndex = AnimationHelper.FindKeyIndex(StartingKeyFrame,
-                                       EndingKeyFrame,
+                                    var keyFrameIndex = AnimationHelper.FindKeyIndex(animationData.Value.Count - 1,
+                                       1,
                                        elapsed * AnimationSpeed,
                                        Animations[animationData.Key], CalculateKeyFrameOptions.Backward);
                                     //if (keyFrameIndex > animationData.Value.KeyFrames[EndingKeyFrame])
@@ -266,9 +256,7 @@ namespace Adamantium.ECS.Components
                             {
                                 foreach (var animationData in Animations)
                                 {
-                                    StartingKeyFrame = 1;
-                                    EndingKeyFrame = animationData.Value.Count - 1;
-                                    var keyFrameIndex = AnimationHelper.FindKeyIndex(StartingKeyFrame, EndingKeyFrame,
+                                    var keyFrameIndex = AnimationHelper.FindKeyIndex(1, animationData.Value.Count - 1,
                                        elapsed * AnimationSpeed,
                                        Animations[animationData.Key]);
                                     if (keyFrameIndex != -1)
@@ -296,9 +284,7 @@ namespace Adamantium.ECS.Components
                     {
                         foreach (var animationData in Animations)
                         {
-                            StartingKeyFrame = 1;
-                            EndingKeyFrame = animationData.Value.Count - 1;
-                            var keyFrameIndex = AnimationHelper.FindKeyIndex(StartingKeyFrame, EndingKeyFrame,
+                            var keyFrameIndex = AnimationHelper.FindKeyIndex(1, animationData.Value.Count - 1,
                                elapsed * AnimationSpeed,
                                Animations[animationData.Key], CalculateKeyFrameOptions.Forward);
                             //if (keyFrameIndex < animationData.Value.KeyFrames.Count - 1)
@@ -324,9 +310,7 @@ namespace Adamantium.ECS.Components
                     {
                         foreach (var animationData in Animations)
                         {
-                            StartingKeyFrame = animationData.Value.Count - 1;
-                            EndingKeyFrame = 1;
-                            var keyFrameIndex = AnimationHelper.FindKeyIndex(StartingKeyFrame, EndingKeyFrame,
+                            var keyFrameIndex = AnimationHelper.FindKeyIndex(animationData.Value.Count - 1, 1,
                                elapsed * AnimationSpeed,
                                Animations[animationData.Key], CalculateKeyFrameOptions.Backward);
                             //if (keyFrameIndex > animationData.Value.KeyFrames[EndingKeyFrame])
