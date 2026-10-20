@@ -13,9 +13,6 @@ All packages share one version.
   hyphen limit and glyphs scaled to nothing (`TextComposition.ScalesGlyphs` tells the latter for a control's own
   check). `TextLayout.Composition` takes it at once; the layout's own properties of these settings read and write it.
   `DropCap.LeastLines` is the fewest lines a drop cap spans.
-- `ShapingBuffer`: the memory `TextShaper.Shape` shapes text in, kept by whoever shapes again and again (each
-  `TextLayout` keeps one). Shaping no longer keeps a buffer per thread (`[ThreadStatic]`): a shaping without a buffer
-  allocates its own.
 - `FeatureSamples.Of(font, features, count)`: what shows each of a font's substitution features - its own sample text,
   or the characters it turns into other glyphs: the ones a character variant names first, then Latin letters and digits,
   letters of one script, one form of a letter, signs only where no letter changes - for a gallery of stylistic sets or a
@@ -1275,6 +1272,9 @@ All packages share one version.
 
 ### Changed
 
+- Text shaping (`TextShaper.Shape`) rents its working memory from `ArrayPool` for the one shaping and gives it back,
+  instead of keeping a buffer and a normalizer per thread (`[ThreadStatic]`): nothing is held between shapings, at the
+  same speed and allocation.
 - `Skin.Joints` and `Skin.InverseBindMatrices` are the lists of its `Skeleton`, shared by every part of the mesh
   bending with it: changing them changes them for all those parts.
 - `AdamantiumCollection.AsSpan` reads without the lock, for a walk each frame: while another thread changes the
