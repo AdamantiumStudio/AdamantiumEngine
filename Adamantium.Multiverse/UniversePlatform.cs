@@ -111,6 +111,7 @@ namespace Adamantium.Multiverse
         private void DeviceChangeEnd(object sender, EventArgs e)
         {
             graphicsDeviceChanged = true;
+            Universe?.Invalidate();
         }
 
         /// <summary>
@@ -151,6 +152,7 @@ namespace Adamantium.Multiverse
                 var device = GraphicsDeviceService.CreateRenderDevice();
                 wnd.SetGraphicsDevice(device);
                 wnd.Input = new InputWormhole(wnd, gamepads, Universe);
+                wnd.Universe = Universe;
                 SubscribeToEvents(wnd);
 
                 outputs.Add(wnd);
@@ -170,6 +172,7 @@ namespace Adamantium.Multiverse
             lock (syncObject)
             {
                 windowsToRemove.Add((UniverseOutput)sender);
+                Universe?.Invalidate();
             }
         }
 
@@ -288,6 +291,7 @@ namespace Adamantium.Multiverse
                 if (contextToWindow.Remove(context, out var window))
                 {
                     windowsToRemove.Add(window);
+                    Universe?.Invalidate();
                 }
             }
         }
@@ -350,6 +354,7 @@ namespace Adamantium.Multiverse
             lock (syncObject)
             {
                 windowsToAdd.Add(wnd);
+                Universe?.Invalidate();
             }
 
             return wnd;
@@ -370,6 +375,7 @@ namespace Adamantium.Multiverse
             {
                 contextToWindow.Add(context, wnd);
                 windowsToAdd.Add(wnd);
+                Universe?.Invalidate();
             }
 
             return wnd;
@@ -399,6 +405,7 @@ namespace Adamantium.Multiverse
                 var wnd = outputFactory.Create(outputContext, _eventAggregator, surfaceFormat, depthFormat, msaaLevel);
                 contextToWindow.Add(outputContext, wnd);
                 windowsToAdd.Add(wnd);
+                Universe?.Invalidate();
                 return wnd;
             }
             return contextToWindow[outputContext];
@@ -415,6 +422,7 @@ namespace Adamantium.Multiverse
             {
                 contextToWindow.Add(window.OutputContext, window);
                 windowsToAdd.Add(window);
+                Universe?.Invalidate();
             }
         }
 

@@ -89,11 +89,17 @@ public class TestUniverse : IUniverse
 
     public FrameMode FrameMode { get; set; }
 
-    public int FramesRequested { get; private set; }
-
-    public void RequestFrame()
+    public void Invalidate()
     {
-        FramesRequested++;
+    }
+
+    public void Invalidate(UniverseOutput output)
+    {
+    }
+
+    public void Post(Action action)
+    {
+        action();
     }
 
     public void Run()

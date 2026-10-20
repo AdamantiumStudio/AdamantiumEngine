@@ -40,9 +40,17 @@ namespace Adamantium.Multiverse
         /// <summary>How the own loop paces its frames; set from any thread.</summary>
         public FrameMode FrameMode { get; set; }
 
-        /// <summary>Asks the own loop for frames under <see cref="Multiverse.FrameMode.OnDemand"/>: the next one and a few
-        /// after, so what settles over a frame or two shows too. From any thread.</summary>
-        public void RequestFrame();
+        /// <summary>Asks for a frame of every output: what the world shows has changed. From any thread; under
+        /// <see cref="Multiverse.FrameMode.OnDemand"/> the loop sleeps until something asks.</summary>
+        public void Invalidate();
+
+        /// <summary>Asks for a frame of <paramref name="output"/> alone: what changed is its own - its input, its size, its
+        /// camera. From any thread.</summary>
+        public void Invalidate(UniverseOutput output);
+
+        /// <summary>Runs <paramref name="action"/> on the universe's thread before its next frame, then draws every output:
+        /// how anything outside the loop changes the world, with no race against a frame. From any thread.</summary>
+        public void Post(Action action);
 
         /// <summary>
         /// Stops the game while drawing goes on: no time passes for the services and no input reaches them. Set from

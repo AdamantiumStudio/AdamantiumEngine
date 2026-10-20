@@ -101,7 +101,7 @@ public class RenderingService : EntityService
     public override bool BeginDraw()
     {
         // False skips Draw, EndDraw and Submit - and a present of a frame nobody sees.
-        if (!Window.IsVisible || !Window.IsUpToDate())
+        if (!Window.IsDrawnThisFrame || !Window.IsVisible || !Window.IsUpToDate())
         {
             return false;
         }

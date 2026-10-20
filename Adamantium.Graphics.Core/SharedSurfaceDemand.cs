@@ -10,6 +10,7 @@ public sealed class SharedSurfaceDemand
 {
     private readonly object _sync = new();
     private ulong _count;
+    private Action _onRaised;
 
     /// <summary>How many frames the consumer has asked for.</summary>
     public ulong Count
@@ -26,11 +27,33 @@ public sealed class SharedSurfaceDemand
     /// <summary>For the consumer: asks for a frame.</summary>
     public void Raise()
     {
+        Action onRaised;
         lock (_sync)
         {
             _count++;
             Monitor.PulseAll(_sync);
+            onRaised = _onRaised;
+            _onRaised = null;
         }
+
+        onRaised?.Invoke();
+    }
+
+    /// <summary>For the producer: runs <paramref name="action"/> once the consumer has asked for more than
+    /// <paramref name="seen"/> frames - at once if it already has, else on the consumer's thread when it asks. One action
+    /// waits at a time; a new one takes the place of the last.</summary>
+    public void WhenBeyond(ulong seen, Action action)
+    {
+        lock (_sync)
+        {
+            if (_count <= seen)
+            {
+                _onRaised = action;
+                return;
+            }
+        }
+
+        action();
     }
 
     /// <summary>For the producer: waits until the consumer has asked for more than <paramref name="seen"/> frames, up to

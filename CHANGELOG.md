@@ -21,11 +21,17 @@ All packages share one version.
   `SharedSurfaceDemand`), so it draws no more often than it is shown and the host's frames never wait for it.
   `SuspendHostedLoop`/`ResumeHostedLoop` hold it between two frames while its devices are made again; its `Fps` counts
   the frames it drew. A frame that throws is logged and the loop goes on. `UniverseOutput.WaitUntilShown` gives whether
-  the output has room, and a frame drawn without it does not count against the frames asked for. `SharedSurface.CreateExportable` takes how many surfaces the producer rotates through
+  the output has room; a frame drawn without it is dropped, and the output asks for another the next time its host
+  asks for one (`SharedSurfaceDemand.WhenBeyond`). `SharedSurface.CreateExportable` takes how many surfaces the producer rotates through
   (`BufferCount`, `SurfaceAt`); the consumer copies the newest and gives the older ones back with it.
-- `IUniverse.FrameMode`: `OnDemand` draws only when something asks - input on an output, a resize, a transform that
-  moved in the frame (`TransformService`), or `IUniverse.RequestFrame` - and a few frames after; a still scene draws
-  nothing. Every quarter of a second the loop updates once to look for a change nobody asked a frame for.
+- `IUniverse.FrameMode`: `OnDemand` draws only when something asks, and a still scene draws nothing - the loop sleeps
+  until a message reaches the universe's channel. `IUniverse.Invalidate()` asks a frame of every output: the world
+  changed. `UniverseOutput.Invalidate` and `IUniverse.Invalidate(UniverseOutput)` ask one of that output alone - its
+  input, its size; the others are not drawn (`UniverseOutput.IsDrawnThisFrame`). `TransformService` asks of every
+  output when a node of the world moved in the frame, and only of the outputs looking through a camera when just that
+  camera moved. `IUniverse.Post` runs an action on the universe's thread before its next frame, then draws every
+  output: a change from another thread with no race against a frame. `Continuous` draws every output at its host's
+  pace. A paused universe sleeps between messages, runs what is posted and keeps the frames asked for its resuming.
 - GPU time of a frame: `IGraphicsDevice.LastGpuFrameMs`, from timestamps at the start and the end of the frame's
   commands, and `Universe.GpuTimeMs`, averaged over a second. `ForwardPlusRenderingProcessor.TrianglesDrawn`,
   `TrianglesInScene` and `DrawCalls`: the triangles of the meshes the last frame drew, of all it would draw were they in
@@ -785,6 +791,9 @@ All packages share one version.
 
 ### Fixed
 
+- An entity moved while a camera was not looked through stayed at its old place through that camera once it was: the
+  world matrix kept for it still counted as computed. A moved entity now forgets them all
+  (`Transform.ForgetComputedMetadata`).
 - Picking a skinned mesh posed the skin of every part from the start, composing the parents of every joint, and took a
   collection lock for every child it walked: the pointer over two animated models cost the frame about 10 ms. It now
   takes the world matrices worked out for the ray's camera in the frame (`Skin.PosedBounds(mesh, camera)`,

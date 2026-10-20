@@ -7,6 +7,6 @@ public enum FrameMode
     Continuous,
 
     /// <summary>Frames only when something asks: input on an output, a resize, a change in the world, or
-    /// <see cref="IUniverse.RequestFrame"/>; a still scene draws nothing.</summary>
+    /// <see cref="IUniverse.Invalidate()"/>; a still scene draws nothing.</summary>
     OnDemand
 }

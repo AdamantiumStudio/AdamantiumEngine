@@ -13,11 +13,11 @@ namespace Adamantium.Engine.EntityServices;
 public class TransformService : EntityService
 {
     private IUniverse universe;
-    private readonly List<Camera> cameras = [];
-    private readonly List<Vector3> cameraPositions = [];
+    private readonly List<Viewpoint> viewpoints = [];
+    private int viewpointCount;
     private readonly Vector3F[] corners = new Vector3F[8];
     private readonly List<(Entity Entity, Mesh Mesh, Skin Skin)> skins = [];
-    private bool moved;
+    private bool worldMoved;
     private SceneIndex index;
 
     public Boolean IsPaused { get; set; }
@@ -47,14 +47,8 @@ public class TransformService : EntityService
         var entities = Entities;
         try
         {
-            universe.CollectCurrentCameras(cameras);
-            cameraPositions.Clear();
-            foreach (var camera in cameras)
-            {
-                cameraPositions.Add(camera.WorldPosition);
-            }
-
-            moved = false;
+            CollectViewpoints();
+            worldMoved = false;
             skins.Clear();
             index.BeginFrame();
             foreach (var entity in entities)
@@ -64,14 +58,15 @@ public class TransformService : EntityService
 
             IndexSkins();
             index.EndFrame();
-            if (moved)
-            {
-                universe.RequestFrame();
-            }
+            InvalidateWhatMoved();
         }
         catch (Exception ex)
         {
             Log.Logger.Error(ex, "Transform update failed");
+        }
+        finally
+        {
+            ForgetViewpoints();
         }
     }
         
@@ -84,11 +79,23 @@ public class TransformService : EntityService
 
             var transform = current.Transform;
             var dirty = transform.IsWorldDirty;
+            var ownViewpoint = dirty ? ViewpointOf(current) : null;
+            if (ownViewpoint != null)
+            {
+                ownViewpoint.Moved = true;
+            }
+
+            if (dirty)
+            {
+                transform.ForgetComputedMetadata();
+            }
+
             Collider[] colliders = null;
 
-            for (int c = 0; c < cameras.Count; c++)
+            for (int v = 0; v < viewpointCount; v++)
             {
-                var camera = cameras[c];
+                var viewpoint = viewpoints[v];
+                var camera = viewpoint.Camera;
                 if (camera.Owner == current)
                 {
                     continue;
@@ -98,7 +105,7 @@ public class TransformService : EntityService
                 // Only when an input to the world matrix changed - the node or its parent, the camera position -
                 // so a static scene skips the pass. World position: a parented camera's local offset barely changes.
                 if (!dirty && metadata.Computed
-                    && metadata.LastCameraPosition == cameraPositions[c])
+                    && metadata.LastCameraPosition == viewpoint.Position)
                 {
                     continue;
                 }
@@ -107,8 +114,15 @@ public class TransformService : EntityService
                 var parentWorld = current.Owner?.Transform != null
                     ? current.Owner.Transform.GetMetadata(camera).AbsoluteWorld
                     : Matrix4x4F.Identity;
-                transform.CalculateFinalTransform(camera, parentWorld, cameraPositions[c]);
-                moved = true;
+                transform.CalculateFinalTransform(camera, parentWorld, viewpoint.Position);
+                if (!dirty)
+                {
+                    viewpoint.Moved = true;
+                }
+                else if (ownViewpoint == null)
+                {
+                    worldMoved = true;
+                }
 
                 // Collider bounds ride the same world matrix, so refresh them exactly when it was recomputed (fetch the
                 // list lazily so a fully-static node allocates nothing).
@@ -182,6 +196,87 @@ public class TransformService : EntityService
         index.Place(entity, mesh, box);
     }
 
+    private void CollectViewpoints()
+    {
+        viewpointCount = 0;
+        var outputs = universe.Outputs;
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            var output = outputs[i];
+            var camera = output.Camera;
+            if (!output.IsVisible || camera == null)
+            {
+                continue;
+            }
+
+            var viewpoint = ViewpointOf(camera);
+            if (viewpoint == null)
+            {
+                if (viewpointCount == viewpoints.Count)
+                {
+                    viewpoints.Add(new Viewpoint());
+                }
+
+                viewpoint = viewpoints[viewpointCount++];
+                viewpoint.Camera = camera;
+                viewpoint.Position = camera.WorldPosition;
+                viewpoint.Moved = false;
+            }
+
+            viewpoint.Outputs.Add(output);
+        }
+    }
+
+    private Viewpoint ViewpointOf(Camera camera)
+    {
+        for (int v = 0; v < viewpointCount; v++)
+        {
+            if (viewpoints[v].Camera == camera)
+            {
+                return viewpoints[v];
+            }
+        }
+
+        return null;
+    }
+
+    private Viewpoint ViewpointOf(Entity entity)
+    {
+        var camera = entity.GetComponent<Camera>();
+        return camera != null ? ViewpointOf(camera) : null;
+    }
+
+    private void InvalidateWhatMoved()
+    {
+        if (worldMoved)
+        {
+            universe.Invalidate();
+            return;
+        }
+
+        for (int v = 0; v < viewpointCount; v++)
+        {
+            if (!viewpoints[v].Moved) continue;
+
+            foreach (var output in viewpoints[v].Outputs)
+            {
+                universe.Invalidate(output);
+            }
+        }
+    }
+
+    private void ForgetViewpoints()
+    {
+        foreach (var viewpoint in viewpoints)
+        {
+            viewpoint.Camera = null;
+            viewpoint.Moved = false;
+            viewpoint.Outputs.Clear();
+        }
+
+        viewpointCount = 0;
+    }
+
     private void IndexSkins()
     {
         foreach (var (entity, mesh, skin) in skins)
@@ -198,14 +293,22 @@ public class TransformService : EntityService
 
     private Camera CameraFor(Entity entity)
     {
-        foreach (var camera in cameras)
+        for (int v = 0; v < viewpointCount; v++)
         {
-            if (camera.Owner != entity)
+            if (viewpoints[v].Camera.Owner != entity)
             {
-                return camera;
+                return viewpoints[v].Camera;
             }
         }
 
         return null;
+    }
+
+    private sealed class Viewpoint
+    {
+        public readonly List<UniverseOutput> Outputs = [];
+        public Camera Camera;
+        public Vector3 Position;
+        public bool Moved;
     }
 }

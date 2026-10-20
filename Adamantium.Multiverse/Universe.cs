@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Channels;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.Engine.Compiler.Models;
@@ -50,21 +51,23 @@ public class Universe : IUniverse
     private readonly Dictionary<Object, OutputContext> contextsMapping;
 
     private static readonly TimeSpan LongestWaitForShown = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan LookForChangesEvery = TimeSpan.FromMilliseconds(250);
     private const int IdleHostedFrameMs = 16;
     private const int FailedFrameBackoffMs = 100;
-    // A resize takes three: one makes the new surface, the next hands it over, the last fills it.
-    private const int SettlingFrames = 3;
 
     private Thread hostedLoop;
     private readonly object hostedFrameGate = new();
     private int hostedLoopHolds;
-    private FrameMode frameMode;
-    private int framesOwed;
-    private readonly ManualResetEventSlim frameWanted = new();
+    private volatile FrameMode frameMode;
+    private volatile bool isPaused;
+    private readonly Channel<UniverseMessage> messages = Channel.CreateUnbounded<UniverseMessage>(
+        new UnboundedChannelOptions { SingleReader = true, AllowSynchronousContinuations = true });
+    private readonly HashSet<UniverseOutput> outputsAsked = [];
+    private bool everyOutputAsked = true;
     private string lastFailedFrame;
     private int hostedFramesDrawn;
     private long hostedFpsSince;
+    private long hostedDrawnAt;
+    private Single fps;
 
     /// <summary>
     /// <paramref name="container"/> is the process's: the host has registered its surfaces and windows there.
@@ -149,7 +152,11 @@ public class Universe : IUniverse
     public InputActions InputActions { get; } = new();
 
     public bool IsInitialized { get; private set; }
-    public bool IsPaused { get; private set; }
+    public bool IsPaused
+    {
+        get => isPaused;
+        private set => isPaused = value;
+    }
         
     /// <summary>
     /// Calling this method will pause running service
@@ -172,6 +179,7 @@ public class Universe : IUniverse
         {
             IsPaused = false;
             Resumed?.Invoke(this, EventArgs.Empty);
+            messages.Writer.TryWrite(new UniverseMessage(null, null));
         }
     }
 
@@ -182,7 +190,11 @@ public class Universe : IUniverse
     public bool IsSimulationPaused
     {
         get => isSimulationPaused;
-        set => simulationPauseRequested = value;
+        set
+        {
+            simulationPauseRequested = value;
+            Invalidate();
+        }
     }
 
     /// <summary>
@@ -213,7 +225,11 @@ public class Universe : IUniverse
     public Double GpuTimeMs { get; private set; }
 
     /// <summary>Frames the universe has actually run a second, over the last second: what the eye sees.</summary>
-    public Single Fps { get; private set; }
+    public Single Fps
+    {
+        get => hostedLoop != null && Stopwatch.GetElapsedTime(Volatile.Read(ref hostedDrawnAt)).TotalSeconds > 1 ? 0 : fps;
+        private set => fps = value;
+    }
 
     /// <summary>
     /// Condition on which the loop will be exited
@@ -317,6 +333,7 @@ public class Universe : IUniverse
         }
 
         UpdateAppTime(HostedFrameTime());
+        StartFrame(true);
         MakePreparations();
         Update(SimulationTime());
         ExecuteDrawSequence2(appTime);
@@ -365,16 +382,36 @@ public class Universe : IUniverse
         set
         {
             frameMode = value;
-            RequestFrame();
+            messages.Writer.TryWrite(new UniverseMessage(null, null));
         }
     }
 
-    /// <summary>Asks the own loop for frames under <see cref="Multiverse.FrameMode.OnDemand"/>: the next one and a few
-    /// after, so what settles over a frame or two shows too. From any thread.</summary>
-    public void RequestFrame()
+    /// <summary>Asks for a frame of every output: what the world shows has changed. From any thread; under
+    /// <see cref="Multiverse.FrameMode.OnDemand"/> the loop sleeps until something asks, under
+    /// <see cref="Multiverse.FrameMode.Continuous"/> every frame draws every output and nothing is asked.</summary>
+    public void Invalidate()
     {
-        Volatile.Write(ref framesOwed, SettlingFrames);
-        frameWanted.Set();
+        if (frameMode == FrameMode.OnDemand || IsPaused)
+        {
+            messages.Writer.TryWrite(new UniverseMessage(null, null));
+        }
+    }
+
+    /// <summary>Asks for a frame of <paramref name="output"/> alone: what changed is its own - its input, its size, its
+    /// camera. From any thread.</summary>
+    public void Invalidate(UniverseOutput output)
+    {
+        if (frameMode == FrameMode.OnDemand || IsPaused)
+        {
+            messages.Writer.TryWrite(new UniverseMessage(output, null));
+        }
+    }
+
+    /// <summary>Runs <paramref name="action"/> on the universe's thread before its next frame, then draws every output:
+    /// how anything outside the loop changes the world, with no race against a frame. From any thread.</summary>
+    public void Post(Action action)
+    {
+        messages.Writer.TryWrite(new UniverseMessage(null, action));
     }
 
     private void RunHostedLoop()
@@ -390,37 +427,43 @@ public class Universe : IUniverse
                     continue;
                 }
 
-                var lookOnly = false;
-                if (frameMode == FrameMode.OnDemand && Volatile.Read(ref framesOwed) == 0)
+                if (frameMode == FrameMode.OnDemand && !FramesAsked())
                 {
-                    frameWanted.Wait(LookForChangesEvery);
-                    frameWanted.Reset();
-                    lookOnly = Volatile.Read(ref framesOwed) == 0;
+                    WaitForMessage();
+                    continue;
                 }
 
                 bool drawn;
+                bool paused;
                 try
                 {
                     lock (hostedFrameGate)
                     {
                         if (Volatile.Read(ref hostedLoopHolds) > 0 || !IsRunning) continue;
 
-                        drawn = RunHostedFrame(lookOnly);
+                        paused = IsPaused;
+                        drawn = paused ? RunPausedFrame() : RunHostedFrame();
                     }
                 }
                 catch (Exception exception)
                 {
                     ReportFailedFrame(exception);
+                    everyOutputAsked = true;
                     Thread.Sleep(FailedFrameBackoffMs);
                     continue;
                 }
 
-                CountHostedFrame(drawn);
-                if (lookOnly)
+                if (paused)
                 {
+                    if (IsPaused)
+                    {
+                        WaitForMessage();
+                    }
+
                     continue;
                 }
 
+                CountHostedFrame(drawn);
                 if (!drawn)
                 {
                     Thread.Sleep(IdleHostedFrameMs);
@@ -449,54 +492,101 @@ public class Universe : IUniverse
         Log.Logger.Error(exception, "A frame of the universe failed; the loop goes on");
     }
 
-    private bool RunHostedFrame(bool lookOnly)
+    private bool RunPausedFrame()
     {
-        if (IsPaused)
-        {
-            platform.RemoveWindowsInternal();
-            hostedFrameAt = 0;
-            Fps = 0;
-            return false;
-        }
+        platform.RemoveWindowsInternal();
+        hostedFrameAt = 0;
+        Fps = 0;
+        TakeMessages();
+        return false;
+    }
 
-        var shown = lookOnly || WaitUntilShown();
+    private bool RunHostedFrame()
+    {
+        StartFrame(false);
+        WaitUntilShown();
         UpdateAppTime(HostedFrameTime());
         MakePreparations();
         Update(SimulationTime());
-        if (lookOnly)
-        {
-            if (Volatile.Read(ref framesOwed) == 0)
-            {
-                return false;
-            }
-
-            shown = WaitUntilShown();
-        }
-
         var drawn = ExecuteDrawSequence2(appTime);
         EndScene();
         FrameFinished?.Invoke(this, EventArgs.Empty);
-        if (drawn && shown)
-        {
-            var owed = Volatile.Read(ref framesOwed);
-            if (owed > 0)
-            {
-                Interlocked.CompareExchange(ref framesOwed, owed - 1, owed);
-            }
-        }
-
         return drawn;
     }
 
-    private bool WaitUntilShown()
+    private bool FramesAsked() => everyOutputAsked || outputsAsked.Count > 0 || messages.Reader.TryPeek(out _);
+
+    private void WaitForMessage()
     {
-        var shown = true;
+        try
+        {
+            messages.Reader.WaitToReadAsync(cancellationTokenSource.Token).AsTask().Wait();
+        }
+        catch (AggregateException) when (cancellationTokenSource.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void TakeMessages()
+    {
+        everyOutputAsked |= frameMode == FrameMode.Continuous;
+        while (messages.Reader.TryRead(out var message))
+        {
+            if (message.Action != null)
+            {
+                RunPosted(message.Action);
+                everyOutputAsked = true;
+            }
+            else if (message.Output == null)
+            {
+                everyOutputAsked = true;
+            }
+            else
+            {
+                outputsAsked.Add(message.Output);
+            }
+        }
+    }
+
+    private static void RunPosted(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Error(exception, "An action posted to the universe failed");
+        }
+    }
+
+    private void StartFrame(bool everyOutput)
+    {
+        TakeMessages();
+        everyOutputAsked |= everyOutput;
+        MarkOutputsDrawn();
+    }
+
+    private void MarkOutputsDrawn()
+    {
         foreach (var output in platform.Outputs)
         {
-            shown &= output.WaitUntilShown(LongestWaitForShown);
+            output.IsDrawnThisFrame = everyOutputAsked || outputsAsked.Contains(output);
         }
 
-        return shown;
+        everyOutputAsked = false;
+        outputsAsked.Clear();
+    }
+
+    private void WaitUntilShown()
+    {
+        foreach (var output in platform.Outputs)
+        {
+            if (output.IsDrawnThisFrame && output.IsVisible)
+            {
+                output.WaitUntilShown(LongestWaitForShown);
+            }
+        }
     }
 
     // A hosted universe may run several frames to one of its host's, or one to several: its clock is its own frames.
@@ -696,8 +786,13 @@ public class Universe : IUniverse
 
     private void CountHostedFrame(bool drawn)
     {
-        if (drawn) hostedFramesDrawn++;
         var now = Stopwatch.GetTimestamp();
+        if (drawn)
+        {
+            hostedFramesDrawn++;
+            Volatile.Write(ref hostedDrawnAt, now);
+        }
+
         if (hostedFpsSince == 0)
         {
             hostedFpsSince = now;
@@ -734,6 +829,7 @@ public class Universe : IUniverse
 
                     if (accumulatedFrameTime >= TimeStep)
                     {
+                        StartFrame(true);
                         MakePreparations();
                         Update(SimulationTime());
                         ExecuteDrawSequence(appTime);
@@ -746,6 +842,7 @@ public class Universe : IUniverse
                 {
                     var frameTime = loopTimer.GetElapsedTime();
 
+                    StartFrame(true);
                     MakePreparations();
                     Update(SimulationTime());
                     ExecuteDrawSequence(appTime);
@@ -926,9 +1023,12 @@ public class Universe : IUniverse
         //Parallel.ForEach(platform.Windows, window => window.DisplayContent());
         foreach (var output in platform.Outputs)
         {
-            output.DisplayContent();
+            if (output.IsDrawnThisFrame)
+            {
+                output.DisplayContent();
+            }
         }
-            
+
         //EntityWorld.ServiceManager.Submit();
         //EntityWorld.ServiceManager.Present();
         EntityWorld.ServiceManager.OnFrameEnded();
@@ -1029,7 +1129,6 @@ public class Universe : IUniverse
         {
             if (Thread.CurrentThread != hostedLoop)
             {
-                frameWanted.Set();
                 hostedLoop.Join();
             }
 
@@ -1051,6 +1150,7 @@ public class Universe : IUniverse
         }
 
         isStopped = true;
+        messages.Writer.TryComplete();
         ShuttingDown?.Invoke(this, EventArgs.Empty);
         FreeResources();
         Stopped?.Invoke(this, EventArgs.Empty);
