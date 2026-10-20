@@ -1,15 +1,15 @@
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.Globalization;
 
 namespace Adamantium.Fonts.Shaping;
 
-internal sealed class Normalizer
+internal struct Normalizer
 {
     private const int MaxCombiningMarks = 32;
 
-    private readonly List<GlyphInfo> _output = [];
-    private GlyphInfo[] _input = [];
+    private GlyphBuffer _output;
+    private GlyphInfo[] _input;
     private IFont _font;
     private GlyphBuffer _buffer;
     private bool _arabicMarks;
@@ -22,18 +22,26 @@ internal sealed class Normalizer
         0xFB40, 0xFB41, 0, 0xFB43, 0xFB44, 0, 0xFB46, 0xFB47, 0xFB48, 0xFB49, 0xFB4A,
     ];
 
-    public bool Keepable => _input.Length <= GlyphBuffer.MostKept && _output.Capacity <= GlyphBuffer.MostKept;
-
     public static void Normalize(IFont font, GlyphBuffer buffer, bool arabicMarks = false, bool hebrewForms = false)
     {
-        var normalizer = buffer.Normalizer;
-        normalizer._font = font;
-        normalizer._buffer = buffer;
-        normalizer._arabicMarks = arabicMarks;
-        normalizer._hebrewForms = hebrewForms;
-        normalizer.Run();
-        normalizer._font = null;
-        normalizer._buffer = null;
+        var normalizer = new Normalizer
+        {
+            _font = font,
+            _buffer = buffer,
+            _arabicMarks = arabicMarks,
+            _hebrewForms = hebrewForms,
+            _output = new GlyphBuffer(buffer.Length),
+            _input = ArrayPool<GlyphInfo>.Shared.Rent(Math.Max(buffer.Length, 4)),
+        };
+        try
+        {
+            normalizer.Run();
+        }
+        finally
+        {
+            normalizer._output.Dispose();
+            ArrayPool<GlyphInfo>.Shared.Return(normalizer._input);
+        }
     }
 
     private void Run()
@@ -41,7 +49,6 @@ internal sealed class Normalizer
         var length = _buffer.Length;
         var input = Input(length);
         Array.Copy(_buffer.Info, input, length);
-        _output.Clear();
 
         var allSimple = Decompose(input, length);
         if (!allSimple)
@@ -52,24 +59,23 @@ internal sealed class Normalizer
         }
 
         _buffer.Clear();
-        foreach (var info in _output)
+        for (var i = 0; i < _output.Length; i++)
         {
-            _buffer.Add(info);
+            _buffer.Add(_output.Info[i]);
         }
     }
 
     // A combining grapheme joiner that kept no marks from being reordered is skipped by lookups as any default
     // ignorable is, as HarfBuzz unhides it.
-    private void UnhideIdleJoiners()
+    private readonly void UnhideIdleJoiners()
     {
-        for (var i = 1; i + 1 < _output.Count; i++)
+        var output = _output.Info;
+        for (var i = 1; i + 1 < _output.Length; i++)
         {
-            if (_output[i].Codepoint == 0x034F && (_output[i + 1].CombiningClass == 0
-                                                   || _output[i - 1].CombiningClass <= _output[i + 1].CombiningClass))
+            if (output[i].Codepoint == 0x034F && (output[i + 1].CombiningClass == 0
+                                                  || output[i - 1].CombiningClass <= output[i + 1].CombiningClass))
             {
-                var joiner = _output[i];
-                joiner.Flags &= ~UnicodeFlags.Hidden;
-                _output[i] = joiner;
+                output[i].Flags &= ~UnicodeFlags.Hidden;
             }
         }
     }
@@ -78,7 +84,8 @@ internal sealed class Normalizer
     {
         if (_input.Length < length)
         {
-            _input = new GlyphInfo[Math.Max(length, _input.Length * 2)];
+            ArrayPool<GlyphInfo>.Shared.Return(_input);
+            _input = ArrayPool<GlyphInfo>.Shared.Rent(length);
         }
 
         return _input;
@@ -273,7 +280,7 @@ internal sealed class Normalizer
         return 2;
     }
 
-    private void OutputCharacter(GlyphInfo info, int codepoint, uint glyph)
+    private readonly void OutputCharacter(GlyphInfo info, int codepoint, uint glyph)
     {
         info.Codepoint = codepoint;
         info.Glyph = glyph;
@@ -281,25 +288,25 @@ internal sealed class Normalizer
         _output.Add(info);
     }
 
-    private void Output(GlyphInfo info, uint glyph)
+    private readonly void Output(GlyphInfo info, uint glyph)
     {
         info.Glyph = glyph;
         _output.Add(info);
     }
 
-    private uint MapGlyph(int codepoint) => _font.TryGetGlyphIndex(codepoint, out var glyph) ? glyph : 0;
+    private readonly uint MapGlyph(int codepoint) => _font.TryGetGlyphIndex(codepoint, out var glyph) ? glyph : 0;
 
-    private void Reorder()
+    private readonly void Reorder()
     {
-        for (var i = 0; i < _output.Count; i++)
+        for (var i = 0; i < _output.Length; i++)
         {
-            if (_output[i].CombiningClass == 0)
+            if (_output.Info[i].CombiningClass == 0)
             {
                 continue;
             }
 
             var end = i + 1;
-            while (end < _output.Count && _output[end].CombiningClass != 0)
+            while (end < _output.Length && _output.Info[end].CombiningClass != 0)
             {
                 end++;
             }
@@ -317,12 +324,12 @@ internal sealed class Normalizer
         }
     }
 
-    private void SortByCombiningClass(int start, int end)
+    private readonly void SortByCombiningClass(int start, int end)
     {
         for (var i = start + 1; i < end; i++)
         {
             var j = i;
-            while (j > start && _output[j - 1].CombiningClass > _output[i].CombiningClass)
+            while (j > start && _output.Info[j - 1].CombiningClass > _output.Info[i].CombiningClass)
             {
                 j--;
             }
@@ -333,44 +340,42 @@ internal sealed class Normalizer
             }
 
             MergeClusters(j, i + 1);
-            var moved = _output[i];
-            _output.RemoveAt(i);
-            _output.Insert(j, moved);
+            _output.Move(i, j);
         }
     }
 
     private void Recompose()
     {
-        var length = _output.Count;
+        var length = _output.Length;
         var input = Input(length);
-        _output.CopyTo(input);
+        Array.Copy(_output.Info, input, length);
         _output.Clear();
         _output.Add(input[0]);
         var starter = 0;
         for (var i = 1; i < length; i++)
         {
             var current = input[i];
+            var output = _output.Info;
             if (current.IsUnicodeMark
-                && (starter == _output.Count - 1 || _output[_output.Count - 1].CombiningClass < current.CombiningClass)
-                && (UnicodeData.TryCompose(_output[starter].Codepoint, current.Codepoint, out var composed)
-                    || (_hebrewForms && TryComposeHebrew(_output[starter].Codepoint, current.Codepoint, out composed)))
+                && (starter == _output.Length - 1 || output[_output.Length - 1].CombiningClass < current.CombiningClass)
+                && (UnicodeData.TryCompose(output[starter].Codepoint, current.Codepoint, out var composed)
+                    || (_hebrewForms && TryComposeHebrew(output[starter].Codepoint, current.Codepoint, out composed)))
                 && _font.TryGetGlyphIndex(composed, out var glyph))
             {
                 _output.Add(current);
-                MergeClusters(starter, _output.Count);
-                _output.RemoveAt(_output.Count - 1);
-                var combined = _output[starter];
+                MergeClusters(starter, _output.Length);
+                _output.RemoveAt(_output.Length - 1);
+                ref var combined = ref _output.Info[starter];
                 combined.Codepoint = composed;
                 combined.Glyph = glyph;
                 UnicodeProps.Set(ref combined, _buffer);
-                _output[starter] = combined;
                 continue;
             }
 
             _output.Add(current);
             if (current.CombiningClass == 0)
             {
-                starter = _output.Count - 1;
+                starter = _output.Length - 1;
             }
         }
     }
@@ -401,24 +406,23 @@ internal sealed class Normalizer
         return composed != 0;
     }
 
-    private void MergeClusters(int start, int end)
+    private readonly void MergeClusters(int start, int end)
     {
         if (end - start < 2)
         {
             return;
         }
 
-        var cluster = _output[start].Cluster;
+        var output = _output.Info;
+        var cluster = output[start].Cluster;
         for (var i = start + 1; i < end; i++)
         {
-            cluster = Math.Min(cluster, _output[i].Cluster);
+            cluster = Math.Min(cluster, output[i].Cluster);
         }
 
         for (var i = start; i < end; i++)
         {
-            var info = _output[i];
-            info.Cluster = cluster;
-            _output[i] = info;
+            output[i].Cluster = cluster;
         }
     }
 }

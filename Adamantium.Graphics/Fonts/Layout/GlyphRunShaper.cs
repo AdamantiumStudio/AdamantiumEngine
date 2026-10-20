@@ -27,8 +27,6 @@ internal sealed class GlyphRunShaper
         _font = font;
     }
 
-    public ShapingBuffer Buffer { get; } = new();
-
     public List<ShapedItem> Shape(string text, AttributedText attributed, IReadOnlyList<AttributeRun> runs,
         double fontSize, int split, bool vertical, TextLayoutOptions options, TextParagraphs paragraphs,
         bool[] graphemes, out bool hasPendingFonts)
@@ -191,8 +189,8 @@ internal sealed class GlyphRunShaper
 
         // A range shaped in the text, its letters joining across its edges, or within the piece alone.
         ShapedGlyph[] Shaped(IFont runFont, int start, int end, ShapingOptions shaping) => piece == null
-            ? TextShaper.Shape(runFont, text, start, end, shaping, Buffer)
-            : TextShaper.Shape(runFont, piece, start - from, end - from, shaping, Buffer);
+            ? TextShaper.Shape(runFont, text, start, end, shaping)
+            : TextShaper.Shape(runFont, piece, start - from, end - from, shaping);
 
         double Raise(TextAttributes raised, IFont raisedFont, double size, double baseSize,
             double objectHeight = double.NaN) =>
@@ -487,7 +485,7 @@ internal sealed class GlyphRunShaper
         {
             pending |= runPending;
             foreach (var glyph in TextShaper.Shape(runFont, text, start, end,
-                         new ShapingOptions(null, language, null, vertical: vertical), Buffer))
+                         new ShapingOptions(null, language, null, vertical: vertical)))
             {
                 glyphs.Add((runFont, glyph, start + glyph.Cluster));
             }
@@ -622,8 +620,8 @@ internal sealed class GlyphRunShaper
         if (!_verticalForms.TryGetValue((font, codepoint), out var has))
         {
             var character = char.ConvertFromUtf32(codepoint);
-            var down = TextShaper.Shape(font, character, new ShapingOptions(vertical: true), Buffer);
-            var across = TextShaper.Shape(font, character, ShapingOptions.Default, Buffer);
+            var down = TextShaper.Shape(font, character, new ShapingOptions(vertical: true));
+            var across = TextShaper.Shape(font, character, ShapingOptions.Default);
             has = down.Length == 1 && across.Length == 1 && down[0].GlyphIndex != across[0].GlyphIndex;
             _verticalForms[(font, codepoint)] = has;
         }
