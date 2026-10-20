@@ -48,4 +48,11 @@ public sealed class SharedSurfaceDescriptor
 
     /// <summary>Number of surfaces the producer rotates through (1 = single-buffered).</summary>
     public uint BufferCount { get; set; } = 1;
+
+    /// <summary>The surfaces the producer rotates through besides the one this descriptor names; empty for one. Each
+    /// frame is numbered across all of them, so the consumer takes the one whose produce timeline is furthest.</summary>
+    public SharedSurfaceDescriptor[] Others { get; set; } = [];
+
+    /// <summary>Raised each time the consumer asks for a frame; a producer in the same process paces by it.</summary>
+    public SharedSurfaceDemand Demand { get; } = new();
 }

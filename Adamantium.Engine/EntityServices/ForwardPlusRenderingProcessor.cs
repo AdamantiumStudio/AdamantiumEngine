@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.ECS;
@@ -41,13 +42,24 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private ForwardPlusEffect effect;
     private ForwardPlusWireEffect wireEffect;
     private readonly Stack<(Entity Entity, EditorDisplay Display)> walk = new();
-    private readonly Matrix4x4F[] palette = CreatePalette();
-    private int paletteFilled;
-    private Skeleton paletteSkeleton;
-    private Matrix4x4F paletteMesh;
     private BasicEffect basicEffect;
     private MeshGeometryCache geometryCache;
     private bool prepared;
+    private readonly Dictionary<MeshDrawKey, MeshDrawGroup> groups = new();
+    private readonly List<MeshDrawGroup> groupsDrawn = [];
+    private readonly Stack<MeshDrawGroup> spareGroups = new();
+    private readonly Dictionary<(Skeleton Skeleton, Matrix4x4F Mesh), (uint First, uint Count)> framePalettes = new();
+    private MeshInstance[] instances = new MeshInstance[256];
+    private Matrix4x4F[] palettes = new Matrix4x4F[MaxJoints * 4];
+    private int paletteMatrices;
+    private Buffer[] instanceBuffers = [];
+    private Buffer[] paletteBuffers = [];
+    private readonly List<(MeshData Data, Matrix4x4F World, bool OverShaded)> wires = [];
+    private readonly List<(Entity Entity, Collider Collider)> colliders = [];
+    private long trianglesCounted;
+    private long trianglesInScene;
+    private SceneIndex sceneIndex;
+    private Vector3F cameraPosition;
 
     /// <summary>The most lights one frame takes, directional ones included; the rest are left out.</summary>
     public const int MaxLights = 1024;
@@ -69,6 +81,17 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     /// <summary>The lights of the last frame, directional ones included.</summary>
     public int LightCount { get; private set; }
+
+    /// <summary>The triangles of the meshes the last frame drew, those outside the view left out.</summary>
+    public long TrianglesDrawn { get; private set; }
+
+    /// <summary>The triangles of every mesh the last frame would draw were it all in view: what
+    /// <see cref="TrianglesDrawn"/> is out of.</summary>
+    public long TrianglesInScene { get; private set; }
+
+    /// <summary>The draw calls the last frame made for the meshes, their wireframes and colliders: copies of a mesh that
+    /// share its pass, texture and state go in one.</summary>
+    public int DrawCalls { get; private set; }
 
     /// <summary>How the whole view draws meshes: shaded, as wireframes, or both.</summary>
     public ViewDisplay Display { get; set; }
@@ -127,6 +150,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             clusterLists[i] = Buffer.New(GraphicsDevice, ClusterCount * MaxLightsPerCluster * sizeof(uint), StorageUsage);
         }
 
+        instanceBuffers = new Buffer[frames];
+        paletteBuffers = new Buffer[frames];
         base.CreateDeviceResources();
     }
 
@@ -177,14 +202,34 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return;
         }
 
-        paletteSkeleton = null;
         effect.View.SetValue(ActiveCamera.ViewMatrix);
         effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         wireEffect?.View.SetValue(ActiveCamera.ViewMatrix);
         wireEffect?.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
-        foreach (var entity in Entities)
+        trianglesCounted = 0;
+        trianglesInScene = 0;
+        sceneIndex = EntityWorld.Satellites.TryGet<SceneIndex>(out var index) ? index : null;
+        cameraPosition = (Vector3F)ActiveCamera.WorldPosition;
+        try
         {
-            OnDraw(entity);
+            foreach (var entity in Entities)
+            {
+                OnDraw(entity);
+            }
+
+            TrianglesDrawn = trianglesCounted;
+            TrianglesInScene = trianglesInScene;
+            DrawCalls = groupsDrawn.Count + wires.Count + colliders.Count;
+            DrawGroups();
+            DrawLines();
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Error(exception, "Drawing the scene's meshes failed");
+        }
+        finally
+        {
+            ForgetFrame();
         }
     }
 
@@ -286,22 +331,22 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var shown = display?.Display ?? EntityDisplay.AsView;
-        if (collider.ContainsDataFor(ActiveCamera))
+        var inView = InView(entity, collider);
+        if (inView && collider.ContainsDataFor(ActiveCamera)
+            && (collider.DisplayCollider || ShowColliders || shown == EntityDisplay.Collider))
         {
-            // A skin goes where its joints take it, not where its bind pose's box stands.
-            if (collider.IsInsideCameraFrustum(ActiveCamera) == ContainmentType.Disjoint && !entity.ContainsComponent<Skin>())
-            {
-                return true;
-            }
-
-            if (collider.DisplayCollider || ShowColliders || shown == EntityDisplay.Collider)
-            {
-                DrawCollider(entity, collider);
-            }
+            colliders.Add((entity, collider));
         }
 
         var meshData = entity.GetComponent<MeshData>();
         if (meshData?.Mesh == null || !meshData.IsEnabled || shown == EntityDisplay.Collider)
+        {
+            return true;
+        }
+
+        var triangles = TriangleCount(meshData);
+        trianglesInScene += triangles;
+        if (!inView)
         {
             return true;
         }
@@ -320,26 +365,57 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var wireInShading = shaded && wired && wireEffect != null && IsTriangles(meshData);
+        trianglesCounted += triangles;
         if (shaded)
         {
-            DrawShaded(entity, meshData, transformation, wireInShading);
+            Enqueue(entity, meshData, transformation.WorldMatrixF, wireInShading);
         }
 
         if (wired && !wireInShading)
         {
-            DrawWire(meshData, transformation, shaded);
+            wires.Add((meshData, transformation.WorldMatrixF, shaded));
         }
 
         return true;
+    }
+
+    private bool InView(Entity entity, Collider collider)
+    {
+        var frustum = ActiveCamera.Frustum;
+        if (frustum == null)
+        {
+            return true;
+        }
+
+        if (sceneIndex != null && sceneIndex.TryGetBox(entity, out var box))
+        {
+            return frustum.Contains(new BoundingBox(box.Minimum - cameraPosition, box.Maximum - cameraPosition))
+                   != ContainmentType.Disjoint;
+        }
+
+        return !collider.ContainsDataFor(ActiveCamera) || entity.ContainsComponent<Skin>()
+               || collider.IsInsideCameraFrustum(ActiveCamera) != ContainmentType.Disjoint;
     }
 
     private static bool IsTriangles(MeshData meshData) =>
         (meshData.TopologyOverride ?? meshData.Mesh.MeshTopology) is PrimitiveTopology.TriangleList
             or PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan;
 
-    private void DrawWire(MeshData meshData, TransformMetaData transformation, bool overShaded)
+    private static long TriangleCount(MeshData meshData)
     {
-        basicEffect.Wvp.SetValue(transformation.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
+        var mesh = meshData.Mesh;
+        long corners = mesh.HasIndices ? mesh.Indices.Length : mesh.Points?.Length ?? 0;
+        return (meshData.TopologyOverride ?? mesh.MeshTopology) switch
+        {
+            PrimitiveTopology.TriangleList => corners / 3,
+            PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan => Math.Max(corners - 2, 0),
+            _ => 0
+        };
+    }
+
+    private void DrawWire(MeshData meshData, in Matrix4x4F world, bool overShaded)
+    {
+        basicEffect.Wvp.SetValue(world * ActiveCamera.ViewProjectionMatrix);
         basicEffect.MeshColor.SetValue(WireColor);
         basicEffect.BasicColoredPass.Apply();
         if (overShaded)
@@ -364,61 +440,160 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    private void DrawShaded(Entity entity, MeshData meshData, TransformMetaData transformation, bool withWire)
+    private void Enqueue(Entity entity, MeshData meshData, in Matrix4x4F world, bool withWire)
     {
         var material = entity.GetComponent<Material>();
-        if (meshData.RenderMode == MeshRenderMode.Skinned)
+        var texture = material?.Texture is { IsDisposed: false } live ? live : null;
+        var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
+        Effect owner = skinned || !withWire ? effect : wireEffect;
+        IEffectPass pass;
+        if (skinned)
         {
-            if (FillPalette(entity.GetComponent<Skin>()))
-            {
-                effect.Joints.SetValue(palette);
-            }
-
-            effect.World.SetValue(transformation.WorldMatrixF);
-            if (material?.Texture != null)
-            {
-                effect.SampleType.SetResource(SamplerStates.LinearRepeat);
-                effect.ShaderTexture.SetResource(material.Texture);
-                effect.ForwardPlusSkinnedTexturedPass.Apply();
-            }
-            else
-            {
-                effect.Albedo.SetValue(AlbedoOf(material));
-                effect.ForwardPlusSkinnedColoredPass.Apply();
-            }
+            pass = texture != null ? effect.ForwardPlusSkinnedTexturedPass : effect.ForwardPlusSkinnedColoredPass;
         }
         else if (withWire)
         {
-            wireEffect.World.SetValue(transformation.WorldMatrixF);
-            if (material?.Texture != null)
-            {
-                wireEffect.SampleType.SetResource(SamplerStates.LinearRepeat);
-                wireEffect.ShaderTexture.SetResource(material.Texture);
-                wireEffect.ForwardPlusWireTexturedPass.Apply();
-            }
-            else
-            {
-                wireEffect.Albedo.SetValue(AlbedoOf(material));
-                wireEffect.ForwardPlusWireColoredPass.Apply();
-            }
+            pass = texture != null ? wireEffect.ForwardPlusWireTexturedPass : wireEffect.ForwardPlusWireColoredPass;
         }
         else
         {
-            effect.World.SetValue(transformation.WorldMatrixF);
-            if (material?.Texture != null)
-            {
-                effect.SampleType.SetResource(SamplerStates.LinearRepeat);
-                effect.ShaderTexture.SetResource(material.Texture);
-                effect.ForwardPlusTexturedPass.Apply();
-            }
-            else
-            {
-                effect.Albedo.SetValue(AlbedoOf(material));
-                effect.ForwardPlusColoredPass.Apply();
-            }
+            pass = texture != null ? effect.ForwardPlusTexturedPass : effect.ForwardPlusColoredPass;
         }
 
-        geometryCache.DrawMesh(GraphicsDevice, meshData);
+        var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
+        var key = new MeshDrawKey(geometry, pass, meshData.CullMode, meshData.DepthTestEnabled,
+            meshData.DepthWriteEnabled, meshData.IsWireFrame, meshData.TopologyOverride);
+        if (!groups.TryGetValue(key, out var group))
+        {
+            group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
+            group.Key = key;
+            group.Effect = owner;
+            groups.Add(key, group);
+            groupsDrawn.Add(group);
+        }
+
+        var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
+        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorHeapManager.TextureIndex(texture) : 0;
+        group.Instances.Add(new MeshInstance(world, AlbedoOf(material), first, count, textureIndex));
+    }
+
+    private (uint First, uint Count) PaletteOf(Skin skin, in Matrix4x4F mesh)
+    {
+        if (skin == null)
+        {
+            return default;
+        }
+
+        if (framePalettes.TryGetValue((skin.Skeleton, mesh), out var known))
+        {
+            return known;
+        }
+
+        if (palettes.Length < paletteMatrices + MaxJoints)
+        {
+            Array.Resize(ref palettes, Math.Max(palettes.Length * 2, paletteMatrices + MaxJoints));
+        }
+
+        var filled = skin.FillPalette(palettes.AsSpan(paletteMatrices, MaxJoints), ActiveCamera);
+        var palette = ((uint)paletteMatrices, (uint)filled);
+        paletteMatrices += filled;
+        framePalettes.Add((skin.Skeleton, mesh), palette);
+        return palette;
+    }
+
+    private void DrawGroups()
+    {
+        if (groupsDrawn.Count == 0)
+        {
+            return;
+        }
+
+        var count = 0;
+        foreach (var group in groupsDrawn)
+        {
+            group.First = (uint)count;
+            count += group.Instances.Count;
+        }
+
+        if (instances.Length < count)
+        {
+            Array.Resize(ref instances, Math.Max(instances.Length * 2, count));
+        }
+
+        foreach (var group in groupsDrawn)
+        {
+            CollectionsMarshal.AsSpan(group.Instances).CopyTo(instances.AsSpan((int)group.First));
+        }
+
+        var frame = (int)(GraphicsDevice.CurrentFrame % (uint)instanceBuffers.Length);
+        var instanceAddress = Upload(instanceBuffers, frame, instances.AsSpan(0, count));
+        var paletteAddress = Upload(paletteBuffers, frame, palettes.AsSpan(0, Math.Max(paletteMatrices, 1)));
+        foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
+        {
+            target?.Parameters["InstancesAddress"].SetValue(instanceAddress);
+            target?.Parameters["PalettesAddress"].SetValue(paletteAddress);
+            target?.Parameters["sampleType"].SetResource(SamplerStates.LinearRepeat);
+        }
+
+        foreach (var group in groupsDrawn)
+        {
+            var key = group.Key;
+            group.Effect.Parameters["InstanceBase"].SetValue(group.First);
+            key.Pass.Apply();
+            key.Geometry.Draw(GraphicsDevice, key.State, (uint)group.Instances.Count);
+        }
+    }
+
+    private void DrawLines()
+    {
+        foreach (var (data, world, overShaded) in wires)
+        {
+            DrawWire(data, world, overShaded);
+        }
+
+        foreach (var (entity, collider) in colliders)
+        {
+            DrawCollider(entity, collider);
+        }
+    }
+
+    private void ForgetFrame()
+    {
+        foreach (var group in groupsDrawn)
+        {
+            group.Instances.Clear();
+            group.Key = default;
+            group.Effect = null;
+            spareGroups.Push(group);
+        }
+
+        groupsDrawn.Clear();
+        groups.Clear();
+        framePalettes.Clear();
+        paletteMatrices = 0;
+        wires.Clear();
+        colliders.Clear();
+    }
+
+    private ulong Upload<T>(Buffer[] ring, int frame, ReadOnlySpan<T> data) where T : unmanaged
+    {
+        var bytes = (ulong)(data.Length * Unsafe.SizeOf<T>());
+        var buffer = ring[frame];
+        if (buffer == null || buffer.TotalSize < bytes)
+        {
+            if (buffer != null)
+            {
+                GraphicsDevice.AddToDeferDisposeQueue(buffer);
+            }
+
+            var size = Math.Max(bytes, buffer == null ? bytes : buffer.TotalSize * 2);
+            buffer = Buffer.New(GraphicsDevice, size, StorageUsage,
+                MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+            ring[frame] = buffer;
+        }
+
+        buffer.SetData(data);
+        return buffer.GetDeviceAddress();
     }
 
     private void DrawCollider(Entity entity, Collider collider)
@@ -438,33 +613,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         basicEffect.BasicColoredPass.UnApply();
-    }
-
-    private static Matrix4x4F[] CreatePalette()
-    {
-        var joints = new Matrix4x4F[MaxJoints];
-        Array.Fill(joints, Matrix4x4F.Identity);
-        return joints;
-    }
-
-    private bool FillPalette(Skin skin)
-    {
-        var mesh = skin?.Owner.Transform.GetWorldMatrixF(ActiveCamera) ?? Matrix4x4F.Identity;
-        if (skin != null && ReferenceEquals(skin.Skeleton, paletteSkeleton) && mesh == paletteMesh)
-        {
-            return false;
-        }
-
-        var filled = skin?.FillPalette(palette, ActiveCamera) ?? 0;
-        for (int i = filled; i < paletteFilled; i++)
-        {
-            palette[i] = Matrix4x4F.Identity;
-        }
-
-        paletteFilled = filled;
-        paletteSkeleton = skin?.Skeleton;
-        paletteMesh = mesh;
-        return true;
     }
 
     private Vector3F AlbedoOf(Material material)
@@ -499,9 +647,21 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             buffer.Dispose();
         }
 
+        foreach (var buffer in instanceBuffers)
+        {
+            buffer?.Dispose();
+        }
+
+        foreach (var buffer in paletteBuffers)
+        {
+            buffer?.Dispose();
+        }
+
         lightBuffers = [];
         clusterCounts = [];
         clusterLists = [];
+        instanceBuffers = [];
+        paletteBuffers = [];
         geometryCache = null;
         effect = null;
         wireEffect = null;

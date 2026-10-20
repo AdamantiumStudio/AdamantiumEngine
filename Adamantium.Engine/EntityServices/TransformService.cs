@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.Multiverse;
 using Adamantium.Mathematics;
 using Serilog;
@@ -14,6 +15,10 @@ public class TransformService : EntityService
     private IUniverse universe;
     private readonly List<Camera> cameras = [];
     private readonly List<Vector3> cameraPositions = [];
+    private readonly Vector3F[] corners = new Vector3F[8];
+    private readonly List<(Entity Entity, Mesh Mesh, Skin Skin)> skins = [];
+    private bool moved;
+    private SceneIndex index;
 
     public Boolean IsPaused { get; set; }
 
@@ -30,6 +35,11 @@ public class TransformService : EntityService
     public override void Initialize()
     {
         universe = EntityWorld.Satellites.Get<IUniverse>();
+        if (!EntityWorld.Satellites.TryGet(out index))
+        {
+            index = new SceneIndex();
+            EntityWorld.Satellites.Add(index);
+        }
     }
 
     public override void Update(AppTime appTime)
@@ -44,9 +54,19 @@ public class TransformService : EntityService
                 cameraPositions.Add(camera.WorldPosition);
             }
 
+            moved = false;
+            skins.Clear();
+            index.BeginFrame();
             foreach (var entity in entities)
             {
                 Transform(entity, appTime);
+            }
+
+            IndexSkins();
+            index.EndFrame();
+            if (moved)
+            {
+                universe.RequestFrame();
             }
         }
         catch (Exception ex)
@@ -88,6 +108,7 @@ public class TransformService : EntityService
                     ? current.Owner.Transform.GetMetadata(camera).AbsoluteWorld
                     : Matrix4x4F.Identity;
                 transform.CalculateFinalTransform(camera, parentWorld, cameraPositions[c]);
+                moved = true;
 
                 // Collider bounds ride the same world matrix, so refresh them exactly when it was recomputed (fetch the
                 // list lazily so a fully-static node allocates nothing).
@@ -99,6 +120,7 @@ public class TransformService : EntityService
             }
 
             transform.IsWorldDirty = false;
+            Index(current, dirty);
             // A moved node changes its children's parent-world, so dirty them for this same top-down pass (a camera move
             // needs no propagation - every node detects that independently above).
             if (dirty)
@@ -117,5 +139,73 @@ public class TransformService : EntityService
             current.GetComponent<AnimationComponent>()?.Update(appTime);
             current.GetComponent<AnimationController>()?.Update(appTime);
         });
+    }
+
+    private void Index(Entity entity, bool changed)
+    {
+        var mesh = entity.GetComponent<MeshData>()?.Mesh;
+        if (mesh == null || !mesh.HasPoints)
+        {
+            return;
+        }
+
+        var skin = Skin.DrawnOn(entity);
+        if (skin != null)
+        {
+            skins.Add((entity, mesh, skin));
+            return;
+        }
+
+        if (!changed && index.IsCurrent(entity, mesh))
+        {
+            index.Keep(entity);
+            return;
+        }
+
+        var camera = CameraFor(entity);
+        if (camera == null)
+        {
+            return;
+        }
+
+        var world = entity.Transform.GetMetadata(camera).AbsoluteWorld;
+        ((BoundingBox)mesh.Bounds).GetCorners(corners);
+        var placed = Vector3F.TransformCoordinate(corners[0], world);
+        var box = new BoundingBox(placed, placed);
+        for (int i = 1; i < corners.Length; i++)
+        {
+            placed = Vector3F.TransformCoordinate(corners[i], world);
+            box.Minimum = Vector3F.Min(box.Minimum, placed);
+            box.Maximum = Vector3F.Max(box.Maximum, placed);
+        }
+
+        index.Place(entity, mesh, box);
+    }
+
+    private void IndexSkins()
+    {
+        foreach (var (entity, mesh, skin) in skins)
+        {
+            var camera = CameraFor(entity);
+            if (camera != null)
+            {
+                index.Place(entity, mesh, skin.WorldBounds(mesh, camera), bent: true);
+            }
+        }
+
+        skins.Clear();
+    }
+
+    private Camera CameraFor(Entity entity)
+    {
+        foreach (var camera in cameras)
+        {
+            if (camera.Owner != entity)
+            {
+                return camera;
+            }
+        }
+
+        return null;
     }
 }

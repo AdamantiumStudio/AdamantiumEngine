@@ -184,6 +184,42 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
 
     CommandBuffer CurrentCommandBuffer { get; }
 
+    /// <summary>Whether this device can record draws with <see cref="BeginRecording"/> and execute them in its pass.</summary>
+    bool SupportsRecordedCommands { get; }
+
+    /// <summary>GPU time of the last finished frame, from its first command to its last, in milliseconds; work other
+    /// queues ran in between counts too. 0 when the device cannot time.</summary>
+    double LastGpuFrameMs { get; }
+
+    /// <summary>Sends the draws that follow into a secondary command buffer for this frame slot instead of the frame's
+    /// own, until <see cref="EndRecording"/>: <paramref name="into"/> recorded over when it is this device's recording for
+    /// this slot, else a new one. Only inside the render pass, and only draws: nothing that ends the pass or changes its
+    /// target.</summary>
+    IRecordedCommands BeginRecording(IRecordedCommands into);
+
+    /// <summary>Ends the recording <see cref="BeginRecording"/> started; the draws go to the frame's buffer again. Gives
+    /// the fingerprint of what was recorded, the same <see cref="EndFingerprint"/> gives for the same draws.</summary>
+    ulong EndRecording();
+
+    /// <summary>Takes the draws that follow as a fingerprint only, issuing none of them, until <see cref="EndFingerprint"/>:
+    /// what a recording of them would hold - shaders, constants by content, resources, state, draw arguments.</summary>
+    void BeginFingerprint();
+
+    /// <summary>Ends the fingerprint <see cref="BeginFingerprint"/> started and gives it. The viewport and scissor are the
+    /// ones the draws left, as after executing a recording of them.</summary>
+    ulong EndFingerprint();
+
+    /// <summary>Executes recorded draws in the frame's render pass. They must be recorded for this frame slot.</summary>
+    void ExecuteRecorded(IRecordedCommands commands);
+
+    /// <summary>
+    /// Records a short piece of work with <paramref name="record"/> and submits it at once, ahead of the frame: it waits
+    /// for <paramref name="wait"/> to reach <paramref name="waitValue"/> and signals each of <paramref name="signals"/> as
+    /// soon as it is done, not when the whole frame is. Outside a render pass.
+    /// </summary>
+    void SubmitAside(Action<CommandBuffer> record, Semaphore wait, PipelineStageFlagBits2 waitStage, ulong waitValue,
+        IReadOnlyList<(Semaphore Semaphore, ulong Value)> signals);
+
     /// <summary>Register a semaphore the next <see cref="Submit"/> must wait on (timelineValue=0 for binary).</summary>
     void AddWaitSemaphore(Semaphore semaphore, PipelineStageFlagBits2 stage, ulong timelineValue = 0);
 

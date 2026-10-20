@@ -1229,6 +1229,13 @@ namespace Adamantium.EffectsCompiler
         /// <returns> an EffectParameter, null if not handled </returns>
         private static EffectData.ResourceParameter BuildResourceParameter(string name, ShaderReflectionVariable variableBinding)
         {
+            if (variableBinding.ElementCount > byte.MaxValue)
+            {
+                throw new NotSupportedException(
+                    $"'{name}' is an array of {variableBinding.ElementCount} resources; at most {byte.MaxValue} are " +
+                    "supported. An array of no length is the whole heap.");
+            }
+
             var parameter = new EffectData.ResourceParameter()
             {
                 Name = name,

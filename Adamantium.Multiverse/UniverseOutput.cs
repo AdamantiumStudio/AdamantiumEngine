@@ -130,6 +130,17 @@ namespace Adamantium.Multiverse
                 Presenter.GetCurrentImage());
         }
 
+        /// <summary>
+        /// Waits, up to <paramref name="timeout"/>, until whatever shows this output has room for another frame, so a
+        /// universe on its own loop draws no more often than it is seen. Called before the frame, so the wait is no part of
+        /// its drawing. Gives whether it has: a frame drawn without room is dropped. An output that presents by itself always
+        /// has room.
+        /// </summary>
+        public virtual bool WaitUntilShown(TimeSpan timeout)
+        {
+            return true;
+        }
+
         public void DisplayContent()
         {
             if (IsUpToDate())
@@ -282,6 +293,13 @@ namespace Adamantium.Multiverse
             Input?.OnGestureInput(args);
         }
 
+        /// <summary>Asks the universe for frames, for what changes the picture without reaching it as input - the pointer
+        /// moving over the output, say. Matters when it draws only on demand.</summary>
+        protected void RequestFrame()
+        {
+            Input?.RequestFrame();
+        }
+
         protected void UpdateViewportAndScissor(uint width, uint height)
         {
             Viewport.Width = width;
@@ -316,6 +334,7 @@ namespace Adamantium.Multiverse
 
             ResizeRequested = true;
             PublishChange(ChangeReason.Resize);
+            RequestFrame();
         }
 
         // Before the presenter exists there is nothing to update: it is created from the description as it is then.

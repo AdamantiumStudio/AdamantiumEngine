@@ -34,8 +34,14 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     // Binds the shared heap onto the CALLING render device's command buffer (not the heap's construction device).
     public void BindDescriptorHeaps(IGraphicsDevice device)
     {
-        ReclaimRetiredSlots();   // once a frame, where a frame demonstrably begins
+        var (resourceBindInfo, samplerBindInfo) = HeapBindInfos(device);
+        device.CurrentCommandBuffer.BindResourceHeapEXT(resourceBindInfo);
+        device.CurrentCommandBuffer.BindSamplerHeapEXT(samplerBindInfo);
+    }
 
+    /// <summary>The heaps as <paramref name="device"/> binds them: what a secondary command buffer inherits.</summary>
+    public (BindHeapInfoEXT Resource, BindHeapInfoEXT Sampler) HeapBindInfos(IGraphicsDevice device)
+    {
         IBuffer resourceBuffer = ResourceHeapBuffer;
         IBuffer samplerBuffer = SamplerHeapBuffer;
 
@@ -62,8 +68,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         samplerBindInfo.ReservedRangeOffset = samplerBuffer.TotalSize - samplerReservedSize;
         samplerBindInfo.ReservedRangeSize = samplerReservedSize;
 
-        device.CurrentCommandBuffer.BindResourceHeapEXT(resourceBindInfo);
-        device.CurrentCommandBuffer.BindSamplerHeapEXT(samplerBindInfo);
+        return (resourceBindInfo, samplerBindInfo);
     }
     
     private void InitializeHeaps()
@@ -112,7 +117,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     {
         lock (_heapSync)
         {
-            ulong alignedOffset = Utilities.AlignSize(currentResourceOffset, alignment);
+            ulong alignedOffset = (currentResourceOffset + alignment - 1) / alignment * alignment;
 
             if (alignedOffset + descriptorSize > UsableResourceSpaceSize)
             {
@@ -185,35 +190,22 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     // A freed slot goes to a per-kind free list (slots fit one descriptor size) after the frames in flight are done with it.
     private readonly System.Collections.Generic.Queue<uint> _freeImageSlots = new();
     private readonly System.Collections.Generic.Queue<uint> _freeBufferSlots = new();
-    private readonly System.Collections.Generic.List<(uint Slot, DescriptorKind Kind, uint Frame)> _retiring = new();
 
     private enum DescriptorKind { Image, Buffer }
 
-    private void Retire(uint slot, DescriptorKind kind)
-    {
-        lock (_heapSync) _retiring.Add((slot, kind, graphicsDevice.CurrentFrame));
-    }
+    private void Retire(uint slot, DescriptorKind kind) => graphicsDevice.AddToDeferDisposeQueue(new RetiredSlot(this, slot, kind));
 
-    /// <summary>Move slots whose frames have gone by into the free lists. Called once per frame, where the heap is bound.
-    /// </summary>
-    private void ReclaimRetiredSlots()
+    private sealed class RetiredSlot(DescriptorHeapManager heap, uint slot, DescriptorKind kind) : IDisposable
     {
-        var depth = Math.Max(1u, graphicsDevice.MaxFramesInFlight);
-        var now = graphicsDevice.CurrentFrame;
-
-        lock (_heapSync)
+        public void Dispose()
         {
-            for (var i = _retiring.Count - 1; i >= 0; i--)
+            lock (heap._heapSync)
             {
-                var (slot, kind, frame) = _retiring[i];
-                // Unsigned wrap is fine: what matters is that a full pipeline's worth of frames has passed.
-                if (now - frame < depth) continue;
-
-                (kind == DescriptorKind.Image ? _freeImageSlots : _freeBufferSlots).Enqueue(slot);
-                _retiring.RemoveAt(i);
+                (kind == DescriptorKind.Image ? heap._freeImageSlots : heap._freeBufferSlots).Enqueue(slot);
             }
         }
     }
+
 
     public uint GetOrAllocateBufferOffset(IBuffer buffer, DescriptorType type)
     {
@@ -233,6 +225,24 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         }
     }
 
+    private static uint LeastCommonMultiple(uint a, uint b)
+    {
+        var (x, y) = (Math.Max(a, 1u), Math.Max(b, 1u));
+        var (p, q) = (x, y);
+        while (q != 0)
+        {
+            (p, q) = (q, p % q);
+        }
+
+        return x / p * y;
+    }
+
+    public uint TextureIndex(ITexture texture)
+    {
+        return GetOrAllocateTextureOffset(texture, DescriptorType.SampledImage) /
+               (uint)DeviceHeapProperties.ImageDescriptorSize;
+    }
+
     public uint GetOrAllocateTextureOffset(ITexture texture, DescriptorType type)
     {
         if (_textureHeapOffsets.TryGetValue(texture, out var found)) return found;
@@ -242,7 +252,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             if (_textureHeapOffsets.TryGetValue(texture, out var existing)) return existing;
 
             uint descSize = (uint)DeviceHeapProperties.ImageDescriptorSize;
-            uint descAlignment = (uint)DeviceHeapProperties.ImageDescriptorAlignment;
+            uint descAlignment = LeastCommonMultiple((uint)DeviceHeapProperties.ImageDescriptorAlignment, descSize);
             uint offset = _freeImageSlots.Count > 0
                 ? _freeImageSlots.Dequeue()
                 : AllocateResourceOffset(descSize, descAlignment); // _heapSync is re-entrant

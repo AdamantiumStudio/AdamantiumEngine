@@ -147,6 +147,8 @@ public class MultipleSelectionTests
     {
         var skinned = CarriedSkin(out var bound, out var drawn);
         skinned.GetComponent<MeshData>().RenderMode = MeshRenderMode.Static;
+        // The scene's index places what is drawn as each frame draws it.
+        Frame();
 
         Assert.Multiple(() =>
         {

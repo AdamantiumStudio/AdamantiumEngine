@@ -190,6 +190,10 @@ public class MainGraphicsDevice : DisposableBase
         && (IsExtensionEnabled(Constants.VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)
             || IsExtensionEnabled(Constants.VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME));
 
+    /// <summary>Whether a render pass can draw and execute recorded secondary command buffers in the same instance.</summary>
+    public bool SupportsRecordedCommands =>
+        GraphicsAdapter.SupportsMaintenance7 && IsExtensionEnabled(Constants.VK_KHR_MAINTENANCE_7_EXTENSION_NAME);
+
     internal Fence[] InFlightFences { get; private set; }
 
     public uint CurrentFrame { get; private set; }
@@ -222,6 +226,9 @@ public class MainGraphicsDevice : DisposableBase
             // Promoted KHR form first, EXT as the fallback: a driver may advertise either.
             Constants.VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
             Constants.VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+
+            // A render pass that both draws and executes recorded secondary command buffers.
+            Constants.VK_KHR_MAINTENANCE_7_EXTENSION_NAME,
         });
     }
 
@@ -393,6 +400,9 @@ public class MainGraphicsDevice : DisposableBase
             // Byte colors in every instance record; there is no second layout to fall back to.
             StorageBuffer8BitAccess = true,
             ShaderInt8 = true,
+            // Texture arrays of no length: the resource heap seen as one, indexed per copy drawn.
+            RuntimeDescriptorArray = true,
+            ShaderSampledImageArrayNonUniformIndexing = true,
         };
 
         var vulkan13Features = new PhysicalDeviceVulkan13Features
@@ -430,6 +440,10 @@ public class MainGraphicsDevice : DisposableBase
         vulkan11Features.PNext = vulkan12Features;
         vulkan12Features.PNext = vulkan13Features;
         vulkan13Features.PNext = features14;
+        if (SupportsRecordedCommands)
+        {
+            vulkan13Features.PNext = new PhysicalDeviceMaintenance7FeaturesKHR { Maintenance7 = true, PNext = features14 };
+        }
 
         if (EnableDynamicRendering &&
             finalDeviceExtensions.Contains(Constants.VK_EXT_SHADER_OBJECT_EXTENSION_NAME))

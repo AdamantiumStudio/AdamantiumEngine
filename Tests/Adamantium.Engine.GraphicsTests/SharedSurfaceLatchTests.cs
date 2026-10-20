@@ -86,6 +86,40 @@ public class SharedSurfaceLatchTests
         Assert.That(surface.ConsumeValue, Is.EqualTo(1ul), "the producer's own handle sees the import's release");
     }
 
+    // Two surfaces: the producer writes one while the panel copies the other. The panel copies the newest frame and gives
+    // back both - the older one too, which nobody will read, or the producer could never write it again.
+    [Test]
+    public void OfTwoSurfaces_TheNewestFrameIsCopied_AndBothAreGivenBack()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        var gd = (GraphicsDevice)device;
+        var prms = new PresentationParameters(PresenterType.RenderTarget, 4, 4, IntPtr.Zero);
+        using var presenter = GraphicsPresenter.Create(device, prms, "shared_surface_two_buffers");
+        using var surface = SharedSurface.CreateExportable(device, 4, 4, SurfaceFormat.B8G8R8A8.UNorm, bufferCount: 2);
+        using var import = SharedSurface.Import(device, surface.Descriptor);
+        device.SetRenderTargets(presenter.RenderTarget);
+        device.SetDepthBuffer(presenter.DepthBuffer);
+        device.Presenter = presenter;
+
+        Assert.That(import.BufferCount, Is.EqualTo(2), "the import takes both surfaces");
+
+        Produce(gd, surface.SurfaceAt(0), 1);
+        Produce(gd, surface.SurfaceAt(1), 2);
+        Frame(device, presenter, import);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(import.LatchedCopy, Is.Not.Null);
+            Assert.That(surface.SurfaceAt(1).ConsumeValue, Is.EqualTo(2ul), "the newest frame is the one copied");
+            Assert.That(surface.SurfaceAt(0).ConsumeValue, Is.EqualTo(1ul), "the older frame is given back unread");
+            Assert.That(import.LatchNewFrame(), Is.Zero, "and nothing newer is left");
+        });
+
+        Produce(gd, surface.SurfaceAt(0), 3);
+        Frame(device, presenter, import);
+        Assert.That(surface.SurfaceAt(0).ConsumeValue, Is.EqualTo(3ul), "the next frame, written over the older one, comes through");
+    }
+
     private static void Frame(IGraphicsDevice device, GraphicsPresenter presenter, SharedSurface surface)
     {
         Assert.That(device.BeginDraw(beforeRenderPass: _ => surface.LatchCopy(device)), Is.True);

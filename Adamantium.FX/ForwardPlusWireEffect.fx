@@ -23,13 +23,13 @@ float3 OverWire(float3 lit, float3 barycentrics)
 
 float4 LitColoredWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
-    float3 lit = Shade(albedo, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(input.albedo, input.viewPosition, input.viewNormal, input.position.xy);
     return float4(OverWire(lit, barycentrics), 1.0f);
 }
 
 float4 LitTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
-    float4 surface = shaderTexture.Sample(sampleType, input.uv);
+    float4 surface = SurfaceOf(input);
     float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
     return float4(OverWire(lit, barycentrics), surface.a);
 }

@@ -7,6 +7,52 @@ All packages share one version.
 
 ### Added
 
+- Recorded draws: `IGraphicsDevice.BeginRecording` sends the draws that follow into a secondary command buffer for the
+  frame slot - recorded over in place on later frames - and `ExecuteRecorded` runs it inside the render pass.
+  `BeginFingerprint`/`EndFingerprint` take the draws as a fingerprint only, issuing nothing - shaders, constants by
+  content, heap indices, buffers, dynamic state, scissors and draw arguments - and `EndRecording` gives the same
+  fingerprint for what it recorded, so a caller can tell a recording still stands for its draws. Needs
+  `VK_KHR_maintenance7` (`SupportsRecordedCommands`), enabled when the device has it; a render pass then takes inline
+  draws and secondary command buffers both. A shader hot reload or a change of target formats retires a recording
+  (`IRecordedCommands.IsReusable`). With it: `GraphicsAdapter.SupportsMaintenance7`, `ShaderHotReload.ReloadCount` and
+  `DescriptorHeapManager.HeapBindInfos`.
+- A universe hosted by another platform runs on a thread of its own (`IUniverse.StartHostedLoop`), paced by its host:
+  it draws a frame each time the host asks for one through the shared surface (`SharedSurfaceDescriptor.Demand`,
+  `SharedSurfaceDemand`), so it draws no more often than it is shown and the host's frames never wait for it.
+  `SuspendHostedLoop`/`ResumeHostedLoop` hold it between two frames while its devices are made again; its `Fps` counts
+  the frames it drew. A frame that throws is logged and the loop goes on. `UniverseOutput.WaitUntilShown` gives whether
+  the output has room, and a frame drawn without it does not count against the frames asked for. `SharedSurface.CreateExportable` takes how many surfaces the producer rotates through
+  (`BufferCount`, `SurfaceAt`); the consumer copies the newest and gives the older ones back with it.
+- `IUniverse.FrameMode`: `OnDemand` draws only when something asks - input on an output, a resize, a transform that
+  moved in the frame (`TransformService`), or `IUniverse.RequestFrame` - and a few frames after; a still scene draws
+  nothing. Every quarter of a second the loop updates once to look for a change nobody asked a frame for.
+- GPU time of a frame: `IGraphicsDevice.LastGpuFrameMs`, from timestamps at the start and the end of the frame's
+  commands, and `Universe.GpuTimeMs`, averaged over a second. `ForwardPlusRenderingProcessor.TrianglesDrawn`,
+  `TrianglesInScene` and `DrawCalls`: the triangles of the meshes the last frame drew, of all it would draw were they in
+  view, and the calls it took. A mesh out of view is left out by its box in the `SceneIndex` - a skinned one too, which
+  was always drawn - and by its collider where there is no index.
+- The Forward+ processor draws meshes instanced: the frame's visible meshes are gathered by geometry, pass and render
+  state, each copy's world, color, texture and joint palette go into per-frame buffers the passes read by address
+  (`MeshInstance`, `MeshDrawKey`, `MeshDrawGroup`), and every group is one call. The parts of a model bent by one
+  skeleton share its palette. Sixteen copies of an animated model of 64 parts: 1020 calls a frame, now 135. The lit
+  passes take `InstancesAddress`, `PalettesAddress` and `InstanceBase` in place of `world`, `albedo` and the `Skinning`
+  buffer, and sample a copy's own texture from `meshTextures`.
+- `MeshGeometryCache` finds a mesh's geometry by its content: meshes with the same vertices and indices - a model loaded
+  twice, or duplicated - share one `RenderGeometry`, its buffers made once, so their copies draw as one call. A mesh is
+  hashed again only when its version moves; a geometry no mesh uses any more is let go after the frames in flight.
+- Textures by index: a texture array of no length in an effect, `Texture2D textures[];`, is the resource heap seen as
+  an array of textures, indexed by `IDescriptorHeapManager.TextureIndex` - copies with different textures draw in one
+  call. Image descriptors take whole slots of the heap for it, and the device enables `runtimeDescriptorArray` and
+  non-uniform indexing of sampled images.
+- `DynamicAabbTree<T>`: a bounding volume hierarchy of moving boxes - leaves grown by a margin, inserted where they add
+  the least surface, kept balanced by rotations - with a ray query. `SceneIndex`, kept by `TransformService` frame by
+  frame, holds every mesh entity's box in the world; `Picking.PickMeshes` asks it for the meshes a ray passes near
+  instead of walking every entity, and tests them nearest first, stopping once the next box is past the nearest hit.
+  A skinned part's box comes from its joints alone (`Skin.WorldBounds`): each point within the reach it had of its
+  joints in the bind pose.
+- The effect parser passes `#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, `#undef`, `#pragma`, `#error` and
+  `#warning` to Slang as it does `#include` and `#define`, each to the end of its line; a `#define` no longer leaves its
+  value to the grammar.
 - `Skeleton`: the joints and inverse bind matrices a skinned mesh bends with, one for all the parts of a mesh that
   share them - `Skin.Skeleton`. An imported model's parts share one, and so do a copy's parts.
 - `ReadOnlyTrackingCollection.AsSpan`, and `Transform.CalculateFinalTransform(camera, parentWorld, cameraWorld)` for a
@@ -729,6 +775,20 @@ All packages share one version.
 
 ### Fixed
 
+- Picking a skinned mesh posed the skin of every part from the start, composing the parents of every joint, and took a
+  collection lock for every child it walked: the pointer over two animated models cost the frame about 10 ms. It now
+  takes the world matrices worked out for the ray's camera in the frame (`Skin.PosedBounds(mesh, camera)`,
+  `Skin.Intersect(mesh, ray, camera, out distance)`), carries the box by the joints the part follows only, and walks
+  the children without the lock.
+- An output made on the host's thread was queued and mapped without the lock the universe's own loop reads the queue
+  under (`UniversePlatform.CreateOutput`, `SwitchContext`, `RemoveOutput`).
+- `EntityComponentCollection.Contains<T>` took the collection's lock on every call, which the Forward+ walk made for
+  every entity every frame; it reads the components as `Get<T>` does.
+- An array of textures in an effect was reflected as one texture: the element's type was read for the whole variable
+  (`Adamantium.Vulkan.Spirv` 1.0.13).
+- A descriptor heap slot freed with its texture or buffer was never handed out again: its frames were counted by the
+  device that made the heap - the resource loader, which never draws - so they never went by. A freed slot goes
+  through the deferred queue now, which waits for the frames in flight of every device sharing the heap.
 - A skinned model cost the frame for every part of its mesh: each part's draw composed every joint's world matrix
   through all its parents again and set the whole palette. The draw takes the joints' worlds the transforms were
   worked out with for its camera this frame (`Skin.FillPalette(palette, camera)`, `Transform.GetWorldMatrixF(camera)`)
@@ -1254,6 +1314,14 @@ All packages share one version.
 
 ### Changed
 
+- `Skin.FillPalette` fills a `Span<Matrix4x4F>`, so a palette can be written straight into a frame's buffer of them.
+  `RenderGeometry` is made by `MeshGeometryCache` from a mesh's content and never changes; `EnsureUpToDate` is gone.
+- `GraphicsDevice` draws, vertex and index buffer bindings, dispatches and buffer barriers go to
+  `CurrentCommandBuffer` - the recording in progress, if any - not straight to the frame's command buffer.
+  `EffectPass` binds shaders and sends push data through the device (`BindShaders(stages, shaders)`, `PushData`).
+  While a recording or a fingerprint is in progress, what cannot go into one throws `InvalidOperationException`:
+  dispatches, barriers, beginning or suspending rendering, `EndDraw` - and `CurrentCommandBuffer` itself while a
+  fingerprint is taken.
 - `Skin.Joints` and `Skin.InverseBindMatrices` are the lists of its `Skeleton`, shared by every part of the mesh
   bending with it: changing them changes them for all those parts.
 - `AdamantiumCollection.AsSpan` reads without the lock, for a walk each frame: while another thread changes the

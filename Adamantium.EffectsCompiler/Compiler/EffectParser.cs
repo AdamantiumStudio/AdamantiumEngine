@@ -16,6 +16,9 @@ namespace Adamantium.EffectsCompiler
         /// </summary>
         protected static readonly Token EndOfFile = new Token(TokenType.EndOfFile, null, new SourceSpan());
 
+        private static readonly string[] BackendDirectives =
+            ["include", "define", "undef", "if", "ifdef", "ifndef", "elif", "else", "endif", "pragma", "error", "warning"];
+
         private protected int bracketCount = 0;
         private protected int curlyBraceCount = 0;
         private protected string currentFile;
@@ -239,6 +242,19 @@ namespace Adamantium.EffectsCompiler
             currentToken = savedPreviewToken;
         }
 
+        private static bool IsPassedToTheBackend(Token directive)
+        {
+            foreach (var name in BackendDirectives)
+            {
+                if (directive.EqualString(name, true))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         protected virtual Token NextToken()
         {
             var token = InternalNextToken();
@@ -246,13 +262,23 @@ namespace Adamantium.EffectsCompiler
             while (token.Type == TokenType.Preprocessor)
             {
                 InternalNextToken();
-                if (Expect("include") || Expect("define"))
+                if (IsPassedToTheBackend(currentToken))
                 {
-                    // Consumed and left alone. This parser is here for the .fx grammar - techniques and passes - and the
-                    // BACKEND resolves includes itself. Splicing each header's text in here produced one flat source,
-                    // which is what DXC needed and nothing needs now; it also had to be done with a blind
-                    // String.Replace over the whole buffer, so a path that appeared twice was rewritten twice.
-                    token = InternalNextToken();
+                    // Consumed to the end of its line and left alone. This parser is here for the .fx grammar - techniques
+                    // and passes - and the BACKEND preprocesses the source itself: includes, macros and conditions.
+                    var line = currentToken.Span.Line;
+                    var previous = currentToken;
+                    do
+                    {
+                        token = InternalNextToken();
+                        if (token.Span.Line == line + 1 && previous.Value == "\\")
+                        {
+                            line++;
+                        }
+
+                        previous = token;
+                    }
+                    while (token.Type != TokenType.EndOfFile && token.Span.Line == line);
                 }
                 else if (Expect("line"))
                 {

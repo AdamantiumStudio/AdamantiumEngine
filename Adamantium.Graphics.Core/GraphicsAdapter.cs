@@ -38,7 +38,8 @@ public unsafe class GraphicsAdapter
 
         // swapchainMaintenance1 is a feature, not just an extension: its structures are invalid with the feature off, so it
         // is queried here and enabled at device creation.
-        var maintenance = new PhysicalDeviceSwapchainMaintenance1FeaturesKHR();
+        var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR();
+        var maintenance = new PhysicalDeviceSwapchainMaintenance1FeaturesKHR { PNext = maintenance7 };
         var hostCopy = new PhysicalDeviceVulkan14Features { PNext = maintenance };
         var heapFeatures = new PhysicalDeviceDescriptorHeapFeaturesEXT { PNext = hostCopy };
         var layout12 = new PhysicalDeviceVulkan12Features();
@@ -50,6 +51,7 @@ public unsafe class GraphicsAdapter
 
         SupportsHostImageCopy = hostCopy.HostImageCopy;
         SupportsSwapchainMaintenance1 = maintenance.SwapchainMaintenance1;
+        SupportsMaintenance7 = maintenance7.Maintenance7;
         Supports8BitStorage = layout12.StorageBuffer8BitAccess && layout12.ShaderInt8;
 
         Console.WriteLine($"DescriptorHeap supported={(bool)heapFeatures.DescriptorHeap}");
@@ -71,6 +73,10 @@ public unsafe class GraphicsAdapter
 
     /// <summary>Whether the device supports the swapchainMaintenance1 FEATURE, not merely the extension.</summary>
     public bool SupportsSwapchainMaintenance1 { get; private set; }
+
+    /// <summary>Whether the device supports the maintenance7 FEATURE, which lets a render pass mix inline draws with
+    /// executed secondary command buffers.</summary>
+    public bool SupportsMaintenance7 { get; private set; }
 
     public PhysicalDeviceType DeviceType => AdapterProperties.DeviceType;
     

@@ -58,6 +58,9 @@
     <Content Include="..\..\Adamantium.FX\Includes\ForwardPlusShading.fxh" Link="EffectsData\Includes\ForwardPlusShading.fxh">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\Adamantium.FX\Includes\SkinnedVertex.fxh" Link="EffectsData\Includes\SkinnedVertex.fxh">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="..\..\Adamantium.FX\Includes\Skinning.fxh" Link="EffectsData\Includes\Skinning.fxh">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

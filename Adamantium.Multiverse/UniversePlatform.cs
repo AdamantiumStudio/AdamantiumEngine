@@ -118,37 +118,50 @@ namespace Adamantium.Multiverse
         /// </summary>
         public void SwitchContext(OutputContext oldContext, OutputContext newContext)
         {
-            if (contextToWindow.Remove(oldContext, out var wnd))
+            UniverseOutput wnd;
+            lock (syncObject)
             {
-                wnd.SwitchContext(newContext);
+                if (!contextToWindow.Remove(oldContext, out wnd))
+                {
+                    return;
+                }
+
                 contextToWindow[newContext] = wnd;
             }
+
+            wnd.SwitchContext(newContext);
         }
 
         private void AddWindowsInternal()
         {
-            if (windowsToAdd.Count > 0)
+            List<UniverseOutput> adding;
+            lock (syncObject)
             {
-                for (int i = 0; i < windowsToAdd.Count; i++)
+                if (windowsToAdd.Count == 0)
                 {
-                    var wnd = windowsToAdd[i];
-                    
-                    var device = GraphicsDeviceService.CreateRenderDevice();
-                    wnd.SetGraphicsDevice(device);
-                    wnd.Input = new InputWormhole(wnd, gamepads, Universe);
-                    SubscribeToEvents(wnd);
-                    
-                    outputs.Add(wnd);
-
-                    if (outputs.Count == 1)
-                    {
-                        MainWindow = wnd;
-                    }
-                    wnd.ClearState();
-                    wnd.Show();
-                    OnWindowCreated(wnd);
+                    return;
                 }
+
+                adding = [.. windowsToAdd];
                 windowsToAdd.Clear();
+            }
+
+            foreach (var wnd in adding)
+            {
+                var device = GraphicsDeviceService.CreateRenderDevice();
+                wnd.SetGraphicsDevice(device);
+                wnd.Input = new InputWormhole(wnd, gamepads, Universe);
+                SubscribeToEvents(wnd);
+
+                outputs.Add(wnd);
+
+                if (outputs.Count == 1)
+                {
+                    MainWindow = wnd;
+                }
+                wnd.ClearState();
+                wnd.Show();
+                OnWindowCreated(wnd);
             }
         }
 
@@ -270,9 +283,9 @@ namespace Adamantium.Multiverse
 
         public void RemoveOutput(OutputContext context)
         {
-            if (contextToWindow.Remove(context, out var window))
+            lock (syncObject)
             {
-                lock (syncObject)
+                if (contextToWindow.Remove(context, out var window))
                 {
                     windowsToRemove.Add(window);
                 }
@@ -334,7 +347,11 @@ namespace Adamantium.Multiverse
         public UniverseOutput CreateOutput(uint width = 1280, uint height = 720)
         {
             var wnd = windowingPlatform.CreateWindow(width, height, _eventAggregator);
-            windowsToAdd.Add(wnd);
+            lock (syncObject)
+            {
+                windowsToAdd.Add(wnd);
+            }
+
             return wnd;
         }
 
@@ -349,8 +366,12 @@ namespace Adamantium.Multiverse
             }
 
             var wnd = outputFactory.Create(context, _eventAggregator);
-            contextToWindow.Add(context, wnd);
-            windowsToAdd.Add(wnd);
+            lock (syncObject)
+            {
+                contextToWindow.Add(context, wnd);
+                windowsToAdd.Add(wnd);
+            }
+
             return wnd;
         }
 

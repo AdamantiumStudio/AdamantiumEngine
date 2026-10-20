@@ -22,6 +22,29 @@ namespace Adamantium.Multiverse
         public void Submit();
 
         /// <summary>
+        /// Runs a universe hosted by another platform on a thread of its own, at the pace its outputs are shown, instead of
+        /// being driven by its host with <see cref="IAdamantiumApplication.RunOnce"/>.
+        /// </summary>
+        public void StartHostedLoop();
+
+        /// <summary>Whether this universe runs its own loop (see <see cref="StartHostedLoop"/>).</summary>
+        public bool RunsOwnLoop { get; }
+
+        /// <summary>Holds the own loop between two frames, once the frame in progress is done, until
+        /// <see cref="ResumeHostedLoop"/>.</summary>
+        public void SuspendHostedLoop();
+
+        /// <summary>Lets the loop held by <see cref="SuspendHostedLoop"/> go on.</summary>
+        public void ResumeHostedLoop();
+
+        /// <summary>How the own loop paces its frames; set from any thread.</summary>
+        public FrameMode FrameMode { get; set; }
+
+        /// <summary>Asks the own loop for frames under <see cref="Multiverse.FrameMode.OnDemand"/>: the next one and a few
+        /// after, so what settles over a frame or two shows too. From any thread.</summary>
+        public void RequestFrame();
+
+        /// <summary>
         /// Stops the game while drawing goes on: no time passes for the services and no input reaches them. Set from
         /// any thread; the change takes effect with the next frame.
         /// </summary>

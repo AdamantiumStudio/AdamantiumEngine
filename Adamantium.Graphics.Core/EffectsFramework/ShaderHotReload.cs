@@ -32,6 +32,10 @@ public sealed class ShaderHotReload : IDisposable
     private readonly Timer settle;
     private volatile ShaderReloadMode mode;
     private int pendingCount;
+    private long reloadCount;
+
+    /// <summary>How many times effects have taken a recompiled version, on any device.</summary>
+    public long ReloadCount => Volatile.Read(ref reloadCount);
 
     public ShaderHotReload()
     {
@@ -196,6 +200,7 @@ public sealed class ShaderHotReload : IDisposable
         if (reloaded.Count > 0)
         {
             Log.Logger.Information("Shader hot reload: {Count} effect(s) reloaded", reloaded.Count);
+            Interlocked.Increment(ref reloadCount);
             Reloaded?.Invoke(device, reloaded);
         }
     }
