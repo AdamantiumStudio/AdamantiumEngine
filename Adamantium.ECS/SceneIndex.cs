@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
@@ -15,6 +17,7 @@ public sealed class SceneIndex
     private readonly DynamicAabbTree<Entity> tree = new();
     private readonly Dictionary<Entity, Entry> entries = new();
     private readonly List<Entity> unseen = [];
+    private readonly List<(Entity Entity, float Entry)> found = [];
     private int frame;
 
     /// <summary>How many entities the index holds.</summary>
@@ -91,11 +94,13 @@ public sealed class SceneIndex
         unseen.Clear();
     }
 
-    /// <summary>Adds to <paramref name="into"/> every entity whose box, grown a little, <paramref name="ray"/> passes
-    /// through - the ray in the world - with how far along it, in lengths of its direction, it enters.</summary>
-    public void RayCast(in Ray ray, List<(Entity Entity, float Entry)> into)
+    /// <summary>Every entity whose box, grown a little, <paramref name="ray"/> passes through - the ray in the world - with
+    /// how far along it, in lengths of its direction, it enters. Good until the next ray cast.</summary>
+    public ReadOnlySpan<(Entity Entity, float Entry)> RayCast(in Ray ray)
     {
-        tree.RayCast(ray, into);
+        found.Clear();
+        tree.RayCast(ray, found);
+        return CollectionsMarshal.AsSpan(found);
     }
 
     private readonly record struct Entry(int Handle, Mesh Mesh, int Version, int Seen, bool Bent);
