@@ -47,6 +47,9 @@ public class CssTests
     [TestCase("#zzzzzz")]
     [TestCase("rgb(1, 2)")]
     [TestCase("notacolor")]
+    [TestCase("zero")]
+    [TestCase("# abc")]
+    [TestCase("#  ffff")]
     public void WhatIsNoCssColor_IsNotRead(string text)
     {
         Assert.That(Css.TryParseColor(text, out _), Is.False);

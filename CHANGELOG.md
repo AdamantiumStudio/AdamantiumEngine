@@ -744,8 +744,10 @@ All packages share one version.
 
 ### Fixed
 
-- An SVG glyph's color of percents is rounded as browsers round it - `rgb(50%, 0%, 0%)` is 128, not 127 - and its
-  named colors take CSS's "grey" spellings, `rebeccapurple` and `transparent` in any case.
+- An SVG glyph's color is rounded as browsers round it: a percent is of 255 and a half goes up - `rgb(50%, 0%, 0%)`
+  is 128, not 127, `rgba(0, 0, 0, 0.3)` has an alpha of 77, not 76. Its named colors take CSS's "grey" spellings and
+  `rebeccapurple`, and no longer "zero"; a "#" followed by a space or another character that is no hex digit is no
+  color, where it threw or was read as one.
 - A drop cap selected is covered across all the lines it spans, and the caret before or after it is as tall as it
   (`TextLayout.GetRangeRects`, `GetCaretRect`), also for a text shorter than the cap; both stood as high as its first
   line only. Its background covers it across its lines too, and no underline, strikethrough or squiggle is drawn

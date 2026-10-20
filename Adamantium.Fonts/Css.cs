@@ -61,10 +61,9 @@ public static class Css
             return TryParseRgb(text, out color);
         }
 
-        if (text.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+        if (text.Equals("zero", StringComparison.OrdinalIgnoreCase))
         {
-            color = Color.FromRgba(0, 0, 0, 0);
-            return true;
+            return false;
         }
 
         if (text.Equals("rebeccapurple", StringComparison.OrdinalIgnoreCase))
@@ -129,6 +128,14 @@ public static class Css
     private static bool TryParseHex(string hex, out Color color)
     {
         color = default;
+        foreach (var c in hex)
+        {
+            if (!Uri.IsHexDigit(c))
+            {
+                return false;
+            }
+        }
+
         if (!uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
         {
             return false;
