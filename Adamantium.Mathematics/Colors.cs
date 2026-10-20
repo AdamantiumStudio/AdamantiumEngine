@@ -161,19 +161,55 @@ namespace Adamantium.Mathematics
             ColorsMap["YellowGreen"] = Color.FromBgra(0xFF9ACD32);
         }
 
-        public static Color Get(string name)
+        /// <summary>The color <paramref name="name"/> stands for, as <see cref="TryParse"/> reads it.</summary>
+        /// <exception cref="FormatException">It is no color.</exception>
+        public static Color Get(string name) =>
+            TryParse(name, out var color) ? color : throw new FormatException($"'{name}' is not a color.");
+
+        /// <summary>A color as markup writes it: a name in any case, or <c>#RGB</c>, <c>#ARGB</c>, <c>#RRGGBB</c> or
+        /// <c>#AARRGGBB</c> - the alpha first, a short form's digits each doubled; false for anything else.</summary>
+        public static bool TryParse(string text, out Color color)
         {
-            if (name.Length > 0 && name[0] == '#')
+            color = default;
+            text = text?.Trim();
+            if (string.IsNullOrEmpty(text))
             {
-                var colorText = name.Substring(1);
-                var argb = Convert.ToUInt32(colorText, 16);
-                // #RRGGBB (and shorter) carry no alpha - treat them as fully opaque, like every other toolkit. Only
-                // #AARRGGBB specifies its own alpha. Without this, 6-digit hex parsed as alpha 0 (fully transparent).
-                if (colorText.Length <= 6) argb |= 0xFF000000;
-                return Color.FromBgra(argb);
+                return false;
             }
 
-            return ColorsMap[name];
+            if (text[0] != '#')
+            {
+                return TryGetNamed(text, out color);
+            }
+
+            var digits = text.Substring(1);
+            if (digits.Length is not (3 or 4 or 6 or 8))
+            {
+                return false;
+            }
+
+            uint argb = 0;
+            foreach (var digit in digits)
+            {
+                var value = digit is >= '0' and <= '9' ? digit - '0'
+                    : digit is >= 'a' and <= 'f' ? digit - 'a' + 10
+                    : digit is >= 'A' and <= 'F' ? digit - 'A' + 10
+                    : -1;
+                if (value < 0)
+                {
+                    return false;
+                }
+
+                argb = digits.Length <= 4 ? argb << 8 | (uint)(value * 17) : argb << 4 | (uint)value;
+            }
+
+            if (digits.Length is 3 or 6)
+            {
+                argb |= 0xFF000000;
+            }
+
+            color = Color.FromBgra(argb);
+            return true;
         }
 
         /// <summary>The color a name stands for, in any case ("Tomato", "tomato"); false for a name it does not know.</summary>
