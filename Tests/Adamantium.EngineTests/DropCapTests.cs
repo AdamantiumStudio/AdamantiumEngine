@@ -249,6 +249,73 @@ public class DropCapTests
             Is.EqualTo(layout.GetLine(2).Baseline).Within(1.5));
     }
 
+    // Selected, the drop cap is covered as far as it stands, across its lines; the text beside it as high as its line.
+    [Test]
+    public void TheDropCapSelected_IsCoveredAcrossItsLines()
+    {
+        var layout = Layout(Prose, new DropCap(3));
+        var rects = layout.GetRangeRects(0, 4);
+        var bottom = layout.GetLine(2).Top + layout.GetLine(2).Height;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rects[0].Top, Is.EqualTo(layout.GetLine(0).Top).Within(0.01));
+            Assert.That(rects[0].Bottom, Is.EqualTo(bottom).Within(0.01), "down to its last line");
+            Assert.That(rects[1].Height, Is.EqualTo(layout.GetLine(0).Height).Within(0.01), "the text beside it");
+        });
+    }
+
+    // Before the drop cap and after it, the caret is as tall as it; beside it in the text, as its line.
+    [Test]
+    public void TheCaretAtTheDropCap_IsAsTallAsIt()
+    {
+        var layout = Layout(Prose, new DropCap(3));
+        var tall = layout.GetLine(2).Top + layout.GetLine(2).Height - layout.GetLine(0).Top;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetCaretRect(new CaretPosition(0), 1).Height, Is.EqualTo(tall).Within(0.01), "before it");
+            Assert.That(layout.GetCaretRect(new CaretPosition(1, true), 1).Height, Is.EqualTo(tall).Within(0.01),
+                "after it");
+            Assert.That(layout.GetCaretRect(new CaretPosition(1), 1).Height,
+                Is.EqualTo(layout.GetLine(0).Height).Within(0.01), "before the text beside it");
+        });
+    }
+
+    // A drop cap's line of the text beside it is not drawn through it: a squiggle under a misspelled first word starts
+    // past the cap; a background covers the cap across its lines.
+    [Test]
+    public void TheDropCapTakesNoLineOfTheText_AndItsBackgroundAcrossItsLines()
+    {
+        var typeface = SourceSans.Value;
+        var text = new AttributedText(Prose)
+            .Apply(0, 6, new TextAttributes { Decorations = TextDecorations.Squiggle })
+            .Apply(0, 1, new TextAttributes { Background = Colors.Gold });
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
+        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var adornments = layout.GetAdornments();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(adornments.Where(a => a.Kind == TextAdornmentKind.Squiggle).Min(a => a.Rect.Left),
+                Is.GreaterThanOrEqualTo(cap.PenX + cap.Advance - 0.5));
+            Assert.That(adornments.Single(a => a.Kind == TextAdornmentKind.Background).Rect.Bottom,
+                Is.EqualTo(layout.GetLine(2).Top + layout.GetLine(2).Height).Within(0.01));
+        });
+    }
+
+    // A text shorter than the drop cap still has its room: the caret at the cap is as tall as the cap's lines.
+    [Test]
+    public void TheCaretAtTheDropCapOfAShortText_IsAsTallAsItsLines()
+    {
+        var layout = Layout("In short.", new DropCap(3));
+
+        Assert.That(layout.GetCaretRect(new CaretPosition(0), 1).Height,
+            Is.GreaterThan(layout.GetLine(0).Height * 2.5));
+    }
+
     [TestCase(1, 1)]
     [TestCase(3, 0)]
     public void ADropCapOfNoLinesOrCharacters_IsRejected(int lines, int characters)

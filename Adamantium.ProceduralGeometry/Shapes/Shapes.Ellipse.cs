@@ -78,45 +78,32 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var radiusY = diameter.Y / 2;
 
                 var range = sweepAngle;
-                var angle = range / (tessellation - 1);
-                
+
                 float sign = -1;
                 if (isClockWise)
                 {
                     sign = 1;
                 }
-                
-                startAngle = MathHelper.DegreesToRadians(startAngle);
-                var currentAngle = startAngle;
 
                 if (ellipseType == EllipseType.Sector && range < 360)
                 {
                     vertices.Add(Vector2.Zero);
                 }
 
+                // Degrees from the start to the start plus the sweep, turned to radians once.
                 for (int i = 0; i < tessellation; ++i)
                 {
+                    var currentAngle = startAngle + range * i / (tessellation - 1);
                     var angleItem = MathHelper.DegreesToRadians(currentAngle * sign);
                     var x = center.X + (radiusX * Math.Cos(angleItem));
                     var y = center.Y + (radiusY * Math.Sin(angleItem));
-                    
+
                     x = Math.Round(x, 4);
                     y = Math.Round(y, 4);
-                    
+
                     var vertex = new Vector2(x, y);
-                        
+
                     vertices.Add(vertex);
-
-                    currentAngle += angle;
-                    if (currentAngle > sweepAngle)
-                    {
-                        currentAngle = sweepAngle;
-
-                        if (currentAngle == 360)
-                        {
-                            currentAngle = 0;
-                        }
-                    }
                 }
 
                 var polygon = new Mathematics.Triangulation.Polygon();

@@ -53,6 +53,10 @@ All packages share one version.
 - The effect parser passes `#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, `#undef`, `#pragma`, `#error` and
   `#warning` to Slang as it does `#include` and `#define`, each to the end of its line; a `#define` no longer leaves its
   value to the grammar.
+- `FeatureSamples.Of(font, features, count)`: what shows each of a font's substitution features - its own sample text,
+  or the characters it turns into other glyphs: the ones a character variant names first, then Latin letters and digits,
+  letters of one script, one form of a letter, signs only where no letter changes - for a gallery of stylistic sets or a
+  list of the font's features.
 - `Skeleton`: the joints and inverse bind matrices a skinned mesh bends with, one for all the parts of a mesh that
   share them - `Skin.Skeleton`. An imported model's parts share one, and so do a copy's parts.
 - `ReadOnlyTrackingCollection.AsSpan`, and `Transform.CalculateFinalTransform(camera, parentWorld, cameraWorld)` for a
@@ -789,6 +793,14 @@ All packages share one version.
 - A descriptor heap slot freed with its texture or buffer was never handed out again: its frames were counted by the
   device that made the heap - the resource loader, which never draws - so they never went by. A freed slot goes
   through the deferred queue now, which waits for the frames in flight of every device sharing the heap.
+- A drop cap selected is covered across all the lines it spans, and the caret before or after it is as tall as it
+  (`TextLayout.GetRangeRects`, `GetCaretRect`), also for a text shorter than the cap; both stood as high as its first
+  line only. Its background covers it across its lines too, and an underline or a squiggle of the text beside it is
+  no longer drawn through it (`GetAdornments`).
+
+- A filled ellipse sector (`Shapes.Ellipse`, solid) that does not start at zero is filled where it is: the start was
+  turned into radians and then read as degrees again, and the fill was cut at the sweep rather than at start plus sweep,
+  so a quarter from twelve to three was filled as a sliver beside three o'clock.
 - A skinned model cost the frame for every part of its mesh: each part's draw composed every joint's world matrix
   through all its parents again and set the whole palette. The draw takes the joints' worlds the transforms were
   worked out with for its camera this frame (`Skin.FillPalette(palette, camera)`, `Transform.GetWorldMatrixF(camera)`)
