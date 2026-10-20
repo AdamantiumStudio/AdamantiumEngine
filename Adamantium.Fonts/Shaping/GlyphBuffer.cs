@@ -7,11 +7,16 @@ internal sealed class GlyphBuffer
     public const int MostKept = 16384;
 
     private int _serial;
+    private Normalizer _normalizer;
 
     public GlyphBuffer(int capacity)
     {
         Info = new GlyphInfo[Math.Max(capacity, 4)];
     }
+
+    public Normalizer Normalizer => _normalizer ??= new Normalizer();
+
+    public bool Keepable => Info.Length <= MostKept && (_normalizer == null || _normalizer.Keepable);
 
     public GlyphInfo[] Info { get; private set; }
 

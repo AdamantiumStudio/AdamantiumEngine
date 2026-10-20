@@ -8,9 +8,6 @@ internal sealed class Normalizer
 {
     private const int MaxCombiningMarks = 32;
 
-    [ThreadStatic]
-    private static Normalizer _spare;
-
     private readonly List<GlyphInfo> _output = [];
     private GlyphInfo[] _input = [];
     private IFont _font;
@@ -25,10 +22,11 @@ internal sealed class Normalizer
         0xFB40, 0xFB41, 0, 0xFB43, 0xFB44, 0, 0xFB46, 0xFB47, 0xFB48, 0xFB49, 0xFB4A,
     ];
 
+    public bool Keepable => _input.Length <= GlyphBuffer.MostKept && _output.Capacity <= GlyphBuffer.MostKept;
+
     public static void Normalize(IFont font, GlyphBuffer buffer, bool arabicMarks = false, bool hebrewForms = false)
     {
-        var normalizer = _spare ?? new Normalizer();
-        _spare = null;
+        var normalizer = buffer.Normalizer;
         normalizer._font = font;
         normalizer._buffer = buffer;
         normalizer._arabicMarks = arabicMarks;
@@ -36,9 +34,6 @@ internal sealed class Normalizer
         normalizer.Run();
         normalizer._font = null;
         normalizer._buffer = null;
-        _spare = normalizer._input.Length <= GlyphBuffer.MostKept && normalizer._output.Capacity <= GlyphBuffer.MostKept
-            ? normalizer
-            : null;
     }
 
     private void Run()

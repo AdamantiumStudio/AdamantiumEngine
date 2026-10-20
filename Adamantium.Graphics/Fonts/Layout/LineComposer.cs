@@ -1204,7 +1204,7 @@ internal sealed class LineComposer
 
             ShapedGlyph[] Shape(IFont capFont)
             {
-                var glyphs = TextShaper.Shape(capFont, text, 0, dropEnd, shapingOptions);
+                var glyphs = TextShaper.Shape(capFont, text, 0, dropEnd, shapingOptions, _shaper.Buffer);
                 if (kerning == TextKerning.Optical && !vertical && OpticalKerning.Measures(capFont)
                     && OpticalKerning.Applies(text, 0, dropEnd))
                 {

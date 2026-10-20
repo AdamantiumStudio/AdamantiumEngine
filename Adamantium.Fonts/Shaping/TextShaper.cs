@@ -9,9 +9,6 @@ namespace Adamantium.Fonts.Shaping;
 /// <summary>Turns text into positioned glyphs of a font, applying its OpenType substitutions and positioning.</summary>
 public static class TextShaper
 {
-    [ThreadStatic]
-    private static GlyphBuffer _spareBuffer;
-
     /// <summary>The features shaping applies to all text without being asked - the required ones (<c>ccmp</c>,
     /// <c>locl</c>, <c>rlig</c>…) and those on by default (<c>calt</c>, <c>liga</c>, <c>kern</c>…); a
     /// <see cref="FontFeature"/> of value 0 turns one off. Any other feature applies only when asked for.</summary>
@@ -26,15 +23,18 @@ public static class TextShaper
     /// <summary>Shapes <paramref name="text"/>; the result is in font design units, each run's glyphs in visual order,
     /// a right-to-left run's first character last. Without a script in <paramref name="options"/> the text is split
     /// where its script changes and each part is shaped with its own.</summary>
-    public static ShapedGlyph[] Shape(IFont font, string text, ShapingOptions options = null) =>
-        Shape(font, text, 0, text?.Length ?? 0, options);
+    public static ShapedGlyph[] Shape(IFont font, string text, ShapingOptions options = null,
+        ShapingBuffer buffer = null) =>
+        Shape(font, text, 0, text?.Length ?? 0, options, buffer);
 
     /// <summary>Shapes the UTF-16 range from <paramref name="start"/> to <paramref name="end"/> of
     /// <paramref name="text"/> as <see cref="Shape(IFont, string, ShapingOptions)"/> shapes the range alone: its
     /// clusters and the ranges of its features count from <paramref name="start"/>. The text around the range is the
-    /// context letters join across, as an Arabic word split between two runs.</summary>
+    /// context letters join across, as an Arabic word split between two runs. <paramref name="buffer"/>, when given,
+    /// is the memory it shapes in; without one each shaping allocates its own.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The range is not inside the text.</exception>
-    public static ShapedGlyph[] Shape(IFont font, string text, int start, int end, ShapingOptions options = null)
+    public static ShapedGlyph[] Shape(IFont font, string text, int start, int end, ShapingOptions options = null,
+        ShapingBuffer buffer = null)
     {
         options ??= ShapingOptions.Default;
         var length = text?.Length ?? 0;
@@ -55,32 +55,37 @@ public static class TextShaper
 
         if (options.Script != null)
         {
-            return ShapeRun(font, text, start, end, start, options.Script, options);
+            return ShapeRun(font, text, start, end, start, options.Script, options, buffer);
         }
 
         var runs = ScriptItemizer.Itemize(start == 0 && end == text.Length ? text : text.Substring(start, end - start));
         if (runs.Count == 1)
         {
-            return ShapeRun(font, text, start, end, start, runs[0].Script, options);
+            return ShapeRun(font, text, start, end, start, runs[0].Script, options, buffer);
         }
 
         return runs.SelectMany(run =>
-            ShapeRun(font, text, start + run.Start, start + run.End, start, run.Script, options)).ToArray();
+            ShapeRun(font, text, start + run.Start, start + run.End, start, run.Script, options, buffer)).ToArray();
     }
 
     private static ShapedGlyph[] ShapeRun(IFont font, string text, int start, int end, int origin, string script,
-        ShapingOptions options)
+        ShapingOptions options, ShapingBuffer kept)
     {
-        var buffer = _spareBuffer ?? new GlyphBuffer(end - start);
-        _spareBuffer = null;
-        buffer.Reset(end - start);
+        if (kept == null)
+        {
+            var own = new GlyphBuffer(end - start);
+            own.Reset(end - start);
+            return ShapeRun(font, text, start, end, origin, script, options, own);
+        }
+
+        var buffer = kept.Take(end - start);
         try
         {
             return ShapeRun(font, text, start, end, origin, script, options, buffer);
         }
         finally
         {
-            _spareBuffer = buffer.Info.Length <= GlyphBuffer.MostKept ? buffer : null;
+            kept.Give(buffer);
         }
     }
 
