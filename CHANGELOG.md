@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `FeatureSamples.Of(font, features, count)`: what shows each of a font's substitution features - its own sample text,
+  or the characters it turns into other glyphs: the ones a character variant names first, then Latin letters and digits,
+  letters of one script, one form of a letter, signs only where no letter changes - for a gallery of stylistic sets or a
+  list of the font's features.
 - `Skeleton`: the joints and inverse bind matrices a skinned mesh bends with, one for all the parts of a mesh that
   share them - `Skin.Skeleton`. An imported model's parts share one, and so do a copy's parts.
 - `ReadOnlyTrackingCollection.AsSpan`, and `Transform.CalculateFinalTransform(camera, parentWorld, cameraWorld)` for a
