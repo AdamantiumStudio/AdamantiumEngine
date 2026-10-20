@@ -533,6 +533,14 @@ namespace Adamantium.ECS.Components
             return true;
         }
 
+        /// <summary>Where this entity stands in the world as the transforms were worked out for <paramref name="camera"/>
+        /// this frame - a lookup, where <see cref="GetWorldMatrixF()"/> composes every parent afresh; worked out afresh
+        /// while there is nothing for the camera yet.</summary>
+        public Matrix4x4F GetWorldMatrixF(CameraBase camera) =>
+            camera != null && TransformData.TryGetValue(camera, out var metadata) && metadata.Computed
+                ? metadata.AbsoluteWorld
+                : GetWorldMatrixF();
+
         /// <summary>Where this entity stands in the world, through its parents; the same matrix it is drawn with.</summary>
         public Matrix4x4F GetWorldMatrixF()
         {
@@ -545,7 +553,12 @@ namespace Adamantium.ECS.Components
             return world;
         }
 
-        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld)
+        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld) =>
+            CalculateFinalTransform(camera, parentWorld, camera.WorldPosition);
+
+        /// <summary>As <see cref="CalculateFinalTransform(CameraBase, Matrix4x4F)"/>, with the camera's world position
+        /// worked out once for the frame's walk.</summary>
+        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld, Vector3 cameraWorld)
         {
             var localMatrix = GetLocalMatrixF();
 
@@ -556,13 +569,12 @@ namespace Adamantium.ECS.Components
 
             // Camera-relative render matrix: the view is rotation-only, so shift the world by the camera's WORLD
             // position - Transform.Position is relative to a parent, which a third-person camera has.
-            var cameraWorld = camera.WorldPosition;
             var cameraPosition = (Vector3F)cameraWorld;
             var renderWorld = absoluteWorld * Matrix4x4F.Translation(-cameraPosition);
 
             var metadata = GetMetadata(camera);
             metadata.AbsoluteWorld = absoluteWorld;
-            metadata.RelativePosition = GetRelativePosition(cameraWorld);
+            metadata.RelativePosition = (Vector3)absoluteWorld.TranslationVector - cameraWorld;
             metadata.Pivot = (Vector3F)pivot;
             metadata.WorldMatrixF = renderWorld;
             metadata.WorldMatrix = (Matrix4x4)renderWorld;

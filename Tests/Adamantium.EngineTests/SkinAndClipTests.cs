@@ -3,7 +3,9 @@ using System.Linq;
 using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Engine.EntityServices;
 using Adamantium.Engine.Templates;
+using Adamantium.Multiverse;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
@@ -84,6 +86,55 @@ public class SkinAndClipTests
         // One unit along X from the knee when bound; the knee's quarter turn carries it round the knee.
         var expected = Vector3F.TransformCoordinate(Vector3F.UnitX, Matrix4x4F.RotationZ(MathF.PI / 2)) + new Vector3F(0, -1, 0);
         Assert.That(drawn, Is.EqualTo(expected).Using<Vector3F>(Near));
+    }
+
+    // A draw takes the palette from the world matrices the transforms were worked out with for its camera this frame -
+    // one lookup a joint, for every mesh sharing the joints - and gets what composing every joint's parents gives; for a
+    // camera nothing was worked out for yet, it composes them.
+    [Test]
+    public void APaletteFromTheFramesWorlds_IsThePaletteComposedAfresh()
+    {
+        var universe = new TestUniverse();
+        universe.Satellites.Add<IUniverse>(universe);
+        var output = new TestOutput();
+        universe.Add(output);
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", Vector3.Zero, Vector3.ForwardLH, -Vector3.Up,
+            800, 600, 0.1f, 1000f);
+        output.Camera = cameraEntity.GetComponent<Camera>();
+        var model = Import(SkinnedScene(), out var leg, out _, out var knee);
+        model.Transform.Position = new Vector3(2, 0, 5);
+        leg.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.5f);
+        knee.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitZ, MathF.PI / 2);
+        universe.EntityWorld.EntityManager.AddEntity(cameraEntity);
+        universe.EntityWorld.EntityManager.AddEntity(model);
+        universe.EntityWorld.ForceUpdate();
+        var transforms = new TransformService(universe.EntityWorld);
+        transforms.Initialize();
+        transforms.Update(new AppTime());
+        var skin = leg.GetComponent<Skin>();
+        var composed = new Matrix4x4F[4];
+        var looked = new Matrix4x4F[4];
+        var unseen = new Matrix4x4F[4];
+
+        skin.FillPalette(composed);
+        skin.FillPalette(looked, output.Camera);
+        skin.FillPalette(unseen, new CameraTemplate().BuildEntity(null, "Other", Vector3.Zero, Vector3.ForwardLH,
+            -Vector3.Up, 800, 600, 0.1f, 1000f).GetComponent<Camera>());
+        knee.Transform.Position += new Vector3(1, 0, 0);
+        transforms.Update(new AppTime());
+        var movedComposed = new Matrix4x4F[4];
+        var movedLooked = new Matrix4x4F[4];
+        skin.FillPalette(movedComposed);
+        skin.FillPalette(movedLooked, output.Camera);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(knee.Transform.GetMetadata(output.Camera).Computed, Is.True, "the frame's worlds were there");
+            Assert.That(looked.Take(2), Is.EqualTo(composed.Take(2)).Using<Matrix4x4F>(Near));
+            Assert.That(unseen.Take(2), Is.EqualTo(composed.Take(2)).Using<Matrix4x4F>(Near));
+            Assert.That(movedLooked.Take(2), Is.EqualTo(movedComposed.Take(2)).Using<Matrix4x4F>(Near));
+            Assert.That(movedComposed[1], Is.Not.EqualTo(composed[1]).Using<Matrix4x4F>(Near), "the knee moved");
+        });
     }
 
     [Test]
@@ -195,7 +246,10 @@ public class SkinAndClipTests
         Assert.Multiple(() =>
         {
             Assert.That(skin.Joints, Is.EqualTo(new[] { copiedHip, copiedKnee }));
-            Assert.That(skin.InverseBindMatrices, Is.EqualTo(leg.GetComponent<Skin>().InverseBindMatrices));
+            Assert.That(skin.InverseBindMatrices, Is.EqualTo(scene.Controllers["leg"].JointMatrices));
+            Assert.That(leg.GetComponent<Skin>().InverseBindMatrices, Is.EqualTo(scene.Controllers["leg"].JointMatrices),
+                "the original's inverse bind matrices stay");
+            Assert.That(skin.Skeleton, Is.Not.SameAs(leg.GetComponent<Skin>().Skeleton));
             Assert.That(animation.Targets["knee"], Is.SameAs(copiedKnee));
             Assert.That(animation.RestPoses.Keys, Is.EquivalentTo(model.GetComponent<AnimationComponent>().RestPoses.Keys));
             Assert.That(copiedKnee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(2, -1, 0)).Using<Vector3F>(Near));

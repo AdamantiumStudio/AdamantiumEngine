@@ -15,6 +15,10 @@ namespace Adamantium.Core.Collections
             _localCollection.PropertyChanged += CollectionPropertyChanged;
         }
 
+        /// <summary>The items as <see cref="AdamantiumCollection{T}.AsSpan"/> reads them: without the lock, for a walk each
+        /// frame.</summary>
+        public System.ReadOnlySpan<T> AsSpan() => _localCollection.AsSpan();
+
         private void CollectionPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             OnPropertyChanged(e);

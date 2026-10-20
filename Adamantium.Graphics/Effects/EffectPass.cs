@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.EffectsCompiler;
@@ -135,12 +136,8 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                 var link = stageBlock.ConstantBufferLinks[i];
 
                 ulong alignment = graphicsDevice.Adapter.AdapterProperties.Limits.MinUniformBufferOffsetAlignment;
-                var (pageBuffer, bufferOffset) = dynamicPool.Allocate(link.ConstantBuffer.BackingBuffer.Size, alignment);
-
-                pageBuffer.CopyFrom(link.ConstantBuffer.BackingBuffer, bufferOffset);
-
                 uint pushOffset = parameterPushOffsets[link.Parameter];
-                *(ulong*)(pushDataBytes + pushOffset) = pageBuffer.GetDeviceAddress() + bufferOffset;
+                *(ulong*)(pushDataBytes + pushOffset) = dynamicPool.Upload(link.ConstantBuffer, alignment);
             }
 
             // Write each bound resource's heap-slot index into push data; link.Parameter is already resolved, so there is
@@ -1019,6 +1016,8 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     
         private int currentPageIndex = 0;
         private ulong currentOffset = 0;
+        private long generation;
+        private readonly ConditionalWeakTable<EffectConstantBuffer, UploadedConstants> uploads = new();
 
         public DynamicBufferPool(IGraphicsDevice device, ulong pageSize = 2 * 1024 * 1024) // 2 MB initial page; grows on demand per frame
         {
@@ -1033,6 +1032,45 @@ public sealed class EffectPass : DisposableObject, IEffectPass
         {
             currentPageIndex = 0;
             currentOffset = 0;
+            generation++;
+        }
+
+        /// <summary>The device address of a copy of <paramref name="buffer"/>'s data in this frame's pages: the copy made
+        /// earlier in the frame while the data is still the same - a run of draws whose constants did not change, or a
+        /// buffer every stage of a pass reads - else a new one.</summary>
+        public unsafe ulong Upload(EffectConstantBuffer buffer, ulong alignment)
+        {
+            var backing = buffer.BackingBuffer;
+            var data = new ReadOnlySpan<byte>(backing.DataPointer.ToPointer(), (int)backing.Size);
+            if (uploads.TryGetValue(buffer, out var last) && last.Generation == generation && data.SequenceEqual(last.Data))
+            {
+                return last.Address;
+            }
+
+            var (page, offset) = Allocate(backing.Size, alignment);
+            page.CopyFrom(backing, offset);
+            if (last == null)
+            {
+                last = new UploadedConstants();
+                uploads.Add(buffer, last);
+            }
+
+            if (last.Data.Length != data.Length)
+            {
+                last.Data = new byte[data.Length];
+            }
+
+            data.CopyTo(last.Data);
+            last.Generation = generation;
+            last.Address = page.GetDeviceAddress() + offset;
+            return last.Address;
+        }
+
+        private sealed class UploadedConstants
+        {
+            public long Generation = -1;
+            public ulong Address;
+            public byte[] Data = [];
         }
         
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)

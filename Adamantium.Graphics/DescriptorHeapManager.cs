@@ -151,8 +151,8 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     // instead of one slot per shader parameter that every bind overwrote (which made the last-bound texture/sampler
     // show up on every draw). Keyed by the resource object; render targets keep a stable view, so the slot stays valid.
     // Samplers are descriptions: equal ones share a slot, which lives as long as the heap.
-    private readonly System.Collections.Generic.Dictionary<ITexture, uint> _textureHeapOffsets = new();
-    private readonly System.Collections.Generic.Dictionary<SamplerState, uint> _samplerHeapOffsets = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ITexture, uint> _textureHeapOffsets = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<SamplerState, uint> _samplerHeapOffsets = new();
     private readonly System.Collections.Generic.Dictionary<SamplerKey, uint> _samplerOffsetsByDescription = new();
     private readonly System.Collections.Generic.Dictionary<IBuffer, uint> _bufferHeapOffsets = new();
 
@@ -235,6 +235,8 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
     public uint GetOrAllocateTextureOffset(ITexture texture, DescriptorType type)
     {
+        if (_textureHeapOffsets.TryGetValue(texture, out var found)) return found;
+
         lock (_heapSync)
         {
             if (_textureHeapOffsets.TryGetValue(texture, out var existing)) return existing;
@@ -263,7 +265,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     {
         lock (_heapSync)
         {
-            if (!_textureHeapOffsets.Remove(texture, out var slot)) return;
+            if (!_textureHeapOffsets.TryRemove(texture, out var slot)) return;
             Retire(slot, DescriptorKind.Image);
         }
     }
@@ -348,6 +350,8 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
     public uint GetOrAllocateSamplerOffset(SamplerState samplerState)
     {
+        if (_samplerHeapOffsets.TryGetValue(samplerState, out var found)) return found;
+
         lock (_heapSync)
         {
             if (_samplerHeapOffsets.TryGetValue(samplerState, out var existing)) return existing;

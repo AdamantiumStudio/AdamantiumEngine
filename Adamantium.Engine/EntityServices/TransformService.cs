@@ -13,6 +13,7 @@ public class TransformService : EntityService
 {
     private IUniverse universe;
     private readonly List<Camera> cameras = [];
+    private readonly List<Vector3> cameraPositions = [];
 
     public Boolean IsPaused { get; set; }
 
@@ -37,6 +38,12 @@ public class TransformService : EntityService
         try
         {
             universe.CollectCurrentCameras(cameras);
+            cameraPositions.Clear();
+            foreach (var camera in cameras)
+            {
+                cameraPositions.Add(camera.WorldPosition);
+            }
+
             foreach (var entity in entities)
             {
                 Transform(entity, appTime);
@@ -59,8 +66,9 @@ public class TransformService : EntityService
             var dirty = transform.IsWorldDirty;
             Collider[] colliders = null;
 
-            foreach (var camera in cameras)
+            for (int c = 0; c < cameras.Count; c++)
             {
+                var camera = cameras[c];
                 if (camera.Owner == current)
                 {
                     continue;
@@ -70,7 +78,7 @@ public class TransformService : EntityService
                 // Only when an input to the world matrix changed - the node or its parent, the camera position -
                 // so a static scene skips the pass. World position: a parented camera's local offset barely changes.
                 if (!dirty && metadata.Computed
-                    && metadata.LastCameraPosition == camera.WorldPosition)
+                    && metadata.LastCameraPosition == cameraPositions[c])
                 {
                     continue;
                 }
@@ -79,7 +87,7 @@ public class TransformService : EntityService
                 var parentWorld = current.Owner?.Transform != null
                     ? current.Owner.Transform.GetMetadata(camera).AbsoluteWorld
                     : Matrix4x4F.Identity;
-                transform.CalculateFinalTransform(camera, parentWorld);
+                transform.CalculateFinalTransform(camera, parentWorld, cameraPositions[c]);
 
                 // Collider bounds ride the same world matrix, so refresh them exactly when it was recomputed (fetch the
                 // list lazily so a fully-static node allocates nothing).
@@ -95,9 +103,10 @@ public class TransformService : EntityService
             // needs no propagation - every node detects that independently above).
             if (dirty)
             {
-                for (int i = 0; i < current.Dependencies.Count; ++i)
+                var children = current.Dependencies.AsSpan();
+                for (int i = 0; i < children.Length; ++i)
                 {
-                    var childTransform = current.Dependencies[i].Transform;
+                    var childTransform = children[i]?.Transform;
                     if (childTransform != null)
                     {
                         childTransform.IsWorldDirty = true;

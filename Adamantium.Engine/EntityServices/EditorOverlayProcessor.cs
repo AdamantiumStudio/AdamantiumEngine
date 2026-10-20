@@ -38,6 +38,9 @@ public class EditorOverlayProcessor : RenderingProcessor
     private readonly Matrix4x4F[] gridWorld = new Matrix4x4F[1];
     private readonly Vector4F[] gridPhases = new Vector4F[GroundGrid.Levels / 2];
     private readonly Matrix4x4F[] palette = new Matrix4x4F[SceneData.Controller.MaxDrawnJoints];
+    private int paletteFilled = SceneData.Controller.MaxDrawnJoints;
+    private Skeleton paletteSkeleton;
+    private Matrix4x4F paletteMesh;
     private bool[] drawn = [];
     private uint outlineMark;
     private BasicEffect effect;
@@ -85,6 +88,7 @@ public class EditorOverlayProcessor : RenderingProcessor
         }
 
         outlineMark = 0;
+        paletteSkeleton = null;
         var processors = tools.Processors;
         for (int i = 0; i < processors.Count; i++)
         {
@@ -407,9 +411,7 @@ public class EditorOverlayProcessor : RenderingProcessor
 
             if (head.Skin != null)
             {
-                var filled = head.Skin.FillPalette(palette);
-                Array.Fill(palette, Matrix4x4F.Identity, filled, palette.Length - filled);
-                effect.Joints.SetValue(palette);
+                FillPalette(head.Skin);
             }
 
             PassFor(look, head.Flat, head.Skin != null).Apply();
@@ -426,6 +428,26 @@ public class EditorOverlayProcessor : RenderingProcessor
         }
 
         GraphicsDevice.ColorBlendEquation = blend;
+    }
+
+    private void FillPalette(Skin skin)
+    {
+        var mesh = skin.Owner.Transform.GetWorldMatrixF(ActiveCamera);
+        if (ReferenceEquals(skin.Skeleton, paletteSkeleton) && mesh == paletteMesh)
+        {
+            return;
+        }
+
+        var filled = skin.FillPalette(palette, ActiveCamera);
+        if (filled < paletteFilled)
+        {
+            Array.Fill(palette, Matrix4x4F.Identity, filled, paletteFilled - filled);
+        }
+
+        paletteFilled = filled;
+        paletteSkeleton = skin.Skeleton;
+        paletteMesh = mesh;
+        effect.Joints.SetValue(palette);
     }
 
     private void DrawRibbon(MeshData data, bool inFront, uint instances)

@@ -326,9 +326,9 @@ namespace Adamantium.ECS
                     if (ignoreDisabled && !current.IsEnabled) continue;
                     action(current);
 
-                    foreach (var t in current.Dependencies)
+                    foreach (var t in current.Dependencies.AsSpan())
                     {
-                        stack.Push(t);
+                        if (t != null) stack.Push(t);
                     }
                 }
             }
@@ -354,9 +354,9 @@ namespace Adamantium.ECS
                         continue;
                     }
 
-                    foreach (var child in current.Dependencies)
+                    foreach (var child in current.Dependencies.AsSpan())
                     {
-                        stack.Push(child);
+                        if (child != null) stack.Push(child);
                     }
                 }
             }
@@ -378,9 +378,9 @@ namespace Adamantium.ECS
                     if (ignoreDisabled && !current.IsEnabled) continue;
                     action(current);
 
-                    for (int i = 0; i < current.Dependencies.Count; i++)
+                    foreach (var child in current.Dependencies.AsSpan())
                     {
-                        queue.Enqueue(current.Dependencies[i]);
+                        if (child != null) queue.Enqueue(child);
                     }
                 }
             }

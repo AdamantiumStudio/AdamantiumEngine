@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `Skeleton`: the joints and inverse bind matrices a skinned mesh bends with, one for all the parts of a mesh that
+  share them - `Skin.Skeleton`. An imported model's parts share one, and so do a copy's parts.
+- `ReadOnlyTrackingCollection.AsSpan`, and `Transform.CalculateFinalTransform(camera, parentWorld, cameraWorld)` for a
+  walk that has worked out the camera's world position once.
 - A tool can do its own thing with a click and a frame instead of selecting: `ToolProcessor.Clicked` and
   `SelectTool.Framed` are virtual, `ToolProcessor.PressedOn` lets a press on an entity start a gesture,
   `SelectTool.ClicksOnRelease` clicks on the release and draws a frame when the pointer moves away first, and
@@ -725,6 +729,17 @@ All packages share one version.
 
 ### Fixed
 
+- A skinned model cost the frame for every part of its mesh: each part's draw composed every joint's world matrix
+  through all its parents again and set the whole palette. The draw takes the joints' worlds the transforms were
+  worked out with for its camera this frame (`Skin.FillPalette(palette, camera)`, `Transform.GetWorldMatrixF(camera)`)
+  and resets only what the last palette left; a run of parts sharing a skeleton where it stands keeps the palette set
+  for the first. Two glTF BrainStems (59 parts, 18 joints each) drew in 11.8 ms a frame, now 1.2 ms.
+- The render thread spent a third of its time in uncontended locks: each processor asking each entity for a component
+  (`GetComponent`, `GetComponents`), the walks over an entity's children and the world's roots, and the descriptor
+  heap's lookup of a texture's or a sampler's slot. These read without the lock now; only a change takes it.
+- Every effect apply copied its constant buffers into the frame's pages, though most draws in a row set the same
+  values: an unchanged buffer takes the copy made earlier in the frame. The camera's world position is worked out once
+  per frame for the transforms' walk, not through its parents for every node.
 - `EntityManager.RemoveEntity` took out only the world's own entities: a part of one's tree - a mesh of an imported
   model - stayed where it was. It now leaves its owner with its tree, announced by `EntityRemoved`, and a camera
   following it leaves the world with it. `InputService.UserControlledEntity` is let go of once it, or what holds it,
@@ -1239,6 +1254,10 @@ All packages share one version.
 
 ### Changed
 
+- `Skin.Joints` and `Skin.InverseBindMatrices` are the lists of its `Skeleton`, shared by every part of the mesh
+  bending with it: changing them changes them for all those parts.
+- `AdamantiumCollection.AsSpan` reads without the lock, for a walk each frame: while another thread changes the
+  collection, an item may be seen twice or missed and a slot may read default.
 - The packages that hold code or data derived from third-party work - `Adamantium.Core`, `Adamantium.Mathematics`,
   `Adamantium.Imaging`, `Adamantium.Fonts`, `Adamantium.Engine.Compiler` - carry `NOTICE` and `THIRD-PARTY-NOTICES.md`;
   the other packages have none in them and carry neither.
