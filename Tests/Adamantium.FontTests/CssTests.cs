@@ -64,6 +64,15 @@ public class CssTests
         Assert.That(FontVariation.ParseList(null), Is.Empty);
     }
 
+    [Test]
+    public void AShortTag_IsPaddedAsOpenTypePadsIt_AndBlankEntriesArePassedOver()
+    {
+        Assert.That(FontVariation.ParseList("TS  =5, , 'XY'=2,"),
+            Is.EqualTo(new[] { new FontVariation("TS  ", 5), new FontVariation("XY  ", 2) }));
+        Assert.That(FontVariation.ParseList(" "), Is.Empty);
+    }
+
+    [TestCase("=5")]
     [TestCase("wght")]
     [TestCase("weight=700")]
     [TestCase("wght=heavy")]

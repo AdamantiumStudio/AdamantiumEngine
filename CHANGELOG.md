@@ -11,7 +11,8 @@ All packages share one version.
   (`CssDeclaration`: name, value, `!important`) cut at semicolons outside quotes and brackets, and
   `Css.TryParseColor`: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()`, `transparent` and the named colors.
   SVG glyphs read their styles and colors through it.
-- `FontVariation.ParseList("wght=650, wdth=87.5, opsz=auto")`: axis values as markup and documents write them.
+- `FontVariation.ParseList("wght=650, wdth=87.5, opsz=auto")`: axis values as markup and documents write them; a tag
+  of fewer than four characters is padded with spaces, as OpenType pads it, and blank entries are passed over.
 - `TextComposition`: how the lines of a text are composed - hyphens and their limit, line breaking, optical margins,
   word and letter spacing, glyph scaling, justification alternates, kashidas, CJK spacing trim and hanging punctuation,
   where a justified last line and a line of one word stand - as one value compared by value, which refuses a negative
