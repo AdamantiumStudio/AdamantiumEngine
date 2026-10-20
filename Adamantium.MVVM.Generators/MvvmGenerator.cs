@@ -1,9 +1,11 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Adamantium.MVVM.Generators;
@@ -24,6 +26,15 @@ public sealed class MvvmGenerator : IIncrementalGenerator
             SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
             SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier |
             SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
+    private static readonly SymbolDisplayFormat PlainFormat = SymbolDisplayFormat.FullyQualifiedFormat
+        .WithMiscellaneousOptions(
+            SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
+            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
+    private const string AccessorsName = "Adamantium.MVVM.PropertyAccessors";
+    private const string DescribeAttr = "Adamantium.MVVM.DescribePropertiesAttribute";
+    private const string UnsafeAccessorName = "System.Runtime.CompilerServices.UnsafeAccessorAttribute";
 
     private static readonly DiagnosticDescriptor MissingInpc = new(
         "AMVVM001",
@@ -100,6 +111,24 @@ public sealed class MvvmGenerator : IIncrementalGenerator
             if (Report(spc, r)) return;
             spc.AddSource(r.Value.HintName, EmitViewModel(r.Value));
         });
+
+        var accessorsAvailable = context.CompilationProvider
+            .Select(static (compilation, _) => (
+                Accessors: compilation.GetTypeByMetadataName(AccessorsName) is not null,
+                InitSetters: compilation.GetTypeByMetadataName(UnsafeAccessorName) is not null));
+        var described = context.SyntaxProvider
+            .CreateSyntaxProvider(static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                static (ctx, ct) => GetDescribed(ctx, ct))
+            .Where(static d => d is not null)
+            .Collect()
+            .Combine(accessorsAvailable);
+        context.RegisterSourceOutput(described, static (spc, pair) =>
+        {
+            if (pair.Right.Accessors && !pair.Left.IsEmpty)
+            {
+                spc.AddSource("Adamantium.MVVM.DescribedProperties.g.cs", EmitDescribed(pair.Left, pair.Right.InitSetters));
+            }
+        });
     }
 
     // ---- transforms (run on the symbol; extract ONLY equatable primitives) -------------------------------------
@@ -108,7 +137,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
     {
         INamedTypeSymbol type;
         ISymbol member;
-        string fieldName, propName, propType;
+        string fieldName, propName, propType, plainType;
         bool isPartialProperty;
 
         switch (ctx.TargetSymbol)
@@ -122,6 +151,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
                 member = field;
                 fieldName = field.Name;
                 propType = field.Type.ToDisplayString(FqnFormat);
+                plainType = field.Type.ToDisplayString(PlainFormat);
                 isPartialProperty = false;
                 break;
 
@@ -134,6 +164,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
                 fieldName = "";
                 propName = property.Name;
                 propType = property.Type.ToDisplayString(FqnFormat);
+                plainType = property.Type.ToDisplayString(PlainFormat);
                 isPartialProperty = true;
                 break;
 
@@ -196,6 +227,9 @@ public sealed class MvvmGenerator : IIncrementalGenerator
             new EquatableArray<string>(affectsCommands.ToArray()),
             new EquatableArray<string>(validationAttributes.ToArray()),
             Hint(type, propName, "Bindable"),
+            DescribedTypeOf(type, ctx.SemanticModel.Compilation),
+            plainType,
+            type.IsValueType,
             warning), null);
     }
 
@@ -230,13 +264,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         }
 
         var commandName = string.IsNullOrEmpty(customName) ? method.Name + "Command" : customName;
-        var commandTypeFqn = (isAsync, hasParam) switch
-        {
-            (false, false) => "global::Adamantium.MVVM.AdamantiumCommand",
-            (false, true) => $"global::Adamantium.MVVM.AdamantiumCommand<{paramTypeFqn}>",
-            (true, false) => "global::Adamantium.MVVM.AdamantiumAsyncCommand",
-            (true, true) => $"global::Adamantium.MVVM.AdamantiumAsyncCommand<{paramTypeFqn}>",
-        };
+        var commandTypeFqn = CommandType(isAsync, hasParam, paramTypeFqn);
         var executeExpr = (isAsync, hasParam, hasCt) switch
         {
             (false, false, _) => $"() => {method.Name}()",
@@ -263,6 +291,8 @@ public sealed class MvvmGenerator : IIncrementalGenerator
             executeExpr,
             canExecuteExpr,
             Hint(type, commandName, "Command"),
+            DescribedTypeOf(type, ctx.SemanticModel.Compilation),
+            CommandType(isAsync, hasParam, hasParam ? parameters[0].Type.ToDisplayString(PlainFormat) : null),
             diagnostic), null);
     }
 
@@ -312,6 +342,11 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"    partial void On{m.PropertyName}Changing({m.PropertyType} value);");
             sb.AppendLine($"    partial void On{m.PropertyName}Changed({m.PropertyType} value);");
+        }
+
+        if (m.DescribedType is not null)
+        {
+            EmitDescription(sb, m.DescribedType, m.PropertyName, m.PlainPropertyType, !m.HostIsValueType);
         }
 
         CloseType(sb);
@@ -376,6 +411,11 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         sb.AppendLine($"    private {m.CommandTypeFqn} {m.FieldName};");
         sb.AppendLine($"    public {m.CommandTypeFqn} {m.CommandName} =>");
         sb.AppendLine($"        {m.FieldName} ??= new {m.CommandTypeFqn}({m.ExecuteExpression}{canExec});");
+        if (m.DescribedType is not null)
+        {
+            EmitDescription(sb, m.DescribedType, m.CommandName, m.PlainCommandType, false);
+        }
+
         CloseType(sb);
         return SourceText.From(sb.ToString(), Encoding.UTF8);
     }
@@ -416,6 +456,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         // No "#nullable enable": the generated file inherits the consuming project's nullable setting, so it
         // matches the user's code (their fields and our output agree) instead of forcing a context on them.
         sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#pragma warning disable CA2255");
         if (ns.Length > 0)
         {
             sb.AppendLine($"namespace {ns};");
@@ -439,6 +480,174 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         spc.ReportDiagnostic(result.Diagnostic.ToDiagnostic());
         return true;
     }
+
+    private static void EmitDescription(StringBuilder sb, string host, string name, string type, bool canSet)
+    {
+        sb.AppendLine();
+        sb.AppendLine("    [global::System.Runtime.CompilerServices.ModuleInitializer]");
+        sb.AppendLine($"    internal static void __Describe{name}() =>");
+        sb.AppendLine($"        global::{AccessorsName}.Register(typeof({host}), static () =>");
+        sb.AppendLine("        [");
+        sb.AppendLine($"            {Accessor(host, name, type, true, canSet)},");
+        sb.AppendLine("        ]);");
+    }
+
+    private static string Accessor(string host, string name, string type, bool canGet, bool canSet,
+        string initSetter = null)
+    {
+        var member = SyntaxFacts.IsReservedKeyword(SyntaxFacts.GetKeywordKind(name)) ? "@" + name : name;
+        var value = $"v is null ? default({type}) : ({type})v";
+        var get = canGet ? $"static o => (({host})o).{member}" : "null";
+        var set = initSetter is not null ? $"static (o, v) => {initSetter}(({host})o, {value})"
+            : canSet ? $"static (o, v) => (({host})o).{member} = {value}"
+            : "null";
+        return $"new global::Adamantium.MVVM.PropertyAccessor(\"{name}\", typeof({type}), {get}, {set})";
+    }
+
+    private static SourceText EmitDescribed(ImmutableArray<DescribedTypeInfo> types, bool reachesInitSetters)
+    {
+        List<string> initSetters = [];
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#pragma warning disable CA2255");
+        sb.AppendLine("namespace Adamantium.MVVM.Generated;");
+        sb.AppendLine();
+        sb.AppendLine("internal static class DescribedProperties");
+        sb.AppendLine("{");
+        sb.AppendLine("    [global::System.Runtime.CompilerServices.ModuleInitializer]");
+        sb.AppendLine("    internal static void Register()");
+        sb.AppendLine("    {");
+        HashSet<string> seen = [];
+        foreach (var type in types)
+        {
+            if (!seen.Add(type.Type))
+            {
+                continue;
+            }
+
+            sb.AppendLine($"        global::{AccessorsName}.Register(typeof({type.Type}), static () =>");
+            sb.AppendLine("        [");
+            foreach (var property in type.Properties)
+            {
+                string initSetter = null;
+                if (property.CanSet && property.IsInit && reachesInitSetters)
+                {
+                    initSetter = $"__SetInit{initSetters.Count / 2}";
+                    initSetters.Add($"    [global::System.Runtime.CompilerServices.UnsafeAccessor(" +
+                                    $"global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"set_{property.Name}\")]");
+                    initSetters.Add($"    private static extern void {initSetter}({type.Type} target, {property.Type} value);");
+                }
+
+                var canSet = property.CanSet && (!property.IsInit || reachesInitSetters);
+                sb.AppendLine($"            {Accessor(type.Type, property.Name, property.Type, property.CanGet, canSet, initSetter)},");
+            }
+
+            sb.AppendLine("        ]);");
+        }
+
+        sb.AppendLine("    }");
+        foreach (var line in initSetters)
+        {
+            sb.AppendLine(line);
+        }
+
+        sb.AppendLine("}");
+        return SourceText.From(sb.ToString(), Encoding.UTF8);
+    }
+
+    private static DescribedTypeInfo GetDescribed(GeneratorSyntaxContext ctx, CancellationToken ct)
+    {
+        if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node, ct) is not INamedTypeSymbol type ||
+            type.TypeKind != TypeKind.Class || type.IsStatic || !IsDescribable(type))
+        {
+            return null;
+        }
+
+        var compilation = ctx.SemanticModel.Compilation;
+        if (!type.AllInterfaces.Contains(compilation.GetTypeByMetadataName(InpcName), SymbolEqualityComparer.Default) &&
+            !CarriesAttribute(type, compilation.GetTypeByMetadataName(ViewModelAttr)) &&
+            !CarriesAttribute(type, compilation.GetTypeByMetadataName(DescribeAttr)))
+        {
+            return null;
+        }
+
+        List<DescribedPropertyInfo> properties = [];
+        foreach (var member in type.GetMembers())
+        {
+            if (member is not IPropertySymbol property || property.IsStatic || property.IsIndexer ||
+                property.DeclaredAccessibility != Accessibility.Public ||
+                property.ReturnsByRef || property.ReturnsByRefReadonly ||
+                property.ExplicitInterfaceImplementations.Length > 0 || property.Type.IsRefLikeType ||
+                property.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer || ContainsDynamic(property.Type))
+            {
+                continue;
+            }
+
+            var canGet = property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
+            var canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
+            if (canGet || canSet)
+            {
+                properties.Add(new DescribedPropertyInfo(property.Name, property.Type.ToDisplayString(PlainFormat), canGet,
+                    canSet, property.SetMethod?.IsInitOnly == true));
+            }
+        }
+
+        return new DescribedTypeInfo(type.ToDisplayString(PlainFormat),
+            new EquatableArray<DescribedPropertyInfo>(properties.ToArray()));
+    }
+
+    private static bool ContainsDynamic(ITypeSymbol type) => type switch
+    {
+        { TypeKind: TypeKind.Dynamic } => true,
+        IArrayTypeSymbol array => ContainsDynamic(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.Any(ContainsDynamic),
+        _ => false,
+    };
+
+    private static bool IsDescribable(INamedTypeSymbol type)
+    {
+        for (var at = type; at is not null; at = at.ContainingType)
+        {
+            if (at.TypeParameters.Length > 0 || at.IsFileLocal ||
+                at.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string DescribedTypeOf(INamedTypeSymbol type, Compilation compilation) =>
+        IsDescribable(type) && compilation.GetTypeByMetadataName(AccessorsName) is not null
+            ? type.ToDisplayString(PlainFormat)
+            : null;
+
+    private static bool CarriesAttribute(INamedTypeSymbol type, INamedTypeSymbol attribute)
+    {
+        if (attribute is null)
+        {
+            return false;
+        }
+
+        for (var at = type; at is not null; at = at.BaseType)
+        {
+            if (at.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attribute)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string CommandType(bool isAsync, bool hasParam, string parameterType) => (isAsync, hasParam) switch
+    {
+        (false, false) => "global::Adamantium.MVVM.AdamantiumCommand",
+        (false, true) => $"global::Adamantium.MVVM.AdamantiumCommand<{parameterType}>",
+        (true, false) => "global::Adamantium.MVVM.AdamantiumAsyncCommand",
+        (true, true) => $"global::Adamantium.MVVM.AdamantiumAsyncCommand<{parameterType}>",
+    };
 
     // ---- symbol helpers ----------------------------------------------------------------------------------------
 
