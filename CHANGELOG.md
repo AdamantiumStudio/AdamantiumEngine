@@ -1273,8 +1273,9 @@ All packages share one version.
 ### Changed
 
 - Text shaping (`TextShaper.Shape`) rents its working memory from `ArrayPool` for the one shaping and gives it back,
-  instead of keeping a buffer and a normalizer per thread (`[ThreadStatic]`): nothing is held between shapings, at the
-  same speed and allocation.
+  instead of keeping a buffer and a normalizer per thread (`[ThreadStatic]`); a run of more than 16384 characters
+  shapes in memory of its own, let go after it, so the pool keeps no buffer that large. As fast as before; a run
+  allocates two small objects more. `Adamantium.Fonts` names its `System.Buffers` dependency.
 - `Skin.Joints` and `Skin.InverseBindMatrices` are the lists of its `Skeleton`, shared by every part of the mesh
   bending with it: changing them changes them for all those parts.
 - `AdamantiumCollection.AsSpan` reads without the lock, for a walk each frame: while another thread changes the
