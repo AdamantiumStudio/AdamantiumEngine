@@ -12,13 +12,15 @@ internal sealed class TextLayoutOptions
 
     public TextDirection Direction { get; init; }
 
-    public Hyphens Hyphens { get; init; }
+    public TextComposition Composition { get; init; } = TextComposition.Default;
 
-    public int HyphenLimit { get; init; }
+    public Hyphens Hyphens => Composition.Hyphens;
 
-    public LineBreaking LineBreaking { get; init; }
+    public int HyphenLimit => Composition.HyphenLimit;
 
-    public bool OpticalMarginAlignment { get; init; }
+    public LineBreaking LineBreaking => Composition.LineBreaking;
+
+    public bool OpticalMarginAlignment => Composition.OpticalMarginAlignment;
 
     public DropCap DropCap { get; init; }
 
@@ -28,23 +30,23 @@ internal sealed class TextLayoutOptions
 
     public WritingMode WritingMode { get; init; }
 
-    public SpacingRange WordSpacing { get; init; }
+    public SpacingRange WordSpacing => Composition.WordSpacing;
 
-    public SpacingRange LetterSpacing { get; init; }
+    public SpacingRange LetterSpacing => Composition.LetterSpacing;
 
-    public SpacingRange GlyphScaling { get; init; }
+    public SpacingRange GlyphScaling => Composition.GlyphScaling;
 
-    public bool JustificationAlternates { get; init; }
+    public bool JustificationAlternates => Composition.JustificationAlternates;
 
-    public HorizontalTextAlignment LastLineAlignment { get; init; }
+    public HorizontalTextAlignment LastLineAlignment => Composition.LastLineAlignment;
 
-    public HorizontalTextAlignment SingleWordJustification { get; init; }
+    public HorizontalTextAlignment SingleWordJustification => Composition.SingleWordJustification;
 
-    public bool Kashidas { get; init; }
+    public bool Kashidas => Composition.Kashidas;
 
-    public TextSpacingTrim SpacingTrim { get; init; }
+    public TextSpacingTrim SpacingTrim => Composition.SpacingTrim;
 
-    public HangingPunctuation HangingPunctuation { get; init; }
+    public HangingPunctuation HangingPunctuation => Composition.HangingPunctuation;
 
     public double Tracking { get; init; }
 
@@ -74,18 +76,11 @@ internal sealed class TextLayoutOptions
 
     public bool LaysOutLike(TextLayoutOptions other)
     {
-        return other != null && TabSize == other.TabSize && Direction == other.Direction && Hyphens == other.Hyphens
-               && HyphenLimit == other.HyphenLimit && Language == other.Language && LineBreaking == other.LineBreaking
-               && TabStops.SequenceEqual(other.TabStops) && OpticalMarginAlignment == other.OpticalMarginAlignment
-               && Equals(DropCap, other.DropCap) && WritingMode == other.WritingMode
-               && WordSpacing.Equals(other.WordSpacing) && LetterSpacing.Equals(other.LetterSpacing)
-               && Tracking.Equals(other.Tracking) && Kerning == other.Kerning
+        return other != null && TabSize == other.TabSize && Direction == other.Direction
+               && Composition.Equals(other.Composition) && Language == other.Language
+               && TabStops.SequenceEqual(other.TabStops) && Equals(DropCap, other.DropCap)
+               && WritingMode == other.WritingMode && Tracking.Equals(other.Tracking) && Kerning == other.Kerning
                && Equals(BaselineGrid, other.BaselineGrid)
-               && GlyphScaling.Equals(other.GlyphScaling)
-               && JustificationAlternates == other.JustificationAlternates
-               && LastLineAlignment == other.LastLineAlignment
-               && SingleWordJustification == other.SingleWordJustification && Kashidas == other.Kashidas
-               && SpacingTrim == other.SpacingTrim && HangingPunctuation == other.HangingPunctuation
                && LineHeight.Equals(other.LineHeight) && LineStacking == other.LineStacking
                && LineSpacing.Equals(other.LineSpacing) && LineBounds == other.LineBounds && MaxLines == other.MaxLines
                && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? []);

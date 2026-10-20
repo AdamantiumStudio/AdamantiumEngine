@@ -133,8 +133,9 @@ internal static class ArabicShaper
         return masks;
     }
 
-    public static void ReorderMarks(List<GlyphInfo> infos, int start, int end)
+    public static void ReorderMarks(GlyphBuffer buffer, int start, int end)
     {
+        var infos = buffer.Info;
         var i = start;
         for (var cc = 220; cc <= 230; cc += 10)
         {
@@ -170,22 +171,20 @@ internal static class ArabicShaper
                 cluster = Math.Min(cluster, infos[k].Cluster);
             }
 
-            var moved = infos.GetRange(i, j - i);
-            infos.RemoveRange(i, j - i);
-            infos.InsertRange(start, moved);
+            var count = j - i;
+            Array.Reverse(infos, start, i - start);
+            Array.Reverse(infos, i, count);
+            Array.Reverse(infos, start, j - start);
             for (var k = start; k < j; k++)
             {
-                var item = infos[k];
-                item.Cluster = cluster;
-                if (k < start + moved.Count)
+                infos[k].Cluster = cluster;
+                if (k < start + count)
                 {
-                    item.CombiningClass = (byte)(cc == 220 ? 25 : 26);
+                    infos[k].CombiningClass = (byte)(cc == 220 ? 25 : 26);
                 }
-
-                infos[k] = item;
             }
 
-            start += moved.Count;
+            start += count;
             i = j;
         }
     }

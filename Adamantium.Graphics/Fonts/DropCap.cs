@@ -7,9 +7,12 @@ namespace Adamantium.Graphics.Fonts;
 /// cap height of the first line, its foot on the baseline of the last.</summary>
 public sealed class DropCap : IEquatable<DropCap>
 {
+    /// <summary>The fewest lines a drop cap spans.</summary>
+    public const int LeastLines = 2;
+
     public DropCap(int lines, int characters = 1, IFont font = null)
     {
-        if (lines < 2)
+        if (lines < LeastLines)
         {
             throw new ArgumentOutOfRangeException(nameof(lines), lines, "A drop cap spans two lines or more.");
         }
