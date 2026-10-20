@@ -45,18 +45,30 @@ public readonly struct FontVariation : IEquatable<FontVariation>
         return variations.ToArray();
     }
 
-    /// <summary>Parses a comma-separated list, such as <c>wght=650, "wdth"=87.5, opsz=auto</c>: an axis tag of four
-    /// characters, quoted or not, and its finite number; <c>opsz=auto</c> sets none, leaving the optical size to follow
-    /// the text's size.</summary>
+    /// <summary>Parses a comma-separated list, such as <c>wght=650, "wdth"=87.5, opsz=auto</c>: an axis tag, quoted or
+    /// not, and its finite number; a tag of fewer than four characters is padded with spaces, as OpenType pads it.
+    /// <c>opsz=auto</c> sets none, leaving the optical size to follow the text's size; blank entries are passed over.
+    /// </summary>
     /// <exception cref="FormatException">An entry is not a tag and its number.</exception>
     public static IReadOnlyList<FontVariation> ParseList(string text)
     {
         var variations = new List<FontVariation>();
-        foreach (var entry in (text ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var entry in (text ?? string.Empty).Split(','))
         {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                continue;
+            }
+
             var parts = entry.Split('=');
-            var tag = parts[0].Trim().Trim('"', '\'');
-            if (parts.Length != 2 || tag.Length != 4)
+            var tag = parts[0].Trim();
+            if (tag.Length >= 2 && tag[0] is '"' or '\'' && tag[tag.Length - 1] == tag[0])
+            {
+                tag = tag.Substring(1, tag.Length - 2);
+            }
+
+            tag = tag.TrimEnd().PadRight(4);
+            if (parts.Length != 2 || tag.Length != 4 || tag[0] == ' ')
             {
                 throw new FormatException($"'{entry.Trim()}' is not an axis and its value, as wght=650");
             }
