@@ -64,7 +64,8 @@ All packages share one version.
   `Css.TryParseColor`: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()`, `transparent` and the named colors.
   SVG glyphs read their styles and colors through it.
 - `FontVariation.ParseList("wght=650, wdth=87.5, opsz=auto")`: axis values as markup and documents write them; a tag
-  of fewer than four characters is padded with spaces, as OpenType pads it, and blank entries are passed over.
+  is four characters, a shorter one written with the spaces OpenType pads it with (`TS  =5`) - a three-letter typo
+  such as `wgt=650` is refused - and blank entries are passed over.
 - `TextComposition`: how the lines of a text are composed - hyphens and their limit, line breaking, optical margins,
   word and letter spacing, glyph scaling, justification alternates, kashidas, CJK spacing trim and hanging punctuation,
   where a justified last line and a line of one word stand - as one value compared by value, which refuses a negative

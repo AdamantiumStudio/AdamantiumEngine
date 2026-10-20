@@ -65,14 +65,19 @@ public class CssTests
     }
 
     [Test]
-    public void AShortTag_IsPaddedAsOpenTypePadsIt_AndBlankEntriesArePassedOver()
+    public void AShortTag_KeepsThePaddingOpenTypeGivesIt_AndBlankEntriesArePassedOver()
     {
-        Assert.That(FontVariation.ParseList("TS  =5, , 'XY'=2,"),
-            Is.EqualTo(new[] { new FontVariation("TS  ", 5), new FontVariation("XY  ", 2) }));
+        Assert.That(FontVariation.ParseList("TS  =5, , 'XY  '=2, wdth =3,"),
+            Is.EqualTo(new[]
+            {
+                new FontVariation("TS  ", 5), new FontVariation("XY  ", 2), new FontVariation("wdth", 3),
+            }));
         Assert.That(FontVariation.ParseList(" "), Is.Empty);
     }
 
     [TestCase("=5")]
+    [TestCase("wgt=650")]
+    [TestCase("'XY'=2")]
     [TestCase("wght")]
     [TestCase("weight=700")]
     [TestCase("wght=heavy")]
