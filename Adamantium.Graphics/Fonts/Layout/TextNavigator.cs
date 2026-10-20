@@ -221,10 +221,21 @@ internal sealed class TextNavigator
 
     public IReadOnlyList<RectangleF> GetRangeRects(int start, int end)
     {
-        return RangeSegments(start, end)
-            .Select(s => Placed(new RectangleF((float)s.Left, (float)LineTop(s.Line),
-                (float)(s.Right - s.Left), (float)LineMetric(_laid.LineHeights, s.Line))))
+        var capEnd = _laid.DropCapEnd;
+        var (capTop, capHeight) = DropCapSpan();
+        return RangeSegments(start, Math.Min(end, capEnd))
+            .Select(s => Placed(new RectangleF((float)s.Left, (float)capTop, (float)(s.Right - s.Left), (float)capHeight)))
+            .Concat(RangeSegments(Math.Max(start, capEnd), end)
+                .Select(s => Placed(new RectangleF((float)s.Left, (float)LineTop(s.Line),
+                    (float)(s.Right - s.Left), (float)LineMetric(_laid.LineHeights, s.Line)))))
             .ToList();
+    }
+
+    private (double Top, double Height) DropCapSpan()
+    {
+        var last = Math.Max(0, _laid.DropCapLines - 1);
+        var top = LineTop(0);
+        return (top, LineTop(last) + LineMetric(_laid.LineHeights, last) - top);
     }
 
     public IReadOnlyList<TextAdornment> GetAdornments()
@@ -259,7 +270,19 @@ internal sealed class TextNavigator
             var vertical = WritingMode == WritingMode.VerticalRightToLeft;
             var size = attributes.FontSize ?? fontSize;
             var runShift = Raise(_laid.Font, WritingMode, attributes, font, size, fontSize);
-            foreach (var segment in RangeSegments(run.Start, run.End))
+            var capEnd = Math.Min(run.End, _laid.DropCapEnd);
+            if (attributes.Background is { } capBackground && run.Start < capEnd)
+            {
+                var (capTop, capHeight) = DropCapSpan();
+                foreach (var segment in RangeSegments(run.Start, capEnd))
+                {
+                    adornments.Add(new TextAdornment(TextAdornmentKind.Background,
+                        Placed(new RectangleF((float)segment.Left, (float)capTop, (float)(segment.Right - segment.Left),
+                            (float)capHeight)), capBackground));
+                }
+            }
+
+            foreach (var segment in RangeSegments(Math.Max(run.Start, _laid.DropCapEnd), run.End))
             {
                 var left = (float)segment.Left;
                 var width = (float)(segment.Right - segment.Left);
@@ -637,12 +660,31 @@ internal sealed class TextNavigator
         return (stops[index].X, line);
     }
 
-    // The caret where the text is shown: across its line, as thick as asked along it.
+    // The caret where the text is shown: across its line, as thick as asked along it - at the drop cap, across all the
+    // lines the drop cap spans.
     public RectangleF GetCaretRect(CaretPosition position, double thickness)
     {
         var (x, line) = GetCaretPoint(position);
+        if (AtTheDropCap(position))
+        {
+            var (top, height) = DropCapSpan();
+            return Placed(new RectangleF((float)x, (float)top, (float)thickness, (float)height));
+        }
+
         return Placed(new RectangleF((float)x, (float)LineTop(line), (float)thickness,
             (float)LineMetric(_laid.LineHeights, line)));
+    }
+
+    private bool AtTheDropCap(CaretPosition position)
+    {
+        if (_laid.DropCapEnd <= 0)
+        {
+            return false;
+        }
+
+        var index = Clamp(position.Index);
+        var held = position.AfterPrevious ? HeldCharacter(index) : -1;
+        return held >= 0 ? held < _laid.DropCapEnd : index < _laid.DropCapEnd;
     }
 
     public CaretPosition MoveVisually(CaretPosition from, bool toRight)

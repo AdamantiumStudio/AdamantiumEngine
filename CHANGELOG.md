@@ -733,6 +733,11 @@ All packages share one version.
 
 ### Fixed
 
+- A drop cap selected is covered across all the lines it spans, and the caret before or after it is as tall as it
+  (`TextLayout.GetRangeRects`, `GetCaretRect`), also for a text shorter than the cap; both stood as high as its first
+  line only. Its background covers it across its lines too, and an underline or a squiggle of the text beside it is
+  no longer drawn through it (`GetAdornments`).
+
 - A filled ellipse sector (`Shapes.Ellipse`, solid) that does not start at zero is filled where it is: the start was
   turned into radians and then read as degrees again, and the fill was cut at the sweep rather than at start plus sweep,
   so a quarter from twelve to three was filled as a sliver beside three o'clock.

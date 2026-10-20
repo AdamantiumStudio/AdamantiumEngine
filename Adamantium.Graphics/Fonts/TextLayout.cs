@@ -430,8 +430,8 @@ public class TextLayout : DisposableObject
     /// <summary>A visual line: the characters it shows and where it stands.</summary>
     public TextLineMetrics GetLine(int lineIndex) => _navigator.GetLine(lineIndex);
 
-    /// <summary>Rectangles covering a UTF-16 range, one per piece of each visual line it spans, as high as the line:
-    /// for selection, search hits, backgrounds.</summary>
+    /// <summary>Rectangles covering a UTF-16 range, one per piece of each visual line it spans, as high as the line -
+    /// the drop cap's characters as high as all the lines it spans: for selection, search hits, backgrounds.</summary>
     public IReadOnlyList<RectangleF> GetRangeRects(int start, int end) => _navigator.GetRangeRects(start, end);
 
     /// <summary>Backgrounds and lines of the attributed text last laid out: draw the backgrounds under the glyphs and the
@@ -476,7 +476,8 @@ public class TextLayout : DisposableObject
     public (double X, int LineIndex) GetCaretPoint(CaretPosition position) => _navigator.GetCaretPoint(position);
 
     /// <summary>The caret for a position where the text is shown: across the whole of its line, <paramref name="thickness"/>
-    /// along it - a bar on a horizontal line, a dash down a vertical one.</summary>
+    /// along it - a bar on a horizontal line, a dash down a vertical one; before or after a character of the drop cap,
+    /// across all the lines the drop cap spans.</summary>
     public RectangleF GetCaretRect(CaretPosition position, double thickness) => _navigator.GetCaretRect(position, thickness);
 
     /// <summary>The caret position one grapheme to the left or the right of <paramref name="from"/> on screen, whichever
