@@ -7,6 +7,58 @@ All packages share one version.
 
 ### Added
 
+- Recorded draws: `IGraphicsDevice.BeginRecording` sends the draws that follow into a secondary command buffer for the
+  frame slot - recorded over in place on later frames - and `ExecuteRecorded` runs it inside the render pass.
+  `BeginFingerprint`/`EndFingerprint` take the draws as a fingerprint only, issuing nothing - shaders, constants by
+  content, heap indices, buffers, dynamic state, scissors and draw arguments - and `EndRecording` gives the same
+  fingerprint for what it recorded, so a caller can tell a recording still stands for its draws. Needs
+  `VK_KHR_maintenance7` (`SupportsRecordedCommands`), enabled when the device has it; a render pass then takes inline
+  draws and secondary command buffers both. A shader hot reload or a change of target formats retires a recording
+  (`IRecordedCommands.IsReusable`). With it: `GraphicsAdapter.SupportsMaintenance7`, `ShaderHotReload.ReloadCount` and
+  `DescriptorHeapManager.HeapBindInfos`.
+- A universe hosted by another platform runs on a thread of its own (`IUniverse.StartHostedLoop`), paced by its host:
+  it draws a frame each time the host asks for one through the shared surface (`SharedSurfaceDescriptor.Demand`,
+  `SharedSurfaceDemand`), so it draws no more often than it is shown and the host's frames never wait for it.
+  `SuspendHostedLoop`/`ResumeHostedLoop` hold it between two frames while its devices are made again; its `Fps` counts
+  the frames it drew. A frame that throws is logged and the loop goes on. `UniverseOutput.WaitUntilShown` gives whether
+  the output has room; a frame drawn without it is dropped, and the output asks for another the next time its host
+  asks for one (`SharedSurfaceDemand.WhenBeyond`). `SharedSurface.CreateExportable` takes how many surfaces the producer rotates through
+  (`BufferCount`, `SurfaceAt`); the consumer copies the newest and gives the older ones back with it.
+- `IUniverse.FrameMode`: `OnDemand` draws only when something asks, and a still scene draws nothing - the loop sleeps
+  until a message reaches the universe's channel. `IUniverse.Invalidate()` asks a frame of every output: the world
+  changed. `UniverseOutput.Invalidate` and `IUniverse.Invalidate(UniverseOutput)` ask one of that output alone - its
+  input, its size; the others are not drawn (`UniverseOutput.IsDrawnThisFrame`). `TransformService` asks of every
+  output when a node of the world moved in the frame, and only of the outputs looking through a camera when just that
+  camera moved. `IUniverse.Post` runs an action on the universe's thread before its next frame, then draws every
+  output: a change from another thread with no race against a frame. `Continuous` draws every output at its host's
+  pace. A paused universe sleeps between messages, runs what is posted and keeps the frames asked for its resuming.
+- GPU time of a frame: `IGraphicsDevice.LastGpuFrameMs`, from timestamps at the start and the end of the frame's
+  commands, and `Universe.GpuTimeMs`, averaged over a second. `ForwardPlusRenderingProcessor.TrianglesDrawn`,
+  `TrianglesInScene` and `DrawCalls`: the triangles of the meshes the last frame drew, of all it would draw were they in
+  view, and the calls it took. A mesh out of view is left out by its box in the `SceneIndex` - a skinned one too, which
+  was always drawn - and by its collider where there is no index.
+- The Forward+ processor draws meshes instanced: the frame's visible meshes are gathered by geometry, pass and render
+  state, each copy's world, color, texture and joint palette go into per-frame buffers the passes read by address
+  (`MeshInstance`, `MeshDrawKey`, `MeshDrawGroup`), and every group is one call. The parts of a model bent by one
+  skeleton share its palette. Sixteen copies of an animated model of 64 parts: 1020 calls a frame, now 135. The lit
+  passes take `InstancesAddress`, `PalettesAddress` and `InstanceBase` in place of `world`, `albedo` and the `Skinning`
+  buffer, and sample a copy's own texture from `meshTextures`.
+- `MeshGeometryCache` finds a mesh's geometry by its content: meshes with the same vertices and indices - a model loaded
+  twice, or duplicated - share one `RenderGeometry`, its buffers made once, so their copies draw as one call. A mesh is
+  hashed again only when its version moves; a geometry no mesh uses any more is let go after the frames in flight.
+- Textures by index: a texture array of no length in an effect, `Texture2D textures[];`, is the resource heap seen as
+  an array of textures, indexed by `IDescriptorHeapManager.TextureIndex` - copies with different textures draw in one
+  call. Image descriptors take whole slots of the heap for it, and the device enables `runtimeDescriptorArray` and
+  non-uniform indexing of sampled images.
+- `DynamicAabbTree<T>`: a bounding volume hierarchy of moving boxes - leaves grown by a margin, inserted where they add
+  the least surface, kept balanced by rotations - with a ray query. `SceneIndex`, kept by `TransformService` frame by
+  frame, holds every mesh entity's box in the world; `Picking.PickMeshes` asks it for the meshes a ray passes near
+  instead of walking every entity, and tests them nearest first, stopping once the next box is past the nearest hit.
+  A skinned part's box comes from its joints alone (`Skin.WorldBounds`): each point within the reach it had of its
+  joints in the bind pose.
+- The effect parser passes `#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, `#undef`, `#pragma`, `#error` and
+  `#warning` to Slang as it does `#include` and `#define`, each to the end of its line; a `#define` no longer leaves its
+  value to the grammar.
 - `Css`: CSS values as SVG glyphs and HTML styles write them - `Css.Declarations(style)`, a style's declarations
   (`CssDeclaration`: name, value, `!important`) cut at semicolons outside quotes and brackets, and
   `Css.TryParseColor`: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()`, `transparent` and the named colors.
@@ -745,6 +797,23 @@ All packages share one version.
 
 ### Fixed
 
+- An entity moved while a camera was not looked through stayed at its old place through that camera once it was: the
+  world matrix kept for it still counted as computed. A moved entity now forgets them all
+  (`Transform.ForgetComputedMetadata`).
+- Picking a skinned mesh posed the skin of every part from the start, composing the parents of every joint, and took a
+  collection lock for every child it walked: the pointer over two animated models cost the frame about 10 ms. It now
+  takes the world matrices worked out for the ray's camera in the frame (`Skin.PosedBounds(mesh, camera)`,
+  `Skin.Intersect(mesh, ray, camera, out distance)`), carries the box by the joints the part follows only, and walks
+  the children without the lock.
+- An output made on the host's thread was queued and mapped without the lock the universe's own loop reads the queue
+  under (`UniversePlatform.CreateOutput`, `SwitchContext`, `RemoveOutput`).
+- `EntityComponentCollection.Contains<T>` took the collection's lock on every call, which the Forward+ walk made for
+  every entity every frame; it reads the components as `Get<T>` does.
+- An array of textures in an effect was reflected as one texture: the element's type was read for the whole variable
+  (`Adamantium.Vulkan.Spirv` 1.0.13).
+- A descriptor heap slot freed with its texture or buffer was never handed out again: its frames were counted by the
+  device that made the heap - the resource loader, which never draws - so they never went by. A freed slot goes
+  through the deferred queue now, which waits for the frames in flight of every device sharing the heap.
 - An SVG glyph's color is rounded as browsers round it: a percent is of 255 and a half goes up - `rgb(50%, 0%, 0%)`
   is 128, not 127, `rgba(0, 0, 0, 0.3)` has an alpha of 77, not 76. Its named colors take CSS's "grey" spellings and
   `rebeccapurple`, and no longer "zero"; a "#" followed by a space or another character that is no hex digit is no
@@ -1282,6 +1351,14 @@ All packages share one version.
 
 ### Changed
 
+- `Skin.FillPalette` fills a `Span<Matrix4x4F>`, so a palette can be written straight into a frame's buffer of them.
+  `RenderGeometry` is made by `MeshGeometryCache` from a mesh's content and never changes; `EnsureUpToDate` is gone.
+- `GraphicsDevice` draws, vertex and index buffer bindings, dispatches and buffer barriers go to
+  `CurrentCommandBuffer` - the recording in progress, if any - not straight to the frame's command buffer.
+  `EffectPass` binds shaders and sends push data through the device (`BindShaders(stages, shaders)`, `PushData`).
+  While a recording or a fingerprint is in progress, what cannot go into one throws `InvalidOperationException`:
+  dispatches, barriers, beginning or suspending rendering, `EndDraw` - and `CurrentCommandBuffer` itself while a
+  fingerprint is taken.
 - Text shaping (`TextShaper.Shape`) rents its working memory from `ArrayPool` for the one shaping and gives it back,
   instead of keeping a buffer and a normalizer per thread (`[ThreadStatic]`); a run of more than 16384 characters
   shapes in memory of its own, let go after it, so the pool keeps no buffer that large. As fast as before; a run

@@ -275,6 +275,63 @@ technique T { pass P { ComputeShader = MainCS; } }
             Assert.That(result.HasErrors, Is.False, $"a real include did not resolve:{Environment.NewLine}{messages}");
         }
 
+        /// <summary>An array of textures is reflected with its length, and one of no length - the resource heap read as an
+        /// array of textures - with none. The element's type used to be read for the whole variable, so both came out as one
+        /// texture.</summary>
+        [Test]
+        public void TextureArrays_AreReflectedWithTheirLength()
+        {
+            var source = @"
+sampler s;
+Texture2D four[4];
+Texture2D heap[];
+struct P { float4 pos : SV_Position; nointerpolation uint t : TEXCOORD0; };
+P VS(float4 p : POSITION, uint id : SV_InstanceID) { P o; o.pos = p; o.t = id; return o; }
+float4 PS(P i) : SV_Target0
+{
+    return heap[NonUniformResourceIndex(i.t)].Sample(s, float2(0, 0)) + four[i.t % 4].Sample(s, float2(0, 0));
+}
+technique T { pass P { VertexShader = VS; PixelShader = PS; } }
+";
+            var result = EffectCompiler.Compile(source, "Probe.fx", ImmutableArray<ShaderFileInfo>.Empty);
+
+            Assert.That(result.HasErrors, Is.False, string.Join(Environment.NewLine, result.Logger.Messages));
+            var parameters = result.EffectData.Shaders.SelectMany(shader => shader.ResourceParameters).ToList();
+            Assert.That(parameters.First(p => p.Name == "four").Count, Is.EqualTo(4));
+            Assert.That(parameters.First(p => p.Name == "heap").Count, Is.EqualTo(0));
+        }
+
+        /// <summary>The source's own conditions and macros are Slang's to apply: the effect parser, reading the techniques
+        /// only, passes every directive it does not need over to the end of its line, leaving nothing of it to the grammar -
+        /// not the value of a define, not the first word of the next line after an #endif.</summary>
+        [Test]
+        public void PreprocessorDirectives_ArePassedToTheBackend()
+        {
+            var source = "#pragma once\n"
+                       + "#define TINTED 1\n"
+                       + "#ifndef UNTINTED\n"
+                       + "#include \"Includes/Tint.fxh\"\n"
+                       + "#elif TINTED > 1\n"
+                       + "#error never\n"
+                       + "#else\n"
+                       + "#warning never\n"
+                       + "#endif\n"
+                       + "#undef TINTED\n"
+                       + "#define LONG(x) \\\n    ((x) + \\\n    1)\n"
+                       + "#define LEAKED \\\n    technique Leaked { pass P { VertexShader = VS; PixelShader = PS; } }\n"
+                       + "#if 1\n"
+                       + "float Unused() { return 0; }\n"
+                       + "#endif\n"
+                       + EffectCalling("");
+
+            var result = EffectCompiler.Compile(source, "Probe.fx", TintInclude());
+
+            var messages = string.Join(Environment.NewLine, result.Logger.Messages);
+            Assert.That(result.HasErrors, Is.False, $"a directive reached the grammar:{Environment.NewLine}{messages}");
+            Assert.That(result.EffectData.Description.Techniques.Select(t => t.Name), Does.Not.Contain("Leaked"),
+                "the line a backslash carried a define onto was read as code");
+        }
+
         /// <summary>A preprocessor directive inside a comment is not a directive; comments reach the parser as written, so the
         /// tokenizer must hand them to the comment rule.</summary>
         [Test]

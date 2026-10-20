@@ -29,7 +29,9 @@ public sealed unsafe class SharedSurface : Texture
     private IntPtr _produceHandle;
     private IntPtr _consumeHandle;
     private ulong _latched;
+    private ulong _consumeSignaled;
     private Texture _copy;
+    private SharedSurface[] _others = [];
 
     public SharedSurfaceDescriptor Descriptor { get; private set; }
 
@@ -45,21 +47,57 @@ public sealed unsafe class SharedSurface : Texture
     /// <summary>Current value of the consume timeline (last frame the consumer finished latching).</summary>
     public ulong ConsumeValue => GetCounter(_consumeSemaphore);
 
+    /// <summary>How many surfaces the producer rotates through: this one and <see cref="SurfaceAt"/> the others.</summary>
+    public int BufferCount => 1 + _others.Length;
+
+    /// <summary>One of the surfaces the producer rotates through; 0 is this one. Each has its own produce and consume
+    /// timelines, numbered by the frames written to it.</summary>
+    public SharedSurface SurfaceAt(int index) => index == 0 ? this : _others[index - 1];
+
     /// <summary>
-    /// For the consumer: the newest frame the producer has finished, handed out once - 0 when nothing is new since the
-    /// last call, whoever made it. Wait on <see cref="ProduceSemaphore"/> for it before sampling and signal
-    /// <see cref="ConsumeSemaphore"/> with it, so the consume timeline only moves forward.
+    /// For the consumer: the newest frame the producer has finished in any of its surfaces, handed out once - 0 when
+    /// nothing is new since the last call, whoever made it.
     /// </summary>
-    public ulong LatchNewFrame()
+    public ulong LatchNewFrame() => LatchNewest(out _);
+
+    private ulong LatchNewest(out SharedSurface source)
     {
-        var latest = ProduceValue;
-        if (latest <= _latched)
+        source = null;
+        var newest = 0ul;
+        for (var i = 0; i < BufferCount; i++)
         {
+            var surface = SurfaceAt(i);
+            var produced = surface.ProduceValue;
+            if (produced > newest)
+            {
+                newest = produced;
+                source = surface;
+            }
+        }
+
+        if (newest <= _latched)
+        {
+            source = null;
             return 0;
         }
 
-        _latched = latest;
-        return latest;
+        _latched = newest;
+        return newest;
+    }
+
+    /// <summary>For the producer: waits until the consumer has finished with frame <paramref name="value"/>, up to
+    /// <paramref name="timeout"/>. False when it ran out first.</summary>
+    public bool WaitConsumed(ulong value, TimeSpan timeout)
+    {
+        if (_consumeSemaphore == null || value == 0) return true;
+
+        var wait = new SemaphoreWaitInfo
+        {
+            SemaphoreCount = 1,
+            PSemaphores = new[] { _consumeSemaphore },
+            PValues = new[] { value }
+        };
+        return GraphicsDevice.LogicalDevice.WaitSemaphores(wait, (ulong)timeout.Ticks * 100) == Result.Success;
     }
 
     /// <summary>The consumer's copy of the last frame latched by <see cref="LatchCopy"/>, sampled in place of the surface
@@ -67,14 +105,18 @@ public sealed unsafe class SharedSurface : Texture
     public ITexture LatchedCopy => _copy;
 
     /// <summary>
-    /// For the consumer, outside a render pass: when the producer has finished a frame newer than <see cref="LatchedCopy"/>,
-    /// records a copy of it into that texture on <paramref name="device"/>'s current command buffer. The copy waits for the
-    /// frame on the produce timeline and signals the consume timeline, so the producer writes again only after it. One
-    /// import per surface: a second one would copy a frame the first released to the producer.
+    /// For the consumer, outside a render pass: when the producer has finished a frame newer than <see cref="LatchedCopy"/>
+    /// in any of its surfaces, copies the newest into that texture on <paramref name="device"/>, submitted on its own ahead
+    /// of the frame. The copy waits for the frame on its surface's produce timeline; once it is done every surface is given
+    /// back on its consume timeline - the one copied, and the others holding older frames nobody will read - so the
+    /// producer writes again right after it, not once the consumer's whole frame has run. One import per surface: a second
+    /// one would copy a frame the first released to the producer. Each call asks for the next frame through
+    /// <see cref="SharedSurfaceDescriptor.Demand"/>.
     /// </summary>
     public void LatchCopy(IGraphicsDevice device)
     {
-        var frame = LatchNewFrame();
+        Descriptor?.Demand.Raise();
+        var frame = LatchNewest(out var source);
         if (frame == 0)
         {
             return;
@@ -84,15 +126,27 @@ public sealed unsafe class SharedSurface : Texture
         description.Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit;
         _copy ??= New(device, description, "SharedSurface(copy)");
 
-        RecordCopy(device, _copy);
-        device.AddWaitSemaphore(_produceSemaphore, PipelineStageFlagBits2.AllTransferBit, frame);
-        device.AddSignalSemaphore(_consumeSemaphore, frame);
+        var released = new System.Collections.Generic.List<(Semaphore, ulong)>(BufferCount);
+        for (var i = 0; i < BufferCount; i++)
+        {
+            var surface = SurfaceAt(i);
+            var produced = ReferenceEquals(surface, source) ? frame : surface.ProduceValue;
+            var through = produced <= frame ? produced : 0;
+            if (through > surface._consumeSignaled && surface._consumeSemaphore != null)
+            {
+                surface._consumeSignaled = through;
+                released.Add((surface._consumeSemaphore, through));
+            }
+        }
+
+        var copy = _copy;
+        device.SubmitAside(commandBuffer => source.RecordCopy(device, commandBuffer, copy),
+            source._produceSemaphore, PipelineStageFlagBits2.AllTransferBit, frame, released);
     }
 
     // Both images rest in ShaderReadOnly: the producer leaves the surface there, and the copy is only ever sampled.
-    private void RecordCopy(IGraphicsDevice device, ITexture copy)
+    private void RecordCopy(IGraphicsDevice device, CommandBuffer commandBuffer, ITexture copy)
     {
-        var commandBuffer = device.CurrentCommandBuffer;
         device.InsertImageMemoryBarrier(commandBuffer, this,
             AccessFlagBits2.None, AccessFlagBits2.TransferReadBit,
             ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferSrcOptimal,
@@ -139,10 +193,32 @@ public sealed unsafe class SharedSurface : Texture
     /// <summary>
     /// Allocates an exportable surface: a dedicated image whose memory and semaphores can be shared with another
     /// process/API. The returned <see cref="Descriptor"/> carries the OS handles to hand off to the consumer.
-    /// <paramref name="handleType"/> defaults to the platform's opaque type (Win32 handle / POSIX fd).
+    /// <paramref name="handleType"/> defaults to the platform's opaque type (Win32 handle / POSIX fd). With
+    /// <paramref name="bufferCount"/> above one the producer rotates through that many surfaces, writing one while the
+    /// consumer copies another (see <see cref="SurfaceAt"/>); the descriptor carries the others in
+    /// <see cref="SharedSurfaceDescriptor.Others"/>.
     /// </summary>
     public static SharedSurface CreateExportable(IGraphicsDevice device, uint width, uint height, SurfaceFormat format,
-        SharedHandleType? handleType = null, string name = "SharedSurface(export)")
+        SharedHandleType? handleType = null, string name = "SharedSurface(export)", uint bufferCount = 1)
+    {
+        var surface = CreateExportableSingle(device, width, height, format, handleType, name);
+        if (bufferCount <= 1) return surface;
+
+        surface._others = new SharedSurface[bufferCount - 1];
+        var others = new SharedSurfaceDescriptor[bufferCount - 1];
+        for (var i = 0; i < others.Length; i++)
+        {
+            surface._others[i] = CreateExportableSingle(device, width, height, format, handleType, name);
+            others[i] = surface._others[i].Descriptor;
+        }
+
+        surface.Descriptor.Others = others;
+        surface.Descriptor.BufferCount = bufferCount;
+        return surface;
+    }
+
+    private static SharedSurface CreateExportableSingle(IGraphicsDevice device, uint width, uint height, SurfaceFormat format,
+        SharedHandleType? handleType, string name)
     {
         var resolvedType = handleType ?? DefaultHandleType;
         var memHandleType = ToMemoryHandleType(resolvedType);
@@ -190,6 +266,21 @@ public sealed unsafe class SharedSurface : Texture
     /// </summary>
     public static SharedSurface Import(IGraphicsDevice device, SharedSurfaceDescriptor descriptor,
         string name = "SharedSurface(import)")
+    {
+        var surface = ImportSingle(device, descriptor, name);
+        if (descriptor.Others is { Length: > 0 } others)
+        {
+            surface._others = new SharedSurface[others.Length];
+            for (var i = 0; i < others.Length; i++)
+            {
+                surface._others[i] = ImportSingle(device, others[i], name);
+            }
+        }
+
+        return surface;
+    }
+
+    private static SharedSurface ImportSingle(IGraphicsDevice device, SharedSurfaceDescriptor descriptor, string name)
     {
         var memHandleType = ToMemoryHandleType(descriptor.HandleType);
         var useFd = IsFdHandle(descriptor.HandleType);
@@ -400,6 +491,12 @@ public sealed unsafe class SharedSurface : Texture
 
     protected override void Dispose(bool disposeManaged)
     {
+        foreach (var other in _others)
+        {
+            other.Dispose();
+        }
+
+        _others = [];
         _copy?.Dispose();
         _copy = null;
         var logical = GraphicsDevice.LogicalDevice;

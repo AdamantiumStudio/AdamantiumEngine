@@ -123,6 +123,9 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
         // Shared per-frame pool: sub-allocates CB data (a per-draw chunk), without a separate buffer per Apply.
         var dynamicPool = CurrentBufferPool;
+        var device = (GraphicsDevice)graphicsDevice;
+        var hashing = device.IsHashing;
+        var swallowing = device.IsSwallowing;
 
         for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
         {
@@ -137,7 +140,14 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
                 ulong alignment = graphicsDevice.Adapter.AdapterProperties.Limits.MinUniformBufferOffsetAlignment;
                 uint pushOffset = parameterPushOffsets[link.Parameter];
-                *(ulong*)(pushDataBytes + pushOffset) = dynamicPool.Upload(link.ConstantBuffer, alignment);
+                if (hashing)
+                {
+                    var backing = link.ConstantBuffer.BackingBuffer;
+                    device.Hash(pushOffset);
+                    device.HashBytes(new ReadOnlySpan<byte>(backing.DataPointer.ToPointer(), (int)backing.Size));
+                }
+
+                *(ulong*)(pushDataBytes + pushOffset) = swallowing ? 0 : dynamicPool.Upload(link.ConstantBuffer, alignment);
             }
 
             // Write each bound resource's heap-slot index into push data; link.Parameter is already resolved, so there is
@@ -167,7 +177,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
             _pushDataInfo.Offset = 0;
             _pushDataInfo.Data = _pushRange;
 
-            graphicsDevice.CurrentCommandBuffer.PushDataEXT(_pushDataInfo);
+            device.PushData(_pushDataInfo);
         }
 
         appliesCounter++;
@@ -197,6 +207,18 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                 // stayed 0 - heap slot 0, whatever holds it, or a texture freed since, which loses the device. Buffers
                 // keep what they had: there is no buffer stand-in, and an image descriptor read as one is no better.
                 var isBuffer = kind == HeapResourceKind.Uav || link.IsStorageBuffer;
+                var wholeHeap = kind == HeapResourceKind.ShaderResource && !isBuffer && link.Parameter.ElementCount == 0;
+                if (wholeHeap)
+                {
+                    *(uint*)(push + basePushOffset) = 0;
+                    if (hashing)
+                    {
+                        device.Hash((ulong)basePushOffset << 32);
+                    }
+
+                    continue;
+                }
+
                 var declared = isBuffer ? resources.Length : Math.Max(resources.Length, (int)link.Parameter.ElementCount);
                 for (int resIdx = 0; resIdx < declared; resIdx++)
                 {
@@ -218,6 +240,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                             slot = kind == HeapResourceKind.Sampler ? heap.FallbackSamplerOffset : heap.FallbackTextureOffset;
                     }
                     *(uint*)(push + basePushOffset + (uint)(resIdx * 4)) = slot;
+                    if (hashing) device.Hash(((ulong)(basePushOffset + (uint)(resIdx * 4)) << 32) | slot);
                 }
             }
         }
@@ -250,7 +273,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
             _bindShaders[^1] = null;
         }
 
-        graphicsDevice.BindShaders(graphicsDevice.CurrentCommandBuffer, _bindStages, _bindShaders);
+        ((GraphicsDevice)graphicsDevice).BindShaders(_bindStages, _bindShaders);
     }
 
     /// <summary>
@@ -360,7 +383,8 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                     {
                         currentOffset = (currentOffset + 3) & ~3U;
                         parameterPushOffsets[param.Parameter] = currentOffset;
-                        currentOffset += param.Parameter.ElementCount * 4; 
+                        // An array of no length still takes the slot its base is pushed in.
+                        currentOffset += Math.Max(param.Parameter.ElementCount, 1) * 4;
                     }
                 }
             }

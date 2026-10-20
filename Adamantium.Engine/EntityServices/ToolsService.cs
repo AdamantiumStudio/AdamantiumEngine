@@ -53,7 +53,9 @@ public class ToolsService : EntityService
     /// <summary>What a click along <paramref name="ray"/> selects: the nearest part of the scene, or of what the editor shows over it.</summary>
     public PickHit PickEntity(in PickRay ray)
     {
-        var nearest = Picking.Pick(EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: true);
+        var nearest = EntityWorld.Satellites.TryGet<SceneIndex>(out var index)
+            ? Picking.PickMeshes(index, ray, withDisabled: true)
+            : Picking.Pick(EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: true);
         var processors = Processors;
         for (int i = 0; i < processors.Count; i++)
         {

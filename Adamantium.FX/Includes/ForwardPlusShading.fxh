@@ -34,12 +34,26 @@ float2 ClusterW;
 float4 ViewportRect;
 float3 Ambient;
 
-float4x4 world;
+// One drawn copy of a mesh: a draw takes InstanceBase + its instance index.
+struct MeshInstance
+{
+    float4x4 world;
+    // rgb: the surface color when it has no texture.
+    float4 albedo;
+    // x: the first matrix of its joints' palette in PalettesAddress, y: how many joints it has (a skinned copy only);
+    // z: its texture in meshTextures (a textured pass only).
+    uint4 slots;
+};
+
+uint64_t InstancesAddress;
+uint64_t PalettesAddress;
+uint InstanceBase;
+
 float4x4 view;
 float4x4 viewProjection;
-float3 albedo;
 sampler sampleType;
-Texture2D shaderTexture;
+// Every texture of the resource heap, by its slot there: the copies of one draw each name their own.
+Texture2D meshTextures[];
 
 struct MESH_VERTEX
 {
@@ -60,7 +74,14 @@ struct LIT_PIXEL
     float3 viewPosition : TEXCOORD0;
     float3 viewNormal : NORMAL;
     float2 uv : TEXCOORD1;
+    nointerpolation float3 albedo : COLOR0;
+    nointerpolation uint texture : TEXCOORD2;
 };
+
+float4 SurfaceOf(LIT_PIXEL input)
+{
+    return meshTextures[NonUniformResourceIndex(input.texture)].Sample(sampleType, input.uv);
+}
 
 uint ClusterAt(float2 pixel, float depth)
 {
@@ -118,27 +139,49 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
     return lit;
 }
 
-LIT_PIXEL Lit_VS(MESH_VERTEX input)
+MeshInstance InstanceOf(uint instanceId)
 {
+    return ((MeshInstance*)InstancesAddress)[InstanceBase + instanceId];
+}
+
+LIT_PIXEL Lit_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
+{
+    MeshInstance instance = InstanceOf(instanceId);
     LIT_PIXEL output;
-    float4 placed = mul(float4(input.position.xyz, 1.0f), world);
+    float4 placed = mul(float4(input.position.xyz, 1.0f), instance.world);
     output.position = mul(placed, viewProjection);
     output.viewPosition = mul(placed, view).xyz;
-    output.viewNormal = mul(mul(input.normal, (float3x3)world), (float3x3)view);
+    output.viewNormal = mul(mul(input.normal, (float3x3)instance.world), (float3x3)view);
     output.uv = input.uv0;
+    output.albedo = instance.albedo.rgb;
+    output.texture = instance.slots.z;
     return output;
 }
 
-#include "Skinning.fxh"
+#include "SkinnedVertex.fxh"
 
-LIT_PIXEL LitSkinned_VS(SKINNED_VERTEX input)
+// A joint of the copy's palette; one past its joints stays where it is, as an unfilled joint of a palette did.
+float4x4 JointOf(MeshInstance instance, uint at)
 {
-    float4x4 skin = SkinOf(input.jointIndices, input.jointWeights);
+    float4x4* palette = (float4x4*)PalettesAddress;
+    return at < instance.slots.y
+        ? palette[instance.slots.x + at]
+        : float4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+}
+
+LIT_PIXEL LitSkinned_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
+{
+    MeshInstance instance = InstanceOf(instanceId);
+    uint4 at = JointSlots(input.jointIndices);
+    float4x4 skin = BlendJoints(JointOf(instance, at.x), JointOf(instance, at.y), JointOf(instance, at.z),
+        JointOf(instance, at.w), input.jointWeights);
     LIT_PIXEL output;
-    float4 placed = mul(mul(float4(input.position.xyz, 1.0f), skin), world);
+    float4 placed = mul(mul(float4(input.position.xyz, 1.0f), skin), instance.world);
     output.position = mul(placed, viewProjection);
     output.viewPosition = mul(placed, view).xyz;
-    output.viewNormal = mul(mul(mul(input.normal, (float3x3)skin), (float3x3)world), (float3x3)view);
+    output.viewNormal = mul(mul(mul(input.normal, (float3x3)skin), (float3x3)instance.world), (float3x3)view);
     output.uv = input.uv0;
+    output.albedo = instance.albedo.rgb;
+    output.texture = instance.slots.z;
     return output;
 }

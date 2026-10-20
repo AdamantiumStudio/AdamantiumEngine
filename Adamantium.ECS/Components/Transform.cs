@@ -47,6 +47,16 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        /// <summary>Marks the world matrix kept for every camera as no longer computed, so a camera not looked through
+        /// when the entity moved computes it again once it is.</summary>
+        public void ForgetComputedMetadata()
+        {
+            foreach (var metadata in TransformData.Values)
+            {
+                metadata.Computed = false;
+            }
+        }
+
         public TransformMetaData GetMetadata(CameraBase camera)
         {
             TransformMetaData metaData;

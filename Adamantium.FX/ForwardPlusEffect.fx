@@ -53,12 +53,12 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
 
 float4 LitColored_PS(LIT_PIXEL input) : SV_TARGET
 {
-    return float4(Shade(albedo, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
+    return float4(Shade(input.albedo, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
 }
 
 float4 LitTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
-    float4 surface = shaderTexture.Sample(sampleType, input.uv);
+    float4 surface = SurfaceOf(input);
     return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), surface.a);
 }
 

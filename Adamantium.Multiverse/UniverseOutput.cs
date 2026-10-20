@@ -118,6 +118,13 @@ namespace Adamantium.Multiverse
         /// </summary>
         public InputWormhole Input { get; internal set; }
 
+        /// <summary>The universe this output shows; set when its platform takes the output in.</summary>
+        public IUniverse Universe { get; internal set; }
+
+        /// <summary>Whether the universe draws this output in the frame under way: every output while it draws
+        /// continuously, on demand only those invalidated since the last frame.</summary>
+        public bool IsDrawnThisFrame { get; internal set; } = true;
+
         public virtual void CopyOutput(IGraphicsDevice graphicsDevice)
         {
             if (Presenter == null)
@@ -128,6 +135,17 @@ namespace Adamantium.Multiverse
             graphicsDevice.BlitImage(GraphicsDevice.CurrentCommandBuffer,
                 GraphicsDevice.CurrentRenderTarget,
                 Presenter.GetCurrentImage());
+        }
+
+        /// <summary>
+        /// Waits, up to <paramref name="timeout"/>, until whatever shows this output has room for another frame, so a
+        /// universe on its own loop draws no more often than it is seen. Called before the frame, so the wait is no part of
+        /// its drawing. Gives whether it has: a frame drawn without room is dropped, and the output asks for another itself
+        /// once there is room. An output that presents by itself always has room.
+        /// </summary>
+        public virtual bool WaitUntilShown(TimeSpan timeout)
+        {
+            return true;
         }
 
         public void DisplayContent()
@@ -282,6 +300,13 @@ namespace Adamantium.Multiverse
             Input?.OnGestureInput(args);
         }
 
+        /// <summary>Asks the universe for a frame of this output alone - its input, its size, the pointer moving over it.
+        /// From any thread; matters when the universe draws on demand.</summary>
+        public void Invalidate()
+        {
+            Universe?.Invalidate(this);
+        }
+
         protected void UpdateViewportAndScissor(uint width, uint height)
         {
             Viewport.Width = width;
@@ -316,6 +341,7 @@ namespace Adamantium.Multiverse
 
             ResizeRequested = true;
             PublishChange(ChangeReason.Resize);
+            Invalidate();
         }
 
         // Before the presenter exists there is nothing to update: it is created from the description as it is then.

@@ -1,83 +1,43 @@
 using System;
 using Adamantium.Core;
-using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
-using Adamantium.Graphics.Core.Extensions;
-using Adamantium.Graphics.Core.Models;
-using Adamantium.Graphics.Core.Vertices;
 using Adamantium.Vulkan.Core;
-using Buffer = Adamantium.Graphics.Buffer;
 
 namespace Adamantium.Engine.Rendering;
 
-// GPU vertex/index buffers for one mesh, built for a specific vertex format. Owned by the render layer (the geometry
-// cache), NOT by an ECS component - a component is bindable/cloneable per-entity editor data and must not hold GPU
-// resources. Rebuilt only when the source mesh's version moved past the one uploaded - each copy for itself, as one mesh
-// may be drawn through several caches (the scene and the editor overlay).
+/// <summary>
+/// GPU vertex and index buffers of one geometry in one vertex format. Every mesh with the same points, attributes and
+/// indices draws with the same one - the copies of a model loaded twice or duplicated alike - so they can be drawn by one
+/// instanced call. Owned by a <see cref="MeshGeometryCache"/>, never by an ECS component, and never changed: a mesh that
+/// changes moves to another.
+/// </summary>
 public sealed class RenderGeometry : DisposableObject
 {
-    private readonly Mesh _mesh;
-    private IBuffer _vertexBuffer;
-    private IBuffer _indexBuffer;
-    private int _uploadedVersion;
+    private readonly IBuffer _vertexBuffer;
+    private readonly IBuffer _indexBuffer;
 
-    public RenderGeometry(Mesh mesh, Type vertexType)
+    internal RenderGeometry(IBuffer vertexBuffer, IBuffer indexBuffer, Type vertexType, PrimitiveTopology topology)
     {
-        _mesh = mesh;
+        _vertexBuffer = vertexBuffer == null ? null : ToDispose(vertexBuffer);
+        _indexBuffer = indexBuffer == null ? null : ToDispose(indexBuffer);
         VertexType = vertexType;
+        Topology = topology;
     }
 
     public Type VertexType { get; }
     public IBuffer VertexBuffer => _vertexBuffer;
     public IBuffer IndexBuffer => _indexBuffer;
-    public PrimitiveTopology Topology { get; private set; }
-    public bool HasIndices { get; private set; }
+    public PrimitiveTopology Topology { get; }
+    public bool HasIndices => _indexBuffer != null;
 
-    // (Re)builds the buffers when they don't exist yet or the mesh changed; a no-op on an unchanged mesh (the common
-    // per-frame case) - which is what keeps the re-upload off the hot path.
-    public void EnsureUpToDate(IGraphicsDevice device)
-    {
-        var version = _mesh.Version;
-        if (version == _uploadedVersion && (_vertexBuffer != null || !_mesh.HasPoints)) return;
-
-        // New buffers each time, the old ones let go only once no frame in flight still draws with them: a buffer the
-        // GPU may yet read is neither written nor destroyed.
-        Retire(device, ref _vertexBuffer);
-        Retire(device, ref _indexBuffer);
-        HasIndices = false;
-        _uploadedVersion = version;
-        if (!_mesh.HasPoints) return;
-
-        if (VertexType == typeof(SkinnedMeshVertex))
-            _vertexBuffer = ToDispose(Buffer.Vertex.New(device, _mesh.ToSkinnedMeshVertices(), BufferMemoryUsage.GpuOnly));
-        else
-            _vertexBuffer = ToDispose(Buffer.Vertex.New(device, _mesh.ToMeshVertices(), BufferMemoryUsage.GpuOnly));
-
-        HasIndices = _mesh.HasIndices;
-        if (HasIndices)
-        {
-            _indexBuffer = ToDispose(Buffer.Index.New(device, _mesh.Indices, BufferMemoryUsage.GpuOnly));
-        }
-
-        Topology = _mesh.MeshTopology;
-    }
-
-    private void Retire(IGraphicsDevice device, ref IBuffer buffer)
-    {
-        if (buffer == null) return;
-
-        RemoveToDispose(buffer);
-        device.AddToDeferDisposeQueue(buffer);
-        buffer = null;
-    }
-
-    // Applies the per-object render state, sets the vertex input, and issues the draw. The caller applies the effect
-    // pass first. The indexed path is a single DrawIndexed (it binds VB+IB itself) - no separate SetVertexBuffer/
-    // SetIndexBuffer pre-bind, which is what collapses the old double bind (D2). The non-indexed path keeps its one
-    // SetVertexBuffer + Draw.
+    /// <summary>Applies the per-object render state, sets the vertex input, and issues the draw of
+    /// <paramref name="instanceCount"/> copies. The caller applies the effect pass first.</summary>
     public void Draw(IGraphicsDevice device, in RenderState state, uint instanceCount = 1)
     {
-        if (_vertexBuffer == null || _vertexBuffer.IsDisposed || instanceCount == 0) return;
+        if (_vertexBuffer == null || _vertexBuffer.IsDisposed || instanceCount == 0)
+        {
+            return;
+        }
 
         device.VertexType = VertexType;
         device.PrimitiveTopology = state.TopologyOverride ?? Topology;

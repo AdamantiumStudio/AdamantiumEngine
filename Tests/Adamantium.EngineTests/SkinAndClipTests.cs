@@ -420,6 +420,27 @@ public class SkinAndClipTests
         });
     }
 
+    // The loose box an index keeps, from where the joints stand alone, holds every point of the pose in the world - with
+    // the joints moved, turned and stretched unevenly, and a point bent by none.
+    [Test]
+    public void TheWorldBox_HoldsThePose_HoweverTheJointsStand()
+    {
+        Import(SkinnedScene(), out var leg, out var hip, out var knee);
+        var mesh = leg.GetComponent<MeshData>().Mesh;
+        mesh.SetJointWeights([Vector4F.UnitX, new Vector4F(0.3f, 0.7f, 0, 0), Vector4F.Zero]);
+        hip.Transform.Position = new Vector3(2, -1, 5);
+        hip.Transform.BaseScale = new Vector3F(1, 3, 0.5f);
+        knee.Transform.Rotation = QuaternionF.RotationYawPitchRoll(0.7f, -0.4f, 1.1f);
+        knee.Transform.Position += new Vector3(1, 2, 0);
+        var skin = leg.GetComponent<Skin>();
+
+        var world = leg.Transform.GetWorldMatrixF();
+        var posed = skin.PosePoints(mesh).Select(p => Vector3F.TransformCoordinate(p, world)).ToList();
+        var box = skin.WorldBounds(mesh, null);
+
+        Assert.That(posed, Has.All.Matches<Vector3F>(p => box.Contains(p) != ContainmentType.Disjoint));
+    }
+
     // A pose that holds is looked through with a tree fitted to it; when the joints move again, the tree follows.
     [Test]
     public void ARay_FindsTheSkinWhereItStands_AsItStandsStill_AndAsItMoves()

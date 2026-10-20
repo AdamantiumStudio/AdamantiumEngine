@@ -141,21 +141,7 @@ namespace Adamantium.ECS
             return childrenComponents.ToArray();
         }
 
-        public bool Contains<T>() where T : class, IComponent
-        {
-            lock (SyncRoot)
-            {
-                var items = ItemsSpan;
-                for (int i = 0; i < items.Length; i++)
-                {
-                    if (items[i] is T)
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            }
-        }
+        public bool Contains<T>() where T : class, IComponent => Get<T>() != null;
 
         public bool Contains(Type componentType)
         {

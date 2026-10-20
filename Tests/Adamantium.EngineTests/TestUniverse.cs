@@ -73,6 +73,35 @@ public class TestUniverse : IUniverse
     {
     }
 
+    public void StartHostedLoop()
+    {
+    }
+
+    public bool RunsOwnLoop => false;
+
+    public void SuspendHostedLoop()
+    {
+    }
+
+    public void ResumeHostedLoop()
+    {
+    }
+
+    public FrameMode FrameMode { get; set; }
+
+    public void Invalidate()
+    {
+    }
+
+    public void Invalidate(UniverseOutput output)
+    {
+    }
+
+    public void Post(Action action)
+    {
+        action();
+    }
+
     public void Run()
     {
     }

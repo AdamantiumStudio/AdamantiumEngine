@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
@@ -12,14 +13,25 @@ namespace Adamantium.ECS.Components.Extensions;
 /// </summary>
 public static class Picking
 {
+    private static readonly Comparer<TriangleCandidate> NearestEntryFirst =
+        Comparer<TriangleCandidate>.Create((a, b) => a.Entry.CompareTo(b.Entry));
+
     /// <param name="aperture">How close a line has to pass, in pixels.</param>
     /// <param name="withDisabled">Whether a disabled entity and what is under it are picked too.</param>
     public static PickHit Pick(this Entity root, in PickRay ray, PickMode mode, float aperture = 0, bool withDisabled = false)
     {
         Validate(mode);
         var nearest = default(PickHit);
-        PickTree(root, in ray, mode, aperture, withDisabled, ref nearest);
-        return nearest;
+        var candidates = new Candidates();
+        try
+        {
+            PickTree(root, in ray, mode, aperture, withDisabled, ref nearest, ref candidates);
+            return PickTriangles(candidates.AsSpan(), in ray, nearest);
+        }
+        finally
+        {
+            candidates.Return();
+        }
     }
 
     /// <param name="aperture">How close a line has to pass, in pixels.</param>
@@ -28,12 +40,74 @@ public static class Picking
     {
         Validate(mode);
         var nearest = default(PickHit);
-        for (int i = 0; i < roots.Count; i++)
+        var candidates = new Candidates();
+        try
         {
-            PickTree(roots[i], in ray, mode, aperture, withDisabled, ref nearest);
+            for (int i = 0; i < roots.Count; i++)
+            {
+                PickTree(roots[i], in ray, mode, aperture, withDisabled, ref nearest, ref candidates);
+            }
+
+            return PickTriangles(candidates.AsSpan(), in ray, nearest);
+        }
+        finally
+        {
+            candidates.Return();
+        }
+    }
+
+    /// <summary>
+    /// The nearest triangle of a mesh <paramref name="ray"/> hits, asking <paramref name="index"/> for the meshes whose
+    /// boxes it passes through instead of walking every entity. Skips what <see cref="Pick(Entity, in PickRay, PickMode,
+    /// float, bool)"/> skips: a hidden entity or one under a hidden one, a disabled one unless asked for, one left out of
+    /// collision detection.
+    /// </summary>
+    public static PickHit PickMeshes(SceneIndex index, in PickRay ray, bool withDisabled = false)
+    {
+        var candidates = new Candidates();
+        try
+        {
+            var origin = ray.Ray.Position + (Vector3F)(ray.Camera?.WorldPosition ?? Vector3.Zero);
+            foreach (var (entity, _) in index.RayCast(new Ray(origin, ray.Ray.Direction)))
+            {
+                if (!Pickable(entity, withDisabled))
+                {
+                    continue;
+                }
+
+                var transform = entity.Transform.GetMetadata(ray.Camera);
+                var mesh = entity.GetComponent<MeshData>() is { IsEnabled: true } data ? data.Mesh : null;
+                if (transform.Enabled && mesh is { HasPoints: true } && IsTriangles(mesh.MeshTopology))
+                {
+                    var world = transform.WorldMatrixF;
+                    AddTriangles(entity, mesh, Skin.DrawnOn(entity), in world, in ray, ref candidates);
+                }
+            }
+
+            return PickTriangles(candidates.AsSpan(), in ray, default);
+        }
+        finally
+        {
+            candidates.Return();
+        }
+    }
+
+    private static bool Pickable(Entity entity, bool withDisabled)
+    {
+        if (entity.IgnoreInCollisionDetection)
+        {
+            return false;
         }
 
-        return nearest;
+        for (var at = entity; at != null; at = at.Owner)
+        {
+            if (!at.Visible || (!at.IsEnabled && !withDisabled))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -67,7 +141,8 @@ public static class Picking
         }
     }
 
-    private static void PickTree(Entity entity, in PickRay ray, PickMode mode, float aperture, bool withDisabled, ref PickHit nearest)
+    private static void PickTree(Entity entity, in PickRay ray, PickMode mode, float aperture, bool withDisabled,
+        ref PickHit nearest, ref Candidates candidates)
     {
         if (!entity.Visible || (!entity.IsEnabled && !withDisabled))
         {
@@ -76,17 +151,20 @@ public static class Picking
 
         if (!entity.IgnoreInCollisionDetection)
         {
-            PickEntity(entity, in ray, mode, aperture, ref nearest);
+            PickEntity(entity, in ray, mode, aperture, ref nearest, ref candidates);
         }
 
-        var children = entity.Dependencies;
-        for (int i = 0; i < children.Count; i++)
+        foreach (var child in entity.Dependencies.AsSpan())
         {
-            PickTree(children[i], in ray, mode, aperture, withDisabled, ref nearest);
+            if (child != null)
+            {
+                PickTree(child, in ray, mode, aperture, withDisabled, ref nearest, ref candidates);
+            }
         }
     }
 
-    private static void PickEntity(Entity entity, in PickRay ray, PickMode mode, float aperture, ref PickHit nearest)
+    private static void PickEntity(Entity entity, in PickRay ray, PickMode mode, float aperture, ref PickHit nearest,
+        ref Candidates candidates)
     {
         var transform = entity.Transform.GetMetadata(ray.Camera);
         if (!transform.Enabled)
@@ -113,7 +191,7 @@ public static class Picking
 
         if ((mode & PickMode.Triangles) != 0 && IsTriangles(mesh.MeshTopology))
         {
-            PickTriangles(entity, mesh, Skin.DrawnOn(entity), in world, ray.Ray, ref nearest);
+            AddTriangles(entity, mesh, Skin.DrawnOn(entity), in world, in ray, ref candidates);
         }
 
         if ((mode & PickMode.Lines) != 0 && IsLines(mesh.MeshTopology))
@@ -132,25 +210,81 @@ public static class Picking
         return topology == PrimitiveType.LineList || topology == PrimitiveType.LineStrip;
     }
 
-    private static void PickTriangles(Entity entity, Mesh mesh, Skin skin, in Matrix4x4F world, in Ray ray, ref PickHit nearest)
+    private static void AddTriangles(Entity entity, Mesh mesh, Skin skin, in Matrix4x4F world, in PickRay pick,
+        ref Candidates candidates)
     {
+        var ray = pick.Ray;
         if (!ToLocal(in ray, in world, out var local))
         {
             return;
         }
 
-        var bounds = skin != null ? skin.PosedBounds(mesh) : (BoundingBox)mesh.Bounds;
-        if (!Collision.RayIntersectsBox(ref local, ref bounds, out float _))
+        var bounds = skin != null ? skin.PosedBounds(mesh, pick.Camera) : (BoundingBox)mesh.Bounds;
+        if (Collision.RayIntersectsBox(ref local, ref bounds, out float entry))
         {
-            return;
+            candidates.Add(new TriangleCandidate(entity, mesh, skin, local, entry));
+        }
+    }
+
+    private static PickHit PickTriangles(Span<TriangleCandidate> candidates, in PickRay pick, PickHit nearest)
+    {
+        var ray = pick.Ray;
+        candidates.Sort(NearestEntryFirst);
+        foreach (var (entity, mesh, skin, local, entry) in candidates)
+        {
+            if (nearest.IsHit && entry > nearest.Depth)
+            {
+                break;
+            }
+
+            var hit = skin != null
+                ? skin.Intersect(mesh, local, pick.Camera, out var distance)
+                : mesh.GetTriangleTree().Intersect(local, out distance);
+            if (hit)
+            {
+                nearest = PickHit.Nearest(nearest, new PickHit(entity, ray.Position + ray.Direction * distance, distance));
+            }
         }
 
-        var hit = skin != null
-            ? skin.Intersect(mesh, local, out var distance)
-            : mesh.GetTriangleTree().Intersect(local, out distance);
-        if (hit)
+        return nearest;
+    }
+
+    private readonly record struct TriangleCandidate(Entity Entity, Mesh Mesh, Skin Skin, Ray Local, float Entry);
+
+    private struct Candidates
+    {
+        private TriangleCandidate[] items;
+        private int count;
+
+        public void Add(in TriangleCandidate candidate)
         {
-            nearest = PickHit.Nearest(nearest, new PickHit(entity, ray.Position + ray.Direction * distance, distance));
+            if (items == null || count == items.Length)
+            {
+                var larger = ArrayPool<TriangleCandidate>.Shared.Rent(Math.Max(16, count * 2));
+                if (items != null)
+                {
+                    items.AsSpan(0, count).CopyTo(larger);
+                    ArrayPool<TriangleCandidate>.Shared.Return(items, clearArray: true);
+                }
+
+                items = larger;
+            }
+
+            items[count++] = candidate;
+        }
+
+        public readonly Span<TriangleCandidate> AsSpan() => items == null ? default : items.AsSpan(0, count);
+
+        public void Return()
+        {
+            if (items == null)
+            {
+                return;
+            }
+
+            ArrayPool<TriangleCandidate>.Shared.Return(items, clearArray: true);
+            items = null;
+            count = 0;
         }
     }
 

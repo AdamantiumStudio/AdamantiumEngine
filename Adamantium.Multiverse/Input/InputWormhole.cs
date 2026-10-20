@@ -47,6 +47,7 @@ public class InputWormhole
         {
             KeyboardInputs.Add(e);
         }
+        output.Invalidate();
     }
 
     internal void OnMouseInput(MouseInput e)
@@ -55,6 +56,7 @@ public class InputWormhole
         {
             MouseInputs.Add(e);
         }
+        output.Invalidate();
     }
 
     internal void OnGestureInput(GestureInput e)
@@ -63,6 +65,7 @@ public class InputWormhole
         {
             GestureInputs.Add(e);
         }
+        output.Invalidate();
     }
 
     internal void OnTextInput(string value)
@@ -71,6 +74,7 @@ public class InputWormhole
         {
             textInputs.Add(value);
         }
+        output.Invalidate();
     }
 
     internal List<KeyboardInput> KeyboardInputs { get; } = [];

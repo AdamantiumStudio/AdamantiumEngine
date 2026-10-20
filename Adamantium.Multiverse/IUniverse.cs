@@ -22,6 +22,37 @@ namespace Adamantium.Multiverse
         public void Submit();
 
         /// <summary>
+        /// Runs a universe hosted by another platform on a thread of its own, at the pace its outputs are shown, instead of
+        /// being driven by its host with <see cref="IAdamantiumApplication.RunOnce"/>.
+        /// </summary>
+        public void StartHostedLoop();
+
+        /// <summary>Whether this universe runs its own loop (see <see cref="StartHostedLoop"/>).</summary>
+        public bool RunsOwnLoop { get; }
+
+        /// <summary>Holds the own loop between two frames, once the frame in progress is done, until
+        /// <see cref="ResumeHostedLoop"/>.</summary>
+        public void SuspendHostedLoop();
+
+        /// <summary>Lets the loop held by <see cref="SuspendHostedLoop"/> go on.</summary>
+        public void ResumeHostedLoop();
+
+        /// <summary>How the own loop paces its frames; set from any thread.</summary>
+        public FrameMode FrameMode { get; set; }
+
+        /// <summary>Asks for a frame of every output: what the world shows has changed. From any thread; under
+        /// <see cref="Multiverse.FrameMode.OnDemand"/> the loop sleeps until something asks.</summary>
+        public void Invalidate();
+
+        /// <summary>Asks for a frame of <paramref name="output"/> alone: what changed is its own - its input, its size, its
+        /// camera. From any thread.</summary>
+        public void Invalidate(UniverseOutput output);
+
+        /// <summary>Runs <paramref name="action"/> on the universe's thread before its next frame, then draws every output:
+        /// how anything outside the loop changes the world, with no race against a frame. From any thread.</summary>
+        public void Post(Action action);
+
+        /// <summary>
         /// Stops the game while drawing goes on: no time passes for the services and no input reaches them. Set from
         /// any thread; the change takes effect with the next frame.
         /// </summary>

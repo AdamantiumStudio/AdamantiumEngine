@@ -239,7 +239,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     // Per render device: the transient per-frame constant-buffer arena (see CreateRenderDevice for why it's not shared).
     private EffectPass.DynamicBufferPool[] _dynamicBufferPools;
-    public EffectPass.DynamicBufferPool CurrentBufferPool => _dynamicBufferPools[CurrentFrame];
+    public EffectPass.DynamicBufferPool CurrentBufferPool => _recording?.Constants ?? _dynamicBufferPools[CurrentFrame];
 
     public uint MaxFramesInFlight { get; private set; }
 
@@ -408,6 +408,13 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             AspectMask = ImageAspectFlagBits.DepthBit,
             ClearValue = new ClearValue { DepthStencil = new ClearDepthStencilValue { Depth = 1.0f, Stencil = 0 } }
         };
+        if (_hashing)
+        {
+            Hash(0xC1EA);
+            HashScissor(rect);
+            if (_swallowing) return;
+        }
+
         var clearRect = new ClearRect { Rect = rect, BaseArrayLayer = 0, LayerCount = 1 };
         CurrentCommandBuffer.ClearAttachments(1, new[] { attachment }, 1, new[] { clearRect });
     }
@@ -460,7 +467,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         _submissionSync = new SyncObject(SyncGuid, true);
     }
 
-    public CommandBuffer CurrentCommandBuffer => commandBuffers[CurrentFrame]; 
+    public CommandBuffer CurrentCommandBuffer => _swallowing
+        ? throw new InvalidOperationException("Nothing may be sent to a command buffer while a fingerprint is taken.")
+        : _recording?.Buffer ?? commandBuffers[CurrentFrame];
 
     private void InitializeRenderDevice()
     {
@@ -541,6 +550,32 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public void BindShaders(CommandBuffer cmd, ShaderStageFlagBits[] stages, ShaderEXT[] shaders)
     {
         cmd.BindShadersEXT((uint)stages.Length, stages, shaders);
+    }
+
+    /// <summary>Binds a pass's stages on the buffer draws go to now - or, while a fingerprint is taken, only counts them
+    /// into it.</summary>
+    public unsafe void BindShaders(ShaderStageFlagBits[] stages, ShaderEXT[] shaders)
+    {
+        if (_hashing)
+        {
+            for (var i = 0; i < stages.Length; i++)
+            {
+                Hash((ulong)stages[i]);
+                HashHandle(shaders[i] == null ? null : shaders[i].NativePointer);
+            }
+
+            if (_swallowing) return;
+        }
+
+        BindShaders(CurrentCommandBuffer, stages, shaders);
+    }
+
+    /// <summary>Sends push data on the buffer draws go to now, unless a fingerprint is being taken.</summary>
+    public void PushData(PushDataInfoEXT info)
+    {
+        if (_swallowing) return;
+
+        CurrentCommandBuffer.PushDataEXT(info);
     }
 
     // Serializes shader creation for parallel callers such as the test runner; static because all render devices share
@@ -716,6 +751,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     {
         if (texture == null) return;
 
+        RefuseWhileIssuingAside(nameof(InsertImageMemoryBarrier));
         var range = new ImageSubresourceRange
         {
             AspectMask = texture.ImageAspect,
@@ -995,6 +1031,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         FrameTicket++;
         MainDevice.OnFrameStarted();
         MainDevice.ShaderHotReload.ApplyTo(this);
+        ObserveShaderReloads();
+        FreeRetiredRecordings();
 
         if (result != Result.Success && result != Result.Timeout)
         {
@@ -1066,7 +1104,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         {
             throw new Exception("failed to begin recording command buffer!");
         }
-        
+
+        StartGpuTimer(commandBuffer);
         TransitionImagesForRendering(commandBuffer, renderTargets);
         TransitionDepthBufferForRendering(commandBuffer, depthBuffer);
 
@@ -1088,6 +1127,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     {
         if (!EnableDynamicRendering) return;
 
+        RefuseWhileIssuingAside(nameof(SuspendRendering));
         CurrentCommandBuffer.EndRendering();
     }
 
@@ -1102,6 +1142,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public void BeginRendering(CommandBuffer commandBuffer, bool continueRendering = false, float depth = 1.0f, uint stencil = 0)
     {
+        RefuseWhileIssuingAside(nameof(BeginRendering));
         var clearColorValue = new ClearValue
         {
             Color = new ClearColorValue
@@ -1158,6 +1199,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             depthAttachmentInfo.ClearValue = clearDepthValue;
 
             var renderingInfo = new RenderingInfo();
+            if (SupportsRecordedCommands)
+            {
+                renderingInfo.Flags = RenderingFlagBits.ContentsInlineBitKhr | RenderingFlagBits.ContentsSecondaryCommandBuffersBit;
+            }
+
             renderingInfo.RenderArea = new Rect2D();
             renderingInfo.RenderArea.Extent = new Extent2D(){ Width = width, Height = height};
             renderingInfo.RenderArea.Offset = new Offset2D();
@@ -1206,6 +1252,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public void EndDraw()
     {
+        RefuseWhileIssuingAside(nameof(EndDraw));
+
         // Acquired here, after the work: the frame renders offscreen, and acquiring first blocked on the present engine.
         // Everything fallible runs before this, so an aborted frame leaks nothing.
         HasSwapchainImage = false;
@@ -1253,6 +1301,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public void InsertMemoryBarrier()
     {
+        RefuseWhileIssuingAside(nameof(InsertMemoryBarrier));
         var memoryBarrier = new MemoryBarrier2
         {
             SrcStageMask = PipelineStageFlagBits2.ColorAttachmentOutputBit,
@@ -1293,6 +1342,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             TransitionPresenterImageForPresent(commandBuffer, presenterForLayout.GetCurrentImage());
         }
 
+        StopGpuTimer(commandBuffer);
         var result = commandBuffer.EndCommandBuffer();
         // unsafe
         // {
@@ -1429,6 +1479,13 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         if (viewportsArray.Length != viewports.Length) viewportsArray = new Viewport[viewports.Length];
         viewports.CopyTo(viewportsArray);
 
+        if (_hashing)
+        {
+            Hash(0x5E7F);
+            HashViewportsAndScissors(viewportsArray, default);
+            if (_swallowing) return;
+        }
+
         CurrentCommandBuffer.SetViewport(0, (uint)viewports.Length, InTarget(viewportsArray));
     }
 
@@ -1443,6 +1500,13 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         if (scissorsArray.Length != scissors.Length) scissorsArray = new Rect2D[scissors.Length];
         scissors.CopyTo(scissorsArray);
+
+        if (_hashing)
+        {
+            Hash(0x5C15);
+            HashViewportsAndScissors(default, scissorsArray);
+            if (_swallowing) return;
+        }
 
         CurrentCommandBuffer.SetScissor(0, (uint)scissors.Length, InTarget(scissorsArray));
     }
@@ -1566,26 +1630,46 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public void SetVertexBuffer(IBuffer vertexBuffer)
     {
+        if (_hashing)
+        {
+            Hash(0xB0F1);
+            HashBuffer(vertexBuffer);
+            if (_swallowing) return;
+        }
+
         ulong offset = 0;
-        var commandBuffer = commandBuffers[CurrentFrame];
-        commandBuffer.BindVertexBuffers(0U, 1U, vertexBuffer.GetBuffer(), offset);
+        CurrentCommandBuffer.BindVertexBuffers(0U, 1U, vertexBuffer.GetBuffer(), offset);
     }
 
     public void SetVertexBuffers(params IBuffer[] vertexBuffers)
     {
         if (vertexBuffers == null || vertexBuffers.Length == 0) return;
 
+        if (_hashing)
+        {
+            Hash(0xB0F2);
+            foreach (var buffer in vertexBuffers) HashBuffer(buffer);
+            if (_swallowing) return;
+        }
+
         var offsets = new VkDeviceSize[vertexBuffers.Length];
-        var commandBuffer = commandBuffers[CurrentFrame];
         var buffers = vertexBuffers.Select(x=>x.GetBuffer()).ToArray();
-        commandBuffer.BindVertexBuffers(0, (uint)buffers.Length, buffers, offsets);
+        CurrentCommandBuffer.BindVertexBuffers(0, (uint)buffers.Length, buffers, offsets);
     }
 
     public void SetIndexBuffer(IBuffer indexBuffer)
     {
-        var commandBuffer = commandBuffers[CurrentFrame];
-        commandBuffer.BindIndexBuffer(indexBuffer.GetBuffer(), 0, IndexType.Uint32);
+        if (_hashing)
+        {
+            Hash(0xB0F3);
+            HashBuffer(indexBuffer);
+            if (_swallowing) return;
+        }
+
+        CurrentCommandBuffer.BindIndexBuffer(indexBuffer.GetBuffer(), 0, IndexType.Uint32);
     }
+
+    private unsafe void HashBuffer(IBuffer buffer) => HashHandle(buffer.GetBuffer().NativePointer);
 
     private void SetDrawingState(CommandBuffer commandBuffer)
     {
@@ -1704,7 +1788,21 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             throw new ArgumentNullException("Effect pass should be applied before executing draw");
         }
 
-        var commandBuffer = commandBuffers[CurrentFrame];
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD1);
+            Hash(vertexCount);
+            Hash(((ulong)instanceCount << 32) | firstVertex);
+            Hash(firstInstance);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
+        var commandBuffer = CurrentCommandBuffer;
         SetDrawingState(commandBuffer);
 
         commandBuffer.Draw((uint)vertexCount, instanceCount, firstVertex, firstInstance);
@@ -1714,8 +1812,22 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     // buffer (its capacity exceeds the live geometry). 0 means "the whole buffer" (its ElementCount), as before.
     public void DrawIndexed(IBuffer vertexBuffer, IBuffer indexBuffer, uint instanceCount = 1, uint indexCount = 0)
     {
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD2);
+            HashBuffer(vertexBuffer);
+            HashBuffer(indexBuffer);
+            Hash(((ulong)instanceCount << 32) | (indexCount > 0 ? indexCount : (uint)indexBuffer.ElementCount));
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
         ulong offset = 0;
-        var commandBuffer = commandBuffers[CurrentFrame];
+        var commandBuffer = CurrentCommandBuffer;
 
         SetDrawingState(commandBuffer);
 
@@ -1731,8 +1843,21 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     // twin of DrawIndexed; instancing (instanceCount) works identically, indices are not required.
     public void Draw(IBuffer vertexBuffer, uint vertexCount, uint instanceCount = 1)
     {
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD3);
+            HashBuffer(vertexBuffer);
+            Hash(((ulong)instanceCount << 32) | vertexCount);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
         ulong offset = 0;
-        var commandBuffer = commandBuffers[CurrentFrame];
+        var commandBuffer = CurrentCommandBuffer;
 
         // Bind the vertex buffer before SetDrawingState, which emits the dynamic vertex input (the SetVertexBuffer()+Draw()
         // order).
@@ -1752,7 +1877,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     /// be applied first, just as a draw needs an effect pass. Record this OUTSIDE a dynamic-rendering pass.</summary>
     public void Dispatch(uint groupCountX, uint groupCountY = 1, uint groupCountZ = 1)
     {
-        commandBuffers[CurrentFrame].Dispatch(groupCountX, groupCountY, groupCountZ);
+        RefuseWhileIssuingAside(nameof(Dispatch));
+        CurrentCommandBuffer.Dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     /// <summary>Indirect draw: vertexCount/instanceCount/firstVertex/firstInstance come from <paramref name="indirectBuffer"/>
@@ -1760,7 +1886,21 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     /// </summary>
     public void DrawIndirect(IBuffer vertexBuffer, IBuffer indirectBuffer, uint drawCount = 1, uint stride = 16)
     {
-        var commandBuffer = commandBuffers[CurrentFrame];
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD4);
+            HashBuffer(vertexBuffer);
+            HashBuffer(indirectBuffer);
+            Hash(((ulong)drawCount << 32) | stride);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
+        var commandBuffer = CurrentCommandBuffer;
         SetDrawingState(commandBuffer);
         commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), 0UL);
         commandBuffer.DrawIndirect(indirectBuffer.GetBuffer(), 0, drawCount, stride);
@@ -1791,7 +1931,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             PBufferMemoryBarriers = new[] { barrier },
             BufferMemoryBarrierCount = 1,
         };
-        commandBuffers[CurrentFrame].PipelineBarrier2(dependencyInfo);
+        RefuseWhileIssuingAside(nameof(BufferBarrier));
+        CurrentCommandBuffer.PipelineBarrier2(dependencyInfo);
     }
 
     public CommandBuffer BeginSingleTimeCommand()
@@ -1935,6 +2076,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
                 foreach (var fence in InFlightFences) LogicalDevice?.DestroyFence(fence);
 
             LogicalDevice?.FreeCommandBuffers(GraphicsCommandPool, (uint)commandBuffers.Length, commandBuffers);
+            FreeRetiredRecordings();
+            FreeAsideBuffers();
+            DestroyGpuTimestamps();
             LogicalDevice?.DestroyCommandPool(GraphicsCommandPool);
             // CreateCommandPool makes TWO pools for every device - graphics and transfer. The render path destroyed only
             // the first, so every render device left a transfer pool behind on the logical device.

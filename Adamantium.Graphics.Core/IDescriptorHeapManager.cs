@@ -25,6 +25,10 @@ public interface IDescriptorHeapManager : System.IDisposable
     /// texture A then B no longer overwrites a single per-parameter slot (the "last texture wins everywhere" bug).</summary>
     uint GetOrAllocateTextureOffset(ITexture texture, DescriptorType type);
 
+    /// <summary>Where <paramref name="texture"/> is in the resource heap seen as an array of textures: what a shader's
+    /// texture array of no length is indexed by. Takes the texture a slot if it has none yet.</summary>
+    uint TextureIndex(ITexture texture);
+
     /// <summary>As <see cref="GetOrAllocateTextureOffset"/>, but for samplers (their own stable slot per sampler).</summary>
     uint GetOrAllocateSamplerOffset(SamplerState samplerState);
 
