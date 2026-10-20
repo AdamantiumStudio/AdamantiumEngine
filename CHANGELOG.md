@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `Css`: CSS values as SVG glyphs and HTML styles write them - `Css.Declarations(style)`, a style's declarations
+  (`CssDeclaration`: name, value, `!important`) cut at semicolons outside quotes and brackets, and
+  `Css.TryParseColor`: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()`, `transparent` and the named colors.
+  SVG glyphs read their styles and colors through it.
+- `FontVariation.ParseList("wght=650, wdth=87.5, opsz=auto")`: axis values as markup and documents write them.
 - `TextComposition`: how the lines of a text are composed - hyphens and their limit, line breaking, optical margins,
   word and letter spacing, glyph scaling, justification alternates, kashidas, CJK spacing trim and hanging punctuation,
   where a justified last line and a line of one word stand - as one value compared by value, which refuses a negative
@@ -739,6 +744,8 @@ All packages share one version.
 
 ### Fixed
 
+- An SVG glyph's color of percents is rounded as browsers round it - `rgb(50%, 0%, 0%)` is 128, not 127 - and its
+  named colors take CSS's "grey" spellings, `rebeccapurple` and `transparent` in any case.
 - A drop cap selected is covered across all the lines it spans, and the caret before or after it is as tall as it
   (`TextLayout.GetRangeRects`, `GetCaretRect`), also for a text shorter than the cap; both stood as high as its first
   line only. Its background covers it across its lines too, and no underline, strikethrough or squiggle is drawn
