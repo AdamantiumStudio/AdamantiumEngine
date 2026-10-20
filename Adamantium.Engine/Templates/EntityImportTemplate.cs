@@ -149,16 +149,16 @@ public class EntityImportTemplate : IEntityTemplate
             {
                 if (node == null || !drawnOf.TryGetValue(node, out var drawnEntities)) continue;
 
+                var skeleton = new Skeleton();
+                foreach (var joint in skinData.JointNames)
+                {
+                    skeleton.Joints.Add(nodeEntities.GetValueOrDefault(joint));
+                }
+
+                skeleton.InverseBindMatrices.AddRange(skinData.JointMatrices);
                 foreach (var drawnEntity in drawnEntities)
                 {
-                    var skin = new Skin();
-                    foreach (var joint in skinData.JointNames)
-                    {
-                        skin.Joints.Add(nodeEntities.GetValueOrDefault(joint));
-                    }
-
-                    skin.InverseBindMatrices.AddRange(skinData.JointMatrices);
-                    drawnEntity.AddComponent(skin);
+                    drawnEntity.AddComponent(new Skin { Skeleton = skeleton });
                 }
             }
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 
 namespace Adamantium.Core.Collections
 {
@@ -334,9 +335,14 @@ namespace Adamantium.Core.Collections
         /// <filterpriority>2</filterpriority>
         public int Count => currentIndex;
 
-        /// <summary>The live contents as a span, so a caller that only READS them does not have to copy them out with
-        /// ToArray() first. It is a view over the backing array: do not add, remove or clear while holding it.</summary>
-        public ReadOnlySpan<T> AsSpan() => new(items, 0, currentIndex);
+        /// <summary>The live contents as a span over the backing array, read without the lock. While another thread
+        /// changes the collection, an item may be seen twice or missed and a slot may read default. Do not change the
+        /// collection while holding it.</summary>
+        public ReadOnlySpan<T> AsSpan()
+        {
+            var array = Volatile.Read(ref items);
+            return new ReadOnlySpan<T>(array, 0, Math.Min(Volatile.Read(ref currentIndex), array.Length));
+        }
 
         /// <summary>
         /// Gets an object that can be used to synchronize access to the <see cref="T:System.Collections.ICollection"/>.
@@ -490,7 +496,7 @@ namespace Adamantium.Core.Collections
                 Array.Copy(items, index, items, index + 1, currentIndex - index);
             }
             items[index] = item;
-            currentIndex++;
+            Volatile.Write(ref currentIndex, currentIndex + 1);
         }
 
         private void RemoveInternal(int index)

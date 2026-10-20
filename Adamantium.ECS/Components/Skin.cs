@@ -1,16 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
 namespace Adamantium.ECS.Components;
 
 /// <summary>
-/// What a skinned mesh bends with: entities standing for its joints - nodes of the model, posed by its animation or
-/// by hand - and the inverse bind matrix of each, in the order a vertex's joint indices count them.
+/// What a skinned mesh bends with: its <see cref="Skeleton"/> - entities standing for its joints, nodes of the model
+/// posed by its animation or by hand, and the inverse bind matrix of each - shared by the parts of a mesh that bend
+/// with the same joints.
 /// </summary>
 public class Skin : Component
 {
+    private static readonly ConditionalWeakTable<IReadOnlyDictionary<Entity, Entity>, Dictionary<Skeleton, Skeleton>>
+        ClonedSkeletons = new();
+
     private readonly Vector3F[] boxCorners = new Vector3F[8];
     private Matrix4x4F[] pose;
     private Matrix4x4F[] posedBy;
@@ -22,11 +27,15 @@ public class Skin : Component
     private int treeVersion;
     private bool treeFitted;
 
-    /// <summary>The joints, as a vertex's joint indices count them.</summary>
-    public List<Entity> Joints { get; } = [];
+    /// <summary>The joints and their inverse bind matrices; the same one for every part of a mesh bending with them.</summary>
+    [DoNotClone]
+    public Skeleton Skeleton { get; set; } = new();
 
-    /// <summary>For each joint, what takes the mesh from its own space to the joint's at the pose it was bound in.</summary>
-    public List<Matrix4x4F> InverseBindMatrices { get; } = [];
+    /// <summary>The joints of the <see cref="Skeleton"/>, as a vertex's joint indices count them.</summary>
+    public List<Entity> Joints => Skeleton.Joints;
+
+    /// <summary>The inverse bind matrices of the <see cref="Skeleton"/>'s joints.</summary>
+    public List<Matrix4x4F> InverseBindMatrices => Skeleton.InverseBindMatrices;
 
     /// <summary>The skin <paramref name="entity"/>'s mesh is drawn with; null when it has none or is drawn unbent.</summary>
     public static Skin DrawnOn(Entity entity)
@@ -40,9 +49,14 @@ public class Skin : Component
     /// always, puts each vertex where its joints carry it. Gives how many it filled; a joint lost is left where it was
     /// bound.
     /// </summary>
-    public int FillPalette(Matrix4x4F[] palette)
+    public int FillPalette(Matrix4x4F[] palette) => FillPalette(palette, null);
+
+    /// <summary>As <see cref="FillPalette(Matrix4x4F[])"/>, from the world matrices the transforms were worked out with
+    /// for <paramref name="camera"/> this frame: what a draw for that camera takes, for each of the meshes sharing the
+    /// joints without composing every joint's parents again.</summary>
+    public int FillPalette(Matrix4x4F[] palette, CameraBase camera)
     {
-        var mesh = Owner.Transform.GetWorldMatrixF();
+        var mesh = Owner.Transform.GetWorldMatrixF(camera);
         Matrix4x4F.Invert(ref mesh, out var toMesh);
         var count = Math.Min(Joints.Count, palette.Length);
         for (int i = 0; i < count; i++)
@@ -51,28 +65,28 @@ public class Skin : Component
             var inverseBind = i < InverseBindMatrices.Count ? InverseBindMatrices[i] : Matrix4x4F.Identity;
             palette[i] = joint == null
                 ? Matrix4x4F.Identity
-                : inverseBind * joint.Transform.GetWorldMatrixF() * toMesh;
+                : inverseBind * joint.Transform.GetWorldMatrixF(camera) * toMesh;
         }
 
         return count;
     }
 
-    public override void CloneValues(IComponent clone)
-    {
-        base.CloneValues(clone);
-        var skin = (Skin)clone;
-        skin.InverseBindMatrices.Clear();
-        skin.InverseBindMatrices.AddRange(InverseBindMatrices);
-    }
-
     public override void CloneReferences(IComponent clone, IReadOnlyDictionary<Entity, Entity> copies)
     {
-        var skin = (Skin)clone;
-        skin.Joints.Clear();
-        foreach (var joint in Joints)
+        var cloned = ClonedSkeletons.GetValue(copies, _ => new Dictionary<Skeleton, Skeleton>());
+        if (!cloned.TryGetValue(Skeleton, out var skeleton))
         {
-            skin.Joints.Add(CopyOf(joint, copies));
+            skeleton = new Skeleton();
+            skeleton.InverseBindMatrices.AddRange(InverseBindMatrices);
+            foreach (var joint in Joints)
+            {
+                skeleton.Joints.Add(CopyOf(joint, copies));
+            }
+
+            cloned[Skeleton] = skeleton;
         }
+
+        ((Skin)clone).Skeleton = skeleton;
     }
 
     /// <summary>

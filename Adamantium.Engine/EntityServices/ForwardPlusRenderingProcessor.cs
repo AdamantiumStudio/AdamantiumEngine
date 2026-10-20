@@ -41,7 +41,10 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private ForwardPlusEffect effect;
     private ForwardPlusWireEffect wireEffect;
     private readonly Stack<(Entity Entity, EditorDisplay Display)> walk = new();
-    private readonly Matrix4x4F[] palette = new Matrix4x4F[MaxJoints];
+    private readonly Matrix4x4F[] palette = CreatePalette();
+    private int paletteFilled;
+    private Skeleton paletteSkeleton;
+    private Matrix4x4F paletteMesh;
     private BasicEffect basicEffect;
     private MeshGeometryCache geometryCache;
     private bool prepared;
@@ -174,6 +177,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return;
         }
 
+        paletteSkeleton = null;
         effect.View.SetValue(ActiveCamera.ViewMatrix);
         effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         wireEffect?.View.SetValue(ActiveCamera.ViewMatrix);
@@ -261,9 +265,9 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
                 continue;
             }
 
-            foreach (var child in entity.Dependencies)
+            foreach (var child in entity.Dependencies.AsSpan())
             {
-                walk.Push((child, display));
+                if (child != null) walk.Push((child, display));
             }
         }
     }
@@ -365,9 +369,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var material = entity.GetComponent<Material>();
         if (meshData.RenderMode == MeshRenderMode.Skinned)
         {
-            FillPalette(entity.GetComponent<Skin>());
+            if (FillPalette(entity.GetComponent<Skin>()))
+            {
+                effect.Joints.SetValue(palette);
+            }
+
             effect.World.SetValue(transformation.WorldMatrixF);
-            effect.Joints.SetValue(palette);
             if (material?.Texture != null)
             {
                 effect.SampleType.SetResource(SamplerStates.LinearRepeat);
@@ -433,13 +440,31 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         basicEffect.BasicColoredPass.UnApply();
     }
 
-    private void FillPalette(Skin skin)
+    private static Matrix4x4F[] CreatePalette()
     {
-        var filled = skin?.FillPalette(palette) ?? 0;
-        for (int i = filled; i < palette.Length; i++)
+        var joints = new Matrix4x4F[MaxJoints];
+        Array.Fill(joints, Matrix4x4F.Identity);
+        return joints;
+    }
+
+    private bool FillPalette(Skin skin)
+    {
+        var mesh = skin?.Owner.Transform.GetWorldMatrixF(ActiveCamera) ?? Matrix4x4F.Identity;
+        if (skin != null && ReferenceEquals(skin.Skeleton, paletteSkeleton) && mesh == paletteMesh)
+        {
+            return false;
+        }
+
+        var filled = skin?.FillPalette(palette, ActiveCamera) ?? 0;
+        for (int i = filled; i < paletteFilled; i++)
         {
             palette[i] = Matrix4x4F.Identity;
         }
+
+        paletteFilled = filled;
+        paletteSkeleton = skin?.Skeleton;
+        paletteMesh = mesh;
+        return true;
     }
 
     private Vector3F AlbedoOf(Material material)

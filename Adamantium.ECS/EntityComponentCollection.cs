@@ -16,20 +16,20 @@ namespace Adamantium.ECS
             this.entity = entity;
         }
 
+        /// <summary>The first component of the type or a derived one, or null. Read without the lock: every processor asks
+        /// this of every entity each frame, and the components change rarely.</summary>
         public T Get<T>() where T : class, IComponent
         {
-            lock (SyncRoot)
+            var items = AsSpan();
+            for (int i = 0; i < items.Length; i++)
             {
-                var items = ItemsSpan;
-                for (int i = 0; i < items.Length; i++)
+                if (items[i] is T component)
                 {
-                    if (items[i] is T component)
-                    {
-                        return component;
-                    }
+                    return component;
                 }
-                return null;
             }
+
+            return null;
         }
 
         /// <summary>
@@ -39,24 +39,23 @@ namespace Adamantium.ECS
         /// <returns>Array of found components</returns>
         public T[] GetAll<T>() where T : class, IComponent
         {
-            lock (SyncRoot)
+            var items = AsSpan();
+            int count = 0;
+            for (int i = 0; i < items.Length; i++)
             {
-                var items = ItemsSpan;
-                int count = 0;
-                for (int i = 0; i < items.Length; i++)
-                {
-                    if (items[i] is T) count++;
-                }
-                if (count == 0) return Array.Empty<T>();
-
-                var result = new T[count];
-                int next = 0;
-                for (int i = 0; i < items.Length; i++)
-                {
-                    if (items[i] is T component) result[next++] = component;
-                }
-                return result;
+                if (items[i] is T) count++;
             }
+
+            if (count == 0) return Array.Empty<T>();
+
+            var result = new T[count];
+            int next = 0;
+            for (int i = 0; i < items.Length && next < count; i++)
+            {
+                if (items[i] is T component) result[next++] = component;
+            }
+
+            return next == count ? result : result[..next];
         }
 
         public T GetInParents<T>() where T : class, IComponent
