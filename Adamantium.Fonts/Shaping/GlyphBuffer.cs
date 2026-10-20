@@ -5,11 +5,23 @@ namespace Adamantium.Fonts.Shaping;
 
 internal sealed class GlyphBuffer : IDisposable
 {
+    public const int MostPooled = 16384;
+
     private int _serial;
 
     public GlyphBuffer(int capacity)
     {
-        Info = ArrayPool<GlyphInfo>.Shared.Rent(Math.Max(capacity, 4));
+        Info = Rent<GlyphInfo>(Math.Max(capacity, 4));
+    }
+
+    public static T[] Rent<T>(int length) => length <= MostPooled ? ArrayPool<T>.Shared.Rent(length) : new T[length];
+
+    public static void Return<T>(T[] array)
+    {
+        if (array.Length <= MostPooled)
+        {
+            ArrayPool<T>.Shared.Return(array);
+        }
     }
 
     public GlyphInfo[] Info { get; private set; }
@@ -124,12 +136,12 @@ internal sealed class GlyphBuffer : IDisposable
     {
         if (Placements == null || Placements.Length < Length)
         {
-            if (Placements != null)
+            var old = Placements;
+            Placements = Rent<GlyphPlacement>(Math.Max(Length, 4));
+            if (old != null)
             {
-                ArrayPool<GlyphPlacement>.Shared.Return(Placements);
+                Return(old);
             }
-
-            Placements = ArrayPool<GlyphPlacement>.Shared.Rent(Math.Max(Length, 4));
         }
 
         Array.Clear(Placements, 0, Length);
@@ -139,13 +151,13 @@ internal sealed class GlyphBuffer : IDisposable
     {
         if (Info != null)
         {
-            ArrayPool<GlyphInfo>.Shared.Return(Info);
+            Return(Info);
             Info = null;
         }
 
         if (Placements != null)
         {
-            ArrayPool<GlyphPlacement>.Shared.Return(Placements);
+            Return(Placements);
             Placements = null;
         }
 
@@ -181,9 +193,9 @@ internal sealed class GlyphBuffer : IDisposable
             return;
         }
 
-        var resized = ArrayPool<GlyphInfo>.Shared.Rent(Math.Max(capacity, Info.Length * 2));
+        var resized = Rent<GlyphInfo>(Math.Max(capacity, Info.Length * 2));
         Array.Copy(Info, resized, Length);
-        ArrayPool<GlyphInfo>.Shared.Return(Info);
+        Return(Info);
         Info = resized;
     }
 }

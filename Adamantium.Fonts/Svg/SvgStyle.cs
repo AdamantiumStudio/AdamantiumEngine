@@ -49,7 +49,7 @@ internal sealed class SvgStyle
     public static string Property(XElement element, string name)
     {
         var style = (string)element.Attribute("style");
-        var inline = style != null ? SvgStyleSheet.Pick(SvgStyleSheet.Declarations(style), name) : null;
+        var inline = style != null ? SvgStyleSheet.Pick(Css.Declarations(style), name) : null;
 
         if (inline is { Important: true })
         {

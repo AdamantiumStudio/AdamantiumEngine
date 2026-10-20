@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.Globalization;
 
 namespace Adamantium.Fonts.Shaping;
@@ -31,7 +30,7 @@ internal struct Normalizer
             _arabicMarks = arabicMarks,
             _hebrewForms = hebrewForms,
             _output = new GlyphBuffer(buffer.Length),
-            _input = ArrayPool<GlyphInfo>.Shared.Rent(Math.Max(buffer.Length, 4)),
+            _input = GlyphBuffer.Rent<GlyphInfo>(Math.Max(buffer.Length, 4)),
         };
         try
         {
@@ -40,7 +39,7 @@ internal struct Normalizer
         finally
         {
             normalizer._output.Dispose();
-            ArrayPool<GlyphInfo>.Shared.Return(normalizer._input);
+            GlyphBuffer.Return(normalizer._input);
         }
     }
 
@@ -84,8 +83,9 @@ internal struct Normalizer
     {
         if (_input.Length < length)
         {
-            ArrayPool<GlyphInfo>.Shared.Return(_input);
-            _input = ArrayPool<GlyphInfo>.Shared.Rent(length);
+            var old = _input;
+            _input = GlyphBuffer.Rent<GlyphInfo>(length);
+            GlyphBuffer.Return(old);
         }
 
         return _input;

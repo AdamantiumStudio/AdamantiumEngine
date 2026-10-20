@@ -13,7 +13,6 @@ namespace Adamantium.Fonts.Svg;
 internal sealed class SvgStyleSheet
 {
     private static readonly Regex Compound = new(@"^(?<tag>\*|[A-Za-z][\w-]*)?(?<part>[.#][\w-]+)*$");
-    private static readonly Regex Important = new(@"!\s*important\s*$", RegexOptions.IgnoreCase);
 
     private readonly List<Rule> rules = [];
 
@@ -39,9 +38,9 @@ internal sealed class SvgStyleSheet
 
     // What the rules set the element's property to: an !important declaration over the others, then the more specific,
     // then the later, one of a value the property does not take dropped; null when none sets it.
-    public Declaration Property(XElement element, string name)
+    public CssDeclaration Property(XElement element, string name)
     {
-        Declaration held = null;
+        CssDeclaration held = null;
         var heldSpecificity = (0, 0, 0);
         foreach (var rule in rules)
         {
@@ -74,9 +73,9 @@ internal sealed class SvgStyleSheet
 
     // The declaration of a style that sets the property, as CSS picks among several: an !important one over the
     // others, the later of two alike; one of a value the property does not take is dropped.
-    public static Declaration Pick(IEnumerable<Declaration> declarations, string name)
+    public static CssDeclaration Pick(IEnumerable<CssDeclaration> declarations, string name)
     {
-        Declaration held = null;
+        CssDeclaration held = null;
         foreach (var declaration in declarations)
         {
             if (string.Equals(declaration.Name, name, StringComparison.OrdinalIgnoreCase)
@@ -88,31 +87,6 @@ internal sealed class SvgStyleSheet
         }
 
         return held;
-    }
-
-    // A style's declarations: name, value and whether it is !important.
-    public static List<Declaration> Declarations(string block)
-    {
-        var declarations = new List<Declaration>();
-        foreach (var text in Split(block, ';'))
-        {
-            var colon = text.IndexOf(':');
-            if (colon <= 0)
-            {
-                continue;
-            }
-
-            var value = text.Substring(colon + 1).Trim();
-            var important = Important.Match(value);
-            if (important.Success)
-            {
-                value = value.Substring(0, important.Index).Trim();
-            }
-
-            declarations.Add(new Declaration(text.Substring(0, colon).Trim(), value, important.Success));
-        }
-
-        return declarations;
     }
 
     private static int Compare((int Ids, int Classes, int Tags) a, (int Ids, int Classes, int Tags) b) =>
@@ -137,7 +111,7 @@ internal sealed class SvgStyleSheet
             }
 
             // A statement at-rule ends at its semicolon, a block - an at-rule's or a rule's - at its closing brace.
-            var end = Next(css, at, '{', ';');
+            var end = Css.Next(css, at, '{', ';');
             if (end >= css.Length)
             {
                 break;
@@ -167,7 +141,7 @@ internal sealed class SvgStyleSheet
 
                 if (selectors is { Count: > 0 })
                 {
-                    rules.Add(new Rule(selectors, Declarations(css.Substring(end + 1, Math.Max(0, close - end - 1)))));
+                    rules.Add(new Rule(selectors, Css.Declarations(css.Substring(end + 1, Math.Max(0, close - end - 1)))));
                 }
             }
 
@@ -208,34 +182,6 @@ internal sealed class SvgStyleSheet
         return text.ToString();
     }
 
-    // The first of the characters at or after `from` outside quotes and brackets; the text's length if none.
-    private static int Next(string css, int from, char first, char second)
-    {
-        var depth = 0;
-        for (var i = from; i < css.Length; i++)
-        {
-            var c = css[i];
-            if (c is '"' or '\'')
-            {
-                i = SkipString(css, i);
-            }
-            else if (c is '(' or '[')
-            {
-                depth++;
-            }
-            else if (c is ')' or ']')
-            {
-                depth = Math.Max(0, depth - 1);
-            }
-            else if (depth == 0 && (c == first || c == second))
-            {
-                return i;
-            }
-        }
-
-        return css.Length;
-    }
-
     // The brace closing the block opened at `open`, past any nested in it and any in quotes; the end of the text if none.
     private static int Closing(string css, int open)
     {
@@ -244,7 +190,7 @@ internal sealed class SvgStyleSheet
         {
             if (css[i] is '"' or '\'')
             {
-                i = SkipString(css, i);
+                i = Css.SkipString(css, i);
             }
             else if (css[i] == '{')
             {
@@ -259,43 +205,11 @@ internal sealed class SvgStyleSheet
         return css.Length;
     }
 
-    private static int SkipString(string css, int start)
-    {
-        var i = start + 1;
-        while (i < css.Length && css[i] != css[start])
-        {
-            i += css[i] == '\\' ? 2 : 1;
-        }
-
-        return Math.Min(i, css.Length - 1);
-    }
-
-    // The text cut at the separator where it stands outside quotes and brackets.
-    private static IEnumerable<string> Split(string text, char separator)
-    {
-        var from = 0;
-        while (from <= text.Length)
-        {
-            var at = Next(text, from, separator, separator);
-            yield return text.Substring(from, at - from);
-            from = at + 1;
-        }
-    }
-
-    internal sealed class Declaration(string name, string value, bool important)
-    {
-        public string Name { get; } = name;
-
-        public string Value { get; } = value;
-
-        public bool Important { get; } = important;
-    }
-
-    private sealed class Rule(List<Selector> selectors, List<Declaration> declarations)
+    private sealed class Rule(List<Selector> selectors, IReadOnlyList<CssDeclaration> declarations)
     {
         public List<Selector> Selectors { get; } = selectors;
 
-        public List<Declaration> Declarations { get; } = declarations;
+        public IReadOnlyList<CssDeclaration> Declarations { get; } = declarations;
     }
 
     private sealed class Selector(string tag, string id, int ids, string[] classes)
