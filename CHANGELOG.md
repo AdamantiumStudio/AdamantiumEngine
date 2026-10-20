@@ -729,6 +729,9 @@ All packages share one version.
 
 ### Fixed
 
+- A filled ellipse sector (`Shapes.Ellipse`, solid) that does not start at zero is filled where it is: the start was
+  turned into radians and then read as degrees again, and the fill was cut at the sweep rather than at start plus sweep,
+  so a quarter from twelve to three was filled as a sliver beside three o'clock.
 - A skinned model cost the frame for every part of its mesh: each part's draw composed every joint's world matrix
   through all its parents again and set the whole palette. The draw takes the joints' worlds the transforms were
   worked out with for its camera this frame (`Skin.FillPalette(palette, camera)`, `Transform.GetWorldMatrixF(camera)`)

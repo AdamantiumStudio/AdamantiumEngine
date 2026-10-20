@@ -104,6 +104,22 @@ public class PrimitiveTemplateTests
         });
     }
 
+    // A sector's fill runs from its start to its start plus its sweep, wherever it starts: 270..360 is the quarter from
+    // the top to the right.
+    [Test]
+    public void AnEllipseSector_FillsFromItsStart_NotFromZero()
+    {
+        var mesh = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.Sector, new Vector2(2), 270, 90);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mesh.Points.Select(p => p.X), Is.All.GreaterThanOrEqualTo(-1e-4));
+            Assert.That(mesh.Points.Select(p => p.Y), Is.All.LessThanOrEqualTo(1e-4));
+            Assert.That(mesh.Points.Any(p => Math.Abs(p.X) < 1e-4 && Math.Abs(p.Y + 1) < 1e-4), "it reaches the top");
+            Assert.That(mesh.Points.Any(p => Math.Abs(p.X - 1) < 1e-4 && Math.Abs(p.Y) < 1e-4), "and the right");
+        });
+    }
+
     // A camera looks along +Z: a flat shape faces it when its triangles are clockwise on its screen - the GPU's front,
     // up being -Y - and its normals point back at it, along -Z.
     [TestCase("Rectangle")]
