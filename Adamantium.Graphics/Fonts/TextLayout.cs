@@ -21,8 +21,7 @@ public class TextLayout : DisposableObject
     private TextLayoutOptions _laidOutOptions;
     private TextRenderingParameters _previousRenderingParameters;
     private AttributedText _attributed;
-    private SpacingRange _glyphScaling = new(1, 1, 1);
-    private int _hyphenLimit;
+    private TextComposition _composition = TextComposition.Default;
     private FontFallback _fallback;
     private bool _fallbackSet;
     private bool _textUpdated;
@@ -62,41 +61,43 @@ public class TextLayout : DisposableObject
     /// </summary>
     public TextDirection Direction { get; set; } = TextDirection.Auto;
 
-    /// <summary>
-    /// Where words wrapped by <see cref="TextWrapping.WrapByWords"/> may break across lines:
-    /// <see cref="Fonts.Hyphens.Manual"/> (the default) at soft hyphens only.
-    /// </summary>
-    public Hyphens Hyphens { get; set; } = Hyphens.Manual;
-
-    /// <summary>
-    /// The most lines in a row that may end in a hyphen breaking a word, as InDesign's hyphen limit: past it a word is
-    /// not broken but goes down whole, unless it is the only word on its line. Hyphens of the text itself, as in
-    /// "state-of-the-art", are not counted. 0, the default, sets no limit.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is below 0.</exception>
-    public int HyphenLimit
+    /// <summary>How the lines are composed, as one value: <see cref="Hyphens"/>, <see cref="WordSpacing"/>,
+    /// <see cref="LastLineAlignment"/> and the rest of the settings <see cref="TextComposition"/> holds, which read and
+    /// write it. <see cref="TextComposition.Default"/> by default.</summary>
+    /// <exception cref="ArgumentNullException">The value is null.</exception>
+    public TextComposition Composition
     {
-        get => _hyphenLimit;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(value);
-            _hyphenLimit = value;
-        }
+        get => _composition;
+        set => _composition = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    /// <summary>
-    /// How words wrapped by <see cref="TextWrapping.WrapByWords"/> are broken into lines: a line at a time
-    /// (<see cref="Fonts.LineBreaking.Greedy"/>, the default) or a paragraph at a time.
-    /// </summary>
-    public LineBreaking LineBreaking { get; set; } = LineBreaking.Greedy;
+    /// <inheritdoc cref="TextComposition.Hyphens"/>
+    public Hyphens Hyphens
+    {
+        get => _composition.Hyphens;
+        set => Compose(_composition.Hyphens, value, static (c, v) => c with { Hyphens = v });
+    }
 
-    /// <summary>
-    /// Hangs punctuation and hyphens at the edges of lines partly past the margin, as InDesign's Optical Margin
-    /// Alignment does, so the text's edge looks straight: the start of lines aligned left or justified, the end of
-    /// lines aligned right or justified. Lines of right-to-left paragraphs and centered lines are left as they are.
-    /// False by default.
-    /// </summary>
-    public bool OpticalMarginAlignment { get; set; }
+    /// <inheritdoc cref="TextComposition.HyphenLimit"/>
+    public int HyphenLimit
+    {
+        get => _composition.HyphenLimit;
+        set => Compose(_composition.HyphenLimit, value, static (c, v) => c with { HyphenLimit = v });
+    }
+
+    /// <inheritdoc cref="TextComposition.LineBreaking"/>
+    public LineBreaking LineBreaking
+    {
+        get => _composition.LineBreaking;
+        set => Compose(_composition.LineBreaking, value, static (c, v) => c with { LineBreaking = v });
+    }
+
+    /// <inheritdoc cref="TextComposition.OpticalMarginAlignment"/>
+    public bool OpticalMarginAlignment
+    {
+        get => _composition.OpticalMarginAlignment;
+        set => Compose(_composition.OpticalMarginAlignment, value, static (c, v) => c with { OpticalMarginAlignment = v });
+    }
 
     /// <summary>
     /// The first characters of the text set large across its first lines, the lines running beside them; null (the
@@ -137,60 +138,76 @@ public class TextLayout : DisposableObject
     /// </summary>
     public WritingMode WritingMode { get; set; }
 
-    /// <summary>
-    /// How wide the spaces between words are, as shares of the font's space: their width as laid out, and how far a
-    /// justified line may squeeze and stretch them (InDesign's 80%, 100% and 133% by default). A justified line that
-    /// cannot fill its width within the range takes letter spacing next, then stretches its spaces further.
-    /// </summary>
-    public SpacingRange WordSpacing { get; set; } = SpacingRange.Words;
-
-    /// <summary>
-    /// What is added between letters, as shares of the font's space: the width added as laid out, and how far a
-    /// justified line may take it below and above that, once its spaces are at their limits. None by default. Cursive
-    /// scripts, such as Arabic, are never spaced.
-    /// </summary>
-    public SpacingRange LetterSpacing { get; set; } = SpacingRange.Letters;
-
-    /// <summary>
-    /// How wide glyphs are drawn, as shares of their own width, InDesign's glyph scaling: the width they are laid out
-    /// at, and how far a justified line may narrow and widen them once its spaces and letters are at their limits.
-    /// 100% throughout by default; the minimum must be above 0. Upright glyphs of vertical text are not scaled.
-    /// </summary>
-    public SpacingRange GlyphScaling
+    /// <inheritdoc cref="TextComposition.WordSpacing"/>
+    public SpacingRange WordSpacing
     {
-        get => _glyphScaling;
-        set => _glyphScaling = value.Minimum > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "Glyphs scale to a positive share of their width.");
+        get => _composition.WordSpacing;
+        set => Compose(_composition.WordSpacing, value, static (c, v) => c with { WordSpacing = v });
     }
 
-    /// <summary>Whether a justified line that cannot fill its width within its spacing takes the wider glyphs its font
-    /// offers for justification ('jalt', as the wide letters of Hebrew), before it scales glyphs. True by default.</summary>
-    public bool JustificationAlternates { get; set; } = true;
+    /// <inheritdoc cref="TextComposition.LetterSpacing"/>
+    public SpacingRange LetterSpacing
+    {
+        get => _composition.LetterSpacing;
+        set => Compose(_composition.LetterSpacing, value, static (c, v) => c with { LetterSpacing = v });
+    }
 
-    /// <summary>Whether a justified line of Arabic and other joined scripts stretches its words with kashidas, once
-    /// its spaces are at their maximum: a stretched extender between two joined letters of each word, after a seen
-    /// or a sad where the word has one, else nearest its end, up to an em each. The extender is the font's
-    /// justification glyph ('JSTF'), else its tatweel (U+0640). True by default.</summary>
-    public bool Kashidas { get; set; } = true;
+    /// <inheritdoc cref="TextComposition.GlyphScaling"/>
+    public SpacingRange GlyphScaling
+    {
+        get => _composition.GlyphScaling;
+        set => Compose(_composition.GlyphScaling, value, static (c, v) => c with { GlyphScaling = v });
+    }
 
-    /// <summary>When fullwidth CJK punctuation is set half-width, its blank half trimmed, as CSS's
-    /// <c>text-spacing-trim</c>: by default, punctuation side by side collapses its blanks and a closing one at the end
-    /// of a line that would not fit otherwise is trimmed.</summary>
-    public TextSpacingTrim SpacingTrim { get; set; }
+    /// <inheritdoc cref="TextComposition.JustificationAlternates"/>
+    public bool JustificationAlternates
+    {
+        get => _composition.JustificationAlternates;
+        set => Compose(_composition.JustificationAlternates, value, static (c, v) => c with { JustificationAlternates = v });
+    }
 
-    /// <summary>Whether an ideographic comma or full stop at the end of a line hangs past it, as Japanese burasage:
-    /// by default it hangs when the line would not fit with it otherwise.</summary>
-    public HangingPunctuation HangingPunctuation { get; set; } = HangingPunctuation.AllowEnd;
+    /// <inheritdoc cref="TextComposition.Kashidas"/>
+    public bool Kashidas
+    {
+        get => _composition.Kashidas;
+        set => Compose(_composition.Kashidas, value, static (c, v) => c with { Kashidas = v });
+    }
 
-    /// <summary>Where the last line of a justified paragraph stands, as InDesign sets it: at its start (the default; on
-    /// the right in a right-to-left paragraph), centered, at its end, or justified too
-    /// (<see cref="TextRenderingParameters.JustifyLastLine"/> justifies it as well).</summary>
-    public HorizontalTextAlignment LastLineAlignment { get; set; } = HorizontalTextAlignment.Left;
+    /// <inheritdoc cref="TextComposition.SpacingTrim"/>
+    public TextSpacingTrim SpacingTrim
+    {
+        get => _composition.SpacingTrim;
+        set => Compose(_composition.SpacingTrim, value, static (c, v) => c with { SpacingTrim = v });
+    }
 
-    /// <summary>Where a justified line holding a single word stands, as InDesign's single word justification sets it:
-    /// at its start (the default), centered, at its end, or justified, its letters spread across the line.</summary>
-    public HorizontalTextAlignment SingleWordJustification { get; set; } = HorizontalTextAlignment.Left;
+    /// <inheritdoc cref="TextComposition.HangingPunctuation"/>
+    public HangingPunctuation HangingPunctuation
+    {
+        get => _composition.HangingPunctuation;
+        set => Compose(_composition.HangingPunctuation, value, static (c, v) => c with { HangingPunctuation = v });
+    }
+
+    /// <inheritdoc cref="TextComposition.LastLineAlignment"/>
+    public HorizontalTextAlignment LastLineAlignment
+    {
+        get => _composition.LastLineAlignment;
+        set => Compose(_composition.LastLineAlignment, value, static (c, v) => c with { LastLineAlignment = v });
+    }
+
+    /// <inheritdoc cref="TextComposition.SingleWordJustification"/>
+    public HorizontalTextAlignment SingleWordJustification
+    {
+        get => _composition.SingleWordJustification;
+        set => Compose(_composition.SingleWordJustification, value, static (c, v) => c with { SingleWordJustification = v });
+    }
+
+    private void Compose<T>(T current, T value, Func<TextComposition, T, TextComposition> with)
+    {
+        if (!EqualityComparer<T>.Default.Equals(current, value))
+        {
+            _composition = with(_composition, value);
+        }
+    }
 
     /// <summary>Space added after each character, in thousandths of an em, as InDesign's tracking; negative draws the
     /// letters closer. 0 by default; <see cref="TextAttributes.Tracking"/> sets it for a range. Cursive scripts, such
@@ -528,23 +545,11 @@ public class TextLayout : DisposableObject
         TabSize = TabSize,
         TabStops = TabStops?.ToArray() ?? [],
         Direction = Direction,
-        Hyphens = Hyphens,
-        HyphenLimit = HyphenLimit,
-        LineBreaking = LineBreaking,
-        OpticalMarginAlignment = OpticalMarginAlignment,
+        Composition = _composition,
         DropCap = DropCap,
         Frames = Frames?.ToArray(),
         Exclusions = Exclusions?.ToArray(),
         WritingMode = WritingMode,
-        WordSpacing = WordSpacing,
-        LetterSpacing = LetterSpacing,
-        GlyphScaling = GlyphScaling,
-        JustificationAlternates = JustificationAlternates,
-        LastLineAlignment = LastLineAlignment,
-        SingleWordJustification = SingleWordJustification,
-        Kashidas = Kashidas,
-        SpacingTrim = SpacingTrim,
-        HangingPunctuation = HangingPunctuation,
         Tracking = Tracking,
         Kerning = Kerning,
         BaselineGrid = BaselineGrid,

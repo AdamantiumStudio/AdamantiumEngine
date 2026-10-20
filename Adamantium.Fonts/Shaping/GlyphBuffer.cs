@@ -1,16 +1,15 @@
 using System;
+using System.Buffers;
 
 namespace Adamantium.Fonts.Shaping;
 
-internal sealed class GlyphBuffer
+internal sealed class GlyphBuffer : IDisposable
 {
-    public const int MostKept = 16384;
-
     private int _serial;
 
     public GlyphBuffer(int capacity)
     {
-        Info = new GlyphInfo[Math.Max(capacity, 4)];
+        Info = ArrayPool<GlyphInfo>.Shared.Rent(Math.Max(capacity, 4));
     }
 
     public GlyphInfo[] Info { get; private set; }
@@ -125,12 +124,32 @@ internal sealed class GlyphBuffer
     {
         if (Placements == null || Placements.Length < Length)
         {
-            Placements = new GlyphPlacement[Math.Max(Length, Info.Length)];
+            if (Placements != null)
+            {
+                ArrayPool<GlyphPlacement>.Shared.Return(Placements);
+            }
+
+            Placements = ArrayPool<GlyphPlacement>.Shared.Rent(Math.Max(Length, 4));
         }
-        else
+
+        Array.Clear(Placements, 0, Length);
+    }
+
+    public void Dispose()
+    {
+        if (Info != null)
         {
-            Array.Clear(Placements, 0, Length);
+            ArrayPool<GlyphInfo>.Shared.Return(Info);
+            Info = null;
         }
+
+        if (Placements != null)
+        {
+            ArrayPool<GlyphPlacement>.Shared.Return(Placements);
+            Placements = null;
+        }
+
+        Length = 0;
     }
 
     public void RemoveWhere(Func<GlyphInfo, bool> predicate)
@@ -162,8 +181,9 @@ internal sealed class GlyphBuffer
             return;
         }
 
-        var resized = Info;
-        Array.Resize(ref resized, Math.Max(capacity, Info.Length * 2));
+        var resized = ArrayPool<GlyphInfo>.Shared.Rent(Math.Max(capacity, Info.Length * 2));
+        Array.Copy(Info, resized, Length);
+        ArrayPool<GlyphInfo>.Shared.Return(Info);
         Info = resized;
     }
 }
