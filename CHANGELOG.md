@@ -59,6 +59,9 @@ All packages share one version.
 - The effect parser passes `#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, `#undef`, `#pragma`, `#error` and
   `#warning` to Slang as it does `#include` and `#define`, each to the end of its line; a `#define` no longer leaves its
   value to the grammar.
+- `Colors.TryParse`: a color as markup writes it - a name in any case, `#RGB`, `#ARGB`, `#RRGGBB` or `#AARRGGBB`,
+  spaces around it allowed - one reader for the framework's type parser, a color picker's hex box and the markup
+  language server.
 - `Css`: CSS values as SVG glyphs and HTML styles write them - `Css.Declarations(style)`, a style's declarations
   (`CssDeclaration`: name, value, `!important`) cut at semicolons outside quotes and brackets, and
   `Css.TryParseColor`: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()`, `transparent` and the named colors.
@@ -1360,6 +1363,11 @@ All packages share one version.
   While a recording or a fingerprint is in progress, what cannot go into one throws `InvalidOperationException`:
   dispatches, barriers, beginning or suspending rendering, `EndDraw` - and `CurrentCommandBuffer` itself while a
   fingerprint is taken.
+- `Colors.Get` reads with `Colors.TryParse`: `#RGB` and `#ARGB` double each digit, as WPF reads them (`#F80` was
+  0x000F80, a dark blue, not orange); spaces around the color are allowed. Whatever is no color throws
+  `FormatException`: a "#" with another count of digits or a character that is no hex digit (more than eight digits
+  threw `OverflowException`, fewer were read as a number), an unknown name (`KeyNotFoundException`), null
+  (`NullReferenceException`).
 - Text shaping (`TextShaper.Shape`) rents its working memory from `ArrayPool` for the one shaping and gives it back,
   instead of keeping a buffer and a normalizer per thread (`[ThreadStatic]`); a run of more than 16384 characters
   shapes in memory of its own, let go after it, so the pool keeps no buffer that large. As fast as before; a run
