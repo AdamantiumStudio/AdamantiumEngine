@@ -20,6 +20,7 @@
         <ProjectReference Include="..\..\Adamantium.XInput\Adamantium.XInput.csproj" />
         <ProjectReference Include="..\..\Adamantium.GameInput\Adamantium.GameInput.csproj" />
         <ProjectReference Include="..\..\Adamantium.Wayland\Adamantium.Wayland.csproj" />
+        <ProjectReference Include="..\..\Adamantium.DBus\Adamantium.DBus.csproj" />
     </ItemGroup>
 
     <ItemGroup>

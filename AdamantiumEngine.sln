@@ -65,6 +65,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Wayland", "Adama
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Wayland.Generator", "Adamantium.Wayland.Generator\Adamantium.Wayland.Generator.csproj", "{72F8BEF8-983B-4790-9FEA-DF52BA017E65}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.DBus", "Adamantium.DBus\Adamantium.DBus.csproj", "{9ECEE739-750C-440E-9386-372FB4E9E3AF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -179,6 +181,10 @@ Global
 		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9ECEE739-750C-440E-9386-372FB4E9E3AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9ECEE739-750C-440E-9386-372FB4E9E3AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9ECEE739-750C-440E-9386-372FB4E9E3AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9ECEE739-750C-440E-9386-372FB4E9E3AF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Release|Any CPU.ActiveCfg = Release|Any CPU
