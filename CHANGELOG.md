@@ -70,15 +70,20 @@ All packages share one version.
   is four characters, a shorter one written with the spaces OpenType pads it with (`TS  =5`) - a three-letter typo
   such as `wgt=650` is refused - and blank entries are passed over.
 - `Adamantium.MVVM.PropertyAccessors`: reads and writes the properties of objects by name - what bindings and data paths
-  do - through plain delegates the MVVM generator writes, so nothing is generated at run time and no reflection invokes
-  them (iOS, NativeAOT). The generator describes the non-generic classes with `INotifyPropertyChanged` or `[ViewModel]`
-  - their hand-written public properties and the `[Bindable]` properties and `[Command]` commands it generates - and
-  every non-generic class under a base marked `[DescribeProperties]`. What no description holds - another type, a
-  generic one, a property another generator adds, a struct's member, an interface's member, a public field - is reached
-  through reflection, and `PropertyAccessors.ReachedThroughReflection` tells it once per type. `Find` looks at the
-  class, its bases, its interfaces and then its public fields; `FindDeclared` only at the class and its bases, so an
-  interface's default implementation does not count. A setter that is not public is not written; an `init` one is, as
-  reflection writes it - the generated code reaches it through `[UnsafeAccessor]`.
+  do - through code the MVVM generator writes, so nothing is generated at run time and no reflection invokes it (iOS,
+  NativeAOT). `PropertyAccessors.GetValue(item, "Name")` and `TryGetValue` read a value at once; `Find` gives a
+  `PropertyAccessor` to keep - `GetValue`, `SetValue`, `CanRead`, `CanWrite`, `ValueType`. The generator writes a class
+  for each type it describes, with a method to read and one to write each property (`PersonProperties.GetName`), so a
+  debugger steps into them by name. It describes the non-generic classes with `INotifyPropertyChanged` or
+  `[ViewModel]` - their hand-written public properties and the `[Bindable]` properties and `[Command]` commands it
+  generates - and every non-generic class under a base marked `[DescribeProperties]`. What no description holds -
+  another type, a generic one, a property another generator adds, a struct's hand-written member, an interface's
+  member, a public field, and a property whose use would warn or fail in the generated code (`[Obsolete]` that is an
+  error or has its own diagnostic id, `[Experimental]`, `[RequiresUnreferencedCode]`, `[RequiresDynamicCode]`) - is
+  reached through reflection, and `PropertyAccessors.ReachedThroughReflection` tells it once per type. `Find` looks at
+  the class, its bases, its interfaces and then its public fields; `FindDeclared` only at the class and its bases, so
+  an interface's default implementation does not count. A getter or setter that is not public is not used; an `init`
+  setter is, as reflection writes it - the generated code reaches it through `[UnsafeAccessor]`.
 - `TextComposition`: how the lines of a text are composed - hyphens and their limit, line breaking, optical margins,
   word and letter spacing, glyph scaling, justification alternates, kashidas, CJK spacing trim and hanging punctuation,
   where a justified last line and a line of one word stand - as one value compared by value, which refuses a negative

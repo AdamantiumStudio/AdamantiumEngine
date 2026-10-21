@@ -69,8 +69,8 @@ namespace Demo
 }";
         var files = GeneratedFiles(source);
 
-        Assert.That(files, Does.Contain("Demo.Base.ViewModel.INPC.g.cs"));
-        Assert.That(files, Does.Not.Contain("Demo.Derived.ViewModel.INPC.g.cs"));
+        Assert.That(files, Has.Some.StartsWith("Demo.Base.ViewModel.INPC."));
+        Assert.That(files, Has.None.StartsWith("Demo.Derived.ViewModel.INPC."));
     }
 
     // A base that raises the change is known by what it can do - a RaisePropertyChanged(string) the class can call -

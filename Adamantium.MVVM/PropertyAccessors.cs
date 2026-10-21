@@ -15,10 +15,11 @@ namespace Adamantium.MVVM;
 public static class PropertyAccessors
 {
     private static readonly object RegistrationLock = new();
-    private static readonly Dictionary<Type, List<Func<PropertyAccessor[]>>> Described = new();
+    private static readonly Dictionary<Type, Func<PropertyAccessor[]>[]> Described = new();
     private static readonly ConcurrentDictionary<Type, byte> Reflected = new();
     private static volatile ConcurrentDictionary<Type, PropertyAccessor[]> declared = new();
     private static volatile ConcurrentDictionary<(Type Type, string Name), PropertyAccessor> found = new();
+    private static volatile bool stale;
 
     /// <summary>Told the first time a type is reached through reflection; raised on the thread that looked. What a
     /// subscriber throws does not reach the lookup.</summary>
@@ -34,15 +35,8 @@ public static class PropertyAccessors
 
         lock (RegistrationLock)
         {
-            if (!Described.TryGetValue(type, out var descriptions))
-            {
-                descriptions = [];
-                Described.Add(type, descriptions);
-            }
-
-            descriptions.Add(declared);
-            PropertyAccessors.declared = new ConcurrentDictionary<Type, PropertyAccessor[]>();
-            found = new ConcurrentDictionary<(Type Type, string Name), PropertyAccessor>();
+            Described[type] = Described.TryGetValue(type, out var descriptions) ? [.. descriptions, declared] : [declared];
+            stale = true;
         }
     }
 
@@ -53,7 +47,30 @@ public static class PropertyAccessors
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(name);
 
+        Refresh();
         return found.GetOrAdd((type, name), static key => Resolve(key.Type, key.Name));
+    }
+
+    /// <summary>The value of the property or field named <paramref name="name"/> on <paramref name="target"/>; null
+    /// when the target or the name is null, or the target has no such value to read.</summary>
+    public static object GetValue(object target, string name)
+    {
+        TryGetValue(target, name, out var value);
+        return value;
+    }
+
+    /// <summary>Reads the property or field named <paramref name="name"/> on <paramref name="target"/>; false when the
+    /// target or the name is null, or the target has no such value to read.</summary>
+    public static bool TryGetValue(object target, string name, out object value)
+    {
+        if (target != null && name != null && Find(target.GetType(), name) is { CanRead: true } accessor)
+        {
+            value = accessor.GetValue(target);
+            return true;
+        }
+
+        value = null;
+        return false;
     }
 
     /// <summary>The property named <paramref name="name"/> that <paramref name="type"/> or one of its base classes
@@ -63,6 +80,7 @@ public static class PropertyAccessors
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(name);
 
+        Refresh();
         for (var declaring = type; declaring != null; declaring = declaring.BaseType)
         {
             if (DeclaredBy(declaring) is { } described)
@@ -114,6 +132,24 @@ public static class PropertyAccessors
         return null;
     }
 
+    private static void Refresh()
+    {
+        if (!stale)
+        {
+            return;
+        }
+
+        lock (RegistrationLock)
+        {
+            if (stale)
+            {
+                declared = new ConcurrentDictionary<Type, PropertyAccessor[]>();
+                found = new ConcurrentDictionary<(Type Type, string Name), PropertyAccessor>();
+                stale = false;
+            }
+        }
+    }
+
     private static PropertyAccessor[] DeclaredBy(Type type)
     {
         var known = declared;
@@ -122,33 +158,35 @@ public static class PropertyAccessors
             return accessors;
         }
 
+        Func<PropertyAccessor[]>[] descriptions;
         lock (RegistrationLock)
         {
-            if (!Described.TryGetValue(type, out var descriptions))
+            if (!Described.TryGetValue(type, out descriptions))
             {
                 return null;
             }
+        }
 
-            HashSet<string> names = [];
-            List<PropertyAccessor> joined = [];
-            foreach (var description in descriptions)
+        HashSet<string> names = [];
+        List<PropertyAccessor> joined = [];
+        foreach (var description in descriptions)
+        {
+            foreach (var accessor in description())
             {
-                foreach (var accessor in description())
+                if (names.Add(accessor.Name))
                 {
-                    if (names.Add(accessor.Name))
-                    {
-                        joined.Add(accessor);
-                    }
+                    joined.Add(accessor);
                 }
             }
-
-            return known.GetOrAdd(type, [.. joined]);
         }
+
+        return known.GetOrAdd(type, [.. joined]);
     }
 
     private static PropertyAccessor FromProperty(PropertyInfo property)
     {
-        return new PropertyAccessor(property.Name, property.PropertyType, property.CanRead ? property.GetValue : null,
+        return new PropertyAccessor(property.Name, property.PropertyType,
+            property.GetMethod is { IsPublic: true } ? property.GetValue : null,
             property.SetMethod is { IsPublic: true } ? property.SetValue : null);
     }
 

@@ -19,4 +19,10 @@
         <ProjectReference Include="..\Adamantium.MVVM.Generators\Adamantium.MVVM.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- So a test can tell a generated accessor from a reflected one. -->
+        <InternalsVisibleTo Include="Adamantium.MVVM.Tests" />
+        <InternalsVisibleTo Include="Adamantium.UITests" />
+    </ItemGroup>
+
 </Project>
