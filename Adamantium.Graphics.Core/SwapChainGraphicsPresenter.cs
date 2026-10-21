@@ -85,7 +85,6 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
 
     protected override void Dispose(bool disposeManagedResources)
     {
-        // The swapchain goes first, in the base's cleanup: a surface is destroyed only once nothing presents to it.
         base.Dispose(disposeManagedResources);
 
         if (surface != null)

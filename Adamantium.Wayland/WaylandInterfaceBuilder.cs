@@ -2,28 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Adamantium.Wayland;
 
-/// <summary>A request or an event as the generated tables describe it.</summary>
-public readonly unsafe struct MessageDescription
-{
-    public MessageDescription(string name, string signature, WlInterface*[] types)
-    {
-        Name = name;
-        Signature = signature;
-        Types = types;
-    }
-
-    public string Name { get; }
-
-    public string Signature { get; }
-
-    public WlInterface*[] Types { get; }
-}
-
-/// <summary>
-/// Builds the wl_interface tables in native memory, where libwayland reads them. Every interface is allocated before
-/// any is filled, since their messages point at each other. They live as long as the process: a proxy's interface is
-/// read for as long as the proxy is.
-/// </summary>
+/// <summary>Builds the wl_interface tables in native memory, where libwayland reads them for the life of the process.</summary>
 public static unsafe class WaylandInterfaceBuilder
 {
     public static WlInterface* Allocate() => (WlInterface*)NativeMemory.AllocZeroed((nuint)sizeof(WlInterface));
@@ -53,7 +32,6 @@ public static unsafe class WaylandInterfaceBuilder
             messages[i].name = Utf8(description.Name);
             messages[i].signature = Utf8(description.Signature);
 
-            // At least one slot, so that no message has a null table even without arguments.
             var count = Math.Max(description.Types.Length, 1);
             var types = (WlInterface**)NativeMemory.AllocZeroed((nuint)count, (nuint)sizeof(WlInterface*));
             for (var t = 0; t < description.Types.Length; t++)

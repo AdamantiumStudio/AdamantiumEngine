@@ -483,12 +483,6 @@ public sealed unsafe class SharedSurface : Texture
         ImageAspect = ImageAspectFlagBits.ColorBit
     };
 
-    /// <summary>
-    /// A copy of the producer's descriptor, for Vulkan to take. A successful fd import takes ownership of the descriptor
-    /// it is given - unlike a Win32 handle, which it only reads - so importing the producer's own made it Vulkan's: the
-    /// producer closed it a second time later, and importing the same surface again (as a resize does) found it gone,
-    /// with VK_ERROR_INVALID_EXTERNAL_HANDLE.
-    /// </summary>
     private static int DuplicateForImport(IntPtr handle)
     {
         var fd = PosixInterop.Dup((int)handle);

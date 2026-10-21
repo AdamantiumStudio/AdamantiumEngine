@@ -2,10 +2,7 @@ using System.Runtime.CompilerServices;
 
 namespace Adamantium.Wayland.Generator;
 
-/// <summary>
-/// Generates Adamantium.Wayland/Generated from the protocol XML files in Protocols/: wayland.xml, the core protocol,
-/// and the extensions from wayland-protocols. A protocol is added by putting its XML there and running this again.
-/// </summary>
+/// <summary>Generates Adamantium.Wayland/Generated from the protocol XML files in Protocols/.</summary>
 public static class Program
 {
     public static void Main()
@@ -22,7 +19,6 @@ public static class Program
         var files = protocols.ToDictionary(p => Naming.FileName(p.FileName), emitter.Protocol);
         files["WaylandInterfaces.cs"] = emitter.Interfaces();
 
-        // Everything is generated before anything is written, so a protocol that fails leaves the old output whole.
         if (Directory.Exists(output))
         {
             Directory.Delete(output, true);

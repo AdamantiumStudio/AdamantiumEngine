@@ -6,23 +6,8 @@ using Adamantium.Wayland.Native;
 
 namespace Adamantium.Wayland;
 
-/// <summary>What every generated interface class provides about itself, so that one can be made by its type: bound
-/// from the registry, or created by a request.</summary>
-public unsafe interface IWaylandInterface<TSelf> where TSelf : WaylandProxy, IWaylandInterface<TSelf>
-{
-    static abstract WlInterface* Interface { get; }
-
-    static abstract TSelf Create(nint handle, uint version);
-}
-
-/// <summary>
-/// A client object of the protocol: a wl_proxy, and the managed object its events are raised on.
-/// <para>
-/// Events reach every proxy of ours through one dispatcher, which libwayland calls with the proxy's GCHandle; the
-/// generated class turns the arguments into its event's. An object an event names is found by its handle among ours -
-/// a proxy someone else made on the display (Mesa's, for the swapchain) is not, and comes out as null.
-/// </para>
-/// </summary>
+/// <summary>A client object of the protocol: a wl_proxy, and the managed object its events are raised on. A proxy
+/// made by someone else on the display comes out of an event as null.</summary>
 public abstract unsafe class WaylandProxy
 {
     private static readonly ConcurrentDictionary<nint, WaylandProxy> Proxies = new();
@@ -45,7 +30,7 @@ public abstract unsafe class WaylandProxy
     public uint Version { get; }
 
     /// <summary>The object's id on the wire.</summary>
-    public uint Id => Handle == 0 ? 0 : WaylandClient.wl_proxy_get_id(Handle);
+    public uint Id => Handle == 0 ? 0 : WaylandClient.ProxyGetId(Handle);
 
     public bool IsAlive => Handle != 0;
 
@@ -60,7 +45,7 @@ public abstract unsafe class WaylandProxy
 
         if (owned)
         {
-            WaylandClient.wl_proxy_destroy(Handle);
+            WaylandClient.ProxyDestroy(Handle);
         }
 
         Forget();
@@ -74,14 +59,14 @@ public abstract unsafe class WaylandProxy
     protected nint Marshal(uint opcode, WlInterface* newInterface, uint version, WlArgument* args)
     {
         ThrowIfDestroyed();
-        return WaylandClient.wl_proxy_marshal_array_flags(Handle, opcode, newInterface, version, 0, args);
+        return WaylandClient.ProxyMarshalArrayFlags(Handle, opcode, newInterface, version, 0, args);
     }
 
     /// <summary>Sends the object's destructor request; libwayland destroys the proxy with it.</summary>
     protected void MarshalDestroy(uint opcode, WlArgument* args)
     {
         ThrowIfDestroyed();
-        WaylandClient.wl_proxy_marshal_array_flags(Handle, opcode, null, Version, WaylandClient.MarshalFlagDestroy, args);
+        WaylandClient.ProxyMarshalArrayFlags(Handle, opcode, null, Version, WaylandClient.MarshalFlagDestroy, args);
         Forget();
     }
 
@@ -131,7 +116,7 @@ public abstract unsafe class WaylandProxy
     {
         self = GCHandle.Alloc(this);
         Proxies[Handle] = this;
-        if (WaylandClient.wl_proxy_add_dispatcher(Handle, &OnEvent, GCHandle.ToIntPtr(self), 0) != 0)
+        if (WaylandClient.ProxyAddDispatcher(Handle, &OnEvent, GCHandle.ToIntPtr(self), 0) != 0)
         {
             Forget();
             throw new WaylandException($"{GetType().Name} already has a listener.");
@@ -169,7 +154,6 @@ public abstract unsafe class WaylandProxy
         }
         catch (Exception e)
         {
-            // An exception must not unwind through libwayland. The first one is kept and rethrown when dispatch returns.
             dispatchFailure ??= ExceptionDispatchInfo.Capture(e);
         }
 

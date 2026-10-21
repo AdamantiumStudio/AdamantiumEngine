@@ -2,10 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Adamantium.Wayland.Native;
 
-/// <summary>
-/// The part of libxkbcommon a Wayland keyboard needs: the compositor sends its keymap as XKB text, and keys arrive as
-/// evdev codes, so what a key means - its keysym, its text, whether it repeats - is xkbcommon's to say.
-/// </summary>
+/// <summary>The part of libxkbcommon a Wayland keyboard needs.</summary>
 internal static unsafe class Xkb
 {
     private const string Library = "libxkbcommon.so.0";
@@ -16,67 +13,46 @@ internal static unsafe class Xkb
 
     public const int StateLayoutEffective = 1 << 7;
 
-    [DllImport(Library)]
-    public static extern nint xkb_context_new(int flags);
+    [DllImport(Library, EntryPoint = "xkb_context_new")]
+    public static extern nint ContextNew(int flags);
 
-    [DllImport(Library)]
-    public static extern void xkb_context_unref(nint context);
+    [DllImport(Library, EntryPoint = "xkb_context_unref")]
+    public static extern void ContextUnref(nint context);
 
-    [DllImport(Library)]
-    public static extern nint xkb_keymap_new_from_string(nint context, byte* text, int format, int flags);
+    [DllImport(Library, EntryPoint = "xkb_keymap_new_from_string")]
+    public static extern nint KeymapNewFromString(nint context, byte* text, int format, int flags);
 
-    [DllImport(Library)]
-    public static extern void xkb_keymap_unref(nint keymap);
+    [DllImport(Library, EntryPoint = "xkb_keymap_unref")]
+    public static extern void KeymapUnref(nint keymap);
 
-    [DllImport(Library)]
-    public static extern int xkb_keymap_key_repeats(nint keymap, uint key);
+    [DllImport(Library, EntryPoint = "xkb_keymap_key_repeats")]
+    public static extern int KeymapKeyRepeats(nint keymap, uint key);
 
-    [DllImport(Library)]
-    public static extern uint xkb_keymap_num_layouts(nint keymap);
+    [DllImport(Library, EntryPoint = "xkb_keymap_num_layouts")]
+    public static extern uint KeymapNumLayouts(nint keymap);
 
-    [DllImport(Library)]
-    public static extern int xkb_keymap_key_get_syms_by_level(nint keymap, uint key, uint layout, uint level, uint** syms);
+    [DllImport(Library, EntryPoint = "xkb_keymap_key_get_syms_by_level")]
+    public static extern int KeymapKeyGetSymsByLevel(nint keymap, uint key, uint layout, uint level, uint** syms);
 
-    [DllImport(Library)]
-    public static extern uint xkb_keysym_to_utf32(uint keysym);
+    [DllImport(Library, EntryPoint = "xkb_keysym_to_utf32")]
+    public static extern uint KeysymToUtf32(uint keysym);
 
-    [DllImport(Library)]
-    public static extern nint xkb_state_new(nint keymap);
+    [DllImport(Library, EntryPoint = "xkb_state_new")]
+    public static extern nint StateNew(nint keymap);
 
-    [DllImport(Library)]
-    public static extern void xkb_state_unref(nint state);
+    [DllImport(Library, EntryPoint = "xkb_state_unref")]
+    public static extern void StateUnref(nint state);
 
-    [DllImport(Library)]
-    public static extern int xkb_state_update_mask(nint state, uint depressedMods, uint latchedMods, uint lockedMods,
+    [DllImport(Library, EntryPoint = "xkb_state_update_mask")]
+    public static extern int StateUpdateMask(nint state, uint depressedMods, uint latchedMods, uint lockedMods,
         uint depressedLayout, uint latchedLayout, uint lockedLayout);
 
-    [DllImport(Library)]
-    public static extern uint xkb_state_key_get_one_sym(nint state, uint key);
+    [DllImport(Library, EntryPoint = "xkb_state_key_get_one_sym")]
+    public static extern uint StateKeyGetOneSym(nint state, uint key);
 
-    [DllImport(Library)]
-    public static extern int xkb_state_key_get_utf8(nint state, uint key, byte* buffer, nuint size);
+    [DllImport(Library, EntryPoint = "xkb_state_key_get_utf8")]
+    public static extern int StateKeyGetUtf8(nint state, uint key, byte* buffer, nuint size);
 
-    [DllImport(Library)]
-    public static extern int xkb_state_mod_name_is_active(nint state, byte* name, int type);
-}
-
-/// <summary>The C library calls the Wayland side needs beyond libwayland: mapping the keymap the compositor sends.</summary>
-internal static unsafe class LibC
-{
-    private const string Library = "libc";
-
-    public const int ProtRead = 1;
-
-    public const int MapPrivate = 2;
-
-    public static readonly nint MapFailed = -1;
-
-    [DllImport(Library)]
-    public static extern nint mmap(nint address, nuint length, int protection, int flags, int fd, long offset);
-
-    [DllImport(Library)]
-    public static extern int munmap(nint address, nuint length);
-
-    [DllImport(Library)]
-    public static extern int close(int fd);
+    [DllImport(Library, EntryPoint = "xkb_state_mod_name_is_active")]
+    public static extern int StateModNameIsActive(nint state, byte* name, int type);
 }

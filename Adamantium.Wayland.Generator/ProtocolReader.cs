@@ -3,40 +3,6 @@ using System.Xml.Linq;
 
 namespace Adamantium.Wayland.Generator;
 
-/// <summary>A protocol as its XML describes it: what wayland-scanner reads, read here straight into C#.</summary>
-public sealed record Protocol(string Name, string FileName, string Copyright, IReadOnlyList<Interface> Interfaces);
-
-public sealed record Interface(string Name, int Version, string Summary, IReadOnlyList<Message> Requests,
-    IReadOnlyList<Message> Events, IReadOnlyList<WaylandEnum> Enums);
-
-public sealed record Message(string Name, bool IsDestructor, int Since, string Summary, IReadOnlyList<Argument> Arguments)
-{
-    /// <summary>The untyped new_id of wl_registry.bind: the caller names the interface, which goes on the wire as a
-    /// string and a version ahead of the id.</summary>
-    public bool HasUntypedNewId => Arguments.Any(a => a.Type == ArgumentType.NewId && a.Interface == null);
-
-    public Argument NewId => Arguments.FirstOrDefault(a => a.Type == ArgumentType.NewId);
-}
-
-public enum ArgumentType
-{
-    Int,
-    Uint,
-    Fixed,
-    String,
-    Object,
-    NewId,
-    Array,
-    Fd,
-}
-
-public sealed record Argument(string Name, ArgumentType Type, string Interface, bool AllowNull, string Enum,
-    string Summary);
-
-public sealed record WaylandEnum(string Name, bool IsBitfield, string Summary, IReadOnlyList<EnumEntry> Entries);
-
-public sealed record EnumEntry(string Name, uint Value, string Summary);
-
 public static class ProtocolReader
 {
     public static Protocol Read(string path)
