@@ -13,6 +13,8 @@ namespace Adamantium.Engine.EntityServices;
 
 public class RenderingService : EntityService
 {
+    private long drawStarted;
+
     public override bool IsUpdateService => false;
     public override bool IsRenderingService => true;
     public override EntityServiceType ServiceType => EntityServiceType.Render;
@@ -118,7 +120,11 @@ public class RenderingService : EntityService
         // An opaque scene must not inherit the blend the UI pass left set.
         GraphicsDevice.ColorBlendEquation = Adamantium.Graphics.Core.ColorBlendEquations.Opaque;
 
-        if (!GraphicsDevice.BeginDraw(beforeRenderPass: _ => PreRenderProcessors()))
+        if (!GraphicsDevice.BeginDraw(beforeRenderPass: _ =>
+            {
+                drawStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                PreRenderProcessors();
+            }))
         {
             return false;
         }
@@ -154,6 +160,7 @@ public class RenderingService : EntityService
     public override void Submit()
     {
         GraphicsDevice.Submit();
+        Window.CountDraw(System.Diagnostics.Stopwatch.GetElapsedTime(drawStarted).TotalMilliseconds);
     }
 
     public override void Present()

@@ -28,6 +28,8 @@ namespace Adamantium.Multiverse
         private uint requestedWidth;
         private uint requestedHeight;
         private bool sizeRequested;
+        private const double DrawSmoothing = 0.1;
+        private long lastDraw;
 
         public Guid Id { get; }
 
@@ -124,6 +126,20 @@ namespace Adamantium.Multiverse
         /// <summary>Whether the universe draws this output in the frame under way: every output while it draws
         /// continuously, on demand only those invalidated since the last frame.</summary>
         public bool IsDrawnThisFrame { get; internal set; } = true;
+
+        /// <summary>What a frame of the output costs on the CPU - recording its draws and submitting them - in
+        /// milliseconds, smoothed over its recent frames; the first frame after a pause of a second starts it afresh.</summary>
+        public double DrawTimeMs { get; private set; }
+
+        /// <summary>Counts a frame drawn into the output that cost <paramref name="milliseconds"/>, for
+        /// <see cref="DrawTimeMs"/>.</summary>
+        public void CountDraw(double milliseconds)
+        {
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            var afresh = lastDraw == 0 || System.Diagnostics.Stopwatch.GetElapsedTime(lastDraw, now).TotalSeconds >= 1;
+            lastDraw = now;
+            DrawTimeMs = afresh ? milliseconds : DrawTimeMs + (milliseconds - DrawTimeMs) * DrawSmoothing;
+        }
 
         public virtual void CopyOutput(IGraphicsDevice graphicsDevice)
         {
@@ -404,6 +420,10 @@ namespace Adamantium.Multiverse
         /// outputs of the same size.
         /// </summary>
         public IReadOnlyList<Camera> Cameras => cameras;
+
+        /// <summary>The camera the universe made for the output when it came: its own, not a camera of the scene, and it
+        /// leaves the scene with the output. Null until then.</summary>
+        public Camera OwnCamera { get; internal set; }
 
         /// <summary>
         /// The viewpoint the output shows now. Setting a camera the output does not have yet adds it to <see cref="Cameras"/>.

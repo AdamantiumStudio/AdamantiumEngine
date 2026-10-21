@@ -20,6 +20,11 @@ All packages share one version.
   as `OutputHandle` (and `UniverseOutputDescription.DisplayHandle` passes it on), and `VulkanInstance` makes a
   `VK_KHR_wayland_surface` from them on Linux. The extension is optional there, so a machine without Wayland still
   renders off-screen; a window asked for without it is refused when its surface is made.
+- `UniverseOutput.DrawTimeMs`: what a frame of one output costs on the CPU, after the wait for its frame slot,
+  smoothed over its recent frames, which `RenderingService` counts - for statistics of each view where a universe
+  draws several.
+- `UniverseOutput.OwnCamera`: the camera the universe made for an output when it came - the output's own, not a
+  camera of the scene.
 - Recorded draws: `IGraphicsDevice.BeginRecording` sends the draws that follow into a secondary command buffer for the
   frame slot - recorded over in place on later frames - and `ExecuteRecorded` runs it inside the render pass.
   `BeginFingerprint`/`EndFingerprint` take the draws as a fingerprint only, issuing nothing - shaders, constants by
@@ -840,6 +845,7 @@ All packages share one version.
   presenter now holds its surface and lets go of it when disposed (`IGraphicsDevice.ReleaseSurface`), after its
   swapchain; the last to let go destroys it. A `wl_surface` is memory libwayland frees, and a window opened after
   another could get the closed one's address - and with it the old surface, made for a window that no longer existed.
+- `Universe.GpuTimeMs` added up the last GPU time of every output each frame, also of outputs hidden or not drawn in it.
 - On Linux a header included by another header was not found when the effect compiled from text: the request's file
   name was taken with `Path.GetFileName` after its separators had been turned into `\`, which Linux does not split on.
 - Tab stops in a paragraph running right to left were measured from the left reserve of its line; they are measured
@@ -1406,6 +1412,9 @@ All packages share one version.
   resolver (`VulkanDllMap.Register`) before its first call, so `vulkan-1` is `libvulkan.so.1` on Linux without an
   application doing it first - the engine's own graphics tests among them. `Adamantium.Graphics.Core` depends on
   `Adamantium.Vulkan.Loader` for it.
+- `EntityIcons` gives an output's own camera no icon in any output: with several outputs, each showed the others'
+  cameras as cameras of the scene.
+- An output's own camera leaves the scene with the output; it stayed behind as a camera of the scene.
 - Effects compile on Linux. `Adamantium.EffectsCompiler`, `Adamantium.Engine.Generators` and `Adamantium.FX` are on
   `Adamantium.Vulkan.Slang` and `Adamantium.Vulkan.Spirv` 1.1.0 - Slang 2026.17 and SPIRV-Cross from Vulkan SDK
   1.4.363.0, each platform's libraries under `runtimes/<rid>/native`. The generator loads them with `dlopen` on Linux
