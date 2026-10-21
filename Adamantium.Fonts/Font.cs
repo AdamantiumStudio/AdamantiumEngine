@@ -46,6 +46,7 @@ namespace Adamantium.Fonts
         private IReadOnlyList<FontVariation> movingTo;
         private float movingProgress;
         private short capsHeight;
+        private short capsHeightOfH;
         public Typeface Typeface { get; private set; }
         internal VariationStore VariationData { get; set; }
 
@@ -134,17 +135,22 @@ namespace Adamantium.Fonts
         {
             get
             {
-                if (capsHeight == 0 && unicodeToGlyph != null && unicodeToGlyph.ContainsKey('H'))
+                if (capsHeight != 0)
                 {
-                    var bounds = GetGlyphByUnicode('H').BoundingRectangle;
-                    capsHeight = (short)(bounds.Y + bounds.Height);
+                    return capsHeight;
                 }
 
-                return capsHeight;
+                if (capsHeightOfH == 0 && unicodeToGlyph != null && unicodeToGlyph.ContainsKey('H'))
+                {
+                    var bounds = GetGlyphByUnicode('H').BoundingRectangle;
+                    capsHeightOfH = (short)(bounds.Y + bounds.Height);
+                }
+
+                return capsHeightOfH;
             }
             internal set => capsHeight = value;
         }
-        
+
         public Int16 LineAscent { get; internal set; }
 
         public Int16 LineDescent { get; internal set; }
@@ -609,6 +615,7 @@ namespace Adamantium.Fonts
             instance.baseFont = this;
             instance.coordinates = normalized;
             instance.colorPaintCache = new ConcurrentDictionary<ulong, ColorPaintOperation[]>();
+            instance.capsHeightOfH = 0;
             instance.Variations = values;
             instance.Weight = values.FirstOrDefault(v => v.Tag == "wght") is { Tag: not null } weight
                 ? new FontWeight(Math.Max(1, Math.Min(1000, (int)Math.Round(weight.Value))))
@@ -656,8 +663,25 @@ namespace Adamantium.Fonts
         }
 
         private FontNamedInstance NamedInstanceAt(FontVariation[] values) =>
-            NamedInstances.FirstOrDefault(named => named.Variations.Count == values.Length &&
-                                                   named.Variations.Select((v, i) => Math.Abs(v.Value - values[i].Value) < 0.5f).All(same => same));
+            NamedInstances.FirstOrDefault(named => !string.IsNullOrEmpty(named.Name) && IsAt(named, values));
+
+        private bool IsAt(FontNamedInstance named, FontVariation[] values)
+        {
+            if (named.Variations.Count != values.Length || values.Length != Axes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (Math.Abs(Axes[i].Normalize(named.Variations[i].Value) - Axes[i].Normalize(values[i].Value)) > 1)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
         private Glyph VariedGlyph(uint index, IGlyphOutlineSource source)
         {
@@ -686,7 +710,11 @@ namespace Adamantium.Fonts
 
             Ascender = Varied(Ascender, "hasc");
             Descender = Varied(Descender, "hdsc");
-            CapsHeight = Varied(CapsHeight, "cpht");
+            if (capsHeight != 0)
+            {
+                capsHeight = Varied(capsHeight, "cpht");
+            }
+
             UnderlinePosition = Varied(UnderlinePosition, "undo");
             UnderlineThickness = Varied(UnderlineThickness, "unds");
             StrikeoutPosition = Varied(StrikeoutPosition, "stro");

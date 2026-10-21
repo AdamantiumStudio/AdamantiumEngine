@@ -1152,18 +1152,25 @@ namespace Adamantium.Fonts.Parsers
             os2.fsSelection = FontReader.ReadUInt16();
             os2.usFirstCharIndex = FontReader.ReadUInt16();
             os2.usLastCharIndex = FontReader.ReadUInt16();
-            os2.sTypoAscender = FontReader.ReadInt16();
-            os2.sTypoDescender = FontReader.ReadInt16();
-            os2.sTypoLineGap = FontReader.ReadInt16();
-            os2.usWinAscent = FontReader.ReadUInt16();
-            os2.usWinDescent = FontReader.ReadUInt16();
-            if (os2.version >= 1)
+            var end = entry.Offset + entry.Length;
+            bool Fits(int size) => FontReader.Position + size <= end;
+            var typoMetrics = Fits(10);
+            if (typoMetrics)
+            {
+                os2.sTypoAscender = FontReader.ReadInt16();
+                os2.sTypoDescender = FontReader.ReadInt16();
+                os2.sTypoLineGap = FontReader.ReadInt16();
+                os2.usWinAscent = FontReader.ReadUInt16();
+                os2.usWinDescent = FontReader.ReadUInt16();
+            }
+
+            if (os2.version >= 1 && Fits(8))
             {
                 os2.ulCodePageRange1 = FontReader.ReadUInt32();
                 os2.ulCodePageRange2 = FontReader.ReadUInt32();
             }
 
-            if (os2.version >= 2)
+            if (os2.version >= 2 && Fits(10))
             {
                 os2.sxHeight = FontReader.ReadInt16();
                 os2.sCapHeight = FontReader.ReadInt16();
@@ -1172,14 +1179,18 @@ namespace Adamantium.Fonts.Parsers
                 os2.usMaxContext = FontReader.ReadUInt16();
             }
 
-            if (os2.version >= 5)
+            if (os2.version >= 5 && Fits(4))
             {
                 os2.usLowerOpticalPointSize = FontReader.ReadUInt16();
                 os2.usUpperOpticalPointSize = FontReader.ReadUInt16();
             }
 
-            CurrentFont.Ascender = os2.sTypoAscender;
-            CurrentFont.Descender = os2.sTypoDescender;
+            if (typoMetrics)
+            {
+                CurrentFont.Ascender = os2.sTypoAscender;
+                CurrentFont.Descender = os2.sTypoDescender;
+            }
+
             CurrentFont.CapsHeight = os2.sCapHeight;
             var weightClass = os2.usWeightClass is > 0 and < 10 ? os2.usWeightClass * 100 : os2.usWeightClass;
             CurrentFont.Weight = new FontWeight(Math.Max(1, Math.Min(1000, (int)weightClass)));

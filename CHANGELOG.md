@@ -843,12 +843,11 @@ All packages share one version.
 
 ### Fixed
 
-- A font whose OS/2 table is older than version 2 (DejaVu Sans) is read as far as its version goes: the x-height,
-  cap height and the fields after them were read from the bytes beyond the table. Where a font gives no cap height,
+- A font's OS/2 table is read as far as its version and length go: a version 1 table (DejaVu Sans) had its x-height,
+  cap height and the fields after them read from the bytes beyond it. Where a font gives no cap height,
   `CapsHeight` is the top of its H.
 - An instance of a variable font named in its `fvar` table (Noto Sans at weight 700) carries that name: its
   `FullName` and subfamily say Bold, not the default instance's Regular.
-
 - Spaces a line running right to left starts with hung past its start, out of the frame - the right margin - when
   the line was set to its start or justified; they take their room inside it, as at the left of a line running left
   to right. A line of spaces alone in text running right to left by `TextLayout.Direction` alone stood at the left;
