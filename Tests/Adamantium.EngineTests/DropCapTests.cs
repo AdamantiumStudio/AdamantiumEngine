@@ -149,6 +149,20 @@ public class DropCapTests
         Assert.That(shortCap.Max(g => g.FontSize), Is.EqualTo(tallCap.Max(g => g.FontSize)).Within(1e-6));
     }
 
+    // A letter with its accent is sized as the letter, composed or not.
+    [Test]
+    public void AnAccentedDropCap_IsSizedAsItsLetter_ComposedOrNot()
+    {
+        double CapSize(string start) =>
+            Layout(start + "clair " + Prose, new DropCap(3)).GetTextData().Where(g => g.PositionInString == 0).Max(g => g.FontSize);
+
+        var composed = CapSize(((char)0xC9).ToString());
+        var decomposed = CapSize("E" + (char)0x301);
+
+        Assert.That(composed, Is.EqualTo(CapSize("E")).Within(1e-6));
+        Assert.That(decomposed, Is.EqualTo(composed).Within(1e-6));
+    }
+
     // A letter beyond the basic plane and a halfwidth one are sized as the rest of their script.
     [TestCase("𠮷", "吉")]
     [TestCase("ｱ", "ア")]

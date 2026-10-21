@@ -1333,8 +1333,8 @@ internal sealed class LineComposer
                         continue;
                     }
 
-                    var own = rune.Value;
-                    var upper = Rune.ToUpperInvariant(rune).Value;
+                    var own = Rune.GetRuneAt(rune.ToString().Normalize(NormalizationForm.FormD), 0).Value;
+                    var upper = own is >= 0x10D0 and <= 0x10FF ? own : Rune.ToUpperInvariant(new Rune(own)).Value;
                     return (upper != own ? upper : own switch
                     {
                         >= 0x0590 and <= 0x05FF or >= 0xFB1D and <= 0xFB4F => 0x05D4,
@@ -1351,9 +1351,8 @@ internal sealed class LineComposer
                 return ('H', 'H');
             }
 
-            static double LetterHeight(IFont letterFont, (int Reference, int Own) letter) =>
-                InkTop(letterFont, letter.Reference) ?? InkTop(letterFont, letter.Own)
-                ?? (letterFont.CapsHeight > 0 ? letterFont.CapsHeight : letterFont.Ascender * 0.7);
+            static double LetterHeight(IFont letterFont, int letter) =>
+                InkTop(letterFont, letter) ?? (letterFont.CapsHeight > 0 ? letterFont.CapsHeight : letterFont.Ascender * 0.7);
 
             static double? InkTop(IFont letterFont, int letter) =>
                 letterFont.TryGetGlyphIndex(letter, out var index) && index != 0
@@ -1391,7 +1390,8 @@ internal sealed class LineComposer
                     return (0, 0);
                 }
 
-                var letter = ReferenceLetter(text, dropEnd);
+                var (reference, own) = ReferenceLetter(text, dropEnd);
+                var letter = InkTop(first.Font, reference) != null && InkTop(font, reference) != null ? reference : own;
                 var cap = LetterHeight(first.Font, letter) * first.FontSize / first.Font.UnitsPerEm;
                 var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / LetterHeight(font, letter);
                 return (scale, Math.Max(pen * scale, inkRight * scale + 0.1 * first.FontSize));

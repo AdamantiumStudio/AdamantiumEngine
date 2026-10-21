@@ -3,8 +3,10 @@ using Adamantium.Fonts;
 
 namespace Adamantium.Graphics.Fonts;
 
-/// <summary>The first characters of a text set large across its first lines, which run beside them: its top at the
-/// cap height of the first line, its foot on the baseline of the last.</summary>
+/// <summary>The first characters of a text set large across its first lines, which run beside them: sized by its
+/// letter's capital, or a letter standing for its script (ה, alef, 国, 한), or the letter itself, whose top stands as
+/// high as in the first line; its foot on the baseline of the last. A lowercase letter stands lower, an accent
+/// higher, as in the text.</summary>
 public sealed class DropCap : IEquatable<DropCap>
 {
     /// <summary>The fewest lines a drop cap spans.</summary>
