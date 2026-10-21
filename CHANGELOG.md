@@ -829,6 +829,10 @@ All packages share one version.
 
 ### Fixed
 
+- A window's Vulkan surface outlived it: surfaces were kept, by window handle, until the instance went. A swapchain
+  presenter now holds its surface and lets go of it when disposed (`IGraphicsDevice.ReleaseSurface`), after its
+  swapchain; the last to let go destroys it. A `wl_surface` is memory libwayland frees, and a window opened after
+  another could get the closed one's address - and with it the old surface, made for a window that no longer existed.
 - On Linux a header included by another header was not found when the effect compiled from text: the request's file
   name was taken with `Path.GetFileName` after its separators had been turned into `\`, which Linux does not split on.
 - An entity moved while a camera was not looked through stayed at its old place through that camera once it was: the

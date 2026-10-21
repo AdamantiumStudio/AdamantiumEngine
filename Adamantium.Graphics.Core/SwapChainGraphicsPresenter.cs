@@ -10,6 +10,7 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
 {
     private SwapchainKHR swapchain;
     private SurfaceKHR surface;
+    private IntPtr surfaceHandle;
     private ITexture[] swapchainTextures;
     private readonly Queue presentQueue;
     private readonly object _presentQueueLock;
@@ -79,6 +80,19 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
     private void CreateSurface()
     {
         surface = GraphicsDevice.GetOrCreateSurface(Description);
+        surfaceHandle = Description.OutputHandle;
+    }
+
+    protected override void Dispose(bool disposeManagedResources)
+    {
+        // The swapchain goes first, in the base's cleanup: a surface is destroyed only once nothing presents to it.
+        base.Dispose(disposeManagedResources);
+
+        if (surface != null)
+        {
+            GraphicsDevice.ReleaseSurface(surfaceHandle);
+            surface = null;
+        }
     }
 
     private void CreateRenderTarget()

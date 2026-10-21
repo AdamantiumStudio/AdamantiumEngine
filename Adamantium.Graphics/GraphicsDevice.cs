@@ -335,6 +335,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         return VulkanInstance.GetOrCreateSurface(parameters);
     }
 
+    public void ReleaseSurface(IntPtr outputHandle)
+    {
+        VulkanInstance.ReleaseSurface(outputHandle);
+    }
+
     public bool CanPresent { get; private set; }
         
     public Color ClearColor { get; set; }

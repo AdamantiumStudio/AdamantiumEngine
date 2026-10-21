@@ -319,6 +319,10 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
 
     SurfaceKHR GetOrCreateSurface(PresentationParameters parameters);
 
+    /// <summary>Lets go of the surface <see cref="GetOrCreateSurface"/> held for this window; the last to let go
+    /// destroys it.</summary>
+    void ReleaseSurface(IntPtr outputHandle);
+
     void InsertImageMemoryBarrier(CommandBuffer commandBuffer,
         ITexture texture,
         AccessFlagBits2 sourceAccessMask,
