@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Adamantium.Fonts.Text;
@@ -77,6 +78,40 @@ public sealed class BidiParagraph
         }
 
         return false;
+    }
+
+    /// <summary>Which way a paragraph of <paramref name="text"/> runs when its text decides (P2, P3), as text laid out
+    /// <see cref="TextDirection.Auto"/> runs: right to left when its first strong character outside isolates is
+    /// Hebrew or Arabic, left to right otherwise. The paragraph ends at its first separator.</summary>
+    public static TextDirection DirectionOf(ReadOnlySpan<char> text)
+    {
+        var isolates = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            int codepoint = text[i];
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                codepoint = char.ConvertToUtf32(text[i], text[i + 1]);
+                i++;
+            }
+
+            switch (BidiProperties.Class(codepoint))
+            {
+                case BidiClass.LRI or BidiClass.RLI or BidiClass.FSI:
+                    isolates++;
+                    break;
+                case BidiClass.PDI when isolates > 0:
+                    isolates--;
+                    break;
+                case BidiClass.B:
+                case BidiClass.L when isolates == 0:
+                    return TextDirection.LeftToRight;
+                case BidiClass.R or BidiClass.AL when isolates == 0:
+                    return TextDirection.RightToLeft;
+            }
+        }
+
+        return TextDirection.LeftToRight;
     }
 
     /// <summary>Whether the character at <paramref name="index"/> separates paragraphs: a line feed, a carriage

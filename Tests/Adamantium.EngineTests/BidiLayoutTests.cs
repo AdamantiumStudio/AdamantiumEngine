@@ -26,6 +26,66 @@ public class BidiLayoutTests
         return layout;
     }
 
+    // A paragraph running right to left, 400 wide.
+    private static TextLayout RightToLeft(string text, ParagraphAttributes paragraph, IReadOnlyList<TabStop> stops = null)
+    {
+        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
+        var typeface = Typeface.LoadFont(path);
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, Direction = TextDirection.RightToLeft, TabStops = stops,
+        };
+        layout.ProcessText(new AttributedText(text, null).SetParagraph(0, text.Length, paragraph), 20,
+            new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            VerticalTextAlignment.Top);
+        return layout;
+    }
+
+    // An empty paragraph an editor shows by a space: its caret where a line of text would start - inside the margin,
+    // at the right, a justified one too - or in the middle.
+    [TestCase(HorizontalTextAlignment.Left, 370, 370)]
+    [TestCase(HorizontalTextAlignment.Justify, 370, 370)]
+    [TestCase(HorizontalTextAlignment.Center, 180, 200)]
+    public void ALineOfSpacesAlone_StandsAsALineOfTextWould_InARightToLeftParagraph(HorizontalTextAlignment alignment,
+        double least, double most)
+    {
+        var layout = RightToLeft(" ", new ParagraphAttributes { MarginRight = 30, Alignment = alignment });
+
+        Assert.That(layout.GetCaretPoint(new CaretPosition(0)).X, Is.InRange(least - 0.5, most + 0.5));
+    }
+
+    // Measured from the edge its lines start at, the right one, whatever the margins and the first line's indent.
+    [TestCase(0, 0, 0)]
+    [TestCase(40, 0, 0)]
+    [TestCase(0, 40, 0)]
+    [TestCase(0, 0, 30)]
+    public void ATabStop_IsMeasuredFromTheRight_InAParagraphRunningRightToLeft(double left, double right, double indent)
+    {
+        var layout = RightToLeft("א\tב", new ParagraphAttributes { MarginLeft = left, MarginRight = right, TextIndent = indent },
+            [new TabStop(100)]);
+
+        // The caret before ב stands on its right edge, where the tab ends; the line starts inside its margin and indent.
+        var fromStart = layout.GetCaretPoint(new CaretPosition(0)).X - layout.GetCaretPoint(new CaretPosition(2)).X;
+        Assert.That(fromStart + right + indent, Is.EqualTo(100).Within(0.5));
+    }
+
+    // Past an exclusion at the right the stop is still measured from the frame's edge, as at the left.
+    [Test]
+    public void ATabStop_PastAnExclusion_IsMeasuredFromTheFramesRightEdge()
+    {
+        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
+        var typeface = Typeface.LoadFont(path);
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, Direction = TextDirection.RightToLeft, TabStops = [new TabStop(100)],
+            Exclusions = [new RectangleF(350, 0, 50, 1000)],
+        };
+        layout.ProcessText("א\tב", 20, new Size(400, 200), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(400 - layout.GetCaretPoint(new CaretPosition(2)).X, Is.EqualTo(100).Within(1));
+    }
+
     private static int[] VisualClusters(TextLayout layout) =>
         layout.GetTextData().OrderBy(g => g.PenX).Select(g => g.PositionInString).ToArray();
 
