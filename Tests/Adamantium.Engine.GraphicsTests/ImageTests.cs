@@ -99,7 +99,7 @@ namespace Adamantium.Engine.GraphicsTests
         {
             //var img = Image.Load(Assets + @"Icons\SharpGen.ico");
             //var img = Image.Load(Assets + @"Icons\Testicon24.ico");
-            var img = Image.Load(Assets + @"Icons\Testicon32.ico");
+            var img = Image.Load(Path.Combine(Assets, "Icons", "testicon32.ico"));
             //var img = Image.Load(Assets + @"Icons\NewIcon.ico");
 
             img.Save(@"RestoredBitmap.bmp", ImageFileType.Bmp);
@@ -130,7 +130,7 @@ namespace Adamantium.Engine.GraphicsTests
         [Test]
         public void PngImageTest()
         {
-            var img = Image.Load(Assets + @"APNG\APNG-cube.png");
+            var img = Image.Load(Path.Combine(Assets, "APNG", "APNG-cube.png"));
             //var img = Image.Load(Assets + @"BaseAlbedoTexture_Text.png");
             //var img = Image.Load(Assets + @"APNG\elephant.png");
             //var img = Image.Load(Assets + @"testpng6.png");
@@ -157,7 +157,7 @@ namespace Adamantium.Engine.GraphicsTests
         {
             //var img = Image.Load(Assets + @"gif\cube.gif");
             //var img = Image.Load(Assets + @"gif\Rotating_earth.gif");
-            var img = Image.Load(Assets + @"gif\infinity.gif");
+            var img = Image.Load(Path.Combine(Assets, "gif", "infinity.gif"));
             //var img = Image.Load(Assets + @"gif\RotatingEarth2.gif");
             //var img = Image.Load(Assets + @"gif\interlaced.gif");
             //var img = Image.Load(Assets + @"coloredImage.jpg");
