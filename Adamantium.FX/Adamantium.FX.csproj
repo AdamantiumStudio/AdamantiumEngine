@@ -17,7 +17,7 @@
     <!-- The Slang runtime rides in this package, so the shader compiler does not need the Vulkan SDK installed. Named
          here only to learn where NuGet put it; the generator is handed the path. -->
     <ItemGroup>
-        <PackageReference Include="Adamantium.Vulkan.Slang" Version="1.0.12" GeneratePathProperty="true" PrivateAssets="all" />
+        <PackageReference Include="Adamantium.Vulkan.Slang" Version="1.1.0" GeneratePathProperty="true" PrivateAssets="all" />
     </ItemGroup>
 
     <PropertyGroup>
