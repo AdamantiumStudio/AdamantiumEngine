@@ -409,9 +409,10 @@ public class TextLayout : DisposableObject
     /// <summary>Builds the quads of every glyph the text draws.</summary>
     public void Update(IGraphicsDevice graphicsDevice) => Update(graphicsDevice, null);
 
-    /// <summary>Builds the quads of only the glyphs that touch <paramref name="window"/>, in the layout's units, and asks
-    /// the atlas for only theirs: a long text scrolled through a viewport costs what the viewport shows. Null builds them
-    /// all.</summary>
+    /// <summary>Builds the quads of only the glyphs in <paramref name="window"/>, in the layout's units, and asks the atlas
+    /// for only theirs: a long text scrolled through a viewport costs what the viewport shows. Across the lines a glyph
+    /// is in it by its line - a line in it is drawn whole, and none of a line outside it, however far its ink reaches;
+    /// along them, and down vertical lines, by its ink. Null builds them all.</summary>
     public void Update(IGraphicsDevice graphicsDevice, RectangleF? window)
     {
         // Built before its first measure (a popup built ahead of its layout pass): retried next frame.

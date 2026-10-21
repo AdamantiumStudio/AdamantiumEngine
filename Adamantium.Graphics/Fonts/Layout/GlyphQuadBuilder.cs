@@ -10,6 +10,8 @@ namespace Adamantium.Graphics.Fonts.Layout;
 
 internal sealed class GlyphQuadBuilder
 {
+    private const double LineTolerance = 0.01;
+
     private FontItem[] _items = Array.Empty<FontItem>();
     private int _atlasVersion = -1;
 
@@ -48,7 +50,7 @@ internal sealed class GlyphQuadBuilder
         foreach (var word in data)
         {
             if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null
-                || !InWindow(word))
+                || !InWindow(text, word))
             {
                 continue;
             }
@@ -111,7 +113,7 @@ internal sealed class GlyphQuadBuilder
             }
 
             if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null
-                || !InWindow(word))
+                || !InWindow(text, word))
             {
                 continue;
             }
@@ -154,7 +156,7 @@ internal sealed class GlyphQuadBuilder
         };
     }
 
-    private bool InWindow(GlyphWordData word)
+    private bool InWindow(LaidOutText text, GlyphWordData word)
     {
         if (Window is not { } window)
         {
@@ -162,8 +164,24 @@ internal sealed class GlyphQuadBuilder
         }
 
         var drawn = DrawnRect(word);
-        return drawn.Right >= window.Left && drawn.Left <= window.Right
-               && drawn.Bottom >= window.Top && drawn.Top <= window.Bottom;
+        if (drawn.Right < window.Left || drawn.Left > window.Right)
+        {
+            return false;
+        }
+
+        if (text.LineTops is { } tops && text.LineHeights is { } heights && word.LineIndex >= 0
+            && word.LineIndex < Math.Min(tops.Length, heights.Length)
+            && (text.Options?.WritingMode ?? WritingMode.Horizontal) == WritingMode.Horizontal)
+        {
+            var cap = word.PositionInString >= 0 && word.PositionInString < text.DropCapEnd;
+            var last = cap
+                ? Math.Clamp(text.DropCapLines - 1, word.LineIndex, Math.Min(tops.Length, heights.Length) - 1)
+                : word.LineIndex;
+            var bottom = cap ? Math.Max(tops[last] + heights[last], drawn.Bottom) : tops[last] + heights[last];
+            return bottom > window.Top + LineTolerance && tops[word.LineIndex] < window.Bottom - LineTolerance;
+        }
+
+        return drawn.Bottom >= window.Top && drawn.Top <= window.Bottom;
     }
 
     private void EnsureItemCapacity(int needed)
