@@ -59,4 +59,7 @@ public static unsafe class PosixInterop
 
     [DllImport(LibC, EntryPoint = "munmap", SetLastError = true)]
     public static extern int Munmap(nint address, nuint length);
+
+    [DllImport(LibC, EntryPoint = "getuid")]
+    public static extern uint GetUid();
 }

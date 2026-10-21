@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Platforms>AnyCPU</Platforms>
+    <Configurations>Debug;Release</Configurations>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
+    <Description>A D-Bus client for the Adamantium engine: the session bus over its unix socket, method calls and signals, with the wire format marshaled by hand.</Description>
+    <PackageTags>adamantium;dbus;linux;interop</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.DBus`: a D-Bus client of our own. `DBusConnection.ConnectSession` connects to the session bus over its
+  unix socket (EXTERNAL authentication), `CallAsync` sends a method call and gives its reply - an error reply thrown
+  as a `DBusException` - and `Subscribe` raises a handler for the signals a match rule lets through. Messages are
+  marshalled by hand: `DBusWriter` and `DBusReader` write and read every basic and container type, `ReadValue` any
+  signature as lists, dictionaries and object arrays. `PosixInterop.GetUid` for the authentication.
 - `Adamantium.Wayland`: Wayland client bindings. The protocols are generated into C# from their XML by
   `Adamantium.Wayland.Generator` - the core `wayland.xml`, and xdg-shell, viewporter, fractional-scale, cursor-shape,
   xdg-decoration, relative-pointer, pointer-constraints, text-input-v3 and tablet-v2 from wayland-protocols - with no
