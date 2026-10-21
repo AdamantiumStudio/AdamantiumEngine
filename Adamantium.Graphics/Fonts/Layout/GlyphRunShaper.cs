@@ -358,7 +358,7 @@ internal sealed class GlyphRunShaper
         }
     }
 
-    private static ShapedGlyph[] ToLogicalOrder(ShapedGlyph[] visual)
+    internal static ShapedGlyph[] ToLogicalOrder(ShapedGlyph[] visual)
     {
         var logical = new ShapedGlyph[visual.Length];
         var start = 0;
