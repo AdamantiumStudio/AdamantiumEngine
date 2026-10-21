@@ -887,7 +887,10 @@ public class Universe : IUniverse
                 renderedFrames++;
                 foreach (var output in platform.Outputs)
                 {
-                    gpuMilliseconds += output.GraphicsDevice?.LastGpuFrameMs ?? 0;
+                    if (output.IsDrawnThisFrame && output.IsVisible)
+                    {
+                        gpuMilliseconds += output.GraphicsDevice?.LastGpuFrameMs ?? 0;
+                    }
                 }
             }
         }
@@ -1106,12 +1109,18 @@ public class Universe : IUniverse
         var camera = entity.GetComponent<Camera>();
         camera.SetFreeLookAt(Vector3.Zero);
         EntityWorld.EntityManager.AddEntity(entity);
+        output.OwnCamera = camera;
         output.Camera = camera;
     }
 
     private void OnOutputRemoved(UniverseOutput output)
     {
         RemoveRenderProcessor(output);
+        if (output.OwnCamera?.Owner is { } ownCamera)
+        {
+            EntityWorld.EntityManager.RemoveEntity(ownCamera);
+        }
+
         if (platform.Outputs.Count == 0 && ShutDownMode == ShutDownMode.OnLastWindowClosed)
         {
             ShutDown();

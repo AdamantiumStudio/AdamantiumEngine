@@ -9,6 +9,7 @@ using Adamantium.Engine.Templates.Lights;
 using Adamantium.Engine.Templates.Markers;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.Multiverse;
 
 namespace Adamantium.Engine.Tools;
 
@@ -16,7 +17,8 @@ namespace Adamantium.Engine.Tools;
 /// Icons for what a scene has but does not draw - lights, cameras, entities with a <see cref="Marker"/> - facing every
 /// camera at a steady size on screen. A directional light's icon also has rays running where it shines, a camera's the
 /// shape of its view - a pyramid or, flat, a box - running where it looks, with a mark on top. A click on an icon selects
-/// its entity. A camera has no icon in its own view.
+/// its entity. A camera has no icon in its own view, and an output's own camera (<see cref="UniverseOutput.OwnCamera"/>)
+/// none at all: it is the output's, not the scene's.
 /// </summary>
 public class EntityIcons : EditorProcessor
 {
@@ -176,7 +178,7 @@ public class EntityIcons : EditorProcessor
             };
         }
 
-        if (ShowsCameras && entity.GetComponent<Camera>() != null)
+        if (ShowsCameras && entity.GetComponent<Camera>() is { } camera && !IsOwnCamera(camera))
         {
             return cameraIcon;
         }
@@ -187,6 +189,20 @@ public class EntityIcons : EditorProcessor
         }
 
         return null;
+    }
+
+    private bool IsOwnCamera(Camera camera)
+    {
+        var outputs = Tools.Observatory.Outputs;
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            if (outputs[i].OwnCamera == camera)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static Entity Instance(Entity owner, Entity look)
