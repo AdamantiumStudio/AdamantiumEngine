@@ -97,6 +97,9 @@ All packages share one version.
   the class, its bases, its interfaces and then its public fields; `FindDeclared` only at the class and its bases, so
   an interface's default implementation does not count. A getter or setter that is not public is not used; an `init`
   setter is, as reflection writes it - the generated code reaches it through `[UnsafeAccessor]`.
+- `BidiParagraph.DirectionOf(text)`: which way a paragraph runs when its text decides, as `TextDirection.Auto` lays it
+  out - by its first strong character outside isolates - for an editor that sets each paragraph's margins by the side
+  its lines start from before laying it out.
 - `TextComposition`: how the lines of a text are composed - hyphens and their limit, line breaking, optical margins,
   word and letter spacing, glyph scaling, justification alternates, kashidas, CJK spacing trim and hanging punctuation,
   where a justified last line and a line of one word stand - as one value compared by value, which refuses a negative
@@ -839,6 +842,12 @@ All packages share one version.
   another could get the closed one's address - and with it the old surface, made for a window that no longer existed.
 - On Linux a header included by another header was not found when the effect compiled from text: the request's file
   name was taken with `Path.GetFileName` after its separators had been turned into `\`, which Linux does not split on.
+- Tab stops in a paragraph running right to left were measured from the left reserve of its line; they are measured
+  from the right edge, the one its lines start at - the frame's, past an exclusion - as in a left-to-right paragraph
+  from the left.
+- A line of spaces alone in a paragraph running right to left - an empty paragraph an editor shows by a space - stood
+  at the left, its caret with it; it stands where a line of text would: at the right, in the middle or at the left, a
+  justified one at its last line's place.
 - An entity moved while a camera was not looked through stayed at its old place through that camera once it was: the
   world matrix kept for it still counted as computed. A moved entity now forgets them all
   (`Transform.ForgetComputedMetadata`).

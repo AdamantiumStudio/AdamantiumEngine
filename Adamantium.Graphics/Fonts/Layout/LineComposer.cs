@@ -344,7 +344,7 @@ internal sealed class LineComposer
                 // reaches the next tab stop.
                 var space = items[wordEnd];
                 var isTab = space.Symbol == '\t';
-                var stop = isTab ? NextTabStop(cursorPosition) : default;
+                var stop = isTab ? NextTabStop(cursorPosition, lineIndex) : default;
                 var advance = isTab ? TabAdvance(stop, wordEnd) : space.Advance;
                 var rect = new RectangleF((float)cursorPosition,
                     (float)(height + baseLine),
@@ -488,6 +488,7 @@ internal sealed class LineComposer
         if (glyphsData.Count > 0)
         {
             ArrangeText();
+            PlaceBlankRightToLeftLines();
         }
 
         for (var i = 0; i < lineCount; i++)
@@ -615,17 +616,28 @@ internal sealed class LineComposer
             return maxInk;
         }
 
-        TabStop NextTabStop(double x)
+        // Stops are measured from the edge the line starts at: the right one of a line running right to left - its frame's,
+        // past an exclusion - whose pen starts at its left reserve all the same.
+        TabStop NextTabStop(double x, int line)
         {
+            var origin = 0.0;
+            if (LineState(line).RightToLeft)
+            {
+                var excluded = slots != null ? frames[SlotOf(line).Frame].Width - SlotOf(line).Right : 0;
+                origin = LineIndent(line) - RightReserve(line) - excluded;
+            }
+
             foreach (var stop in tabStops)
             {
-                if (stop.Position > x + 1e-6)
+                if (stop.Position + origin > x + 1e-6)
                 {
-                    return stop;
+                    return origin == 0
+                        ? stop
+                        : new TabStop(stop.Position + origin, stop.Alignment, stop.Leader, stop.AlignOn);
                 }
             }
 
-            return new TabStop((Math.Floor(x / tabStop) + 1) * tabStop);
+            return new TabStop((Math.Floor((x - origin) / tabStop) + 1) * tabStop + origin);
         }
 
         double TabAdvance(TabStop stop, int tab) => TabAdvanceAt(stop, tab, cursorPosition);
@@ -2049,7 +2061,7 @@ internal sealed class LineComposer
                     atLineStart = false;
                     if (tabs.TryGetValue(e, out var tab))
                     {
-                        var width = TabAdvanceAt(NextTabStop(x), tab, x);
+                        var width = TabAdvanceAt(NextTabStop(x, line), tab, x);
                         if (Math.Abs(width - item.Width) > 0.01)
                         {
                             paragraph[e] = (ComposerItem.Glue(width, 0, 0), paragraph[e].Next, paragraph[e].Cut,
@@ -3785,6 +3797,49 @@ internal sealed class LineComposer
             }
         }
 
+        // A line of spaces alone in a paragraph running right to left - an empty paragraph shown by one - has no ink to
+        // align by and was left at the left: it stands where a line of text would, at its start, centered or at its end,
+        // its caret with it.
+        void PlaceBlankRightToLeftLines()
+        {
+            var lineStart = 0;
+            while (lineStart < glyphsData.Count)
+            {
+                var line = glyphsData[lineStart].LineIndex;
+                var lineEnd = lineStart;
+                var blank = true;
+                var left = double.MaxValue;
+                var right = double.MinValue;
+                while (lineEnd < glyphsData.Count && glyphsData[lineEnd].LineIndex == line)
+                {
+                    var glyph = glyphsData[lineEnd++];
+                    blank &= glyph.Symbol == ' ';
+                    left = Math.Min(left, glyph.PenX);
+                    right = Math.Max(right, glyph.PenX + glyph.Advance);
+                }
+
+                if (blank && LineState(line).RightToLeft)
+                {
+                    var alignment = AlignmentOf(line) == HorizontalTextAlignment.Justify
+                        ? options.LastLineAlignment
+                        : AlignmentOf(line);
+                    var shift = alignment switch
+                    {
+                        HorizontalTextAlignment.Center => (LineIndent(line) + AlignRight(line) - left - right) / 2,
+                        HorizontalTextAlignment.Right => LineIndent(line) - left,
+                        _ => AlignRight(line) - right,
+                    };
+                    for (var k = lineStart; k < lineEnd; k++)
+                    {
+                        glyphsData[k].Rect.X += (float)shift;
+                        glyphsData[k].PenX += shift;
+                    }
+                }
+
+                lineStart = lineEnd;
+            }
+        }
+
         void AlignToEachLinesStart(HorizontalTextAlignment alignment)
         {
             var lineStart = 0;
@@ -3823,7 +3878,6 @@ internal sealed class LineComposer
 
                     Widen(tab, shift);
                 }
-
                 lineStart = lineEnd;
             }
         }
