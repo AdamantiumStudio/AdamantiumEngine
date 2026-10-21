@@ -32,6 +32,15 @@ internal static unsafe class Xkb
     public static extern int xkb_keymap_key_repeats(nint keymap, uint key);
 
     [DllImport(Library)]
+    public static extern uint xkb_keymap_num_layouts(nint keymap);
+
+    [DllImport(Library)]
+    public static extern int xkb_keymap_key_get_syms_by_level(nint keymap, uint key, uint layout, uint level, uint** syms);
+
+    [DllImport(Library)]
+    public static extern uint xkb_keysym_to_utf32(uint keysym);
+
+    [DllImport(Library)]
     public static extern nint xkb_state_new(nint keymap);
 
     [DllImport(Library)]

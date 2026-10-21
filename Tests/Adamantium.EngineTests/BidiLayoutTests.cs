@@ -207,6 +207,43 @@ public class BidiLayoutTests
         });
     }
 
+    // Spaces a right-to-left paragraph starts with take their room at its start, inside the frame, however its lines are
+    // aligned, and with an ellipsis at their end.
+    [TestCase(HorizontalTextAlignment.Left)]
+    [TestCase(HorizontalTextAlignment.Justify)]
+    public void SpacesStartingARightToLeftParagraph_StandAtItsRightInsideTheFrame(HorizontalTextAlignment alignment)
+    {
+        var layout = RightToLeft("  " + Hebrew, new ParagraphAttributes { Alignment = alignment });
+
+        Assert.That(layout.GetCaretPoint(new CaretPosition(0)).X, Is.EqualTo(400).Within(0.5));
+    }
+
+    [Test]
+    public void SpacesStartingARightToLeftLine_CutWithAnEllipsis_StandInsideTheFrame()
+    {
+        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
+        var typeface = Typeface.LoadFont(path);
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Direction = TextDirection.RightToLeft };
+        layout.ProcessText("  " + string.Join(" ", Enumerable.Repeat(Hebrew, 10)), 20, new Size(200, double.NaN),
+            TextWrapping.NoWrap, TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.GetCaretPoint(new CaretPosition(0)).X, Is.EqualTo(200).Within(0.5));
+    }
+
+    // A line of spaces alone stands at the right of a paragraph running right to left by the layout's direction too.
+    [Test]
+    public void ALineOfSpacesAlone_StandsAtTheRight_InATextRunningRightToLeft()
+    {
+        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
+        var typeface = Typeface.LoadFont(path);
+        var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Direction = TextDirection.RightToLeft };
+        var text = $"{Hebrew}\n   \n{Hebrew}";
+        layout.ProcessText(text, 20, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.That(layout.GetCaretPoint(new CaretPosition(Hebrew.Length + 1)).X, Is.EqualTo(400).Within(0.5));
+    }
+
     // A line feed ends a right-to-left paragraph: the caret on the empty line after it starts on the right.
     [Test]
     public void TheEmptyLastLineOfARightToLeftParagraph_StartsOnTheRight()

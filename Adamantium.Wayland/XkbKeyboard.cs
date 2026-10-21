@@ -152,6 +152,18 @@ public sealed unsafe class XkbKeyboard : IDisposable
     /// at the rate wl_keyboard.repeat_info gave.</summary>
     public bool Repeats(uint evdevCode) => Xkb.xkb_keymap_key_repeats(keymap, evdevCode + EvdevOffset) != 0;
 
+    /// <summary>How many layouts the keymap holds: the ones the user switches between.</summary>
+    public uint LayoutCount => Xkb.xkb_keymap_num_layouts(keymap);
+
+    /// <summary>The character the key types unshifted in <paramref name="layout"/>, whichever layout is on; 0 for one
+    /// that types none.</summary>
+    public int Character(uint evdevCode, uint layout)
+    {
+        uint* syms;
+        var count = Xkb.xkb_keymap_key_get_syms_by_level(keymap, evdevCode + EvdevOffset, layout, 0, &syms);
+        return count > 0 ? (int)Xkb.xkb_keysym_to_utf32(syms[0]) : 0;
+    }
+
     public void Dispose()
     {
         if (state != 0)
