@@ -29,8 +29,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -73,7 +71,7 @@ public sealed unsafe partial class ZwpPointerConstraintsV1 : WaylandProxy, IWayl
     }
 
     /// <summary>Lock pointer to a position</summary>
-    public ZwpLockedPointerV1 LockPointer(WlSurface surface, WlPointer pointer, WlRegion? region, Lifetime lifetime)
+    public ZwpLockedPointerV1 LockPointer(WlSurface surface, WlPointer pointer, WlRegion region, Lifetime lifetime)
     {
         var wlArgs = stackalloc WlArgument[5];
         wlArgs[0].n = 0;
@@ -85,7 +83,7 @@ public sealed unsafe partial class ZwpPointerConstraintsV1 : WaylandProxy, IWayl
     }
 
     /// <summary>Confine pointer to a region</summary>
-    public ZwpConfinedPointerV1 ConfinePointer(WlSurface surface, WlPointer pointer, WlRegion? region, Lifetime lifetime)
+    public ZwpConfinedPointerV1 ConfinePointer(WlSurface surface, WlPointer pointer, WlRegion region, Lifetime lifetime)
     {
         var wlArgs = stackalloc WlArgument[5];
         wlArgs[0].n = 0;
@@ -132,7 +130,7 @@ public sealed unsafe partial class ZwpLockedPointerV1 : WaylandProxy, IWaylandIn
     }
 
     /// <summary>Set a new lock region</summary>
-    public void SetRegion(WlRegion? region)
+    public void SetRegion(WlRegion region)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = region?.Handle ?? 0;
@@ -143,13 +141,13 @@ public sealed unsafe partial class ZwpLockedPointerV1 : WaylandProxy, IWaylandIn
     public delegate void LockedHandler();
 
     /// <summary>Lock activation event</summary>
-    public event LockedHandler? Locked;
+    public event LockedHandler Locked;
 
     /// <summary>Lock deactivation event</summary>
     public delegate void UnlockedHandler();
 
     /// <summary>Lock deactivation event</summary>
-    public event UnlockedHandler? Unlocked;
+    public event UnlockedHandler Unlocked;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -191,7 +189,7 @@ public sealed unsafe partial class ZwpConfinedPointerV1 : WaylandProxy, IWayland
     }
 
     /// <summary>Set a new confine region</summary>
-    public void SetRegion(WlRegion? region)
+    public void SetRegion(WlRegion region)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = region?.Handle ?? 0;
@@ -202,13 +200,13 @@ public sealed unsafe partial class ZwpConfinedPointerV1 : WaylandProxy, IWayland
     public delegate void ConfinedHandler();
 
     /// <summary>Pointer confined</summary>
-    public event ConfinedHandler? Confined;
+    public event ConfinedHandler Confined;
 
     /// <summary>Pointer unconfined</summary>
     public delegate void UnconfinedHandler();
 
     /// <summary>Pointer unconfined</summary>
-    public event UnconfinedHandler? Unconfined;
+    public event UnconfinedHandler Unconfined;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

@@ -33,8 +33,6 @@
 // ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 // THIS SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -257,58 +255,58 @@ public sealed unsafe partial class ZwpTextInputV3 : WaylandProxy, IWaylandInterf
     }
 
     /// <summary>Enter event</summary>
-    public delegate void EnterHandler(WlSurface? surface);
+    public delegate void EnterHandler(WlSurface surface);
 
     /// <summary>Enter event</summary>
-    public event EnterHandler? Enter;
+    public event EnterHandler Enter;
 
     /// <summary>Leave event</summary>
-    public delegate void LeaveHandler(WlSurface? surface);
+    public delegate void LeaveHandler(WlSurface surface);
 
     /// <summary>Leave event</summary>
-    public event LeaveHandler? Leave;
+    public event LeaveHandler Leave;
 
     /// <summary>Pre-edit</summary>
-    public delegate void PreeditStringHandler(string? text, int cursorBegin, int cursorEnd);
+    public delegate void PreeditStringHandler(string text, int cursorBegin, int cursorEnd);
 
     /// <summary>Pre-edit</summary>
-    public event PreeditStringHandler? PreeditString;
+    public event PreeditStringHandler PreeditString;
 
     /// <summary>Text commit</summary>
-    public delegate void CommitStringHandler(string? text);
+    public delegate void CommitStringHandler(string text);
 
     /// <summary>Text commit</summary>
-    public event CommitStringHandler? CommitString;
+    public event CommitStringHandler CommitString;
 
     /// <summary>Delete surrounding text</summary>
     public delegate void DeleteSurroundingTextHandler(uint beforeLength, uint afterLength);
 
     /// <summary>Delete surrounding text</summary>
-    public event DeleteSurroundingTextHandler? DeleteSurroundingText;
+    public event DeleteSurroundingTextHandler DeleteSurroundingText;
 
     /// <summary>Apply changes</summary>
     public delegate void DoneHandler(uint serial);
 
     /// <summary>Apply changes</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     /// <summary>Action performed</summary>
     public delegate void ActionEventHandler(Action action, uint serial);
 
     /// <summary>Action performed</summary>
-    public event ActionEventHandler? ActionEvent;
+    public event ActionEventHandler ActionEvent;
 
     /// <summary>Notify of language selection</summary>
     public delegate void LanguageHandler(string language);
 
     /// <summary>Notify of language selection</summary>
-    public event LanguageHandler? Language;
+    public event LanguageHandler Language;
 
     /// <summary>Pre-edit</summary>
     public delegate void PreeditHintEventHandler(uint start, uint end, PreeditHint hint);
 
     /// <summary>Pre-edit</summary>
-    public event PreeditHintEventHandler? PreeditHintEvent;
+    public event PreeditHintEventHandler PreeditHintEvent;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

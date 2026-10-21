@@ -39,6 +39,6 @@ public static class Program
 
     private static string SourceDirectory([CallerFilePath] string path = "")
     {
-        return Path.GetDirectoryName(path)!;
+        return Path.GetDirectoryName(path);
     }
 }

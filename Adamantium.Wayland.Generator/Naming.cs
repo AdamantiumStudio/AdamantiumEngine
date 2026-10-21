@@ -18,7 +18,7 @@ public static class Naming
 
     /// <summary>xdg_toplevel → XdgToplevel, set_min_size → SetMinSize. A name that would start with a digit takes
     /// <paramref name="prefix"/> in front: wl_output.transform's 90 → Transform90.</summary>
-    public static string Pascal(string name, string? prefix = null)
+    public static string Pascal(string name, string prefix = null)
     {
         var builder = new StringBuilder(name.Length);
         foreach (var part in name.Split('_', StringSplitOptions.RemoveEmptyEntries))

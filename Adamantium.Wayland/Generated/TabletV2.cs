@@ -31,8 +31,6 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -97,19 +95,19 @@ public sealed unsafe partial class ZwpTabletSeatV2 : WaylandProxy, IWaylandInter
     public delegate void TabletAddedHandler(ZwpTabletV2 id);
 
     /// <summary>New device notification</summary>
-    public event TabletAddedHandler? TabletAdded;
+    public event TabletAddedHandler TabletAdded;
 
     /// <summary>A new tool has been used with a tablet</summary>
     public delegate void ToolAddedHandler(ZwpTabletToolV2 id);
 
     /// <summary>A new tool has been used with a tablet</summary>
-    public event ToolAddedHandler? ToolAdded;
+    public event ToolAddedHandler ToolAdded;
 
     /// <summary>New pad notification</summary>
     public delegate void PadAddedHandler(ZwpTabletPadV2 id);
 
     /// <summary>New pad notification</summary>
-    public event PadAddedHandler? PadAdded;
+    public event PadAddedHandler PadAdded;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -205,7 +203,7 @@ public sealed unsafe partial class ZwpTabletToolV2 : WaylandProxy, IWaylandInter
     }
 
     /// <summary>Set the tablet tool&apos;s surface</summary>
-    public void SetCursor(uint serial, WlSurface? surface, int hotspotX, int hotspotY)
+    public void SetCursor(uint serial, WlSurface surface, int hotspotX, int hotspotY)
     {
         var wlArgs = stackalloc WlArgument[4];
         wlArgs[0].u = serial;
@@ -226,115 +224,115 @@ public sealed unsafe partial class ZwpTabletToolV2 : WaylandProxy, IWaylandInter
     public delegate void TypeEventHandler(Type toolType);
 
     /// <summary>Tool type</summary>
-    public event TypeEventHandler? TypeEvent;
+    public event TypeEventHandler TypeEvent;
 
     /// <summary>Unique hardware serial number of the tool</summary>
     public delegate void HardwareSerialHandler(uint hardwareSerialHi, uint hardwareSerialLo);
 
     /// <summary>Unique hardware serial number of the tool</summary>
-    public event HardwareSerialHandler? HardwareSerial;
+    public event HardwareSerialHandler HardwareSerial;
 
     /// <summary>Hardware id notification in Wacom&apos;s format</summary>
     public delegate void HardwareIdWacomHandler(uint hardwareIdHi, uint hardwareIdLo);
 
     /// <summary>Hardware id notification in Wacom&apos;s format</summary>
-    public event HardwareIdWacomHandler? HardwareIdWacom;
+    public event HardwareIdWacomHandler HardwareIdWacom;
 
     /// <summary>Tool capability notification</summary>
     public delegate void CapabilityEventHandler(Capability capability);
 
     /// <summary>Tool capability notification</summary>
-    public event CapabilityEventHandler? CapabilityEvent;
+    public event CapabilityEventHandler CapabilityEvent;
 
     /// <summary>Tool description events sequence complete</summary>
     public delegate void DoneHandler();
 
     /// <summary>Tool description events sequence complete</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     /// <summary>Tool removed</summary>
     public delegate void RemovedHandler();
 
     /// <summary>Tool removed</summary>
-    public event RemovedHandler? Removed;
+    public event RemovedHandler Removed;
 
     /// <summary>Proximity in event</summary>
-    public delegate void ProximityInHandler(uint serial, ZwpTabletV2? tablet, WlSurface? surface);
+    public delegate void ProximityInHandler(uint serial, ZwpTabletV2 tablet, WlSurface surface);
 
     /// <summary>Proximity in event</summary>
-    public event ProximityInHandler? ProximityIn;
+    public event ProximityInHandler ProximityIn;
 
     /// <summary>Proximity out event</summary>
     public delegate void ProximityOutHandler();
 
     /// <summary>Proximity out event</summary>
-    public event ProximityOutHandler? ProximityOut;
+    public event ProximityOutHandler ProximityOut;
 
     /// <summary>Tablet tool is making contact</summary>
     public delegate void DownHandler(uint serial);
 
     /// <summary>Tablet tool is making contact</summary>
-    public event DownHandler? Down;
+    public event DownHandler Down;
 
     /// <summary>Tablet tool is no longer making contact</summary>
     public delegate void UpHandler();
 
     /// <summary>Tablet tool is no longer making contact</summary>
-    public event UpHandler? Up;
+    public event UpHandler Up;
 
     /// <summary>Motion event</summary>
     public delegate void MotionHandler(double x, double y);
 
     /// <summary>Motion event</summary>
-    public event MotionHandler? Motion;
+    public event MotionHandler Motion;
 
     /// <summary>Pressure change event</summary>
     public delegate void PressureHandler(uint pressure);
 
     /// <summary>Pressure change event</summary>
-    public event PressureHandler? Pressure;
+    public event PressureHandler Pressure;
 
     /// <summary>Distance change event</summary>
     public delegate void DistanceHandler(uint distance);
 
     /// <summary>Distance change event</summary>
-    public event DistanceHandler? Distance;
+    public event DistanceHandler Distance;
 
     /// <summary>Tilt change event</summary>
     public delegate void TiltHandler(double tiltX, double tiltY);
 
     /// <summary>Tilt change event</summary>
-    public event TiltHandler? Tilt;
+    public event TiltHandler Tilt;
 
     /// <summary>Z-rotation change event</summary>
     public delegate void RotationHandler(double degrees);
 
     /// <summary>Z-rotation change event</summary>
-    public event RotationHandler? Rotation;
+    public event RotationHandler Rotation;
 
     /// <summary>Slider position change event</summary>
     public delegate void SliderHandler(int position);
 
     /// <summary>Slider position change event</summary>
-    public event SliderHandler? Slider;
+    public event SliderHandler Slider;
 
     /// <summary>Wheel delta event</summary>
     public delegate void WheelHandler(double degrees, int clicks);
 
     /// <summary>Wheel delta event</summary>
-    public event WheelHandler? Wheel;
+    public event WheelHandler Wheel;
 
     /// <summary>Button event</summary>
     public delegate void ButtonHandler(uint serial, uint button, ButtonState state);
 
     /// <summary>Button event</summary>
-    public event ButtonHandler? Button;
+    public event ButtonHandler Button;
 
     /// <summary>Frame event</summary>
     public delegate void FrameHandler(uint time);
 
     /// <summary>Frame event</summary>
-    public event FrameHandler? Frame;
+    public event FrameHandler Frame;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -479,37 +477,37 @@ public sealed unsafe partial class ZwpTabletV2 : WaylandProxy, IWaylandInterface
     public delegate void NameHandler(string name);
 
     /// <summary>Tablet device name</summary>
-    public event NameHandler? Name;
+    public event NameHandler Name;
 
     /// <summary>Tablet device vendor/product id</summary>
     public delegate void IdEventHandler(uint vid, uint pid);
 
     /// <summary>Tablet device vendor/product id</summary>
-    public event IdEventHandler? IdEvent;
+    public event IdEventHandler IdEvent;
 
     /// <summary>Path to the device</summary>
     public delegate void PathHandler(string path);
 
     /// <summary>Path to the device</summary>
-    public event PathHandler? Path;
+    public event PathHandler Path;
 
     /// <summary>Tablet description events sequence complete</summary>
     public delegate void DoneHandler();
 
     /// <summary>Tablet description events sequence complete</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     /// <summary>Tablet removed event</summary>
     public delegate void RemovedHandler();
 
     /// <summary>Tablet removed event</summary>
-    public event RemovedHandler? Removed;
+    public event RemovedHandler Removed;
 
     /// <summary>Tablet device bus type</summary>
     public delegate void BustypeEventHandler(Bustype bustype);
 
     /// <summary>Tablet device bus type</summary>
-    public event BustypeEventHandler? BustypeEvent;
+    public event BustypeEventHandler BustypeEvent;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -591,25 +589,25 @@ public sealed unsafe partial class ZwpTabletPadRingV2 : WaylandProxy, IWaylandIn
     public delegate void SourceEventHandler(Source source);
 
     /// <summary>Ring event source</summary>
-    public event SourceEventHandler? SourceEvent;
+    public event SourceEventHandler SourceEvent;
 
     /// <summary>Angle changed</summary>
     public delegate void AngleHandler(double degrees);
 
     /// <summary>Angle changed</summary>
-    public event AngleHandler? Angle;
+    public event AngleHandler Angle;
 
     /// <summary>Interaction stopped</summary>
     public delegate void StopHandler();
 
     /// <summary>Interaction stopped</summary>
-    public event StopHandler? Stop;
+    public event StopHandler Stop;
 
     /// <summary>End of a ring event sequence</summary>
     public delegate void FrameHandler(uint time);
 
     /// <summary>End of a ring event sequence</summary>
-    public event FrameHandler? Frame;
+    public event FrameHandler Frame;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -681,25 +679,25 @@ public sealed unsafe partial class ZwpTabletPadStripV2 : WaylandProxy, IWaylandI
     public delegate void SourceEventHandler(Source source);
 
     /// <summary>Strip event source</summary>
-    public event SourceEventHandler? SourceEvent;
+    public event SourceEventHandler SourceEvent;
 
     /// <summary>Position changed</summary>
     public delegate void PositionHandler(uint position);
 
     /// <summary>Position changed</summary>
-    public event PositionHandler? Position;
+    public event PositionHandler Position;
 
     /// <summary>Interaction stopped</summary>
     public delegate void StopHandler();
 
     /// <summary>Interaction stopped</summary>
-    public event StopHandler? Stop;
+    public event StopHandler Stop;
 
     /// <summary>End of a strip event sequence</summary>
     public delegate void FrameHandler(uint time);
 
     /// <summary>End of a strip event sequence</summary>
-    public event FrameHandler? Frame;
+    public event FrameHandler Frame;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -754,43 +752,43 @@ public sealed unsafe partial class ZwpTabletPadGroupV2 : WaylandProxy, IWaylandI
     public delegate void ButtonsHandler(ReadOnlySpan<byte> buttons);
 
     /// <summary>Buttons announced</summary>
-    public event ButtonsHandler? Buttons;
+    public event ButtonsHandler Buttons;
 
     /// <summary>Ring announced</summary>
     public delegate void RingHandler(ZwpTabletPadRingV2 ring);
 
     /// <summary>Ring announced</summary>
-    public event RingHandler? Ring;
+    public event RingHandler Ring;
 
     /// <summary>Strip announced</summary>
     public delegate void StripHandler(ZwpTabletPadStripV2 strip);
 
     /// <summary>Strip announced</summary>
-    public event StripHandler? Strip;
+    public event StripHandler Strip;
 
     /// <summary>Mode-switch ability announced</summary>
     public delegate void ModesHandler(uint modes);
 
     /// <summary>Mode-switch ability announced</summary>
-    public event ModesHandler? Modes;
+    public event ModesHandler Modes;
 
     /// <summary>Tablet group description events sequence complete</summary>
     public delegate void DoneHandler();
 
     /// <summary>Tablet group description events sequence complete</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     /// <summary>Mode switch event</summary>
     public delegate void ModeSwitchHandler(uint time, uint serial, uint mode);
 
     /// <summary>Mode switch event</summary>
-    public event ModeSwitchHandler? ModeSwitch;
+    public event ModeSwitchHandler ModeSwitch;
 
     /// <summary>Dial announced</summary>
     public delegate void DialHandler(ZwpTabletPadDialV2 dial);
 
     /// <summary>Dial announced</summary>
-    public event DialHandler? Dial;
+    public event DialHandler Dial;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -883,49 +881,49 @@ public sealed unsafe partial class ZwpTabletPadV2 : WaylandProxy, IWaylandInterf
     public delegate void GroupHandler(ZwpTabletPadGroupV2 padGroup);
 
     /// <summary>Group announced</summary>
-    public event GroupHandler? Group;
+    public event GroupHandler Group;
 
     /// <summary>Path to the device</summary>
     public delegate void PathHandler(string path);
 
     /// <summary>Path to the device</summary>
-    public event PathHandler? Path;
+    public event PathHandler Path;
 
     /// <summary>Buttons announced</summary>
     public delegate void ButtonsHandler(uint buttons);
 
     /// <summary>Buttons announced</summary>
-    public event ButtonsHandler? Buttons;
+    public event ButtonsHandler Buttons;
 
     /// <summary>Pad description event sequence complete</summary>
     public delegate void DoneHandler();
 
     /// <summary>Pad description event sequence complete</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     /// <summary>Physical button state</summary>
     public delegate void ButtonHandler(uint time, uint button, ButtonState state);
 
     /// <summary>Physical button state</summary>
-    public event ButtonHandler? Button;
+    public event ButtonHandler Button;
 
     /// <summary>Enter event</summary>
-    public delegate void EnterHandler(uint serial, ZwpTabletV2? tablet, WlSurface? surface);
+    public delegate void EnterHandler(uint serial, ZwpTabletV2 tablet, WlSurface surface);
 
     /// <summary>Enter event</summary>
-    public event EnterHandler? Enter;
+    public event EnterHandler Enter;
 
     /// <summary>Leave event</summary>
-    public delegate void LeaveHandler(uint serial, WlSurface? surface);
+    public delegate void LeaveHandler(uint serial, WlSurface surface);
 
     /// <summary>Leave event</summary>
-    public event LeaveHandler? Leave;
+    public event LeaveHandler Leave;
 
     /// <summary>Pad removed event</summary>
     public delegate void RemovedHandler();
 
     /// <summary>Pad removed event</summary>
-    public event RemovedHandler? Removed;
+    public event RemovedHandler Removed;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1011,13 +1009,13 @@ public sealed unsafe partial class ZwpTabletPadDialV2 : WaylandProxy, IWaylandIn
     public delegate void DeltaHandler(int value120);
 
     /// <summary>Delta movement</summary>
-    public event DeltaHandler? Delta;
+    public event DeltaHandler Delta;
 
     /// <summary>End of a dial event sequence</summary>
     public delegate void FrameHandler(uint time);
 
     /// <summary>End of a dial event sequence</summary>
-    public event FrameHandler? Frame;
+    public event FrameHandler Frame;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

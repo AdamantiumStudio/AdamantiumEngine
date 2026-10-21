@@ -31,14 +31,14 @@ public sealed unsafe class WaylandDisplay : IDisposable
     public int FileDescriptor => WaylandClient.wl_display_get_fd(Handle);
 
     /// <summary>Connects to the compositor - the one WAYLAND_DISPLAY names when <paramref name="name"/> is null.</summary>
-    public static WaylandDisplay Connect(string? name = null)
+    public static WaylandDisplay Connect(string name = null)
     {
         return TryConnect(name) ?? throw new WaylandException(
             "No Wayland compositor to connect to" + (name == null ? " (WAYLAND_DISPLAY)" : $" at '{name}'") + ".");
     }
 
     /// <summary>Connects to the compositor, or returns null where there is none - an X11 session, a console.</summary>
-    public static WaylandDisplay? TryConnect(string? name = null)
+    public static WaylandDisplay TryConnect(string name = null)
     {
         using var nameUtf8 = new WaylandString(name);
         var handle = WaylandClient.wl_display_connect(nameUtf8.Pointer);

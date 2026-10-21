@@ -28,8 +28,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -130,7 +128,7 @@ public sealed unsafe partial class ZxdgToplevelDecorationV1 : WaylandProxy, IWay
     public delegate void ConfigureHandler(Mode mode);
 
     /// <summary>Notify a decoration mode change</summary>
-    public event ConfigureHandler? Configure;
+    public event ConfigureHandler Configure;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

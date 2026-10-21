@@ -32,8 +32,6 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -82,16 +80,16 @@ public sealed unsafe partial class WlDisplay : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Fatal error event</summary>
-    public delegate void ErrorEventHandler(WaylandProxy? objectId, uint code, string message);
+    public delegate void ErrorEventHandler(WaylandProxy objectId, uint code, string message);
 
     /// <summary>Fatal error event</summary>
-    public event ErrorEventHandler? ErrorEvent;
+    public event ErrorEventHandler ErrorEvent;
 
     /// <summary>Acknowledge object ID deletion</summary>
     public delegate void DeleteIdHandler(uint id);
 
     /// <summary>Acknowledge object ID deletion</summary>
-    public event DeleteIdHandler? DeleteId;
+    public event DeleteIdHandler DeleteId;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -141,13 +139,13 @@ public sealed unsafe partial class WlRegistry : WaylandProxy, IWaylandInterface<
     public delegate void GlobalHandler(uint name, string @interface, uint version);
 
     /// <summary>Announce global object</summary>
-    public event GlobalHandler? Global;
+    public event GlobalHandler Global;
 
     /// <summary>Announce removal of global object</summary>
     public delegate void GlobalRemoveHandler(uint name);
 
     /// <summary>Announce removal of global object</summary>
-    public event GlobalRemoveHandler? GlobalRemove;
+    public event GlobalRemoveHandler GlobalRemove;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -185,7 +183,7 @@ public sealed unsafe partial class WlCallback : WaylandProxy, IWaylandInterface<
     public delegate void DoneHandler(uint callbackData);
 
     /// <summary>Done event</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -633,7 +631,7 @@ public sealed unsafe partial class WlShm : WaylandProxy, IWaylandInterface<WlShm
     public delegate void FormatEventHandler(Format format);
 
     /// <summary>Pixel format description</summary>
-    public event FormatEventHandler? FormatEvent;
+    public event FormatEventHandler FormatEvent;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -673,7 +671,7 @@ public sealed unsafe partial class WlBuffer : WaylandProxy, IWaylandInterface<Wl
     public delegate void ReleaseHandler();
 
     /// <summary>Compositor releases buffer</summary>
-    public event ReleaseHandler? Release;
+    public event ReleaseHandler Release;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -715,7 +713,7 @@ public sealed unsafe partial class WlDataOffer : WaylandProxy, IWaylandInterface
     }
 
     /// <summary>Accept one of the offered mime types</summary>
-    public void Accept(uint serial, string? mimeType)
+    public void Accept(uint serial, string mimeType)
     {
         using var mimeTypeUtf8 = new WaylandString(mimeType);
         var wlArgs = stackalloc WlArgument[2];
@@ -761,19 +759,19 @@ public sealed unsafe partial class WlDataOffer : WaylandProxy, IWaylandInterface
     public delegate void OfferHandler(string mimeType);
 
     /// <summary>Advertise offered mime type</summary>
-    public event OfferHandler? Offer;
+    public event OfferHandler Offer;
 
     /// <summary>Notify the source-side available actions</summary>
     public delegate void SourceActionsHandler(WlDataDeviceManager.DndAction sourceActions);
 
     /// <summary>Notify the source-side available actions</summary>
-    public event SourceActionsHandler? SourceActions;
+    public event SourceActionsHandler SourceActions;
 
     /// <summary>Notify the selected action</summary>
     public delegate void ActionHandler(WlDataDeviceManager.DndAction dndAction);
 
     /// <summary>Notify the selected action</summary>
-    public event ActionHandler? Action;
+    public event ActionHandler Action;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -845,40 +843,40 @@ public sealed unsafe partial class WlDataSource : WaylandProxy, IWaylandInterfac
     }
 
     /// <summary>A target accepts an offered mime type</summary>
-    public delegate void TargetHandler(string? mimeType);
+    public delegate void TargetHandler(string mimeType);
 
     /// <summary>A target accepts an offered mime type</summary>
-    public event TargetHandler? Target;
+    public event TargetHandler Target;
 
     /// <summary>Send the data</summary>
     public delegate void SendHandler(string mimeType, int fd);
 
     /// <summary>Send the data</summary>
-    public event SendHandler? Send;
+    public event SendHandler Send;
 
     /// <summary>Selection was cancelled</summary>
     public delegate void CancelledHandler();
 
     /// <summary>Selection was cancelled</summary>
-    public event CancelledHandler? Cancelled;
+    public event CancelledHandler Cancelled;
 
     /// <summary>The drag-and-drop operation physically finished</summary>
     public delegate void DndDropPerformedHandler();
 
     /// <summary>The drag-and-drop operation physically finished</summary>
-    public event DndDropPerformedHandler? DndDropPerformed;
+    public event DndDropPerformedHandler DndDropPerformed;
 
     /// <summary>The drag-and-drop operation concluded</summary>
     public delegate void DndFinishedHandler();
 
     /// <summary>The drag-and-drop operation concluded</summary>
-    public event DndFinishedHandler? DndFinished;
+    public event DndFinishedHandler DndFinished;
 
     /// <summary>Notify the selected action</summary>
     public delegate void ActionHandler(WlDataDeviceManager.DndAction dndAction);
 
     /// <summary>Notify the selected action</summary>
-    public event ActionHandler? Action;
+    public event ActionHandler Action;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -941,7 +939,7 @@ public sealed unsafe partial class WlDataDevice : WaylandProxy, IWaylandInterfac
     }
 
     /// <summary>Start drag-and-drop operation</summary>
-    public void StartDrag(WlDataSource? source, WlSurface origin, WlSurface? icon, uint serial)
+    public void StartDrag(WlDataSource source, WlSurface origin, WlSurface icon, uint serial)
     {
         var wlArgs = stackalloc WlArgument[4];
         wlArgs[0].o = source?.Handle ?? 0;
@@ -952,7 +950,7 @@ public sealed unsafe partial class WlDataDevice : WaylandProxy, IWaylandInterfac
     }
 
     /// <summary>Copy data to the selection</summary>
-    public void SetSelection(WlDataSource? source, uint serial)
+    public void SetSelection(WlDataSource source, uint serial)
     {
         var wlArgs = stackalloc WlArgument[2];
         wlArgs[0].o = source?.Handle ?? 0;
@@ -971,37 +969,37 @@ public sealed unsafe partial class WlDataDevice : WaylandProxy, IWaylandInterfac
     public delegate void DataOfferHandler(WlDataOffer id);
 
     /// <summary>Introduce a new wl_data_offer</summary>
-    public event DataOfferHandler? DataOffer;
+    public event DataOfferHandler DataOffer;
 
     /// <summary>Initiate drag-and-drop session</summary>
-    public delegate void EnterHandler(uint serial, WlSurface? surface, double x, double y, WlDataOffer? id);
+    public delegate void EnterHandler(uint serial, WlSurface surface, double x, double y, WlDataOffer id);
 
     /// <summary>Initiate drag-and-drop session</summary>
-    public event EnterHandler? Enter;
+    public event EnterHandler Enter;
 
     /// <summary>End drag-and-drop session</summary>
     public delegate void LeaveHandler();
 
     /// <summary>End drag-and-drop session</summary>
-    public event LeaveHandler? Leave;
+    public event LeaveHandler Leave;
 
     /// <summary>Drag-and-drop session motion</summary>
     public delegate void MotionHandler(uint time, double x, double y);
 
     /// <summary>Drag-and-drop session motion</summary>
-    public event MotionHandler? Motion;
+    public event MotionHandler Motion;
 
     /// <summary>End drag-and-drop session successfully</summary>
     public delegate void DropHandler();
 
     /// <summary>End drag-and-drop session successfully</summary>
-    public event DropHandler? Drop;
+    public event DropHandler Drop;
 
     /// <summary>Advertise new selection</summary>
-    public delegate void SelectionHandler(WlDataOffer? id);
+    public delegate void SelectionHandler(WlDataOffer id);
 
     /// <summary>Advertise new selection</summary>
-    public event SelectionHandler? Selection;
+    public event SelectionHandler Selection;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1238,7 +1236,7 @@ public sealed unsafe partial class WlShellSurface : WaylandProxy, IWaylandInterf
     }
 
     /// <summary>Make the surface a fullscreen surface</summary>
-    public void SetFullscreen(FullscreenMethod method, uint framerate, WlOutput? output)
+    public void SetFullscreen(FullscreenMethod method, uint framerate, WlOutput output)
     {
         var wlArgs = stackalloc WlArgument[3];
         wlArgs[0].u = (uint)method;
@@ -1261,7 +1259,7 @@ public sealed unsafe partial class WlShellSurface : WaylandProxy, IWaylandInterf
     }
 
     /// <summary>Make the surface a maximized surface</summary>
-    public void SetMaximized(WlOutput? output)
+    public void SetMaximized(WlOutput output)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = output?.Handle ?? 0;
@@ -1290,19 +1288,19 @@ public sealed unsafe partial class WlShellSurface : WaylandProxy, IWaylandInterf
     public delegate void PingHandler(uint serial);
 
     /// <summary>Ping client</summary>
-    public event PingHandler? Ping;
+    public event PingHandler Ping;
 
     /// <summary>Suggest resize</summary>
     public delegate void ConfigureHandler(Resize edges, int width, int height);
 
     /// <summary>Suggest resize</summary>
-    public event ConfigureHandler? Configure;
+    public event ConfigureHandler Configure;
 
     /// <summary>Popup interaction is done</summary>
     public delegate void PopupDoneHandler();
 
     /// <summary>Popup interaction is done</summary>
-    public event PopupDoneHandler? PopupDone;
+    public event PopupDoneHandler PopupDone;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1366,7 +1364,7 @@ public sealed unsafe partial class WlSurface : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Set the surface contents</summary>
-    public void Attach(WlBuffer? buffer, int x, int y)
+    public void Attach(WlBuffer buffer, int x, int y)
     {
         var wlArgs = stackalloc WlArgument[3];
         wlArgs[0].o = buffer?.Handle ?? 0;
@@ -1395,7 +1393,7 @@ public sealed unsafe partial class WlSurface : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Set opaque region</summary>
-    public void SetOpaqueRegion(WlRegion? region)
+    public void SetOpaqueRegion(WlRegion region)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = region?.Handle ?? 0;
@@ -1403,7 +1401,7 @@ public sealed unsafe partial class WlSurface : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Set input region</summary>
-    public void SetInputRegion(WlRegion? region)
+    public void SetInputRegion(WlRegion region)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = region?.Handle ?? 0;
@@ -1462,28 +1460,28 @@ public sealed unsafe partial class WlSurface : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Surface enters an output</summary>
-    public delegate void EnterHandler(WlOutput? output);
+    public delegate void EnterHandler(WlOutput output);
 
     /// <summary>Surface enters an output</summary>
-    public event EnterHandler? Enter;
+    public event EnterHandler Enter;
 
     /// <summary>Surface leaves an output</summary>
-    public delegate void LeaveHandler(WlOutput? output);
+    public delegate void LeaveHandler(WlOutput output);
 
     /// <summary>Surface leaves an output</summary>
-    public event LeaveHandler? Leave;
+    public event LeaveHandler Leave;
 
     /// <summary>Preferred buffer scale for the surface</summary>
     public delegate void PreferredBufferScaleHandler(int factor);
 
     /// <summary>Preferred buffer scale for the surface</summary>
-    public event PreferredBufferScaleHandler? PreferredBufferScale;
+    public event PreferredBufferScaleHandler PreferredBufferScale;
 
     /// <summary>Preferred buffer transform for the surface</summary>
     public delegate void PreferredBufferTransformHandler(WlOutput.Transform transform);
 
     /// <summary>Preferred buffer transform for the surface</summary>
-    public event PreferredBufferTransformHandler? PreferredBufferTransform;
+    public event PreferredBufferTransformHandler PreferredBufferTransform;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1581,13 +1579,13 @@ public sealed unsafe partial class WlSeat : WaylandProxy, IWaylandInterface<WlSe
     public delegate void CapabilitiesHandler(Capability capabilities);
 
     /// <summary>Seat capabilities changed</summary>
-    public event CapabilitiesHandler? Capabilities;
+    public event CapabilitiesHandler Capabilities;
 
     /// <summary>Unique identifier for this seat</summary>
     public delegate void NameHandler(string name);
 
     /// <summary>Unique identifier for this seat</summary>
-    public event NameHandler? Name;
+    public event NameHandler Name;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1668,7 +1666,7 @@ public sealed unsafe partial class WlPointer : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Set the pointer surface</summary>
-    public void SetCursor(uint serial, WlSurface? surface, int hotspotX, int hotspotY)
+    public void SetCursor(uint serial, WlSurface surface, int hotspotX, int hotspotY)
     {
         var wlArgs = stackalloc WlArgument[4];
         wlArgs[0].u = serial;
@@ -1686,76 +1684,76 @@ public sealed unsafe partial class WlPointer : WaylandProxy, IWaylandInterface<W
     }
 
     /// <summary>Enter event</summary>
-    public delegate void EnterHandler(uint serial, WlSurface? surface, double surfaceX, double surfaceY);
+    public delegate void EnterHandler(uint serial, WlSurface surface, double surfaceX, double surfaceY);
 
     /// <summary>Enter event</summary>
-    public event EnterHandler? Enter;
+    public event EnterHandler Enter;
 
     /// <summary>Leave event</summary>
-    public delegate void LeaveHandler(uint serial, WlSurface? surface);
+    public delegate void LeaveHandler(uint serial, WlSurface surface);
 
     /// <summary>Leave event</summary>
-    public event LeaveHandler? Leave;
+    public event LeaveHandler Leave;
 
     /// <summary>Pointer motion event</summary>
     public delegate void MotionHandler(uint time, double surfaceX, double surfaceY);
 
     /// <summary>Pointer motion event</summary>
-    public event MotionHandler? Motion;
+    public event MotionHandler Motion;
 
     /// <summary>Pointer button event</summary>
     public delegate void ButtonHandler(uint serial, uint time, uint button, ButtonState state);
 
     /// <summary>Pointer button event</summary>
-    public event ButtonHandler? Button;
+    public event ButtonHandler Button;
 
     /// <summary>Axis event</summary>
     public delegate void AxisEventHandler(uint time, Axis axis, double value);
 
     /// <summary>Axis event</summary>
-    public event AxisEventHandler? AxisEvent;
+    public event AxisEventHandler AxisEvent;
 
     /// <summary>End of a pointer event sequence</summary>
     public delegate void FrameHandler();
 
     /// <summary>End of a pointer event sequence</summary>
-    public event FrameHandler? Frame;
+    public event FrameHandler Frame;
 
     /// <summary>Axis source event</summary>
     public delegate void AxisSourceEventHandler(AxisSource axisSource);
 
     /// <summary>Axis source event</summary>
-    public event AxisSourceEventHandler? AxisSourceEvent;
+    public event AxisSourceEventHandler AxisSourceEvent;
 
     /// <summary>Axis stop event</summary>
     public delegate void AxisStopHandler(uint time, Axis axis);
 
     /// <summary>Axis stop event</summary>
-    public event AxisStopHandler? AxisStop;
+    public event AxisStopHandler AxisStop;
 
     /// <summary>Axis click event</summary>
     public delegate void AxisDiscreteHandler(Axis axis, int discrete);
 
     /// <summary>Axis click event</summary>
-    public event AxisDiscreteHandler? AxisDiscrete;
+    public event AxisDiscreteHandler AxisDiscrete;
 
     /// <summary>Axis high-resolution scroll event</summary>
     public delegate void AxisValue120Handler(Axis axis, int value120);
 
     /// <summary>Axis high-resolution scroll event</summary>
-    public event AxisValue120Handler? AxisValue120;
+    public event AxisValue120Handler AxisValue120;
 
     /// <summary>Axis relative physical direction event</summary>
     public delegate void AxisRelativeDirectionEventHandler(Axis axis, AxisRelativeDirection direction);
 
     /// <summary>Axis relative physical direction event</summary>
-    public event AxisRelativeDirectionEventHandler? AxisRelativeDirectionEvent;
+    public event AxisRelativeDirectionEventHandler AxisRelativeDirectionEvent;
 
     /// <summary>Pointer warp event</summary>
     public delegate void WarpHandler(double surfaceX, double surfaceY);
 
     /// <summary>Pointer warp event</summary>
-    public event WarpHandler? Warp;
+    public event WarpHandler Warp;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1870,37 +1868,37 @@ public sealed unsafe partial class WlKeyboard : WaylandProxy, IWaylandInterface<
     public delegate void KeymapHandler(KeymapFormat format, int fd, uint size);
 
     /// <summary>Keyboard mapping</summary>
-    public event KeymapHandler? Keymap;
+    public event KeymapHandler Keymap;
 
     /// <summary>Enter event</summary>
-    public delegate void EnterHandler(uint serial, WlSurface? surface, ReadOnlySpan<byte> keys);
+    public delegate void EnterHandler(uint serial, WlSurface surface, ReadOnlySpan<byte> keys);
 
     /// <summary>Enter event</summary>
-    public event EnterHandler? Enter;
+    public event EnterHandler Enter;
 
     /// <summary>Leave event</summary>
-    public delegate void LeaveHandler(uint serial, WlSurface? surface);
+    public delegate void LeaveHandler(uint serial, WlSurface surface);
 
     /// <summary>Leave event</summary>
-    public event LeaveHandler? Leave;
+    public event LeaveHandler Leave;
 
     /// <summary>Key event</summary>
     public delegate void KeyHandler(uint serial, uint time, uint key, KeyState state);
 
     /// <summary>Key event</summary>
-    public event KeyHandler? Key;
+    public event KeyHandler Key;
 
     /// <summary>Modifier and group state</summary>
     public delegate void ModifiersHandler(uint serial, uint modsDepressed, uint modsLatched, uint modsLocked, uint group);
 
     /// <summary>Modifier and group state</summary>
-    public event ModifiersHandler? Modifiers;
+    public event ModifiersHandler Modifiers;
 
     /// <summary>Repeat rate and delay</summary>
     public delegate void RepeatInfoHandler(int rate, int delay);
 
     /// <summary>Repeat rate and delay</summary>
-    public event RepeatInfoHandler? RepeatInfo;
+    public event RepeatInfoHandler RepeatInfo;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -1962,46 +1960,46 @@ public sealed unsafe partial class WlTouch : WaylandProxy, IWaylandInterface<WlT
     }
 
     /// <summary>Touch down event and beginning of a touch sequence</summary>
-    public delegate void DownHandler(uint serial, uint time, WlSurface? surface, int id, double x, double y);
+    public delegate void DownHandler(uint serial, uint time, WlSurface surface, int id, double x, double y);
 
     /// <summary>Touch down event and beginning of a touch sequence</summary>
-    public event DownHandler? Down;
+    public event DownHandler Down;
 
     /// <summary>End of a touch event sequence</summary>
     public delegate void UpHandler(uint serial, uint time, int id);
 
     /// <summary>End of a touch event sequence</summary>
-    public event UpHandler? Up;
+    public event UpHandler Up;
 
     /// <summary>Update of touch point coordinates</summary>
     public delegate void MotionHandler(uint time, int id, double x, double y);
 
     /// <summary>Update of touch point coordinates</summary>
-    public event MotionHandler? Motion;
+    public event MotionHandler Motion;
 
     /// <summary>End of touch frame event</summary>
     public delegate void FrameHandler();
 
     /// <summary>End of touch frame event</summary>
-    public event FrameHandler? Frame;
+    public event FrameHandler Frame;
 
     /// <summary>Touch session cancelled</summary>
     public delegate void CancelHandler();
 
     /// <summary>Touch session cancelled</summary>
-    public event CancelHandler? Cancel;
+    public event CancelHandler Cancel;
 
     /// <summary>Update shape of touch point</summary>
     public delegate void ShapeHandler(int id, double major, double minor);
 
     /// <summary>Update shape of touch point</summary>
-    public event ShapeHandler? Shape;
+    public event ShapeHandler Shape;
 
     /// <summary>Update orientation of touch point</summary>
     public delegate void OrientationHandler(int id, double orientation);
 
     /// <summary>Update orientation of touch point</summary>
-    public event OrientationHandler? Orientation;
+    public event OrientationHandler Orientation;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -2119,37 +2117,37 @@ public sealed unsafe partial class WlOutput : WaylandProxy, IWaylandInterface<Wl
     public delegate void GeometryHandler(int x, int y, int physicalWidth, int physicalHeight, Subpixel subpixel, string make, string model, Transform transform);
 
     /// <summary>Properties of the output</summary>
-    public event GeometryHandler? Geometry;
+    public event GeometryHandler Geometry;
 
     /// <summary>Advertise available modes for the output</summary>
     public delegate void ModeEventHandler(Mode flags, int width, int height, int refresh);
 
     /// <summary>Advertise available modes for the output</summary>
-    public event ModeEventHandler? ModeEvent;
+    public event ModeEventHandler ModeEvent;
 
     /// <summary>Sent all information about output</summary>
     public delegate void DoneHandler();
 
     /// <summary>Sent all information about output</summary>
-    public event DoneHandler? Done;
+    public event DoneHandler Done;
 
     /// <summary>Output scaling properties</summary>
     public delegate void ScaleHandler(int factor);
 
     /// <summary>Output scaling properties</summary>
-    public event ScaleHandler? Scale;
+    public event ScaleHandler Scale;
 
     /// <summary>Name of this output</summary>
     public delegate void NameHandler(string name);
 
     /// <summary>Name of this output</summary>
-    public event NameHandler? Name;
+    public event NameHandler Name;
 
     /// <summary>Human-readable description of this output</summary>
     public delegate void DescriptionHandler(string description);
 
     /// <summary>Human-readable description of this output</summary>
-    public event DescriptionHandler? Description;
+    public event DescriptionHandler Description;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

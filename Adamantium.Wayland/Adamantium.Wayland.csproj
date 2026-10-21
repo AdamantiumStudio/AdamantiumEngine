@@ -6,7 +6,6 @@
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>true</IsPackable>
     <Description>Wayland client bindings for the Adamantium engine: the protocols generated from their XML into C#, over libwayland-client's wire, and xkbcommon for the keyboard.</Description>

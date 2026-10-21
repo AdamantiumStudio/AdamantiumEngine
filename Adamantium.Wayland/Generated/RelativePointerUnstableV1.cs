@@ -29,8 +29,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -95,7 +93,7 @@ public sealed unsafe partial class ZwpRelativePointerV1 : WaylandProxy, IWayland
     public delegate void RelativeMotionHandler(uint utimeHi, uint utimeLo, double dx, double dy, double dxUnaccel, double dyUnaccel);
 
     /// <summary>Relative pointer motion</summary>
-    public event RelativeMotionHandler? RelativeMotion;
+    public event RelativeMotionHandler RelativeMotion;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

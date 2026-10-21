@@ -28,8 +28,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -100,7 +98,7 @@ public sealed unsafe partial class WpFractionalScaleV1 : WaylandProxy, IWaylandI
     public delegate void PreferredScaleHandler(uint scale);
 
     /// <summary>Notify of new preferred scale</summary>
-    public event PreferredScaleHandler? PreferredScale;
+    public event PreferredScaleHandler PreferredScale;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {

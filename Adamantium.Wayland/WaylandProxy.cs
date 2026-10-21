@@ -27,7 +27,7 @@ public abstract unsafe class WaylandProxy
 {
     private static readonly ConcurrentDictionary<nint, WaylandProxy> Proxies = new();
 
-    [ThreadStatic] private static ExceptionDispatchInfo? dispatchFailure;
+    [ThreadStatic] private static ExceptionDispatchInfo dispatchFailure;
 
     private GCHandle self;
     private bool owned = true;
@@ -105,7 +105,7 @@ public abstract unsafe class WaylandProxy
     }
 
     /// <summary>The proxy of ours with this handle, null if there is none - or if it is someone else's.</summary>
-    protected static T? Find<T>(nint handle) where T : WaylandProxy
+    protected static T Find<T>(nint handle) where T : WaylandProxy
     {
         return handle != 0 && Proxies.TryGetValue(handle, out var proxy) ? proxy as T : null;
     }

@@ -53,7 +53,7 @@ public sealed unsafe class XkbKeyboard : IDisposable
 
     /// <summary>Reads the keymap wl_keyboard.keymap sent, and closes its descriptor. Null when the text is not a
     /// keymap XKB can compile.</summary>
-    public static XkbKeyboard? FromKeymap(int fd, uint size)
+    public static XkbKeyboard FromKeymap(int fd, uint size)
     {
         try
         {
@@ -79,13 +79,13 @@ public sealed unsafe class XkbKeyboard : IDisposable
     }
 
     /// <summary>Compiles a keymap from its XKB text.</summary>
-    public static XkbKeyboard? FromText(string text)
+    public static XkbKeyboard FromText(string text)
     {
         using var utf8 = new WaylandString(text);
         return FromText(utf8.Pointer);
     }
 
-    private static XkbKeyboard? FromText(byte* text)
+    private static XkbKeyboard FromText(byte* text)
     {
         var context = Xkb.xkb_context_new(0);
         if (context == 0)

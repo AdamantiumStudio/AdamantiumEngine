@@ -93,5 +93,5 @@ public unsafe class WaylandTablesTests
         throw new AssertionException($"{name} is not a request of {Marshal.PtrToStringUTF8((nint)@interface->name)}");
     }
 
-    private static string? Signature(WlMessage* message) => Marshal.PtrToStringUTF8((nint)message->signature);
+    private static string Signature(WlMessage* message) => Marshal.PtrToStringUTF8((nint)message->signature);
 }

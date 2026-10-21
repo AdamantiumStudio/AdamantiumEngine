@@ -5,8 +5,6 @@
 // </auto-generated>
 // ----------------------------------------------------------------------------------------------
 
-#nullable enable
-
 namespace Adamantium.Wayland;
 
 /// <summary>The wl_interface of every interface of the generated protocols: names, versions and the

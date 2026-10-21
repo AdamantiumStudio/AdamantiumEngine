@@ -6,16 +6,16 @@ namespace Adamantium.Wayland.Generator;
 /// <summary>A protocol as its XML describes it: what wayland-scanner reads, read here straight into C#.</summary>
 public sealed record Protocol(string Name, string FileName, string Copyright, IReadOnlyList<Interface> Interfaces);
 
-public sealed record Interface(string Name, int Version, string? Summary, IReadOnlyList<Message> Requests,
+public sealed record Interface(string Name, int Version, string Summary, IReadOnlyList<Message> Requests,
     IReadOnlyList<Message> Events, IReadOnlyList<WaylandEnum> Enums);
 
-public sealed record Message(string Name, bool IsDestructor, int Since, string? Summary, IReadOnlyList<Argument> Arguments)
+public sealed record Message(string Name, bool IsDestructor, int Since, string Summary, IReadOnlyList<Argument> Arguments)
 {
     /// <summary>The untyped new_id of wl_registry.bind: the caller names the interface, which goes on the wire as a
     /// string and a version ahead of the id.</summary>
     public bool HasUntypedNewId => Arguments.Any(a => a.Type == ArgumentType.NewId && a.Interface == null);
 
-    public Argument? NewId => Arguments.FirstOrDefault(a => a.Type == ArgumentType.NewId);
+    public Argument NewId => Arguments.FirstOrDefault(a => a.Type == ArgumentType.NewId);
 }
 
 public enum ArgumentType
@@ -30,12 +30,12 @@ public enum ArgumentType
     Fd,
 }
 
-public sealed record Argument(string Name, ArgumentType Type, string? Interface, bool AllowNull, string? Enum,
-    string? Summary);
+public sealed record Argument(string Name, ArgumentType Type, string Interface, bool AllowNull, string Enum,
+    string Summary);
 
-public sealed record WaylandEnum(string Name, bool IsBitfield, string? Summary, IReadOnlyList<EnumEntry> Entries);
+public sealed record WaylandEnum(string Name, bool IsBitfield, string Summary, IReadOnlyList<EnumEntry> Entries);
 
-public sealed record EnumEntry(string Name, uint Value, string? Summary);
+public sealed record EnumEntry(string Name, uint Value, string Summary);
 
 public static class ProtocolReader
 {
@@ -61,10 +61,10 @@ public static class ProtocolReader
 
     private static Message ReadMessage(XElement e)
     {
-        var since = (string?)e.Attribute("since");
+        var since = (string)e.Attribute("since");
         return new Message(
             Required(e, "name"),
-            (string?)e.Attribute("type") == "destructor",
+            (string)e.Attribute("type") == "destructor",
             since == null ? 1 : int.Parse(since, CultureInfo.InvariantCulture),
             Summary(e),
             e.Elements("arg").Select(ReadArgument).ToList());
@@ -88,22 +88,22 @@ public static class ProtocolReader
         return new Argument(
             Required(e, "name"),
             type,
-            (string?)e.Attribute("interface"),
-            (string?)e.Attribute("allow-null") == "true",
-            (string?)e.Attribute("enum"),
-            (string?)e.Attribute("summary"));
+            (string)e.Attribute("interface"),
+            (string)e.Attribute("allow-null") == "true",
+            (string)e.Attribute("enum"),
+            (string)e.Attribute("summary"));
     }
 
     private static WaylandEnum ReadEnum(XElement e)
     {
         return new WaylandEnum(
             Required(e, "name"),
-            (string?)e.Attribute("bitfield") == "true",
+            (string)e.Attribute("bitfield") == "true",
             Summary(e),
             e.Elements("entry").Select(x => new EnumEntry(
                 Required(x, "name"),
                 ParseValue(Required(x, "value")),
-                (string?)x.Attribute("summary") ?? Summary(x))).ToList());
+                (string)x.Attribute("summary") ?? Summary(x))).ToList());
     }
 
     private static uint ParseValue(string value)
@@ -113,14 +113,14 @@ public static class ProtocolReader
             : uint.Parse(value, CultureInfo.InvariantCulture);
     }
 
-    private static string? Summary(XElement e)
+    private static string Summary(XElement e)
     {
-        return (string?)e.Element("description")?.Attribute("summary");
+        return (string)e.Element("description")?.Attribute("summary");
     }
 
     private static string Required(XElement e, string attribute)
     {
-        return (string?)e.Attribute(attribute)
+        return (string)e.Attribute(attribute)
                ?? throw new InvalidDataException($"<{e.Name}> has no '{attribute}' attribute");
     }
 }

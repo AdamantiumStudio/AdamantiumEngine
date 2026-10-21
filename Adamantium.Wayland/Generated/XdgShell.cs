@@ -33,8 +33,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#nullable enable
-
 using System;
 
 namespace Adamantium.Wayland;
@@ -107,7 +105,7 @@ public sealed unsafe partial class XdgWmBase : WaylandProxy, IWaylandInterface<X
     public delegate void PingHandler(uint serial);
 
     /// <summary>Check if the client is alive</summary>
-    public event PingHandler? Ping;
+    public event PingHandler Ping;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -323,7 +321,7 @@ public sealed unsafe partial class XdgSurface : WaylandProxy, IWaylandInterface<
     }
 
     /// <summary>Assign the xdg_popup surface role</summary>
-    public XdgPopup GetPopup(XdgSurface? parent, XdgPositioner positioner)
+    public XdgPopup GetPopup(XdgSurface parent, XdgPositioner positioner)
     {
         var wlArgs = stackalloc WlArgument[3];
         wlArgs[0].n = 0;
@@ -355,7 +353,7 @@ public sealed unsafe partial class XdgSurface : WaylandProxy, IWaylandInterface<
     public delegate void ConfigureHandler(uint serial);
 
     /// <summary>Suggest a surface change</summary>
-    public event ConfigureHandler? Configure;
+    public event ConfigureHandler Configure;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -459,7 +457,7 @@ public sealed unsafe partial class XdgToplevel : WaylandProxy, IWaylandInterface
     }
 
     /// <summary>Set the parent of this surface</summary>
-    public void SetParent(XdgToplevel? parent)
+    public void SetParent(XdgToplevel parent)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = parent?.Handle ?? 0;
@@ -547,7 +545,7 @@ public sealed unsafe partial class XdgToplevel : WaylandProxy, IWaylandInterface
     }
 
     /// <summary>Set the window as fullscreen on an output</summary>
-    public void SetFullscreen(WlOutput? output)
+    public void SetFullscreen(WlOutput output)
     {
         var wlArgs = stackalloc WlArgument[1];
         wlArgs[0].o = output?.Handle ?? 0;
@@ -572,25 +570,25 @@ public sealed unsafe partial class XdgToplevel : WaylandProxy, IWaylandInterface
     public delegate void ConfigureHandler(int width, int height, ReadOnlySpan<byte> states);
 
     /// <summary>Suggest a surface change</summary>
-    public event ConfigureHandler? Configure;
+    public event ConfigureHandler Configure;
 
     /// <summary>Surface wants to be closed</summary>
     public delegate void CloseHandler();
 
     /// <summary>Surface wants to be closed</summary>
-    public event CloseHandler? Close;
+    public event CloseHandler Close;
 
     /// <summary>Recommended window geometry bounds</summary>
     public delegate void ConfigureBoundsHandler(int width, int height);
 
     /// <summary>Recommended window geometry bounds</summary>
-    public event ConfigureBoundsHandler? ConfigureBounds;
+    public event ConfigureBoundsHandler ConfigureBounds;
 
     /// <summary>Compositor capabilities</summary>
     public delegate void WmCapabilitiesEventHandler(ReadOnlySpan<byte> capabilities);
 
     /// <summary>Compositor capabilities</summary>
-    public event WmCapabilitiesEventHandler? WmCapabilitiesEvent;
+    public event WmCapabilitiesEventHandler WmCapabilitiesEvent;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
@@ -669,19 +667,19 @@ public sealed unsafe partial class XdgPopup : WaylandProxy, IWaylandInterface<Xd
     public delegate void ConfigureHandler(int x, int y, int width, int height);
 
     /// <summary>Configure the popup surface</summary>
-    public event ConfigureHandler? Configure;
+    public event ConfigureHandler Configure;
 
     /// <summary>Popup interaction is done</summary>
     public delegate void PopupDoneHandler();
 
     /// <summary>Popup interaction is done</summary>
-    public event PopupDoneHandler? PopupDone;
+    public event PopupDoneHandler PopupDone;
 
     /// <summary>Signal the completion of a repositioned request</summary>
     public delegate void RepositionedHandler(uint token);
 
     /// <summary>Signal the completion of a repositioned request</summary>
-    public event RepositionedHandler? Repositioned;
+    public event RepositionedHandler Repositioned;
 
     protected override void DispatchEvent(uint opcode, WlArgument* args)
     {
