@@ -45,6 +45,8 @@ namespace Adamantium.Fonts
         private IReadOnlyList<FontVariation> movingFrom;
         private IReadOnlyList<FontVariation> movingTo;
         private float movingProgress;
+        private short capsHeight;
+        private short capsHeightOfH;
         public Typeface Typeface { get; private set; }
         internal VariationStore VariationData { get; set; }
 
@@ -128,8 +130,27 @@ namespace Adamantium.Fonts
         public ushort UnitsPerEm { get; internal set; }
         public Int16 Ascender { get; internal set; }
         public Int16 Descender { get; internal set; }
-        public Int16 CapsHeight { get; internal set; }
-        
+        /// <summary>The height of the capitals: the font's own figure, or the top of its H where it gives none.</summary>
+        public Int16 CapsHeight
+        {
+            get
+            {
+                if (capsHeight != 0)
+                {
+                    return capsHeight;
+                }
+
+                if (capsHeightOfH == 0 && unicodeToGlyph != null && unicodeToGlyph.ContainsKey('H'))
+                {
+                    var bounds = GetGlyphByUnicode('H').BoundingRectangle;
+                    capsHeightOfH = (short)(bounds.Y + bounds.Height);
+                }
+
+                return capsHeightOfH;
+            }
+            internal set => capsHeight = value;
+        }
+
         public Int16 LineAscent { get; internal set; }
 
         public Int16 LineDescent { get; internal set; }
@@ -594,6 +615,7 @@ namespace Adamantium.Fonts
             instance.baseFont = this;
             instance.coordinates = normalized;
             instance.colorPaintCache = new ConcurrentDictionary<ulong, ColorPaintOperation[]>();
+            instance.capsHeightOfH = 0;
             instance.Variations = values;
             instance.Weight = values.FirstOrDefault(v => v.Tag == "wght") is { Tag: not null } weight
                 ? new FontWeight(Math.Max(1, Math.Min(1000, (int)Math.Round(weight.Value))))
@@ -604,6 +626,14 @@ namespace Adamantium.Fonts
             instance.Style = values.Any(v => v.Tag == "ital" && v.Value >= 0.5f) ? FontStyle.Italic
                 : values.Any(v => v.Tag == "slnt" && v.Value != 0) ? FontStyle.Oblique
                 : Style;
+            if (NamedInstanceAt(values) is { } named)
+            {
+                var family = string.IsNullOrEmpty(TypographicFamilyName) ? FontFamily : TypographicFamilyName;
+                instance.FontSubfamily = named.Name;
+                instance.TypographicSubfamilyName = named.Name;
+                instance.FullName = $"{family} {named.Name}";
+            }
+
             var count = (int)Typeface.GlyphCount;
             instance.variedAdvances = new int[count];
             for (var i = 0; i < count; i++)
@@ -630,6 +660,27 @@ namespace Adamantium.Fonts
             }
 
             return instance;
+        }
+
+        private FontNamedInstance NamedInstanceAt(FontVariation[] values) =>
+            NamedInstances.FirstOrDefault(named => !string.IsNullOrEmpty(named.Name) && IsAt(named, values));
+
+        private bool IsAt(FontNamedInstance named, FontVariation[] values)
+        {
+            if (named.Variations.Count != values.Length || values.Length != Axes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (Math.Abs(Axes[i].Normalize(named.Variations[i].Value) - Axes[i].Normalize(values[i].Value)) > 1)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private Glyph VariedGlyph(uint index, IGlyphOutlineSource source)
@@ -659,7 +710,11 @@ namespace Adamantium.Fonts
 
             Ascender = Varied(Ascender, "hasc");
             Descender = Varied(Descender, "hdsc");
-            CapsHeight = Varied(CapsHeight, "cpht");
+            if (capsHeight != 0)
+            {
+                capsHeight = Varied(capsHeight, "cpht");
+            }
+
             UnderlinePosition = Varied(UnderlinePosition, "undo");
             UnderlineThickness = Varied(UnderlineThickness, "unds");
             StrikeoutPosition = Varied(StrikeoutPosition, "stro");
