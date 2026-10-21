@@ -137,6 +137,9 @@ namespace Adamantium.Win32
         public static extern short GetAsyncKeyState(uint key);
 
         [DllImport("user32.dll")]
+        public static extern int GetKeyboardLayoutList(int count, [Out] IntPtr[] layouts);
+
+        [DllImport("user32.dll")]
         public static extern IntPtr LoadCursor(IntPtr hInstance, NativeCursors cursorName);
 
         [DllImport("user32.dll", EntryPoint = "LoadImageW", SetLastError = true)]

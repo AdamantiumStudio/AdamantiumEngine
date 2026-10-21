@@ -21,6 +21,13 @@ public class DropCapTests
         "the youngest was so beautiful that the sun itself, which has seen so much, was astonished whenever it shone " +
         "in her face.";
 
+    private const string HebrewProse =
+        "בראשית ברא אלהים את השמים ואת הארץ והארץ היתה תהו ובהו וחשך על פני תהום ורוח אלהים מרחפת על פני המים " +
+        "ויאמר אלהים יהי אור ויהי אור וירא אלהים את האור כי טוב ויבדל אלהים בין האור ובין החשך";
+
+    private static readonly Lazy<Typeface> Hebrew = new(() =>
+        Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf")));
+
     private static readonly Lazy<Typeface> SourceSans = new(() =>
         Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf")));
 
@@ -36,6 +43,24 @@ public class DropCapTests
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
+
+    // A paragraph running right to left, in Hebrew.
+    private static TextLayout RightToLeft(AttributedText text, DropCap dropCap, LineBreaking breaking = LineBreaking.Greedy,
+        HorizontalTextAlignment alignment = HorizontalTextAlignment.Left)
+    {
+        var typeface = Hebrew.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, DropCap = dropCap, LineBreaking = breaking, Direction = TextDirection.RightToLeft,
+        };
+        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            alignment, VerticalTextAlignment.Top);
+        return layout;
+    }
+
+    private static TextLayout RightToLeft(string text, DropCap dropCap, LineBreaking breaking = LineBreaking.Greedy,
+        HorizontalTextAlignment alignment = HorizontalTextAlignment.Left) =>
+        RightToLeft(new AttributedText(text), dropCap, breaking, alignment);
 
     private static GlyphWordData[] Body(TextLayout layout) =>
         layout.GetTextData().Where(g => g.PositionInString > 0).ToArray();
@@ -314,6 +339,264 @@ public class DropCapTests
 
         Assert.That(layout.GetCaretRect(new CaretPosition(0), 1).Height,
             Is.GreaterThan(layout.GetLine(0).Height * 2.5));
+    }
+
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void InARightToLeftParagraph_TheDropCapStandsAtTheRight_AndTheLinesBesideItEndPastItsInk(LineBreaking breaking)
+    {
+        var layout = RightToLeft(HebrewProse, new DropCap(3), breaking);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var body = Body(layout).Where(g => g.Symbol != ' ').ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cap.PenX + cap.Advance, Is.EqualTo(Width).Within(0.5), "the cap ends at the right edge");
+            Assert.That(cap.FontSize, Is.GreaterThan(FontSize * 2));
+            for (var line = 0; line < 3; line++)
+            {
+                Assert.That(body.Where(g => g.LineIndex == line).Max(g => g.Rect.Right), Is.LessThan(cap.Rect.Left),
+                    $"line {line}");
+            }
+
+            Assert.That(body.Where(g => g.LineIndex == 3).Max(g => g.Rect.Right), Is.GreaterThan(Width - 3),
+                "the fourth line starts at the margin");
+            Assert.That(body.Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(-0.5));
+        });
+    }
+
+    [Test]
+    public void InARightToLeftParagraph_TheDropCapStandsAtTheMarginItsLinesStartFrom_InPlaceOfTheIndent()
+    {
+        var text = new AttributedText(HebrewProse).SetParagraph(0, HebrewProse.Length,
+            new ParagraphAttributes { MarginRight = 50, TextIndent = 25 });
+        var layout = RightToLeft(text, new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var besideCap = Enumerable.Range(0, 2).Select(line => Body(layout)
+            .Where(g => g.LineIndex == line && g.Symbol != ' ').Max(g => (double)g.Rect.Right)).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cap.PenX + cap.Advance, Is.EqualTo(Width - 50).Within(0.5));
+            Assert.That(besideCap[0], Is.EqualTo(besideCap[1]).Within(3), "no indent beside the cap");
+            Assert.That(besideCap[0], Is.LessThan(cap.Rect.Left));
+        });
+    }
+
+    [Test]
+    public void InARightToLeftParagraph_AJustifiedLineBesideTheDropCap_FillsTheRestOfTheWidth()
+    {
+        var layout = RightToLeft(HebrewProse, new DropCap(3), LineBreaking.Paragraph, HorizontalTextAlignment.Justify);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var line = Body(layout).Where(g => g.LineIndex == 1 && g.Symbol != ' ').ToArray();
+
+        Assert.That(line.Min(g => g.Rect.Left), Is.EqualTo(0).Within(1));
+        Assert.That(line.Max(g => g.Rect.Right), Is.LessThan(cap.Rect.Left));
+    }
+
+    // Laid out as wide as it needs, the text beside the cap keeps out of it and inside the box.
+    [Test]
+    public void InARightToLeftParagraphAsWideAsItsText_TheDropCapStandsInTheBox()
+    {
+        var typeface = Hebrew.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, DropCap = new DropCap(2), Direction = TextDirection.RightToLeft,
+        };
+        layout.ProcessText("שלום עולם\nטוב", FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+            TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var body = Body(layout).Where(g => g.Symbol != ' ').ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cap.FontSize, Is.GreaterThan(FontSize));
+            Assert.That(cap.PenX + cap.Advance, Is.EqualTo(layout.CalculatedLayoutSize.Width).Within(1));
+            Assert.That(body.Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(-0.5));
+            Assert.That(body.Where(g => g.LineIndex == 0).Max(g => g.Rect.Right), Is.LessThan(cap.Rect.Left));
+        });
+    }
+
+    [Test]
+    public void SeveralCharacters_OfARightToLeftDropCap_StandInVisualOrder()
+    {
+        var layout = RightToLeft(HebrewProse, new DropCap(2, 2));
+        var first = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var second = layout.GetTextData().Single(g => g.PositionInString == 1);
+
+        Assert.That(first.FontSize, Is.EqualTo(second.FontSize));
+        Assert.That(first.PenX, Is.GreaterThan(second.PenX), "the first at the right");
+    }
+
+    // Characters of a drop cap that run each their own way stand as in their line: the bracket opening a right-to-left
+    // paragraph mirrored at the right, the number left to right beside it.
+    [Test]
+    public void AMixedDropCap_StandsAsItsLineWouldShowIt()
+    {
+        const string text = "(1) In olden times when wishing still helped one, there lived a king whose daughters were all beautiful";
+        var typeface = SourceSans.Value;
+        TextLayout Lay(DropCap dropCap)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, DropCap = dropCap, Direction = TextDirection.RightToLeft,
+            };
+            layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+                HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        var capped = Lay(new DropCap(3));
+        var plain = Lay(null);
+        var bracket = capped.GetTextData().Single(g => g.PositionInString == 0);
+        var number = capped.GetTextData().Single(g => g.PositionInString == 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(bracket.PenX, Is.GreaterThan(number.PenX), "the bracket at the right");
+            Assert.That(bracket.Glyph.Index, Is.EqualTo(plain.GetTextData().Single(g => g.PositionInString == 0).Glyph.Index),
+                "mirrored, as in the line");
+            Assert.That(capped.GetCaretPoint(new CaretPosition(0)).X, Is.EqualTo(bracket.PenX + bracket.Advance).Within(0.5));
+            Assert.That(capped.GetCaretStops()[1].X, Is.EqualTo(number.PenX).Within(0.5), "before the number, at its left");
+        });
+    }
+
+    // Each character of a right-to-left drop cap has its own caret stop, selection and click.
+    [Test]
+    public void EachCharacterOfARightToLeftDropCap_IsSelectedAndClickedAlone()
+    {
+        var layout = RightToLeft(HebrewProse, new DropCap(3, 2));
+        var second = layout.GetTextData().Single(g => g.PositionInString == 1);
+        var rects = layout.GetRangeRects(1, 2);
+        var y = layout.GetLine(1).Top + layout.GetLine(1).Height / 2;
+        var hit = layout.HitTest(second.PenX + second.Advance / 2, y);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rects.Min(r => r.Left), Is.EqualTo(second.PenX).Within(0.5));
+            Assert.That(rects.Max(r => r.Right), Is.EqualTo(second.PenX + second.Advance).Within(0.5));
+            Assert.That((hit.Index, hit.IsInside), Is.EqualTo((1, true)));
+        });
+    }
+
+    // Two scripts running right to left in one cap stand as their line shows them: the first at the right.
+    [Test]
+    public void ADropCapOfTwoRightToLeftScripts_StandsAsItsLineShowsIt()
+    {
+        var layout = RightToLeft("אب " + HebrewProse, new DropCap(3, 2));
+        var first = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var second = layout.GetTextData().Single(g => g.PositionInString == 1);
+
+        Assert.That(first.PenX, Is.GreaterThan(second.PenX));
+        Assert.That(layout.GetCaretPoint(new CaretPosition(0)).X, Is.EqualTo(first.PenX + first.Advance).Within(0.5));
+    }
+
+    // The space after a right-to-left cap stands beside it, at the start of its line, as after a left-to-right one.
+    [Test]
+    public void TheSpaceAfterARightToLeftDropCap_StandsBesideIt()
+    {
+        var layout = RightToLeft("ב " + HebrewProse, new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var space = layout.GetTextData().Single(g => g.PositionInString == 1);
+
+        Assert.That(space.PenX + space.Advance, Is.EqualTo(cap.PenX + cap.Advance - LayoutIndent(layout)).Within(0.5));
+        Assert.That(layout.GetCaretPoint(new CaretPosition(1)).X, Is.LessThanOrEqualTo(cap.Rect.Left));
+    }
+
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void TheSpaceAfterARightToLeftDropCap_StandsBesideIt_InAJustifiedParagraph(LineBreaking breaking)
+    {
+        var layout = RightToLeft("ב " + HebrewProse, new DropCap(3), breaking, HorizontalTextAlignment.Justify);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var space = layout.GetTextData().Single(g => g.PositionInString == 1);
+
+        Assert.That(space.PenX + space.Advance, Is.LessThanOrEqualTo(cap.Rect.Left));
+        Assert.That(Body(layout).Where(g => g.LineIndex == 0 && g.Symbol != ' ').Max(g => g.Rect.Right),
+            Is.LessThanOrEqualTo(space.PenX + 0.5));
+    }
+
+    // Down vertical lines a cap's characters stand in the order they are read, whatever their direction.
+    [Test]
+    public void AVerticalDropCapOfRightToLeftLetters_HasItsCaretsInOrder()
+    {
+        var typeface = Hebrew.Value;
+        var layout = new TextLayout(typeface, typeface.Fonts[0])
+        {
+            Fallback = null, DropCap = new DropCap(2, 2), Direction = TextDirection.LeftToRight,
+            WritingMode = WritingMode.VerticalRightToLeft,
+        };
+        layout.ProcessText("אב " + Prose, FontSize, new Size(Width, Width), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var stops = layout.GetCaretStops();
+
+        Assume.That(layout.GetTextData().Single(g => g.PositionInString == 0).FontSize, Is.GreaterThan(FontSize));
+        Assert.That(stops[0].X, Is.LessThan(stops[1].X));
+        Assert.That(stops[1].X, Is.LessThan(stops[2].X));
+    }
+
+    // How far in from the right the lines beside a right-to-left cap start.
+    private static double LayoutIndent(TextLayout layout)
+    {
+        var beside = Body(layout).Where(g => g.LineIndex == 1 && g.Symbol != ' ').Max(g => (double)g.Rect.Right);
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        return cap.PenX + cap.Advance - beside;
+    }
+
+    // A cap taking a carriage return and line feed in text with both directions is laid out, as in text with one.
+    [Test]
+    public void ADropCapTakingALineEnd_InTextOfBothDirections_IsLaidOut()
+    {
+        var layout = RightToLeft("א\r\n" + HebrewProse + " world", new DropCap(3, 2));
+
+        Assert.That(layout.GetTextData().Single(g => g.PositionInString == 0).FontSize, Is.GreaterThan(FontSize));
+    }
+
+    // The text beside a right-to-left cap stands as far from its ink as beside a left-to-right one.
+    [Test]
+    public void TheGapBesideARightToLeftDropCap_IsTheMirrorOfALeftToRightOnes()
+    {
+        var typeface = Hebrew.Value;
+        TextLayout Lay(TextDirection direction)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, DropCap = new DropCap(3), Direction = direction,
+            };
+            layout.ProcessText(HebrewProse, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords,
+                TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        var rightToLeft = Lay(TextDirection.RightToLeft);
+        var leftToRight = Lay(TextDirection.LeftToRight);
+        var rtlCap = rightToLeft.GetTextData().Single(g => g.PositionInString == 0);
+        var ltrCap = leftToRight.GetTextData().Single(g => g.PositionInString == 0);
+        // A right-to-left line is set by its ink at its start, a left-to-right one by its pen.
+        var rtlLine = Body(rightToLeft).Where(g => g.LineIndex == 1 && g.Symbol != ' ').Max(g => (double)g.Rect.Right);
+        var ltrLine = Body(leftToRight).Where(g => g.LineIndex == 1).Min(g => g.PenX);
+
+        Assert.That(rtlCap.Rect.Left - rtlLine, Is.EqualTo(ltrLine - ltrCap.Rect.Right).Within(0.5));
+    }
+
+    // The caret before the first character stands on the cap's right edge, after it on its left; a click finds it on
+    // every line it spans.
+    [TestCase(0)]
+    [TestCase(2)]
+    public void AClickOnARightToLeftDropCap_FindsIt_OnEveryLineItSpans(int line)
+    {
+        var layout = RightToLeft(HebrewProse, new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var y = layout.GetLine(line).Top + layout.GetLine(line).Height / 2;
+        var leading = layout.HitTest(cap.PenX + cap.Advance * 0.75, y);
+        var trailing = layout.HitTest(cap.PenX + cap.Advance * 0.25, y);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetCaretPoint(new CaretPosition(0)).X, Is.EqualTo(cap.PenX + cap.Advance).Within(0.5));
+            Assert.That((leading.Index, leading.CaretIndex, leading.IsInside), Is.EqualTo((0, 0, true)), "its right half");
+            Assert.That((trailing.Index, trailing.CaretIndex, trailing.IsInside), Is.EqualTo((0, 1, true)), "its left half");
+        });
     }
 
     [TestCase(1, 1)]

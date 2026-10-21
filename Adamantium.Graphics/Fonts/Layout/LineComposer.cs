@@ -181,8 +181,10 @@ internal sealed class LineComposer
         // What the attributed text says, read once: a style changed meanwhile does not reach this layout.
         var (attributeRuns, resolvedParagraphs) = attributed?.Resolved() ?? (null, null);
         var paragraphRuns = resolvedParagraphs is { Count: > 0 } ? resolvedParagraphs : null;
+        // A drop cap stands at the side its paragraph's lines start from.
+        var dropRightToLeft = TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0);
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
-                                              && !TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0)
+                                              && !(vertical && dropRightToLeft)
                                               && (options.MaxLines <= 0 || options.MaxLines >= options.DropCap.Lines)
                                               && (lineLimit <= 0 || lineLimit >= options.DropCap.Lines)
             ? DropCapEnd(text, options.DropCap)
@@ -450,7 +452,7 @@ internal sealed class LineComposer
 
         // Each line keeps its own paragraph's room on the right.
         var reservedRight = inkRight;
-        if (paragraphRuns != null && glyphsData.Count > 0)
+        if ((paragraphRuns != null || (dropRightToLeft && dropGlyphs != null)) && glyphsData.Count > 0)
         {
             var lineRights = new double[lineCount];
             Array.Fill(lineRights, double.NegativeInfinity);
@@ -516,6 +518,10 @@ internal sealed class LineComposer
         if (dropGlyphs != null)
         {
             glyphsData.InsertRange(0, DropCapGlyphs());
+            if (!vertical)
+            {
+                paragraphs?.ResolveApart(0, dropEnd);
+            }
             CalculateRealTextDimensions(glyphsData);
         }
 
@@ -818,6 +824,13 @@ internal sealed class LineComposer
             var baseline = DropBaseline() - shift;
             List<GlyphWordData> glyphs = [];
             double pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Left : 0) + EdgeReserve(0, false);
+            if (dropRightToLeft)
+            {
+                // Its glyphs come in visual order: the last of them ends at the right edge.
+                pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Right : finalRect.Width)
+                      - EdgeReserve(0, true) - dropGlyphs.Sum(shaped => shaped.XAdvance) * dropScale;
+            }
+
             // Down vertical lines its middle stands halfway from the first line's middle to the last's.
             var across = (DropBaseline() - lineTops[0] - lineBaselines[0]) / 2;
             foreach (var shaped in dropGlyphs)
@@ -857,7 +870,8 @@ internal sealed class LineComposer
                 pen += advance;
             }
 
-            return glyphs;
+            // Placed in visual order, kept in logical order as the lines' glyphs are.
+            return paragraphs != null ? glyphs.OrderBy(glyph => glyph.PositionInString).ToList() : glyphs;
         }
 
         // Each ruby's annotation shaped in its base's font (or the fallback's); a base narrower than it spread to its
@@ -1216,7 +1230,9 @@ internal sealed class LineComposer
 
             ShapedGlyph[] Shape(IFont capFont)
             {
-                var glyphs = TextShaper.Shape(capFont, text, 0, dropEnd, shapingOptions);
+                var glyphs = vertical || paragraphs == null
+                    ? TextShaper.Shape(capFont, text, 0, dropEnd, shapingOptions)
+                    : InVisualOrder(capFont);
                 if (kerning == TextKerning.Optical && !vertical && OpticalKerning.Measures(capFont)
                     && OpticalKerning.Applies(text, 0, dropEnd))
                 {
@@ -1224,6 +1240,51 @@ internal sealed class LineComposer
                 }
 
                 return glyphs;
+            }
+
+            // Each run of one level shaped its own way - a bracket mirrored where it runs right to left - and the runs
+            // set as its line would show them.
+            ShapedGlyph[] InVisualOrder(IFont capFont)
+            {
+                var levels = paragraphs.LevelsApart(0, dropEnd);
+                List<(int Start, int End)> runs = [];
+                List<byte> runLevels = [];
+                for (var start = 0; start < dropEnd;)
+                {
+                    var end = start + 1;
+                    while (end < dropEnd && levels[end] == levels[start])
+                    {
+                        end++;
+                    }
+
+                    runs.Add((start, end));
+                    runLevels.Add(levels[start]);
+                    start = end;
+                }
+
+                List<ShapedGlyph> glyphs = [];
+                foreach (var run in BidiParagraph.VisualOrder(runLevels))
+                {
+                    var (start, end) = runs[run];
+                    var direction = (runLevels[run] & 1) == 1 ? TextDirection.RightToLeft : TextDirection.LeftToRight;
+                    var options = new ShapingOptions(shapingOptions.Script, shapingOptions.Language, shapingOptions.Features,
+                        direction);
+                    var shaped = TextShaper.Shape(capFont, text, start, end, options);
+                    if (direction == TextDirection.RightToLeft)
+                    {
+                        // Its scripts come each in visual order but one after another as they are read.
+                        shaped = GlyphRunShaper.ToLogicalOrder(shaped);
+                        Array.Reverse(shaped);
+                    }
+
+                    foreach (var glyph in shaped)
+                    {
+                        glyphs.Add(new ShapedGlyph(glyph.GlyphIndex, start + glyph.Cluster, glyph.XAdvance, glyph.YAdvance,
+                            glyph.XOffset, glyph.YOffset));
+                    }
+                }
+
+                return glyphs.ToArray();
             }
 
             var (capScale, indent) = vertical ? DownTheLines() : AcrossTheLines();
@@ -1268,11 +1329,13 @@ internal sealed class LineComposer
                 return (scale, down * scale);
             }
 
-            // Its top at the cap height of the first line, its foot on the baseline of the last.
+            // Its top at the cap height of the first line, its foot on the baseline of the last; the text beside it past
+            // its ink.
             (double, double) AcrossTheLines()
             {
                 double top = 0;
                 double pen = 0;
+                var inkLeft = double.MaxValue;
                 double inkRight = 0;
                 foreach (var glyph in shaped)
                 {
@@ -1280,11 +1343,17 @@ internal sealed class LineComposer
                     top = Math.Max(top, bounds.Y + bounds.Height);
                     if (bounds.Width > 0)
                     {
-                        inkRight = Math.Max(inkRight,
-                            pen + glyph.XOffset + font.GetLeftSideBearing(glyph.GlyphIndex) + bounds.Width);
+                        var left = pen + glyph.XOffset + font.GetLeftSideBearing(glyph.GlyphIndex);
+                        inkLeft = Math.Min(inkLeft, left);
+                        inkRight = Math.Max(inkRight, left + bounds.Width);
                     }
 
                     pen += glyph.XAdvance;
+                }
+
+                if (dropRightToLeft)
+                {
+                    inkRight = inkLeft == double.MaxValue ? 0 : pen - inkLeft;
                 }
 
                 var bodyScale = first.FontSize / first.Font.UnitsPerEm;
@@ -1659,10 +1728,10 @@ internal sealed class LineComposer
             return Math.Max(0, Finite(right ? paragraph.MarginRight : paragraph.MarginLeft) + indent);
         }
 
-        double RightReserve(int line) => EdgeReserve(line, true);
+        double RightReserve(int line) => EdgeReserve(line, true) + (line < dropLines && dropRightToLeft ? dropIndent : 0);
 
         double LineIndent(int line) => (slots != null ? SlotOf(line).Left : 0)
-                                       + EdgeReserve(line, false) + (line < dropLines ? dropIndent : 0);
+                                       + EdgeReserve(line, false) + (line < dropLines && !dropRightToLeft ? dropIndent : 0);
 
         double LineRight(int line) => (slots != null ? SlotOf(line).Right : textArea.Width) - RightReserve(line);
 
@@ -3299,7 +3368,8 @@ internal sealed class LineComposer
                         var inkRight = lineGlyphs.Where(glyph => !IsBlank(glyph.Symbol) && glyph.Symbol != '\n'
                                                                  && !ReferenceEquals(glyph, hungEnd))
                             .Select(RightOf).DefaultIfEmpty(lineGlyphs[lastInk].Rect.Right).Max();
-                        var extra = AlignRight(i) + leftHang + rightHang - (inkRight - lead);
+                        var startRight = rightToLeft && lastTab < 0 ? StartRight(lineGlyphs, inkRight) : inkRight;
+                        var extra = AlignRight(i) + leftHang + rightHang - (startRight - lead);
 
                         double wordShare;
                         double letterShare;
@@ -3376,7 +3446,7 @@ internal sealed class LineComposer
                                 HorizontalTextAlignment.Right => rightToLeft
                                     ? LineIndent(i) - inkLeft
                                     : AlignRight(i) + rightHang - inkRight,
-                                _ => rightToLeft ? AlignRight(i) - inkRight : 0,
+                                _ => rightToLeft ? AlignRight(i) - startRight : 0,
                             };
                             if (placement is HorizontalTextAlignment.Center or HorizontalTextAlignment.Right)
                             {
@@ -3818,7 +3888,8 @@ internal sealed class LineComposer
                     right = Math.Max(right, glyph.PenX + glyph.Advance);
                 }
 
-                if (blank && LineState(line).RightToLeft)
+                if (blank && (LineState(line).RightToLeft
+                              || (glyphsData[lineStart].PositionInString is >= 0 and var at && IsRightToLeftParagraph(at))))
                 {
                     var alignment = AlignmentOf(line) == HorizontalTextAlignment.Justify
                         ? options.LastLineAlignment
@@ -3838,6 +3909,30 @@ internal sealed class LineComposer
 
                 lineStart = lineEnd;
             }
+        }
+
+        // The right of a line running right to left from its start: the blanks it starts with take their room there, as
+        // at the left of one running left to right - after a drop cap they stand beside it, not over it.
+        double StartRight(IEnumerable<GlyphWordData> line, double inkRight)
+        {
+            var firstInk = int.MaxValue;
+            foreach (var glyph in line)
+            {
+                if (!IsBlank(glyph.Symbol) && glyph.PositionInString >= 0)
+                {
+                    firstInk = Math.Min(firstInk, glyph.PositionInString);
+                }
+            }
+
+            foreach (var glyph in line)
+            {
+                if (IsBlank(glyph.Symbol) && glyph.PositionInString >= 0 && glyph.PositionInString < firstInk)
+                {
+                    inkRight = Math.Max(inkRight, glyph.PenX + glyph.Advance);
+                }
+            }
+
+            return inkRight;
         }
 
         void AlignToEachLinesStart(HorizontalTextAlignment alignment)
@@ -3866,7 +3961,14 @@ internal sealed class LineComposer
                     .Where(g => !IsBlank(g.Symbol) && Aligned(g, from)).ToArray();
                 if (toRight && ink.Length > 0 && AlignmentOf(line) == alignment && !PlacesWhatFollows(tab))
                 {
-                    var shift = PastTab(tab, AlignRight(line) - ink.Max(RightOf));
+                    var right = ink.Max(RightOf);
+                    if (rightToLeft)
+                    {
+                        right = StartRight(Enumerable.Range(lineStart, lineEnd - lineStart).Select(k => glyphsData[k])
+                            .Where(g => Aligned(g, from)), right);
+                    }
+
+                    var shift = PastTab(tab, AlignRight(line) - right);
                     for (var k = lineStart; k < lineEnd; k++)
                     {
                         if (Aligned(glyphsData[k], from))

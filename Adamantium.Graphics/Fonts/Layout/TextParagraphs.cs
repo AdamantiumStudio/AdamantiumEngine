@@ -128,6 +128,30 @@ internal sealed class TextParagraphs
         }
     }
 
+    // The levels of characters set apart from the lines, as a drop cap's: as their line would have them, each paragraph's
+    // by its own.
+    public byte[] LevelsApart(int start, int end)
+    {
+        var levels = new byte[end - start];
+        for (var at = start; at < end;)
+        {
+            var (_, paragraphEnd, paragraph) = ParagraphAt(at);
+            var stop = Math.Min(end, paragraphEnd);
+            Array.Copy(paragraph.LineLevels(at, stop), 0, levels, at - start, stop - at);
+            at = stop;
+        }
+
+        return levels;
+    }
+
+    public void ResolveApart(int start, int end)
+    {
+        if (_characterLevels != null && start < end)
+        {
+            Array.Copy(LevelsApart(start, end), 0, _characterLevels, start, end - start);
+        }
+    }
+
     private static TextDirection DirectionOf(int level) =>
         (level & 1) == 1 ? TextDirection.RightToLeft : TextDirection.LeftToRight;
 

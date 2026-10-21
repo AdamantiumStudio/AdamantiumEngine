@@ -105,6 +105,12 @@ All packages share one version.
 - `BidiParagraph.DirectionOf(text)`: which way a paragraph runs when its text decides, as `TextDirection.Auto` lays it
   out - by its first strong character outside isolates - for an editor that sets each paragraph's margins by the side
   its lines start from before laying it out.
+- A drop cap in a paragraph running right to left: it stands at the right, past the margin there, and the lines beside
+  it end as far before its ink as they start past it at the left; a caret and a click at it go as at any right-to-left
+  letter. Down vertical lines a right-to-left paragraph still takes none. A drop cap of characters running both ways -
+  "(1" opening a Hebrew paragraph - is shaped run by run and set as its line shows them, a bracket mirrored.
+- The keyboard layouts a user switches between: `Win32Interop.GetKeyboardLayoutList`, and on Wayland
+  `XkbKeyboard.LayoutCount` and `XkbKeyboard.Character(code, layout)` - what a key types in each layout of the keymap.
 - `TextComposition`: how the lines of a text are composed - hyphens and their limit, line breaking, optical margins,
   word and letter spacing, glyph scaling, justification alternates, kashidas, CJK spacing trim and hanging punctuation,
   where a justified last line and a line of one word stand - as one value compared by value, which refuses a negative
@@ -837,6 +843,10 @@ All packages share one version.
 
 ### Fixed
 
+- Spaces a line running right to left starts with hung past its start, out of the frame - the right margin - when
+  the line was set to its start or justified; they take their room inside it, as at the left of a line running left
+  to right. A line of spaces alone in text running right to left by `TextLayout.Direction` alone stood at the left;
+  it stands at the right, as in a paragraph that sets its direction.
 - A shared surface imported by file descriptor - Linux - gave its descriptors to Vulkan: a successful fd import takes
   ownership of the descriptor, so the producer's own were consumed. Importing the surface again, as a resize of the view
   showing a universe does, failed with `VK_ERROR_INVALID_EXTERNAL_HANDLE` and the window stopped drawing; the producer
