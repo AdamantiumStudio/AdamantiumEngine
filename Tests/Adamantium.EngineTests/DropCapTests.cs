@@ -109,6 +109,107 @@ public class DropCapTests
         Assert.That(body.Where(g => g.LineIndex == 1 && g.Symbol != ' ').Max(g => g.Rect.Right), Is.EqualTo(Width).Within(0.5));
     }
 
+    // Sized by a letter of its script in its font - H, ה, alef, 国 - not by its own: a lowercase letter is as large as a
+    // capital, a letter of short ink is not blown up, and a Hebrew cap stands as high as the Hebrew letters beside it.
+    [Test]
+    public void AHebrewDropCap_StandsAsHighAsTheLettersOfItsFirstLine()
+    {
+        var layout = RightToLeft("ש " + HebrewProse, new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var letters = Body(layout).Where(g => g.LineIndex == 0 && "בראשית".Contains(g.Symbol)).Min(g => g.Rect.Top);
+
+        Assert.That(cap.Rect.Top, Is.EqualTo(letters).Within(1.5));
+    }
+
+    // An alef cap stands as high as the alefs of its first line, and a cap of a short letter is as large; a Syriac one, a
+    // script with no letter to go by, stands by its own.
+    [TestCase("NotoSansArabic-Regular.ttf", "ا", "ب", "بسم الله الرحمن الرحيم والحمد لله رب العالمين الرحمن الرحيم مالك يوم الدين")]
+    [TestCase("NotoSansSyriac-Regular.ttf", "ܐ", "ܐ", "ܐܢܐ ܐܝܬܝ ܐܠܦܐ ܘܐܢܐ ܐܝܬܝ ܬܘ ܫܘܪܝܐ ܘܫܘܠܡܐ ܐܡܪ ܡܪܝܐ ܐܠܗܐ")]
+    public void ADropCapOfAScriptWithoutCapitals_StandsAsHighAsItsFirstLine(string font, string tallLetter,
+        string shortLetter, string text)
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", font));
+        GlyphWordData[] Cap(string letter, out double tall)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null, DropCap = new DropCap(3), Direction = TextDirection.RightToLeft,
+            };
+            layout.ProcessText(letter + " " + text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords,
+                TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            tall = Body(layout).Where(g => g.LineIndex == 0 && tallLetter[0] == g.Symbol).Min(g => g.Rect.Top);
+            return layout.GetTextData().Where(g => g.PositionInString == 0).ToArray();
+        }
+
+        var tallCap = Cap(tallLetter, out var tallTop);
+        var shortCap = Cap(shortLetter, out _);
+
+        Assert.That(tallCap.Max(g => g.FontSize), Is.GreaterThan(FontSize * 2));
+        Assert.That(tallCap.Min(g => g.Rect.Top), Is.EqualTo(tallTop).Within(1.5), "as high as its first line");
+        Assert.That(shortCap.Max(g => g.FontSize), Is.EqualTo(tallCap.Max(g => g.FontSize)).Within(1e-6));
+    }
+
+    // A letter with its accent is sized as the letter, composed or not.
+    [Test]
+    public void AnAccentedDropCap_IsSizedAsItsLetter_ComposedOrNot()
+    {
+        double CapSize(string start) =>
+            Layout(start + "clair " + Prose, new DropCap(3)).GetTextData().Where(g => g.PositionInString == 0).Max(g => g.FontSize);
+
+        var composed = CapSize(((char)0xC9).ToString());
+        var decomposed = CapSize("E" + (char)0x301);
+
+        Assert.That(composed, Is.EqualTo(CapSize("E")).Within(1e-6));
+        Assert.That(decomposed, Is.EqualTo(composed).Within(1e-6));
+    }
+
+    // Set in a font of Hangul beside text with none, every syllable is sized alike, by the syllable, not by its first
+    // jamo.
+    [TestCase("가")]
+    [TestCase("이")]
+    public void AHangulDropCapInAFontOfItsOwn_IsSizedAsEverySyllable(string syllable)
+    {
+        var cjk = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansCJK-Regular.ttc")).Fonts[0];
+        double CapSize(string start) =>
+            Layout(start + "국어 " + Prose, new DropCap(3, 1, cjk)).GetTextData().Where(g => g.PositionInString == 0)
+                .Max(g => g.FontSize);
+
+        Assert.That(CapSize(syllable), Is.EqualTo(CapSize("한")).Within(1).Percent);
+    }
+
+    // A letter beyond the basic plane and a halfwidth one are sized as the rest of their script.
+    [TestCase("𠮷", "吉")]
+    [TestCase("ｱ", "ア")]
+    public void ACjkDropCap_IsSizedAsTheRestOfItsScript(string letter, string other)
+    {
+        var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansCJK-Regular.ttc"));
+        double CapSize(string cap)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
+            layout.ProcessText(cap + string.Concat(Enumerable.Repeat("漢字仮名交じり文", 10)), FontSize,
+                new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+                VerticalTextAlignment.Top);
+            return layout.GetTextData().Single(g => g.PositionInString == 0).FontSize;
+        }
+
+        Assert.That(CapSize(letter), Is.EqualTo(CapSize(other)).Within(1e-6));
+    }
+
+    [Test]
+    public void ADropCap_IsSizedByALetterOfItsScript_NotByItsOwn()
+    {
+        var lower = Layout("and " + Prose, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+        var upper = Layout("And " + Prose, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+        var low = RightToLeft("נ " + HebrewProse, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+        var tall = RightToLeft("ל " + HebrewProse, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lower.FontSize, Is.EqualTo(upper.FontSize).Within(1e-6));
+            Assert.That(low.FontSize, Is.EqualTo(tall.FontSize).Within(1e-6));
+        });
+    }
+
     [Test]
     public void AShortText_StillMakesRoomForTheWholeDropCap()
     {

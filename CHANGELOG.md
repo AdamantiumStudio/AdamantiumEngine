@@ -1423,6 +1423,13 @@ All packages share one version.
 
 ### Changed
 
+- A drop cap is sized by a letter that stands for its script, not always by its own, much as CSS's `initial-letter`
+  sizes it by the script's alignment: a letter with a capital by that capital, Hebrew by ה, Arabic by alef, Han and
+  kana by 国, Hangul by 한, any other - Georgian too - by itself; an accented letter by its letter, composed or not -
+  from the top of that letter in the first line, in the text's font, to the last line's baseline; where the cap's font
+  or the text's lacks that letter, by its own. A lowercase letter or one of short ink - a Hebrew נ, an Arabic ب - is
+  as large as the rest of its script, where it was blown up until its own ink spanned the lines; an accent or an
+  ascender rises above the first line as it does in the text.
 - The engine finds Vulkan by itself on every platform: `VulkanInstance` registers `Adamantium.Vulkan.Loader`'s
   resolver (`VulkanDllMap.Register`) before its first call, so `vulkan-1` is `libvulkan.so.1` on Linux without an
   application doing it first - the engine's own graphics tests among them. `Adamantium.Graphics.Core` depends on

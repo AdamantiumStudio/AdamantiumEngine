@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using Adamantium.Fonts;
 using Adamantium.Fonts.Shaping;
 using Adamantium.Fonts.Text;
@@ -181,7 +182,6 @@ internal sealed class LineComposer
         // What the attributed text says, read once: a style changed meanwhile does not reach this layout.
         var (attributeRuns, resolvedParagraphs) = attributed?.Resolved() ?? (null, null);
         var paragraphRuns = resolvedParagraphs is { Count: > 0 } ? resolvedParagraphs : null;
-        // A drop cap stands at the side its paragraph's lines start from.
         var dropRightToLeft = TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0);
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
                                               && !(vertical && dropRightToLeft)
@@ -826,7 +826,6 @@ internal sealed class LineComposer
             double pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Left : 0) + EdgeReserve(0, false);
             if (dropRightToLeft)
             {
-                // Its glyphs come in visual order: the last of them ends at the right edge.
                 pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Right : finalRect.Width)
                       - EdgeReserve(0, true) - dropGlyphs.Sum(shaped => shaped.XAdvance) * dropScale;
             }
@@ -870,7 +869,6 @@ internal sealed class LineComposer
                 pen += advance;
             }
 
-            // Placed in visual order, kept in logical order as the lines' glyphs are.
             return paragraphs != null ? glyphs.OrderBy(glyph => glyph.PositionInString).ToList() : glyphs;
         }
 
@@ -1242,8 +1240,6 @@ internal sealed class LineComposer
                 return glyphs;
             }
 
-            // Each run of one level shaped its own way - a bracket mirrored where it runs right to left - and the runs
-            // set as its line would show them.
             ShapedGlyph[] InVisualOrder(IFont capFont)
             {
                 var levels = paragraphs.LevelsApart(0, dropEnd);
@@ -1272,7 +1268,6 @@ internal sealed class LineComposer
                     var shaped = TextShaper.Shape(capFont, text, start, end, options);
                     if (direction == TextDirection.RightToLeft)
                     {
-                        // Its scripts come each in visual order but one after another as they are read.
                         shaped = GlyphRunShaper.ToLogicalOrder(shaped);
                         Array.Reverse(shaped);
                     }
@@ -1329,8 +1324,61 @@ internal sealed class LineComposer
                 return (scale, down * scale);
             }
 
-            // Its top at the cap height of the first line, its foot on the baseline of the last; the text beside it past
-            // its ink.
+            static (int Reference, int Own) ReferenceLetter(string text, int end)
+            {
+                for (var i = 0; i < end; i++)
+                {
+                    if (!Rune.TryGetRuneAt(text, i, out var rune) || !Rune.IsLetter(rune))
+                    {
+                        continue;
+                    }
+
+                    var own = BaseLetter(rune).Value;
+                    var upper = own is >= 0x10D0 and <= 0x10FF ? own : Rune.ToUpperInvariant(new Rune(own)).Value;
+                    return (upper != own ? upper : own switch
+                    {
+                        >= 0x0590 and <= 0x05FF or >= 0xFB1D and <= 0xFB4F => 0x05D4,
+                        >= 0x0600 and <= 0x06FF or >= 0x0750 and <= 0x077F or >= 0x08A0 and <= 0x08FF
+                            or >= 0xFB50 and <= 0xFDFF or >= 0xFE70 and <= 0xFEFF => 0x0627,
+                        >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xA960 and <= 0xA97F
+                            or >= 0xAC00 and <= 0xD7FF or >= 0xFFA0 and <= 0xFFDC => 0xD55C,
+                        >= 0x2E80 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF or >= 0xFF65 and <= 0xFF9F
+                            or >= 0x20000 and <= 0x3FFFF => 0x56FD,
+                        _ => own,
+                    }, own);
+                }
+
+                return ('H', 'H');
+            }
+
+            static Rune BaseLetter(Rune letter)
+            {
+                var decomposed = letter.ToString().Normalize(NormalizationForm.FormD);
+                var first = Rune.GetRuneAt(decomposed, 0);
+                for (var i = first.Utf16SequenceLength; i < decomposed.Length;)
+                {
+                    var next = Rune.GetRuneAt(decomposed, i);
+                    if (Rune.GetUnicodeCategory(next) is not (UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark
+                        or UnicodeCategory.EnclosingMark))
+                    {
+                        return letter;
+                    }
+
+                    i += next.Utf16SequenceLength;
+                }
+
+                return first;
+            }
+
+            static double LetterHeight(IFont letterFont, int letter) =>
+                InkTop(letterFont, letter) ?? (letterFont.CapsHeight > 0 ? letterFont.CapsHeight : letterFont.Ascender * 0.7);
+
+            static double? InkTop(IFont letterFont, int letter) =>
+                letterFont.TryGetGlyphIndex(letter, out var index) && index != 0
+                && letterFont.GetGlyphByIndex(index).BoundingRectangle is var bounds && bounds.Y + bounds.Height > 0
+                    ? bounds.Y + bounds.Height
+                    : null;
+
             (double, double) AcrossTheLines()
             {
                 double top = 0;
@@ -1356,14 +1404,15 @@ internal sealed class LineComposer
                     inkRight = inkLeft == double.MaxValue ? 0 : pen - inkLeft;
                 }
 
-                var bodyScale = first.FontSize / first.Font.UnitsPerEm;
-                var cap = (first.Font.CapsHeight > 0 ? first.Font.CapsHeight : first.Font.Ascender * 0.7) * bodyScale;
                 if (top <= 0)
                 {
                     return (0, 0);
                 }
 
-                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / top;
+                var (reference, own) = ReferenceLetter(text, dropEnd);
+                var letter = InkTop(first.Font, reference) != null && InkTop(font, reference) != null ? reference : own;
+                var cap = LetterHeight(first.Font, letter) * first.FontSize / first.Font.UnitsPerEm;
+                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / LetterHeight(font, letter);
                 return (scale, Math.Max(pen * scale, inkRight * scale + 0.1 * first.FontSize));
             }
         }
@@ -3911,8 +3960,6 @@ internal sealed class LineComposer
             }
         }
 
-        // The right of a line running right to left from its start: the blanks it starts with take their room there, as
-        // at the left of one running left to right - after a drop cap they stand beside it, not over it.
         double StartRight(IEnumerable<GlyphWordData> line, double inkRight)
         {
             var firstInk = int.MaxValue;
