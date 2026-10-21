@@ -1430,6 +1430,10 @@ All packages share one version.
   or the text's lacks that letter, by its own. A lowercase letter or one of short ink - a Hebrew נ, an Arabic ب - is
   as large as the rest of its script, where it was blown up until its own ink spanned the lines; an accent or an
   ascender rises above the first line as it does in the text.
+- `PosixInterop` carries the libc calls the Linux platform needs - `Read`, `Write`, `Poll` (with `PosixPollFd`),
+  `Pipe2`, `EventFd`, `MemFdCreate`, `Mmap`, `Munmap` - and `Adamantium.Wayland` maps its keymap through it, so it
+  references `Adamantium.Core`. The libwayland-client and xkbcommon imports are named in C# (`DisplayConnect`,
+  `StateKeyGetUtf8`), the C names in `EntryPoint`.
 - The engine finds Vulkan by itself on every platform: `VulkanInstance` registers `Adamantium.Vulkan.Loader`'s
   resolver (`VulkanDllMap.Register`) before its first call, so `vulkan-1` is `libvulkan.so.1` on Linux without an
   application doing it first - the engine's own graphics tests among them. `Adamantium.Graphics.Core` depends on

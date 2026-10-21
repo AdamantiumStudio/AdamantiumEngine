@@ -44,13 +44,11 @@ public unsafe class VulkanInstance : DisposableBase
 
     private readonly Dictionary<IntPtr, SurfaceKHR> availableSurfaces;
 
-    // How many presenters hold each surface: a headless one is shared by every headless presenter, all under handle 0.
     private readonly Dictionary<IntPtr, int> surfaceHolders = new();
+    private readonly object _surfaceHoldersLock = new();
 
     static VulkanInstance()
     {
-        // The Vulkan loader by the name each platform installs it under - vulkan-1 is only Windows' - before the first
-        // call reaches it. Here rather than in an application, so the engine finds Vulkan with or without one around it.
         VulkanDllMap.Register();
 
         var validationLayers = new List<string>();
@@ -80,8 +78,6 @@ public unsafe class VulkanInstance : DisposableBase
         };
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            // Optional, unlike the other platforms' surfaces: a Linux machine may have no Wayland - a server, a CI
-            // runner - and still render off-screen. A window asked for without it is refused when its surface is made.
             optionalExt.Add(Constants.VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
         }
         OptionalInstanceExtensions = new ReadOnlyCollection<string>(optionalExt);
@@ -222,8 +218,7 @@ public unsafe class VulkanInstance : DisposableBase
     /// and <see cref="ReleaseSurface"/> lets go of it.</summary>
     public SurfaceKHR GetOrCreateSurface(PresentationParameters parameters)
     {
-        // Presenters are made and disposed on more than one thread: the render thread, a universe's own.
-        lock (surfaceHolders)
+        lock (_surfaceHoldersLock)
         {
             var surface = SurfaceFor(parameters);
             surfaceHolders[parameters.OutputHandle] = surfaceHolders.GetValueOrDefault(parameters.OutputHandle) + 1;
@@ -239,7 +234,7 @@ public unsafe class VulkanInstance : DisposableBase
     /// </summary>
     public void ReleaseSurface(IntPtr outputHandle)
     {
-        lock (surfaceHolders)
+        lock (_surfaceHoldersLock)
         {
             if (!surfaceHolders.TryGetValue(outputHandle, out var holders))
             {

@@ -4,16 +4,11 @@ using Adamantium.Core;
 
 namespace Adamantium.Wayland.Generator;
 
-/// <summary>
-/// Writes C# for the protocols: a class per interface, its requests as methods that marshal through
-/// wl_proxy_marshal_array_flags, its events as C# events raised from one dispatcher, its enums nested in it - and one
-/// file of the wl_interface tables libwayland reads the wire format from, which wayland-scanner would have written in C.
-/// </summary>
+/// <summary>Writes C# for the protocols: a class per interface, and the wl_interface tables libwayland reads.</summary>
 public sealed class CSharpEmitter
 {
     private const string Namespace = "Adamantium.Wayland";
 
-    // Members of WaylandProxy and object: a protocol name that lands on one of them is renamed.
     private static readonly HashSet<string> BaseMembers =
     [
         "Handle", "Version", "Id", "DestroyProxy", "Interface", "InterfaceName", "InterfaceVersion", "Create",
@@ -116,7 +111,7 @@ public sealed class CSharpEmitter
         w.PushIndent();
         foreach (var m in messages)
         {
-            var types = new List<string>();
+            List<string> types = [];
             foreach (var a in m.Arguments)
             {
                 if (a.Type == ArgumentType.NewId && a.Interface == null)
@@ -141,9 +136,6 @@ public sealed class CSharpEmitter
         w.WriteLine("]" + end);
     }
 
-    /// <summary>The wire signature wayland-scanner writes: the version the message came in, then a letter per
-    /// argument, ? before one that may be null - and "sun" for an untyped new_id, which travels as the interface's
-    /// name, its version and the id.</summary>
     private static string Signature(Message m)
     {
         var builder = new StringBuilder();
@@ -298,7 +290,6 @@ public sealed class CSharpEmitter
 
         var slots = m.Arguments.Sum(a => a.Type == ArgumentType.NewId && a.Interface == null ? 3 : 1);
 
-        // Strings and arrays are pinned or copied for the call's length.
         var closers = 0;
         foreach (var a in m.Arguments)
         {
@@ -394,7 +385,7 @@ public sealed class CSharpEmitter
 
     private void EventDispatch(TextGenerator w, Interface i, Message m, string name)
     {
-        var values = new List<string>();
+        List<string> values = [];
         for (var index = 0; index < m.Arguments.Count; index++)
         {
             var a = m.Arguments[index];
@@ -417,7 +408,6 @@ public sealed class CSharpEmitter
                     values.Add($"Find<{ObjectType(a)}>({arg}.o)");
                     break;
                 case ArgumentType.NewId:
-                    // Taken on even when nobody listens: the compositor made it, and its events need somewhere to go.
                     var local = Naming.Local(Naming.Camel(a.Name), "Created");
                     RequireInterface(a.Interface!);
                     w.WriteLine($"var {local} = Adopt<{Naming.Pascal(a.Interface!)}>({arg}.o, Version);");
@@ -464,7 +454,6 @@ public sealed class CSharpEmitter
             ArgumentType.Uint => "uint",
             ArgumentType.Fixed => "double",
             ArgumentType.String => "string",
-            // Found by its handle: one made by someone else on this display - Mesa's, say - is not ours to find.
             ArgumentType.Object => ObjectType(a),
             ArgumentType.NewId => Naming.Pascal(a.Interface!),
             ArgumentType.Array => "ReadOnlySpan<byte>",
@@ -484,7 +473,6 @@ public sealed class CSharpEmitter
         return Naming.Pascal(a.Interface);
     }
 
-    /// <summary>An enum named by an argument: "state" is the interface's own, "wl_output.transform" another's.</summary>
     private string EnumType(Interface i, string reference)
     {
         var dot = reference.IndexOf('.');
@@ -522,15 +510,19 @@ public sealed class CSharpEmitter
     private static IEnumerable<string> Dedent(string text)
     {
         var lines = text.Replace("\r", "").Split('\n').Select(l => l.TrimEnd()).ToList();
-        while (lines.Count > 0 && lines[0].Length == 0) lines.RemoveAt(0);
-        while (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
+        while (lines.Count > 0 && lines[0].Length == 0)
+        {
+            lines.RemoveAt(0);
+        }
+
+        while (lines.Count > 0 && lines[^1].Length == 0)
+        {
+            lines.RemoveAt(lines.Count - 1);
+        }
         var indent = lines.Where(l => l.Length > 0).Select(l => l.Length - l.TrimStart().Length).DefaultIfEmpty(0).Min();
         return lines.Select(l => l.Length >= indent ? l[indent..] : l);
     }
 
-    /// <summary>The C# names of an interface's requests and events. Enums keep theirs - other interfaces name them -
-    /// and a request or an event that meets an enum, the other kind or a member of the base takes a suffix:
-    /// wl_display's error event, beside its error enum, is ErrorEvent.</summary>
     private sealed class MemberNames
     {
         public MemberNames(string className, Interface i)

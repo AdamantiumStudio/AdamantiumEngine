@@ -1,30 +1,12 @@
+using Adamantium.Core;
 using System.Text;
 using Adamantium.Wayland.Native;
 
 namespace Adamantium.Wayland;
 
-/// <summary>The modifiers XKB reports as active.</summary>
-[Flags]
-public enum XkbModifiers
-{
-    None = 0,
-    Shift = 1 << 0,
-    Control = 1 << 1,
-    Alt = 1 << 2,
-    Logo = 1 << 3,
-    CapsLock = 1 << 4,
-    NumLock = 1 << 5,
-}
-
-/// <summary>
-/// A Wayland keyboard's keymap and state. wl_keyboard sends the keymap as a file descriptor of XKB text, then keys as
-/// evdev codes and the modifiers as masks; this turns a code into its keysym and its text under the current
-/// modifiers and layout.
-/// <para>Codes are the evdev ones wl_keyboard.key carries - KEY_A is 30 - not XKB's, which are 8 more.</para>
-/// </summary>
+/// <summary>A Wayland keyboard's keymap and state: turns an evdev key code into its keysym and text.</summary>
 public sealed unsafe class XkbKeyboard : IDisposable
 {
-    // XKB numbers keys as X11 does: the evdev code plus 8.
     private const uint EvdevOffset = 8;
 
     private static readonly (string Name, XkbModifiers Modifier)[] ModifierNames =
@@ -57,8 +39,8 @@ public sealed unsafe class XkbKeyboard : IDisposable
     {
         try
         {
-            var text = LibC.mmap(0, size, LibC.ProtRead, LibC.MapPrivate, fd, 0);
-            if (text == LibC.MapFailed)
+            var text = PosixInterop.Mmap(0, size, PosixInterop.ProtRead, PosixInterop.MapPrivate, fd, 0);
+            if (text == PosixInterop.MapFailed)
             {
                 return null;
             }
@@ -69,12 +51,12 @@ public sealed unsafe class XkbKeyboard : IDisposable
             }
             finally
             {
-                LibC.munmap(text, size);
+                PosixInterop.Munmap(text, size);
             }
         }
         finally
         {
-            LibC.close(fd);
+            PosixInterop.Close(fd);
         }
     }
 
@@ -87,24 +69,24 @@ public sealed unsafe class XkbKeyboard : IDisposable
 
     private static XkbKeyboard FromText(byte* text)
     {
-        var context = Xkb.xkb_context_new(0);
+        var context = Xkb.ContextNew(0);
         if (context == 0)
         {
             return null;
         }
 
-        var keymap = Xkb.xkb_keymap_new_from_string(context, text, Xkb.KeymapFormatTextV1, 0);
+        var keymap = Xkb.KeymapNewFromString(context, text, Xkb.KeymapFormatTextV1, 0);
         if (keymap == 0)
         {
-            Xkb.xkb_context_unref(context);
+            Xkb.ContextUnref(context);
             return null;
         }
 
-        var state = Xkb.xkb_state_new(keymap);
+        var state = Xkb.StateNew(keymap);
         if (state == 0)
         {
-            Xkb.xkb_keymap_unref(keymap);
-            Xkb.xkb_context_unref(context);
+            Xkb.KeymapUnref(keymap);
+            Xkb.ContextUnref(context);
             return null;
         }
 
@@ -114,7 +96,7 @@ public sealed unsafe class XkbKeyboard : IDisposable
     /// <summary>Takes in what wl_keyboard.modifiers sent.</summary>
     public void UpdateModifiers(uint depressed, uint latched, uint locked, uint group)
     {
-        Xkb.xkb_state_update_mask(state, depressed, latched, locked, 0, 0, group);
+        Xkb.StateUpdateMask(state, depressed, latched, locked, 0, 0, group);
 
         var modifiers = XkbModifiers.None;
         Span<byte> name = stackalloc byte[16];
@@ -124,7 +106,7 @@ public sealed unsafe class XkbKeyboard : IDisposable
             name[length] = 0;
             fixed (byte* pointer = name)
             {
-                if (Xkb.xkb_state_mod_name_is_active(state, pointer, Xkb.StateModsEffective) > 0)
+                if (Xkb.StateModNameIsActive(state, pointer, Xkb.StateModsEffective) > 0)
                 {
                     modifiers |= modifier;
                 }
@@ -135,7 +117,7 @@ public sealed unsafe class XkbKeyboard : IDisposable
     }
 
     /// <summary>The key's keysym under the current modifiers and layout: XKB_KEY_a, XKB_KEY_A, XKB_KEY_Return.</summary>
-    public uint KeySym(uint evdevCode) => Xkb.xkb_state_key_get_one_sym(state, evdevCode + EvdevOffset);
+    public uint KeySym(uint evdevCode) => Xkb.StateKeyGetOneSym(state, evdevCode + EvdevOffset);
 
     /// <summary>The text the key types under the current modifiers and layout, empty for one that types none.</summary>
     public string Text(uint evdevCode)
@@ -143,44 +125,44 @@ public sealed unsafe class XkbKeyboard : IDisposable
         Span<byte> buffer = stackalloc byte[64];
         fixed (byte* pointer = buffer)
         {
-            var length = Xkb.xkb_state_key_get_utf8(state, evdevCode + EvdevOffset, pointer, (nuint)buffer.Length);
+            var length = Xkb.StateKeyGetUtf8(state, evdevCode + EvdevOffset, pointer, (nuint)buffer.Length);
             return length <= 0 ? string.Empty : Encoding.UTF8.GetString(buffer[..Math.Min(length, buffer.Length - 1)]);
         }
     }
 
     /// <summary>Whether the keymap has the key repeat while held. Wayland repeats nothing itself: the client does,
     /// at the rate wl_keyboard.repeat_info gave.</summary>
-    public bool Repeats(uint evdevCode) => Xkb.xkb_keymap_key_repeats(keymap, evdevCode + EvdevOffset) != 0;
+    public bool Repeats(uint evdevCode) => Xkb.KeymapKeyRepeats(keymap, evdevCode + EvdevOffset) != 0;
 
     /// <summary>How many layouts the keymap holds: the ones the user switches between.</summary>
-    public uint LayoutCount => Xkb.xkb_keymap_num_layouts(keymap);
+    public uint LayoutCount => Xkb.KeymapNumLayouts(keymap);
 
     /// <summary>The character the key types unshifted in <paramref name="layout"/>, whichever layout is on; 0 for one
     /// that types none.</summary>
     public int Character(uint evdevCode, uint layout)
     {
         uint* syms;
-        var count = Xkb.xkb_keymap_key_get_syms_by_level(keymap, evdevCode + EvdevOffset, layout, 0, &syms);
-        return count > 0 ? (int)Xkb.xkb_keysym_to_utf32(syms[0]) : 0;
+        var count = Xkb.KeymapKeyGetSymsByLevel(keymap, evdevCode + EvdevOffset, layout, 0, &syms);
+        return count > 0 ? (int)Xkb.KeysymToUtf32(syms[0]) : 0;
     }
 
     public void Dispose()
     {
         if (state != 0)
         {
-            Xkb.xkb_state_unref(state);
+            Xkb.StateUnref(state);
             state = 0;
         }
 
         if (keymap != 0)
         {
-            Xkb.xkb_keymap_unref(keymap);
+            Xkb.KeymapUnref(keymap);
             keymap = 0;
         }
 
         if (context != 0)
         {
-            Xkb.xkb_context_unref(context);
+            Xkb.ContextUnref(context);
             context = 0;
         }
     }

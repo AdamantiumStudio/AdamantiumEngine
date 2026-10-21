@@ -12,4 +12,8 @@
     <PackageTags>adamantium;wayland;linux;interop</PackageTags>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+  </ItemGroup>
+
 </Project>
