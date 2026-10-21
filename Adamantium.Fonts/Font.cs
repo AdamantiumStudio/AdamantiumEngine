@@ -45,6 +45,7 @@ namespace Adamantium.Fonts
         private IReadOnlyList<FontVariation> movingFrom;
         private IReadOnlyList<FontVariation> movingTo;
         private float movingProgress;
+        private short capsHeight;
         public Typeface Typeface { get; private set; }
         internal VariationStore VariationData { get; set; }
 
@@ -128,7 +129,21 @@ namespace Adamantium.Fonts
         public ushort UnitsPerEm { get; internal set; }
         public Int16 Ascender { get; internal set; }
         public Int16 Descender { get; internal set; }
-        public Int16 CapsHeight { get; internal set; }
+        /// <summary>The height of the capitals: the font's own figure, or the top of its H where it gives none.</summary>
+        public Int16 CapsHeight
+        {
+            get
+            {
+                if (capsHeight == 0 && unicodeToGlyph != null && unicodeToGlyph.ContainsKey('H'))
+                {
+                    var bounds = GetGlyphByUnicode('H').BoundingRectangle;
+                    capsHeight = (short)(bounds.Y + bounds.Height);
+                }
+
+                return capsHeight;
+            }
+            internal set => capsHeight = value;
+        }
         
         public Int16 LineAscent { get; internal set; }
 
@@ -604,6 +619,14 @@ namespace Adamantium.Fonts
             instance.Style = values.Any(v => v.Tag == "ital" && v.Value >= 0.5f) ? FontStyle.Italic
                 : values.Any(v => v.Tag == "slnt" && v.Value != 0) ? FontStyle.Oblique
                 : Style;
+            if (NamedInstanceAt(values) is { } named)
+            {
+                var family = string.IsNullOrEmpty(TypographicFamilyName) ? FontFamily : TypographicFamilyName;
+                instance.FontSubfamily = named.Name;
+                instance.TypographicSubfamilyName = named.Name;
+                instance.FullName = $"{family} {named.Name}";
+            }
+
             var count = (int)Typeface.GlyphCount;
             instance.variedAdvances = new int[count];
             for (var i = 0; i < count; i++)
@@ -631,6 +654,10 @@ namespace Adamantium.Fonts
 
             return instance;
         }
+
+        private FontNamedInstance NamedInstanceAt(FontVariation[] values) =>
+            NamedInstances.FirstOrDefault(named => named.Variations.Count == values.Length &&
+                                                   named.Variations.Select((v, i) => Math.Abs(v.Value - values[i].Value) < 0.5f).All(same => same));
 
         private Glyph VariedGlyph(uint index, IGlyphOutlineSource source)
         {

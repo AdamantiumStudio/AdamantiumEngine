@@ -1157,14 +1157,22 @@ namespace Adamantium.Fonts.Parsers
             os2.sTypoLineGap = FontReader.ReadInt16();
             os2.usWinAscent = FontReader.ReadUInt16();
             os2.usWinDescent = FontReader.ReadUInt16();
-            os2.ulCodePageRange1 = FontReader.ReadUInt32();
-            os2.ulCodePageRange2 = FontReader.ReadUInt32();
-            os2.sxHeight = FontReader.ReadInt16();
-            os2.sCapHeight = FontReader.ReadInt16();
-            os2.usDefaultChar = FontReader.ReadUInt16();
-            os2.usBreakChar = FontReader.ReadUInt16();
-            os2.usMaxContext = FontReader.ReadUInt16();
-            if (os2.version == 5)
+            if (os2.version >= 1)
+            {
+                os2.ulCodePageRange1 = FontReader.ReadUInt32();
+                os2.ulCodePageRange2 = FontReader.ReadUInt32();
+            }
+
+            if (os2.version >= 2)
+            {
+                os2.sxHeight = FontReader.ReadInt16();
+                os2.sCapHeight = FontReader.ReadInt16();
+                os2.usDefaultChar = FontReader.ReadUInt16();
+                os2.usBreakChar = FontReader.ReadUInt16();
+                os2.usMaxContext = FontReader.ReadUInt16();
+            }
+
+            if (os2.version >= 5)
             {
                 os2.usLowerOpticalPointSize = FontReader.ReadUInt16();
                 os2.usUpperOpticalPointSize = FontReader.ReadUInt16();
