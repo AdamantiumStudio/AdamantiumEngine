@@ -886,7 +886,8 @@ namespace Adamantium.EffectsCompiler
                 return null;
 
             var includePath = requestedPath.Replace("\"", string.Empty).Replace('/', '\\');
-            var fileName = Path.GetFileName(includePath);
+            // Not Path.GetFileName: '\' separates nothing on Linux, where that would hand back the whole request.
+            var fileName = includePath.Substring(includePath.LastIndexOf('\\') + 1);
 
             foreach (var include in includes.IsDefault ? ImmutableArray<ShaderFileInfo>.Empty : includes)
             {
