@@ -1,6 +1,6 @@
 # Builds the engine, runs the tests that need no GPU and packs the packages: for every pull request, and for master
-# once it is merged into. Windows only: the effects generator compiles the built-in shaders during the build and loads
-# Slang through kernel32.
+# once it is merged into. On Windows and on Linux: the effects generator compiles the built-in shaders during the build
+# on either, and a path or a file name that only Windows forgives fails on Linux before it is merged.
 name: CI
 
 on:
@@ -16,8 +16,19 @@ concurrency:
 jobs:
   # A required check for master: the job always runs and always reports, so a pull request is never left waiting for a
   # check that did not start. What it skips is the work, when nothing but documents, icons or settings changed.
+  #
+  # Windows keeps the job's name, build - the one master requires; Linux runs beside it as build (linux).
   build:
-    runs-on: windows-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: build
+          - os: ubuntu-latest
+            name: build (linux)
 
     steps:
       - uses: actions/checkout@v7
@@ -91,6 +102,7 @@ jobs:
           done
           exit $status
 
+      # Once: the packages are the same whichever runner packs them.
       - name: Pack
-        if: steps.changes.outputs.code == 'true'
+        if: steps.changes.outputs.code == 'true' && matrix.os == 'windows-latest'
         run: dotnet pack AdamantiumEngine.sln -c Release --no-build -o artifacts/nupkg

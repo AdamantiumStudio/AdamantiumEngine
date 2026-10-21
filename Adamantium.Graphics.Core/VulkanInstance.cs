@@ -9,6 +9,7 @@ using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Vulkan.Core;
 using Adamantium.Vulkan.Core.Interop;
 using Adamantium.Vulkan.Linux;
+using Adamantium.Vulkan.Loader;
 using Adamantium.Vulkan.MacOS;
 using Adamantium.Vulkan.Windows;
 using Serilog;
@@ -48,6 +49,10 @@ public unsafe class VulkanInstance : DisposableBase
 
     static VulkanInstance()
     {
+        // The Vulkan loader by the name each platform installs it under - vulkan-1 is only Windows' - before the first
+        // call reaches it. Here rather than in an application, so the engine finds Vulkan with or without one around it.
+        VulkanDllMap.Register();
+
         var validationLayers = new List<string>();
 
         validationLayers.Add("VK_LAYER_KHRONOS_validation");

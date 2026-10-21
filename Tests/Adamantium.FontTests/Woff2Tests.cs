@@ -25,7 +25,7 @@ namespace Adamantium.FontTests
         [Test]
         public void LoadWoff2FontCollectionAsana()
         {
-            var typeFace = Typeface.LoadFont(Path.Combine("WoffFonts", "Woff2Collection", "ASANA.woff2"), 3);
+            var typeFace = Typeface.LoadFont(Path.Combine("WoffFonts", "WOFF2Collection", "ASANA.woff2"), 3);
             
         }
         
@@ -49,7 +49,7 @@ namespace Adamantium.FontTests
         [Test]
         public void LoadWoff2FontCollectionNotoSans()
         {
-            var typeFace = Typeface.LoadFont(Path.Combine("WoffFonts", "Woff2Collection", "NotoSansCJK-Regular.woff2"), 3);
+            var typeFace = Typeface.LoadFont(Path.Combine("WoffFonts", "WOFF2Collection", "NotoSansCJK-Regular.woff2"), 3);
             
         }
     }
