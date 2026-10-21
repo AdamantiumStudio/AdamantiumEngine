@@ -829,6 +829,10 @@ All packages share one version.
 
 ### Fixed
 
+- A shared surface imported by file descriptor - Linux - gave its descriptors to Vulkan: a successful fd import takes
+  ownership of the descriptor, so the producer's own were consumed. Importing the surface again, as a resize of the view
+  showing a universe does, failed with `VK_ERROR_INVALID_EXTERNAL_HANDLE` and the window stopped drawing; the producer
+  also closed the descriptors a second time. The import hands Vulkan a copy (`PosixInterop.Dup`).
 - A window's Vulkan surface outlived it: surfaces were kept, by window handle, until the instance went. A swapchain
   presenter now holds its surface and lets go of it when disposed (`IGraphicsDevice.ReleaseSurface`), after its
   swapchain; the last to let go destroys it. A `wl_surface` is memory libwayland frees, and a window opened after
