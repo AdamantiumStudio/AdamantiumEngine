@@ -336,7 +336,7 @@ public class RubyTests
         var layout = LayIn(NotoSansCjk, new AttributedText(Text + Text + Text).SetRuby(0, 1, new RubyAnnotation("に")),
             100, setUp: set => set.DropCap = new DropCap(2));
 
-        Assume.That(layout.GetTextData().Single(g => g.PositionInString == 0).FontSize, Is.GreaterThan(FontSize));
+        Assert.That(layout.GetTextData().Single(g => g.PositionInString == 0).FontSize, Is.GreaterThan(FontSize));
         Assert.That(Annotation(layout), Is.Empty);
     }
 

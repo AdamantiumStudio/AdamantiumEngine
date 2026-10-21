@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using Adamantium.Fonts;
 using Adamantium.Fonts.Shaping;
 using Adamantium.Fonts.Text;
@@ -1323,39 +1324,42 @@ internal sealed class LineComposer
                 return (scale, down * scale);
             }
 
-            static int ReferenceLetter(string text, int end)
+            static (int Reference, int Own) ReferenceLetter(string text, int end)
             {
                 for (var i = 0; i < end; i++)
                 {
-                    if (!char.IsLetter(text[i]))
+                    if (!Rune.TryGetRuneAt(text, i, out var rune) || !Rune.IsLetter(rune))
                     {
                         continue;
                     }
 
-                    return (int)text[i] switch
+                    var own = rune.Value;
+                    var upper = Rune.ToUpperInvariant(rune).Value;
+                    return (upper != own ? upper : own switch
                     {
                         >= 0x0590 and <= 0x05FF or >= 0xFB1D and <= 0xFB4F => 0x05D4,
                         >= 0x0600 and <= 0x06FF or >= 0x0750 and <= 0x077F or >= 0x08A0 and <= 0x08FF
                             or >= 0xFB50 and <= 0xFDFF or >= 0xFE70 and <= 0xFEFF => 0x0627,
-                        >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xAC00 and <= 0xD7AF => 0xD55C,
-                        >= 0x2E80 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF => 0x56FD,
-                        _ => 'H',
-                    };
+                        >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xA960 and <= 0xA97F
+                            or >= 0xAC00 and <= 0xD7FF or >= 0xFFA0 and <= 0xFFDC => 0xD55C,
+                        >= 0x2E80 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF or >= 0xFF65 and <= 0xFF9F
+                            or >= 0x20000 and <= 0x3FFFF => 0x56FD,
+                        _ => own,
+                    }, own);
                 }
 
-                return 'H';
+                return ('H', 'H');
             }
 
-            static double LetterHeight(IFont letterFont, int letter)
-            {
-                if (letterFont.TryGetGlyphIndex(letter, out var index) && index != 0
-                    && letterFont.GetGlyphByIndex(index).BoundingRectangle is var bounds && bounds.Y + bounds.Height > 0)
-                {
-                    return bounds.Y + bounds.Height;
-                }
+            static double LetterHeight(IFont letterFont, (int Reference, int Own) letter) =>
+                InkTop(letterFont, letter.Reference) ?? InkTop(letterFont, letter.Own)
+                ?? (letterFont.CapsHeight > 0 ? letterFont.CapsHeight : letterFont.Ascender * 0.7);
 
-                return letterFont.CapsHeight > 0 ? letterFont.CapsHeight : letterFont.Ascender * 0.7;
-            }
+            static double? InkTop(IFont letterFont, int letter) =>
+                letterFont.TryGetGlyphIndex(letter, out var index) && index != 0
+                && letterFont.GetGlyphByIndex(index).BoundingRectangle is var bounds && bounds.Y + bounds.Height > 0
+                    ? bounds.Y + bounds.Height
+                    : null;
 
             (double, double) AcrossTheLines()
             {
