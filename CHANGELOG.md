@@ -848,6 +848,11 @@ All packages share one version.
 
 ### Fixed
 
+- A block drawing a window of a layout (`TextLayout.Update`/`BuildGlyphRun` with a window - a frame of a text, a part of
+  a paragraph a page breaks) drew every glyph whose ink touched the window: the descenders of the line above it showed
+  at its top edge. Across the lines a glyph is in the window by its line now, drawn whole when its line is in it and not
+  at all when it is not - a drop cap in every line it spans; along them, and down vertical lines, by its ink as
+  before.
 - A font's OS/2 table is read as far as its version and length go: a version 1 table (DejaVu Sans) had its x-height,
   cap height and the fields after them read from the bytes beyond it. Where a font gives no cap height,
   `CapsHeight` is the top of its H.

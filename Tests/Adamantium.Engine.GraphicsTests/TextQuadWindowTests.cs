@@ -38,10 +38,8 @@ public class TextQuadWindowTests
         return new RectangleF(0, (float)top, 2000, (float)(bottom - top));
     }
 
-    private static int InkIn(TextLayout layout, RectangleF window) => layout.GetTextData().Count(g =>
-        g.Symbol is not (' ' or '\t' or '\n')
-        && g.Rect.Right >= window.Left && g.Rect.Left <= window.Right
-        && g.Rect.Bottom >= window.Top && g.Rect.Top <= window.Bottom);
+    private static int InkIn(TextLayout layout, int first, int last) => layout.GetTextData().Count(g =>
+        g.Symbol is not (' ' or '\t' or '\n') && g.LineIndex >= first && g.LineIndex <= last);
 
     [Test]
     public void AWindow_BuildsTheQuadsOfTheGlyphsInIt_AndNoOthers()
@@ -57,7 +55,7 @@ public class TextQuadWindowTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(layout.ElementsCount, Is.EqualTo(InkIn(layout, window)), "the glyphs that touch the window");
+            Assert.That(layout.ElementsCount, Is.EqualTo(InkIn(layout, 50, 60)), "the glyphs of the lines in the window");
             Assert.That(layout.ElementsCount, Is.LessThan(all / 10), "a fraction of the whole text");
             Assert.That(layout.QuadWindow, Is.EqualTo(window));
             Assert.That(layout.SnapshotGlyphs().Count, Is.EqualTo(layout.ElementsCount), "the snapshot holds the same");
@@ -87,7 +85,7 @@ public class TextQuadWindowTests
         Assert.Multiple(() =>
         {
             Assert.That(layout.QuadWindow, Is.EqualTo(window), "the window is kept");
-            Assert.That(layout.ElementsCount, Is.EqualTo(InkIn(layout, window)));
+            Assert.That(layout.ElementsCount, Is.EqualTo(InkIn(layout, 120, 130)));
         });
     }
 
@@ -97,7 +95,6 @@ public class TextQuadWindowTests
         var device = GpuFixture.CreateRenderDevice();
         FontAtlasStore.SynchronousFill = true;
         var layout = Layout();
-        var everything = new RectangleF(-1e6f, -1e6f, 2e6f, 2e6f);
         layout.Update(device, LinesWindow(layout, 0, 3));
 
         layout.Update(device, null);
@@ -105,7 +102,7 @@ public class TextQuadWindowTests
         Assert.Multiple(() =>
         {
             Assert.That(layout.QuadWindow, Is.Null);
-            Assert.That(layout.ElementsCount, Is.EqualTo(InkIn(layout, everything)));
+            Assert.That(layout.ElementsCount, Is.EqualTo(InkIn(layout, 0, Lines - 1)));
         });
     }
 }
