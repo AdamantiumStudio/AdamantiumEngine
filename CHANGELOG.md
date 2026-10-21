@@ -801,6 +801,8 @@ All packages share one version.
 
 ### Fixed
 
+- On Linux a header included by another header was not found when the effect compiled from text: the request's file
+  name was taken with `Path.GetFileName` after its separators had been turned into `\`, which Linux does not split on.
 - An entity moved while a camera was not looked through stayed at its old place through that camera once it was: the
   world matrix kept for it still counted as computed. A moved entity now forgets them all
   (`Transform.ForgetComputedMetadata`).
@@ -1355,6 +1357,13 @@ All packages share one version.
 
 ### Changed
 
+- Effects compile on Linux. `Adamantium.EffectsCompiler`, `Adamantium.Engine.Generators` and `Adamantium.FX` are on
+  `Adamantium.Vulkan.Slang` and `Adamantium.Vulkan.Spirv` 1.1.0 - Slang 2026.17 and SPIRV-Cross from Vulkan SDK
+  1.4.363.0, each platform's libraries under `runtimes/<rid>/native`. The generator loads them with `dlopen` on Linux
+  and `LoadLibraryW` on Windows, takes the Slang runtime from that folder of the package, and points the bindings'
+  imports at what it loaded. The libraries it extracts come from the packages at build time instead of copies kept in
+  the repository; where the compiler gives the generator no location, they go to a folder of its version in the temp
+  directory.
 - `Skin.FillPalette` fills a `Span<Matrix4x4F>`, so a palette can be written straight into a frame's buffer of them.
   `RenderGeometry` is made by `MeshGeometryCache` from a mesh's content and never changes; `EnsureUpToDate` is gone.
 - `GraphicsDevice` draws, vertex and index buffer bindings, dispatches and buffer barriers go to

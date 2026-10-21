@@ -53,8 +53,8 @@
 	<ItemGroup>
          <!--Generator dependencies-->
 		
-		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="1.0.13" GeneratePathProperty="true" PrivateAssets="all" />
-		<PackageReference Include="Adamantium.Vulkan.Slang" Version="1.0.12" GeneratePathProperty="true" PrivateAssets="all" />
+		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="1.1.0" GeneratePathProperty="true" PrivateAssets="all" />
+		<PackageReference Include="Adamantium.Vulkan.Slang" Version="1.1.0" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="QuantumBinding.Utils" Version="3.0.1" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack.Annotations" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
@@ -63,10 +63,15 @@
         <!--<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />-->
     </ItemGroup>
     
+    <!-- The libraries NativeLibraryLoader extracts and loads, for each platform, taken from the packages rather than kept
+         here, so they are always the build those packages carry. The Slang runtime itself (slang-compiler, 25-35 MB)
+         is not embedded: the consuming project hands its package path to the generator. -->
     <ItemGroup>
-        <EmbeddedResource Include="spirv-cross-c-shared.dll"/>
-        <EmbeddedResource Include="slang.dll"/>
-        <EmbeddedResource Include="slang-c-shared.dll"/>
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Spirv)\runtimes\win-x64\native\spirv-cross-c-shared.dll" LogicalName="$(RootNamespace).spirv-cross-c-shared.dll" Visible="false" />
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\win-x64\native\slang.dll" LogicalName="$(RootNamespace).slang.dll" Visible="false" />
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\win-x64\native\slang-c-shared.dll" LogicalName="$(RootNamespace).slang-c-shared.dll" Visible="false" />
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Spirv)\runtimes\linux-x64\native\libspirv-cross-c-shared.so" LogicalName="$(RootNamespace).libspirv-cross-c-shared.so" Visible="false" />
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\linux-x64\native\libslang-c-shared.so" LogicalName="$(RootNamespace).libslang-c-shared.so" Visible="false" />
     </ItemGroup>
 
     <PropertyGroup>
