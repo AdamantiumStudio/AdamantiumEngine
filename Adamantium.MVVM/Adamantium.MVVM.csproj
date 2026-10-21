@@ -16,6 +16,13 @@
         <!-- PropertyChangedBase (INPC base) + ICommand (the generated commands implement it) both live in Core, so this
              library is UI-free and safe to reference from any layer (e.g. Adamantium.ECS.Components). -->
         <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+        <ProjectReference Include="..\Adamantium.MVVM.Generators\Adamantium.MVVM.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- So a test can tell a generated accessor from a reflected one. -->
+        <InternalsVisibleTo Include="Adamantium.MVVM.Tests" />
+        <InternalsVisibleTo Include="Adamantium.UITests" />
     </ItemGroup>
 
 </Project>
