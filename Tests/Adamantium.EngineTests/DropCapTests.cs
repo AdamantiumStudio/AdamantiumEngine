@@ -109,6 +109,23 @@ public class DropCapTests
         Assert.That(body.Where(g => g.LineIndex == 1 && g.Symbol != ' ').Max(g => g.Rect.Right), Is.EqualTo(Width).Within(0.5));
     }
 
+    // Sized by the font's cap height, as Word and CSS's initial-letter size it: a lowercase letter is as large as a
+    // capital, and a letter of short ink is not blown up.
+    [Test]
+    public void ADropCap_IsSizedByTheFontsCapHeight_NotByItsLetter()
+    {
+        var lower = Layout("and " + Prose, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+        var upper = Layout("And " + Prose, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+        var low = RightToLeft("נ " + HebrewProse, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+        var tall = RightToLeft("ל " + HebrewProse, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lower.FontSize, Is.EqualTo(upper.FontSize).Within(1e-6));
+            Assert.That(low.FontSize, Is.EqualTo(tall.FontSize).Within(1e-6));
+        });
+    }
+
     [Test]
     public void AShortText_StillMakesRoomForTheWholeDropCap()
     {

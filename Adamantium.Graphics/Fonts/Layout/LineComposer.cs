@@ -181,7 +181,6 @@ internal sealed class LineComposer
         // What the attributed text says, read once: a style changed meanwhile does not reach this layout.
         var (attributeRuns, resolvedParagraphs) = attributed?.Resolved() ?? (null, null);
         var paragraphRuns = resolvedParagraphs is { Count: > 0 } ? resolvedParagraphs : null;
-        // A drop cap stands at the side its paragraph's lines start from.
         var dropRightToLeft = TextParagraphs.IsRightToLeftParagraph(paragraphs, text, options.Direction, 0);
         var dropEnd = options.DropCap != null && renderingParameters.TextWrapping == TextWrapping.WrapByWords
                                               && !(vertical && dropRightToLeft)
@@ -826,7 +825,6 @@ internal sealed class LineComposer
             double pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Left : 0) + EdgeReserve(0, false);
             if (dropRightToLeft)
             {
-                // Its glyphs come in visual order: the last of them ends at the right edge.
                 pen = (slots != null ? frames[SlotOf(0).Frame].Left + SlotOf(0).Right : finalRect.Width)
                       - EdgeReserve(0, true) - dropGlyphs.Sum(shaped => shaped.XAdvance) * dropScale;
             }
@@ -870,7 +868,6 @@ internal sealed class LineComposer
                 pen += advance;
             }
 
-            // Placed in visual order, kept in logical order as the lines' glyphs are.
             return paragraphs != null ? glyphs.OrderBy(glyph => glyph.PositionInString).ToList() : glyphs;
         }
 
@@ -1242,8 +1239,6 @@ internal sealed class LineComposer
                 return glyphs;
             }
 
-            // Each run of one level shaped its own way - a bracket mirrored where it runs right to left - and the runs
-            // set as its line would show them.
             ShapedGlyph[] InVisualOrder(IFont capFont)
             {
                 var levels = paragraphs.LevelsApart(0, dropEnd);
@@ -1272,7 +1267,6 @@ internal sealed class LineComposer
                     var shaped = TextShaper.Shape(capFont, text, start, end, options);
                     if (direction == TextDirection.RightToLeft)
                     {
-                        // Its scripts come each in visual order but one after another as they are read.
                         shaped = GlyphRunShaper.ToLogicalOrder(shaped);
                         Array.Reverse(shaped);
                     }
@@ -1329,8 +1323,8 @@ internal sealed class LineComposer
                 return (scale, down * scale);
             }
 
-            // Its top at the cap height of the first line, its foot on the baseline of the last; the text beside it past
-            // its ink.
+            static double CapHeight(IFont capFont) => capFont.CapsHeight > 0 ? capFont.CapsHeight : capFont.Ascender * 0.7;
+
             (double, double) AcrossTheLines()
             {
                 double top = 0;
@@ -1356,14 +1350,13 @@ internal sealed class LineComposer
                     inkRight = inkLeft == double.MaxValue ? 0 : pen - inkLeft;
                 }
 
-                var bodyScale = first.FontSize / first.Font.UnitsPerEm;
-                var cap = (first.Font.CapsHeight > 0 ? first.Font.CapsHeight : first.Font.Ascender * 0.7) * bodyScale;
                 if (top <= 0)
                 {
                     return (0, 0);
                 }
 
-                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / top;
+                var cap = CapHeight(first.Font) * first.FontSize / first.Font.UnitsPerEm;
+                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / CapHeight(font);
                 return (scale, Math.Max(pen * scale, inkRight * scale + 0.1 * first.FontSize));
             }
         }
@@ -3911,8 +3904,6 @@ internal sealed class LineComposer
             }
         }
 
-        // The right of a line running right to left from its start: the blanks it starts with take their room there, as
-        // at the left of one running left to right - after a drop cap they stand beside it, not over it.
         double StartRight(IEnumerable<GlyphWordData> line, double inkRight)
         {
             var firstInk = int.MaxValue;
