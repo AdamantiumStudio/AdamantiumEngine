@@ -1393,6 +1393,10 @@ All packages share one version.
 
 ### Changed
 
+- The engine finds Vulkan by itself on every platform: `VulkanInstance` registers `Adamantium.Vulkan.Loader`'s
+  resolver (`VulkanDllMap.Register`) before its first call, so `vulkan-1` is `libvulkan.so.1` on Linux without an
+  application doing it first - the engine's own graphics tests among them. `Adamantium.Graphics.Core` depends on
+  `Adamantium.Vulkan.Loader` for it.
 - Effects compile on Linux. `Adamantium.EffectsCompiler`, `Adamantium.Engine.Generators` and `Adamantium.FX` are on
   `Adamantium.Vulkan.Slang` and `Adamantium.Vulkan.Spirv` 1.1.0 - Slang 2026.17 and SPIRV-Cross from Vulkan SDK
   1.4.363.0, each platform's libraries under `runtimes/<rid>/native`. The generator loads them with `dlopen` on Linux
