@@ -47,6 +47,9 @@
         <Content Include="..\Adamantium.FontTests\ScriptFonts\NotoSansArabic-Regular.ttf" Link="Fonts\NotoSansArabic-Regular.ttf">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="..\Adamantium.FontTests\ScriptFonts\NotoSansSyriac-Regular.ttf" Link="Fonts\NotoSansSyriac-Regular.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
         <Content Include="..\Adamantium.FontTests\TTFFonts\PlayfairDisplay-Regular.ttf" Link="Fonts\PlayfairDisplay-Regular.ttf">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>

@@ -843,6 +843,11 @@ All packages share one version.
 
 ### Fixed
 
+- A font's OS/2 table is read as far as its version and length go: a version 1 table (DejaVu Sans) had its x-height,
+  cap height and the fields after them read from the bytes beyond it. Where a font gives no cap height,
+  `CapsHeight` is the top of its H.
+- An instance of a variable font named in its `fvar` table (Noto Sans at weight 700) carries that name: its
+  `FullName` and subfamily say Bold, not the default instance's Regular.
 - Spaces a line running right to left starts with hung past its start, out of the frame - the right margin - when
   the line was set to its start or justified; they take their room inside it, as at the left of a line running left
   to right. A line of spaces alone in text running right to left by `TextLayout.Direction` alone stood at the left;
@@ -1418,6 +1423,13 @@ All packages share one version.
 
 ### Changed
 
+- A drop cap is sized by a letter that stands for its script, not always by its own, much as CSS's `initial-letter`
+  sizes it by the script's alignment: a letter with a capital by that capital, Hebrew by ה, Arabic by alef, Han and
+  kana by 国, Hangul by 한, any other - Georgian too - by itself; an accented letter by its letter, composed or not -
+  from the top of that letter in the first line, in the text's font, to the last line's baseline; where the cap's font
+  or the text's lacks that letter, by its own. A lowercase letter or one of short ink - a Hebrew נ, an Arabic ب - is
+  as large as the rest of its script, where it was blown up until its own ink spanned the lines; an accent or an
+  ascender rises above the first line as it does in the text.
 - `PosixInterop` carries the libc calls the Linux platform needs - `Read`, `Write`, `Poll` (with `PosixPollFd`),
   `Pipe2`, `EventFd`, `MemFdCreate`, `Mmap`, `Munmap` - and `Adamantium.Wayland` maps its keymap through it, so it
   references `Adamantium.Core`. The libwayland-client and xkbcommon imports are named in C# (`DisplayConnect`,

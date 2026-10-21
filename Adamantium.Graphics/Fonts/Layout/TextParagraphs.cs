@@ -128,8 +128,6 @@ internal sealed class TextParagraphs
         }
     }
 
-    // The levels of characters set apart from the lines, as a drop cap's: as their line would have them, each paragraph's
-    // by its own.
     public byte[] LevelsApart(int start, int end)
     {
         var levels = new byte[end - start];
