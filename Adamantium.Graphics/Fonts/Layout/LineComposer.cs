@@ -1323,7 +1323,39 @@ internal sealed class LineComposer
                 return (scale, down * scale);
             }
 
-            static double CapHeight(IFont capFont) => capFont.CapsHeight > 0 ? capFont.CapsHeight : capFont.Ascender * 0.7;
+            static int ReferenceLetter(string text, int end)
+            {
+                for (var i = 0; i < end; i++)
+                {
+                    if (!char.IsLetter(text[i]))
+                    {
+                        continue;
+                    }
+
+                    return (int)text[i] switch
+                    {
+                        >= 0x0590 and <= 0x05FF or >= 0xFB1D and <= 0xFB4F => 0x05D4,
+                        >= 0x0600 and <= 0x06FF or >= 0x0750 and <= 0x077F or >= 0x08A0 and <= 0x08FF
+                            or >= 0xFB50 and <= 0xFDFF or >= 0xFE70 and <= 0xFEFF => 0x0627,
+                        >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xAC00 and <= 0xD7AF => 0xD55C,
+                        >= 0x2E80 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF => 0x56FD,
+                        _ => 'H',
+                    };
+                }
+
+                return 'H';
+            }
+
+            static double LetterHeight(IFont letterFont, int letter)
+            {
+                if (letterFont.TryGetGlyphIndex(letter, out var index) && index != 0
+                    && letterFont.GetGlyphByIndex(index).BoundingRectangle is var bounds && bounds.Y + bounds.Height > 0)
+                {
+                    return bounds.Y + bounds.Height;
+                }
+
+                return letterFont.CapsHeight > 0 ? letterFont.CapsHeight : letterFont.Ascender * 0.7;
+            }
 
             (double, double) AcrossTheLines()
             {
@@ -1355,8 +1387,9 @@ internal sealed class LineComposer
                     return (0, 0);
                 }
 
-                var cap = CapHeight(first.Font) * first.FontSize / first.Font.UnitsPerEm;
-                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / CapHeight(font);
+                var letter = ReferenceLetter(text, dropEnd);
+                var cap = LetterHeight(first.Font, letter) * first.FontSize / first.Font.UnitsPerEm;
+                var scale = (cap + (dropCap.Lines - 1) * DropPitch()) / LetterHeight(font, letter);
                 return (scale, Math.Max(pen * scale, inkRight * scale + 0.1 * first.FontSize));
             }
         }

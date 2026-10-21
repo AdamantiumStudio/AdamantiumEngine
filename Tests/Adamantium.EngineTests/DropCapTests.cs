@@ -109,10 +109,20 @@ public class DropCapTests
         Assert.That(body.Where(g => g.LineIndex == 1 && g.Symbol != ' ').Max(g => g.Rect.Right), Is.EqualTo(Width).Within(0.5));
     }
 
-    // Sized by the font's cap height, as Word and CSS's initial-letter size it: a lowercase letter is as large as a
-    // capital, and a letter of short ink is not blown up.
+    // Sized by a letter of its script in its font - H, ה, alef, 国 - not by its own: a lowercase letter is as large as a
+    // capital, a letter of short ink is not blown up, and a Hebrew cap stands as high as the Hebrew letters beside it.
     [Test]
-    public void ADropCap_IsSizedByTheFontsCapHeight_NotByItsLetter()
+    public void AHebrewDropCap_StandsAsHighAsTheLettersOfItsFirstLine()
+    {
+        var layout = RightToLeft("ש " + HebrewProse, new DropCap(3));
+        var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
+        var letters = Body(layout).Where(g => g.LineIndex == 0 && "בראשית".Contains(g.Symbol)).Min(g => g.Rect.Top);
+
+        Assert.That(cap.Rect.Top, Is.EqualTo(letters).Within(1.5));
+    }
+
+    [Test]
+    public void ADropCap_IsSizedByALetterOfItsScript_NotByItsOwn()
     {
         var lower = Layout("and " + Prose, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
         var upper = Layout("And " + Prose, new DropCap(3)).GetTextData().Single(g => g.PositionInString == 0);
