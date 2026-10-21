@@ -17,4 +17,7 @@ internal sealed record BindableMemberInfo(
     EquatableArray<string> AffectsCommands,
     EquatableArray<string> ValidationAttributes,
     string HintName,
+    string DescribedType,
+    string PlainPropertyType,
+    bool HostIsValueType,
     DiagnosticInfo Warning = null);

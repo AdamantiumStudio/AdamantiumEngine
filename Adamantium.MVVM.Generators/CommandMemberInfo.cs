@@ -15,4 +15,6 @@ internal sealed record CommandMemberInfo(
     string ExecuteExpression,
     string CanExecuteExpression,
     string HintName,
+    string DescribedType,
+    string PlainCommandType,
     DiagnosticInfo Diagnostic = null);
