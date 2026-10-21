@@ -293,7 +293,7 @@ public sealed unsafe class SharedSurface : Texture
             ? (object)new ImportMemoryFdInfoKHR
             {
                 HandleType = memHandleType,
-                Fd = (int)descriptor.MemoryHandle,
+                Fd = DuplicateForImport(descriptor.MemoryHandle),
                 PNext = new MemoryDedicatedAllocateInfo { Image = image }
             }
             : new ImportMemoryWin32HandleInfoKHR
@@ -429,12 +429,14 @@ public sealed unsafe class SharedSurface : Texture
         }
         else
         {
+            var fd = DuplicateForImport(handle);
             res = logical.ImportSemaphoreFdKHR(new ImportSemaphoreFdInfoKHR
             {
                 Semaphore = semaphore,
                 HandleType = ExternalSemaphoreHandleTypeFlagBits.OpaqueFdBit,
-                Fd = (int)handle
+                Fd = fd
             });
+            if (res != Result.Success) PosixInterop.Close(fd);
         }
         if (res != Result.Success)
         {
@@ -480,6 +482,23 @@ public sealed unsafe class SharedSurface : Texture
         DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal,
         ImageAspect = ImageAspectFlagBits.ColorBit
     };
+
+    /// <summary>
+    /// A copy of the producer's descriptor, for Vulkan to take. A successful fd import takes ownership of the descriptor
+    /// it is given - unlike a Win32 handle, which it only reads - so importing the producer's own made it Vulkan's: the
+    /// producer closed it a second time later, and importing the same surface again (as a resize does) found it gone,
+    /// with VK_ERROR_INVALID_EXTERNAL_HANDLE.
+    /// </summary>
+    private static int DuplicateForImport(IntPtr handle)
+    {
+        var fd = PosixInterop.Dup((int)handle);
+        if (fd < 0)
+        {
+            throw new Exception($"failed to duplicate the shared descriptor {handle} for import: errno {Marshal.GetLastPInvokeError()}");
+        }
+
+        return fd;
+    }
 
     private void CloseSharedHandle(IntPtr handle)
     {
