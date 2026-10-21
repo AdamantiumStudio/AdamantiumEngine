@@ -163,6 +163,20 @@ public class DropCapTests
         Assert.That(decomposed, Is.EqualTo(composed).Within(1e-6));
     }
 
+    // Set in a font of Hangul beside text with none, every syllable is sized alike, by the syllable, not by its first
+    // jamo.
+    [TestCase("가")]
+    [TestCase("이")]
+    public void AHangulDropCapInAFontOfItsOwn_IsSizedAsEverySyllable(string syllable)
+    {
+        var cjk = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansCJK-Regular.ttc")).Fonts[0];
+        double CapSize(string start) =>
+            Layout(start + "국어 " + Prose, new DropCap(3, 1, cjk)).GetTextData().Where(g => g.PositionInString == 0)
+                .Max(g => g.FontSize);
+
+        Assert.That(CapSize(syllable), Is.EqualTo(CapSize("한")).Within(1).Percent);
+    }
+
     // A letter beyond the basic plane and a halfwidth one are sized as the rest of their script.
     [TestCase("𠮷", "吉")]
     [TestCase("ｱ", "ア")]

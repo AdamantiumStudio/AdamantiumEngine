@@ -1333,7 +1333,7 @@ internal sealed class LineComposer
                         continue;
                     }
 
-                    var own = Rune.GetRuneAt(rune.ToString().Normalize(NormalizationForm.FormD), 0).Value;
+                    var own = BaseLetter(rune).Value;
                     var upper = own is >= 0x10D0 and <= 0x10FF ? own : Rune.ToUpperInvariant(new Rune(own)).Value;
                     return (upper != own ? upper : own switch
                     {
@@ -1349,6 +1349,25 @@ internal sealed class LineComposer
                 }
 
                 return ('H', 'H');
+            }
+
+            static Rune BaseLetter(Rune letter)
+            {
+                var decomposed = letter.ToString().Normalize(NormalizationForm.FormD);
+                var first = Rune.GetRuneAt(decomposed, 0);
+                for (var i = first.Utf16SequenceLength; i < decomposed.Length;)
+                {
+                    var next = Rune.GetRuneAt(decomposed, i);
+                    if (Rune.GetUnicodeCategory(next) is not (UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark
+                        or UnicodeCategory.EnclosingMark))
+                    {
+                        return letter;
+                    }
+
+                    i += next.Utf16SequenceLength;
+                }
+
+                return first;
             }
 
             static double LetterHeight(IFont letterFont, int letter) =>
