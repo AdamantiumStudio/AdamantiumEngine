@@ -385,6 +385,50 @@ is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 
 ---
 
+## Wayland protocols
+
+**Where:** `Adamantium.Wayland.Generator/Protocols/` — `wayland.xml` from Wayland 1.26.0
+(https://gitlab.freedesktop.org/wayland/wayland), and `xdg-shell.xml`, `viewporter.xml`, `tablet-v2.xml`,
+`fractional-scale-v1.xml`, `cursor-shape-v1.xml`, `xdg-decoration-unstable-v1.xml`,
+`relative-pointer-unstable-v1.xml`, `pointer-constraints-unstable-v1.xml` and `text-input-unstable-v3.xml` from
+wayland-protocols 1.49 (https://gitlab.freedesktop.org/wayland/wayland-protocols), unchanged; and
+`Adamantium.Wayland/Generated/`, generated from them.
+
+The protocols' descriptions, read by `Adamantium.Wayland.Generator` into C#: the interfaces, their messages and
+enums, and the summaries that become the documentation comments. Each XML file names its authors in its own
+`<copyright>`, and each generated file repeats the notice of the protocol it was generated from. All but one are under
+the MIT licence below, with their own copyright lines; `text-input-unstable-v3.xml` is under the permissive notice it
+carries in full.
+
+```
+Copyright © 2008-2011 Kristian Høgsberg
+Copyright © 2010-2011 Intel Corporation
+Copyright © 2012-2013 Collabora, Ltd.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation files
+(the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of the Software,
+and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice (including the
+next paragraph) shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## SharpDX
 
 **Where:** ten files still carry its notice, and only those ten are derived from it —

@@ -61,6 +61,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Engine.ContentCo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Engine.Templates", "Adamantium.Engine.Templates\Adamantium.Engine.Templates.csproj", "{4467B6EF-3169-4EFD-9CD0-51473135386F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Wayland", "Adamantium.Wayland\Adamantium.Wayland.csproj", "{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Wayland.Generator", "Adamantium.Wayland.Generator\Adamantium.Wayland.Generator.csproj", "{72F8BEF8-983B-4790-9FEA-DF52BA017E65}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -171,6 +175,14 @@ Global
 		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4467B6EF-3169-4EFD-9CD0-51473135386F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72F8BEF8-983B-4790-9FEA-DF52BA017E65}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -6,6 +6,7 @@
         <Platforms>AnyCPU</Platforms>
         <Configurations>Debug;Release</Configurations>
         <LangVersion>latest</LangVersion>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -18,6 +19,7 @@
         <ProjectReference Include="..\..\Adamantium.Engine\Adamantium.Engine.csproj" />
         <ProjectReference Include="..\..\Adamantium.XInput\Adamantium.XInput.csproj" />
         <ProjectReference Include="..\..\Adamantium.GameInput\Adamantium.GameInput.csproj" />
+        <ProjectReference Include="..\..\Adamantium.Wayland\Adamantium.Wayland.csproj" />
     </ItemGroup>
 
     <ItemGroup>
