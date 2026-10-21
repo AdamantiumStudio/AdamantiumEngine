@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.Wayland`: Wayland client bindings. The protocols are generated into C# from their XML by
+  `Adamantium.Wayland.Generator` - the core `wayland.xml`, and xdg-shell, viewporter, fractional-scale, cursor-shape,
+  xdg-decoration, relative-pointer, pointer-constraints, text-input-v3 and tablet-v2 from wayland-protocols - with no
+  C in between: a class per interface (`WlSurface`, `XdgToplevel`), its requests as methods, its events as C# events,
+  its enums nested in it, and the `wl_interface` tables libwayland marshals by. Of libwayland-client only the wire is
+  called: `wl_proxy_marshal_array_flags` for every request, one dispatcher (`wl_proxy_add_dispatcher`) for every event.
+  `WaylandDisplay` connects and dispatches, `WlRegistry.Bind<T>` binds a global by its type, and an event's handler
+  that throws has its exception rethrown from the dispatching call. `XkbKeyboard` reads the keymap `wl_keyboard`
+  sends through xkbcommon: keysyms, text and repeat of evdev key codes under the current modifiers and layout.
+- A Vulkan surface on Wayland: `PresentationParameters.DisplayHandle` carries the `wl_display` beside the `wl_surface`
+  as `OutputHandle` (and `UniverseOutputDescription.DisplayHandle` passes it on), and `VulkanInstance` makes a
+  `VK_KHR_wayland_surface` from them on Linux. The extension is optional there, so a machine without Wayland still
+  renders off-screen; a window asked for without it is refused when its surface is made.
 - Recorded draws: `IGraphicsDevice.BeginRecording` sends the draws that follow into a secondary command buffer for the
   frame slot - recorded over in place on later frames - and `ExecuteRecorded` runs it inside the render pass.
   `BeginFingerprint`/`EndFingerprint` take the draws as a fingerprint only, issuing nothing - shaders, constants by
