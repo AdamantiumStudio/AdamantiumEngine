@@ -8,6 +8,7 @@ using Adamantium.Core.Collections;
 using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Vulkan.Core;
 using Adamantium.Vulkan.Core.Interop;
+using Adamantium.Vulkan.Linux;
 using Adamantium.Vulkan.MacOS;
 using Adamantium.Vulkan.Windows;
 using Serilog;
@@ -61,14 +62,21 @@ public unsafe class VulkanInstance : DisposableBase
         }
         InstanceExtensions = new ReadOnlyCollection<string>(instanceExt);
 
-        OptionalInstanceExtensions = new ReadOnlyCollection<string>(new List<string>
+        var optionalExt = new List<string>
         {
             Constants.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
             Constants.VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
             Constants.VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
             Constants.VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
             Constants.VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
-        });
+        };
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            // Optional, unlike the other platforms' surfaces: a Linux machine may have no Wayland - a server, a CI
+            // runner - and still render off-screen. A window asked for without it is refused when its surface is made.
+            optionalExt.Add(Constants.VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+        }
+        OptionalInstanceExtensions = new ReadOnlyCollection<string>(optionalExt);
     }
 
     public AdamantiumCollection<GraphicsAdapter> GraphicsAdapters { get; private set; }
@@ -243,6 +251,32 @@ public unsafe class VulkanInstance : DisposableBase
             var surfaceInfo = new MacOSSurfaceCreateInfoMVK();
             surfaceInfo.PView = (nuint)parameters.OutputHandle;
             var surface = VkInstance.CreateMacOSSurfaceMVK(surfaceInfo);
+
+            availableSurfaces.Add(parameters.OutputHandle, surface);
+
+            return surface;
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            if (!IsExtensionEnabled(Constants.VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME))
+            {
+                throw new NotSupportedException(
+                    $"{Constants.VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME} is not available on this Vulkan loader, so no " +
+                    "window can be presented to. Use PresenterType.Headless or RenderTarget for off-screen rendering.");
+            }
+
+            if (parameters.DisplayHandle == IntPtr.Zero)
+            {
+                throw new ArgumentException(
+                    "A Wayland surface needs the wl_display as DisplayHandle, besides the wl_surface as OutputHandle.",
+                    nameof(parameters));
+            }
+
+            var surfaceInfo = new WaylandSurfaceCreateInfoKHR();
+            surfaceInfo.Display = parameters.DisplayHandle;
+            surfaceInfo.Surface = parameters.OutputHandle;
+            var surface = VkInstance.CreateWaylandSurface(surfaceInfo);
 
             availableSurfaces.Add(parameters.OutputHandle, surface);
 

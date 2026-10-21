@@ -25,6 +25,8 @@ public class PresentationParameters
         Width = parameters.Width;
         Height = parameters.Height;
         OutputHandle = parameters.OutputHandle;
+        HInstanceHandle = parameters.HInstanceHandle;
+        DisplayHandle = parameters.DisplayHandle;
         ImageFormat = parameters.ImageFormat;
         DepthFormat = parameters.DepthFormat;
         MSAALevel = parameters.MSAALevel;
@@ -79,6 +81,10 @@ public class PresentationParameters
     public UInt32 Height { get; set; }
     public IntPtr OutputHandle { get; set; }
     public IntPtr HInstanceHandle { get; set; }
+
+    /// <summary>The connection the output's window belongs to, where the platform's surface needs one besides the
+    /// window: on Wayland the wl_display, with the wl_surface as <see cref="OutputHandle"/>.</summary>
+    public IntPtr DisplayHandle { get; set; }
     public SurfaceFormat ImageFormat { get; set; }
     public DepthFormat DepthFormat { get; set; }
     public MSAALevel MSAALevel { get; set; }

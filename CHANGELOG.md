@@ -16,6 +16,10 @@ All packages share one version.
   `WaylandDisplay` connects and dispatches, `WlRegistry.Bind<T>` binds a global by its type, and an event's handler
   that throws has its exception rethrown from the dispatching call. `XkbKeyboard` reads the keymap `wl_keyboard`
   sends through xkbcommon: keysyms, text and repeat of evdev key codes under the current modifiers and layout.
+- A Vulkan surface on Wayland: `PresentationParameters.DisplayHandle` carries the `wl_display` beside the `wl_surface`
+  as `OutputHandle` (and `UniverseOutputDescription.DisplayHandle` passes it on), and `VulkanInstance` makes a
+  `VK_KHR_wayland_surface` from them on Linux. The extension is optional there, so a machine without Wayland still
+  renders off-screen; a window asked for without it is refused when its surface is made.
 - Recorded draws: `IGraphicsDevice.BeginRecording` sends the draws that follow into a secondary command buffer for the
   frame slot - recorded over in place on later frames - and `ExecuteRecorded` runs it inside the render pass.
   `BeginFingerprint`/`EndFingerprint` take the draws as a fingerprint only, issuing nothing - shaders, constants by

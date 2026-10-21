@@ -25,6 +25,7 @@ namespace Adamantium.Multiverse
             Width = parameters.Width;
             Height = parameters.Height;
             Handle = parameters.OutputHandle;
+            DisplayHandle = parameters.DisplayHandle;
             PixelFormat = parameters.ImageFormat;
             DepthFormat = parameters.DepthFormat;
             MsaaLevel = parameters.MSAALevel;
@@ -77,6 +78,7 @@ namespace Adamantium.Multiverse
             Width = copy.Width;
             Height = copy.Height;
             Handle = copy.Handle;
+            DisplayHandle = copy.DisplayHandle;
             MsaaLevel = copy.MsaaLevel;
             PixelFormat = copy.PixelFormat;
             DepthFormat = copy.DepthFormat;
@@ -87,6 +89,9 @@ namespace Adamantium.Multiverse
         public UInt32 Width { get; set; }
         public UInt32 Height { get; set; }
         public IntPtr Handle { get; set; }
+
+        /// <summary>The window's connection where its surface needs one: the wl_display on Wayland.</summary>
+        public IntPtr DisplayHandle { get; set; }
         public SurfaceFormat PixelFormat { get; set; }
         public DepthFormat DepthFormat { get; set; }
         public MSAALevel MsaaLevel { get; set; }
@@ -111,7 +116,10 @@ namespace Adamantium.Multiverse
                 MsaaLevel,
                 PixelFormat,
                 DepthFormat,
-                BuffersCount);
+                BuffersCount)
+            {
+                DisplayHandle = DisplayHandle,
+            };
         }
         
         public static implicit operator PresentationParameters(UniverseOutputDescription description)
