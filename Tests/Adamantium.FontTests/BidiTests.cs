@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using Adamantium.Fonts;
 using Adamantium.Fonts.Text;
 using NUnit.Framework;
 
@@ -98,6 +99,47 @@ public class BidiTests
         }
 
         Assert.That(failures, Is.Empty, $"{failures.Count} of {cases} cases:\n{string.Join("\n", failures.Take(FailuresShown))}");
+    }
+
+    // Every case of the text the conformance tests leave to decide its own direction.
+    [Test]
+    public void TheDirectionOfText_IsTheLevelItsParagraphResolvesTo()
+    {
+        var failures = new List<string>();
+        var cases = 0;
+        var number = 0;
+        foreach (var line in File.ReadLines(UnicodeFile("BidiCharacterTest.txt")))
+        {
+            number++;
+            var fields = line.Split('#')[0].Trim().Split(';');
+            if (fields.Length < 3 || fields[1].Trim() != "2")
+            {
+                continue;
+            }
+
+            var text = string.Concat(Tokens(fields[0]).Select(t => char.ConvertFromUtf32(int.Parse(t, NumberStyles.HexNumber))));
+            var expected = fields[2].Trim() == "1" ? TextDirection.RightToLeft : TextDirection.LeftToRight;
+            cases++;
+            if (BidiParagraph.DirectionOf(text.AsSpan()) != expected)
+            {
+                failures.Add($"line {number}: expected {expected}");
+            }
+        }
+
+        Assert.That(cases, Is.GreaterThan(0));
+        Assert.That(failures, Is.Empty, $"{failures.Count} of {cases} cases:\n{string.Join("\n", failures.Take(FailuresShown))}");
+    }
+
+    [TestCase("שלום world", TextDirection.RightToLeft)]
+    [TestCase("123 שלום", TextDirection.RightToLeft)]
+    [TestCase("(world) שלום", TextDirection.LeftToRight)]
+    [TestCase("⁧world⁩ שלום", TextDirection.RightToLeft)]
+    [TestCase("⁧world שלום", TextDirection.LeftToRight)]
+    [TestCase("123\nשלום", TextDirection.LeftToRight)]
+    [TestCase("", TextDirection.LeftToRight)]
+    public void ADirection_IsByTheFirstStrongCharacterOutsideIsolates(string text, TextDirection direction)
+    {
+        Assert.That(BidiParagraph.DirectionOf(text.AsSpan()), Is.EqualTo(direction));
     }
 
     private static void Check(BidiResolver resolver, string[] levels, int[] order, string name, List<string> failures)
