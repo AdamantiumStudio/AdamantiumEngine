@@ -43,6 +43,9 @@ public unsafe class VulkanInstance : DisposableBase
 
     private readonly Dictionary<IntPtr, SurfaceKHR> availableSurfaces;
 
+    // How many presenters hold each surface: a headless one is shared by every headless presenter, all under handle 0.
+    private readonly Dictionary<IntPtr, int> surfaceHolders = new();
+
     static VulkanInstance()
     {
         var validationLayers = new List<string>();
@@ -210,7 +213,49 @@ public unsafe class VulkanInstance : DisposableBase
         return new VulkanInstance(appName, enableDebug);
     }
 
+    /// <summary>The surface for the output's window, made the first time it is asked for. Each call holds it once more,
+    /// and <see cref="ReleaseSurface"/> lets go of it.</summary>
     public SurfaceKHR GetOrCreateSurface(PresentationParameters parameters)
+    {
+        // Presenters are made and disposed on more than one thread: the render thread, a universe's own.
+        lock (surfaceHolders)
+        {
+            var surface = SurfaceFor(parameters);
+            surfaceHolders[parameters.OutputHandle] = surfaceHolders.GetValueOrDefault(parameters.OutputHandle) + 1;
+            return surface;
+        }
+    }
+
+    /// <summary>
+    /// Lets go of the surface held for this window, and destroys it when nothing holds it any more - its swapchain must
+    /// be gone by then. A surface kept past its window is kept on a handle that may come back for another: a wl_surface is
+    /// memory libwayland frees, and the next window's can be at the same address, which then got the old surface back,
+    /// made for a window that no longer existed.
+    /// </summary>
+    public void ReleaseSurface(IntPtr outputHandle)
+    {
+        lock (surfaceHolders)
+        {
+            if (!surfaceHolders.TryGetValue(outputHandle, out var holders))
+            {
+                return;
+            }
+
+            if (holders > 1)
+            {
+                surfaceHolders[outputHandle] = holders - 1;
+                return;
+            }
+
+            surfaceHolders.Remove(outputHandle);
+            if (availableSurfaces.Remove(outputHandle, out var surface))
+            {
+                VkInstance.DestroySurfaceKHR(surface);
+            }
+        }
+    }
+
+    private SurfaceKHR SurfaceFor(PresentationParameters parameters)
     {
         if (availableSurfaces.TryGetValue(parameters.OutputHandle, out var createSurface))
         {
