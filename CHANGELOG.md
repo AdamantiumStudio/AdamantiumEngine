@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Word's text effects, drawn from each glyph's own distance field: `GlyphOutline`, `GlyphShadow`, `GlyphGlow` and
+  `GlyphReflection` on a stretch (`TextAttributes.Outline`, `Shadow`, `Glow`, `Reflection`) or as the layout's defaults
+  (`TextLayout.GlyphOutline` and the rest, which move `Revision` on). Each is a copy of the glyphs under all of the
+  text - reflections, then shadows, glows and outlines - grown and softened no further than the field reaches past the
+  outline, about a tenth of an em; the shared atlas is as it was. The glyph shader takes a soft edge
+  (`FontItem.Synthesis.w`) and a reflection's fade (`FontItem.Paint.zw`).
+
 - Gamepads on Linux: `EvdevGamepadBackend` reads the input devices (`/dev/input/event*`) the user may read, looking for
   new ones once a second, and `EvdevGamepad` takes the Linux gamepad layout - buttons by their place, the sticks with
   up positive, the triggers, the hat as the d-pad - into `GamepadState` at each report, catching up after dropped

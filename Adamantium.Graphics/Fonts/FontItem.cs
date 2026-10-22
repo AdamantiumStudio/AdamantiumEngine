@@ -65,7 +65,9 @@ public struct FontItem
     /// <summary>
     /// What draws the glyph as a face its font lacks (<see cref="Adamantium.Fonts.FontSynthesis"/>): x = how far the
     /// outline moves out for a bold, in units of the distance field; y = the slant of an italic; z = where the baseline
-    /// lies in the quad, 0 at its top and 1 at its bottom, the line the slant pivots on. Zero draws the glyph as it is.
+    /// lies in the quad, 0 at its top and 1 at its bottom, the line the slant pivots on; w = the width of a soft edge,
+    /// in units of the distance field, for a glyph drawn as a shadow or a glow (0 for a crisp one). Zero draws the
+    /// glyph as it is.
     /// </summary>
     [VertexInputElement("TEXCOORD2")]
     public Vector4F Synthesis;
@@ -73,7 +75,8 @@ public struct FontItem
     /// <summary>
     /// A 'COLR' version 1 glyph, drawn by its paint program: x = the program in the atlas plus one, 0 for an ordinary
     /// glyph. Such a glyph's <see cref="ArrangeRect"/> holds where its pen and baseline are and the pixels per font unit,
-    /// as x, y, z (and again w): the program places the quad.
+    /// as x, y, z (and again w): the program places the quad. A glyph drawn as a reflection: z = the share of the quad,
+    /// from its top, it fades away over; w = how strong it starts; zero for every other glyph.
     /// </summary>
     [VertexInputElement("TEXCOORD3")]
     public Vector4F Paint;
