@@ -10,4 +10,8 @@ public class HeadlessPresenter : SwapChainGraphicsPresenter
         : base(graphicsDevice, description, name)
     {
     }
+
+    /// <summary>One: its frames are read back, not shown, and a ring would leave the copy just drawn behind a newer slot.
+    /// </summary>
+    protected override int FrameCopies => 1;
 }

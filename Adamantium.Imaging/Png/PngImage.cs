@@ -88,7 +88,9 @@ namespace Adamantium.Imaging.Png
 
         private SurfaceFormat GetFormat()
         {
-            switch (PngColorConversion.GetNumberOfColorChannels(ColorType) * Header.BitDepth)
+            var mode = State?.ColorModeRaw;
+            var channels = PngColorConversion.GetNumberOfColorChannels(mode?.ColorType ?? ColorType);
+            switch (channels * (mode?.BitDepth ?? (uint)Header.BitDepth))
             {
                 case 8:
                     return Format.R8_UNORM;
