@@ -1,5 +1,8 @@
 using System;
+using System.Globalization;
 using Adamantium.Fonts;
+using Adamantium.Fonts.Text;
+using Adamantium.Graphics.Fonts.Layout;
 
 namespace Adamantium.Graphics.Fonts;
 
@@ -37,6 +40,65 @@ public sealed class DropCap : IEquatable<DropCap>
 
     /// <summary>The font it is set in, as a decorative face of initials; null sets it in the text's own.</summary>
     public IFont Font { get; }
+
+    /// <summary>Whether a drop cap can start <paramref name="text"/>: not one that is empty or starts with a blank, a
+    /// control character or an object.</summary>
+    public static bool CanStart(ReadOnlySpan<char> text) =>
+        !text.IsEmpty && !char.IsWhiteSpace(text[0]) && !char.IsControl(text[0]) &&
+        text[0] != TextGeometry.ObjectReplacement;
+
+    /// <summary>How many characters of <paramref name="text"/> it takes from the start, an opening quote or bracket
+    /// with the letter after it; 0 for a text it cannot start (<see cref="CanStart"/>).</summary>
+    public int Length(string text)
+    {
+        if (!CanStart(text))
+        {
+            return 0;
+        }
+
+        var graphemes = TextBoundaries.Graphemes(text);
+        var end = 0;
+        var letters = 0;
+        while (end < text.Length && letters < Characters &&
+               text[end] is not ('\n' or TextGeometry.LineSeparator or TextGeometry.ParagraphSeparator
+                   or TextGeometry.ObjectReplacement))
+        {
+            if (Counts(text, end))
+            {
+                letters++;
+            }
+
+            end = TextBoundaries.Next(graphemes, end);
+        }
+
+        return end;
+    }
+
+    /// <summary>How many <see cref="Characters"/> a drop cap of <paramref name="letters"/> has: its graphemes, an
+    /// opening quote or bracket not counted.</summary>
+    public static int CharactersOf(string letters)
+    {
+        if (string.IsNullOrEmpty(letters))
+        {
+            return 0;
+        }
+
+        var graphemes = TextBoundaries.Graphemes(letters);
+        var count = 0;
+        for (var at = 0; at < letters.Length; at = TextBoundaries.Next(graphemes, at))
+        {
+            if (Counts(letters, at))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static bool Counts(string text, int at) =>
+        CharUnicodeInfo.GetUnicodeCategory(text, at) is not (UnicodeCategory.OpenPunctuation
+            or UnicodeCategory.InitialQuotePunctuation);
 
     public bool Equals(DropCap other) =>
         other != null && Lines == other.Lines && Characters == other.Characters && ReferenceEquals(Font, other.Font);

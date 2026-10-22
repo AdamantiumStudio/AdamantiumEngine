@@ -329,7 +329,29 @@ public class DropCapTests
     {
         var layout = Layout("\tIndented text", new DropCap(3));
 
-        Assert.That(layout.GetTextData().All(g => g.FontSize <= FontSize));
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetTextData().All(g => g.FontSize <= FontSize));
+            Assert.That(layout.DropCapLength, Is.Zero);
+            Assert.That(new DropCap(3).Length("\tIndented text"), Is.Zero);
+        });
+    }
+
+    [TestCase("Text", 1, 1)]
+    [TestCase("Text", 2, 2)]
+    [TestCase("“Quoted", 1, 2)]
+    [TestCase("A\nB", 3, 1)]
+    [TestCase(" Spaced", 1, 0)]
+    [TestCase("", 1, 0)]
+    public void TheLength_IsWhatTheLayoutTakes(string text, int characters, int length)
+    {
+        var cap = new DropCap(3, characters);
+
+        Assert.That(cap.Length(text), Is.EqualTo(length));
+        if (text.Length > 0)
+        {
+            Assert.That(Layout(text, cap).DropCapLength, Is.EqualTo(length));
+        }
     }
 
     [Test]
