@@ -402,10 +402,20 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     /// <summary>Resets DEPTH ONLY (the stencil, which carries the instanced fills' coverage marks, is untouched) inside
     /// one rectangle of the attachment, mid-pass. A draw that borrows depth as scratch - the strokes' union coverage -
     /// uses this to start from a known 1.0 over its own bounds, instead of assuming what the rest of the frame left
-    /// there. That assumption is what made the first version of this a frame-wide change.</summary>
+    /// there. That assumption is what made the first version of this a frame-wide change. The rectangle is in the
+    /// coordinates scissors are given in, so it is moved by <see cref="TargetOrigin"/> like them.</summary>
     public void ClearDepthInRect(Rect2D rect)
     {
         if (depthBuffer == null || rect.Extent.Width == 0 || rect.Extent.Height == 0) return;
+        if (_originX != 0 || _originY != 0)
+        {
+            rect = new Rect2D
+            {
+                Offset = new Offset2D { X = rect.Offset.X - _originX, Y = rect.Offset.Y - _originY },
+                Extent = rect.Extent
+            };
+        }
+
         if (!ClampToRenderArea(ref rect)) return;
 
         var attachment = new ClearAttachment

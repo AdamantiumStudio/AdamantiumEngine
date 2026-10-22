@@ -18,6 +18,14 @@ public static unsafe partial class WaylandInterfaces
     public static readonly WlInterface* ZwpPointerConstraintsV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZwpLockedPointerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZwpConfinedPointerV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPointerGesturesV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPointerGestureSwipeV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPointerGesturePinchV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPointerGestureHoldV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPrimarySelectionDeviceManagerV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPrimarySelectionDeviceV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPrimarySelectionOfferV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZwpPrimarySelectionSourceV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZwpRelativePointerManagerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZwpRelativePointerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZwpTabletManagerV2 = WaylandInterfaceBuilder.Allocate();
@@ -56,13 +64,26 @@ public static unsafe partial class WaylandInterfaces
     public static readonly WlInterface* WlSubcompositor = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* WlSubsurface = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* WlFixes = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgActivationV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgActivationTokenV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgDecorationManagerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgToplevelDecorationV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZxdgExporterV2 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZxdgImporterV2 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZxdgExportedV2 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZxdgImportedV2 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZxdgOutputManagerV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* ZxdgOutputV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgSessionManagerV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgSessionV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgToplevelSessionV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgWmBase = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgPositioner = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgSurface = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgToplevel = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgPopup = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgToplevelDragManagerV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgToplevelDragV1 = WaylandInterfaceBuilder.Allocate();
 
     static WaylandInterfaces()
     {
@@ -117,6 +138,73 @@ public static unsafe partial class WaylandInterfaces
             [
                 new("confined", "", []),
                 new("unconfined", "", []),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZwpPointerGesturesV1, "zwp_pointer_gestures_v1", 3,
+            [
+                new("get_swipe_gesture", "no", [ZwpPointerGestureSwipeV1, WlPointer]),
+                new("get_pinch_gesture", "no", [ZwpPointerGesturePinchV1, WlPointer]),
+                new("release", "2", []),
+                new("get_hold_gesture", "3no", [ZwpPointerGestureHoldV1, WlPointer]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(ZwpPointerGestureSwipeV1, "zwp_pointer_gesture_swipe_v1", 3,
+            [
+                new("destroy", "", []),
+            ],
+            [
+                new("begin", "uuou", [null, null, WlSurface, null]),
+                new("update", "uff", [null, null, null]),
+                new("end", "uui", [null, null, null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZwpPointerGesturePinchV1, "zwp_pointer_gesture_pinch_v1", 3,
+            [
+                new("destroy", "", []),
+            ],
+            [
+                new("begin", "uuou", [null, null, WlSurface, null]),
+                new("update", "uffff", [null, null, null, null, null]),
+                new("end", "uui", [null, null, null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZwpPointerGestureHoldV1, "zwp_pointer_gesture_hold_v1", 3,
+            [
+                new("destroy", "3", []),
+            ],
+            [
+                new("begin", "3uuou", [null, null, WlSurface, null]),
+                new("end", "3uui", [null, null, null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZwpPrimarySelectionDeviceManagerV1, "zwp_primary_selection_device_manager_v1", 1,
+            [
+                new("create_source", "n", [ZwpPrimarySelectionSourceV1]),
+                new("get_device", "no", [ZwpPrimarySelectionDeviceV1, WlSeat]),
+                new("destroy", "", []),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(ZwpPrimarySelectionDeviceV1, "zwp_primary_selection_device_v1", 1,
+            [
+                new("set_selection", "?ou", [ZwpPrimarySelectionSourceV1, null]),
+                new("destroy", "", []),
+            ],
+            [
+                new("data_offer", "n", [ZwpPrimarySelectionOfferV1]),
+                new("selection", "?o", [ZwpPrimarySelectionOfferV1]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZwpPrimarySelectionOfferV1, "zwp_primary_selection_offer_v1", 1,
+            [
+                new("receive", "sh", [null, null]),
+                new("destroy", "", []),
+            ],
+            [
+                new("offer", "s", [null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZwpPrimarySelectionSourceV1, "zwp_primary_selection_source_v1", 1,
+            [
+                new("offer", "s", [null]),
+                new("destroy", "", []),
+            ],
+            [
+                new("send", "sh", [null, null]),
+                new("cancelled", "", []),
             ]);
         WaylandInterfaceBuilder.Fill(ZwpRelativePointerManagerV1, "zwp_relative_pointer_manager_v1", 1,
             [
@@ -527,6 +615,24 @@ public static unsafe partial class WaylandInterfaces
                 new("ack_global_remove", "2ou", [WlRegistry, null]),
             ],
             []);
+        WaylandInterfaceBuilder.Fill(XdgActivationV1, "xdg_activation_v1", 1,
+            [
+                new("destroy", "", []),
+                new("get_activation_token", "n", [XdgActivationTokenV1]),
+                new("activate", "so", [null, WlSurface]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(XdgActivationTokenV1, "xdg_activation_token_v1", 1,
+            [
+                new("set_serial", "uo", [null, WlSeat]),
+                new("set_app_id", "s", [null]),
+                new("set_surface", "o", [WlSurface]),
+                new("commit", "", []),
+                new("destroy", "", []),
+            ],
+            [
+                new("done", "s", [null]),
+            ]);
         WaylandInterfaceBuilder.Fill(ZxdgDecorationManagerV1, "zxdg_decoration_manager_v1", 2,
             [
                 new("destroy", "", []),
@@ -541,6 +647,77 @@ public static unsafe partial class WaylandInterfaces
             ],
             [
                 new("configure", "u", [null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZxdgExporterV2, "zxdg_exporter_v2", 1,
+            [
+                new("destroy", "", []),
+                new("export_toplevel", "no", [ZxdgExportedV2, WlSurface]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(ZxdgImporterV2, "zxdg_importer_v2", 1,
+            [
+                new("destroy", "", []),
+                new("import_toplevel", "ns", [ZxdgImportedV2, null]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(ZxdgExportedV2, "zxdg_exported_v2", 1,
+            [
+                new("destroy", "", []),
+            ],
+            [
+                new("handle", "s", [null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZxdgImportedV2, "zxdg_imported_v2", 1,
+            [
+                new("destroy", "", []),
+                new("set_parent_of", "o", [WlSurface]),
+            ],
+            [
+                new("destroyed", "", []),
+            ]);
+        WaylandInterfaceBuilder.Fill(ZxdgOutputManagerV1, "zxdg_output_manager_v1", 3,
+            [
+                new("destroy", "", []),
+                new("get_xdg_output", "no", [ZxdgOutputV1, WlOutput]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(ZxdgOutputV1, "zxdg_output_v1", 3,
+            [
+                new("destroy", "", []),
+            ],
+            [
+                new("logical_position", "ii", [null, null]),
+                new("logical_size", "ii", [null, null]),
+                new("done", "", []),
+                new("name", "2s", [null]),
+                new("description", "2s", [null]),
+            ]);
+        WaylandInterfaceBuilder.Fill(XdgSessionManagerV1, "xdg_session_manager_v1", 1,
+            [
+                new("destroy", "", []),
+                new("get_session", "nu?s", [XdgSessionV1, null, null]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(XdgSessionV1, "xdg_session_v1", 1,
+            [
+                new("destroy", "", []),
+                new("remove", "", []),
+                new("add_toplevel", "nos", [XdgToplevelSessionV1, XdgToplevel, null]),
+                new("restore_toplevel", "nos", [XdgToplevelSessionV1, XdgToplevel, null]),
+                new("remove_toplevel", "s", [null]),
+            ],
+            [
+                new("created", "s", [null]),
+                new("restored", "", []),
+                new("replaced", "", []),
+            ]);
+        WaylandInterfaceBuilder.Fill(XdgToplevelSessionV1, "xdg_toplevel_session_v1", 1,
+            [
+                new("destroy", "", []),
+                new("rename", "s", [null]),
+            ],
+            [
+                new("restored", "", []),
             ]);
         WaylandInterfaceBuilder.Fill(XdgWmBase, "xdg_wm_base", 7,
             [
@@ -611,5 +788,17 @@ public static unsafe partial class WaylandInterfaces
                 new("popup_done", "", []),
                 new("repositioned", "3u", [null]),
             ]);
+        WaylandInterfaceBuilder.Fill(XdgToplevelDragManagerV1, "xdg_toplevel_drag_manager_v1", 1,
+            [
+                new("destroy", "", []),
+                new("get_xdg_toplevel_drag", "no", [XdgToplevelDragV1, WlDataSource]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(XdgToplevelDragV1, "xdg_toplevel_drag_v1", 1,
+            [
+                new("destroy", "", []),
+                new("attach", "oii", [XdgToplevel, null, null]),
+            ],
+            []);
     }
 }

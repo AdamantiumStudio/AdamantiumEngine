@@ -22,12 +22,16 @@ public sealed unsafe class XkbKeyboard : IDisposable
     private nint context;
     private nint keymap;
     private nint state;
+    private nint composeTable;
+    private nint compose;
 
     private XkbKeyboard(nint context, nint keymap, nint state)
     {
         this.context = context;
         this.keymap = keymap;
         this.state = state;
+        composeTable = ComposeTable(context);
+        compose = composeTable == 0 ? 0 : Xkb.ComposeStateNew(composeTable, 0);
     }
 
     /// <summary>The modifiers active since the last <see cref="UpdateModifiers"/>.</summary>
@@ -130,6 +134,74 @@ public sealed unsafe class XkbKeyboard : IDisposable
         }
     }
 
+    /// <summary>Feeds a pressed key to the compose sequence of the user's locale; <paramref name="text"/> is what a
+    /// finished sequence types.</summary>
+    public XkbComposeStatus Compose(uint evdevCode, out string text)
+    {
+        text = string.Empty;
+        if (compose == 0 || Xkb.ComposeStateFeed(compose, KeySym(evdevCode)) != Xkb.ComposeFeedAccepted)
+        {
+            return XkbComposeStatus.None;
+        }
+
+        switch (Xkb.ComposeStateGetStatus(compose))
+        {
+            case Xkb.ComposeComposing:
+                return XkbComposeStatus.Composing;
+            case Xkb.ComposeComposed:
+                Span<byte> buffer = stackalloc byte[64];
+                fixed (byte* pointer = buffer)
+                {
+                    var length = Xkb.ComposeStateGetUtf8(compose, pointer, (nuint)buffer.Length);
+                    text = length <= 0 ? string.Empty : Encoding.UTF8.GetString(buffer[..Math.Min(length, buffer.Length - 1)]);
+                }
+
+                Xkb.ComposeStateReset(compose);
+                return XkbComposeStatus.Composed;
+            case Xkb.ComposeCancelled:
+                Xkb.ComposeStateReset(compose);
+                return XkbComposeStatus.Cancelled;
+            default:
+                return XkbComposeStatus.None;
+        }
+    }
+
+    /// <summary>Drops a compose sequence under way: focus moved on.</summary>
+    public void ResetCompose()
+    {
+        if (compose != 0)
+        {
+            Xkb.ComposeStateReset(compose);
+        }
+    }
+
+    private static nint ComposeTable(nint context)
+    {
+        var locale = FirstSet("LC_ALL", "LC_CTYPE", "LANG") ?? "C";
+        try
+        {
+            using var utf8 = new WaylandString(locale);
+            return Xkb.ComposeTableNewFromLocale(context, utf8.Pointer, 0);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return 0;
+        }
+    }
+
+    private static string FirstSet(params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (Environment.GetEnvironmentVariable(name) is { Length: > 0 } value)
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Whether the keymap has the key repeat while held. Wayland repeats nothing itself: the client does,
     /// at the rate wl_keyboard.repeat_info gave.</summary>
     public bool Repeats(uint evdevCode) => Xkb.KeymapKeyRepeats(keymap, evdevCode + EvdevOffset) != 0;
@@ -148,6 +220,18 @@ public sealed unsafe class XkbKeyboard : IDisposable
 
     public void Dispose()
     {
+        if (compose != 0)
+        {
+            Xkb.ComposeStateUnref(compose);
+            compose = 0;
+        }
+
+        if (composeTable != 0)
+        {
+            Xkb.ComposeTableUnref(composeTable);
+            composeTable = 0;
+        }
+
         if (state != 0)
         {
             Xkb.StateUnref(state);
