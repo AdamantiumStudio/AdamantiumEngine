@@ -11,7 +11,13 @@ namespace Adamantium.Graphics.Fonts.Layout;
 internal sealed class GlyphQuadBuilder
 {
     private const double LineTolerance = 0.01;
+    private const float FieldReach = 0.5f;
+    private const float MostGrowth = 0.45f;
 
+    private readonly List<FontItem> _reflections = [];
+    private readonly List<FontItem> _shadows = [];
+    private readonly List<FontItem> _glows = [];
+    private readonly List<FontItem> _outlines = [];
     private FontItem[] _items = Array.Empty<FontItem>();
     private int _atlasVersion = -1;
 
@@ -93,7 +99,8 @@ internal sealed class GlyphQuadBuilder
         }
     }
 
-    public void Build(IGraphicsDevice graphicsDevice, LaidOutText text, RectangleF? window)
+    public void Build(IGraphicsDevice graphicsDevice, LaidOutText text, RectangleF? window,
+        GlyphEffectDefaults effects = default)
     {
         Window = window;
         // Asked for, not waited for: glyphs land over the next frames and bump the atlas version (NeedsGlyphRefresh).
@@ -101,6 +108,10 @@ internal sealed class GlyphQuadBuilder
         atlas.RequestAsync(GetGlyphs(text));
         _atlasVersion = atlas.Version;
         ElementsCount = 0;
+        _reflections.Clear();
+        _shadows.Clear();
+        _glows.Clear();
+        _outlines.Clear();
 
         var glyphs = text.Glyphs;
         var lastPosition = -1;
@@ -131,8 +142,118 @@ internal sealed class GlyphQuadBuilder
                 _items[k].Cell = cell;
                 _items[k].Place.X = word.PositionInString >= 0 ? word.PositionInString : word.Annotates ? -1 : lastPosition;
             }
+
+            AddEffectItems(text, word, first, effects);
+        }
+
+        var under = _reflections.Count + _shadows.Count + _glows.Count + _outlines.Count;
+        if (under == 0)
+        {
+            return;
+        }
+
+        EnsureItemCapacity((int)ElementsCount + under);
+        Array.Copy(_items, 0, _items, under, ElementsCount);
+        var at = 0;
+        foreach (var layer in (ReadOnlySpan<List<FontItem>>)[_reflections, _shadows, _glows, _outlines])
+        {
+            layer.CopyTo(_items, at);
+            at += layer.Count;
+        }
+
+        ElementsCount += (uint)under;
+    }
+
+    private void AddEffectItems(LaidOutText text, GlyphWordData word, uint first, GlyphEffectDefaults defaults)
+    {
+        var attributes = word.Attributes;
+        var outline = attributes?.Outline ?? defaults.Outline;
+        var shadow = attributes?.Shadow ?? defaults.Shadow;
+        var glow = attributes?.Glow ?? defaults.Glow;
+        var reflection = attributes?.Reflection ?? defaults.Reflection;
+        if (outline == null && shadow == null && glow == null && reflection == null || word.FontSize <= 0)
+        {
+            return;
+        }
+
+        var perPixel = (float)(FontAtlas.MSDFTextureSize / (FontAtlas.PixelRange * word.FontSize));
+        var horizontal = (text.Options?.WritingMode ?? WritingMode.Horizontal) == WritingMode.Horizontal;
+        var line = word.PositionInString >= 0 && word.PositionInString < text.DropCapEnd
+            ? Math.Max(word.LineIndex, text.DropCapLines - 1)
+            : word.LineIndex;
+        var lines = Math.Min(text.LineTops?.Length ?? 0, text.LineHeights?.Length ?? 0);
+        var lineBottom = Math.Max(word.Rect.Bottom, line >= 0 && lines > 0
+            ? text.LineTops[Math.Min(line, lines - 1)] + text.LineHeights[Math.Min(line, lines - 1)]
+            : word.Rect.Bottom);
+        var last = ElementsCount;
+        for (var k = first; k < last; k++)
+        {
+            var item = _items[k];
+            if (item.Paint.X > 0.5f)
+            {
+                continue;
+            }
+
+            var room = Math.Max(0, MostGrowth - item.Synthesis.X);
+            if (reflection is { Opacity: > 0, Size: > 0 } && Finite(reflection.Distance) && item.Rotation == 0 && horizontal)
+            {
+                var axis = (float)(lineBottom + Math.Max(0, reflection.Distance));
+                var copy = item;
+                var quad = item.ArrangeRect;
+                copy.ArrangeRect = new Vector4F(quad.X, 2 * axis - (quad.Y + quad.W), quad.Z, quad.W);
+                copy.Source = Flipped(item.Source);
+                if (item.SecondSource.Z > 0)
+                {
+                    copy.SecondSource = Flipped(item.SecondSource);
+                }
+
+                copy.Synthesis = new Vector4F(item.Synthesis.X, -item.Synthesis.Y, 1 - item.Synthesis.Z, 0);
+                copy.Paint = new Vector4F(0, 0, (float)Math.Clamp(reflection.Size, 0.01, 1),
+                    (float)Math.Clamp(reflection.Opacity, 0, 1));
+                copy.Place.X = -1;
+                _reflections.Add(copy);
+            }
+
+            if (shadow != null && Finite(shadow.OffsetX) && Finite(shadow.OffsetY) && Finite(shadow.Blur))
+            {
+                var copy = Colored(item, shadow.Color);
+                copy.ArrangeRect.X += (float)shadow.OffsetX;
+                copy.ArrangeRect.Y += (float)shadow.OffsetY;
+                copy.Synthesis.W = Soft((float)Math.Max(0, shadow.Blur) * perPixel, item.Synthesis.X);
+                _shadows.Add(copy);
+            }
+
+            if (glow is { Radius: > 0 } && Finite(glow.Radius))
+            {
+                var radius = (float)glow.Radius * perPixel;
+                var grow = Math.Min(radius / 2, room);
+                var copy = Colored(item, glow.Color);
+                copy.Synthesis.X += grow;
+                copy.Synthesis.W = Soft(radius, copy.Synthesis.X);
+                _glows.Add(copy);
+            }
+
+            if (outline is { Width: > 0 } && Finite(outline.Width))
+            {
+                var copy = Colored(item, outline.Color);
+                copy.Synthesis.X += Math.Min((float)outline.Width * perPixel, room);
+                _outlines.Add(copy);
+            }
         }
     }
+
+    private static bool Finite(double value) => double.IsFinite(value);
+
+    private static Vector4F Flipped(Vector4F source) => new(source.X, source.Y + source.W, source.Z, -source.W);
+
+    private static FontItem Colored(FontItem item, Color color)
+    {
+        item.Color = color.ToVector4();
+        item.Place.Y = 0;
+        return item;
+    }
+
+    private static float Soft(float width, float grow) => Math.Max(0, Math.Min(width, 2 * (FieldReach - grow)));
 
     public FrozenGlyphRun Snapshot(float fontSize)
     {

@@ -71,6 +71,18 @@ public sealed class TextAttributes
     /// <see cref="Decorations"/>.</summary>
     public IReadOnlyList<TextDecorationLine> DecorationLines { get; init; }
 
+    /// <summary>A line round the glyphs; unset takes the layout's <see cref="TextLayout.GlyphOutline"/>.</summary>
+    public GlyphOutline Outline { get; init; }
+
+    /// <summary>A shadow under the glyphs; unset takes the layout's <see cref="TextLayout.GlyphShadow"/>.</summary>
+    public GlyphShadow Shadow { get; init; }
+
+    /// <summary>A glow round the glyphs; unset takes the layout's <see cref="TextLayout.GlyphGlow"/>.</summary>
+    public GlyphGlow Glow { get; init; }
+
+    /// <summary>A reflection below the glyphs; unset takes the layout's <see cref="TextLayout.GlyphReflection"/>.</summary>
+    public GlyphReflection Reflection { get; init; }
+
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public TextAttributes With(TextAttributes over)
     {
@@ -102,6 +114,10 @@ public sealed class TextAttributes
             Decorations = over.Decorations ?? Decorations,
             DecorationColor = over.DecorationColor ?? DecorationColor,
             DecorationLines = over.DecorationLines ?? DecorationLines,
+            Outline = over.Outline ?? Outline,
+            Shadow = over.Shadow ?? Shadow,
+            Glow = over.Glow ?? Glow,
+            Reflection = over.Reflection ?? Reflection,
         };
     }
 

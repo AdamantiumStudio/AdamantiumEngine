@@ -17,6 +17,10 @@ public class TextLayout : DisposableObject
     private readonly LineComposer _composer;
     private readonly GlyphQuadBuilder _quads = new();
     private LaidOutText _laid;
+    private GlyphOutline _glyphOutline;
+    private GlyphShadow _glyphShadow;
+    private GlyphGlow _glyphGlow;
+    private GlyphReflection _glyphReflection;
     private TextNavigator _navigator;
     private TextLayoutOptions _laidOutOptions;
     private TextRenderingParameters _previousRenderingParameters;
@@ -303,8 +307,9 @@ public class TextLayout : DisposableObject
     public static long TailBytes;
     public static int ProcessCount;
 
-    /// <summary>Grows each time the text is laid out anew, so whoever keeps this layout can tell its glyphs changed when
-    /// its text and size did not: a new last-line alignment, or kashidas switched off.</summary>
+    /// <summary>Grows each time the text is laid out anew, or its glyph effects change, so whoever keeps this layout can
+    /// tell its glyphs changed when its text and size did not: a new last-line alignment, kashidas switched off, a
+    /// shadow put on.</summary>
     public int Revision { get; private set; }
 
     public TextLayout(Typeface typeface, IFont font)
@@ -423,7 +428,52 @@ public class TextLayout : DisposableObject
         var laid = _laid;
         if (!_textUpdated || laid?.Glyphs == null) return;
 
-        _quads.Build(graphicsDevice, laid, window);
+        _quads.Build(graphicsDevice, laid, window, new GlyphEffectDefaults(GlyphOutline, GlyphShadow, GlyphGlow,
+            GlyphReflection));
+        _textUpdated = true;
+    }
+
+    /// <summary>A line round every glyph of text that sets none of its own (<see cref="TextAttributes.Outline"/>); null
+    /// for none. Read when the quads are built; a change moves <see cref="Revision"/> on.</summary>
+    public GlyphOutline GlyphOutline
+    {
+        get => _glyphOutline;
+        set => Revise(ref _glyphOutline, value);
+    }
+
+    /// <summary>A shadow under every glyph of text that sets none of its own (<see cref="TextAttributes.Shadow"/>); null
+    /// for none. Read when the quads are built; a change moves <see cref="Revision"/> on.</summary>
+    public GlyphShadow GlyphShadow
+    {
+        get => _glyphShadow;
+        set => Revise(ref _glyphShadow, value);
+    }
+
+    /// <summary>A glow round every glyph of text that sets none of its own (<see cref="TextAttributes.Glow"/>); null for
+    /// none. Read when the quads are built; a change moves <see cref="Revision"/> on.</summary>
+    public GlyphGlow GlyphGlow
+    {
+        get => _glyphGlow;
+        set => Revise(ref _glyphGlow, value);
+    }
+
+    /// <summary>A reflection below every glyph of text that sets none of its own (<see cref="TextAttributes.Reflection"/>);
+    /// null for none. Read when the quads are built; a change moves <see cref="Revision"/> on.</summary>
+    public GlyphReflection GlyphReflection
+    {
+        get => _glyphReflection;
+        set => Revise(ref _glyphReflection, value);
+    }
+
+    private void Revise<T>(ref T field, T value) where T : class
+    {
+        if (Equals(field, value))
+        {
+            return;
+        }
+
+        field = value;
+        Revision++;
         _textUpdated = true;
     }
 
