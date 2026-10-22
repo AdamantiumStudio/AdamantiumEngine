@@ -187,7 +187,7 @@ internal sealed class LineComposer
                                               && !(vertical && dropRightToLeft)
                                               && (options.MaxLines <= 0 || options.MaxLines >= options.DropCap.Lines)
                                               && (lineLimit <= 0 || lineLimit >= options.DropCap.Lines)
-            ? DropCapEnd(text, options.DropCap)
+            ? options.DropCap.Length(text)
             : 0;
         var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
         var items = _shaper.Shape(text, attributed, attributeRuns, fontSize, dropEnd, vertical, options, paragraphs,
@@ -4368,31 +4368,6 @@ internal sealed class LineComposer
             var (font, dot, size) = EllipsisFont(EllipsisStyle());
             return font.GetAdvanceWidth(dot.Index) * size / font.UnitsPerEm * 3 * options.GlyphScaling.Desired;
         }
-    }
-
-    private static int DropCapEnd(string text, DropCap dropCap)
-    {
-        if (char.IsWhiteSpace(text[0]) || char.IsControl(text[0]) || text[0] == ObjectReplacement)
-        {
-            return 0;
-        }
-
-        var graphemes = TextBoundaries.Graphemes(text);
-        var end = 0;
-        var letters = 0;
-        while (end < text.Length && letters < dropCap.Characters
-                                 && text[end] is not ('\n' or LineSeparator or ParagraphSeparator or ObjectReplacement))
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(text, end) is not (UnicodeCategory.OpenPunctuation
-                or UnicodeCategory.InitialQuotePunctuation))
-            {
-                letters++;
-            }
-
-            end = TextBoundaries.Next(graphemes, end);
-        }
-
-        return end;
     }
 
     private static double Hang(GlyphWordData glyph, bool left)

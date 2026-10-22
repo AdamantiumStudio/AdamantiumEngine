@@ -279,6 +279,10 @@ public class TextLayout : DisposableObject
     /// (<see cref="LoadFontsInBackground"/>).</summary>
     public bool HasPendingFonts { get; private set; }
 
+    /// <summary>How many characters the last layout set as its <see cref="DropCap"/>; 0 when it drew none - for a text
+    /// the drop cap cannot start (<see cref="Fonts.DropCap.Length"/>) or one laid out where it has no place.</summary>
+    public int DropCapLength => _laid?.DropCapEnd ?? 0;
+
     public TextRenderingParameters RenderingParameters { get; private set; }
 
     public FontAtlas FontAtlas => _quads.FontAtlas;

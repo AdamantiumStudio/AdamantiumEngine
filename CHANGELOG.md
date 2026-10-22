@@ -11,6 +11,11 @@ All packages share one version.
   new ones once a second, and `EvdevGamepad` takes the Linux gamepad layout - buttons by their place, the sticks with
   up positive, the triggers, the hat as the d-pad - into `GamepadState` at each report, catching up after dropped
   events. Its face is guessed from the device's name. No vibration yet. `PosixInterop.Open` and `Ioctl` for it.
+- `DropCap.Length` and `DropCap.CanStart`: how many characters a drop cap takes from a text, and whether one can start
+  it at all - not a text starting with a blank, a control character or an object; `DropCap.CharactersOf`, how many
+  characters a drop cap of given letters counts, an opening quote not counted. `TextLayout.DropCapLength`: the
+  characters the last layout set as its drop cap, 0 where it drew none - for an editor to show and keep room only for a
+  drop cap that is drawn.
 - `Adamantium.DBus`: a D-Bus client of our own. `DBusConnection.ConnectSession` connects to the session bus over its
   unix socket (EXTERNAL authentication), `CallAsync` sends a method call and gives its reply - an error reply thrown
   as a `DBusException` - and `Subscribe` raises a handler for the signals a match rule lets through. Messages are
