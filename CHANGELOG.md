@@ -866,6 +866,10 @@ All packages share one version.
 
 ### Fixed
 
+- A PNG decoded to another bit depth than the file's took its `SurfaceFormat` from the file's depth, so its pixels were
+  read in a format they were not in.
+- `HeadlessPresenter` drew into a ring of frames like a swapchain, so a frame read back after it ended was the next,
+  empty slot; it keeps one frame, the one just drawn.
 - A block drawing a window of a layout (`TextLayout.Update`/`BuildGlyphRun` with a window - a frame of a text, a part of
   a paragraph a page breaks) drew every glyph whose ink touched the window: the descenders of the line above it showed
   at its top edge. Across the lines a glyph is in the window by its line now, drawn whole when its line is in it and not
