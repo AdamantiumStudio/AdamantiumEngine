@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- Gamepads on Linux: `EvdevGamepadBackend` reads the input devices (`/dev/input/event*`) the user may read, looking for
+  new ones once a second, and `EvdevGamepad` takes the Linux gamepad layout - buttons by their place, the sticks with
+  up positive, the triggers, the hat as the d-pad - into `GamepadState` at each report, catching up after dropped
+  events. Its face is guessed from the device's name. No vibration yet. `PosixInterop.Open` and `Ioctl` for it.
 - `Adamantium.DBus`: a D-Bus client of our own. `DBusConnection.ConnectSession` connects to the session bus over its
   unix socket (EXTERNAL authentication), `CallAsync` sends a method call and gives its reply - an error reply thrown
   as a `DBusException` - and `Subscribe` raises a handler for the signals a match rule lets through. Messages are
@@ -14,13 +18,15 @@ All packages share one version.
   signature as lists, dictionaries and object arrays. `PosixInterop.GetUid` for the authentication.
 - `Adamantium.Wayland`: Wayland client bindings. The protocols are generated into C# from their XML by
   `Adamantium.Wayland.Generator` - the core `wayland.xml`, and xdg-shell, viewporter, fractional-scale, cursor-shape,
-  xdg-decoration, relative-pointer, pointer-constraints, text-input-v3 and tablet-v2 from wayland-protocols - with no
+  xdg-decoration, relative-pointer, pointer-constraints, text-input-v3, tablet-v2, xdg-toplevel-drag, xdg-activation,
+  primary-selection, xdg-output, pointer-gestures, xdg-foreign and xdg-session-management from wayland-protocols - with no
   C in between: a class per interface (`WlSurface`, `XdgToplevel`), its requests as methods, its events as C# events,
   its enums nested in it, and the `wl_interface` tables libwayland marshals by. Of libwayland-client only the wire is
   called: `wl_proxy_marshal_array_flags` for every request, one dispatcher (`wl_proxy_add_dispatcher`) for every event.
   `WaylandDisplay` connects and dispatches, `WlRegistry.Bind<T>` binds a global by its type, and an event's handler
   that throws has its exception rethrown from the dispatching call. `XkbKeyboard` reads the keymap `wl_keyboard`
-  sends through xkbcommon: keysyms, text and repeat of evdev key codes under the current modifiers and layout.
+  sends through xkbcommon: keysyms, text and repeat of evdev key codes under the current modifiers and layout, and
+  compose sequences - dead keys, the Compose key - by the user's locale (`Compose`, `XkbComposeStatus`).
 - A Vulkan surface on Wayland: `PresentationParameters.DisplayHandle` carries the `wl_display` beside the `wl_surface`
   as `OutputHandle` (and `UniverseOutputDescription.DisplayHandle` passes it on), and `VulkanInstance` makes a
   `VK_KHR_wayland_surface` from them on Linux. The extension is optional there, so a machine without Wayland still
@@ -853,6 +859,9 @@ All packages share one version.
   at its top edge. Across the lines a glyph is in the window by its line now, drawn whole when its line is in it and not
   at all when it is not - a drop cap in every line it spans; along them, and down vertical lines, by its ink as
   before.
+- `GraphicsDevice.ClearDepthInRect` moves its rectangle by `TargetOrigin`, as scissors and viewports are moved: inside
+  a layer away from the window's corner it reset the depth of the wrong place, so a translucent stroke there (a tab's
+  close cross under the strip's edge fade) lost part of itself to the depth left under it.
 - A font's OS/2 table is read as far as its version and length go: a version 1 table (DejaVu Sans) had its x-height,
   cap height and the fields after them read from the bytes beyond it. Where a font gives no cap height,
   `CapsHeight` is the top of its H.

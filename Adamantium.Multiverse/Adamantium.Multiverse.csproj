@@ -6,6 +6,7 @@
 		<Configurations>Debug;Release</Configurations>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<IsPackable>true</IsPackable>
 		<Description>Hosting layer of the Adamantium engine: universes, the outputs they render to, windowing platforms and input.</Description>
 		<PackageTags>adamantium;engine;windowing;input</PackageTags>

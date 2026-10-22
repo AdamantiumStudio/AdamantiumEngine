@@ -23,6 +23,14 @@ public static unsafe class PosixInterop
 
     public const int OpenCloseOnExec = 0x80000;
 
+    public const int OpenReadOnly = 0;
+
+    public const int OpenNonBlock = 0x800;
+
+    public const int ErrorAgain = 11;
+
+    public const int ErrorInterrupted = 4;
+
     public const uint MemFdCloseOnExec = 0x1;
 
     public static readonly nint MapFailed = -1;
@@ -59,6 +67,12 @@ public static unsafe class PosixInterop
 
     [DllImport(LibC, EntryPoint = "munmap", SetLastError = true)]
     public static extern int Munmap(nint address, nuint length);
+
+    [DllImport(LibC, EntryPoint = "open", SetLastError = true)]
+    public static extern int Open(string path, int flags);
+
+    [DllImport(LibC, EntryPoint = "ioctl", SetLastError = true)]
+    public static extern int Ioctl(int fd, nuint request, void* argument);
 
     [DllImport(LibC, EntryPoint = "getuid")]
     public static extern uint GetUid();

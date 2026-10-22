@@ -55,4 +55,36 @@ internal static unsafe class Xkb
 
     [DllImport(Library, EntryPoint = "xkb_state_mod_name_is_active")]
     public static extern int StateModNameIsActive(nint state, byte* name, int type);
+
+    public const int ComposeFeedAccepted = 1;
+
+    public const int ComposeComposing = 1;
+
+    public const int ComposeComposed = 2;
+
+    public const int ComposeCancelled = 3;
+
+    [DllImport(Library, EntryPoint = "xkb_compose_table_new_from_locale")]
+    public static extern nint ComposeTableNewFromLocale(nint context, byte* locale, int flags);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_table_unref")]
+    public static extern void ComposeTableUnref(nint table);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_state_new")]
+    public static extern nint ComposeStateNew(nint table, int flags);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_state_unref")]
+    public static extern void ComposeStateUnref(nint state);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_state_feed")]
+    public static extern int ComposeStateFeed(nint state, uint keysym);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_state_reset")]
+    public static extern void ComposeStateReset(nint state);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_state_get_status")]
+    public static extern int ComposeStateGetStatus(nint state);
+
+    [DllImport(Library, EntryPoint = "xkb_compose_state_get_utf8")]
+    public static extern int ComposeStateGetUtf8(nint state, byte* buffer, nuint size);
 }
