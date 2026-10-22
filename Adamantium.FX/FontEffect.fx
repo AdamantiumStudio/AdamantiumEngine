@@ -58,7 +58,20 @@ struct PSInput
     float3 EffectClipPoint : TEXCOORD10;
     nointerpolation float4 EffectClipBox : TEXCOORD11;
     nointerpolation float4 EffectClipRadii : TEXCOORD12;
+    // A glyph drawn as a shadow or a glow: the width of its soft edge in field units, 0 for a crisp one.
+    nointerpolation float Soft : TEXCOORD13;
+    // How far down its quad the point is, 0 at the top and 1 at the bottom, for a reflection's fade.
+    float ReflectY : TEXCOORD14;
+    // A reflection: x = the share of its quad, from the top, it fades over; y = how strong it starts. x = 0 for every
+    // other glyph.
+    nointerpolation float2 Reflection : TEXCOORD15;
 };
+
+// A reflection's strength at a point `y` down its quad; 1 for every other glyph.
+float ReflectionFade(float2 reflection, float y)
+{
+    return reflection.x > 0.0 ? reflection.y * saturate(1.0 - y / reflection.x) : 1.0;
+}
 
 // Where a glyph is drawn between two key instances, the second field's place for this corner and its layer and share;
 // a negative layer for a glyph drawn from one field.
@@ -577,6 +590,9 @@ PSInput ExpandGlyphCorner(FontItem item, int corner)
     // register, and the batch shares this PSInput with it. A zero box is "no clip".
     vertex.Layer = item.Layer;
     vertex.Embolden = item.Synthesis.x;
+    vertex.Soft = item.Synthesis.w;
+    vertex.ReflectY = cornerCoord.y;
+    vertex.Reflection = item.Paint.zw;
     vertex.ClipBox = DirectClipBox;
     vertex.ClipRadii = DirectClipRadii;
 
@@ -594,6 +610,23 @@ float ScreenPxRange(float2 uv)
     float2 unitRange = float2(PxRange, PxRange) / MSDFAtlasSize;
     float2 screenTexSize = float2(1.0, 1.0) / fwidth(uv);
     return max(0.5 * dot(unitRange, screenTexSize), 1.0);
+}
+
+// How much of the pixel the glyph covers, `edge` being its field less the outline's level: crisp over one screen pixel,
+// or spread over `soft` field units - never less than the pixel - for a shadow or a glow. Where the field `sd` runs out
+// (its range past the outline) nothing is covered, so a band grown or softened up to it fades there rather than filling
+// the quad.
+float Coverage(float edge, float2 uv, float soft, float sd)
+{
+    float pixel = ScreenPxRange(uv);
+    float reach = smoothstep(0.02, 0.1, sd);
+    if (soft <= 0.0)
+    {
+        return clamp(pixel * edge + 0.5, 0.0, 1.0) * reach;
+    }
+
+    float width = max(soft, 1.0 / pixel);
+    return smoothstep(-0.5 * width, 0.5 * width, edge) * reach;
 }
 
 // Coverage source for the glyph body: MSDF median when magnified (sharp corners), true-SDF alpha when
@@ -771,7 +804,8 @@ float4 FontPixelShaderMsdf(PSInput input) : SV_Target
     float2 glyphDy = ddy(input.PaintPoint);
     float4 samp = Texture.Sample(TextureSampler, float3(input.UV, input.Layer));
     float sd = GlyphField(samp, input.UV, input.SecondUV, input.Second);
-    float opacity = clamp(ScreenPxRange(input.UV) * (sd - 0.5 + FontWeight + input.Embolden) + 0.5, 0.0, 1.0);
+    float opacity = Coverage(sd - 0.5 + FontWeight + input.Embolden, input.UV, input.Soft, sd)
+                    * ReflectionFade(input.Reflection, input.ReflectY);
     // A glyph of attributed text brings its own color; a negative alpha means the element's foreground.
     float4 color = input.Color.a < 0 ? ForegroundColor : float4(input.Color.rgb, input.Color.a * GlyphFade);
     if (input.PaintProgram > 0.5)
@@ -800,7 +834,8 @@ float4 FontPixelShaderMsdfBatch(PSInput input) : SV_Target
     float2 glyphDy = ddy(input.PaintPoint);
     float4 samp = Texture.Sample(TextureSampler, float3(input.UV, input.Layer));
     float sd = GlyphField(samp, input.UV, input.SecondUV, input.Second);
-    float opacity = clamp(ScreenPxRange(input.UV) * (sd - 0.5 + FontWeight + input.Embolden) + 0.5, 0.0, 1.0);
+    float opacity = Coverage(sd - 0.5 + FontWeight + input.Embolden, input.UV, input.Soft, sd)
+                    * ReflectionFade(input.Reflection, input.ReflectY);
     // Unchanged on purpose - the element's fade is pre-compensated in the vertex stage so that this very boost hands
     // it back linear. See the FADE line in FontBatchInstancedVS.
     float4 color = input.Color;
@@ -832,10 +867,11 @@ struct GlyphData
     float4 Color;       // straight RGBA, element/brush opacity folded into .w
     float4 Paint;       // .x = a 'COLR' version 1 glyph's paint program plus one, or 0 (LocalRect is then the pen and
                         // baseline, xy, and pixels per font unit, zw); .y = the element's opacity raised to 2.2, for the
-                        // glyph's own colors; .zw reserved
+                        // glyph's own colors; .z = a shadow's or a glow's soft edge, in field units; .w = the share of
+                        // a reflection's quad it fades over (0 for every other glyph)
     float4 SecondSource; // a glyph between two key instances: the second key's cell over the same quad, or zero
     float4 Second;      // .x = that cell's layer; .y = its share; .z = the glyph's turn, radians clockwise about
-                        // LocalRect.xy
+                        // LocalRect.xy; .w = how strong a reflection starts
     float4 Cell;        // the glyph's cell in the LAYOUT's units, as FontItem.Cell holds it
     float4 ToNode;      // the layout's units to node-local: x * ToNode.x + ToNode.z, y * ToNode.y + ToNode.w
     float4 Place;       // .x, .y = FontItem.Place; .z = the slot of the block's first effect, -1 for none; .w = the
@@ -899,6 +935,9 @@ PSInput FontBatchInstancedVS(uint vertexId : SV_VertexID, uint instanceId : SV_I
     // The clip's shape, from the table by the slot the record carries - one fetch per instance, as everywhere else.
     o.Layer = g.Params.y;   // the atlas layer this glyph was packed into
     o.Embolden = g.Clip.y;
+    o.Soft = g.Paint.z;
+    o.ReflectY = corner.y;
+    o.Reflection = float2(g.Paint.w, g.Second.w);
     ClipFromSlot(g.Clip.x, o.ClipBox, o.ClipRadii);
     return o;
 }
