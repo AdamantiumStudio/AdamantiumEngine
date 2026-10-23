@@ -37,6 +37,14 @@ namespace Adamantium.Engine.GraphicsTests
             return device;
         }
 
+        /// <summary>Releases one render device before the test ends - a window that closes while others stay.</summary>
+        public static void ReleaseRenderDevice(IGraphicsDevice device)
+        {
+            Main.DeviceWaitIdle();
+            Main.RemoveDevice(device);
+            PerTest.Remove(device);
+        }
+
         /// <summary>Called from each fixture's TearDown. RemoveDevice both unregisters and disposes, so the shared main
         /// device is not left holding a device the next test knows nothing about.</summary>
         public static void ReleaseRenderDevices()
