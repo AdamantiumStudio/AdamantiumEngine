@@ -12,6 +12,10 @@ public sealed class DBusConnection : IDisposable
     private const string BusName = "org.freedesktop.DBus";
     private const string BusPath = "/org/freedesktop/DBus";
     private const string ClosedError = "Adamantium.DBus.Closed";
+    private const string UnknownMethodError = "org.freedesktop.DBus.Error.UnknownMethod";
+    private const string FailedError = "org.freedesktop.DBus.Error.Failed";
+    private const string PeerInterface = "org.freedesktop.DBus.Peer";
+    private const string PingMember = "Ping";
 
     private readonly Socket socket;
     private readonly NetworkStream stream;
@@ -19,6 +23,9 @@ public sealed class DBusConnection : IDisposable
     private readonly object _writeLock = new();
     private readonly object _pendingLock = new();
     private readonly object _subscriptionsLock = new();
+    private readonly object _serverLock = new();
+    private Served server;
+    private Task serving = Task.CompletedTask;
     private readonly Dictionary<uint, TaskCompletionSource<DBusMessage>> pending = [];
     private readonly List<Subscription> subscriptions = [];
     private uint lastSerial;
@@ -128,6 +135,26 @@ public sealed class DBusConnection : IDisposable
         {
             ThrowIfClosed();
             Write(message, ++lastSerial);
+        }
+    }
+
+    /// <summary>Answers the calls to this connection's objects with what <paramref name="handler"/> gives - a reply or an
+    /// error made from the call, or null for a method not served here - until the result is disposed. Calls are handled
+    /// one at a time, in the order they came, off the thread calls are read on, so a handler may wait for its own calls;
+    /// one that throws is answered with an error that names the method, not what went wrong.
+    /// </summary>
+    public IDisposable Serve(Func<DBusMessage, Task<DBusMessage>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_serverLock)
+        {
+            if (server != null)
+            {
+                throw new InvalidOperationException("This connection already serves its objects.");
+            }
+
+            server = new Served(this, handler);
+            return server;
         }
     }
 
@@ -337,13 +364,90 @@ public sealed class DBusConnection : IDisposable
                 reply?.TrySetResult(message);
                 break;
             }
-            case DBusMessageType.MethodCall when !message.NoReplyExpected:
-                Send(DBusMessage.Error(message, "org.freedesktop.DBus.Error.UnknownMethod",
-                    $"{message.Interface}.{message.Member} is not served here"));
+            case DBusMessageType.MethodCall:
+                Answer(message);
                 break;
             case DBusMessageType.Signal:
                 Raise(message);
                 break;
+        }
+    }
+
+    private void Answer(DBusMessage call)
+    {
+        if (call.Interface == PeerInterface && call.Member == PingMember)
+        {
+            Reply(call, DBusMessage.MethodReturn(call));
+            return;
+        }
+
+        lock (_serverLock)
+        {
+            if (server is { } served)
+            {
+                serving = serving.ContinueWith(_ => Handle(served, call), CancellationToken.None,
+                    TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+                return;
+            }
+        }
+
+        Reply(call, NotServed(call));
+    }
+
+    private async Task Handle(Served served, DBusMessage call)
+    {
+        bool current;
+        lock (_serverLock)
+        {
+            current = ReferenceEquals(server, served);
+        }
+
+        if (!current)
+        {
+            Reply(call, NotServed(call));
+            return;
+        }
+
+        DBusMessage reply;
+        try
+        {
+            reply = await served.Handler(call).ConfigureAwait(false) ?? NotServed(call);
+        }
+        catch (Exception)
+        {
+            reply = DBusMessage.Error(call, FailedError, $"{call.Interface}.{call.Member} failed");
+        }
+
+        Reply(call, reply);
+    }
+
+    private static DBusMessage NotServed(DBusMessage call) =>
+        DBusMessage.Error(call, UnknownMethodError, $"{call.Interface}.{call.Member} is not served here");
+
+    private void Reply(DBusMessage call, DBusMessage reply)
+    {
+        if (call.NoReplyExpected || closed)
+        {
+            return;
+        }
+
+        try
+        {
+            Send(reply);
+        }
+        catch (Exception e) when (e is DBusException or IOException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private void StopServing(Served served)
+    {
+        lock (_serverLock)
+        {
+            if (ReferenceEquals(server, served))
+            {
+                server = null;
+            }
         }
     }
 
@@ -395,6 +499,13 @@ public sealed class DBusConnection : IDisposable
                 writer => writer.WriteString(subscription.Rule))).ContinueWith(task => task.Exception,
                 TaskContinuationOptions.OnlyOnFaulted);
         }
+    }
+
+    private sealed class Served(DBusConnection connection, Func<DBusMessage, Task<DBusMessage>> handler) : IDisposable
+    {
+        public Func<DBusMessage, Task<DBusMessage>> Handler { get; } = handler;
+
+        public void Dispose() => connection.StopServing(this);
     }
 
     private sealed class Subscription(

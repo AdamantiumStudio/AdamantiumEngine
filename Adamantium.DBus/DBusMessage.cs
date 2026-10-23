@@ -64,6 +64,41 @@ public sealed class DBusMessage
         };
     }
 
+    /// <summary>The reply to <paramref name="call"/>, with what <paramref name="body"/> writes as
+    /// <paramref name="signature"/>.</summary>
+    public static DBusMessage MethodReturn(DBusMessage call, string signature = "", Action<DBusWriter> body = null)
+    {
+        var writer = new DBusWriter();
+        body?.Invoke(writer);
+        return new DBusMessage
+        {
+            Type = DBusMessageType.MethodReturn,
+            NoReplyExpected = true,
+            ReplySerial = call.Serial,
+            Destination = call.Sender,
+            Signature = signature,
+            Body = writer.ToArray(),
+        };
+    }
+
+    /// <summary>A signal from the object at <paramref name="path"/>, to whoever subscribes to it.</summary>
+    public static DBusMessage Signal(string path, string interfaceName, string member, string signature = "",
+        Action<DBusWriter> body = null)
+    {
+        var writer = new DBusWriter();
+        body?.Invoke(writer);
+        return new DBusMessage
+        {
+            Type = DBusMessageType.Signal,
+            NoReplyExpected = true,
+            Path = path,
+            Interface = interfaceName,
+            Member = member,
+            Signature = signature,
+            Body = writer.ToArray(),
+        };
+    }
+
     /// <summary>The error a call is answered with.</summary>
     public static DBusMessage Error(DBusMessage call, string name, string text)
     {
