@@ -68,6 +68,8 @@ public static unsafe partial class WaylandInterfaces
     public static readonly WlInterface* XdgActivationTokenV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgDecorationManagerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgToplevelDecorationV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgWmDialogV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgDialogV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgExporterV2 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgImporterV2 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* ZxdgExportedV2 = WaylandInterfaceBuilder.Allocate();
@@ -648,6 +650,19 @@ public static unsafe partial class WaylandInterfaces
             [
                 new("configure", "u", [null]),
             ]);
+        WaylandInterfaceBuilder.Fill(XdgWmDialogV1, "xdg_wm_dialog_v1", 1,
+            [
+                new("destroy", "", []),
+                new("get_xdg_dialog", "no", [XdgDialogV1, XdgToplevel]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(XdgDialogV1, "xdg_dialog_v1", 1,
+            [
+                new("destroy", "", []),
+                new("set_modal", "", []),
+                new("unset_modal", "", []),
+            ],
+            []);
         WaylandInterfaceBuilder.Fill(ZxdgExporterV2, "zxdg_exporter_v2", 1,
             [
                 new("destroy", "", []),
