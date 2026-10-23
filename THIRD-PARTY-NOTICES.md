@@ -391,8 +391,9 @@ is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 (https://gitlab.freedesktop.org/wayland/wayland), and `xdg-shell.xml`, `viewporter.xml`, `tablet-v2.xml`,
 `fractional-scale-v1.xml`, `cursor-shape-v1.xml`, `xdg-activation-v1.xml`, `xdg-decoration-unstable-v1.xml`,
 `xdg-dialog-v1.xml`, `xdg-foreign-unstable-v2.xml`, `xdg-output-unstable-v1.xml`, `xdg-session-management-v1.xml`,
-`xdg-toplevel-drag-v1.xml`, `relative-pointer-unstable-v1.xml`, `pointer-constraints-unstable-v1.xml`,
-`pointer-gestures-unstable-v1.xml`, `primary-selection-unstable-v1.xml` and `text-input-unstable-v3.xml` from
+`xdg-toplevel-drag-v1.xml`, `xdg-toplevel-icon-v1.xml`, `relative-pointer-unstable-v1.xml`,
+`pointer-constraints-unstable-v1.xml`, `pointer-gestures-unstable-v1.xml`, `primary-selection-unstable-v1.xml` and
+`text-input-unstable-v3.xml` from
 wayland-protocols (https://gitlab.freedesktop.org/wayland/wayland-protocols), unchanged; and
 `Adamantium.Wayland/Generated/`, generated from them.
 

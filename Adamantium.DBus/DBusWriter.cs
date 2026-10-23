@@ -57,8 +57,15 @@ public sealed class DBusWriter
 
     public void WriteDouble(double value) => WriteUInt64(BitConverter.DoubleToUInt64Bits(value));
 
+    /// <summary>Writes <paramref name="value"/> as D-Bus allows a string: a NUL, which would end it early and get the
+    /// connection dropped, is written as U+FFFD - as an unpaired surrogate is.</summary>
     public void WriteString(string value)
     {
+        if (value.Contains('\0'))
+        {
+            value = value.Replace('\0', '�');
+        }
+
         var count = Encoding.UTF8.GetByteCount(value);
         WriteUInt32((uint)count);
         Reserve(count + 1);

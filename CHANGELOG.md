@@ -7,6 +7,16 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.DBus` serves objects of its own: `DBusConnection.Serve` answers the calls that come to the connection
+  with what its handler gives - a reply (`DBusMessage.MethodReturn`), an error, or nothing for a method not served -
+  one call at a time, in the order they came, off the thread calls are read on, so a handler may wait for its own
+  calls; one that throws is answered with an error naming the method, not what went wrong, and
+  `org.freedesktop.DBus.Peer.Ping` is always answered. `DBusMessage.Signal` makes a signal to send.
+- Wayland's `xdg_toplevel_icon_manager_v1` (staging `xdg-toplevel-icon-v1`): `XdgToplevelIconManagerV1.CreateIcon`
+  makes an icon - a name in the icon theme (`XdgToplevelIconV1.SetName`), pictures (`AddBuffer`) - and `SetIcon` gives it
+  to a toplevel.
+- ICO files are written: `IcoHelper.SaveToStream` writes every level of an RGBA picture, up to 256 pixels a side, as a
+  PNG image of the file.
 - Wayland's `xdg_wm_dialog_v1` (staging `xdg-dialog-v1`): `XdgWmDialogV1.GetXdgDialog` makes a toplevel a dialog of
   its parent, and `XdgDialogV1.SetModal` / `UnsetModal` tell the compositor it is modal.
 - `TextLayout.BalanceLines`: text wrapped by words takes the narrowest width that keeps its lines - `MaxLines` of
@@ -876,6 +886,12 @@ All packages share one version.
 
 ### Fixed
 
+- A D-Bus string holding a NUL ended early and the bus dropped the connection for the bad message: the NUL is now
+  written as U+FFFD, as an unpaired surrogate already was.
+- An ICO file is read as applications carry it: its PNG images are decoded as PNG - they were read as bitmaps, so
+  garbage - and its 256-pixel image, listed with the size 0, is no longer skipped. Bitmap images of 1, 4, 8, 24 and 32
+  bits are read with their palette and their transparency mask, top-down, as RGBA; of images of one size the one of
+  most colors comes first. A bitmap of color masks, and a file that lists more than it holds, are refused.
 - The glyph atlas every text shares was made on the render device of the first window to draw text and went with it:
   when that window closed while others stayed, their text drew from a disposed atlas and every frame failed.
   `FontAtlasStore` now makes it on the main device's resource loader, which lives as long as the application.

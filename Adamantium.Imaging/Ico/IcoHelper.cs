@@ -1,202 +1,218 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
-using Adamantium.Core;
-using Adamantium.Imaging.Bmp;
-using Adamantium.Mathematics;
-using Adamantium.Vulkan.Core;
+using Adamantium.Imaging.Png;
 
 namespace Adamantium.Imaging.Ico
 {
     public static class IcoHelper
     {
-        public static IRawBitmap LoadFromMemory(IntPtr pSource, ulong size)
+        private const int DirectorySize = 6;
+        private const int EntrySize = 16;
+        private const int BitmapHeaderSize = 40;
+        private const int PngDepth = 32;
+
+        private static ReadOnlySpan<byte> PngSignature => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        /// <summary>Every image of an ICO file, PNG or uncompressed bitmap, as RGBA pixels top-down: the largest is the
+        /// first level, and of images of one size the one of most colors comes first.</summary>
+        public static unsafe IRawBitmap LoadFromMemory(IntPtr pSource, ulong size)
         {
-            if (!DecodeIcoHeader(pSource, size, out var description, out List<IconInfo> iconsInfos))
+            var data = new ReadOnlySpan<byte>((void*)pSource, checked((int)size));
+            if (data.Length < DirectorySize || BinaryPrimitives.ReadUInt16LittleEndian(data) != 0 ||
+                BinaryPrimitives.ReadUInt16LittleEndian(data[2..]) != 1)
             {
                 throw new ArgumentException("Given file is not an ICO file");
             }
 
-            return CreateImageFromIco(pSource, description, iconsInfos.ToArray());
-        }
-
-        private static unsafe bool DecodeIcoHeader(IntPtr headerPtr, ulong size, out ImageDescription description, out List<IconInfo> iconsInfos)
-        {
-            description = new ImageDescription();
-            iconsInfos = new List<IconInfo>();
-
-            var header = *(IconDir*)headerPtr;
-
-            if (header.Reserved != 0 || header.Count == 0)
+            var count = BinaryPrimitives.ReadUInt16LittleEndian(data[4..]);
+            if (count == 0 || data.Length < DirectorySize + count * EntrySize)
             {
-                return false;
+                throw new ArgumentException("The ICO file lists no images, or more than it holds");
             }
 
-            var dataPtr = IntPtr.Add(headerPtr, Marshal.SizeOf<IconDir>());
-            for (int i = 0; i< header.Count; ++i)
+            var frames = new List<(FrameData Frame, int Depth)>(count);
+            for (var index = 0; index < count; index++)
             {
-                var entry = *(IconInfo*)dataPtr;
-                dataPtr = IntPtr.Add(dataPtr, Marshal.SizeOf<IconInfo>());
-                iconsInfos.Add(entry);
+                var entry = data.Slice(DirectorySize + index * EntrySize, EntrySize);
+                var length = BinaryPrimitives.ReadUInt32LittleEndian(entry[8..]);
+                var offset = BinaryPrimitives.ReadUInt32LittleEndian(entry[12..]);
+                if (offset > (uint)data.Length || length > (uint)data.Length - offset)
+                {
+                    throw new ArgumentException($"Image {index} of the ICO file lies outside it");
+                }
+
+                var image = data.Slice((int)offset, (int)length);
+                frames.Add(image.StartsWith(PngSignature)
+                    ? (DecodePng(IntPtr.Add(pSource, (int)offset), length), PngDepth)
+                    : (DecodeBitmap(image), BinaryPrimitives.ReadUInt16LittleEndian(image[14..])));
             }
 
-            iconsInfos = iconsInfos.Where(x => x.Width > 0 && x.Height > 0).
-                OrderByDescending(x => x.BytesInRes).
-                ToList();
-
-            return true;
-        }
-
-        private static IRawBitmap CreateImageFromIco(IntPtr pSource, ImageDescription description, IconInfo[] iconsInfos)
-        {
-            var ico = new IcoImage(description);
-            for (int i = 0; i < iconsInfos.Length; i++)
+            frames.Sort((a, b) =>
             {
-                ProcessIcon(pSource, ico, iconsInfos[i], (uint)i);
+                var bySize = Area(b.Frame).CompareTo(Area(a.Frame));
+                return bySize != 0 ? bySize : b.Depth.CompareTo(a.Depth);
+            });
+            var ico = new IcoImage(frames[0].Frame.Description);
+            for (var level = 0; level < frames.Count; level++)
+            {
+                frames[level].Frame.MipLevel = (uint)level;
+                ico.AddMipLevel(frames[level].Frame);
             }
-            
-            // description.Width = (uint)width;
-            // description.Height = (uint)height;
-            // description.Format = Format.R8G8B8A8_UNORM;
-            // description.MipLevels = 1;
-            // description.ArraySize = 1;
-            // description.Depth = 1;
-            //
-            // Image image = Image.New(description);
-            // var bufferHandle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            // var ptr = image.PixelBuffer[0].DataPointer;
-            // Utilities.CopyMemory(ptr, bufferHandle.AddrOfPinnedObject(), buffer.Length);
-            // bufferHandle.Free();
-            // var px = PixelBuffer.FlipBuffer(image.PixelBuffer[0], FlipBufferOptions.FlipVertically);
-            // var colorsBuf = px.GetPixels<Color>();
-            // image.ApplyPixelBuffer(px, 0, true);
-
-            var data = ico.GetMipLevelData(0);
-            ico.Description = data.Description;
 
             return ico;
         }
 
-        private static unsafe void ProcessIcon(IntPtr pSource, IcoImage image, IconInfo iconInfo, uint mipLevel)
+        private static long Area(FrameData frame) => (long)frame.Description.Width * frame.Description.Height;
+
+        private static FrameData DecodePng(IntPtr source, uint length)
         {
-            var dataPtr = IntPtr.Add(pSource, (int)iconInfo.ImageOffset);
-
-            var iconImageInfo = *(IconImageInfo*)dataPtr;
-            var width = iconImageInfo.Header.width;
-            var height = iconImageInfo.Header.height;
-            if (height == width * 2)
+            var png = PngHelper.LoadFromMemory(source, length);
+            var pixels = png.GetRawPixels(0);
+            var count = (int)(png.Width * png.Height);
+            var rgba = new byte[count * 4];
+            var channels = pixels.Length / Math.Max(1, count);
+            if (channels is not (1 or 3 or 4) || pixels.Length != count * channels)
             {
-                height /= 2;
+                throw new NotSupportedException("An ICO image in PNG is read only with 8-bit gray, RGB or RGBA pixels");
             }
 
-            var descr = ImageDescription.Default2D((uint)width, (uint)height, SurfaceFormat.R8G8B8A8.UNorm);
-            
-            int realBitsCount = iconImageInfo.Header.bitCount;
-            bool hasAndMask = /*(realBitsCount < 32) &&*/ (height != iconImageInfo.Header.height);
-
-            dataPtr = IntPtr.Add(dataPtr, Marshal.SizeOf<BitmapInfoHeader>());
-            var buffer = new byte[width * height * 4];
-
-            var stream = new UnmanagedMemoryStream((byte*)dataPtr, iconInfo.BytesInRes);
-            var sizeinBytes = realBitsCount / 8;
-            int bufferOffset = 0;
-            if (realBitsCount == 32)
+            for (var pixel = 0; pixel < count; pixel++)
             {
-                for (int i = 0; i < buffer.Length; i += sizeinBytes)
-                {
-                    stream.Read(buffer, bufferOffset, sizeinBytes);
-                    Utilities.Swap(ref buffer[bufferOffset], ref buffer[bufferOffset + 2]);
-                    bufferOffset += sizeinBytes;
-                }
+                var from = pixel * channels;
+                var to = pixel * 4;
+                rgba[to] = pixels[from];
+                rgba[to + 1] = pixels[channels == 1 ? from : from + 1];
+                rgba[to + 2] = pixels[channels == 1 ? from : from + 2];
+                rgba[to + 3] = channels == 4 ? pixels[from + 3] : byte.MaxValue;
             }
-            else if (realBitsCount == 24)
+
+            return new FrameData(rgba, ImageDescription.Default2D(png.Width, png.Height, SurfaceFormat.R8G8B8A8.UNorm));
+        }
+
+        private static FrameData DecodeBitmap(ReadOnlySpan<byte> image)
+        {
+            if (image.Length < BitmapHeaderSize)
             {
-                for (int i = 0; i < buffer.Length; i += 4)
-                {
-                    stream.Read(buffer, bufferOffset, sizeinBytes);
-                    Utilities.Swap(ref buffer[bufferOffset], ref buffer[bufferOffset + 2]);
-                    bufferOffset += 4;
-                }
+                throw new ArgumentException("An ICO image is neither a PNG nor a bitmap");
             }
-            else if (realBitsCount == 4)
+
+            var headerSize = (int)BinaryPrimitives.ReadUInt32LittleEndian(image);
+            var width = BinaryPrimitives.ReadInt32LittleEndian(image[4..]);
+            var height = BinaryPrimitives.ReadInt32LittleEndian(image[8..]) / 2;
+            var bitCount = BinaryPrimitives.ReadUInt16LittleEndian(image[14..]);
+            var compression = BinaryPrimitives.ReadUInt32LittleEndian(image[16..]);
+            var colorsUsed = (int)BinaryPrimitives.ReadUInt32LittleEndian(image[32..]);
+            if (width <= 0 || height <= 0 || compression != 0 || bitCount is not (1 or 4 or 8 or 24 or 32))
             {
-                var colors = new byte[16 * 4];
-                stream.Read(colors, 0, colors.Length);
-                var cursor = IntPtr.Add(dataPtr, colors.Length);
-                int shift;
-                int shift2;
-                byte index;
-                for (int x = 0; x < width; x++)
+                throw new NotSupportedException($"An ICO bitmap of {bitCount} bits, compression {compression}, is not read");
+            }
+
+            var paletteSize = bitCount <= 8 ? (colorsUsed > 0 ? colorsUsed : 1 << bitCount) : 0;
+            var palette = image[headerSize..];
+            var colorStride = (width * bitCount + 31) / 32 * 4;
+            var maskStride = (width + 31) / 32 * 4;
+            var colors = palette[(paletteSize * 4)..];
+            var mask = colors[(colorStride * height)..];
+            if (mask.Length < maskStride * height)
+            {
+                mask = ReadOnlySpan<byte>.Empty;
+            }
+
+            var rgba = new byte[width * height * 4];
+            var alphaSeen = false;
+            for (var y = 0; y < height; y++)
+            {
+                var row = colors.Slice((height - 1 - y) * colorStride, colorStride);
+                for (var x = 0; x < width; x++)
                 {
-                    for (int y = 0; y < height; y++)
+                    var to = (y * width + x) * 4;
+                    if (bitCount >= 24)
                     {
-                        shift = 4 * (x + y * width);
-                        //shift2 = (x + height * width);
-                        shift2 = (x + (height - y - 1) * width);
-                        index = (byte)(void*)IntPtr.Add(cursor, shift2 / 2);
-                        if (shift2 % 2 == 0)
-                            index = (byte)((index >> 4) & 0xF);
-                        else
-                            index = (byte)(index & 0xF);
-                        index *= 4;
-
-                        buffer[shift] = colors[index + 2];
-                        buffer[shift + 1] = colors[index + 1];
-                        buffer[shift + 2] = colors[index];
-                        buffer[shift + 3] = 255;
+                        var from = x * (bitCount / 8);
+                        rgba[to] = row[from + 2];
+                        rgba[to + 1] = row[from + 1];
+                        rgba[to + 2] = row[from];
+                        rgba[to + 3] = bitCount == 32 ? row[from + 3] : byte.MaxValue;
+                        alphaSeen |= bitCount == 32 && row[from + 3] != 0;
+                    }
+                    else
+                    {
+                        var bit = x * bitCount;
+                        var index = (row[bit / 8] >> (8 - bitCount - bit % 8)) & ((1 << bitCount) - 1);
+                        var color = palette.Slice(Math.Min(index, paletteSize - 1) * 4, 4);
+                        rgba[to] = color[2];
+                        rgba[to + 1] = color[1];
+                        rgba[to + 2] = color[0];
+                        rgba[to + 3] = byte.MaxValue;
                     }
                 }
             }
-            
-            stream.Dispose();
-            
-            var pixelSize = (byte)(realBitsCount / 8);
-            
-            var pixels = ImageHelper.FlipBuffer(buffer, descr.Width, descr.Height, pixelSize, FlipBufferOptions.FlipVertically);
-            var icoMipData = new FrameData(pixels, descr, mipLevel);
-            image.AddMipLevel(icoMipData);
-            
-            // Read AND mask after base color data - 1 BIT MASK
-            //if (hasAndMask)
-            //{
-            //    int shift;
-            //    int shift2;
-            //    byte bit;
-            //    int mask;
 
-            //    int boundary = width * realBitsCount; //!!! 32 bit boundary (http://www.daubnet.com/en/file-format-ico)
-            //    while (boundary % 32 != 0) boundary++;
+            if (!mask.IsEmpty && (bitCount < 32 || !alphaSeen))
+            {
+                for (var y = 0; y < height; y++)
+                {
+                    var row = mask.Slice((height - 1 - y) * maskStride, maskStride);
+                    for (var x = 0; x < width; x++)
+                    {
+                        var transparent = (row[x / 8] >> (7 - x % 8) & 1) != 0;
+                        rgba[(y * width + x) * 4 + 3] = transparent ? (byte)0 : byte.MaxValue;
+                    }
+                }
+            }
 
-            //    boundary = width;
-            //    while (boundary % 32 != 0) boundary++;
-
-            //    var bufSize = iconImageInfo.Header.sizeImage - (width * height * (realBitsCount / 8));
-            //    if (bufSize > 0)
-            //    {
-            //        var transparencyBuffer = new byte[bufSize];
-            //        stream.Read(transparencyBuffer, 0, (int)bufSize);
-            //        for (int y = 0; y < height; y++)
-            //        {
-            //            for (int x = 0; x < width; x++)
-            //            {
-            //                shift = 4 * (x + y * width) + 3;
-            //                bit = (byte)(7 - (x % 8));
-            //                shift2 = (x + (height - y - 1) * boundary) / 8;
-            //                var b = transparencyBuffer[shift2];
-            //                mask = (0x01 & (b >> bit));
-            //                var before = buffer[shift];
-            //                buffer[shift] *= (byte)(1 - mask);
-            //            }
-            //        }
-            //    }
-            //}
+            return new FrameData(rgba, ImageDescription.Default2D((uint)width, (uint)height, SurfaceFormat.R8G8B8A8.UNorm));
         }
 
-        public static unsafe void SaveToStream(IRawBitmap img, Stream imageStream)
+        /// <summary>Writes every level of <paramref name="img"/> - RGBA pixels, at most 256 a side - as an ICO file of PNG
+        /// images.</summary>
+        public static void SaveToStream(IRawBitmap img, Stream imageStream)
         {
+            var levels = Math.Max(1u, img.MipLevelsCount);
+            var images = new List<(uint Width, uint Height, byte[] Png)>((int)levels);
+            for (uint level = 0; level < levels; level++)
+            {
+                var frame = img.MipLevelsCount > 1 ? img.GetMipLevelData(level) : img.GetFrameData(0);
+                var (width, height) = (frame.Description.Width, frame.Description.Height);
+                if (frame.Description.Format != SurfaceFormat.R8G8B8A8.UNorm || width is 0 or > 256 || height is 0 or > 256)
+                {
+                    throw new NotSupportedException("An ICO image is written from RGBA pixels, at most 256 a side");
+                }
 
+                using var image = Image.New2D(width, height, SurfaceFormat.R8G8B8A8.UNorm);
+                System.Runtime.InteropServices.Marshal.Copy(frame.RawPixels, 0, image.DataPointer, (int)(width * height * 4));
+                using var png = new MemoryStream();
+                image.Save(png, ImageFileType.Png);
+                images.Add((width, height, png.ToArray()));
+            }
+
+            Span<byte> header = stackalloc byte[DirectorySize + EntrySize];
+            BinaryPrimitives.WriteUInt16LittleEndian(header, 0);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[2..], 1);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[4..], (ushort)images.Count);
+            imageStream.Write(header[..DirectorySize]);
+
+            var offset = (uint)(DirectorySize + EntrySize * images.Count);
+            var entry = header[DirectorySize..];
+            foreach (var (width, height, png) in images)
+            {
+                entry.Clear();
+                entry[0] = (byte)(width == 256 ? 0 : width);
+                entry[1] = (byte)(height == 256 ? 0 : height);
+                BinaryPrimitives.WriteUInt16LittleEndian(entry[4..], 1);
+                BinaryPrimitives.WriteUInt16LittleEndian(entry[6..], 32);
+                BinaryPrimitives.WriteUInt32LittleEndian(entry[8..], (uint)png.Length);
+                BinaryPrimitives.WriteUInt32LittleEndian(entry[12..], offset);
+                imageStream.Write(entry);
+                offset += (uint)png.Length;
+            }
+
+            foreach (var (_, _, png) in images)
+            {
+                imageStream.Write(png);
+            }
         }
     }
 }

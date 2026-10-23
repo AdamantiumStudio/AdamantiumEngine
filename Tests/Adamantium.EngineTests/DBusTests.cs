@@ -223,6 +223,184 @@ public class DBusTests
         Assert.Throws<DBusException>(() => connection.Call(DBusMessage.MethodCall(BusName, BusPath, BusName, "GetId")));
     }
 
+    [Test]
+    public void AnObject_AnswersACallFromAnotherConnection_AndNotWhatItDoesNotServe()
+    {
+        using var server = Session();
+        using var client = Session();
+        using var served = server.Serve(call => Task.FromResult(call.Member == "Echo"
+            ? DBusMessage.MethodReturn(call, "s", writer => writer.WriteString(call.Reader().ReadString() + "!"))
+            : null));
+
+        var echoed = client.Call(Echo(server, "Echo", "hi")).Reader().ReadString();
+        var missing = Assert.Throws<DBusException>(() => client.Call(Echo(server, "Other", "hi")));
+
+        Assert.That(echoed, Is.EqualTo("hi!"));
+        Assert.That(missing.Name, Is.EqualTo("org.freedesktop.DBus.Error.UnknownMethod"));
+    }
+
+    [Test]
+    public void AHandlerThatThrows_IsAnsweredWithAnError_AndTheObjectServesOn()
+    {
+        using var server = Session();
+        using var client = Session();
+        using var served = server.Serve(call => call.Member == "Fail"
+            ? throw new InvalidOperationException("broken")
+            : Task.FromResult(DBusMessage.MethodReturn(call)));
+
+        var failure = Assert.Throws<DBusException>(() => client.Call(Echo(server, "Fail", "x")));
+
+        Assert.That(failure.Name, Is.EqualTo("org.freedesktop.DBus.Error.Failed"));
+        Assert.That(failure.Message, Does.Contain("adamantium.Test.Fail").And.Not.Contain("broken"),
+            "what went wrong inside stays inside: any process on the bus may call");
+        Assert.That(client.Call(Echo(server, "Fine", "x")).Type, Is.EqualTo(DBusMessageType.MethodReturn));
+    }
+
+    [Test]
+    public void Calls_AreHandledOneAtATime_InTheOrderTheyCame()
+    {
+        using var server = Session();
+        using var client = Session();
+        var handled = new List<string>();
+        var running = 0;
+        var overlapped = false;
+        using var served = server.Serve(async call =>
+        {
+            overlapped |= Interlocked.Increment(ref running) > 1;
+            if (call.Member == "Slow")
+            {
+                await Task.Delay(200);
+            }
+
+            lock (handled)
+            {
+                handled.Add(call.Member);
+            }
+
+            Interlocked.Decrement(ref running);
+            return DBusMessage.MethodReturn(call);
+        });
+
+        var slow = client.CallAsync(Echo(server, "Slow", "x"));
+        var fast = client.CallAsync(Echo(server, "Fast", "x"));
+        Task.WaitAll(slow, fast);
+
+        Assert.That(handled, Is.EqualTo(new[] { "Slow", "Fast" }));
+        Assert.That(overlapped, Is.False);
+    }
+
+    [Test]
+    public void ANulInAString_IsSentAsAReplacement_AndTheConnectionLives()
+    {
+        using var server = Session();
+        using var client = Session();
+        using var served = server.Serve(call => Task.FromResult(DBusMessage.MethodReturn(call, "s",
+            writer => writer.WriteString("a\0b"))));
+
+        Assert.That(client.Call(Echo(server, "Nul", "x")).Reader().ReadString(), Is.EqualTo("a�b"));
+        Assert.That(client.Call(Echo(server, "Again", "x")).Type, Is.EqualTo(DBusMessageType.MethodReturn));
+    }
+
+    [Test]
+    public void CallsQueuedBeforeServingStopped_AreNotServed()
+    {
+        using var server = Session();
+        using var client = Session();
+        var release = new TaskCompletionSource();
+        var served = server.Serve(async call =>
+        {
+            if (call.Member == "Hold")
+            {
+                await release.Task;
+            }
+
+            return DBusMessage.MethodReturn(call);
+        });
+
+        var held = client.CallAsync(Echo(server, "Hold", "x"));
+        var queued = client.CallAsync(Echo(server, "Queued", "x"));
+        Thread.Sleep(200);
+        served.Dispose();
+        release.SetResult();
+
+        Assert.That(held.Result.Type, Is.EqualTo(DBusMessageType.MethodReturn));
+        var error = Assert.Throws<AggregateException>(() => queued.Wait()).InnerException as DBusException;
+        Assert.That(error?.Name, Is.EqualTo("org.freedesktop.DBus.Error.UnknownMethod"));
+    }
+
+    [Test]
+    public void AConnectionServes_OnlyOneHandlerAtATime()
+    {
+        using var server = Session();
+        using var served = server.Serve(call => Task.FromResult(DBusMessage.MethodReturn(call)));
+
+        Assert.Throws<InvalidOperationException>(() => server.Serve(call => Task.FromResult(DBusMessage.MethodReturn(call))));
+    }
+
+    [Test]
+    public void ServingStoppedOnce_IsNotStoppedAgain_ByTheSameHandlersOldServing()
+    {
+        using var server = Session();
+        using var client = Session();
+        Func<DBusMessage, Task<DBusMessage>> handler = call => Task.FromResult(DBusMessage.MethodReturn(call));
+        var first = server.Serve(handler);
+        first.Dispose();
+        using var second = server.Serve(handler);
+
+        first.Dispose();
+
+        Assert.That(client.Call(Echo(server, "Still", "x")).Type, Is.EqualTo(DBusMessageType.MethodReturn));
+    }
+
+    [Test]
+    public void AHandler_MayWaitForACallOverItsOwnConnection()
+    {
+        using var server = Session();
+        using var client = Session();
+        using var served = server.Serve(call =>
+        {
+            var id = server.Call(DBusMessage.MethodCall(BusName, BusPath, BusName, "GetId")).Reader().ReadString();
+            return Task.FromResult(DBusMessage.MethodReturn(call, "s", writer => writer.WriteString(id)));
+        });
+
+        Assert.That(client.Call(Echo(server, "Id", "x")).Reader().ReadString(), Is.Not.Empty);
+    }
+
+    [Test]
+    public void ASignalSent_ReachesWhoeverSubscribesToIt()
+    {
+        using var server = Session();
+        using var client = Session();
+        string heard = null;
+        using var arrived = new ManualResetEventSlim();
+        using var subscription = client.Subscribe(server.UniqueName, "/adamantium/test", "adamantium.Test", "Said", signal =>
+        {
+            heard = signal.Reader().ReadString();
+            arrived.Set();
+        });
+
+        server.Send(DBusMessage.Signal("/adamantium/test", "adamantium.Test", "Said", "s", writer => writer.WriteString("hello")));
+
+        Assert.That(arrived.Wait(TimeSpan.FromSeconds(5)), Is.True);
+        Assert.That(heard, Is.EqualTo("hello"));
+    }
+
+    [Test]
+    public void OnceServingStops_CallsAreNotServed_ButAPingIsAnswered()
+    {
+        using var server = Session();
+        using var client = Session();
+        server.Serve(call => Task.FromResult(DBusMessage.MethodReturn(call))).Dispose();
+
+        Assert.Throws<DBusException>(() => client.Call(Echo(server, "Echo", "x")));
+        Assert.That(client.Call(DBusMessage.MethodCall(server.UniqueName, "/", "org.freedesktop.DBus.Peer", "Ping")).Type,
+            Is.EqualTo(DBusMessageType.MethodReturn));
+    }
+
+    private static DBusMessage Echo(DBusConnection server, string member, string text) =>
+        DBusMessage.MethodCall(server.UniqueName, "/adamantium/test", "adamantium.Test", member, "s",
+            writer => writer.WriteString(text));
+
     private static DBusConnection Session()
     {
         Assume.That(Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS") ?? Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR"),

@@ -86,6 +86,8 @@ public static unsafe partial class WaylandInterfaces
     public static readonly WlInterface* XdgPopup = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgToplevelDragManagerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* XdgToplevelDragV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgToplevelIconManagerV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* XdgToplevelIconV1 = WaylandInterfaceBuilder.Allocate();
 
     static WaylandInterfaces()
     {
@@ -813,6 +815,23 @@ public static unsafe partial class WaylandInterfaces
             [
                 new("destroy", "", []),
                 new("attach", "oii", [XdgToplevel, null, null]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(XdgToplevelIconManagerV1, "xdg_toplevel_icon_manager_v1", 1,
+            [
+                new("destroy", "", []),
+                new("create_icon", "n", [XdgToplevelIconV1]),
+                new("set_icon", "o?o", [XdgToplevel, XdgToplevelIconV1]),
+            ],
+            [
+                new("icon_size", "i", [null]),
+                new("done", "", []),
+            ]);
+        WaylandInterfaceBuilder.Fill(XdgToplevelIconV1, "xdg_toplevel_icon_v1", 1,
+            [
+                new("destroy", "", []),
+                new("set_name", "s", [null]),
+                new("add_buffer", "oi", [WlBuffer, null]),
             ],
             []);
     }
