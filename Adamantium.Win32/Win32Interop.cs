@@ -321,6 +321,19 @@ namespace Adamantium.Win32
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        /// <summary>Lets a window take mouse and keyboard input, or refuses it all; returns whether it was disabled before.</summary>
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnableWindow(IntPtr hWnd, [MarshalAs(UnmanagedType.Bool)] bool enable);
+
+        /// <summary>Called once per top-level window of a thread; return false to stop.</summary>
+        public delegate bool EnumThreadWndProc(IntPtr hWnd, IntPtr lParam);
+
+        /// <summary>Calls <paramref name="callback"/> for every top-level window the thread owns.</summary>
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumThreadWindows(uint threadId, EnumThreadWndProc callback, IntPtr lParam);
+
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SystemParametersInfo(SPI uiAction, uint uiParam, ref IntPtr pvParam, SPIF fWinIni);
