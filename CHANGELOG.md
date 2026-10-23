@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- Wayland's `xdg_wm_dialog_v1` (staging `xdg-dialog-v1`): `XdgWmDialogV1.GetXdgDialog` makes a toplevel a dialog of
+  its parent, and `XdgDialogV1.SetModal` / `UnsetModal` tell the compositor it is modal.
 - `Win32Interop.EnableWindow`: lets a window take input or refuses it all, as the windows behind a modal one do.
   `Win32Interop.EnumThreadWindows`: walks the top-level windows a thread owns.
 - Word's text effects, drawn from each glyph's own distance field: `GlyphOutline`, `GlyphShadow`, `GlyphGlow` and
