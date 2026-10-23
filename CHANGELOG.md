@@ -9,6 +9,12 @@ All packages share one version.
 
 - Wayland's `xdg_wm_dialog_v1` (staging `xdg-dialog-v1`): `XdgWmDialogV1.GetXdgDialog` makes a toplevel a dialog of
   its parent, and `XdgDialogV1.SetModal` / `UnsetModal` tell the compositor it is modal.
+- `TextLayout.BalanceLines`: text wrapped by words takes the narrowest width that keeps its lines - `MaxLines` of
+  them, or as many as wrapping at the full width gives - so they come out about equally long, as CSS's
+  `text-wrap: balance`; the lines are still aligned in the full width. A width counts only when every word fits its
+  line whole and the lines fit the area's height, so balancing never trims or hyphenates what it would not otherwise.
+  Horizontal text of up to 10 lines in one area without a drop cap. With `MaxLines = 2` a label of two or more words
+  goes on two lines, broken where the wider line is narrowest.
 - `Win32Interop.EnableWindow`: lets a window take input or refuses it all, as the windows behind a modal one do.
   `Win32Interop.EnumThreadWindows`: walks the top-level windows a thread owns.
 - Word's text effects, drawn from each glyph's own distance field: `GlyphOutline`, `GlyphShadow`, `GlyphGlow` and
