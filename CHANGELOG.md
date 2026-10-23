@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.EnableWindow`: lets a window take input or refuses it all, as the windows behind a modal one do.
+  `Win32Interop.EnumThreadWindows`: walks the top-level windows a thread owns.
 - Word's text effects, drawn from each glyph's own distance field: `GlyphOutline`, `GlyphShadow`, `GlyphGlow` and
   `GlyphReflection` on a stretch (`TextAttributes.Outline`, `Shadow`, `Glow`, `Reflection`) or as the layout's defaults
   (`TextLayout.GlyphOutline` and the rest, which move `Revision` on). Each is a copy of the glyphs under all of the
