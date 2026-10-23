@@ -70,6 +70,12 @@ internal sealed record LaidOutText
 
     public bool NoRoom { get; init; }
 
+    // A word first on its line was wider than the line's room, as wrapping measures it (Overflows) and as trimming does
+    // (InkOverflows, without the room justification may take back): it stood past the room.
+    public bool Overflows { get; init; }
+
+    public bool InkOverflows { get; init; }
+
     public bool Vertical => Options?.Vertical == true;
 
     public bool[] Graphemes

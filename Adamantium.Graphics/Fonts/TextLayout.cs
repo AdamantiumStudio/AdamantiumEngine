@@ -251,6 +251,14 @@ public class TextLayout : DisposableObject
     /// most lines is not set.</summary>
     public int MaxLines { get; set; }
 
+    /// <summary>Whether text wrapped by <see cref="TextWrapping.WrapByWords"/> takes the narrowest width that keeps its
+    /// lines - as many as <see cref="MaxLines"/>, or else as wrapping at the full width gives - so they come out about
+    /// equally long; the lines are aligned in the full width. A width counts only when every word fits its line whole -
+    /// none broken by hyphenation - and the lines fit the area's height, so nothing is trimmed that would not be anyway.
+    /// Off by default. Horizontal text of up to 10 lines in one area without a drop cap: it lays the text out about a
+    /// dozen times, so it is meant for short text such as a command's label or a heading.</summary>
+    public bool BalanceLines { get; set; }
+
     /// <summary>
     /// The text's language, a BCP 47 tag such as "ru" or "en-GB", for ranges whose attributes name none: picks the
     /// hyphenation patterns, the font's localized glyph forms and the fallback fonts. Null when unknown.
@@ -613,6 +621,7 @@ public class TextLayout : DisposableObject
         LineSpacing = LineSpacing,
         LineBounds = LineBounds,
         MaxLines = MaxLines,
+        BalanceLines = BalanceLines,
         Language = Language,
         Fallback = Fallback,
         LoadFontsInBackground = LoadFontsInBackground,

@@ -64,6 +64,8 @@ internal sealed class TextLayoutOptions
 
     public int MaxLines { get; init; }
 
+    public bool BalanceLines { get; init; }
+
     public string Language { get; init; }
 
     public FontFallback Fallback { get; init; }
@@ -83,6 +85,6 @@ internal sealed class TextLayoutOptions
                && Equals(BaselineGrid, other.BaselineGrid)
                && LineHeight.Equals(other.LineHeight) && LineStacking == other.LineStacking
                && LineSpacing.Equals(other.LineSpacing) && LineBounds == other.LineBounds && MaxLines == other.MaxLines
-               && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? []);
+               && BalanceLines == other.BalanceLines && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? []);
     }
 }

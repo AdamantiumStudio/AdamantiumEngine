@@ -49,11 +49,12 @@ internal sealed class LineComposer
         // A text trimmed and wrapped in a fixed height takes only lines that fit whole. A line raised by larger
         // text in it is known only once laid, so a text whose last line came out taller than the room is laid again up
         // to the lines that fit - until its last line fits, or only one is left.
-        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, null, null);
+        var wrapWidth = BalancedWidth(text, attributed, fontSize, renderingParameters, options);
+        var laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, null, null, wrapWidth);
         var limit = TrimmedLinesThatFit(laid, renderingParameters, options);
         while (limit > 0)
         {
-            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit, null, null);
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, limit, null, null, wrapWidth);
             var fit = TrimmedLinesThatFit(laid, renderingParameters, options);
             limit = fit < limit ? fit : 0;
         }
@@ -86,13 +87,117 @@ internal sealed class LineComposer
                 break;
             }
 
-            laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, pushed, tall);
+            laid = Lay(text, attributed, fontSize, renderingParameters, options, 0, pushed, tall, wrapWidth);
         }
 
         return laid;
     }
 
     private const int MostFramePasses = 64;
+
+    // Text longer than this many lines is not balanced: each width tried lays all of it out again.
+    private const int MostBalancedLines = 10;
+
+    // The narrowest whole width the text wraps in without taking more lines than MaxLines, or than wrapping at the full
+    // width takes; 0 when the lines are not balanced. The lines are still aligned in the full width. A width counts only
+    // when every word fits its line whole - none past the room, none broken by hyphenation - and every line fits the
+    // area's height, so trimming has nothing to cut.
+    private int BalancedWidth(string text, AttributedText attributed, double fontSize,
+        TextRenderingParameters renderingParameters, TextLayoutOptions options)
+    {
+        if (!options.BalanceLines || renderingParameters.TextWrapping != TextWrapping.WrapByWords || options.Vertical
+            || options.Frames is { Length: > 0 } || options.DropCap != null || string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+
+        var area = renderingParameters.TextArea;
+        // Tried untrimmed and unbounded below, so what does not fit shows as a word past its room or a line too many.
+        var tried = new TextRenderingParameters
+        {
+            TextArea = new Rectangle(area.X, area.Y, area.Width, Int32.MaxValue),
+            TextWrapping = renderingParameters.TextWrapping,
+            HorizontalTextAlignment = renderingParameters.HorizontalTextAlignment,
+            VerticalTextAlignment = VerticalTextAlignment.Top,
+            JustifyLastLine = renderingParameters.JustifyLastLine,
+            TextTrimming = TextTrimming.None,
+            Color = renderingParameters.Color,
+        };
+        var trims = renderingParameters.TextTrimming != TextTrimming.None;
+        var breaks = TextBoundaries.LineBreaks(text);
+        var full = Lay(text, attributed, fontSize, tried, options, 0, null, null, 0);
+        var lines = LinesOf(full);
+        var target = options.MaxLines > 0 ? options.MaxLines : lines;
+        if (target < 2 || lines > MostBalancedLines || !Fits(full))
+        {
+            return 0;
+        }
+
+        // Unbounded, the room is the ink's plus an em: a last glyph's advance may reach past its ink.
+        var high = area.Width < Int32.MaxValue
+            ? area.Width
+            : (int)Math.Ceiling(full.Size.Width) + (int)Math.Ceiling(fontSize);
+        if (area.Width == Int32.MaxValue && !Fits(Tried(high)))
+        {
+            return 0;
+        }
+
+        var low = 0;
+        while (high - low > 1)
+        {
+            var middle = low + (high - low) / 2;
+            if (Fits(Tried(middle)))
+            {
+                high = middle;
+            }
+            else
+            {
+                low = middle;
+            }
+        }
+
+        return high < area.Width ? high : 0;
+
+        // Laid no further than a line past the most, so a width far too narrow costs what a right one does.
+        LaidOutText Tried(int width) => Lay(text, attributed, fontSize, tried, options, target + 1, null, null, width);
+
+        bool Fits(LaidOutText laid)
+        {
+            var count = LinesOf(laid);
+            if (laid.NoRoom || laid.HasPendingFonts || laid.Overflows || trims && laid.InkOverflows
+                || laid.OversetIndex < text.Length
+                || count == 0 || count > target
+                || area.Height != Int32.MaxValue
+                && laid.LineTops[count - 1] - laid.VerticalShift + laid.LineHeights[count - 1] >= area.Height + 1.0)
+            {
+                return false;
+            }
+
+            var starts = new int[count];
+            Array.Fill(starts, Int32.MaxValue);
+            foreach (var glyph in laid.Glyphs)
+            {
+                if (glyph.PositionInString >= 0 && !glyph.Annotates && glyph.LineIndex < count)
+                {
+                    starts[glyph.LineIndex] = Math.Min(starts[glyph.LineIndex], glyph.PositionInString);
+                }
+            }
+
+            // A line starting inside a word, or after a soft hyphen, was hyphenated there.
+            for (var line = 1; line < count; line++)
+            {
+                if (starts[line] < breaks.Length
+                    && (breaks[starts[line]] == LineBreakKind.None || text[starts[line] - 1] == '­'))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        static int LinesOf(LaidOutText laid) => laid.LineTops?.Length ?? 0;
+    }
 
     // The first line that ends past the bottom of its frame and is not the first in it: the next frame may hold it.
     private static (int Line, int Frame)? LineOverItsFrame(LaidOutText laid)
@@ -141,7 +246,7 @@ internal sealed class LineComposer
 
     private LaidOutText Lay(string text, AttributedText attributed, double fontSize,
         TextRenderingParameters renderingParameters, TextLayoutOptions options, int lineLimit,
-        IReadOnlyDictionary<int, int> pushed, IReadOnlyDictionary<int, double> tall)
+        IReadOnlyDictionary<int, int> pushed, IReadOnlyDictionary<int, double> tall, int wrapWidth)
     {
         var laidOutParameters = renderingParameters;
 
@@ -177,6 +282,8 @@ internal sealed class LineComposer
         }
 
         var oversetIndex = text.Length;
+        var overflows = false;
+        var inkOverflows = false;
         var tabStops = options.TabStops.OrderBy(stop => stop.Position).ToArray();
         var paragraphs = TextParagraphs.Resolve(text, options.Direction);
         // What the attributed text says, read once: a style changed meanwhile does not reach this layout.
@@ -203,6 +310,11 @@ internal sealed class LineComposer
 
 
         var textArea = renderingParameters.TextArea;
+        if (wrapWidth > 0 && wrapWidth < textArea.Width)
+        {
+            textArea.Width = wrapWidth;
+        }
+
         double width = 0;
         double height = textArea.Y;
         double lineRawTop = textArea.Y;
@@ -582,6 +694,8 @@ internal sealed class LineComposer
             Size = finalRect,
             RealTextDimensions = realTextDimensions,
             HasPendingFonts = hasPendingFonts,
+            Overflows = overflows,
+            InkOverflows = inkOverflows,
             DotGlyph = _dotGlyph,
         };
 
@@ -1931,6 +2045,12 @@ internal sealed class LineComposer
                 start = k;
             }
 
+            if (!LineHasContent())
+            {
+                overflows |= cursorPosition + WordWidth(start, newline) > LineRight(lineIndex) + LineShrink();
+                inkOverflows |= cursorPosition + WordWidth(start, newline) > LineRight(lineIndex);
+            }
+
             wordStartPosition = cursorPosition;
             if (trims && !LineHasContent() && cursorPosition + WordWidth(start, newline) > LineRight(lineIndex))
             {
@@ -2377,6 +2497,12 @@ internal sealed class LineComposer
                 {
                     return Overset(start);
                 }
+            }
+
+            if (wrapsByWords && !LineHasContent())
+            {
+                overflows |= Overflows(EndWidth(start, end));
+                inkOverflows |= Overflows(wordWidth);
             }
 
             wordStartPosition = cursorPosition;
