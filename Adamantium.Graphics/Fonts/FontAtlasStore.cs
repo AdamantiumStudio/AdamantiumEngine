@@ -50,10 +50,13 @@ namespace Adamantium.Graphics.Fonts
         }
 
         /// <summary>The atlas rasterized with <paramref name="fontParameters"/>, shared by all text in every font: a glyph
-        /// is found in it by its typeface and index.</summary>
+        /// is found in it by its typeface and index. Made on the resource loader of <paramref name="graphicsDevice"/>'s
+        /// main device, which lives as long as the application: the device of the window that asks first may close
+        /// before the others.</summary>
         public static FontAtlas GetOrCreateFrom(IGraphicsDevice graphicsDevice, FontParameters fontParameters)
         {
-            return _fontAtlasMap.GetOrAdd(fontParameters, _ => new FontAtlas(graphicsDevice, fontParameters));
+            return _fontAtlasMap.GetOrAdd(fontParameters,
+                _ => new FontAtlas(graphicsDevice.MainDevice?.ResourceLoaderDevice ?? graphicsDevice, fontParameters));
         }
 
         /// <summary>Drops every atlas while its device is still alive: an atlas belongs to the device that made it, and

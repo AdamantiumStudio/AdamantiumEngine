@@ -868,6 +868,9 @@ All packages share one version.
 
 ### Fixed
 
+- The glyph atlas every text shares was made on the render device of the first window to draw text and went with it:
+  when that window closed while others stayed, their text drew from a disposed atlas and every frame failed.
+  `FontAtlasStore` now makes it on the main device's resource loader, which lives as long as the application.
 - A PNG decoded to another bit depth than the file's took its `SurfaceFormat` from the file's depth, so its pixels were
   read in a format they were not in.
 - `HeadlessPresenter` drew into a ring of frames like a swapchain, so a frame read back after it ended was the next,

@@ -78,6 +78,32 @@ public class FontAtlasStoreTests
             "and no two share one");
     }
 
+    // The first window to draw text asks for the atlas every window shares, and it may close before the others - a splash
+    // window does, every start.
+    [Test]
+    public void TheAtlas_OutlivesTheDeviceThatAskedForItFirst()
+    {
+        var first = GpuFixture.CreateRenderDevice();
+        var second = GpuFixture.CreateRenderDevice();
+        FontAtlasStore.SynchronousFill = true;
+        var early = Layout("SourceSans3-Regular.ttf", "a");
+        early.Update(first);
+        var atlas = early.FontAtlas;
+
+        GpuFixture.ReleaseRenderDevice(first);
+        var late = Layout("SourceSans3-Regular.ttf", "b");
+        late.Update(second);
+        var b = late.GetTextData().Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(atlas.GraphicsDevice, Is.SameAs(GpuFixture.Main.ResourceLoaderDevice), "made on what the application keeps");
+            Assert.That(atlas.IsDisposed, Is.False);
+            Assert.That(late.FontAtlas, Is.SameAs(atlas), "still the one every window shares");
+            Assert.That(atlas.GetGlyphData(b.Font, b.Glyph), Is.Not.Null, "and letters still land in it");
+        });
+    }
+
     [Test]
     public void TwoFonts_ShareOneAtlas_AndKeepTheirGlyphsApart()
     {
