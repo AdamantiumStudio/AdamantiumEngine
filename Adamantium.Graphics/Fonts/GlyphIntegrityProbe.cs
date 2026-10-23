@@ -26,6 +26,15 @@ namespace Adamantium.Graphics.Fonts
 
         private static readonly ConditionalWeakTable<object, AtlasState> States = new();
         private static readonly ConcurrentDictionary<string, byte> Reported = new();
+        private static volatile bool _isEnabled;
+
+        /// <summary>Whether glyph uploads go through the traps; off by default, for a hunt only. Switch it on before the
+        /// first text is drawn.</summary>
+        public static bool IsEnabled
+        {
+            get => _isEnabled;
+            set => _isEnabled = value;
+        }
 
         /// <summary>Everything this probe has said so far, newest last - so a run can be asked what it saw without
         /// hunting through the console.</summary>
