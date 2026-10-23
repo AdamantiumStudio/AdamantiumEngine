@@ -1487,6 +1487,9 @@ All packages share one version.
 
 ### Changed
 
+- `GlyphIntegrityProbe` is off by default: a tool for a hunt, it ran on every glyph upload, hashed the pixels and wrote
+  `glyph-probe.log` beside every application - thousands of false "moved" and "rewritten" lines where an atlas holds
+  several fonts or sizes. `GlyphIntegrityProbe.IsEnabled = true` switches it on while chasing glyph corruption.
 - A drop cap is sized by a letter that stands for its script, not always by its own, much as CSS's `initial-letter`
   sizes it by the script's alignment: a letter with a capital by that capital, Hebrew by ה, Arabic by alef, Han and
   kana by 国, Hangul by 한, any other - Georgian too - by itself; an accented letter by its letter, composed or not -

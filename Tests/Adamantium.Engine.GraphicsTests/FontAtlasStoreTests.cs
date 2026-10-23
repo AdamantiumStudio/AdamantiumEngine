@@ -48,6 +48,34 @@ public class FontAtlasStoreTests
         Assert.That(glyphs.All(p => atlas.GetGlyphData(p.font, p.g) != null), "every glyph has its cell");
     }
 
+    // The atlas holds every font: two typefaces bring glyphs of the same indices, which the probe would take for one
+    // glyph moved - so with it off, as it is by default, nothing is reported.
+    [Test]
+    public void TheGlyphProbe_IsOffByDefault_AndReportsNothing()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        FontAtlasStore.SynchronousFill = true;
+        var regular = Layout("SourceSans3-Regular.ttf", "a");
+        var bold = Layout("SourceSans3-Bold.ttf", "a");
+        var atlas = regular.EnsureAtlas(device);
+        var before = GlyphIntegrityProbe.Findings.Count;
+        IFont[] fonts = [regular.Font, bold.Font];
+        var requested = fonts.SelectMany(font => font.Typeface.Glyphs
+                .Where(g => !g.IsEmpty && g.BoundingRectangle.Width > 0 && g.BoundingRectangle.Height > 0)
+                .Take(40)
+                .Select(g => (font, g)))
+            .ToList();
+
+        atlas.RequestAsync(requested);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(GlyphIntegrityProbe.IsEnabled, Is.False);
+            Assert.That(requested.All(p => atlas.GetGlyphData(p.font, p.g) != null), "both fonts' glyphs are in");
+            Assert.That(GlyphIntegrityProbe.Findings, Has.Count.EqualTo(before));
+        });
+    }
+
     // An off-screen render fills inline; a window's thread asking meanwhile fills inline too, into the same atlas.
     [Test]
     public void ThreadsFillingInlineAtOnce_EachGlyphGetsACellOfItsOwn()

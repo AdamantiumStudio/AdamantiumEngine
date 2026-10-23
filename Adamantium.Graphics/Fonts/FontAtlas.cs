@@ -355,8 +355,15 @@ namespace Adamantium.Graphics.Fonts
 
         private void Upload(IReadOnlyList<GlyphTextureData> textureDataArray)
         {
-            GlyphIntegrityProbe.EnterUpload(this);
-            foreach (var textureData in textureDataArray) GlyphIntegrityProbe.Inspect(this, textureData);
+            var probing = GlyphIntegrityProbe.IsEnabled;
+            if (probing)
+            {
+                GlyphIntegrityProbe.EnterUpload(this);
+                foreach (var textureData in textureDataArray)
+                {
+                    GlyphIntegrityProbe.Inspect(this, textureData);
+                }
+            }
 
             var deepest = textureDataArray.Max(x => x.DepthLayer);
             while (_layers.Count <= deepest)
@@ -423,7 +430,10 @@ namespace Adamantium.Graphics.Fonts
                 buffer?.Dispose();
             }
 
-            GlyphIntegrityProbe.LeaveUpload(this);
+            if (probing)
+            {
+                GlyphIntegrityProbe.LeaveUpload(this);
+            }
         }
 
         public RectangleF GetUVCoordinatesForGlyph(IFont font, Glyph glyph)
