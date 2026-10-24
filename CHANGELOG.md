@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
+  application asks before it offers the heap as a choice, and what the device goes by.
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
   A pass pushes its descriptors on every Apply (push descriptors, Vulkan 1.4) and a texture array of no length reads
   one update-after-bind set every pass shares, at the same index the heap gives the texture. That set starts with
@@ -1535,7 +1537,7 @@ All packages share one version.
   model)`; `IDescriptorHeapManager.BindDescriptorHeaps` is `IDescriptorManager.BindTo`. The heap's extension and
   feature are enabled only on the heap path.
 - `Adamantium.Vulkan` 1.1.0 (`ShaderStageFlagBits.All` is `0x7FFFFFFF`, `AllGraphics` is there); `Adamantium.Graphics.Core`
-  depends on `Adamantium.Vulkan.ShaderObjectLayer` 1.0.0, so every application carries the layer.
+  depends on `Adamantium.Vulkan.ShaderObjectLayer` 1.0.1, so every application carries the layer.
 - `EffectPass` is abstract: the device makes a `HeapEffectPass` or a `SetsEffectPass`.
 - With graphics debug on, the validation layer sits above the other layers, so it checks the engine's own calls.
 - `meshTextures[]` of `ForwardPlusShading.fxh` is in a set of its own (`register(t0, space1)`).

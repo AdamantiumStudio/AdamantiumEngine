@@ -28,7 +28,7 @@
 	<ItemGroup>
 		<PackageReference Include="Adamantium.Vulkan" Version="1.1.0" />
 		<PackageReference Include="Adamantium.Vulkan.Loader" Version="1.0.3" />
-		<PackageReference Include="Adamantium.Vulkan.ShaderObjectLayer" Version="1.0.0" />
+		<PackageReference Include="Adamantium.Vulkan.ShaderObjectLayer" Version="1.0.1" />
 		<ProjectReference Include="..\Adamantium.EffectsCompiler\Adamantium.EffectsCompiler.csproj" />
 		<ProjectReference Include="..\Adamantium.Imaging\Adamantium.Imaging.csproj" />
 		<ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
