@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics.Core;
@@ -57,14 +58,24 @@ public unsafe class GraphicsAdapter
         SupportsSwapchainMaintenance1 = maintenance.SwapchainMaintenance1;
         SupportsMaintenance7 = maintenance7.Maintenance7;
         Supports8BitStorage = layout12.StorageBuffer8BitAccess && layout12.ShaderInt8;
+        SupportsDescriptorHeap = heapFeatures.DescriptorHeap && HasExtension(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
 
-        Console.WriteLine($"DescriptorHeap supported={(bool)heapFeatures.DescriptorHeap}");
+        Console.WriteLine($"DescriptorHeap supported={SupportsDescriptorHeap}");
         Console.WriteLine($"HostImageCopy supported={SupportsHostImageCopy}");
         Console.WriteLine($"SwapchainMaintenance1 supported={SupportsSwapchainMaintenance1}");
         Console.WriteLine($"8-bit storage supported={Supports8BitStorage} " +
                           $"(storageBuffer8BitAccess={(bool)layout12.StorageBuffer8BitAccess}, shaderInt8={(bool)layout12.ShaderInt8})");
     }
-    
+
+    private bool HasExtension(string name)
+    {
+        uint count = 0;
+        _physicalDevice.EnumerateDeviceExtensionProperties(null, ref count, null);
+        var extensions = new ExtensionProperties[count];
+        _physicalDevice.EnumerateDeviceExtensionProperties(null, ref count, extensions);
+        return extensions.Any(extension => extension.ExtensionName == name);
+    }
+
     public PhysicalDeviceProperties AdapterProperties { get; private set; }
 
     public PhysicalDeviceDescriptorHeapPropertiesEXT DeviceHeapProperties { get; private set; }
@@ -87,6 +98,10 @@ public unsafe class GraphicsAdapter
     /// <summary>Whether the device supports the maintenance7 FEATURE, which lets a render pass mix inline draws with
     /// executed secondary command buffers.</summary>
     public bool SupportsMaintenance7 { get; private set; }
+
+    /// <summary>Whether the device has the descriptor heap (VK_EXT_descriptor_heap), extension and feature: the one way
+    /// to resources besides descriptor sets, see <see cref="DescriptorModel"/>.</summary>
+    public bool SupportsDescriptorHeap { get; private set; }
 
     public PhysicalDeviceType DeviceType => AdapterProperties.DeviceType;
     

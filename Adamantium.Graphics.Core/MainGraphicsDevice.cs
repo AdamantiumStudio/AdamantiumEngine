@@ -331,7 +331,7 @@ public class MainGraphicsDevice : DisposableBase
         GraphicsAdapter.Adapter.EnumerateDeviceExtensionProperties(null, ref propCount, supportedDeviceExtensions);
 
         var availableDeviceExtensions = supportedDeviceExtensions.Select(x => x.ExtensionName).ToArray();
-        var hasHeap = availableDeviceExtensions.Contains(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
+        var hasHeap = GraphicsAdapter.SupportsDescriptorHeap;
         DescriptorModel = Settings.DescriptorModel switch
         {
             DescriptorModel.Heap when !hasHeap => throw new ExtensionNotSupportedException(
