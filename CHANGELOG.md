@@ -7,6 +7,7 @@ All packages share one version.
 
 ### Added
 
+- `ShellDialog.PickFolders` (`FOS_PICKFOLDERS`): the shell's open dialog chooses a folder.
 - `Win32Interop.QueryDisplayConfig`, `GetDisplayConfigBufferSizes`, `DisplayConfigGetDeviceInfo` and their structs: the
   display paths, with each monitor's exact refresh rate.
   `Win32Interop.TimeBeginPeriod` / `TimeEndPeriod`: waits finer than the default 15.6 ms.
