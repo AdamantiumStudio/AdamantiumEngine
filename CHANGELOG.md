@@ -1487,6 +1487,9 @@ All packages share one version.
 
 ### Changed
 
+- `GraphicsDevice.LastFenceWaitMs` - the wait for the GPU at the start of a frame - is timed only while a handle
+  from the new `GraphicsDevice.MeasureFenceWait()` is held, on every device of the process, and is 0 otherwise. It
+  used to be timed on every frame of every device, whether anything read it or not.
 - `GlyphIntegrityProbe` is off by default: a tool for a hunt, it ran on every glyph upload, hashed the pixels and wrote
   `glyph-probe.log` beside every application - thousands of false "moved" and "rewritten" lines where an atlas holds
   several fonts or sizes. `GlyphIntegrityProbe.IsEnabled = true` switches it on while chasing glyph corruption.
