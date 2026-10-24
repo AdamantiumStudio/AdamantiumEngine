@@ -16,14 +16,8 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
     /// <summary>How many textures the shared array holds at most.</summary>
     public const uint ArrayCapacity = 16384;
 
-    /// <summary>Every stage a pass may have (the bindings' <c>ShaderStageFlagBits.All</c> is 7 in Adamantium.Vulkan
-    /// 1.0.4).</summary>
-    internal const ShaderStageFlagBits EveryStage = ShaderStageFlagBits.VertexBit |
-                                                    ShaderStageFlagBits.TessellationControlBit |
-                                                    ShaderStageFlagBits.TessellationEvaluationBit |
-                                                    ShaderStageFlagBits.GeometryBit |
-                                                    ShaderStageFlagBits.FragmentBit |
-                                                    ShaderStageFlagBits.ComputeBit;
+    /// <summary>Every stage a pass may have.</summary>
+    internal const ShaderStageFlagBits EveryStage = ShaderStageFlagBits.AllGraphics | ShaderStageFlagBits.ComputeBit;
 
     private readonly IGraphicsDevice graphicsDevice;
     private readonly object _sync = new();

@@ -1532,6 +1532,8 @@ All packages share one version.
   `IDescriptorManager`; `IGraphicsDeviceFactory.CreateDescriptorHeapManager` is `CreateDescriptorManager(device,
   model)`; `IDescriptorHeapManager.BindDescriptorHeaps` is `IDescriptorManager.BindTo`. The heap's extension and
   feature are enabled only on the heap path.
+- `Adamantium.Vulkan` 1.1.0 (`ShaderStageFlagBits.All` is `0x7FFFFFFF`, `AllGraphics` is there); `Adamantium.Graphics.Core`
+  depends on `Adamantium.Vulkan.ShaderObjectLayer` 1.0.0, so every application carries the layer.
 - `EffectPass` is abstract: the device makes a `HeapEffectPass` or a `SetsEffectPass`.
 - With graphics debug on, the validation layer sits above the other layers, so it checks the engine's own calls.
 - `meshTextures[]` of `ForwardPlusShading.fxh` is in a set of its own (`register(t0, space1)`).
