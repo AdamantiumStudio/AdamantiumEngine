@@ -230,25 +230,35 @@ public class EditorOverlayProcessor : RenderingProcessor
     }
 
     /// <summary>
-    /// Outlines an entity and what is under it: a band <paramref name="points"/> wide round their joint silhouette, in
-    /// front of everything the scene drew.
+    /// Outlines an entity of the scene and what is under it: a band <paramref name="points"/> wide round their joint
+    /// silhouette, in front of everything the scene drew. One the scene has not placed for this camera yet - added this
+    /// frame - is outlined from the next.
     /// </summary>
     public void DrawOutline(Entity root, Vector4F color, float points)
     {
-        Collect(root);
+        parts.Clear();
+        if (IsPlaced(root))
+        {
+            CollectInto(root);
+        }
+
         DrawCollectedOutline(color, points);
     }
 
     /// <summary>
-    /// Outlines several entities and what is under each: a band <paramref name="points"/> wide round their joint
-    /// silhouette, in front of everything the scene drew.
+    /// Outlines several entities of the scene and what is under each: a band <paramref name="points"/> wide round their
+    /// joint silhouette, in front of everything the scene drew. Those the scene has not placed for this camera yet are
+    /// outlined from the next frame.
     /// </summary>
     public void DrawOutline(IReadOnlyList<Entity> roots, Vector4F color, float points)
     {
         parts.Clear();
         for (int i = 0; i < roots.Count; i++)
         {
-            CollectInto(roots[i]);
+            if (IsPlaced(roots[i]))
+            {
+                CollectInto(roots[i]);
+            }
         }
 
         DrawCollectedOutline(color, points);
@@ -296,6 +306,8 @@ public class EditorOverlayProcessor : RenderingProcessor
 
         GraphicsDevice.StencilTestEnabled = false;
     }
+
+    private bool IsPlaced(Entity entity) => entity.Transform.GetMetadata(ActiveCamera).Computed;
 
     private void Collect(Entity root)
     {
