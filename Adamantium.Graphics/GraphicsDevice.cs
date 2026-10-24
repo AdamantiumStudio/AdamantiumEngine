@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Adamantium.Core;
 using Adamantium.Core.Collections;
 using Adamantium.EffectsCompiler;
@@ -26,6 +27,7 @@ namespace Adamantium.Graphics;
 [ViewModel]
 public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 {
+    private static int _fenceWaitMeasurers;
     private object _locker = new object();
     private bool _withheld;
     private volatile bool _recordingFrame;
@@ -243,8 +245,30 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public uint MaxFramesInFlight { get; private set; }
 
-    /// <summary>TEMP: how long the last frame spent blocked on its slot's fence - the CPU waiting for the GPU.</summary>
+    /// <summary>How long the last frame spent blocked on its slot's fence - the CPU waiting for the GPU - while a handle
+    /// from <see cref="MeasureFenceWait"/> is held; 0 otherwise.</summary>
     public static double LastFenceWaitMs;
+
+    /// <summary>Times each frame's wait for the GPU into <see cref="LastFenceWaitMs"/> until the returned handle is
+    /// disposed - a measuring tool, off unless something asks.</summary>
+    public static IDisposable MeasureFenceWait()
+    {
+        Interlocked.Increment(ref _fenceWaitMeasurers);
+        return new FenceWaitMeasurer();
+    }
+
+    private sealed class FenceWaitMeasurer : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                Interlocked.Decrement(ref _fenceWaitMeasurers);
+            }
+        }
+    }
 
     public ulong FrameTicket { get; private set; }
 
@@ -1037,11 +1061,10 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         _withheld = false;
         FrameWithheld = false;
         var renderFence = InFlightFences[CurrentFrame];
-        // TEMP: the CPU blocks HERE until the GPU is done with this slot. Timed on its own because "BeginDraw is a third
-        // of the frame" does not say whether we are waiting for the GPU or doing work - and those have opposite fixes.
-        var fenceStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        var measuring = Volatile.Read(ref _fenceWaitMeasurers) > 0;
+        var fenceStart = measuring ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         var result = MainDevice.Observe(LogicalDevice.WaitForFences(1, renderFence, true, ulong.MaxValue));
-        LastFenceWaitMs = System.Diagnostics.Stopwatch.GetElapsedTime(fenceStart).TotalMilliseconds;
+        LastFenceWaitMs = measuring ? System.Diagnostics.Stopwatch.GetElapsedTime(fenceStart).TotalMilliseconds : 0;
 
         FrameTicket++;
         MainDevice.OnFrameStarted();
