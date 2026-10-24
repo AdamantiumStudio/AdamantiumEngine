@@ -9,8 +9,10 @@ All packages share one version.
 
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
   A pass pushes its descriptors on every Apply (push descriptors, Vulkan 1.4) and a texture array of no length reads
-  one update-after-bind set every pass shares, at the same index the heap gives the texture. The same SPIR-V serves
-  both; `DescriptorSetManager`, `HeapEffectPass` / `SetsEffectPass` and `HeapEffectResourceLinker` are the two paths.
+  one update-after-bind set every pass shares, at the same index the heap gives the texture. That set starts with
+  `GraphicsSettings.TextureArrayCapacity` textures (1024) and doubles when full, up to what the device's update-after-bind
+  limits allow (`DescriptorSetManager.MaxTextureArrayCapacity`). The same SPIR-V serves both; `DescriptorSetManager`,
+  `HeapEffectPass` / `SetsEffectPass` and `HeapEffectResourceLinker` / `SetsEffectResourceLinker` are the two paths.
   A pass that needs more push descriptors or a bigger uniform buffer than the GPU gives, or binds two resources at one
   binding, is refused with its name rather than drawn wrong. `GraphicsAdapter.MaxPushDescriptors`.
 - `GraphicsSettings`: what the application asks of Vulkan - instance and device extensions, required and optional,

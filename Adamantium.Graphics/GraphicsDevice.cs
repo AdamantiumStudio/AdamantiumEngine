@@ -561,7 +561,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     {
         return DescriptorManager is IDescriptorHeapManager heap
             ? new HeapEffectResourceLinker(heap)
-            : new EffectResourceLinker();
+            : new SetsEffectResourceLinker((DescriptorSetManager)DescriptorManager);
     }
 
     public IEffectPass CreateEffectPass(Logger logger, Effect effect, EffectTechnique technique, EffectData.Pass pass, string name)

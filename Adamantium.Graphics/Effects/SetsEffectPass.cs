@@ -29,7 +29,7 @@ internal sealed class SetsEffectPass : EffectPass
     private Pushed[] _pushed = [];
     private int _descriptorCount;
     private uint _pushSet;
-    private (uint Set, DescriptorSet Value)[] _textureArrays = [];
+    private (uint Set, DescriptorSetManager.TextureArray Array)[] _textureArrays = [];
     private PipelineBindPoint _bindPoint;
     private PipelineLayout _layout;
     private DescriptorSetLayout _pushLayout;
@@ -103,10 +103,13 @@ internal sealed class SetsEffectPass : EffectPass
                     var bound = linker.GetSamplers(pushed.Description);
                     for (int element = 0; element < pushed.Count; element++)
                     {
-                        var state = element < bound.Length ? bound[element]?.Resource : null;
-                        if (state == null) ReportUnbound(pushed.Parameter);
+                        var sampler = element < bound.Length ? bound[element]?.Sampler : null;
+                        if (sampler == null)
+                        {
+                            ReportUnbound(pushed.Parameter);
+                            sampler = manager.FallbackSampler;
+                        }
 
-                        var sampler = state == null ? manager.FallbackSampler : manager.SamplerOf(state);
                         if (hashing) device.Hash((ulong)sampler.NativePointer);
                         ((VkDescriptorImageInfo*)(info + element * InfoSize))[0] = new VkDescriptorImageInfo
                         {
@@ -143,6 +146,14 @@ internal sealed class SetsEffectPass : EffectPass
             }
         }
 
+        if (hashing)
+        {
+            for (int i = 0; i < _textureArrays.Length; i++)
+            {
+                device.Hash(_textureArrays[i].Array.Generation);
+            }
+        }
+
         BindShaders();
         if (swallowing) return;
 
@@ -154,7 +165,7 @@ internal sealed class SetsEffectPass : EffectPass
 
         for (int i = 0; i < _textureArrays.Length; i++)
         {
-            commands.BindDescriptorSets(_bindPoint, _layout, _textureArrays[i].Set, 1, _textureArrays[i].Value, 0,
+            commands.BindDescriptorSets(_bindPoint, _layout, _textureArrays[i].Set, 1, _textureArrays[i].Array.Set, 0,
                 ReadOnlySpan<uint>.Empty);
         }
     }
@@ -302,13 +313,13 @@ internal sealed class SetsEffectPass : EffectPass
             setLayouts[_pushSet] = _pushLayout;
         }
 
-        _textureArrays = new (uint, DescriptorSet)[arrays.Count];
+        _textureArrays = new (uint, DescriptorSetManager.TextureArray)[arrays.Count];
         var arrayIndex = 0;
         foreach (var (set, binding) in arrays)
         {
-            var (layout, value) = manager.TextureArray(binding);
-            setLayouts[set] = layout;
-            _textureArrays[arrayIndex++] = (set, value);
+            var array = manager.TextureArrayAt(binding);
+            setLayouts[set] = array.Layout;
+            _textureArrays[arrayIndex++] = (set, array);
         }
 
         for (var set = 0; set < setLayouts.Length; set++)

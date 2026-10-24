@@ -397,6 +397,7 @@ public class MainGraphicsDevice : DisposableBase
             vulkan12Features.DescriptorBindingSampledImageUpdateAfterBind = true;
             vulkan12Features.DescriptorBindingUpdateUnusedWhilePending = true;
             vulkan12Features.DescriptorBindingPartiallyBound = true;
+            vulkan12Features.DescriptorBindingVariableDescriptorCount = true;
         }
 
         var vulkan13Features = new PhysicalDeviceVulkan13Features

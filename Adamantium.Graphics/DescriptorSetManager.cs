@@ -13,9 +13,6 @@ namespace Adamantium.Graphics;
 /// and the samplers that passes push.</summary>
 public class DescriptorSetManager : DisposableObject, IDescriptorManager
 {
-    /// <summary>How many textures the shared array holds at most.</summary>
-    public const uint ArrayCapacity = 16384;
-
     /// <summary>Every stage a pass may have.</summary>
     internal const ShaderStageFlagBits EveryStage = ShaderStageFlagBits.AllGraphics | ShaderStageFlagBits.ComputeBit;
 
@@ -26,7 +23,8 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
     private uint _nextIndex;
     private readonly ConcurrentDictionary<SamplerState, Sampler> _samplersByState = new();
     private readonly Dictionary<SamplerKey, Sampler> _samplers = new();
-    private readonly Dictionary<uint, TextureArraySet> _arrays = new();
+    private readonly Dictionary<uint, TextureArray> _arrays = new();
+    private uint _capacity;
     private DescriptorSetLayout _emptyLayout;
     private ITexture _fallbackTexture;
     private Buffer _fallbackBuffer;
@@ -36,6 +34,36 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
     public DescriptorSetManager(IGraphicsDevice graphicsDevice)
     {
         this.graphicsDevice = graphicsDevice;
+        MaxTextureArrayCapacity = MaxCapacityOf(graphicsDevice.Adapter);
+        _capacity = Math.Min(Math.Max(graphicsDevice.MainDevice.Settings.TextureArrayCapacity, 1u), MaxTextureArrayCapacity);
+    }
+
+    /// <summary>The most textures a texture array of no length can hold on this device: its update-after-bind limits
+    /// for sampled images, less what a pass's pushed descriptors and color attachments may take of the stage's.</summary>
+    public uint MaxTextureArrayCapacity { get; }
+
+    /// <summary>How many textures the texture arrays hold now; doubled when full.</summary>
+    public uint TextureArrayCapacity
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _capacity;
+            }
+        }
+    }
+
+    private static uint MaxCapacityOf(GraphicsAdapter adapter)
+    {
+        var limits = adapter.Vulkan12Properties;
+        var pushed = adapter.MaxPushDescriptors;
+        var attachments = adapter.AdapterProperties.Limits.MaxColorAttachments;
+        var perStageImages = limits.MaxPerStageDescriptorUpdateAfterBindSampledImages;
+        var perStageResources = limits.MaxPerStageUpdateAfterBindResources;
+        return Math.Min(limits.MaxDescriptorSetUpdateAfterBindSampledImages,
+            Math.Min(perStageImages > pushed ? perStageImages - pushed : 0,
+                perStageResources > pushed + attachments ? perStageResources - pushed - attachments : 0));
     }
 
     private Device LogicalDevice => graphicsDevice.LogicalDevice;
@@ -58,13 +86,14 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
             {
                 index = _freeIndices.Dequeue();
             }
-            else if (_nextIndex < ArrayCapacity)
-            {
-                index = _nextIndex++;
-            }
             else
             {
-                throw new OutOfMemoryException($"The texture array is full: {ArrayCapacity} textures.");
+                if (_nextIndex == _capacity)
+                {
+                    Grow();
+                }
+
+                index = _nextIndex++;
             }
 
             foreach (var array in _arrays.Values)
@@ -102,8 +131,8 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
         }
     }
 
-    /// <summary>The set of every indexed texture for an array declared at <paramref name="binding"/>, and its layout.</summary>
-    internal (DescriptorSetLayout Layout, DescriptorSet Set) TextureArray(uint binding)
+    /// <summary>The set of every indexed texture for an array declared at <paramref name="binding"/>.</summary>
+    internal TextureArray TextureArrayAt(uint binding)
     {
         lock (_sync)
         {
@@ -113,12 +142,19 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
                 _arrays.Add(binding, array);
             }
 
-            return (array.Layout, array.Set);
+            return array;
         }
     }
 
-    private TextureArraySet CreateTextureArray(uint binding)
+    private TextureArray CreateTextureArray(uint binding)
     {
+        if (MaxTextureArrayCapacity == 0)
+        {
+            throw new NotSupportedException(
+                $"{graphicsDevice.Adapter.AdapterProperties.DeviceName} has no room for update-after-bind sampled images: " +
+                "a texture array of no length cannot be bound on descriptor sets");
+        }
+
         var layoutInfo = new DescriptorSetLayoutCreateInfo
         {
             Flags = DescriptorSetLayoutCreateFlagBits.UpdateAfterBindPoolBit,
@@ -129,7 +165,7 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
                 {
                     Binding = binding,
                     DescriptorType = DescriptorType.SampledImage,
-                    DescriptorCount = ArrayCapacity,
+                    DescriptorCount = MaxTextureArrayCapacity,
                     StageFlags = EveryStage
                 }
             },
@@ -139,25 +175,40 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
                 PBindingFlags = new[]
                 {
                     DescriptorBindingFlagBits.UpdateAfterBindBit | DescriptorBindingFlagBits.PartiallyBoundBit |
-                    DescriptorBindingFlagBits.UpdateUnusedWhilePendingBit
+                    DescriptorBindingFlagBits.UpdateUnusedWhilePendingBit |
+                    DescriptorBindingFlagBits.VariableDescriptorCountBit
                 }
             }
         };
         Check(LogicalDevice.CreateDescriptorSetLayout(layoutInfo, null, out var layout), "a texture array layout");
 
+        var array = new TextureArray(binding, layout);
+        var (pool, set) = Allocate(layout, binding, _capacity);
+        array.Pool = pool;
+        array.Set = set;
+        return array;
+    }
+
+    private (DescriptorPool Pool, DescriptorSet Set) Allocate(DescriptorSetLayout layout, uint binding, uint capacity)
+    {
         var pool = LogicalDevice.CreateDescriptorPool(new DescriptorPoolCreateInfo
         {
             Flags = DescriptorPoolCreateFlagBits.UpdateAfterBindBit,
             MaxSets = 1,
             PoolSizeCount = 1,
-            PoolSizes = new[] { new DescriptorPoolSize { Type = DescriptorType.SampledImage, DescriptorCount = ArrayCapacity } }
+            PoolSizes = new[] { new DescriptorPoolSize { Type = DescriptorType.SampledImage, DescriptorCount = capacity } }
         });
 
         var allocation = new DescriptorSetAllocateInfo
         {
             DescriptorPool = pool,
             DescriptorSetCount = 1,
-            PSetLayouts = new[] { layout }
+            PSetLayouts = new[] { layout },
+            PNext = new DescriptorSetVariableDescriptorCountAllocateInfo
+            {
+                DescriptorSetCount = 1,
+                PDescriptorCounts = new[] { capacity }
+            }
         };
         Check(LogicalDevice.AllocateDescriptorSets(allocation, out var sets), "the texture array set");
 
@@ -166,7 +217,31 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
             Write(sets[0], binding, index, texture);
         }
 
-        return new TextureArraySet(binding, layout, pool, sets[0]);
+        return (pool, sets[0]);
+    }
+
+    private void Grow()
+    {
+        if (_capacity >= MaxTextureArrayCapacity)
+        {
+            throw new OutOfMemoryException(
+                $"The texture array is full: {MaxTextureArrayCapacity} textures, as many as this device allows.");
+        }
+
+        _capacity = (uint)Math.Min((ulong)_capacity * 2, MaxTextureArrayCapacity);
+        foreach (var array in _arrays.Values)
+        {
+            var (pool, set) = Allocate(array.Layout, array.Binding, _capacity);
+            graphicsDevice.AddToDeferDisposeQueue(new RetiredPool(LogicalDevice, array.Pool));
+            array.Pool = pool;
+            array.Set = set;
+            array.Generation++;
+        }
+    }
+
+    private sealed class RetiredPool(Device device, DescriptorPool pool) : IDisposable
+    {
+        public void Dispose() => device.DestroyDescriptorPool(pool);
     }
 
     private void Write(DescriptorSet set, uint binding, uint index, ITexture texture)
@@ -303,5 +378,19 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
         base.Dispose(disposeManagedResources);
     }
 
-    private sealed record TextureArraySet(uint Binding, DescriptorSetLayout Layout, DescriptorPool Pool, DescriptorSet Set);
+    /// <summary>A texture array's set: replaced by a bigger one when the array grows, so a pass reads
+    /// <see cref="Set"/> as it is applied.</summary>
+    internal sealed class TextureArray(uint binding, DescriptorSetLayout layout)
+    {
+        public uint Binding { get; } = binding;
+
+        public DescriptorSetLayout Layout { get; } = layout;
+
+        public DescriptorPool Pool { get; set; }
+
+        public DescriptorSet Set { get; set; }
+
+        /// <summary>How many times the set was replaced: what a recording's fingerprint names it by.</summary>
+        public ulong Generation { get; set; }
+    }
 }

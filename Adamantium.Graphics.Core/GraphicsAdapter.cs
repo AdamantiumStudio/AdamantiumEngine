@@ -24,7 +24,8 @@ public unsafe class GraphicsAdapter
         // used to be a call PER STRUCTURE, each one hand-marshaled into unmanaged memory and read back with a raw
         // cast, because the binding handed an output chain back as a bare address and dropped the typed objects. It
         // marshals them into the objects the caller supplied now, so the chain can simply be built and read.
-        var vulkan14Properties = new PhysicalDeviceVulkan14Properties();
+        var vulkan12Properties = new PhysicalDeviceVulkan12Properties();
+        var vulkan14Properties = new PhysicalDeviceVulkan14Properties { PNext = vulkan12Properties };
         var heapProperties = new PhysicalDeviceDescriptorHeapPropertiesEXT { PNext = vulkan14Properties };
         var properties2 = new PhysicalDeviceProperties2
         {
@@ -37,6 +38,7 @@ public unsafe class GraphicsAdapter
         AdapterProperties = properties2.Properties;
         DeviceHeapProperties = heapProperties;
         MaxPushDescriptors = vulkan14Properties.MaxPushDescriptors;
+        Vulkan12Properties = vulkan12Properties;
 
         // swapchainMaintenance1 is a feature, not just an extension: its structures are invalid with the feature off, so it
         // is queried here and enabled at device creation.
@@ -69,6 +71,9 @@ public unsafe class GraphicsAdapter
 
     /// <summary>How many descriptors one push may carry: the most a pass can have on descriptor sets.</summary>
     public uint MaxPushDescriptors { get; private set; }
+
+    /// <summary>The device's Vulkan 1.2 properties: among them the limits of update-after-bind descriptor sets.</summary>
+    public PhysicalDeviceVulkan12Properties Vulkan12Properties { get; private set; }
 
     public bool SupportsHostImageCopy { get; private set; }
 

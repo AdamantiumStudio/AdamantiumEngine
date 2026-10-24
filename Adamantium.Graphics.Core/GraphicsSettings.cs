@@ -41,6 +41,10 @@ public sealed class GraphicsSettings
     /// one.</summary>
     public DescriptorModel DescriptorModel { get; set; } = DescriptorModel.Auto;
 
+    /// <summary>How many textures a shader's texture array of no length starts with on descriptor sets. It doubles when
+    /// full, up to what the device allows.</summary>
+    public uint TextureArrayCapacity { get; set; } = 1024;
+
     /// <summary>How many frames the CPU may record ahead of the GPU before it waits for the oldest.</summary>
     public uint FramesInFlight { get; set; } = 3;
 

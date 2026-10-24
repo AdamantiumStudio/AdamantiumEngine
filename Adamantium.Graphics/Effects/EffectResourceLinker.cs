@@ -56,15 +56,21 @@ internal class ResourceInfo<T> : IHeapResource where T : class
     public bool HasLiveSlot =>
         GlobalHeapOffset != uint.MaxValue && resource is not DisposableObject { IsDisposed: true };
 
-    // Bound to nothing: what SetResource(null) means.
+    /// <summary>The sampler a bound <see cref="SamplerState"/> stands for, on descriptor sets.</summary>
+    public Sampler Sampler { get; internal set; }
+
+    /// <summary>Bound to nothing: what SetResource(null) means.</summary>
     internal void Clear()
     {
         Resource = null;
         GlobalHeapOffset = uint.MaxValue;
+        Sampler = null;
     }
 }
 
-internal class EffectResourceLinker : IEffectResourceLinker
+/// <summary>What an effect's parameters are bound to. The heap and descriptor sets each prepare a bound resource for
+/// the draws that read it in their own way.</summary>
+internal abstract class EffectResourceLinker : IEffectResourceLinker
 {
     /// <summary>
     /// Real object resources, as they were set on the parameter.
@@ -92,13 +98,11 @@ internal class EffectResourceLinker : IEffectResourceLinker
     private static ResourceInfo<Buffer>[] EmptyShaderResourceBuffers = [];
     private static ResourceInfo<Buffer>[] EmptyUAVs = [];
 
-    protected const uint NoSlot = uint.MaxValue;
+    protected abstract void Bound(ResourceInfo<SamplerState> sampler);
 
-    protected virtual uint SlotOf(SamplerState sampler) => NoSlot;
+    protected abstract void Bound(ResourceInfo<Texture> texture);
 
-    protected virtual uint SlotOf(Texture texture) => NoSlot;
-
-    protected virtual uint SlotOf(Buffer buffer) => NoSlot;
+    protected abstract void Bound(ResourceInfo<Buffer> buffer);
 
     /// <summary>
     /// Initializes this instance.
@@ -275,12 +279,10 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     states[index] = new ResourceInfo<SamplerState>();
                 }
 
-                // Each sampler gets its OWN stable heap slot instead of sharing one per-parameter slot, which made the
-                // last-bound sampler apply to every draw.
                 if (state != null)
                 {
                     states[index].Resource = state;
-                    states[index].GlobalHeapOffset = SlotOf(state);
+                    Bound(states[index]);
                 }
                 else
                 {
@@ -290,9 +292,6 @@ internal class EffectResourceLinker : IEffectResourceLinker
                 break;
             case EffectResourceType.ShaderResourceView:
             {
-                // A read-only StructuredBuffer also reflects as a ShaderResourceView, but its resource is a storage
-                // BUFFER, not a texture. Route it to its own collection + bind it like a UAV buffer (its OWN heap slot,
-                // a StorageBuffer descriptor) - in Vulkan a read-only structured buffer IS a StorageBuffer descriptor.
                 if (value is Buffer srvBuffer)
                 {
                     if (!ShaderResourceBuffers.TryGetValue(parameter, out var srvBufs))
@@ -304,7 +303,7 @@ internal class EffectResourceLinker : IEffectResourceLinker
 
                     srvBufs[index] ??= new ResourceInfo<Buffer>();
                     srvBufs[index].Resource = srvBuffer;
-                    srvBufs[index].GlobalHeapOffset = SlotOf(srvBuffer);
+                    Bound(srvBufs[index]);
                     break;
                 }
 
@@ -329,16 +328,10 @@ internal class EffectResourceLinker : IEffectResourceLinker
                 if (value is Texture texture)
                 {
                     views[index].Resource = texture;
-
-                    // This texture's OWN stable heap slot (bindless). The offset used to be allocated per parameter, so
-                    // every texture bound to ShaderTexture shared ONE slot and the last-written one showed up on every
-                    // draw. The slot belongs to the texture itself.
-                    views[index].GlobalHeapOffset = SlotOf(texture);
+                    Bound(views[index]);
                 }
                 else
                 {
-                    // Setting null used to leave the last texture's slot in place, which then went on being sampled
-                    // after that texture was gone.
                     views[index].Clear();
                 }
             }
@@ -360,9 +353,7 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     }
                     
                     uavs[index].Resource = buffer;
-
-                    // This buffer's OWN stable heap slot - same per-resource rule as textures and samplers.
-                    uavs[index].GlobalHeapOffset = SlotOf(buffer);
+                    Bound(uavs[index]);
                 }
                 else
                 {
