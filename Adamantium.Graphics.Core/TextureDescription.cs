@@ -276,7 +276,7 @@ public struct TextureDescription
             ImageTiling = ImageTiling.Optimal,
             SharingMode = SharingMode.Exclusive,
             ImageType = ConvertToImageType(description.Dimension),
-            InitialLayout = ImageLayout.Preinitialized,
+            InitialLayout = ImageLayout.Undefined,
             ImageAspect = ImageAspectFlagBits.ColorBit
         };
     }

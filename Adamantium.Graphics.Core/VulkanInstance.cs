@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
@@ -29,13 +29,11 @@ public unsafe class VulkanInstance : DisposableBase
 
     public bool IsInDebugMode { get; set; }
 
-    public static ReadOnlyCollection<string> ValidationLayers { get; private set; }
+    /// <summary>What the instance was asked for: its extensions and layers.</summary>
+    public GraphicsSettings Settings { get; }
 
-    /// <summary>Instance extensions the engine cannot run without.</summary>
-    public static ReadOnlyCollection<string> InstanceExtensions { get; private set; }
-
-    /// <summary>Instance extensions enabled when the loader has them, never required.</summary>
-    public static ReadOnlyCollection<string> OptionalInstanceExtensions { get; private set; }
+    /// <summary>Instance layers this instance actually enabled.</summary>
+    public IReadOnlySet<string> EnabledLayers { get; private set; } = new HashSet<string>();
 
     /// <summary>Instance extensions this instance actually enabled.</summary>
     public IReadOnlySet<string> EnabledInstanceExtensions { get; private set; } = new HashSet<string>();
@@ -50,37 +48,6 @@ public unsafe class VulkanInstance : DisposableBase
     static VulkanInstance()
     {
         VulkanDllMap.Register();
-
-        var validationLayers = new List<string>();
-
-        validationLayers.Add("VK_LAYER_KHRONOS_validation");
-        //validationLayers.Add("VK_LAYER_LUNARG_monitor");
-        ValidationLayers = new ReadOnlyCollection<string>(validationLayers);
-
-        var instanceExt = new List<string> { Constants.VK_KHR_SURFACE_EXTENSION_NAME };
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            instanceExt.Add(Constants.VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            instanceExt.Add(Constants.VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
-        }
-        InstanceExtensions = new ReadOnlyCollection<string>(instanceExt);
-
-        var optionalExt = new List<string>
-        {
-            Constants.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-            Constants.VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
-            Constants.VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-            Constants.VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
-            Constants.VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
-        };
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            optionalExt.Add(Constants.VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
-        }
-        OptionalInstanceExtensions = new ReadOnlyCollection<string>(optionalExt);
     }
 
     public AdamantiumCollection<GraphicsAdapter> GraphicsAdapters { get; private set; }
@@ -124,12 +91,13 @@ public unsafe class VulkanInstance : DisposableBase
         return discreteAdapter;
     }
 
-    private VulkanInstance(string appName, bool enableDebug)
+    private VulkanInstance(string appName, bool enableDebug, GraphicsSettings settings)
     {
         availableSurfaces = new Dictionary<IntPtr, SurfaceKHR>();
         debugCallback = &DebugCallback;
         ApplicationName = appName;
         IsInDebugMode = enableDebug;
+        Settings = settings;
         CreateInstance(appName);
         GraphicsAdapters = new AdamantiumCollection<GraphicsAdapter>();
         EnumerateGraphicAdapters();
@@ -148,31 +116,31 @@ public unsafe class VulkanInstance : DisposableBase
         var createInfo = new InstanceCreateInfo();
         createInfo.PApplicationInfo = appInfo;
 
+        AddLayerFolders(Settings.LayerFolders);
         var layersAvailable = Instance.EnumerateInstanceLayerProperties();
         var available = Instance.EnumerateInstanceExtensionProperties().Select(x => x.ExtensionName).ToHashSet();
 
-        var missing = InstanceExtensions.Where(x => !available.Contains(x)).ToArray();
+        var missing = Settings.InstanceExtensions.Where(x => !available.Contains(x)).ToArray();
         if (missing.Length > 0)
         {
             throw new ExtensionNotSupportedException("Vulkan loader", missing);
         }
 
-        var enabled = InstanceExtensions.Concat(OptionalInstanceExtensions.Where(available.Contains)).ToArray();
+        var enabled = Settings.InstanceExtensions.Concat(Settings.OptionalInstanceExtensions.Where(available.Contains))
+            .Distinct().ToArray();
         EnabledInstanceExtensions = new HashSet<string>(enabled, StringComparer.Ordinal);
         createInfo.PEnabledExtensionNames = enabled;
         createInfo.EnabledExtensionCount = (uint)enabled.Length;
 
-        if (IsInDebugMode)
+        var availableLayers = new HashSet<string>(layersAvailable.Select(x => x.LayerName));
+        var asked = IsInDebugMode ? Settings.DebugLayers.Concat(Settings.Layers) : Settings.Layers;
+        var enabledLayers = asked.Distinct().Where(availableLayers.Contains).ToArray();
+        EnabledLayers = new HashSet<string>(enabledLayers, StringComparer.Ordinal);
+        createInfo.EnabledLayerCount = (uint)enabledLayers.Length;
+        createInfo.PEnabledLayerNames = enabledLayers;
+        if (IsInDebugMode && !Settings.DebugLayers.Any(availableLayers.Contains))
         {
-            // Only enable validation layers that are actually installed - asking for a missing layer makes
-            // Instance.Create fail outright, which would take down the whole (e.g. designer) host instead of just
-            // running without validation.
-            var availableLayers = new HashSet<string>(layersAvailable.Select(x => x.LayerName));
-            var enabledLayers = ValidationLayers.Where(availableLayers.Contains).ToArray();
-            createInfo.EnabledLayerCount = (uint)enabledLayers.Length;
-            createInfo.PEnabledLayerNames = enabledLayers;
-            if (enabledLayers.Length == 0)
-                Console.Error.WriteLine("[vk] graphics debug requested but no validation layers are installed (Vulkan SDK?) - running without them");
+            Console.Error.WriteLine("[vk] graphics debug requested but no validation layers are installed (Vulkan SDK?) - running without them");
         }
 
         VkInstance = Instance.Create(createInfo);
@@ -209,9 +177,33 @@ public unsafe class VulkanInstance : DisposableBase
         }
     }
 
-    public static VulkanInstance Create(string appName, bool enableDebug)
+    public static VulkanInstance Create(string appName, bool enableDebug, GraphicsSettings settings)
     {
-        return new VulkanInstance(appName, enableDebug);
+        return new VulkanInstance(appName, enableDebug, settings);
+    }
+
+    private static void AddLayerFolders(IEnumerable<string> folders)
+    {
+        const string variable = "VK_ADD_LAYER_PATH";
+        var current = OperatingSystem.IsWindows()
+            ? Environment.GetEnvironmentVariable(variable)
+            : Marshal.PtrToStringUTF8(PosixInterop.GetEnvironment(variable));
+        var paths = (current ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).ToList();
+        var added = folders.Where(Directory.Exists).Where(folder => !paths.Contains(folder)).ToList();
+        if (added.Count == 0)
+        {
+            return;
+        }
+
+        var value = string.Join(Path.PathSeparator, paths.Concat(added));
+        if (OperatingSystem.IsWindows())
+        {
+            Environment.SetEnvironmentVariable(variable, value);
+        }
+        else
+        {
+            PosixInterop.SetEnvironment(variable, value, 1);
+        }
     }
 
     /// <summary>The surface for the output's window, made the first time it is asked for. Each call holds it once more,

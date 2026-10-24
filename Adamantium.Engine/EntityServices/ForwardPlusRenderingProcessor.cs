@@ -473,7 +473,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
-        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorHeapManager.TextureIndex(texture) : 0;
+        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture) : 0;
         group.Instances.Add(new MeshInstance(world, AlbedoOf(material), first, count, textureIndex));
     }
 

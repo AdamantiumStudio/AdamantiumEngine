@@ -154,8 +154,9 @@ public class MainGraphicsDevice : DisposableBase
         return true;
     }
 
-    /// <summary>One descriptor heap per logical device, shared by every render-device wrapper.</summary>
-    public IDescriptorHeapManager DescriptorHeapManager { get; private set; }
+    /// <summary>The descriptor heap or the descriptor sets, as <see cref="DescriptorModel"/> chose: one per logical device,
+    /// shared by every render-device wrapper.</summary>
+    public IDescriptorManager DescriptorManager { get; private set; }
 
     // Shared like the heap, so no render device grabs its own BAR block. Created on first use.
     private IDeviceMemoryAllocator _memoryAllocator;
@@ -167,10 +168,12 @@ public class MainGraphicsDevice : DisposableBase
 
     public QueueFamilyContainer QueueFamilyContainer { get; private set; }
 
-    public static ReadOnlyCollection<string> DeviceExtensions { get; private set; }
+    /// <summary>What the device was asked for: its extensions and how shaders reach their resources.</summary>
+    public GraphicsSettings Settings { get; }
 
-    /// <summary>Extensions enabled when supported, never required.</summary>
-    public static ReadOnlyCollection<string> OptionalDeviceExtensions { get; private set; }
+    /// <summary>How shaders reach their resources on this device: the heap, or descriptor sets where the device has no
+    /// heap or the settings ask for sets.</summary>
+    public DescriptorModel DescriptorModel { get; private set; }
 
     private static readonly Dictionary<string, string> OptionalExtensionInstancePrerequisites = new()
     {
@@ -202,53 +205,24 @@ public class MainGraphicsDevice : DisposableBase
 
     private IGraphicsDeviceFactory _graphicsDeviceFactory;
 
-    static MainGraphicsDevice()
-    {
-        var deviceExt = new List<string>();
-        deviceExt.Add(Constants.VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        deviceExt.Add(Constants.VK_EXT_SHADER_OBJECT_EXTENSION_NAME);
-        deviceExt.Add(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
-        DeviceExtensions = new ReadOnlyCollection<string>(deviceExt);
-
-        // Every external memory/semaphore transport the driver has, NT handles and fds alike: the producer dictates
-        // the handle, not our OS.
-        OptionalDeviceExtensions = new ReadOnlyCollection<string>(new List<string>
-        {
-            Constants.VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
-            Constants.VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
-            Constants.VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-            Constants.VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
-            // The real cause of a device-lost.
-            Constants.VK_EXT_DEVICE_FAULT_EXTENSION_NAME,
-            // Wireframes drawn over shaded meshes in one pass.
-            Constants.VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
-
-            // Promoted KHR form first, EXT as the fallback: a driver may advertise either.
-            Constants.VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
-            Constants.VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
-
-            // A render pass that both draws and executes recorded secondary command buffers.
-            Constants.VK_KHR_MAINTENANCE_7_EXTENSION_NAME,
-        });
-    }
-
     public bool IsInDebugMode
     {
         get => VulkanInstance.IsInDebugMode;
         set => VulkanInstance.IsInDebugMode = value;
     }
 
-    private MainGraphicsDevice(IGraphicsDeviceFactory deviceFactory, uint buffersCount, string name,
+    private MainGraphicsDevice(IGraphicsDeviceFactory deviceFactory, GraphicsSettings settings, string name,
         bool enableDebug)
     {
         _graphicsDeviceFactory = deviceFactory;
         graphicsDevices = new List<IGraphicsDevice>();
         deviceMap = new Dictionary<Guid, IGraphicsDevice>();
         EnableDynamicRendering = true;
-        VulkanInstance = VulkanInstance.Create(name, enableDebug);
+        Settings = settings;
+        VulkanInstance = VulkanInstance.Create(name, enableDebug, settings);
         GraphicsAdapter = VulkanInstance.MainGraphicsAdapter;
         QueueFamilyContainer = GraphicsAdapter.FindQueueFamilies();
-        BuffersCount = buffersCount;
+        BuffersCount = settings.FramesInFlight;
         CreateLogicalDevice();
         unsafe
         {
@@ -260,7 +234,7 @@ public class MainGraphicsDevice : DisposableBase
         }
 
         ResourceLoaderDevice = CreateResourceLoaderDevice();
-        DescriptorHeapManager = _graphicsDeviceFactory.CreateDescriptorHeapManager(ResourceLoaderDevice);
+        DescriptorManager = _graphicsDeviceFactory.CreateDescriptorManager(ResourceLoaderDevice, DescriptorModel);
     }
 
     public void RemoveDevice(IGraphicsDevice device)
@@ -357,8 +331,17 @@ public class MainGraphicsDevice : DisposableBase
         GraphicsAdapter.Adapter.EnumerateDeviceExtensionProperties(null, ref propCount, supportedDeviceExtensions);
 
         var availableDeviceExtensions = supportedDeviceExtensions.Select(x => x.ExtensionName).ToArray();
+        var hasHeap = availableDeviceExtensions.Contains(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
+        DescriptorModel = Settings.DescriptorModel switch
+        {
+            DescriptorModel.Heap when !hasHeap => throw new ExtensionNotSupportedException(
+                GraphicsAdapter.AdapterProperties.DeviceName, [Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME]),
+            DescriptorModel.Auto => hasHeap ? DescriptorModel.Heap : DescriptorModel.Sets,
+            var asked => asked
+        };
+
         var finalDeviceExtensions = new List<string>();
-        foreach (var extension in DeviceExtensions)
+        foreach (var extension in Settings.DeviceExtensions.Distinct())
         {
             if (availableDeviceExtensions.Contains(extension))
             {
@@ -366,13 +349,13 @@ public class MainGraphicsDevice : DisposableBase
             }
         }
 
-        if (finalDeviceExtensions.Count != DeviceExtensions.Count)
+        var missing = Settings.DeviceExtensions.Except(finalDeviceExtensions).ToArray();
+        if (missing.Length > 0)
         {
-            var diff = DeviceExtensions.Except(finalDeviceExtensions).ToArray();
-            throw new ExtensionNotSupportedException(GraphicsAdapter.AdapterProperties.DeviceName, diff);
+            throw new ExtensionNotSupportedException(GraphicsAdapter.AdapterProperties.DeviceName, missing);
         }
 
-        foreach (var extension in OptionalDeviceExtensions)
+        foreach (var extension in Settings.OptionalDeviceExtensions)
         {
             if (availableDeviceExtensions.Contains(extension) && !finalDeviceExtensions.Contains(extension)
                                                               && (!OptionalExtensionInstancePrerequisites.TryGetValue(extension, out var instanceExtension)
@@ -382,12 +365,19 @@ public class MainGraphicsDevice : DisposableBase
             }
         }
 
-        // What was actually enabled: the same binary runs where the optional ones are missing (MoltenVK has none).
+        if (DescriptorModel == DescriptorModel.Sets)
+        {
+            finalDeviceExtensions.Remove(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
+        }
+        else if (!finalDeviceExtensions.Contains(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME))
+        {
+            finalDeviceExtensions.Add(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
+        }
+
         EnabledDeviceExtensions = new HashSet<string>(finalDeviceExtensions, StringComparer.Ordinal);
 
         var vulkan11Features = new PhysicalDeviceVulkan11Features
         {
-            // SV_VertexID/SV_InstanceID need DrawParameters; without it vkCreateShadersEXT rejects the instanced shaders.
             ShaderDrawParameters = true,
         };
 
@@ -397,36 +387,35 @@ public class MainGraphicsDevice : DisposableBase
             BufferDeviceAddress = true,
             SamplerMirrorClampToEdge = true,
             ScalarBlockLayout = true,
-            // Byte colors in every instance record; there is no second layout to fall back to.
             StorageBuffer8BitAccess = true,
             ShaderInt8 = true,
-            // Texture arrays of no length: the resource heap seen as one, indexed per copy drawn.
             RuntimeDescriptorArray = true,
             ShaderSampledImageArrayNonUniformIndexing = true,
         };
+        if (DescriptorModel == DescriptorModel.Sets)
+        {
+            vulkan12Features.DescriptorBindingSampledImageUpdateAfterBind = true;
+            vulkan12Features.DescriptorBindingUpdateUnusedWhilePending = true;
+            vulkan12Features.DescriptorBindingPartiallyBound = true;
+            vulkan12Features.DescriptorBindingVariableDescriptorCount = true;
+        }
 
         var vulkan13Features = new PhysicalDeviceVulkan13Features
         {
             Synchronization2 = true,
             DynamicRendering = true,
-            // Discard before a derivative compiles to demote; used without this it lost the device.
             ShaderDemoteToHelperInvocation = true,
         };
 
         var features14 = new PhysicalDeviceVulkan14Features
         {
-            HostImageCopy = GraphicsAdapter.SupportsHostImageCopy
-        };
-
-        var heapFeatures = new PhysicalDeviceDescriptorHeapFeaturesEXT
-        {
-            DescriptorHeap = true
+            HostImageCopy = GraphicsAdapter.SupportsHostImageCopy,
+            PushDescriptor = DescriptorModel == DescriptorModel.Sets
         };
 
         var deviceFeatures2 = GraphicsAdapter.Adapter.GetPhysicalDeviceFeatures2();
 
         deviceFeatures2.PNext = vulkan11Features;
-        // A driver with the extension has the feature too.
         if (finalDeviceExtensions.Contains(Constants.VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME))
         {
             deviceFeatures2.PNext = new PhysicalDeviceFragmentShaderBarycentricFeaturesKHR
@@ -445,45 +434,33 @@ public class MainGraphicsDevice : DisposableBase
             vulkan13Features.PNext = new PhysicalDeviceMaintenance7FeaturesKHR { Maintenance7 = true, PNext = features14 };
         }
 
-        if (EnableDynamicRendering &&
-            finalDeviceExtensions.Contains(Constants.VK_EXT_SHADER_OBJECT_EXTENSION_NAME))
+        List<object> tail = [];
+        if (EnableDynamicRendering && finalDeviceExtensions.Contains(Constants.VK_EXT_SHADER_OBJECT_EXTENSION_NAME))
         {
-            var shaderObjectFeatures = new PhysicalDeviceShaderObjectFeaturesEXT
-            {
-                ShaderObject = true
-            };
-            features14.PNext = shaderObjectFeatures;
-            shaderObjectFeatures.PNext = heapFeatures;
-        }
-        else
-        {
-            features14.PNext = heapFeatures;
+            tail.Add(new PhysicalDeviceShaderObjectFeaturesEXT { ShaderObject = true });
         }
 
-        PhysicalDeviceFaultFeaturesEXT faultFeatures = null;
+        if (DescriptorModel == DescriptorModel.Heap)
+        {
+            tail.Add(new PhysicalDeviceDescriptorHeapFeaturesEXT { DescriptorHeap = true });
+        }
+
         if (finalDeviceExtensions.Contains(Constants.VK_EXT_DEVICE_FAULT_EXTENSION_NAME))
         {
-            faultFeatures = new PhysicalDeviceFaultFeaturesEXT { DeviceFault = true };
-            heapFeatures.PNext = faultFeatures;
+            tail.Add(new PhysicalDeviceFaultFeaturesEXT { DeviceFault = true });
             DeviceFaultSupported = true;
         }
 
-        // Both this and the fault block are conditional, so the chain's tail is whichever of them landed.
         if (SupportsSwapchainMaintenance)
         {
-            var maintenanceFeatures = new PhysicalDeviceSwapchainMaintenance1FeaturesKHR
-            {
-                SwapchainMaintenance1 = true
-            };
+            tail.Add(new PhysicalDeviceSwapchainMaintenance1FeaturesKHR { SwapchainMaintenance1 = true });
+        }
 
-            if (faultFeatures != null)
-            {
-                faultFeatures.PNext = maintenanceFeatures;
-            }
-            else
-            {
-                heapFeatures.PNext = maintenanceFeatures;
-            }
+        object previous = features14;
+        foreach (var next in tail)
+        {
+            Chain(previous, next);
+            previous = next;
         }
 
         deviceFeatures2.Features.SamplerAnisotropy = true;
@@ -502,6 +479,27 @@ public class MainGraphicsDevice : DisposableBase
         var fenceInfo = new FenceCreateInfo();
         fenceInfo.Flags = FenceCreateFlagBits.SignaledBit;
         InFlightFences ??= LogicalDevice.CreateFences(fenceInfo, BuffersCount);
+    }
+
+    private static void Chain(object feature, object next)
+    {
+        switch (feature)
+        {
+            case PhysicalDeviceVulkan14Features vulkan14:
+                vulkan14.PNext = next;
+                break;
+            case PhysicalDeviceShaderObjectFeaturesEXT shaderObject:
+                shaderObject.PNext = next;
+                break;
+            case PhysicalDeviceDescriptorHeapFeaturesEXT heap:
+                heap.PNext = next;
+                break;
+            case PhysicalDeviceFaultFeaturesEXT fault:
+                fault.PNext = next;
+                break;
+            default:
+                throw new InvalidOperationException($"{feature.GetType().Name} is not chained before another feature.");
+        }
     }
 
     /// <summary>True once the GPU has lost this device: nothing it is asked to do runs any more, and only a new device
@@ -575,10 +573,10 @@ public class MainGraphicsDevice : DisposableBase
         return _graphicsDeviceFactory.Create(this, GraphicsDeviceType.ResourceLoader);
     }
 
-    public static MainGraphicsDevice Create(IGraphicsDeviceFactory deviceFactory, uint buffersCount, string name,
+    public static MainGraphicsDevice Create(IGraphicsDeviceFactory deviceFactory, GraphicsSettings settings, string name,
         bool enableDebug)
     {
-        return new(deviceFactory, buffersCount, name, enableDebug);
+        return new(deviceFactory, settings, name, enableDebug);
     }
 
     /// <summary>Leases the graphics queue the fewest devices hold, so a queue is shared only once every one is taken.
@@ -654,8 +652,8 @@ public class MainGraphicsDevice : DisposableBase
         }
 
         // The heap's buffers were allocated through the resource-loader device, so they go first.
-        DescriptorHeapManager?.Dispose();
-        DescriptorHeapManager = null;
+        DescriptorManager?.Dispose();
+        DescriptorManager = null;
 
         ResourceLoaderDevice?.Dispose();
         ResourceLoaderDevice = null;

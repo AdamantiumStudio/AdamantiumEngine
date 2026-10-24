@@ -7,6 +7,25 @@ All packages share one version.
 
 ### Added
 
+- The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
+  A pass pushes its descriptors on every Apply (push descriptors, Vulkan 1.4) and a texture array of no length reads
+  one update-after-bind set every pass shares, at the same index the heap gives the texture. That set starts with
+  `GraphicsSettings.TextureArrayCapacity` textures (1024) and doubles when full, up to what the device's update-after-bind
+  limits allow (`DescriptorSetManager.MaxTextureArrayCapacity`). The same SPIR-V serves both; `DescriptorSetManager`,
+  `HeapEffectPass` / `SetsEffectPass` and `HeapEffectResourceLinker` / `SetsEffectResourceLinker` are the two paths.
+  A pass that needs more push descriptors or a bigger uniform buffer than the GPU gives, or binds two resources at one
+  binding, is refused with its name rather than drawn wrong. `GraphicsAdapter.MaxPushDescriptors`.
+- `GraphicsSettings`: what the application asks of Vulkan - instance and device extensions, required and optional,
+  layers (`VK_LAYER_KHRONOS_shader_object` where present, validation in debug), folders the loader looks for layers in
+  (by default `vulkan/layers/<rid>` beside the application, where `Adamantium.Vulkan.ShaderObjectLayer` puts the layer),
+  the descriptor model (`DescriptorModel.Auto` / `Heap` / `Sets`) and the frames in flight. `GraphicsSettings.
+  CreateDefault()` gives what the engine used before; `MainGraphicsDevice.Create`, `VulkanInstance.Create` and
+  `GraphicsDeviceService` take it. `MainGraphicsDevice.DescriptorModel` tells which path the device took.
+- `IDescriptorManager`: the heap or the descriptor sets behind one interface - `TextureIndex`, `BindTo`.
+- `Texture.GetLevelTexture(level)`: one mip level as a texture of its own, for a shader that reads a level while
+  another level of the same image is drawn into.
+- `PosixInterop.SetEnvironment` / `GetEnvironment` (`setenv` / `getenv`): variables native code in this process reads.
+- `EffectPass.DynamicBufferPool.UploadRange`: where a constant buffer's copy is, as a page and an offset.
 - `ShellDialog.PickFolders` (`FOS_PICKFOLDERS`): the shell's open dialog chooses a folder.
 - `Win32Interop.QueryDisplayConfig`, `GetDisplayConfigBufferSizes`, `DisplayConfigGetDeviceInfo` and their structs: the
   display paths, with each monitor's exact refresh rate.
@@ -893,6 +912,19 @@ All packages share one version.
 
 ### Fixed
 
+- The views `Texture.GetLevelView` makes were never destroyed: every texture whose levels were drawn into one by one
+  left them behind when it went.
+- A texture made from an image description, and the font atlas, started in `PREINITIALIZED` layout with optimal tiling,
+  which only linear tiling allows; they start undefined.
+- `SetViewports` / `SetScissors` sent `vkCmdSetViewport` / `vkCmdSetScissor` at once and the draw sent them again with
+  their count. With the shader-object layer the first set state its pipelines do not declare dynamic; now only the draw
+  sends them.
+- The shader binary cache named a stage's binary by that stage's code alone, while where it reads its resources depends
+  on the other stages of the pass too: a binding added to one stage left another loading a binary that read the wrong
+  place. The resource layout of the whole pass is in the name now, and the cache folder is keyed by the descriptor
+  model and a format number as well - so the precompile stamp of an older cache does not count for this one.
+- The effects compiler took the same binding in two descriptor sets for a clash, and gave every constant buffer set 0
+  whatever set it was in.
 - The editor's selection outline of an entity added in this frame - one just placed, which is selected at once - was
   drawn for one frame at the camera itself (the middle of an orthographic view, a flash over a perspective one): its
   transform for the camera was not worked out yet. `EditorOverlayProcessor.DrawOutline` outlines an entity from the
@@ -1498,6 +1530,16 @@ All packages share one version.
 
 ### Changed
 
+- `MainGraphicsDevice.DescriptorHeapManager` and `GraphicsDevice.DescriptorHeapManager` are `DescriptorManager`, an
+  `IDescriptorManager`; `IGraphicsDeviceFactory.CreateDescriptorHeapManager` is `CreateDescriptorManager(device,
+  model)`; `IDescriptorHeapManager.BindDescriptorHeaps` is `IDescriptorManager.BindTo`. The heap's extension and
+  feature are enabled only on the heap path.
+- `Adamantium.Vulkan` 1.1.0 (`ShaderStageFlagBits.All` is `0x7FFFFFFF`, `AllGraphics` is there); `Adamantium.Graphics.Core`
+  depends on `Adamantium.Vulkan.ShaderObjectLayer` 1.0.0, so every application carries the layer.
+- `EffectPass` is abstract: the device makes a `HeapEffectPass` or a `SetsEffectPass`.
+- With graphics debug on, the validation layer sits above the other layers, so it checks the engine's own calls.
+- `meshTextures[]` of `ForwardPlusShading.fxh` is in a set of its own (`register(t0, space1)`).
+- The instance and device extension lists of `VulkanInstance` and `MainGraphicsDevice` moved into `GraphicsSettings`.
 - `GraphicsDevice.LastFenceWaitMs` - the wait for the GPU at the start of a frame - is timed only while a handle
   from the new `GraphicsDevice.MeasureFenceWait()` is held, on every device of the process, and is 0 otherwise. It
   used to be timed on every frame of every device, whether anything read it or not.
@@ -1669,6 +1711,7 @@ All packages share one version.
 
 ### Removed
 
+- `ADAM_FRAMES_IN_FLIGHT`: the frames in flight are `GraphicsSettings.FramesInFlight`.
 - `AnimationComponent.StartingKeyFrame` and `EndingKeyFrame`: nothing read what was set in them, and a key's number
   is no range of a clip whose channels key at their own times. A clip is chosen by name and played by speed, pause and
   `Option`.

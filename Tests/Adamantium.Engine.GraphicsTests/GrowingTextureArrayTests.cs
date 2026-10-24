@@ -29,7 +29,7 @@ public class GrowingTextureArrayTests
             MipLevels = levels,
             Samples = MSAALevel.None,
             Format = Format.R8G8B8A8_UNORM,
-            InitialLayout = ImageLayout.Preinitialized,
+            InitialLayout = ImageLayout.Undefined,
             DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal,
             ImageType = ImageType._2d,
             ImageAspect = ImageAspectFlagBits.ColorBit,

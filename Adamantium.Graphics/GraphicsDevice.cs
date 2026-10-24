@@ -117,7 +117,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     // The device-memory sub-allocator is SHARED (one per logical device), owned by the MAIN device. A render-device
     // wrapper never creates its own - it references the shared one, so no window grabs its own big host-visible BAR block
     // (that per-window block only device.Dispose freed, so a few open windows exhausted the ~214 MB BAR heap). Mirrors
-    // the shared DescriptorHeapManager.
+    // the shared DescriptorManager.
     public DeviceMemoryAllocator MemoryAllocator => (DeviceMemoryAllocator)MainDevice.MemoryAllocator;
     public GraphicsPresenter Presenter { get; set; }
 
@@ -194,9 +194,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         MaxFramesInFlight = mainDevice.BuffersCount;
         InitializeRenderDevice();
         InitializePipeline();
-        // One global descriptor heap per logical device, owned by the main device and shared by every render-device
-        // wrapper (they share one VkDevice). Just reference it — no per-device allocation.
-        DescriptorHeapManager = mainDevice.DescriptorHeapManager;
+        DescriptorManager = mainDevice.DescriptorManager;
 
         // The per-frame constant-buffer arena stays per render device: devices render concurrently (parallel universes)
         // and cycle frames independently, so this can't be shared.
@@ -237,7 +235,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public uint CurrentFrame => frame;
     
-    public IDescriptorHeapManager DescriptorHeapManager { get; private set; }
+    public IDescriptorManager DescriptorManager { get; private set; }
 
     // Per render device: the transient per-frame constant-buffer arena (see CreateRenderDevice for why it's not shared).
     private EffectPass.DynamicBufferPool[] _dynamicBufferPools;
@@ -561,12 +559,16 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     public IEffectResourceLinker CreateEffectResourceLinker()
     {
-        return new EffectResourceLinker(DescriptorHeapManager);
+        return DescriptorManager is IDescriptorHeapManager heap
+            ? new HeapEffectResourceLinker(heap)
+            : new SetsEffectResourceLinker((DescriptorSetManager)DescriptorManager);
     }
 
     public IEffectPass CreateEffectPass(Logger logger, Effect effect, EffectTechnique technique, EffectData.Pass pass, string name)
     {
-        return new EffectPass(logger, effect, technique, pass, name);
+        return DescriptorManager is IDescriptorHeapManager
+            ? new HeapEffectPass(logger, effect, technique, pass, name)
+            : new SetsEffectPass(logger, effect, technique, pass, name);
     }
 
     // Which pass's shader objects the CURRENT command buffer already has bound. A pass applied again for the next draw of
@@ -621,19 +623,24 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     // one VkDevice and one cache folder.
     private static readonly object ShaderCreateLock = new();
 
-    public ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name = null)
+    public ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name = null) =>
+        CreateShader(shaderCreateInfo, name, 0);
+
+    /// <summary>As <see cref="CreateShader(ShaderCreateInfoEXT, string)"/>; the binary cache takes only a binary made for
+    /// the same <paramref name="layout"/>.</summary>
+    internal ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
     {
         lock (ShaderCreateLock)
         {
-            return CreateShaderCore(shaderCreateInfo, name);
+            return CreateShaderCore(shaderCreateInfo, name, layout);
         }
     }
 
-    private ShaderEXT CreateShaderCore(ShaderCreateInfoEXT shaderCreateInfo, string name)
+    private ShaderEXT CreateShaderCore(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
     {
         // Create from the cached driver binary when there is one; otherwise compile from SPIR-V and persist the binary as
         // `name` (effect.technique.pass.stage).
-        if (ShaderBinaryCache.TryLoad(this, shaderCreateInfo, name, out var binary))
+        if (ShaderBinaryCache.TryLoad(this, shaderCreateInfo, name, layout, out var binary))
         {
             var result = LogicalDevice.CreateShaderFromBinary(ShaderBinaryCache.AsBinary(shaderCreateInfo, binary), out var cached);
             if (result == Result.Success) return cached;
@@ -656,7 +663,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         ShaderPrecompiler.NoteShaderInFlight(name);
 
         LogicalDevice.CreateShadersEXT(1, shaderCreateInfo, null, out var shaderObject);
-        ShaderBinaryCache.Save(this, shaderCreateInfo, name, shaderObject[0]);
+        ShaderBinaryCache.Save(this, shaderCreateInfo, name, layout, shaderObject[0]);
         return shaderObject[0];
     }
 
@@ -1276,7 +1283,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             // );
             
             commandBuffer.BeginRendering(renderingInfo);
-            DescriptorHeapManager.BindDescriptorHeaps(this);
+            DescriptorManager.BindTo(this);
         }
     }
 
@@ -1521,10 +1528,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         {
             Hash(0x5E7F);
             HashViewportsAndScissors(viewportsArray, default);
-            if (_swallowing) return;
         }
-
-        CurrentCommandBuffer.SetViewport(0, (uint)viewports.Length, InTarget(viewportsArray));
     }
 
     public void SetScissors(params ReadOnlySpan<Rect2D> scissors)
@@ -1543,10 +1547,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         {
             Hash(0x5C15);
             HashViewportsAndScissors(default, scissorsArray);
-            if (_swallowing) return;
         }
-
-        CurrentCommandBuffer.SetScissor(0, (uint)scissors.Length, InTarget(scissorsArray));
     }
 
     // The most recently set viewport/scissor, so code that interrupts the pass to render to another target (the font

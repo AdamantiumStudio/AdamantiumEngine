@@ -110,7 +110,10 @@ public class Universe : IUniverse
 
         if (mode == UniverseMode.Standalone)
         {
-            GraphicsDeviceService = new GraphicsDeviceService(factory, enableDebug);
+            var settings = Container.IsRegistered<GraphicsSettings>()
+                ? Container.Resolve<GraphicsSettings>()
+                : GraphicsSettings.CreateDefault();
+            GraphicsDeviceService = new GraphicsDeviceService(factory, enableDebug, settings);
             //GraphicsDeviceService.CreateMainDevice("Universe", enableDynamicRendering);
         }
         else

@@ -9,9 +9,9 @@ public class GraphicsDeviceFactory : IGraphicsDeviceFactory
         return GraphicsDevice.Create(mainDevice, deviceType);
     }
 
-    public IDescriptorHeapManager CreateDescriptorHeapManager(IGraphicsDevice device)
+    public IDescriptorManager CreateDescriptorManager(IGraphicsDevice device, DescriptorModel model)
     {
-        return new DescriptorHeapManager(device);
+        return model == DescriptorModel.Sets ? new DescriptorSetManager(device) : new DescriptorHeapManager(device);
     }
 
     public IDeviceMemoryAllocator CreateMemoryAllocator(IGraphicsDevice device)

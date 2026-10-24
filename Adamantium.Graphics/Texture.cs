@@ -434,6 +434,49 @@ public unsafe class Texture : GraphicsResource, ITexture
         return _levelInfos[Math.Min(level, (uint)_levelInfos.Length - 1)];
     }
 
+    private Texture[] _levelTextures;
+
+    /// <summary>One mip level as a texture of its own, shader-read-only, disposed with this texture: what a shader reads
+    /// while another level of the same image is drawn into.</summary>
+    public Texture GetLevelTexture(uint level)
+    {
+        var levels = Math.Max(1u, Description.MipLevels);
+        if (level >= levels) level = levels - 1;
+
+        _levelTextures ??= new Texture[levels];
+        if (_levelTextures[level] is not { IsDisposed: false })
+        {
+            _levelTextures[level] = new LevelTexture(this, level);
+        }
+
+        return _levelTextures[level];
+    }
+
+    private sealed class LevelTexture : Texture
+    {
+        public LevelTexture(Texture image, uint level)
+            : base(image.GraphicsDevice, image.GetImage(), LevelDescription(image.Description, level), 0, image.Name)
+        {
+            ImageView = image.GetLevelView(level);
+            Info = image.GetLevelViewInfo(level);
+        }
+
+        private static TextureDescription LevelDescription(TextureDescription description, uint level)
+        {
+            description.Width = Math.Max(1u, description.Width >> (int)level);
+            description.Height = Math.Max(1u, description.Height >> (int)level);
+            description.MipLevels = 1;
+            description.DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal;
+            return description;
+        }
+
+        protected override void Dispose(bool disposeManaged)
+        {
+            ImageView = null;
+            base.Dispose(disposeManaged);
+        }
+    }
+
 
     public static uint CalculateMipLevels(int width, int height, MipMapCount mipLevels)
     {
@@ -737,6 +780,27 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     protected override void Dispose(bool disposeManaged)
     {
+        if (_levelTextures != null)
+        {
+            foreach (var levelTexture in _levelTextures)
+            {
+                levelTexture?.Dispose();
+            }
+
+            _levelTextures = null;
+        }
+
+        if (_levelViews != null)
+        {
+            foreach (var levelView in _levelViews)
+            {
+                GraphicsDevice.Destroy(levelView);
+            }
+
+            _levelViews = null;
+            _levelInfos = null;
+        }
+
         if (_disposeImage)
         {
             GraphicsDevice.Destroy(VulkanImage);

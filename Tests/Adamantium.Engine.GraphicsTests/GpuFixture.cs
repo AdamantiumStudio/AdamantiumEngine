@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
@@ -17,7 +18,19 @@ namespace Adamantium.Engine.GraphicsTests
         [OneTimeSetUp]
         public void CreateSharedDevice()
         {
-            Main = MainGraphicsDevice.Create(new GraphicsDeviceFactory(), 3, "TestApp", true);
+            Main = MainGraphicsDevice.Create(new GraphicsDeviceFactory(), Settings(), "TestApp", true);
+        }
+
+        /// <summary>The default settings with the run parameter <c>DescriptorModel</c>, if given.</summary>
+        public static GraphicsSettings Settings()
+        {
+            var settings = GraphicsSettings.CreateDefault();
+            if (Enum.TryParse<DescriptorModel>(TestContext.Parameters.Get("DescriptorModel", ""), out var model))
+            {
+                settings.DescriptorModel = model;
+            }
+
+            return settings;
         }
 
         [OneTimeTearDown]

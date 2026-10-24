@@ -1121,12 +1121,14 @@ namespace Adamantium.EffectsCompiler
         /// <param name="reflectionResult"> A shader-reflection interface accesses shader information.</param>
         private void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult)
         {
-            var groupByIds = reflectionResult.AllResources.GroupBy(x => x.Description.SlotIndex).Where(group=>group.Count() > 1).SelectMany(g=>g).ToArray();
+            var groupByIds = reflectionResult.AllResources
+                .GroupBy(x => (x.Description.DescriptorSet, x.Description.SlotIndex))
+                .Where(group => group.Count() > 1).SelectMany(g => g).ToArray();
 
             if (groupByIds.Length > 0)
             {
                 var names = groupByIds.Select(x => x.Description.Name).ToArray();
-                logger.Error($"{Utilities.Join(", ", names)} has the same binding id {groupByIds[0].Description.SlotIndex} which is not permitted by Vulkan.\nPlease, change shader code not to have same binding ids in one shader.");
+                logger.Error($"{Utilities.Join(", ", names)} has the same binding id {groupByIds[0].Description.SlotIndex} in set {groupByIds[0].Description.DescriptorSet} which is not permitted by Vulkan.\nPlease, change shader code not to have same binding ids in one set.");
                 return;
             }
 
@@ -1143,6 +1145,7 @@ namespace Adamantium.EffectsCompiler
                     Name = description.Name,
                     Size = description.Size,
                     Slot = description.SlotIndex,
+                    DescriptorSet = (byte)description.DescriptorSet,
                     Parameters = new List<EffectData.ValueTypeParameter>(),
                 };
                 shader.ConstantBuffers.Add(parameterBuffer);
