@@ -892,6 +892,10 @@ All packages share one version.
 
 ### Fixed
 
+- The editor's selection outline of an entity added in this frame - one just placed, which is selected at once - was
+  drawn for one frame at the camera itself (the middle of an orthographic view, a flash over a perspective one): its
+  transform for the camera was not worked out yet. `EditorOverlayProcessor.DrawOutline` outlines an entity from the
+  first frame the scene has placed it for that camera.
 - A D-Bus string holding a NUL ended early and the bus dropped the connection for the bad message: the NUL is now
   written as U+FFFD, as an unpaired surrogate already was.
 - An ICO file is read as applications carry it: its PNG images are decoded as PNG - they were read as bitmaps, so
