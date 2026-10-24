@@ -2,7 +2,7 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics;
 
-// A sampler's description as a value: equal descriptions share one heap slot or one VkSampler.
+/// <summary>A sampler's description as a value: equal descriptions share one heap slot or one VkSampler.</summary>
 internal readonly record struct SamplerKey(
     SamplerCreateFlagBits Flags,
     Filter MagFilter,

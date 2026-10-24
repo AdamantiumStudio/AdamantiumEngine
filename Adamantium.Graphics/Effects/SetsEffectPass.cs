@@ -12,12 +12,10 @@ using EffectTechnique = Adamantium.Graphics.Core.EffectsFramework.EffectTechniqu
 
 namespace Adamantium.Graphics.Effects;
 
-/// <summary>A pass on descriptor sets, for a device without VK_EXT_descriptor_heap. Its resources are one set of push
-/// descriptors, written on every Apply; a texture array of no length reads the set the
-/// <see cref="DescriptorSetManager"/> shares between passes, which must be the only binding of its own set.</summary>
+/// <summary>A pass on descriptor sets: its resources pushed on every Apply, a texture array of no length read from the
+/// <see cref="DescriptorSetManager"/>'s shared set.</summary>
 internal sealed class SetsEffectPass : EffectPass
 {
-    // VkDescriptorImageInfo and VkDescriptorBufferInfo are the same size, so the pushed descriptors are one array.
     private static readonly int InfoSize =
         Math.Max(Unsafe.SizeOf<VkDescriptorImageInfo>(), Unsafe.SizeOf<VkDescriptorBufferInfo>());
 
@@ -25,7 +23,6 @@ internal sealed class SetsEffectPass : EffectPass
 
     private enum Kind { ConstantBuffer, Texture, Sampler, Buffer }
 
-    // One binding of the pushed set, FirstDescriptor..+Count in the pushed array.
     private readonly record struct Pushed(Kind Kind, EffectParameter Parameter, EffectConstantBuffer ConstantBuffer,
         EffectData.Parameter Description, uint Count, int FirstDescriptor);
 
@@ -155,7 +152,6 @@ internal sealed class SetsEffectPass : EffectPass
             commands.PushDescriptorSetWithTemplate(_template, _layout, _pushSet, (nuint)infos);
         }
 
-        // Bound on every Apply: a pass whose pushed set differs in layout may have disturbed it since.
         for (int i = 0; i < _textureArrays.Length; i++)
         {
             commands.BindDescriptorSets(_bindPoint, _layout, _textureArrays[i].Set, 1, _textureArrays[i].Value, 0,
@@ -276,7 +272,6 @@ internal sealed class SetsEffectPass : EffectPass
             }
         }
 
-        // What the binary cache keys every stage's binary by: the set layouts all of them are made with.
         var layoutKey = Mix(LayoutSeed, _pushSet);
         foreach (var (binding, (type, value)) in pushedBindings)
         {
@@ -396,7 +391,6 @@ internal sealed class SetsEffectPass : EffectPass
         _textureArrays = [];
     }
 
-    // Destroyed once the frames in flight that recorded with them are done.
     private sealed class RetiredLayout(Device device, PipelineLayout layout, DescriptorSetLayout pushLayout,
         DescriptorUpdateTemplate template) : IDisposable
     {

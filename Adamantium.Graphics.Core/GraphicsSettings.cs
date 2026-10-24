@@ -74,7 +74,7 @@ public sealed class GraphicsSettings
 
         settings.Layers.Add(ShaderObjectLayer);
         settings.DebugLayers.Add("VK_LAYER_KHRONOS_validation");
-        settings.LayerFolders.Add(Path.Combine(AppContext.BaseDirectory, "vulkan", "layers"));
+        settings.LayerFolders.Add(Path.Combine(AppContext.BaseDirectory, "vulkan", "layers", PlatformFolder()));
 
         settings.DeviceExtensions.AddRange(
         [
@@ -84,28 +84,27 @@ public sealed class GraphicsSettings
 
         settings.OptionalDeviceExtensions.AddRange(
         [
-            // One of the two ways to resources; the other takes push descriptors, which Vulkan 1.4 has.
             Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
-
-            // Every external memory/semaphore transport the driver has, NT handles and fds alike: the producer dictates
-            // the handle, not our OS.
             Constants.VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
             Constants.VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
             Constants.VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
             Constants.VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
-            // The real cause of a device-lost.
             Constants.VK_EXT_DEVICE_FAULT_EXTENSION_NAME,
-            // Wireframes drawn over shaded meshes in one pass.
             Constants.VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
-
-            // Promoted KHR form first, EXT as the fallback: a driver may advertise either.
             Constants.VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
             Constants.VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
-
-            // A render pass that both draws and executes recorded secondary command buffers.
             Constants.VK_KHR_MAINTENANCE_7_EXTENSION_NAME
         ]);
 
         return settings;
+    }
+
+    private static string PlatformFolder()
+    {
+        var system = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win"
+            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx"
+            : "linux";
+        var architecture = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+        return $"{system}-{architecture}";
     }
 }

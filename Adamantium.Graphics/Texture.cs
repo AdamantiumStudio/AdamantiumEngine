@@ -436,9 +436,8 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     private Texture[] _levelTextures;
 
-    /// <summary>ONE mip level as a texture of its own, sampled as shader-read-only; made on first use and kept, and
-    /// disposed with this texture. What a shader reads while another level of the same image is drawn into: a descriptor
-    /// of the whole texture names every level in one layout, and the level being drawn into is not in it.</summary>
+    /// <summary>One mip level as a texture of its own, shader-read-only, disposed with this texture: what a shader reads
+    /// while another level of the same image is drawn into.</summary>
     public Texture GetLevelTexture(uint level)
     {
         var levels = Math.Max(1u, Description.MipLevels);
@@ -447,15 +446,12 @@ public unsafe class Texture : GraphicsResource, ITexture
         _levelTextures ??= new Texture[levels];
         if (_levelTextures[level] is not { IsDisposed: false })
         {
-            // Made again if a caller disposed the one it was given.
             _levelTextures[level] = new LevelTexture(this, level);
         }
 
         return _levelTextures[level];
     }
 
-    // The image's level view under a texture of one level. The view is the image's (GetLevelView), so the image
-    // destroys it.
     private sealed class LevelTexture : Texture
     {
         public LevelTexture(Texture image, uint level)
@@ -794,7 +790,6 @@ public unsafe class Texture : GraphicsResource, ITexture
             _levelTextures = null;
         }
 
-        // The level views are made here, on demand, so they go with the image.
         if (_levelViews != null)
         {
             foreach (var levelView in _levelViews)

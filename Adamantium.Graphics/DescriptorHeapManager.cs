@@ -11,9 +11,16 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     private readonly IGraphicsDevice graphicsDevice;
     private ulong currentResourceOffset = 0;
     private ulong currentSamplerOffset = 0;
-    // The heap is shared by all render devices of one logical device, which may render concurrently (different
-    // universes run in parallel). Serialize the offset allocators and heap writes so the heap path stays correct.
     private readonly object _heapSync = new object();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ITexture, uint> _textureHeapOffsets = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<SamplerState, uint> _samplerHeapOffsets = new();
+    private readonly System.Collections.Generic.Dictionary<SamplerKey, uint> _samplerOffsetsByDescription = new();
+    private readonly System.Collections.Generic.Dictionary<IBuffer, uint> _bufferHeapOffsets = new();
+    private readonly System.Collections.Generic.Queue<uint> _freeImageSlots = new();
+    private readonly System.Collections.Generic.Queue<uint> _freeBufferSlots = new();
+    private uint _fallbackTextureOffset = uint.MaxValue;
+    private uint _fallbackSamplerOffset = uint.MaxValue;
+    private ITexture _fallbackTexture;
 
     public IBuffer ResourceHeapBuffer { get; private set; }
     public IBuffer SamplerHeapBuffer { get; private set; }
@@ -31,7 +38,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         InitializeHeaps();
     }
 
-    // Binds the shared heap onto the CALLING render device's command buffer (not the heap's construction device).
+    /// <summary>Binds the shared heaps onto <paramref name="device"/>'s current command buffer.</summary>
     public void BindTo(IGraphicsDevice device)
     {
         var (resourceBindInfo, samplerBindInfo) = HeapBindInfos(device);
@@ -70,13 +77,11 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
         return (resourceBindInfo, samplerBindInfo);
     }
-    
+
     private void InitializeHeaps()
     {
         var props = graphicsDevice.Adapter.DeviceHeapProperties;
 
-        // IMPORTANT: do not allocate a heap as large as the device maximum. host-visible + device-local memory lives in
-        // the small BAR window (~256 MB on NVIDIA Turing) and this is paid per render device, so keep it modest.
         ulong resourceHeapSize = Math.Min((ulong)props.MaxResourceHeapSize, 8UL * 1024 * 1024);
         ulong samplerHeapSize = Math.Min((ulong)props.MaxSamplerHeapSize, 2UL * 1024 * 1024);
 
@@ -87,17 +92,12 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         UsableSamplerSpaceSize = samplerHeapSize - props.MinSamplerHeapReservedRange;
 
         var flags = BufferUsageFlags.DescriptorHeapExt | BufferUsageFlags.ShaderDeviceAddress;
-        // Descriptor heaps are written by the CPU and read by the GPU each frame → CPU-to-GPU upload (BAR window).
         var memFlags = BufferMemoryUsage.UploadFromCpuToGpu;
 
         ResourceHeapBuffer = Buffer.New(graphicsDevice, resourceHeapSize, flags, memFlags);
         SamplerHeapBuffer = Buffer.New(graphicsDevice, samplerHeapSize, flags, memFlags);
     }
 
-    /// <summary>The two heap buffers are created HERE, so they are destroyed here. Nothing did: the main device nulled
-    /// its reference to this manager without disposing it, so every logical device left its heaps behind - which the
-    /// validation layer reports at vkDestroyDevice as leaked objects, and which made a second device in one process a
-    /// fatal error (every GPU test after the first).</summary>
     protected override void Dispose(bool disposeManagedResources)
     {
         ResourceHeapBuffer?.Dispose();
@@ -131,7 +131,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             return (uint)alignedOffset;
         }
     }
-    
+
     /// <summary>
     /// Allocates an aligned byte offset in the global sampler heap.
     /// </summary>
@@ -152,20 +152,6 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         }
     }
 
-    // Bindless slot caches: each unique texture/sampler gets ONE stable heap slot (its descriptor written once),
-    // instead of one slot per shader parameter that every bind overwrote (which made the last-bound texture/sampler
-    // show up on every draw). Keyed by the resource object; render targets keep a stable view, so the slot stays valid.
-    // Samplers are descriptions: equal ones share a slot, which lives as long as the heap.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<ITexture, uint> _textureHeapOffsets = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<SamplerState, uint> _samplerHeapOffsets = new();
-    private readonly System.Collections.Generic.Dictionary<SamplerKey, uint> _samplerOffsetsByDescription = new();
-    private readonly System.Collections.Generic.Dictionary<IBuffer, uint> _bufferHeapOffsets = new();
-
-    // ---- RETURNING SLOTS ----------------------------------------------------------------------------------------
-    // A freed slot goes to a per-kind free list (slots fit one descriptor size) after the frames in flight are done with it.
-    private readonly System.Collections.Generic.Queue<uint> _freeImageSlots = new();
-    private readonly System.Collections.Generic.Queue<uint> _freeBufferSlots = new();
-
     private enum DescriptorKind { Image, Buffer }
 
     private void Retire(uint slot, DescriptorKind kind) => graphicsDevice.AddToDeferDisposeQueue(new RetiredSlot(this, slot, kind));
@@ -181,7 +167,6 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         }
     }
 
-
     public uint GetOrAllocateBufferOffset(IBuffer buffer, DescriptorType type)
     {
         lock (_heapSync)
@@ -192,8 +177,8 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             uint descAlignment = (uint)(ulong)DeviceHeapProperties.BufferDescriptorAlignment;
             uint offset = _freeBufferSlots.Count > 0
                 ? _freeBufferSlots.Dequeue()
-                : AllocateResourceOffset(descSize, descAlignment); // _heapSync is re-entrant
-            WriteBuffer(offset, buffer, 0, buffer.TotalSize, type);        // whole-buffer binding
+                : AllocateResourceOffset(descSize, descAlignment);
+            WriteBuffer(offset, buffer, 0, buffer.TotalSize, type);
             _bufferHeapOffsets[buffer] = offset;
             Track(buffer as DisposableObject, () => ReleaseBuffer(buffer));
             return offset;
@@ -230,7 +215,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             uint descAlignment = LeastCommonMultiple((uint)DeviceHeapProperties.ImageDescriptorAlignment, descSize);
             uint offset = _freeImageSlots.Count > 0
                 ? _freeImageSlots.Dequeue()
-                : AllocateResourceOffset(descSize, descAlignment); // _heapSync is re-entrant
+                : AllocateResourceOffset(descSize, descAlignment);
             WriteTexture(offset, texture, type);
             _textureHeapOffsets[texture] = offset;
             Track(texture as DisposableObject, () => ReleaseTexture(texture));
@@ -238,8 +223,6 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
         }
     }
 
-    // The resource tells us when it dies. Subscribed once, at the moment it takes a slot - which is also the only moment
-    // we know it has one.
     private static void Track(DisposableObject resource, Action release)
     {
         if (resource == null) return;
@@ -263,13 +246,6 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             Retire(slot, DescriptorKind.Buffer);
         }
     }
-
-    // ---- THE FALLBACK DESCRIPTOR --------------------------------------------------------------------------------
-    // Sampled when a parameter was never bound, instead of an out-of-heap index. Red 4x4 in Debug so the miss shows,
-    // transparent 1x1 in Release.
-    private uint _fallbackTextureOffset = uint.MaxValue;
-    private uint _fallbackSamplerOffset = uint.MaxValue;
-    private ITexture _fallbackTexture;
 
     public uint FallbackTextureOffset
     {
@@ -330,7 +306,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             Layout = texture.ImageLayout
         };
 
-        var resourceInfo = new ResourceDescriptorInfoEXT 
+        var resourceInfo = new ResourceDescriptorInfoEXT
         {
             Type = type
         };
@@ -339,13 +315,12 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
         WriteToResourceHeap(offset, descriptorSize, resourceInfo);
     }
-    
+
     public void WriteBuffer(ulong offset, IBuffer buffer, ulong bufferOffset, ulong bufferSize, DescriptorType type)
     {
         uint descriptorSize = (uint)graphicsDevice.Adapter.DeviceHeapProperties.BufferDescriptorSize;
 
-        // Pass the GPU address of this specific object's data start (base + offset within the arena)
-        var bufferRange = new DeviceAddressRangeKHR() 
+        var bufferRange = new DeviceAddressRangeKHR()
         {
             Address = buffer.GetDeviceAddress() + bufferOffset,
             Size = bufferSize
@@ -360,7 +335,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
         WriteToResourceHeap(offset, descriptorSize, resourceInfo);
     }
-    
+
     public unsafe void WriteSampler(uint offset, SamplerState samplerState)
     {
         uint descriptorSize = (uint)graphicsDevice.Adapter.DeviceHeapProperties.SamplerDescriptorSize;

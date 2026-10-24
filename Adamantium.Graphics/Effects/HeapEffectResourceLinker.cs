@@ -3,7 +3,7 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics.Effects;
 
-// The descriptor heap's linker: every bound resource takes its own stable heap slot, whose index a pass pushes per draw.
+/// <summary>The descriptor heap's linker: every bound resource takes a stable heap slot of its own.</summary>
 internal class HeapEffectResourceLinker(IDescriptorHeapManager heap) : EffectResourceLinker
 {
     protected override uint SlotOf(SamplerState sampler) => heap.GetOrAllocateSamplerOffset(sampler);

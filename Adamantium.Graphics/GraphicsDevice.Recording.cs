@@ -162,8 +162,6 @@ public partial class GraphicsDevice
             StencilAttachmentFormat = depthBuffer?.SurfaceFormat ?? Format.UNDEFINED,
             RasterizationSamples = (SampleCountFlagBits)renderTargets[0].MSAALevel
         };
-        // The recording draws through the heaps the primary has bound. Descriptor sets are not inherited: every pass in
-        // the recording pushes and binds its own.
         if (DescriptorManager is DescriptorHeapManager heap)
         {
             var (resourceHeap, samplerHeap) = heap.HeapBindInfos(this);

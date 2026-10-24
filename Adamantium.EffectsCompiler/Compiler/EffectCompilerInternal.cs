@@ -1121,7 +1121,6 @@ namespace Adamantium.EffectsCompiler
         /// <param name="reflectionResult"> A shader-reflection interface accesses shader information.</param>
         private void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult)
         {
-            // A binding id is unique within its set: the same id in two sets is two bindings.
             var groupByIds = reflectionResult.AllResources
                 .GroupBy(x => (x.Description.DescriptorSet, x.Description.SlotIndex))
                 .Where(group => group.Count() > 1).SelectMany(g => g).ToArray();

@@ -13,10 +13,6 @@ namespace Adamantium.Graphics.Effects;
 /// and buffers by their heap slot - both written to push data on every Apply.</summary>
 internal sealed class HeapEffectPass : EffectPass
 {
-    // The push-data wrappers, made ONCE. Both are generated as CLASSES, not structs, so `new` here allocated two objects
-    // on EVERY Apply - i.e. on every draw call, tens of thousands a second. They are marshaled to a pointer inside
-    // PushDataEXT and nothing keeps a reference past the call, so one instance per pass can be refilled and re-sent.
-    // Same lesson as the delegate this method already avoids (see WriteHeapOffsets): per-draw garbage in the draw path.
     private readonly HostAddressRangeConstEXT _pushRange = new();
     private readonly PushDataInfoEXT _pushDataInfo = new();
 
@@ -28,19 +24,12 @@ internal sealed class HeapEffectPass : EffectPass
     {
     }
 
-    // Which linker resource collection a heap-offset write pulls from - a plain kind so ApplyResources' inner loop needs no
-    // per-draw delegate/closure.
     private enum HeapResourceKind { ShaderResource, Sampler, Uav }
 
-    // === VK_EXT_descriptor_heap: CB via push-address; textures/samplers — indices into heaps ===
     private protected override unsafe void ApplyResources()
     {
         var resourceLinker = (EffectResourceLinker)Effect.ResourceLinker;
-
-        // Allocate a stack buffer for the full push-data size of this pass
         byte* pushDataBytes = stackalloc byte[(int)totalPushDataSize];
-
-        // Shared per-frame pool: sub-allocates CB data (a per-draw chunk), without a separate buffer per Apply.
         var dynamicPool = CurrentBufferPool;
         var device = (GraphicsDevice)graphicsDevice;
         var hashing = device.IsHashing;
@@ -49,9 +38,6 @@ internal sealed class HeapEffectPass : EffectPass
         for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
         {
             var stageBlock = stages[stageIndex];
-
-            // 1. CONSTANT BUFFERS (PushAddress):
-            // sub-allocate a chunk in the pool, copy the CB data, and put its GPU address into push data.
             for (int i = 0; i < stageBlock.ConstantBufferLinks.Count; ++i)
             {
                 var link = stageBlock.ConstantBufferLinks[i];
@@ -68,8 +54,6 @@ internal sealed class HeapEffectPass : EffectPass
                 *(ulong*)(pushDataBytes + pushOffset) = swallowing ? 0 : dynamicPool.Upload(link.ConstantBuffer, alignment);
             }
 
-            // Write each bound resource's heap-slot index into push data; link.Parameter is already resolved, so there is
-            // no per-draw lookup.
             WriteHeapOffsets(pushDataBytes, stageBlock.ShaderResourceViewSlotLinks, HeapResourceKind.ShaderResource);
             WriteHeapOffsets(pushDataBytes, stageBlock.SamplerStateSlotLinks, HeapResourceKind.Sampler);
             WriteHeapOffsets(pushDataBytes, stageBlock.UnorderedAccessViewSlotLinks, HeapResourceKind.Uav);
@@ -77,8 +61,6 @@ internal sealed class HeapEffectPass : EffectPass
 
         BindShaders();
 
-        // SEND PUSH DATA — strictly AFTER binding shaders (in the reference, push data goes after bind pipeline).
-        // Otherwise binding a shader resets push data before the draw.
         if (totalPushDataSize > 0)
         {
             _pushRange.Address = (nuint)pushDataBytes;
@@ -89,17 +71,11 @@ internal sealed class HeapEffectPass : EffectPass
             device.PushData(_pushDataInfo);
         }
 
-        // Writes each bound resource's stable heap-slot index into push data for one resource list. The actual descriptor
-        // (SampledImage / Sampler / StorageBuffer) already sits in that heap slot (allocated by the linker); here we only
-        // publish the index. link.Parameter is the pre-resolved EffectParameter, so no per-draw name lookup.
         void WriteHeapOffsets(byte* push, List<SlotLink> links, HeapResourceKind kind)
         {
             for (int i = 0; i < links.Count; ++i)
             {
                 var link = links[i];
-                // resourceLinker is read from the enclosing scope directly (a struct closure - no heap alloc). Passing a
-                // Func here allocated a delegate + closure PER Apply, i.e. per draw, which showed up as GC-driven frame
-                // spikes (240 -> 60 fps) under many draws. A plain kind switch keeps the single loop without the garbage.
                 IHeapResource[] resources = kind switch
                 {
                     HeapResourceKind.ShaderResource => link.IsStorageBuffer
@@ -110,9 +86,6 @@ internal sealed class HeapEffectPass : EffectPass
                 };
                 uint basePushOffset = parameterPushOffsets[link.Parameter];
 
-                // Every element a texture or sampler parameter DECLARES. One never set has no entry at all, and its index
-                // stayed 0 - heap slot 0, whatever holds it, or a texture freed since, which loses the device. Buffers
-                // keep what they had: there is no buffer stand-in, and an image descriptor read as one is no better.
                 var isBuffer = kind == HeapResourceKind.Uav || link.IsStorageBuffer;
                 var wholeHeap = kind == HeapResourceKind.ShaderResource && !isBuffer && link.Parameter.ElementCount == 0;
                 if (wholeHeap)
@@ -132,10 +105,6 @@ internal sealed class HeapEffectPass : EffectPass
                     var resource = resIdx < resources.Length ? resources[resIdx] : null;
                     var slot = isBuffer ? resource?.GlobalHeapOffset ?? uint.MaxValue
                         : resource is { HasLiveSlot: true } ? resource.GlobalHeapOffset : uint.MaxValue;
-                    // Nothing bound. An out-of-heap index would sample whatever the driver finds there - in practice
-                    // another effect's live descriptor - so hand over the stand-in instead: the worst case becomes a
-                    // red square (DEBUG) or a transparent one, both of which are honest, rather than someone else's
-                    // texture. The pass is still marked, because a missing binding is a bug either way.
                     if (slot == uint.MaxValue)
                     {
                         ReportUnbound(link.Parameter);
@@ -154,8 +123,6 @@ internal sealed class HeapEffectPass : EffectPass
         parameterPushOffsets.Clear();
         uint currentOffset = 0;
 
-        // Constant buffers (PushAddress): reserve 8 bytes for each unique CB to hold its
-        // 64-bit GPU address. ApplyResources sub-allocates CB data from the shared pool and writes the address here.
         for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
         {
             var stageBlock = pipelineStages[stageIndex];
@@ -188,7 +155,6 @@ internal sealed class HeapEffectPass : EffectPass
                     {
                         currentOffset = (currentOffset + 3) & ~3U;
                         parameterPushOffsets[param.Parameter] = currentOffset;
-                        // An array of no length still takes the slot its base is pushed in.
                         currentOffset += Math.Max(param.Parameter.ElementCount, 1) * 4;
                     }
                 }
@@ -210,9 +176,6 @@ internal sealed class HeapEffectPass : EffectPass
         totalPushDataSize = 0;
     }
 
-    // The stage's shader with each classic (set, binding) remapped to push data: a constant buffer to its address there,
-    // the rest to a heap index there. No set layouts. The mappings - where in push data each one reads, which the other
-    // stages' resources move - are the layout the binary cache keys by.
     private ShaderCreateInfoEXT MappedCreateInfo(StageBlock stage, out ulong layout)
     {
         var shaderCreateInfo = stage.NewCreateInfo();
@@ -233,8 +196,6 @@ internal sealed class HeapEffectPass : EffectPass
         var mappings = new DescriptorSetAndBindingMappingEXT[mappingCount];
         int mapIdx = 0;
 
-        // 1. Map the classic cbuffer register(b0) to PushAddress: the shader reads the CB
-        // directly via the 64-bit address from push data (written by ApplyResources at this same offset).
         foreach (var link in stage.ConstantBufferLinks)
         {
             mappings[mapIdx] = new DescriptorSetAndBindingMappingEXT
@@ -250,9 +211,6 @@ internal sealed class HeapEffectPass : EffectPass
             mapIdx++;
         }
 
-        // 2. Map each SRV register(t#) to a resource-heap slot. A texture -> a sampled-image descriptor; a
-        //    read-only StructuredBuffer (IsStorageBuffer) -> a read-only storage-buffer descriptor (its own
-        //    resource mask + the buffer-descriptor stride, not the image one).
         foreach (var link in stage.ShaderResourceViewSlotLinks)
         {
             mappings[mapIdx] = PushIndexed(link,
@@ -263,7 +221,6 @@ internal sealed class HeapEffectPass : EffectPass
             mapIdx++;
         }
 
-        // 3. Map the classic sampler register(s0) to an index in the sampler heap
         foreach (var link in stage.SamplerStateSlotLinks)
         {
             mappings[mapIdx] = PushIndexed(link, SpirvResourceTypeFlagBitsEXT.SamplerBitExt,
@@ -271,7 +228,6 @@ internal sealed class HeapEffectPass : EffectPass
             mapIdx++;
         }
 
-        // 4. Map the classic UAV register(u0) to an index in the resource heap
         foreach (var link in stage.UnorderedAccessViewSlotLinks)
         {
             mappings[mapIdx] = PushIndexed(link,
@@ -297,7 +253,6 @@ internal sealed class HeapEffectPass : EffectPass
                               mapping.SourceData.PushIndex.HeapArrayStride);
         }
 
-        // Pass it into native shader creation via a pointer
         shaderCreateInfo.PNext = new ShaderDescriptorSetAndBindingMappingInfoEXT
         {
             MappingCount = (uint)mappingCount,

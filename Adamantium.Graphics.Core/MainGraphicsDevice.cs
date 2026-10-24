@@ -365,7 +365,6 @@ public class MainGraphicsDevice : DisposableBase
             }
         }
 
-        // The heap only where shaders reach resources through it: a device with sets runs without it.
         if (DescriptorModel == DescriptorModel.Sets)
         {
             finalDeviceExtensions.Remove(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
@@ -375,12 +374,10 @@ public class MainGraphicsDevice : DisposableBase
             finalDeviceExtensions.Add(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
         }
 
-        // What was actually enabled: the same binary runs where the optional ones are missing (MoltenVK has none).
         EnabledDeviceExtensions = new HashSet<string>(finalDeviceExtensions, StringComparer.Ordinal);
 
         var vulkan11Features = new PhysicalDeviceVulkan11Features
         {
-            // SV_VertexID/SV_InstanceID need DrawParameters; without it vkCreateShadersEXT rejects the instanced shaders.
             ShaderDrawParameters = true,
         };
 
@@ -390,16 +387,13 @@ public class MainGraphicsDevice : DisposableBase
             BufferDeviceAddress = true,
             SamplerMirrorClampToEdge = true,
             ScalarBlockLayout = true,
-            // Byte colors in every instance record; there is no second layout to fall back to.
             StorageBuffer8BitAccess = true,
             ShaderInt8 = true,
-            // Texture arrays of no length: the resource heap - or the bindless set - seen as one, indexed per copy drawn.
             RuntimeDescriptorArray = true,
             ShaderSampledImageArrayNonUniformIndexing = true,
         };
         if (DescriptorModel == DescriptorModel.Sets)
         {
-            // The bindless set: written while frames that use it are in flight, read only where filled.
             vulkan12Features.DescriptorBindingSampledImageUpdateAfterBind = true;
             vulkan12Features.DescriptorBindingUpdateUnusedWhilePending = true;
             vulkan12Features.DescriptorBindingPartiallyBound = true;
@@ -409,21 +403,18 @@ public class MainGraphicsDevice : DisposableBase
         {
             Synchronization2 = true,
             DynamicRendering = true,
-            // Discard before a derivative compiles to demote; used without this it lost the device.
             ShaderDemoteToHelperInvocation = true,
         };
 
         var features14 = new PhysicalDeviceVulkan14Features
         {
             HostImageCopy = GraphicsAdapter.SupportsHostImageCopy,
-            // Each draw's own resources go with it.
             PushDescriptor = DescriptorModel == DescriptorModel.Sets
         };
 
         var deviceFeatures2 = GraphicsAdapter.Adapter.GetPhysicalDeviceFeatures2();
 
         deviceFeatures2.PNext = vulkan11Features;
-        // A driver with the extension has the feature too.
         if (finalDeviceExtensions.Contains(Constants.VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME))
         {
             deviceFeatures2.PNext = new PhysicalDeviceFragmentShaderBarycentricFeaturesKHR
@@ -442,7 +433,6 @@ public class MainGraphicsDevice : DisposableBase
             vulkan13Features.PNext = new PhysicalDeviceMaintenance7FeaturesKHR { Maintenance7 = true, PNext = features14 };
         }
 
-        // Each of these is there or not on its own; they follow the 1.4 features in this order.
         List<object> tail = [];
         if (EnableDynamicRendering && finalDeviceExtensions.Contains(Constants.VK_EXT_SHADER_OBJECT_EXTENSION_NAME))
         {

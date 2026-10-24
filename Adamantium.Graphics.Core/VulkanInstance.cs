@@ -132,11 +132,7 @@ public unsafe class VulkanInstance : DisposableBase
         createInfo.PEnabledExtensionNames = enabled;
         createInfo.EnabledExtensionCount = (uint)enabled.Length;
 
-        // Only layers that are there: asking for a missing one makes Instance.Create fail outright, which would take
-        // down the whole (e.g. designer) host instead of just running without it.
         var availableLayers = new HashSet<string>(layersAvailable.Select(x => x.LayerName));
-        // Debug layers first - nearest the application - so validation checks the engine's own calls rather than what a
-        // layer under it (the shader-object one) turns them into.
         var asked = IsInDebugMode ? Settings.DebugLayers.Concat(Settings.Layers) : Settings.Layers;
         var enabledLayers = asked.Distinct().Where(availableLayers.Contains).ToArray();
         EnabledLayers = new HashSet<string>(enabledLayers, StringComparer.Ordinal);
@@ -186,8 +182,6 @@ public unsafe class VulkanInstance : DisposableBase
         return new VulkanInstance(appName, enableDebug, settings);
     }
 
-    // The loader finds layers only on its own search paths; this adds the application's folders to them for this process
-    // alone, where native code reads them - .NET's own environment does not reach getenv on Linux and macOS.
     private static void AddLayerFolders(IEnumerable<string> folders)
     {
         const string variable = "VK_ADD_LAYER_PATH";

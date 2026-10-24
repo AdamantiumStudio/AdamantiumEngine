@@ -110,7 +110,6 @@ public class Universe : IUniverse
 
         if (mode == UniverseMode.Standalone)
         {
-            // The host's graphics settings where it registered them, the engine's own otherwise.
             var settings = Container.IsRegistered<GraphicsSettings>()
                 ? Container.Resolve<GraphicsSettings>()
                 : GraphicsSettings.CreateDefault();

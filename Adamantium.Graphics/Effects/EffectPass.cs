@@ -43,10 +43,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private List<DescriptorSetLayoutBinding> layoutBindings;
 
-    // The stages of this pass that have a shader, in pipeline order.
     private protected readonly List<StageBlock> stages = new List<StageBlock>();
 
-    // The transient per-frame constant-buffer arena lives on the render device (not the shared heap manager).
     private protected DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
 
     private uint appliesCounter = 0;
@@ -99,7 +97,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         appliesCounter++;
     }
 
-    /// <summary>Hands the stages in <see cref="stages"/> the resources bound to the effect and binds their shaders.</summary>
     private protected abstract void ApplyResources();
 
     /// <inheritdoc />
@@ -107,23 +104,16 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private HashSet<EffectParameter> _reportedUnbound;
 
-    /// <summary>A parameter this pass reads was bound to nothing, and a stand-in is drawn in its place.</summary>
     private protected void ReportUnbound(EffectParameter parameter)
     {
         ResourcesBound = false;
-        // Once per parameter of this pass: a resource left unset on purpose meets this on every draw.
         if ((_reportedUnbound ??= []).Add(parameter))
             UnboundResource.ReportOnce(Effect.Name, parameter?.Name);
     }
 
-    // The stage list of a pass does not change once its shaders exist, so the arrays vkCmdBindShadersEXT wants are built
-    // ONCE and re-used. A pass that also has to say "no geometry shader" carries that entry in the same arrays: one call
-    // instead of one per stage plus one for the null.
     private ShaderStageFlagBits[] _bindStages;
     private ShaderEXT[] _bindShaders;
 
-    /// <summary>Binds this pass's shaders - unless the command buffer already has THIS pass's shaders on it. A run of
-    /// draws of one material re-bound the same handles per draw, and every bind is a marshaled call.</summary>
     private protected void BindShaders()
     {
         if (graphicsDevice.ShadersBoundFor(this)) return;
@@ -227,52 +217,25 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private protected const ulong LayoutSeed = 0xCBF29CE484222325UL;
 
-    /// <summary>Folds <paramref name="value"/> into a resource layout's fingerprint - the same in every run, unlike
-    /// GetHashCode, since the binary cache names files by it.</summary>
     private protected static ulong Mix(ulong hash, ulong value)
     {
         var mixed = (hash ^ value) * 0x9E3779B97F4A7C15UL;
         return mixed ^ (mixed >> 31);
     }
 
-    /// <summary>Lays out how the stages reach their resources and creates their shader objects to match.</summary>
     private protected abstract void CreateShaders();
 
-    /// <summary>Lets go of what <see cref="CreateShaders"/> laid out, once frames in flight are done with it.</summary>
     private protected abstract void ReleaseResourceLayout();
 
-    /// <summary>
-    /// Initializes the stage block.
-    /// </summary>
-    /// <param name="stageBlock">The stage block.</param>
-    /// <param name="logger">The logger.</param>
     private void InitStageBlock(StageBlock stageBlock, Logger logger)
     {
-        // If null shader, then skip init
         var shaderIndex = stageBlock.Index;
         if (shaderIndex < 0)
         {
             return;
         }
 
-        // stageBlock.ShaderModule = Effect.Pool.GetOrCompileShader(
-        //     stageBlock.Type,
-        //     shaderIndex,
-        //     out var errorProfile);
-
         stageBlock.ByteCode = Effect.Pool.GetShaderBytecode(stageBlock.Type, shaderIndex);
-
-        // if (stageBlock.ShaderModule == null)
-        // {
-        //     logger.Error(
-        //         "Unsupported shader profile [{0} / {1}] on current GraphicsDevice in (effect [{2}] Technique [{3}] Pass: [{4}])",
-        //         stageBlock.Type,
-        //         errorProfile,
-        //         Effect.Name,
-        //         Technique.Name,
-        //         Name);
-        //     return;
-        // }
 
         var shaderStageInfo = new PipelineShaderStageCreateInfo();
         shaderStageInfo.Stage = EffectShaderTypeToShaderStage(stageBlock.Type);
@@ -287,12 +250,10 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         {
             var constantBufferRaw = shaderRaw.ConstantBuffers[i];
 
-            // Constant buffers with a null size are skipped
             if (constantBufferRaw.Size == 0)
                 continue;
 
             var constantBuffer = Effect.GetOrCreateConstantBuffer(constantBufferRaw);
-            // IF constant buffer is null, it means that there is a conflict
             if (constantBuffer == null)
             {
                 logger.Error(
@@ -304,19 +265,15 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             CreateAndAddLayoutBinding(constantBuffer.Description.DescriptorSet, constantBuffer.Description.Slot, 1U,
                 DescriptorType.UniformBuffer, EffectShaderTypeToShaderStage(stageBlock.Type));
 
-            // Test if this constant buffer is not already part of the effect
             if (Effect.ConstantBuffers[constantBufferRaw.Name] == null)
             {
-                // Add the declared constant buffer to the effect shader.
                 Effect.ConstantBuffers.Add(constantBuffer);
 
-                // Declare all parameter from constant buffer at the effect level.
                 foreach (var parameter in constantBuffer.Parameters)
                 {
                     var previousParameter = Effect.Parameters[parameter.Name];
                     if (previousParameter == null)
                     {
-                        // Add an effect parameter linked to the appropriate constant buffer at the effect level.
                         Effect.DeclareValueParameter(
                             (EffectData.ValueTypeParameter)parameter.ParameterDescription,
                             constantBuffer);
@@ -324,7 +281,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                     else if (parameter.ParameterDescription != previousParameter.ParameterDescription ||
                              parameter.Buffer != previousParameter.Buffer)
                     {
-                        // If registered parameters is different
                         logger.Error(
                             "Parameter [{0}] defined in Constant buffer [{0}] is already defined by another constant buffer with the definition [{2}]",
                             parameter,
@@ -337,13 +293,11 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
         stageBlock.ConstantBufferLinks.Clear();
 
-        // Declare all resource parameters at the effect level.
         foreach (var parameterRaw in shaderRaw.ResourceParameters)
         {
             EffectParameter parameter;
             var previousParameter = Effect.Parameters[parameterRaw.Name];
 
-            // Skip empty constant buffers.
             if (parameterRaw.Type == EffectParameterType.ConstantBuffer &&
                 Effect.ConstantBuffers[parameterRaw.Name] == null)
             {
@@ -361,7 +315,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                         parameterRaw,
                         (EffectData.ResourceParameter)previousParameter.ParameterDescription))
                 {
-                    // If registered parameters is different
                     logger.Error(
                         "Resource Parameter [{0}] is already defined with a different definition [{1}]",
                         parameterRaw,
@@ -375,7 +328,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                 ConvertFromEffectParameterType(parameterRaw.Type),
                 EffectShaderTypeToShaderStage(stageBlock.Type));
 
-            // For constant buffers, we need to store explicit link
             if (parameter.ResourceType == EffectResourceType.ConstantBuffer)
             {
                 stageBlock.ConstantBufferLinks.Add(new ConstantBufferLink(Effect.ConstantBuffers[parameter.Name], parameter));
@@ -484,10 +436,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         }
     }
 
-    /// <summary>
-    /// Optimizes the slot links.
-    /// </summary>
-    /// <param name="stageBlock">The stage block.</param>
     private void PrepareSlotLinks(ref StageBlock stageBlock)
     {
         foreach (var parameter in stageBlock.Parameters)
@@ -497,8 +445,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             switch (resourceType)
             {
                 case EffectResourceType.ShaderResourceView:
-                    // A read-only StructuredBuffer reflects as an SRV too, but its resource is a STORAGE BUFFER, not a
-                    // texture. Same list, tagged so the consumers branch (read-only storage-buffer descriptor + mask).
                     link = new SlotLink((uint)parameter.Parameter.SlotIndex, (uint)parameter.Parameter.DescriptorSet,
                         parameter.Parameter.ParameterDescription, parameter.Parameter,
                         isStorageBuffer: parameter.Parameter.ParameterDescription.Type == EffectParameterType.StorageBuffer);
@@ -531,32 +477,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         {
             switch (property.Key)
             {
-                //case EffectData.PropertyKeys.Blending:
-                //    BlendState = graphicsDevice.BlendStates[(string)property.Value];
-                //    if (BlendState == null)
-                //        logger.Error("Unable to find registered BlendState [{0}]", (string)property.Value);
-                //    break;
-                //case EffectData.PropertyKeys.BlendingColor:
-                //    BlendStateColor = (Color4)(Vector4F)property.Value;
-                //    break;
-                //case EffectData.PropertyKeys.BlendingSampleMask:
-                //    BlendStateSampleMask = (uint)property.Value;
-                //    break;
-
-                //case EffectData.PropertyKeys.DepthStencil:
-                //    DepthStencilState = graphicsDevice.DepthStencilStates[(string)property.Value];
-                //    if (DepthStencilState == null)
-                //        logger.Error("Unable to find registered DepthStencilState [{0}]", (string)property.Value);
-                //    break;
-                //case EffectData.PropertyKeys.DepthStencilReference:
-                //    DepthStencilReference = (int)property.Value;
-                //    break;
-
-                //case EffectData.PropertyKeys.Rasterizer:
-                //    RasterizerState = graphicsDevice.RasterizerStates[(string)property.Value];
-                //    if (RasterizerState == null)
-                //        logger.Error("Unable to find registered RasterizerState [{0}]", (string)property.Value);
-                //    break;
                 default:
                     passProperties[new PropertyKey(property.Key)] = property.Value;
                     break;
@@ -608,7 +528,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         base.Dispose(disposeManagedResources);
     }
 
-    // Frames in flight may still bind these shaders.
     private void RetireStages()
     {
         foreach (var stage in pipelineStages)
@@ -644,8 +563,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
         public readonly uint DescriptorSet;
 
-        // An SRV slot that is a read-only StructuredBuffer (a storage-buffer resource) rather than a texture. Only
-        // meaningful for links in ShaderResourceViewSlotLinks; lets the one SRV loop branch instead of a second list.
         public readonly bool IsStorageBuffer;
     }
 
@@ -657,7 +574,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     {
         public List<ParameterBinding> Parameters;
         public readonly List<SlotLink> SamplerStateSlotLinks;
-        public readonly List<SlotLink> ShaderResourceViewSlotLinks;   // textures AND read-only StructuredBuffers (SlotLink.IsStorageBuffer)
+        public readonly List<SlotLink> ShaderResourceViewSlotLinks;
         public readonly List<SlotLink> UnorderedAccessViewSlotLinks;
 
         public readonly ShaderStageFlagBits Stage;
@@ -671,7 +588,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
         public byte[] ByteCode;
         public string EntryPoint;
-        /// <summary>effect.technique.pass.stage - names this shader's binary-cache file so the cache folder is readable.</summary>
         public string CacheName;
         public readonly EffectShaderType Type;
         public readonly IGraphicsDevice GraphicsDevice;
@@ -688,7 +604,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             ConstantBufferLinks = new List<ConstantBufferLink>();
         }
 
-        /// <summary>This stage's shader as SPIR-V, for a pass to say how it reaches its resources.</summary>
         public ShaderCreateInfoEXT NewCreateInfo() => new()
         {
             Stage = Stage,
@@ -699,8 +614,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             PName = EntryPoint
         };
 
-        /// <summary>Creates the shader; <paramref name="layout"/> stands for how the whole pass reaches its resources, which
-        /// the binary cache keys by.</summary>
         public void CreateShader(ShaderCreateInfoEXT createInfo, ulong layout)
         {
             ShaderObject = ((GraphicsDevice)GraphicsDevice).CreateShader(createInfo, CacheName, layout);
@@ -749,12 +662,10 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         private long generation;
         private readonly ConditionalWeakTable<EffectConstantBuffer, UploadedConstants> uploads = new();
 
-        public DynamicBufferPool(IGraphicsDevice device, ulong pageSize = 2 * 1024 * 1024) // 2 MB initial page; grows on demand per frame
+        public DynamicBufferPool(IGraphicsDevice device, ulong pageSize = 2 * 1024 * 1024)
         {
             graphicsDevice = device;
             this.pageSize = pageSize;
-
-            // Create the first page immediately
             CreateNewPage();
         }
 
@@ -819,10 +730,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
-            // Align the current offset to hardware requirements (e.g., to 16 or 256 bytes)
             ulong alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
-
-            // If the data does not fit within the current page, create/take the next one
             if (alignedOffset + size > pageSize)
             {
                 currentPageIndex++;
@@ -831,24 +739,17 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                     CreateNewPage();
                 }
 
-                // On a new page the allocation is guaranteed to start at zero
                 alignedOffset = 0;
             }
 
             Buffer page = pages[currentPageIndex];
-
-            // Advance the allocator pointer for the next Allocate call
             currentOffset = alignedOffset + size;
-
-            // Return the page itself and the exact byte offset within it
             return (page, alignedOffset);
         }
 
         private void CreateNewPage()
         {
-            // CRITICALLY IMPORTANT: the ShaderDeviceAddress flag is required for Vulkan to allow obtaining the buffer's GPU address
             var flags = BufferUsageFlags.UniformBuffer | BufferUsageFlags.ShaderDeviceAddress;
-            // Constant-buffer pages: CPU writes them, GPU reads them each frame → CPU-to-GPU upload (BAR window).
             var memFlags = BufferMemoryUsage.UploadFromCpuToGpu;
 
             var buffer = Buffer.New(graphicsDevice, pageSize, flags, memFlags);

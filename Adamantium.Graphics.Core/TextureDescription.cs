@@ -276,7 +276,6 @@ public struct TextureDescription
             ImageTiling = ImageTiling.Optimal,
             SharingMode = SharingMode.Exclusive,
             ImageType = ConvertToImageType(description.Dimension),
-            // PREINITIALIZED is for LINEAR tiling only; an optimal image starts undefined and is filled by a copy.
             InitialLayout = ImageLayout.Undefined,
             ImageAspect = ImageAspectFlagBits.ColorBit
         };

@@ -6,8 +6,7 @@ public interface IGraphicsDeviceFactory
 {
     IGraphicsDevice Create(MainGraphicsDevice mainDevice, GraphicsDeviceType deviceType);
 
-    // Bridges Graphics.Core -> Graphics: lets MainGraphicsDevice (Core) own the heap or the descriptor sets without
-    // referencing the impl.
+    /// <summary>The heap or the descriptor sets for <paramref name="model"/>, which MainGraphicsDevice owns.</summary>
     IDescriptorManager CreateDescriptorManager(IGraphicsDevice device, DescriptorModel model);
 
     // Same bridge for the shared device-memory allocator (one per logical device, owned by MainGraphicsDevice).

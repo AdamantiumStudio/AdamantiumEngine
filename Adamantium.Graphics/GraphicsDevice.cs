@@ -194,8 +194,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         MaxFramesInFlight = mainDevice.BuffersCount;
         InitializeRenderDevice();
         InitializePipeline();
-        // One descriptor heap - or one set of shared descriptor sets - per logical device, owned by the main device and
-        // shared by every render-device wrapper (they share one VkDevice). Just reference it — no per-device allocation.
         DescriptorManager = mainDevice.DescriptorManager;
 
         // The per-frame constant-buffer arena stays per render device: devices render concurrently (parallel universes)
@@ -628,9 +626,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name = null) =>
         CreateShader(shaderCreateInfo, name, 0);
 
-    /// <summary>As <see cref="CreateShader(ShaderCreateInfoEXT, string)"/>, for a shader whose resource layout - what
-    /// <paramref name="layout"/> stands for - is not all in its create info: a cached binary of another layout is not
-    /// taken.</summary>
+    /// <summary>As <see cref="CreateShader(ShaderCreateInfoEXT, string)"/>; the binary cache takes only a binary made for
+    /// the same <paramref name="layout"/>.</summary>
     internal ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
     {
         lock (ShaderCreateLock)
@@ -1532,9 +1529,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             Hash(0x5E7F);
             HashViewportsAndScissors(viewportsArray, default);
         }
-
-        // The command buffer hears of it at the next draw (SetDrawingState), with the count shader objects need. Sending
-        // vkCmdSetViewport here as well set state the shader-object layer's pipelines do not declare dynamic.
     }
 
     public void SetScissors(params ReadOnlySpan<Rect2D> scissors)
@@ -1554,8 +1548,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             Hash(0x5C15);
             HashViewportsAndScissors(default, scissorsArray);
         }
-
-        // Sent at the next draw, as viewports are.
     }
 
     // The most recently set viewport/scissor, so code that interrupts the pass to render to another target (the font

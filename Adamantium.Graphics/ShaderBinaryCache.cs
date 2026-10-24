@@ -5,23 +5,15 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics;
 
-/// <summary>On-disk cache of driver-compiled shader-object binaries, keyed by pipeline-cache UUID and driver version, so later
-/// launches create shaders from the binary instead of SPIR-V. Any IO failure falls back to SPIR-V.</summary>
+/// <summary>On-disk cache of driver-compiled shader-object binaries, keyed by GPU, driver version and descriptor model, so
+/// later launches create shaders from the binary instead of SPIR-V. Any IO failure falls back to SPIR-V.</summary>
 public static class ShaderBinaryCache
 {
     /// <summary>Master switch (off = always compile from SPIR-V, the pre-cache behavior).</summary>
     public static bool Enabled = true;
 
-    // What the files in a folder are: raised when what they hold or how they are named changes, so a folder of the old
-    // ones - and its precompile stamp - is left behind instead of read.
     private const int Format = 2;
 
-    // The per-device cache folder: %LOCALAPPDATA%/Adamantium/ShaderCache/<deviceHash>/. Keyed by the STABLE identity of
-    // the GPU + driver (device name + vendor/device id + driver version) - which changes exactly when a cached binary
-    // would become incompatible - and by how shaders reach their resources: the heap and descriptor sets build different
-    // binaries from the same SPIR-V, and each path has its own precompile stamp and compile record. NB pipelineCacheUUID
-    // is deliberately NOT used: its marshaled bytes were not stable across runs here, so it spawned a fresh folder every
-    // launch and the cache never hit (the whole point defeated).
     private static string DeviceDir(GraphicsDevice device)
     {
         var props = device.MainDevice.GraphicsAdapter.AdapterProperties;
@@ -38,11 +30,6 @@ public static class ShaderBinaryCache
     /// changes.</summary>
     public static string DirectoryFor(GraphicsDevice device) => DeviceDir(device);
 
-    // The cache file for one shader: "<effect>.<technique>.<pass>.<stage>_<hash>.shaderbin". The NAME is what makes the
-    // folder readable - which shader is which, and how many actually compiled - and the HASH is what keeps it correct:
-    // it covers the SPIR-V bytes + stage + entry-point name, so editing a shader lands on a new file instead of loading
-    // a binary that no longer matches the code (the name alone cannot tell two versions apart), and the layout of the
-    // pass's resources, which the other stages' code changes as much as this one's.
     private static string FileFor(GraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout)
     {
         using var sha = SHA256.Create();
@@ -50,15 +37,12 @@ public static class ShaderBinaryCache
         if (!info.PCode.IsEmpty) buf.Write(info.PCode.Span);
         buf.Write(BitConverter.GetBytes((uint)info.Stage));
         buf.Write(BitConverter.GetBytes(layout));
-        // Hash the entry-point NAME's bytes, not String.GetHashCode - the latter is RANDOMIZED per process, so it made
-        // the file name differ every run and the cache never hit.
         if (!string.IsNullOrEmpty(info.PName)) buf.Write(System.Text.Encoding.UTF8.GetBytes(info.PName));
         var hash = Convert.ToHexString(sha.ComputeHash(buf.ToArray())).Substring(0, 16);
         var readable = Sanitize(name) ?? info.Stage.ToString();
         return Path.Combine(DeviceDir(device), $"{readable}_{hash}.shaderbin");
     }
 
-    // File names come from shader/technique/pass names, so keep only what a file name may hold.
     private static string Sanitize(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;

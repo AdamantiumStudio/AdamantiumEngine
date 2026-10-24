@@ -21,9 +21,7 @@ namespace Adamantium.Engine.GraphicsTests
             Main = MainGraphicsDevice.Create(new GraphicsDeviceFactory(), Settings(), "TestApp", true);
         }
 
-        /// <summary>The default settings, with the descriptor model the run asks for:
-        /// <c>dotnet test -- TestRunParameters.Parameter(name="DescriptorModel", value="Sets")</c> runs every GPU test on
-        /// descriptor sets on a device that has the heap.</summary>
+        /// <summary>The default settings with the run parameter <c>DescriptorModel</c>, if given.</summary>
         public static GraphicsSettings Settings()
         {
             var settings = GraphicsSettings.CreateDefault();

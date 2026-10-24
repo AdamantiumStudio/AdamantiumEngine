@@ -92,11 +92,8 @@ internal class EffectResourceLinker : IEffectResourceLinker
     private static ResourceInfo<Buffer>[] EmptyShaderResourceBuffers = [];
     private static ResourceInfo<Buffer>[] EmptyUAVs = [];
 
-    /// <summary>The value of <see cref="ResourceInfo{T}.GlobalHeapOffset"/> where a path keeps no slots.</summary>
     protected const uint NoSlot = uint.MaxValue;
 
-    // Where a bound resource's descriptor waits for the draws that read it: a heap slot. Descriptor sets keep none - a
-    // pass writes the descriptors as it is applied.
     protected virtual uint SlotOf(SamplerState sampler) => NoSlot;
 
     protected virtual uint SlotOf(Texture texture) => NoSlot;

@@ -9,16 +9,15 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics;
 
-/// <summary>Descriptor sets, for a device without VK_EXT_descriptor_heap. A pass pushes its own descriptors on every
-/// draw; a texture array of no length reads one set shared by every pass, holding each texture that asked for an index
-/// at that index - the same index the heap path gives it. Also owns the samplers pushed descriptors name, one per
-/// description.</summary>
+/// <summary>Descriptor sets for a device without VK_EXT_descriptor_heap: the shared set of a texture array of no length,
+/// and the samplers that passes push.</summary>
 public class DescriptorSetManager : DisposableObject, IDescriptorManager
 {
     /// <summary>How many textures the shared array holds at most.</summary>
     public const uint ArrayCapacity = 16384;
 
-    // Every stage a pass may have. ShaderStageFlagBits.All of the bindings is 7, not VK_SHADER_STAGE_ALL.
+    /// <summary>Every stage a pass may have (the bindings' <c>ShaderStageFlagBits.All</c> is 7 in Adamantium.Vulkan
+    /// 1.0.4).</summary>
     internal const ShaderStageFlagBits EveryStage = ShaderStageFlagBits.VertexBit |
                                                     ShaderStageFlagBits.TessellationControlBit |
                                                     ShaderStageFlagBits.TessellationEvaluationBit |
@@ -37,6 +36,8 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
     private DescriptorSetLayout _emptyLayout;
     private ITexture _fallbackTexture;
     private Buffer _fallbackBuffer;
+    private readonly ConditionalWeakTable<object, StrongBox<ulong>> _identities = new();
+    private long _lastIdentity;
 
     public DescriptorSetManager(IGraphicsDevice graphicsDevice)
     {
@@ -87,7 +88,6 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
         }
     }
 
-    // The index goes back to the free list once the frames in flight are done with it.
     private void Release(ITexture texture)
     {
         lock (_sync)
@@ -108,8 +108,7 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
         }
     }
 
-    /// <summary>The set holding every texture that has an index, for a shader that declares its array at
-    /// <paramref name="binding"/> - alone in its set - and the layout that set has.</summary>
+    /// <summary>The set of every indexed texture for an array declared at <paramref name="binding"/>, and its layout.</summary>
     internal (DescriptorSetLayout Layout, DescriptorSet Set) TextureArray(uint binding)
     {
         lock (_sync)
@@ -193,12 +192,7 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
         LogicalDevice.UpdateDescriptorSets(1, write, 0, out _);
     }
 
-    private readonly ConditionalWeakTable<object, StrongBox<ulong>> _identities = new();
-    private long _lastIdentity;
-
-    /// <summary>A number of <paramref name="resource"/>'s own that no other resource ever gets: what a recording's
-    /// fingerprint names a pushed texture or buffer by. A handle will not do - a resource made after another is gone may
-    /// be given the same one, and a recording that pushed the old one's descriptor would be taken for current.</summary>
+    /// <summary>A number no other resource ever gets: what a recording's fingerprint names a pushed resource by.</summary>
     internal ulong IdentityOf(object resource) =>
         _identities.TryGetValue(resource, out var identity)
             ? identity.Value

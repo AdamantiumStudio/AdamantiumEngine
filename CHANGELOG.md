@@ -14,7 +14,8 @@ All packages share one version.
   A pass that needs more push descriptors or a bigger uniform buffer than the GPU gives, or binds two resources at one
   binding, is refused with its name rather than drawn wrong. `GraphicsAdapter.MaxPushDescriptors`.
 - `GraphicsSettings`: what the application asks of Vulkan - instance and device extensions, required and optional,
-  layers (`VK_LAYER_KHRONOS_shader_object` where present, validation in debug), folders the loader looks for layers in,
+  layers (`VK_LAYER_KHRONOS_shader_object` where present, validation in debug), folders the loader looks for layers in
+  (by default `vulkan/layers/<rid>` beside the application, where `Adamantium.Vulkan.ShaderObjectLayer` puts the layer),
   the descriptor model (`DescriptorModel.Auto` / `Heap` / `Sets`) and the frames in flight. `GraphicsSettings.
   CreateDefault()` gives what the engine used before; `MainGraphicsDevice.Create`, `VulkanInstance.Create` and
   `GraphicsDeviceService` take it. `MainGraphicsDevice.DescriptorModel` tells which path the device took.
