@@ -27,6 +27,8 @@ public enum SharedHandleType
 /// <c>RenderTargetPanel</c> can import it zero-copy.</summary>
 public sealed class SharedSurfaceDescriptor
 {
+    private long _submitted;
+
     /// <summary>The kind of handle in <see cref="MemoryHandle"/> (decides the Vulkan handle type on import).</summary>
     public SharedHandleType HandleType { get; set; } = SharedHandleType.OpaqueWin32;
 
@@ -55,4 +57,11 @@ public sealed class SharedSurfaceDescriptor
 
     /// <summary>Raised each time the consumer asks for a frame; a producer in the same process paces by it.</summary>
     public SharedSurfaceDemand Demand { get; } = new();
+
+    /// <summary>The newest frame a producer in the same process has submitted, finished or not; 0 from a producer in
+    /// another process. A consumer tells by it that a frame is on its way.</summary>
+    public ulong Submitted => (ulong)System.Threading.Interlocked.Read(ref _submitted);
+
+    /// <summary>For a producer in the same process: frame <paramref name="frame"/> is submitted.</summary>
+    public void NoteSubmitted(ulong frame) => System.Threading.Interlocked.Exchange(ref _submitted, (long)frame);
 }

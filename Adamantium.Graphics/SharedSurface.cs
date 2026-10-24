@@ -60,6 +60,10 @@ public sealed unsafe class SharedSurface : Texture
     /// </summary>
     public ulong LatchNewFrame() => LatchNewest(out _);
 
+    /// <summary>For the consumer: a frame newer than the last one latched has been submitted by a producer in the same
+    /// process and has not been latched yet - it may still be drawing.</summary>
+    public bool AwaitsFrame => Descriptor != null && Descriptor.Submitted > _latched;
+
     private ulong LatchNewest(out SharedSurface source)
     {
         source = null;
