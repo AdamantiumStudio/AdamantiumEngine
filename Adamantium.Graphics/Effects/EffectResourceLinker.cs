@@ -92,12 +92,16 @@ internal class EffectResourceLinker : IEffectResourceLinker
     private static ResourceInfo<Buffer>[] EmptyShaderResourceBuffers = [];
     private static ResourceInfo<Buffer>[] EmptyUAVs = [];
 
-    internal IDescriptorHeapManager DescriptorHeapManager { get; }
+    /// <summary>The value of <see cref="ResourceInfo{T}.GlobalHeapOffset"/> where a path keeps no slots.</summary>
+    protected const uint NoSlot = uint.MaxValue;
 
-    public EffectResourceLinker(IDescriptorHeapManager descriptorHeapManager)
-    {
-        DescriptorHeapManager = descriptorHeapManager;
-    }
+    // Where a bound resource's descriptor waits for the draws that read it: a heap slot. Descriptor sets keep none - a
+    // pass writes the descriptors as it is applied.
+    protected virtual uint SlotOf(SamplerState sampler) => NoSlot;
+
+    protected virtual uint SlotOf(Texture texture) => NoSlot;
+
+    protected virtual uint SlotOf(Buffer buffer) => NoSlot;
 
     /// <summary>
     /// Initializes this instance.
@@ -279,7 +283,7 @@ internal class EffectResourceLinker : IEffectResourceLinker
                 if (state != null)
                 {
                     states[index].Resource = state;
-                    states[index].GlobalHeapOffset = DescriptorHeapManager.GetOrAllocateSamplerOffset(state);
+                    states[index].GlobalHeapOffset = SlotOf(state);
                 }
                 else
                 {
@@ -303,8 +307,7 @@ internal class EffectResourceLinker : IEffectResourceLinker
 
                     srvBufs[index] ??= new ResourceInfo<Buffer>();
                     srvBufs[index].Resource = srvBuffer;
-                    srvBufs[index].GlobalHeapOffset =
-                        DescriptorHeapManager.GetOrAllocateBufferOffset(srvBuffer, DescriptorType.StorageBuffer);
+                    srvBufs[index].GlobalHeapOffset = SlotOf(srvBuffer);
                     break;
                 }
 
@@ -333,8 +336,7 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     // This texture's OWN stable heap slot (bindless). The offset used to be allocated per parameter, so
                     // every texture bound to ShaderTexture shared ONE slot and the last-written one showed up on every
                     // draw. The slot belongs to the texture itself.
-                    views[index].GlobalHeapOffset =
-                        DescriptorHeapManager.GetOrAllocateTextureOffset(texture, DescriptorType.SampledImage);
+                    views[index].GlobalHeapOffset = SlotOf(texture);
                 }
                 else
                 {
@@ -363,8 +365,7 @@ internal class EffectResourceLinker : IEffectResourceLinker
                     uavs[index].Resource = buffer;
 
                     // This buffer's OWN stable heap slot - same per-resource rule as textures and samplers.
-                    uavs[index].GlobalHeapOffset =
-                        DescriptorHeapManager.GetOrAllocateBufferOffset(buffer, DescriptorType.StorageBuffer);
+                    uavs[index].GlobalHeapOffset = SlotOf(buffer);
                 }
                 else
                 {

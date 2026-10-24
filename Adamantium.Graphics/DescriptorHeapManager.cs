@@ -32,7 +32,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     }
 
     // Binds the shared heap onto the CALLING render device's command buffer (not the heap's construction device).
-    public void BindDescriptorHeaps(IGraphicsDevice device)
+    public void BindTo(IGraphicsDevice device)
     {
         var (resourceBindInfo, samplerBindInfo) = HeapBindInfos(device);
         device.CurrentCommandBuffer.BindResourceHeapEXT(resourceBindInfo);
@@ -161,31 +161,6 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     private readonly System.Collections.Generic.Dictionary<SamplerKey, uint> _samplerOffsetsByDescription = new();
     private readonly System.Collections.Generic.Dictionary<IBuffer, uint> _bufferHeapOffsets = new();
 
-    private readonly record struct SamplerKey(
-        SamplerCreateFlagBits Flags,
-        Filter MagFilter,
-        Filter MinFilter,
-        SamplerMipmapMode MipmapMode,
-        SamplerAddressMode AddressModeU,
-        SamplerAddressMode AddressModeV,
-        SamplerAddressMode AddressModeW,
-        float MipLodBias,
-        bool AnisotropyEnable,
-        float MaxAnisotropy,
-        bool CompareEnable,
-        CompareOp CompareOp,
-        float MinLod,
-        float MaxLod,
-        BorderColor BorderColor,
-        bool UnnormalizedCoordinates,
-        object Extension)
-    {
-        public static SamplerKey Of(SamplerCreateInfo info) => new(info.Flags, info.MagFilter, info.MinFilter,
-            info.MipmapMode, info.AddressModeU, info.AddressModeV, info.AddressModeW, info.MipLodBias,
-            info.AnisotropyEnable, info.MaxAnisotropy, info.CompareEnable, info.CompareOp, info.MinLod, info.MaxLod,
-            info.BorderColor, info.UnnormalizedCoordinates, info.PNext);
-    }
-
     // ---- RETURNING SLOTS ----------------------------------------------------------------------------------------
     // A freed slot goes to a per-kind free list (slots fit one descriptor size) after the frames in flight are done with it.
     private readonly System.Collections.Generic.Queue<uint> _freeImageSlots = new();
@@ -304,7 +279,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
             {
                 if (_fallbackTextureOffset != uint.MaxValue) return _fallbackTextureOffset;
 
-                _fallbackTexture = CreateFallbackTexture();
+                _fallbackTexture = FallbackTexture.Create(graphicsDevice);
                 _fallbackTextureOffset = GetOrAllocateTextureOffset(_fallbackTexture, DescriptorType.SampledImage);
                 return _fallbackTextureOffset;
             }
@@ -323,39 +298,6 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
                 return _fallbackSamplerOffset;
             }
         }
-    }
-
-    private ITexture CreateFallbackTexture()
-    {
-#if DEBUG
-        const uint size = 4;
-        var pixels = new byte[size * size * 4];
-        for (var i = 0; i < pixels.Length; i += 4)
-        {
-            pixels[i] = 255;        // R
-            pixels[i + 3] = 255;    // A
-        }
-#else
-        const uint size = 1;
-        var pixels = new byte[4];   // transparent black
-#endif
-        return graphicsDevice.CreateTexture(new TextureDescription
-        {
-            Width = size,
-            Height = size,
-            Depth = 1,
-            ArrayLayers = 1,
-            MipLevels = 1,
-            Samples = MSAALevel.None,
-            Format = Format.R8G8B8A8_UNORM,
-            InitialLayout = ImageLayout.Undefined,
-            DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal,
-            ImageType = ImageType._2d,
-            ImageAspect = ImageAspectFlagBits.ColorBit,
-            ImageTiling = ImageTiling.Optimal,
-            Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit,
-            Dimension = Imaging.TextureDimension.Texture2D
-        }, pixels);
     }
 
     public uint GetOrAllocateSamplerOffset(SamplerState samplerState)

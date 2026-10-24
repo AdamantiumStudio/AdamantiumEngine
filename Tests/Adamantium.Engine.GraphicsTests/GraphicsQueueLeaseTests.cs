@@ -45,7 +45,7 @@ public class GraphicsQueueLeaseTests
     [Test]
     public void ALostDevice_IsReportedOnce()
     {
-        var main = MainGraphicsDevice.Create(new GraphicsDeviceFactory(), 3, "LostDevice", false);
+        var main = MainGraphicsDevice.Create(new GraphicsDeviceFactory(), GpuFixture.Settings(), "LostDevice", false);
         try
         {
             var reports = 0;

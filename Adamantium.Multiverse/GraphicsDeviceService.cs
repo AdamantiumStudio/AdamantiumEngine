@@ -28,11 +28,15 @@ public sealed partial class GraphicsDeviceService : IGraphicsDeviceService
         set => _deviceUpdateNeeded = value;
     }
 
-    public GraphicsDeviceService(IGraphicsDeviceFactory deviceFactory, bool isInDebug)
+    public GraphicsDeviceService(IGraphicsDeviceFactory deviceFactory, bool isInDebug, GraphicsSettings settings)
     {
         IsInDebugMode = isInDebug;
         GraphicsDeviceFactory = deviceFactory;
+        Settings = settings;
     }
+
+    /// <summary>How the devices this service creates set Vulkan up.</summary>
+    public GraphicsSettings Settings { get; }
 
     void IGraphicsDeviceService.CreateMainDevice(string name)
     {
@@ -107,10 +111,7 @@ public sealed partial class GraphicsDeviceService : IGraphicsDeviceService
             MainGraphicsDevice.Dispose();
         }
 
-        // TEMP knob for the in-flight depth measurement (ADAM_FRAMES_IN_FLIGHT). This is what MaxFramesInFlight is taken
-        // from, i.e. how far the CPU may run ahead of the GPU before it blocks on a slot's fence.
-        var inFlight = Environment.GetEnvironmentVariable("ADAM_FRAMES_IN_FLIGHT") is { } f && uint.TryParse(f, out var n) ? n : 3;
-        MainGraphicsDevice = MainGraphicsDevice.Create(GraphicsDeviceFactory, inFlight, name, debugEnabled);
+        MainGraphicsDevice = MainGraphicsDevice.Create(GraphicsDeviceFactory, Settings, name, debugEnabled);
         // The main device now creates and owns its resource-loader device + shared descriptor heap; we only read them.
         MainGraphicsDevice.Disposing += GraphicsDeviceDisposing;
         MainGraphicsDevice.Lost += MainDeviceLost;

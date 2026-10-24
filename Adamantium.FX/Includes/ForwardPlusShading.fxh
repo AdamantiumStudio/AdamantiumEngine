@@ -52,8 +52,9 @@ uint InstanceBase;
 float4x4 view;
 float4x4 viewProjection;
 sampler sampleType;
-// Every texture of the resource heap, by its slot there: the copies of one draw each name their own.
-Texture2D meshTextures[];
+// Every texture of the resource heap - or of the shared texture set - by its slot there: the copies of one draw each name
+// their own. A set of its own, which descriptor sets bind apart from the pass's other resources.
+Texture2D meshTextures[] : register(t0, space1);
 
 struct MESH_VERTEX
 {

@@ -4,7 +4,7 @@ namespace Adamantium.Graphics.Core;
 
 /// <summary>The global descriptor heap (VK_EXT_descriptor_heap): one per logical device, owned by
 /// <see cref="MainGraphicsDevice"/> and shared by its render devices.</summary>
-public interface IDescriptorHeapManager : System.IDisposable
+public interface IDescriptorHeapManager : IDescriptorManager
 {
     PhysicalDeviceDescriptorHeapPropertiesEXT DeviceHeapProperties { get; }
 
@@ -25,10 +25,6 @@ public interface IDescriptorHeapManager : System.IDisposable
     /// texture A then B no longer overwrites a single per-parameter slot (the "last texture wins everywhere" bug).</summary>
     uint GetOrAllocateTextureOffset(ITexture texture, DescriptorType type);
 
-    /// <summary>Where <paramref name="texture"/> is in the resource heap seen as an array of textures: what a shader's
-    /// texture array of no length is indexed by. Takes the texture a slot if it has none yet.</summary>
-    uint TextureIndex(ITexture texture);
-
     /// <summary>As <see cref="GetOrAllocateTextureOffset"/>, but for samplers (their own stable slot per sampler).</summary>
     uint GetOrAllocateSamplerOffset(SamplerState samplerState);
 
@@ -36,9 +32,6 @@ public interface IDescriptorHeapManager : System.IDisposable
     /// Cached by buffer object and assumes whole-buffer binding (offset 0, full size); extend the key to
     /// (buffer, offset, size) if sub-range bindings are ever used.</summary>
     uint GetOrAllocateBufferOffset(IBuffer buffer, DescriptorType type);
-
-    /// <summary>Binds the shared heap onto the calling render device's command buffer.</summary>
-    void BindDescriptorHeaps(IGraphicsDevice device);
 
     /// <summary>Slots holding a stand-in for a parameter nobody bound. Sampling an out-of-heap index returns whatever
     /// descriptor the driver finds there - another effect's live texture - so a shader is handed these instead. Red and

@@ -15,12 +15,12 @@ using EffectTechnique = Adamantium.Graphics.Core.EffectsFramework.EffectTechniqu
 namespace Adamantium.Graphics.Effects;
 
 /// <summary>
-/// Contains rendering state for drawing with an effect; updates constant buffers and directly sets all needed resources for each shader stage/>
+/// Contains rendering state for drawing with an effect; updates constant buffers and directly sets all needed resources
+/// for each shader stage. How the resources reach the shaders - the descriptor heap or descriptor sets - is up to the
+/// implementation the device chose.
 /// </summary>
-public sealed class EffectPass : DisposableObject, IEffectPass
+public abstract class EffectPass : DisposableObject, IEffectPass
 {
-    private const uint MaxItemsPerBuffer = 4096;
-
     /// <summary>
     ///   Gets the attributes associated with this pass.
     /// </summary>
@@ -33,9 +33,9 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     public readonly Effect Effect;
 
     private EffectData.Pass pass;
-    private readonly IGraphicsDevice graphicsDevice;
+    private protected readonly IGraphicsDevice graphicsDevice;
 
-    private readonly List<StageBlock> pipelineStages;
+    private protected readonly List<StageBlock> pipelineStages;
 
     internal EffectTechnique Technique;
 
@@ -43,17 +43,11 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
     private List<DescriptorSetLayoutBinding> layoutBindings;
 
-    private readonly List<StageBlock> stages = new List<StageBlock>();
-
-    // The push-data wrappers, made ONCE. Both are generated as CLASSES, not structs, so `new` here allocated two objects
-    // on EVERY Apply - i.e. on every draw call, tens of thousands a second. They are marshaled to a pointer inside
-    // PushDataEXT and nothing keeps a reference past the call, so one instance per pass can be refilled and re-sent.
-    // Same lesson as the delegate this method already avoids (see WriteHeapOffsets): per-draw garbage in the draw path.
-    private readonly HostAddressRangeConstEXT _pushRange = new();
-    private readonly PushDataInfoEXT _pushDataInfo = new();
+    // The stages of this pass that have a shader, in pipeline order.
+    private protected readonly List<StageBlock> stages = new List<StageBlock>();
 
     // The transient per-frame constant-buffer arena lives on the render device (not the shared heap manager).
-    private DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
+    private protected DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
 
     private uint appliesCounter = 0;
     private bool geometryStagePresent = false;
@@ -67,7 +61,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     /// <param name="technique">The technique. </param>
     /// <param name="pass"> The pass. </param>
     /// <param name="name"> The name. </param>
-    internal EffectPass(Logger logger, Effect effect, EffectTechnique technique, EffectData.Pass pass, string name)
+    private protected EffectPass(Logger logger, Effect effect, EffectTechnique technique, EffectData.Pass pass, string name)
         : base(name)
     {
         Technique = technique;
@@ -83,167 +77,43 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
     private void ClearLayoutBindings()
     {
-        foreach (var binding in layoutBindings)
-        {
-            //binding?.Dispose();
-        }
-
         layoutBindings.Clear();
     }
 
     /// <summary>Applies this pass: binds each stage's shader, uploads dirty constant buffers and binds its resources.</summary>
     public void Apply()
     {
-       ApplyInternal();
+        Effect.CurrentTechnique = Technique;
+        graphicsDevice.CurrentEffectPass = this;
+        ResourcesBound = true;
+        stages.Clear();
+        for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
+        {
+            var stageBlock = pipelineStages[stageIndex];
+            if (stageBlock == null || stageBlock.Index < 0) continue;
+
+            stages.Add(stageBlock);
+        }
+
+        ApplyResources();
+        appliesCounter++;
     }
 
-    private void ApplyInternal() => ApplyHeap();
-
-    // === VK_EXT_descriptor_heap: CB via push-address; textures/samplers — indices into heaps ===
-    // Which linker resource collection a heap-offset write pulls from - a plain kind so ApplyHeap's inner loop needs no
-    // per-draw delegate/closure.
-    private enum HeapResourceKind { ShaderResource, Sampler, Uav }
+    /// <summary>Hands the stages in <see cref="stages"/> the resources bound to the effect and binds their shaders.</summary>
+    private protected abstract void ApplyResources();
 
     /// <inheritdoc />
     public bool ResourcesBound { get; private set; } = true;
 
     private HashSet<EffectParameter> _reportedUnbound;
 
-    private unsafe void ApplyHeap()
+    /// <summary>A parameter this pass reads was bound to nothing, and a stand-in is drawn in its place.</summary>
+    private protected void ReportUnbound(EffectParameter parameter)
     {
-        Effect.CurrentTechnique = Technique;
-        graphicsDevice.CurrentEffectPass = this;
-        ResourcesBound = true;
-        stages.Clear();
-
-        var resourceLinker = (EffectResourceLinker)Effect.ResourceLinker;
-
-        // Allocate a stack buffer for the full push-data size of this pass
-        byte* pushDataBytes = stackalloc byte[(int)totalPushDataSize];
-
-        // Shared per-frame pool: sub-allocates CB data (a per-draw chunk), without a separate buffer per Apply.
-        var dynamicPool = CurrentBufferPool;
-        var device = (GraphicsDevice)graphicsDevice;
-        var hashing = device.IsHashing;
-        var swallowing = device.IsSwallowing;
-
-        for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
-        {
-            var stageBlock = pipelineStages[stageIndex];
-            if (stageBlock == null || stageBlock.Index < 0) continue;
-
-            // 1. CONSTANT BUFFERS (PushAddress):
-            // sub-allocate a chunk in the pool, copy the CB data, and put its GPU address into push data.
-            for (int i = 0; i < stageBlock.ConstantBufferLinks.Count; ++i)
-            {
-                var link = stageBlock.ConstantBufferLinks[i];
-
-                ulong alignment = graphicsDevice.Adapter.AdapterProperties.Limits.MinUniformBufferOffsetAlignment;
-                uint pushOffset = parameterPushOffsets[link.Parameter];
-                if (hashing)
-                {
-                    var backing = link.ConstantBuffer.BackingBuffer;
-                    device.Hash(pushOffset);
-                    device.HashBytes(new ReadOnlySpan<byte>(backing.DataPointer.ToPointer(), (int)backing.Size));
-                }
-
-                *(ulong*)(pushDataBytes + pushOffset) = swallowing ? 0 : dynamicPool.Upload(link.ConstantBuffer, alignment);
-            }
-
-            // Write each bound resource's heap-slot index into push data; link.Parameter is already resolved, so there is
-            // no per-draw lookup.
-            WriteHeapOffsets(pushDataBytes, stageBlock.ShaderResourceViewSlotLinks, HeapResourceKind.ShaderResource);
-            WriteHeapOffsets(pushDataBytes, stageBlock.SamplerStateSlotLinks, HeapResourceKind.Sampler);
-            WriteHeapOffsets(pushDataBytes, stageBlock.UnorderedAccessViewSlotLinks, HeapResourceKind.Uav);
-
-            stages.Add(stageBlock);
-
-        }
-
-        // 5. BIND SHADERS - unless this command buffer already has THIS pass's shaders on it. A run of draws of one
-        // material re-bound the same handles per draw, and every bind is a marshaled call.
-        if (!graphicsDevice.ShadersBoundFor(this))
-        {
-            BindAllStages();
-            graphicsDevice.ShadersBound(this);
-        }
-
-        // 6. SEND PUSH DATA — strictly AFTER binding shaders (in the reference, push data goes
-        // after bind pipeline). Otherwise binding a shader resets push data before the draw.
-        if (totalPushDataSize > 0)
-        {
-            _pushRange.Address = (nuint)pushDataBytes;
-            _pushRange.Size = totalPushDataSize;
-            _pushDataInfo.Offset = 0;
-            _pushDataInfo.Data = _pushRange;
-
-            device.PushData(_pushDataInfo);
-        }
-
-        appliesCounter++;
-
-        // Writes each bound resource's stable heap-slot index into push data for one resource list. The actual descriptor
-        // (SampledImage / Sampler / StorageBuffer) already sits in that heap slot (allocated by the linker); here we only
-        // publish the index. link.Parameter is the pre-resolved EffectParameter, so no per-draw name lookup.
-        void WriteHeapOffsets(byte* push, List<SlotLink> links, HeapResourceKind kind)
-        {
-            for (int i = 0; i < links.Count; ++i)
-            {
-                var link = links[i];
-                // resourceLinker is read from the enclosing scope directly (a struct closure - no heap alloc). Passing a
-                // Func here allocated a delegate + closure PER Apply, i.e. per draw, which showed up as GC-driven frame
-                // spikes (240 -> 60 fps) under many draws. A plain kind switch keeps the single loop without the garbage.
-                IHeapResource[] resources = kind switch
-                {
-                    HeapResourceKind.ShaderResource => link.IsStorageBuffer
-                        ? (IHeapResource[])resourceLinker.GetShaderResourceBuffers(link.ResourceParamDescription)
-                        : resourceLinker.GetShaderResources(link.ResourceParamDescription),
-                    HeapResourceKind.Sampler => resourceLinker.GetSamplers(link.ResourceParamDescription),
-                    _ => resourceLinker.GetUAVs(link.ResourceParamDescription),
-                };
-                uint basePushOffset = parameterPushOffsets[link.Parameter];
-
-                // Every element a texture or sampler parameter DECLARES. One never set has no entry at all, and its index
-                // stayed 0 - heap slot 0, whatever holds it, or a texture freed since, which loses the device. Buffers
-                // keep what they had: there is no buffer stand-in, and an image descriptor read as one is no better.
-                var isBuffer = kind == HeapResourceKind.Uav || link.IsStorageBuffer;
-                var wholeHeap = kind == HeapResourceKind.ShaderResource && !isBuffer && link.Parameter.ElementCount == 0;
-                if (wholeHeap)
-                {
-                    *(uint*)(push + basePushOffset) = 0;
-                    if (hashing)
-                    {
-                        device.Hash((ulong)basePushOffset << 32);
-                    }
-
-                    continue;
-                }
-
-                var declared = isBuffer ? resources.Length : Math.Max(resources.Length, (int)link.Parameter.ElementCount);
-                for (int resIdx = 0; resIdx < declared; resIdx++)
-                {
-                    var resource = resIdx < resources.Length ? resources[resIdx] : null;
-                    var slot = isBuffer ? resource?.GlobalHeapOffset ?? uint.MaxValue
-                        : resource is { HasLiveSlot: true } ? resource.GlobalHeapOffset : uint.MaxValue;
-                    // Nothing bound. An out-of-heap index would sample whatever the driver finds there - in practice
-                    // another effect's live descriptor - so hand over the stand-in instead: the worst case becomes a
-                    // red square (DEBUG) or a transparent one, both of which are honest, rather than someone else's
-                    // texture. The pass is still marked, because a missing binding is a bug either way.
-                    if (slot == uint.MaxValue)
-                    {
-                        ResourcesBound = false;
-                        // Once per parameter of this pass: a resource left unset on purpose meets this on every draw.
-                        if ((_reportedUnbound ??= []).Add(link.Parameter))
-                            UnboundResource.ReportOnce(Effect.Name, link.Parameter?.Name);
-                        var heap = ((GraphicsDevice)graphicsDevice).DescriptorHeapManager;
-                        if (heap != null)
-                            slot = kind == HeapResourceKind.Sampler ? heap.FallbackSamplerOffset : heap.FallbackTextureOffset;
-                    }
-                    *(uint*)(push + basePushOffset + (uint)(resIdx * 4)) = slot;
-                    if (hashing) device.Hash(((ulong)(basePushOffset + (uint)(resIdx * 4)) << 32) | slot);
-                }
-            }
-        }
+        ResourcesBound = false;
+        // Once per parameter of this pass: a resource left unset on purpose meets this on every draw.
+        if ((_reportedUnbound ??= []).Add(parameter))
+            UnboundResource.ReportOnce(Effect.Name, parameter?.Name);
     }
 
     // The stage list of a pass does not change once its shaders exist, so the arrays vkCmdBindShadersEXT wants are built
@@ -251,6 +121,16 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     // instead of one per stage plus one for the null.
     private ShaderStageFlagBits[] _bindStages;
     private ShaderEXT[] _bindShaders;
+
+    /// <summary>Binds this pass's shaders - unless the command buffer already has THIS pass's shaders on it. A run of
+    /// draws of one material re-bound the same handles per draw, and every bind is a marshaled call.</summary>
+    private protected void BindShaders()
+    {
+        if (graphicsDevice.ShadersBoundFor(this)) return;
+
+        BindAllStages();
+        graphicsDevice.ShadersBound(this);
+    }
 
     private void BindAllStages()
     {
@@ -289,11 +169,10 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     public void Reset(EffectTechnique technique, EffectData.Pass pass, Logger logger)
     {
         RetireStages();
+        ReleaseResourceLayout();
         stages.Clear();
         shaderStages.Clear();
         ClearLayoutBindings();
-        parameterPushOffsets.Clear();
-        totalPushDataSize = 0;
         geometryStagePresent = false;
         Technique = technique;
         this.pass = pass;
@@ -338,76 +217,29 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     public void PrepareData()
     {
         ComputeSlotLinks();
-        ComputePushDataLayout();   // creates shaders with heap mappings
+        for (int i = 1; i < pipelineStages.Count; ++i)
+        {
+            pipelineStages[i - 1].NextStage = pipelineStages[i].Stage;
+        }
+
+        CreateShaders();
     }
 
-    private readonly Dictionary<EffectParameter, uint> parameterPushOffsets = new();
-    private uint totalPushDataSize = 0;
+    private protected const ulong LayoutSeed = 0xCBF29CE484222325UL;
 
-    private void ComputePushDataLayout()
+    /// <summary>Folds <paramref name="value"/> into a resource layout's fingerprint - the same in every run, unlike
+    /// GetHashCode, since the binary cache names files by it.</summary>
+    private protected static ulong Mix(ulong hash, ulong value)
     {
-        parameterPushOffsets.Clear();
-        uint currentOffset = 0;
-
-        // Constant buffers (PushAddress): reserve 8 bytes for each unique CB to hold its
-        // 64-bit GPU address. ApplyInternal sub-allocates CB data from the shared pool and writes the address here.
-        for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
-        {
-            var stageBlock = pipelineStages[stageIndex];
-            if (stageBlock == null || stageBlock.Index < 0) continue;
-
-            foreach (var link in stageBlock.ConstantBufferLinks)
-            {
-                if (!parameterPushOffsets.ContainsKey(link.Parameter))
-                {
-                    currentOffset = (currentOffset + 7) & ~7U;
-                    parameterPushOffsets[link.Parameter] = currentOffset;
-                    currentOffset += 8;
-                }
-            }
-        }
-
-        for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
-        {
-            var stageBlock = pipelineStages[stageIndex];
-            if (stageBlock == null || stageBlock.Index < 0) continue;
-
-            if (stageBlock.Parameters != null)
-            {
-                foreach (var param in stageBlock.Parameters)
-                {
-                    if (param.Parameter.ResourceType == EffectResourceType.ConstantBuffer) 
-                        continue;
-                    
-                    if (!parameterPushOffsets.ContainsKey(param.Parameter))
-                    {
-                        currentOffset = (currentOffset + 3) & ~3U;
-                        parameterPushOffsets[param.Parameter] = currentOffset;
-                        // An array of no length still takes the slot its base is pushed in.
-                        currentOffset += Math.Max(param.Parameter.ElementCount, 1) * 4;
-                    }
-                }
-            }
-        }
-
-        totalPushDataSize = currentOffset;
-        
-        CreateShaderObjects();
+        var mixed = (hash ^ value) * 0x9E3779B97F4A7C15UL;
+        return mixed ^ (mixed >> 31);
     }
 
-    private void CreateShaderObjects()
-    {
-        for (int i = 0; i < pipelineStages.Count; ++i)
-        {
-            var stage = pipelineStages[i];
-            if (i > 0)
-            {
-                pipelineStages[i - 1].NextStage = stage.Stage;
-            }
-        }
+    /// <summary>Lays out how the stages reach their resources and creates their shader objects to match.</summary>
+    private protected abstract void CreateShaders();
 
-        pipelineStages.ForEach(stage => stage.CreateShader(parameterPushOffsets));
-    }
+    /// <summary>Lets go of what <see cref="CreateShaders"/> laid out, once frames in flight are done with it.</summary>
+    private protected abstract void ReleaseResourceLayout();
 
     /// <summary>
     /// Initializes the stage block.
@@ -751,7 +583,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
     #region Nested type: PipelineBlock
 
-    private struct ParameterBinding
+    private protected struct ParameterBinding
     {
         public ParameterBinding(EffectParameter parameter, int slot, uint descriptorSet)
         {
@@ -772,6 +604,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
         Log.Logger.Debug("Disposing EffectPass resources");
         ClearLayoutBindings();
         RetireStages();
+        ReleaseResourceLayout();
         base.Dispose(disposeManagedResources);
     }
 
@@ -791,7 +624,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
     #region Nested type: SlotLink
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct SlotLink
+    private protected struct SlotLink
     {
         public SlotLink(uint slotIndex, uint descriptorSet, EffectData.Parameter paramDescription, EffectParameter parameter,
             bool isStorageBuffer = false)
@@ -820,7 +653,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
     #region Nested type: StageBlock
 
-    private class StageBlock : DisposableObject
+    private protected class StageBlock : DisposableObject
     {
         public List<ParameterBinding> Parameters;
         public readonly List<SlotLink> SamplerStateSlotLinks;
@@ -855,149 +688,22 @@ public sealed class EffectPass : DisposableObject, IEffectPass
             ConstantBufferLinks = new List<ConstantBufferLink>();
         }
 
-        public void CreateShader(Dictionary<EffectParameter, uint> pushOffsets)
+        /// <summary>This stage's shader as SPIR-V, for a pass to say how it reaches its resources.</summary>
+        public ShaderCreateInfoEXT NewCreateInfo() => new()
         {
-            var shaderCreateInfo = new ShaderCreateInfoEXT();
-            shaderCreateInfo.Stage = Stage;
-            shaderCreateInfo.NextStage = NextStage;
-            shaderCreateInfo.CodeType = ShaderCodeTypeEXT.SpirvExt;
-            shaderCreateInfo.CodeSize = (uint)ByteCode.Length;
-            shaderCreateInfo.PCode = ByteCode;
-            shaderCreateInfo.PName = EntryPoint;
+            Stage = Stage,
+            NextStage = NextStage,
+            CodeType = ShaderCodeTypeEXT.SpirvExt,
+            CodeSize = (uint)ByteCode.Length,
+            PCode = ByteCode,
+            PName = EntryPoint
+        };
 
-            // No set layouts; classic (set,binding) are remapped to heap/push-address.
-            shaderCreateInfo.Flags = ShaderCreateFlagBitsEXT.DescriptorHeapBitExt;
-            shaderCreateInfo.PSetLayouts = null;
-            shaderCreateInfo.SetLayoutCount = 0;
-
-            int mappingCount = ConstantBufferLinks.Count +
-                               ShaderResourceViewSlotLinks.Count +
-                               SamplerStateSlotLinks.Count +
-                               UnorderedAccessViewSlotLinks.Count;
-
-            if (mappingCount > 0)
-            {
-                var mappings = new  DescriptorSetAndBindingMappingEXT[mappingCount];
-                int mapIdx = 0;
-                uint descriptorSize = (uint)GraphicsDevice.Adapter.DeviceHeapProperties.BufferDescriptorSize;
-
-                // 1. Map the classic cbuffer register(b0) to PushAddress: the shader reads the CB
-                // directly via the 64-bit address from push data (written by ApplyInternal at this same offset).
-                foreach (var link in ConstantBufferLinks)
-                {
-                    mappings[mapIdx] = new DescriptorSetAndBindingMappingEXT
-                    {
-                        DescriptorSet = link.Parameter.DescriptorSet,
-                        FirstBinding = (uint)link.Parameter.SlotIndex,
-                        BindingCount = 1,
-                        ResourceMask = SpirvResourceTypeFlagBitsEXT.UniformBufferBitExt,
-                        Source = DescriptorMappingSourceEXT.PushAddressExt
-                    };
-                    mappings[mapIdx].SourceData = new DescriptorMappingSourceDataEXT();
-                    mappings[mapIdx].SourceData.PushAddressOffset = pushOffsets[link.Parameter];
-                    mapIdx++;
-                }
-
-                // 2. Map each SRV register(t#) to a resource-heap slot. A texture -> a sampled-image descriptor; a
-                //    read-only StructuredBuffer (IsStorageBuffer) -> a read-only storage-buffer descriptor (its own
-                //    resource mask + the buffer-descriptor stride, not the image one).
-                foreach (var link in ShaderResourceViewSlotLinks)
-                {
-                    uint offsetInPushData = pushOffsets[link.Parameter];
-
-                    mappings[mapIdx] = new DescriptorSetAndBindingMappingEXT
-                    {
-                        DescriptorSet = link.DescriptorSet,
-                        FirstBinding = link.SlotIndex,
-                        BindingCount = 1,
-                        ResourceMask = link.IsStorageBuffer
-                            ? SpirvResourceTypeFlagBitsEXT.ReadOnlyStorageBufferBitExt
-                            : SpirvResourceTypeFlagBitsEXT.SampledImageBitExt | SpirvResourceTypeFlagBitsEXT.ReadOnlyImageBitExt,
-                        Source = DescriptorMappingSourceEXT.HeapWithPushIndexExt
-                    };
-                    mappings[mapIdx].SourceData = new DescriptorMappingSourceDataEXT();
-                    mappings[mapIdx].SourceData.PushIndex = new DescriptorMappingSourcePushIndexEXT
-                    {
-                        PushOffset = offsetInPushData,
-                        HeapOffset = 0,
-                        HeapIndexStride = 1,
-                        HeapArrayStride = (uint)(link.IsStorageBuffer
-                            ? GraphicsDevice.Adapter.DeviceHeapProperties.BufferDescriptorSize
-                            : GraphicsDevice.Adapter.DeviceHeapProperties.ImageDescriptorSize)
-                    };
-                    mapIdx++;
-                }
-
-                // 3. Map the classic sampler register(s0) to an index in the sampler heap
-                foreach (var link in SamplerStateSlotLinks)
-                {
-                    var effectParam = link.Parameter;
-                    uint offsetInPushData = pushOffsets[effectParam];
-
-                    mappings[mapIdx] = new DescriptorSetAndBindingMappingEXT
-                    {
-                        DescriptorSet = link.DescriptorSet,
-                        FirstBinding = link.SlotIndex,
-                        BindingCount = 1,
-                        ResourceMask = SpirvResourceTypeFlagBitsEXT.SamplerBitExt,
-                        Source = DescriptorMappingSourceEXT.HeapWithPushIndexExt
-                    };
-                    mappings[mapIdx].SourceData = new DescriptorMappingSourceDataEXT();
-                    mappings[mapIdx].SourceData.PushIndex = new DescriptorMappingSourcePushIndexEXT
-                    {
-                        PushOffset = offsetInPushData,
-                        HeapOffset = 0,
-                        HeapIndexStride = 1,
-                        HeapArrayStride = (uint)GraphicsDevice.Adapter.DeviceHeapProperties.SamplerDescriptorSize
-                    };
-                    mapIdx++;
-                }
-
-                // 4. Map the classic UAV register(u0) to an index in the resource heap
-                foreach (var link in UnorderedAccessViewSlotLinks)
-                {
-                    var effectParam = link.Parameter;
-                    uint offsetInPushData = pushOffsets[effectParam];
-                    
-                    mappings[mapIdx] = new DescriptorSetAndBindingMappingEXT
-                    {
-                        DescriptorSet = link.DescriptorSet,
-                        FirstBinding = link.SlotIndex,
-                        BindingCount = 1,
-                        ResourceMask = SpirvResourceTypeFlagBitsEXT.ReadWriteImageBitExt |
-                                       SpirvResourceTypeFlagBitsEXT.ReadWriteStorageBufferBitExt,
-                        Source = DescriptorMappingSourceEXT.HeapWithPushIndexExt
-                    };
-    
-                    mappings[mapIdx].SourceData = new DescriptorMappingSourceDataEXT();
-                    mappings[mapIdx].SourceData.PushIndex = new DescriptorMappingSourcePushIndexEXT
-                    {
-                        PushOffset = offsetInPushData,
-                        HeapOffset = 0,
-                        HeapIndexStride = 1,
-                        HeapArrayStride = (uint)GraphicsDevice.Adapter.DeviceHeapProperties.BufferDescriptorSize
-                    };
-                    mapIdx++;
-                }
-                
-                Array.Sort(mappings, (a, b) => {
-                    int setCmp = a.DescriptorSet.CompareTo(b.DescriptorSet);
-                    if (setCmp != 0) return setCmp;
-                    return a.FirstBinding.CompareTo(b.FirstBinding);
-                });
-
-                // Assemble the final mapping structure for pNext
-                var mappingInfo = new ShaderDescriptorSetAndBindingMappingInfoEXT
-                {
-                    MappingCount = (uint)mappingCount,
-                    PMappings = mappings
-                };
-
-                // Pass it into native shader creation via a pointer
-                shaderCreateInfo.PNext = mappingInfo;
-            }
-
-            ShaderObject = GraphicsDevice.CreateShader(shaderCreateInfo, CacheName);
+        /// <summary>Creates the shader; <paramref name="layout"/> stands for how the whole pass reaches its resources, which
+        /// the binary cache keys by.</summary>
+        public void CreateShader(ShaderCreateInfoEXT createInfo, ulong layout)
+        {
+            ShaderObject = ((GraphicsDevice)GraphicsDevice).CreateShader(createInfo, CacheName, layout);
         }
 
         protected override void Dispose(bool disposeManagedResources)
@@ -1012,7 +718,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
         }
     }
 
-    private struct ConstantBufferLink
+    private protected struct ConstantBufferLink
     {
         public ConstantBufferLink(EffectConstantBuffer constantBuffer, EffectParameter parameter)
         {
@@ -1037,7 +743,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
         private readonly IGraphicsDevice graphicsDevice;
         private readonly ulong pageSize;
         private readonly List<Buffer> pages = new();
-    
+
         private int currentPageIndex = 0;
         private ulong currentOffset = 0;
         private long generation;
@@ -1047,7 +753,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
         {
             graphicsDevice = device;
             this.pageSize = pageSize;
-        
+
             // Create the first page immediately
             CreateNewPage();
         }
@@ -1062,13 +768,23 @@ public sealed class EffectPass : DisposableObject, IEffectPass
         /// <summary>The device address of a copy of <paramref name="buffer"/>'s data in this frame's pages: the copy made
         /// earlier in the frame while the data is still the same - a run of draws whose constants did not change, or a
         /// buffer every stage of a pass reads - else a new one.</summary>
-        public unsafe ulong Upload(EffectConstantBuffer buffer, ulong alignment)
+        public ulong Upload(EffectConstantBuffer buffer, ulong alignment) => UploadCopy(buffer, alignment).Address;
+
+        /// <summary>As <see cref="Upload"/>, but where the copy is as a page and an offset in it - what a uniform-buffer
+        /// descriptor names.</summary>
+        public (Buffer Page, ulong Offset) UploadRange(EffectConstantBuffer buffer, ulong alignment)
+        {
+            var copy = UploadCopy(buffer, alignment);
+            return (copy.Page, copy.Offset);
+        }
+
+        private unsafe UploadedConstants UploadCopy(EffectConstantBuffer buffer, ulong alignment)
         {
             var backing = buffer.BackingBuffer;
             var data = new ReadOnlySpan<byte>(backing.DataPointer.ToPointer(), (int)backing.Size);
             if (uploads.TryGetValue(buffer, out var last) && last.Generation == generation && data.SequenceEqual(last.Data))
             {
-                return last.Address;
+                return last;
             }
 
             var (page, offset) = Allocate(backing.Size, alignment);
@@ -1086,17 +802,21 @@ public sealed class EffectPass : DisposableObject, IEffectPass
 
             data.CopyTo(last.Data);
             last.Generation = generation;
+            last.Page = page;
+            last.Offset = offset;
             last.Address = page.GetDeviceAddress() + offset;
-            return last.Address;
+            return last;
         }
 
         private sealed class UploadedConstants
         {
             public long Generation = -1;
+            public Buffer Page;
+            public ulong Offset;
             public ulong Address;
             public byte[] Data = [];
         }
-        
+
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
             // Align the current offset to hardware requirements (e.g., to 16 or 256 bytes)
@@ -1110,7 +830,7 @@ public sealed class EffectPass : DisposableObject, IEffectPass
                 {
                     CreateNewPage();
                 }
-            
+
                 // On a new page the allocation is guaranteed to start at zero
                 alignedOffset = 0;
             }

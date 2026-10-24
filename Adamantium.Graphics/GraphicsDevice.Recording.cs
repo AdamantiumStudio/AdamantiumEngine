@@ -153,7 +153,6 @@ public partial class GraphicsDevice
             colorFormats[i] = renderTargets[i].SurfaceFormat;
         }
 
-        var (resourceHeap, samplerHeap) = ((DescriptorHeapManager)DescriptorHeapManager).HeapBindInfos(this);
         var rendering = new CommandBufferInheritanceRenderingInfo
         {
             Flags = RenderingFlagBits.ContentsInlineBitKhr,
@@ -161,12 +160,18 @@ public partial class GraphicsDevice
             PColorAttachmentFormats = colorFormats,
             DepthAttachmentFormat = depthBuffer?.SurfaceFormat ?? Format.UNDEFINED,
             StencilAttachmentFormat = depthBuffer?.SurfaceFormat ?? Format.UNDEFINED,
-            RasterizationSamples = (SampleCountFlagBits)renderTargets[0].MSAALevel,
-            PNext = new CommandBufferInheritanceDescriptorHeapInfoEXT
+            RasterizationSamples = (SampleCountFlagBits)renderTargets[0].MSAALevel
+        };
+        // The recording draws through the heaps the primary has bound. Descriptor sets are not inherited: every pass in
+        // the recording pushes and binds its own.
+        if (DescriptorManager is DescriptorHeapManager heap)
+        {
+            var (resourceHeap, samplerHeap) = heap.HeapBindInfos(this);
+            rendering.PNext = new CommandBufferInheritanceDescriptorHeapInfoEXT
             {
                 PResourceHeapBindInfo = resourceHeap, PSamplerHeapBindInfo = samplerHeap
-            }
-        };
+            };
+        }
         var begin = new CommandBufferBeginInfo
         {
             Flags = CommandBufferUsageFlagBits.RenderPassContinueBit,
@@ -208,7 +213,7 @@ public partial class GraphicsDevice
 
         CurrentCommandBuffer.ExecuteCommands(1, recording.Buffer);
         ForgetCommandState();
-        DescriptorHeapManager.BindDescriptorHeaps(this);
+        DescriptorManager.BindTo(this);
     }
 
     private int TargetSignature()

@@ -44,6 +44,17 @@ public static unsafe class PosixInterop
     [DllImport(LibC, EntryPoint = "dup", SetLastError = true)]
     public static extern int Dup(int fd);
 
+    /// <summary>POSIX <c>setenv(3)</c>: a variable native code in this process reads with <c>getenv</c> - which .NET's
+    /// own <c>Environment.SetEnvironmentVariable</c> does not reach on Linux and macOS.</summary>
+    [DllImport(LibC, EntryPoint = "setenv", SetLastError = true)]
+    public static extern int SetEnvironment([MarshalAs(UnmanagedType.LPStr)] string name,
+        [MarshalAs(UnmanagedType.LPStr)] string value, int overwrite);
+
+    /// <summary>POSIX <c>getenv(3)</c>: the variable as native code in this process sees it, a UTF-8 string libc keeps
+    /// (read it, never free it); zero when unset.</summary>
+    [DllImport(LibC, EntryPoint = "getenv")]
+    public static extern nint GetEnvironment([MarshalAs(UnmanagedType.LPStr)] string name);
+
     [DllImport(LibC, EntryPoint = "read", SetLastError = true)]
     public static extern nint Read(int fd, void* buffer, nuint count);
 

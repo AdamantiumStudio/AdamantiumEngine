@@ -434,6 +434,53 @@ public unsafe class Texture : GraphicsResource, ITexture
         return _levelInfos[Math.Min(level, (uint)_levelInfos.Length - 1)];
     }
 
+    private Texture[] _levelTextures;
+
+    /// <summary>ONE mip level as a texture of its own, sampled as shader-read-only; made on first use and kept, and
+    /// disposed with this texture. What a shader reads while another level of the same image is drawn into: a descriptor
+    /// of the whole texture names every level in one layout, and the level being drawn into is not in it.</summary>
+    public Texture GetLevelTexture(uint level)
+    {
+        var levels = Math.Max(1u, Description.MipLevels);
+        if (level >= levels) level = levels - 1;
+
+        _levelTextures ??= new Texture[levels];
+        if (_levelTextures[level] is not { IsDisposed: false })
+        {
+            // Made again if a caller disposed the one it was given.
+            _levelTextures[level] = new LevelTexture(this, level);
+        }
+
+        return _levelTextures[level];
+    }
+
+    // The image's level view under a texture of one level. The view is the image's (GetLevelView), so the image
+    // destroys it.
+    private sealed class LevelTexture : Texture
+    {
+        public LevelTexture(Texture image, uint level)
+            : base(image.GraphicsDevice, image.GetImage(), LevelDescription(image.Description, level), 0, image.Name)
+        {
+            ImageView = image.GetLevelView(level);
+            Info = image.GetLevelViewInfo(level);
+        }
+
+        private static TextureDescription LevelDescription(TextureDescription description, uint level)
+        {
+            description.Width = Math.Max(1u, description.Width >> (int)level);
+            description.Height = Math.Max(1u, description.Height >> (int)level);
+            description.MipLevels = 1;
+            description.DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal;
+            return description;
+        }
+
+        protected override void Dispose(bool disposeManaged)
+        {
+            ImageView = null;
+            base.Dispose(disposeManaged);
+        }
+    }
+
 
     public static uint CalculateMipLevels(int width, int height, MipMapCount mipLevels)
     {
@@ -737,6 +784,28 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     protected override void Dispose(bool disposeManaged)
     {
+        if (_levelTextures != null)
+        {
+            foreach (var levelTexture in _levelTextures)
+            {
+                levelTexture?.Dispose();
+            }
+
+            _levelTextures = null;
+        }
+
+        // The level views are made here, on demand, so they go with the image.
+        if (_levelViews != null)
+        {
+            foreach (var levelView in _levelViews)
+            {
+                GraphicsDevice.Destroy(levelView);
+            }
+
+            _levelViews = null;
+            _levelInfos = null;
+        }
+
         if (_disposeImage)
         {
             GraphicsDevice.Destroy(VulkanImage);
