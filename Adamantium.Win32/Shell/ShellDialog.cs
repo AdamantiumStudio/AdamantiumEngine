@@ -32,6 +32,9 @@ public static class ShellDialog
     /// also offers the parts of the shell namespace that are not files at all.</summary>
     public const uint ForceFileSystem = 0x00000040;
 
+    /// <summary>FOS_PICKFOLDERS - an open dialog chooses a folder instead of a file.</summary>
+    public const uint PickFolders = 0x00000020;
+
     /// <summary>SIGDN_FILESYSPATH - the full path on disk, which is the only name we ever want back.</summary>
     public const uint SigdnFileSysPath = 0x80058000;
 
