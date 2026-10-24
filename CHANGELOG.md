@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.QueryDisplayConfig`, `GetDisplayConfigBufferSizes`, `DisplayConfigGetDeviceInfo` and their structs: the
+  display paths, with each monitor's exact refresh rate.
+  `Win32Interop.TimeBeginPeriod` / `TimeEndPeriod`: waits finer than the default 15.6 ms.
+- `SharedSurfaceDescriptor.Submitted` / `NoteSubmitted` and `SharedSurface.AwaitsFrame`: a consumer in the producer's
+  process tells that a frame is on its way before the GPU has finished it, so it can look again rather than wait.
+- `UniverseOutput.DisplayContent` is virtual: an output can tell, once its frame is submitted, that the frame is there.
 - `Adamantium.DBus` serves objects of its own: `DBusConnection.Serve` answers the calls that come to the connection
   with what its handler gives - a reply (`DBusMessage.MethodReturn`), an error, or nothing for a method not served -
   one call at a time, in the order they came, off the thread calls are read on, so a handler may wait for its own

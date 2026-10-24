@@ -96,6 +96,28 @@ namespace Adamantium.Win32
         [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode)]
         public static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFOEX info);
 
+        /// <summary>Asks for timers and waits as fine as <paramref name="milliseconds"/> (15.6 ms by default) until the
+        /// matching <see cref="TimeEndPeriod"/>.</summary>
+        [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+        public static extern uint TimeBeginPeriod(uint milliseconds);
+
+        [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+        public static extern uint TimeEndPeriod(uint milliseconds);
+
+        /// <summary>For <see cref="QueryDisplayConfig"/>: the paths in use now.</summary>
+        public const uint QdcOnlyActivePaths = 2;
+
+        [DllImport("user32.dll")]
+        public static extern int GetDisplayConfigBufferSizes(uint flags, out uint pathCount, out uint modeCount);
+
+        [DllImport("user32.dll")]
+        public static extern int QueryDisplayConfig(uint flags, ref uint pathCount,
+            [Out] DISPLAYCONFIG_PATH_INFO[] paths, ref uint modeCount, [Out] DISPLAYCONFIG_MODE_INFO[] modes,
+            IntPtr currentTopologyId);
+
+        [DllImport("user32.dll")]
+        public static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_SOURCE_DEVICE_NAME request);
+
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr deviceContext, IntPtr clip, MonitorEnumProc callback, IntPtr data);
 

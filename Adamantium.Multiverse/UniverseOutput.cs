@@ -164,7 +164,8 @@ namespace Adamantium.Multiverse
             return true;
         }
 
-        public void DisplayContent()
+        /// <summary>Shows the frame drawn into the output, once it is submitted.</summary>
+        public virtual void DisplayContent()
         {
             if (IsUpToDate())
             {

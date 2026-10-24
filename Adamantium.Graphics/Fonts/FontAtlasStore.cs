@@ -96,9 +96,12 @@ namespace Adamantium.Graphics.Fonts
         {
             get
             {
-                foreach (var atlas in _fontAtlasMap.Values)
+                foreach (var pair in _fontAtlasMap)
                 {
-                    if (atlas.HasPendingGlyphs) return true;
+                    if (pair.Value.HasPendingGlyphs)
+                    {
+                        return true;
+                    }
                 }
 
                 return false;
