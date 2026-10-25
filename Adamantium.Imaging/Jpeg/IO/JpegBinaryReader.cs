@@ -97,6 +97,9 @@ namespace Adamantium.Imaging.Jpeg.IO
         /// <summary>Throw away <paramref name="n"/> bits that were peeked at.</summary>
         public void DropBits(int n) => _bitsLeft -= n;
 
+        /// <summary>Throws away the bits still buffered: the padding that ends an interval or a scan.</summary>
+        public void DiscardBits() => _bitsLeft = 0;
+
         /// <summary>One bit. Written out rather than routed through <see cref="ReadBits"/> because the general path
         /// costs a loop and a handful of branches, and this is called for every bit of every Huffman code that the
         /// look-ahead table does not resolve.</summary>

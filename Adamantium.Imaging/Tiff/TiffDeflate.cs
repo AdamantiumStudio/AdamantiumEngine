@@ -30,8 +30,12 @@ internal static class TiffDeflate
                     written += read;
                 }
             }
-            catch (InvalidDataException) when (written > 0)
+            catch (Exception exception) when (exception is InvalidDataException or IOException)
             {
+                if (written == 0)
+                {
+                    throw new InvalidDataException("A Deflate strip or tile is broken: " + exception.Message, exception);
+                }
             }
 
             return written;

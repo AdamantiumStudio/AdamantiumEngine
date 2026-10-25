@@ -58,7 +58,7 @@ public sealed class TiffImage : IRawBitmap
     public static TiffImage Load(byte[] bytes)
     {
         var file = TiffFile.Open(new TiffMemorySource(bytes));
-        var pages = file.Directories.Where(IsPage).ToList();
+        var pages = file.Directories.Where(directory => directory.IsPage).ToList();
         var first = TiffLayout.Read(pages.Count > 0 ? pages[0] : file.Directories[0]);
         var size = TiffColor.SizeOf(first);
         var format = TiffColor.FormatOf(first);
@@ -66,8 +66,8 @@ public sealed class TiffImage : IRawBitmap
         List<TiffLayout> frames = [first];
         foreach (var directory in pages.Skip(1))
         {
-            if (Readable(directory) is { } page && TiffColor.SizeOf(page) == size
-                                                && TiffColor.FormatOf(page).Equals(format))
+            if (TiffTry.Read(() => Checked(TiffLayout.Read(directory)), null) is { } page
+                && TiffColor.SizeOf(page) == size && TiffColor.FormatOf(page).Equals(format))
             {
                 frames.Add(page);
             }
@@ -113,9 +113,6 @@ public sealed class TiffImage : IRawBitmap
         }
     }
 
-    private static bool IsPage(TiffDirectory directory) =>
-        (directory.GetUnsigned(TiffTag.NewSubfileType, 0) & 0b101) == 0;
-
     private static void CheckSize(TiffLayout page, SurfaceFormat format)
     {
         var bytes = (long)page.Width * page.Height * Math.Max(format.SizeInBytes, page.SamplesPerPixel);
@@ -126,17 +123,9 @@ public sealed class TiffImage : IRawBitmap
         }
     }
 
-    private static TiffLayout Readable(TiffDirectory directory)
+    private static TiffLayout Checked(TiffLayout page)
     {
-        try
-        {
-            var page = TiffLayout.Read(directory);
-            CheckSize(page, TiffColor.FormatOf(page));
-            return page;
-        }
-        catch (Exception exception) when (exception is NotSupportedException or System.IO.InvalidDataException)
-        {
-            return null;
-        }
+        CheckSize(page, TiffColor.FormatOf(page));
+        return page;
     }
 }

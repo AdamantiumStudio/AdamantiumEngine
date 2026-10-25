@@ -44,6 +44,15 @@ internal sealed class TiffDirectory
             ? field.GetUnsigned(0)
             : throw new InvalidDataException($"The TIFF directory at {Offset} has no {tag}.");
 
+    /// <summary>Whether this is a page: neither a reduced-resolution copy nor a transparency mask (NewSubfileType bits 0
+    /// and 2). A value that cannot be read counts as neither.</summary>
+    public bool IsPage => SubfileType is { } type && (type & 0b101) == 0;
+
+    /// <summary>Whether this is a reduced-resolution copy of a page, not a mask.</summary>
+    public bool IsReducedCopy => SubfileType is { } type && (type & 0b101) == 1;
+
+    private ulong? SubfileType => TiffTry.Read(() => GetUnsigned(TiffTag.NewSubfileType, 0), (ulong?)null);
+
     /// <summary>All values of <paramref name="tag"/> as unsigned integers; null when the field is missing.</summary>
     public ulong[] GetUnsignedValues(TiffTag tag) => this[tag]?.GetUnsignedValues();
 

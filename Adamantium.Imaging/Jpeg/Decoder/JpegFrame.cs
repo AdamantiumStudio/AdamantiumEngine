@@ -66,6 +66,31 @@ namespace Adamantium.Imaging.Jpeg.Decoder
             DecodeScan(numberOfComponents, componentSelector, resetInterval, jpegReader, ref marker);
         }
 
+        private long ScanUnits(bool interleaved, byte[] componentSelector)
+        {
+            if (interleaved)
+            {
+                return (Width + 8L * Scan.MaxH - 1) / (8L * Scan.MaxH) * ((Height + 8L * Scan.MaxV - 1) / (8L * Scan.MaxV));
+            }
+
+            var component = Scan.GetComponentById(componentSelector[0]);
+            var width = ((long)Width * component.factorH + Scan.MaxH - 1) / Scan.MaxH;
+            var height = ((long)Height * component.factorV + Scan.MaxV - 1) / Scan.MaxV;
+            return (width + 7) / 8 * ((height + 7) / 8);
+        }
+
+        private static bool IsRestart(byte marker) => marker is >= JPEGMarker.RST0 and <= JPEGMarker.RST7;
+
+        private void Restart(byte numberOfComponents, byte[] componentSelector, JPEGBinaryReader jpegReader)
+        {
+            jpegReader.DiscardBits();
+            jpegReader.eob_run = 0;
+            for (int compIndex = 0; compIndex < numberOfComponents; compIndex++)
+            {
+                Scan.GetComponentById(componentSelector[compIndex]).resetInterval();
+            }
+        }
+
         private int McusPerRow(JpegComponent c)
         {
             return ((Width * c.factorH + (Scan.MaxH - 1)) / Scan.MaxH + 7) / 8;
@@ -88,9 +113,30 @@ namespace Adamantium.Imaging.Jpeg.Decoder
             int h = 0, v = 0;
             int x = 0;
 
-            //TODO: replace this with a loop which knows how much data to expect
-            while (true)
+            var interleaved = numberOfComponents != 1;
+            var total = ScanUnits(interleaved, componentSelector);
+            long decoded = 0;
+            var inInterval = 0;
+            while (decoded < total)
             {
+               if (resetInterval > 0 && inInterval == resetInterval)
+               {
+                   jpegReader.DiscardBits();
+                   var next = jpegReader.GetNextMarker();
+                   if (!IsRestart(next))
+                   {
+                       marker = next;
+                       return;
+                   }
+
+                   Restart(numberOfComponents, componentSelector, jpegReader);
+                   inInterval = 0;
+                   if (interleaved)
+                   {
+                       mcuIndex = 0;
+                   }
+               }
+
                try
                {
                    // Loop though capturing MCU, instruct each
@@ -99,8 +145,6 @@ namespace Adamantium.Imaging.Jpeg.Decoder
                    // read in how much they need
 
                    // Sec A.2.2 from CCITT Rec. T.81 (1992 E)
-                   bool interleaved = !(numberOfComponents == 1);
-
                    if (!interleaved)
                    {
                        JpegComponent comp = Scan.GetComponentById(componentSelector[0]);
@@ -161,47 +205,39 @@ namespace Adamantium.Imaging.Jpeg.Decoder
                        mcuIndex++;
                        mcuTotalIndex++;
                    }
+
+                   decoded++;
+                   inInterval++;
                }
-               // We've found a marker, see if the marker is a restart
-               // marker or just the next marker in the stream. If
-               // it's the next marker in the stream break out of the
-               // while loop, if it's just a restart marker skip it
                catch (JpegMarkerFoundException ex)
                {
                    marker = ex.Marker;
+                   if (!IsRestart(marker))
+                   {
+                       return;
+                   }
 
-                   // Handle JPEG Restart Markers, this is where the
-                   // count of MCU's per interval is compared with
-                   // the count actually obtained, if it's short then
-                   // pad on some MCU's ONLY for components that are
-                   // greater than one. Also restart the DC prediction
-                   // to zero.
-                   if (marker is JPEGMarker.RST0 or 
-                       JPEGMarker.RST1 or 
-                       JPEGMarker.RST2 or 
-                       JPEGMarker.RST3 or 
-                       JPEGMarker.RST4 or 
-                       JPEGMarker.RST5 or 
-                       JPEGMarker.RST6 or 
-                       JPEGMarker.RST7)
+                   if (interleaved && resetInterval > 0)
                    {
                        for (int compIndex = 0; compIndex < numberOfComponents; compIndex++)
                        {
                            JpegComponent comp = Scan.GetComponentById(componentSelector[compIndex]);
                            if (compIndex > 1)
                                comp.padMCU(mcuTotalIndex, resetInterval - mcuIndex);
-                           comp.resetInterval();
                        }
 
                        mcuTotalIndex += resetInterval - mcuIndex;
+                       decoded += resetInterval - mcuIndex;
                        mcuIndex = 0;
                    }
-                   else
-                   {
-                       break; // We're at the end of our scan, exit out.
-                   }
+
+                   Restart(numberOfComponents, componentSelector, jpegReader);
+                   inInterval = 0;
                }
             }
+
+            jpegReader.DiscardBits();
+            marker = jpegReader.GetNextMarker();
         }
 
         public void DecodeScanProgressive(byte successiveApproximation, 

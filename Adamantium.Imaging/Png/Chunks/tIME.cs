@@ -32,10 +32,17 @@ namespace Adamantium.Imaging.Png.Chunks
             return bytes.ToArray();
         }
 
+        /// <summary>The time the image says it was last changed, in UTC as PNG keeps it: the one it was given, or now.
+        /// </summary>
         internal static tIME FromState(PngState state)
         {
+            if (state.InfoPng.Time != null)
+            {
+                return state.InfoPng.Time;
+            }
+
             var time = new tIME();
-            var date = DateTime.Now;
+            var date = DateTime.UtcNow;
             time.Year = (ushort)date.Year;
             time.Month = (byte)date.Month;
             time.Day = (byte)date.Day;

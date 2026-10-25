@@ -1,7 +1,7 @@
 namespace Adamantium.Imaging.Tiff;
 
 /// <summary>The kind of a TIFF sample's value.</summary>
-internal enum TiffSampleFormat : ushort
+public enum TiffSampleFormat : ushort
 {
     /// <summary>Unsigned integer.</summary>
     UnsignedInteger = 1,

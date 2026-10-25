@@ -72,6 +72,18 @@ public class JpegDecodeTests
         Assert.That(mean, Is.LessThan(12.0), $"average channel error {mean:F2} - the decoder is no longer producing the picture it used to");
     }
 
+    // Progressive scans and restart intervals reorder and split the same coefficients: each file decodes exactly as the
+    // baseline one of the same picture. Progressive with restarts came out garbled or threw; tiny gray progressive ones
+    // read the padding bits of a scan as data.
+    [TestCase("color-progressive", "color-baseline")]
+    [TestCase("color-progressive-restart", "color-baseline")]
+    [TestCase("color-baseline-restart", "color-baseline")]
+    [TestCase("gray-8x8-progressive", "gray-8x8-baseline")]
+    [TestCase("gray-16x8-progressive", "gray-16x8-baseline")]
+    public void ProgressiveAndRestartScans_DecodeAsBaseline(string name, string baseline) =>
+        Assert.That(BitmapLoader.Load(TestAssets.Path($"JpegScans/{name}.jpg")).GetRawPixels(0),
+            Is.EqualTo(BitmapLoader.Load(TestAssets.Path($"JpegScans/{baseline}.jpg")).GetRawPixels(0)));
+
     // A grayscale JPEG came out RGBA in name only: three bytes a pixel, the alpha never written.
     [Test]
     public void AGrayscaleJpeg_ComesOutWholeRgbaOpaque()

@@ -27,9 +27,11 @@ internal static class TiffJpeg
         }
 
         JpegImage image;
+        byte[] pixels;
         try
         {
             image = new JpegDecoder(new MemoryStream(stream)) { ComponentsAreRgb = rgb }.Decode();
+            pixels = image.GetRawPixels(0);
         }
         catch (Exception exception) when (exception is not (InvalidDataException or NotSupportedException
                                               or OutOfMemoryException))
@@ -37,7 +39,11 @@ internal static class TiffJpeg
             throw new InvalidDataException("A JPEG strip or tile is broken: " + exception.Message, exception);
         }
 
-        var pixels = image.GetRawPixels(0);
+        if (pixels == null || pixels.Length < (long)image.Width * image.Height * 4)
+        {
+            throw new InvalidDataException("A JPEG strip or tile decoded to fewer pixels than its frame.");
+        }
+
         var rows = Math.Min(output.Length / (width * samples), (int)image.Height);
         var columns = Math.Min(width, (int)image.Width);
         for (var y = 0; y < rows; y++)

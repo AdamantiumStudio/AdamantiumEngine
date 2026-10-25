@@ -1,7 +1,7 @@
 namespace Adamantium.Imaging.Tiff;
 
 /// <summary>The color model of TIFF pixel data.</summary>
-internal enum TiffPhotometric : ushort
+public enum TiffPhotometric : ushort
 {
     /// <summary>Gray, zero is white.</summary>
     MinIsWhite = 0,

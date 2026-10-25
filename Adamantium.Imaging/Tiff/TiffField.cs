@@ -134,12 +134,13 @@ internal sealed class TiffField
         return values;
     }
 
-    /// <summary>The text of an ASCII field, up to its first zero byte.</summary>
+    /// <summary>The text of an ASCII field, up to its first zero byte - read as UTF-8, which ASCII is part of and which
+    /// writers such as GDAL put there.</summary>
     public string GetString()
     {
         var data = Data;
         var end = Array.IndexOf(data, (byte)0);
-        return Encoding.ASCII.GetString(data, 0, end < 0 ? data.Length : end);
+        return Encoding.UTF8.GetString(data, 0, end < 0 ? data.Length : end);
     }
 
     private void CheckIndex(int index)

@@ -276,7 +276,10 @@ namespace Adamantium.Imaging.Png
                 pngStream.WriteIDAT(state, pngImage.Frames[0].FrameData);
             }
 
-            pngStream.WritetIME(state);
+            if (state.InfoPng.IsTimeDefined)
+            {
+                pngStream.WritetIME(state);
+            }
 
             pngStream.WriteIEND(state);
 
