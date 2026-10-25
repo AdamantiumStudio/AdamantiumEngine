@@ -58,9 +58,9 @@ public sealed class GraphicsSettings
         {
             settings.InstanceExtensions.Add(Constants.VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        else if (IsApple)
         {
-            settings.InstanceExtensions.Add(Constants.VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
+            settings.InstanceExtensions.Add(Constants.VK_EXT_METAL_SURFACE_EXTENSION_NAME);
         }
 
         settings.OptionalInstanceExtensions.AddRange(
@@ -102,6 +102,9 @@ public sealed class GraphicsSettings
 
         return settings;
     }
+
+    /// <summary>Whether this is one of Apple's platforms - macOS, iOS, tvOS - where Vulkan draws through Metal.</summary>
+    internal static bool IsApple => OperatingSystem.IsMacOS() || OperatingSystem.IsIOS() || OperatingSystem.IsTvOS();
 
     private static string PlatformFolder()
     {
