@@ -1532,6 +1532,7 @@ All packages share one version.
 
 ### Changed
 
+- The packages' icons are the redrawn Adamantium family: the mark and the package's letters drawn in Inter.
 - `MainGraphicsDevice.DescriptorHeapManager` and `GraphicsDevice.DescriptorHeapManager` are `DescriptorManager`, an
   `IDescriptorManager`; `IGraphicsDeviceFactory.CreateDescriptorHeapManager` is `CreateDescriptorManager(device,
   model)`; `IDescriptorHeapManager.BindDescriptorHeaps` is `IDescriptorManager.BindTo`. The heap's extension and
