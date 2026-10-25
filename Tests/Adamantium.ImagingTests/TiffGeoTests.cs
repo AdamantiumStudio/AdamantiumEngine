@@ -167,7 +167,8 @@ public class TiffGeoTests
     {
         const string metadata = "<GDALMetadata><Item name=\"DESCRIPTION\" sample=\"0\" role=\"description\">Temp °C</Item>"
                                 + "<Item name=\"SCALE\" domain=\"OTHER\">7</Item><Item sample=\"0\">nameless</Item>"
-                                + "<Item name=\"X\" sample=\"-1\">no band</Item></GDALMetadata>";
+                                + "<Item name=\"X\" sample=\"-1\">no band</Item><Item name=\"EMPTY\"></Item>"
+                                + "</GDALMetadata>";
         var bytes = Encoding.UTF8.GetBytes(metadata + "\0").Select(b => (ulong)b).ToArray();
         using var reader = Open((42112, Ascii, bytes));
 
@@ -179,6 +180,80 @@ public class TiffGeoTests
             Assert.That(reader.Bands[0].Scale, Is.EqualTo(1));
             Assert.That(reader.Metadata, Is.Not.InstanceOf<System.Collections.Generic.Dictionary<string, string>>());
         });
+    }
+
+    // A tag whose values would lie past the file's end is as if the file did not have it.
+    [Test]
+    public void AGeoTagPastTheFilesEnd_LeavesTheRasterReadable()
+    {
+        using var reader = Open((34737, Pointer, [Ascii, 50, 1 << 20]), Utm33);
+
+        Assert.That(reader.GeoReference.Texts, Is.Empty);
+        Assert.That(reader.GeoReference.ProjectedCrs, Is.EqualTo(32633));
+        Assert.That(reader.Levels[0].Width, Is.EqualTo(4));
+    }
+
+    // A tag the samples are read by is not passed over: past the file's end, the file is refused.
+    [Test]
+    public void BitsPerSamplePastTheFilesEnd_RefusesTheFile()
+    {
+        (ushort, ushort, ulong[])[] fields =
+        [
+            (256, Long, [4]), (257, Long, [4]), (258, Pointer, [Short, 3, 1 << 20]), (259, Short, [1]),
+            (262, Short, [2]), (273, Long, [Data]), (277, Short, [3]), (278, Long, [4]), (279, Long, [48])
+        ];
+
+        Assert.That(() => TiffReader.Open(new MemoryStream(Build(new byte[48], fields))),
+            Throws.InstanceOf<InvalidDataException>());
+    }
+
+    [TestCase("-1.#INF", double.NegativeInfinity)]
+    [TestCase("1.#INF", double.PositiveInfinity)]
+    [TestCase("-1.#IND", double.NaN)]
+    [TestCase("1.#INF00", double.PositiveInfinity)]
+    [TestCase("-1.#INF00", double.NegativeInfinity)]
+    [TestCase("1.#QNAN0", double.NaN)]
+    [TestCase("-1.#IND00", double.NaN)]
+    [TestCase("1.#SNAN", double.NaN)]
+    [TestCase("-nan(ind)", double.NaN)]
+    [TestCase("+1.#inf", double.PositiveInfinity)]
+    public void NoDataAsMsvcPrintsIt_IsRead(string text, double expected)
+    {
+        using var reader = Open(Text(42113, text));
+
+        Assert.That(reader.NoData, Is.EqualTo(expected));
+    }
+
+    [TestCase("+-1.#inf")]
+    [TestCase("--1.#ind")]
+    [TestCase("1.#INF-junk")]
+    public void NoDataOfSignsAndJunk_IsNone(string text)
+    {
+        using var reader = Open(Text(42113, text));
+
+        Assert.That(reader.NoData, Is.Null);
+    }
+
+    // Float samples hold the no-data value rounded to their size - the value they compare equal to. A float of 24
+    // bits keeps 16 bits of mantissa: 1.00001 is 1 + 1/65536 there.
+    [TestCase(32, "-3.402823e+38", (double)-3.402823e+38f)]
+    [TestCase(24, "1.00001", 1 + 1 / 65536d)]
+    [TestCase(16, "0.1", 0.0999755859375)]
+    [TestCase(24, "1e30", double.PositiveInfinity)]
+    [TestCase(24, "1e-20", 3022 * 3.308722450212111e-24)]
+    [TestCase(24, "1.0000076293954407", 1 + 1 / 65536d)]
+    public void NoDataOfFloatSamples_IsWhatTheSamplesHold(int bits, string text, double expected)
+    {
+        var bytes = (ulong)(4 * 4 * bits / 8);
+        var file = Build(new byte[bytes],
+        [
+            (256, Long, [4]), (257, Long, [4]), (258, Short, [(ulong)bits]), (259, Short, [1]), (262, Short, [1]),
+            (273, Long, [Data]), (277, Short, [1]), (278, Long, [4]), (279, Long, [bytes]), (339, Short, [3]),
+            Text(42113, text)
+        ]);
+        using var reader = TiffReader.Open(new MemoryStream(file));
+
+        Assert.That(reader.NoData, Is.EqualTo(expected));
     }
 
     [Test]

@@ -1,5 +1,9 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Adamantium.Imaging.Tiff;
 
@@ -17,26 +21,40 @@ internal static class TiffLzw
     /// the end code, a full output or the end of the input.</summary>
     public static int Decode(ReadOnlySpan<byte> input, Span<byte> output)
     {
+        // A code's string is already in the output - its prefix's string where that was written, and one byte more -
+        // so the table keeps where and how long, and a code is copied out whole.
         var oldStyle = input.Length >= 2 && input[0] == 0 && (input[1] & 1) != 0;
-        Span<short> prefix = stackalloc short[TableSize];
-        Span<byte> suffix = stackalloc byte[TableSize];
-        Span<short> length = stackalloc short[TableSize];
-        for (var i = 0; i < 256; i++)
-        {
-            prefix[i] = -1;
-            suffix[i] = (byte)i;
-            length[i] = 1;
-        }
-
-        var reader = new BitReader(input, oldStyle);
+        Span<int> start = stackalloc int[TableSize];
+        Span<int> length = stackalloc int[TableSize];
+        length[..256].Fill(1);
+        ulong bits = 0;
+        var count = 0;
+        var position = 0;
         var written = 0;
         var width = 9;
         var next = FirstFree;
         var old = -1;
+        var oldAt = 0;
         while (written < output.Length)
         {
-            var code = reader.Read(width);
-            if (code < 0 || code == EndOfInformation)
+            if (count < width && !Refill(input, oldStyle, width, ref bits, ref count, ref position))
+            {
+                break;
+            }
+
+            count -= width;
+            int code;
+            if (oldStyle)
+            {
+                code = (int)(bits & ((1UL << width) - 1));
+                bits >>= width;
+            }
+            else
+            {
+                code = (int)((bits >> count) & ((1UL << width) - 1));
+            }
+
+            if (code == EndOfInformation)
             {
                 break;
             }
@@ -49,42 +67,35 @@ internal static class TiffLzw
                 continue;
             }
 
-            if (old < 0)
+            var at = written;
+            if (code < 256)
             {
-                if (code >= FirstFree)
+                output[written++] = (byte)code;
+            }
+            else if (old < 0 || code > next || code < FirstFree)
+            {
+                break;
+            }
+            else if (code < next)
+            {
+                written += Copy(output, start[code], length[code], written);
+            }
+            else
+            {
+                var copied = Copy(output, oldAt, length[old], written);
+                written += copied;
+                if (copied < length[old] || written == output.Length)
                 {
                     break;
                 }
 
-                output[written++] = (byte)code;
-                old = code;
-                continue;
+                output[written++] = output[oldAt];
             }
 
-            int first;
-            if (code < next)
+            if (old >= 0 && next < TableSize)
             {
-                written += Emit(code, prefix, suffix, length, output[written..], out first);
-            }
-            else if (code == next)
-            {
-                var copied = Emit(old, prefix, suffix, length, output[written..], out first);
-                written += copied;
-                if (written < output.Length)
-                {
-                    output[written++] = (byte)first;
-                }
-            }
-            else
-            {
-                break;
-            }
-
-            if (next < TableSize)
-            {
-                prefix[next] = (short)old;
-                suffix[next] = (byte)first;
-                length[next] = (short)Math.Min(length[old] + 1, short.MaxValue);
+                start[next] = oldAt;
+                length[next] = length[old] + 1;
                 next++;
             }
 
@@ -94,9 +105,67 @@ internal static class TiffLzw
             }
 
             old = code;
+            oldAt = at;
         }
 
         return written;
+    }
+
+    // Brings at least width bits into bits, most significant first or, for old-style codes, least; false when the
+    // input ends first.
+    private static bool Refill(ReadOnlySpan<byte> input, bool leastSignificantFirst, int width, ref ulong bits,
+        ref int count, ref int position)
+    {
+        if (position + 8 <= input.Length)
+        {
+            var take = Math.Min(7, (64 - count) / 8);
+            bits = leastSignificantFirst
+                ? bits | ((BinaryPrimitives.ReadUInt64LittleEndian(input[position..]) & ((1UL << (take * 8)) - 1))
+                          << count)
+                : (bits << (take * 8)) | (BinaryPrimitives.ReadUInt64BigEndian(input[position..]) >> (64 - take * 8));
+            position += take;
+            count += take * 8;
+            return true;
+        }
+
+        while (count < width)
+        {
+            if (position == input.Length)
+            {
+                return false;
+            }
+
+            bits = leastSignificantFirst ? bits | ((ulong)input[position++] << count) : (bits << 8) | input[position++];
+            count += 8;
+        }
+
+        return true;
+    }
+
+    // Bytes past count may be written too, when there is room: the codes after overwrite them, or the caller clears
+    // what is past the end.
+    private static int Copy(Span<byte> output, int from, int count, int to)
+    {
+        count = Math.Min(count, output.Length - to);
+        if (count <= 16 && to + 16 <= output.Length)
+        {
+            ref var start = ref MemoryMarshal.GetReference(output);
+            Unsafe.WriteUnaligned(ref Unsafe.Add(ref start, to),
+                Unsafe.ReadUnaligned<Vector128<byte>>(ref Unsafe.Add(ref start, from)));
+        }
+        else if (count <= 16)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                output[to + i] = output[from + i];
+            }
+        }
+        else
+        {
+            output.Slice(from, count).CopyTo(output[to..]);
+        }
+
+        return count;
     }
 
     /// <summary>Packs <paramref name="input"/> - one strip or tile - into new-style TIFF LZW.</summary>
@@ -149,70 +218,6 @@ internal static class TiffLzw
 
         writer.Write(EndOfInformation, width);
         return writer.ToArray();
-    }
-
-    private static int Emit(int code, Span<short> prefix, Span<byte> suffix, Span<short> length, Span<byte> output,
-        out int first)
-    {
-        var count = length[code];
-        for (var at = count - 1; code >= 0; at--)
-        {
-            if (at < output.Length)
-            {
-                output[at] = suffix[code];
-            }
-
-            first = suffix[code];
-            code = prefix[code];
-            if (code < 0)
-            {
-                return Math.Min(count, output.Length);
-            }
-        }
-
-        first = 0;
-        return 0;
-    }
-
-    private ref struct BitReader
-    {
-        private readonly ReadOnlySpan<byte> _input;
-        private readonly bool _leastSignificantFirst;
-        private int _position;
-        private ulong _bits;
-        private int _count;
-
-        public BitReader(ReadOnlySpan<byte> input, bool leastSignificantFirst)
-        {
-            _input = input;
-            _leastSignificantFirst = leastSignificantFirst;
-        }
-
-        public int Read(int width)
-        {
-            while (_count < width)
-            {
-                if (_position == _input.Length)
-                {
-                    return -1;
-                }
-
-                _bits = _leastSignificantFirst
-                    ? _bits | ((ulong)_input[_position++] << _count)
-                    : (_bits << 8) | _input[_position++];
-                _count += 8;
-            }
-
-            _count -= width;
-            if (_leastSignificantFirst)
-            {
-                var value = (int)(_bits & ((1UL << width) - 1));
-                _bits >>= width;
-                return value;
-            }
-
-            return (int)((_bits >> _count) & ((1UL << width) - 1));
-        }
     }
 
     private sealed class BitWriter

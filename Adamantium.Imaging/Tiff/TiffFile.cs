@@ -94,7 +94,10 @@ internal sealed class TiffFile
     }
 
     /// <summary>Reads the directory at <paramref name="offset"/> - one of the chain, or a child one such as a
-    /// reduced-resolution copy. Values that do not fit in their entries are read when first asked for.</summary>
+    /// reduced-resolution copy. Values that do not fit in their entries are read when first asked for. A field whose
+    /// values would run past the file's end throws <see cref="InvalidDataException"/> - unless it only describes the
+    /// image (resolution, color profile, geotags, GDAL's), then it is left out, as if the file did not have it.
+    /// </summary>
     public TiffDirectory ReadDirectory(long offset)
     {
         var countSize = IsBigTiff ? 8 : 2;
@@ -125,6 +128,11 @@ internal sealed class TiffFile
 
             if (valueCount > (ulong)Source.Length / (ulong)size || valueCount > (ulong)(Array.MaxLength / size))
             {
+                if (Describes((TiffTag)tag))
+                {
+                    continue;
+                }
+
                 throw new InvalidDataException($"TIFF tag {tag} claims {valueCount} values, more than the file holds.");
             }
 
@@ -136,13 +144,18 @@ internal sealed class TiffFile
                 continue;
             }
 
-            var at = IsBigTiff ? ToOffset(Read64(value, LittleEndian), Source) : Read32(value, LittleEndian);
-            if (at > Source.Length - bytes)
+            var at = IsBigTiff ? Read64(value, LittleEndian) : Read32(value, LittleEndian);
+            if (at > (ulong)(Source.Length - bytes))
             {
+                if (Describes((TiffTag)tag))
+                {
+                    continue;
+                }
+
                 throw new InvalidDataException($"The values of TIFF tag {tag} run past the file's end.");
             }
 
-            fields[tag] = new TiffField(tag, type, valueCount, Source, at, LittleEndian);
+            fields[tag] = new TiffField(tag, type, valueCount, Source, (long)at, LittleEndian);
         }
 
         var next = table.AsSpan((int)entries * entrySize);
@@ -150,6 +163,11 @@ internal sealed class TiffFile
         return new TiffDirectory(offset, countSize + table.Length, fields,
             nextOffset < (ulong)Source.Length ? (long)nextOffset : 0);
     }
+
+    private static bool Describes(TiffTag tag) => tag is TiffTag.XResolution or TiffTag.YResolution
+        or TiffTag.ResolutionUnit or TiffTag.PageNumber or TiffTag.IccProfile
+        or TiffTag.ModelPixelScale or TiffTag.ModelTiepoint or TiffTag.ModelTransformation or TiffTag.GeoKeyDirectory
+        or TiffTag.GeoDoubleParams or TiffTag.GeoAsciiParams or TiffTag.GdalMetadata or TiffTag.GdalNoData;
 
     private static long ToOffset(ulong offset, ITiffSource source) =>
         offset <= (ulong)source.Length

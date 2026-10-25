@@ -10,8 +10,10 @@ All packages share one version.
 - `TiffReader`: a TIFF raster too large to hold whole, read a tile or a window at a time - opening reads only the
   file's structure. `Levels` are the full-resolution image and its reduced-resolution copies (from the directory chain
   or SubIFDs), largest first; `ReadTile` reads all bands or one (only that band's plane when the file keeps bands
-  apart), `ReadWindow` any rectangle, decoding only the rows of a tile inside the level; `HasTile` tells a tile the
-  file leaves out, `TiffLevel.TileArea` the part of an edge tile inside the level - the rest reads as zeros. Samples
+  apart), `ReadWindow` any rectangle, decoding only the rows of a tile inside the level and the tiles under it on the
+  thread pool, as many at once as 64 MB of decoding buffers allow; `HasTile` tells a tile the file leaves out - it reads as `NoData` when the samples can
+  hold that value, else as zeros - and `TiffLevel.TileArea` the part of an edge tile inside the level - the rest reads
+  as zeros. Samples
   come as the file holds them, not as colors (`TiffLevel`: bands, bits, `TiffSampleFormat`, `TiffPhotometric`, the
   color map, the alpha band, the orientation). Opened on a path it reads at offsets from any number of threads at once;
   on a seekable stream reads take turns. A compression it cannot read refuses the file when it is opened.
@@ -19,7 +21,9 @@ All packages share one version.
   and pixel scale or a matrix, half a pixel off for `PixelIsPoint`, control points as they are; the model type, the
   projected, geographic and vertical systems by EPSG code, and every key by number with its short, double or text
   values (`TiffGeoKey`); `Resampled`/`GeoReferenceOf` for a reduced-resolution copy. GDAL's no-data value
-  (`NoData`) and metadata - per band scale, offset and description (`Bands`), and the rest (`Metadata`).
+  (`NoData`, as the samples hold it - rounded to a float for float samples; infinities and NaN as C runtimes print
+  them, MSVC's too) and metadata - per band scale, offset and description (`Bands`), and the rest (`Metadata`).
+  Checked against GDAL 3.12 on Natural Earth, USGS 3DEP, Landsat 8 and GDAL's own test files.
 - TIFF, read and written, written from the specifications (TIFF 6.0, its Technical Notes, BigTIFF, ITU-T T.4/T.6).
   `Image.Load` and `BitmapLoader` read any common TIFF: strips or tiles, classic or BigTIFF, either byte order;
   uncompressed, PackBits, LZW (also the TIFF 5.0 kind), Deflate, CCITT run lengths, Group 3 and Group 4 fax, JPEG;
@@ -31,7 +35,10 @@ All packages share one version.
   frame, in strips or tiles (`TiffSaveOptions`), uncompressed, PackBits, LZW or Deflate with a predictor - Deflate by
   default - and BigTIFF when the file would pass 4 GB; `Image.Save` writes TIFF. A broken or hostile file fails with
   `InvalidDataException` or `NotSupportedException`: lengths are bounded by the file, a picture no array holds is
-  refused before it is decoded, and only the rows of a tile inside the image are decoded. A broken link after the first
+  refused before it is decoded, and only the rows of a tile inside the image are decoded; a compressed strip or tile
+  is not read past 16 times its decoded size and 64 KB, more than any codec needs; a field that only describes
+  the image (resolution, color profile, geotags, GDAL's) whose values would run past the file's end is left out, as if
+  the file did not have it. A broken link after the first
   page leaves the pages before it. LERC-compressed files are refused: the
   format has no specification.
 - `JpegDecoder.ComponentsAreRgb`: three components taken as RGB as they are, as TIFF stores JPEG of RGB data.

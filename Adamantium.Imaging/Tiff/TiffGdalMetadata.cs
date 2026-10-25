@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -8,10 +10,10 @@ namespace Adamantium.Imaging.Tiff;
 
 /// <summary>GDAL's tags: the value meaning "no data" (GDAL_NODATA, text) and its metadata (GDAL_METADATA, XML of
 /// items, each of the dataset or of one band; an item of a named domain is kept as "domain:name").</summary>
-internal static class TiffGdalMetadata
+internal static partial class TiffGdalMetadata
 {
     /// <summary>The no-data value of <paramref name="directory"/>; null when it has none or it is not a number.
-    /// </summary>
+    /// Infinities and NaN are read as C runtimes print them, MSVC's "1.#INF" too.</summary>
     public static double? NoData(TiffDirectory directory)
     {
         var text = directory[TiffTag.GdalNoData]?.GetString().Trim();
@@ -20,18 +22,38 @@ internal static class TiffGdalMetadata
             return null;
         }
 
-        return text.ToLowerInvariant() switch
+        var special = Special().Match(text);
+        if (special.Success)
         {
-            "nan" => double.NaN,
-            "inf" or "+inf" => double.PositiveInfinity,
-            "-inf" => double.NegativeInfinity,
-            _ => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null
-        };
+            return special.Groups["inf"].Success
+                ? text[0] == '-' ? double.NegativeInfinity : double.PositiveInfinity
+                : double.NaN;
+        }
+
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
+
+    // inf, nan, nan(ind) as C runtimes print them; MSVC's 1.#INF, 1.#QNAN, 1.#SNAN, 1.#IND, with zeros after.
+    [GeneratedRegex(@"^[+-]?(?:(?<inf>inf|1\.#inf0*)|nan(?:\([a-z0-9_]*\))?|1\.#(?:qnan|snan|ind)0*)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Special();
+
+    /// <summary>The no-data value of <paramref name="directory"/> as an integer of 64 bits, signed or not, when its
+    /// text is one exactly - a double cannot hold every such value.</summary>
+    public static (long? Signed, ulong? Unsigned) IntegerNoData(TiffDirectory directory)
+    {
+        var text = directory[TiffTag.GdalNoData]?.GetString().Trim();
+        return (long.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var signed)
+                ? signed
+                : null,
+            ulong.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var unsigned)
+                ? unsigned
+                : null);
     }
 
     /// <summary>The dataset's items and each of <paramref name="bands"/> bands' information; a file without the tag,
-    /// or whose XML is broken, gives none and defaults. Items without a name, or of a band that is not there, are
-    /// passed over.</summary>
+    /// or whose XML is broken, gives none and defaults. Items without a name or a value, or of a band that is not
+    /// there, are passed over, as GDAL passes them.</summary>
     public static (IReadOnlyDictionary<string, string> Dataset, TiffBandInfo[] Bands) Read(TiffDirectory directory,
         int bands)
     {
@@ -42,7 +64,7 @@ internal static class TiffGdalMetadata
         {
             var name = (string)item.Attribute("name");
             var domain = (string)item.Attribute("domain");
-            if (string.IsNullOrEmpty(name))
+            if (string.IsNullOrEmpty(name) || item.Value.Length == 0)
             {
                 continue;
             }
