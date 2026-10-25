@@ -10,7 +10,7 @@ using Adamantium.Vulkan.Core;
 using Adamantium.Vulkan.Core.Interop;
 using Adamantium.Vulkan.Linux;
 using Adamantium.Vulkan.Loader;
-using Adamantium.Vulkan.MacOS;
+using Adamantium.Vulkan.Metal;
 using Adamantium.Vulkan.Windows;
 using Serilog;
 
@@ -283,11 +283,11 @@ public unsafe class VulkanInstance : DisposableBase
             return surface;
         }
             
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        if (GraphicsSettings.IsApple)
         {
-            var surfaceInfo = new MacOSSurfaceCreateInfoMVK();
-            surfaceInfo.PView = (nuint)parameters.OutputHandle;
-            var surface = VkInstance.CreateMacOSSurfaceMVK(surfaceInfo);
+            var surfaceInfo = new MetalSurfaceCreateInfoEXT();
+            surfaceInfo.PLayer = parameters.OutputHandle;
+            var surface = VkInstance.CreateMetalSurface(surfaceInfo);
 
             availableSurfaces.Add(parameters.OutputHandle, surface);
 

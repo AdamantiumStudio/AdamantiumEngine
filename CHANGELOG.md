@@ -1539,6 +1539,9 @@ All packages share one version.
   feature are enabled only on the heap path.
 - `Adamantium.Vulkan` 1.1.0 (`ShaderStageFlagBits.All` is `0x7FFFFFFF`, `AllGraphics` is there); `Adamantium.Graphics.Core`
   depends on `Adamantium.Vulkan.ShaderObjectLayer` 1.0.1, so every application carries the layer.
+- `Adamantium.Vulkan` 1.2.0. On Apple's platforms - macOS, iOS, tvOS - the swapchain's surface is a Metal one
+  (`VK_EXT_metal_surface`) on a `CAMetalLayer`, which `PresentationParameters.OutputHandle` is there, instead of
+  MoltenVK's own `NSView` surface (`VK_MVK_macos_surface`), deprecated by it.
 - `EffectPass` is abstract: the device makes a `HeapEffectPass` or a `SetsEffectPass`.
 - With graphics debug on, the validation layer sits above the other layers, so it checks the engine's own calls.
 - `meshTextures[]` of `ForwardPlusShading.fxh` is in a set of its own (`register(t0, space1)`).

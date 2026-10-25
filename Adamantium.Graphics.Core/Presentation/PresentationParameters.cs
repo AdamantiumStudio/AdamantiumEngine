@@ -79,6 +79,8 @@ public class PresentationParameters
     public PresenterType PresenterType { get; }
     public UInt32 Width { get; set; }
     public UInt32 Height { get; set; }
+    /// <summary>What is drawn into: on Windows the HWND, on Wayland the wl_surface, on Apple's platforms a CAMetalLayer -
+    /// the view's layer, not the view.</summary>
     public IntPtr OutputHandle { get; set; }
     public IntPtr HInstanceHandle { get; set; }
 

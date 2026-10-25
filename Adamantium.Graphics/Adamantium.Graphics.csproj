@@ -13,7 +13,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Adamantium.Vulkan" Version="1.1.0" />
+		<PackageReference Include="Adamantium.Vulkan" Version="1.2.0" />
 		<PackageReference Include="QuantumBinding.Utils" Version="3.0.1" />
 		<ProjectReference Include="..\Adamantium.Engine.Compiler\Adamantium.Engine.Compiler.csproj" />
 		<ProjectReference Include="..\Adamantium.FX\Adamantium.FX.csproj" />
