@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using Adamantium.Graphics.Core;
 using Adamantium.Imaging;
-using Adamantium.Imaging.Jpeg.Decoder;
+using Adamantium.Imaging.Jpeg;
 using NUnit.Framework;
 
 namespace Adamantium.ImagingTests;
@@ -42,8 +42,11 @@ public class JpegPreviewDecodeTests
         return stream.ToArray();
     }
 
+    // Sizes that are not whole blocks too: the edge blocks' DC terms take in the encoder's padding, nothing else.
     [TestCase(64u, 64u)]
     [TestCase(128u, 96u)]
+    [TestCase(100u, 70u)]
+    [TestCase(33u, 17u)]
     public void PreviewIsAnEighthOfTheFullPicture(uint width, uint height)
     {
         var jpeg = EncodeJpeg(width, height);
@@ -92,28 +95,9 @@ public class JpegPreviewDecodeTests
 
         // The blocks fully inside the picture are what actually proves the traversal: a misplaced plane or an
         // off-by-one walk shows up here immediately, since a preview pixel would then carry a neighbor's color.
-        Assert.That(worst, Is.LessThan(40.0), $"interior block differs by {worst:F1} from its average");
+        Assert.That(worst, Is.LessThan(4.0), $"interior block differs by {worst:F1} from its average");
 
-        // The edge is still checked, only loosely - it must be the right REGION of the picture even if the padding
-        // pulls its value about.
-        Assert.That(worstEdge, Is.LessThan(90.0), $"edge block differs by {worstEdge:F1} from its visible average");
-    }
-
-    [TestCase(100u, 70u)]
-    [TestCase(33u, 17u)]
-    public void PreviewRefusesWhereBlocksDoNotFitWhole(uint width, uint height)
-    {
-        // A picture whose edge falls inside a block is REFUSED rather than previewed approximately. The edge column
-        // came out carrying the wrong chroma, and a preview that is quietly wrong at the edge is worse than one that
-        // says it cannot be made - the caller then decodes at full scale, which always works.
-        var jpeg = EncodeJpeg(width, height);
-        var decoder = new JpegDecoder(new MemoryStream(jpeg));
-
-        Assert.Throws<PreviewNotAvailableException>(() => decoder.DecodePreview());
-
-        // ...and the ordinary decode of that same picture is unaffected.
-        var full = new JpegDecoder(new MemoryStream(jpeg)).Decode();
-        Assert.That(full.Width, Is.EqualTo(width));
-        Assert.That(full.Height, Is.EqualTo(height));
+        // The encoder pads an edge block with the edge's pixels, so its DC term stays near the visible average.
+        Assert.That(worstEdge, Is.LessThan(12.0), $"edge block differs by {worstEdge:F1} from its visible average");
     }
 }

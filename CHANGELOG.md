@@ -42,6 +42,10 @@ All packages share one version.
   page leaves the pages before it. LERC-compressed files are refused: the
   format has no specification.
 - `JpegDecoder.ComponentsAreRgb`: three components taken as RGB as they are, as TIFF stores JPEG of RGB data.
+- `JpegImage(width, height, format, pixels)`: the picture made from its pixels.
+- `JpegEncoder.Encode(image, output, quality)`: a picture written as JPEG at a quality of 1 to 100, from gray, RGB,
+  BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100.
+- `JpegDecoder.Size`: the picture's size from its frame header, decoding nothing - what the preview is an eighth of.
 - `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
   application asks before it offers the heap as a choice, and what the device goes by.
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
@@ -1575,6 +1579,17 @@ All packages share one version.
 
 ### Changed
 
+- JPEG is decoded and encoded by the engine's own codec, written from ITU-T T.81, JFIF (T.871) and Adobe's APP14 - the
+  FJCore code it replaces is gone, and its third-party notice with it. It reads baseline, extended and progressive
+  frames of 8 and 12 bits, restart intervals and DNL, gray, YCbCr, RGB, CMYK and YCCK, any subsampling whose factors
+  divide the largest - halves stretched smoothly between the samples' centers - and streams without Huffman tables (by
+  T.81's K.3 ones). A picture comes out RGBA8, RGBA16 for 12 bits. The scans of a file with restart intervals are
+  decoded side by side, a progressive file's inverse DCT and the colors by rows on the thread pool; the
+  eighth-scale `DecodePreview` works for any file and size, and skips a progressive file's AC scans. TIFF reads JPEG
+  of planes, of four samples and of 12 bits, its JPEGTables read once. Against libjpeg-turbo (Pillow 13, which decodes
+  on one thread) a 10800×5400 photograph decodes in 1.3 times its time, in a fifth of it with restart intervals,
+  measured on 48 cores; the encoder writes
+  baseline JFIF with Huffman tables made for the picture (K.2).
 - The packages' icons are the redrawn Adamantium family: the mark and the package's letters drawn in Inter.
 - `MainGraphicsDevice.DescriptorHeapManager` and `GraphicsDevice.DescriptorHeapManager` are `DescriptorManager`, an
   `IDescriptorManager`; `IGraphicsDeviceFactory.CreateDescriptorHeapManager` is `CreateDescriptorManager(device,
@@ -1760,6 +1775,10 @@ All packages share one version.
 
 ### Removed
 
+- With FJCore: the `Adamantium.Imaging.Jpeg.Decoder` and `Encoder` namespaces (`JpegDecoder` is in
+  `Adamantium.Imaging.Jpeg`), `PreviewNotAvailableException` (every file previews), `JpegDecoder.BlockUpsamplingMode`
+  and `ExtractHeaders`, `JpegHeader`, the JPEG filters and resizer, `ComponentsBuffer`, `ComponentBufferType`,
+  `RawBitmapExtension.ToComponentsBuffer` and `PixelBuffer.GetComponents`.
 - `ADAM_FRAMES_IN_FLIGHT`: the frames in flight are `GraphicsSettings.FramesInFlight`.
 - `AnimationComponent.StartingKeyFrame` and `EndingKeyFrame`: nothing read what was set in them, and a key's number
   is no range of a clip whose channels key at their own times. A clip is chosen by name and played by speed, pause and

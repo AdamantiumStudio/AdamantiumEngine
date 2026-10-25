@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Adamantium.Imaging.Jpeg;
 
 namespace Adamantium.Imaging.Tiff;
 
@@ -20,7 +21,8 @@ internal sealed class TiffChunkDecoder
     private byte[] _chunk;
     private byte[] _compressed;
     private byte[] _native;
-    private byte[] _jpegTables;
+    private JpegStream _jpegTables;
+    private bool _jpegTablesRead;
 
     /// <summary>A decoder of <paramref name="layout"/>'s strips or tiles; one the reader cannot take throws
     /// <see cref="NotSupportedException"/>, a broken one <see cref="InvalidDataException"/>.</summary>
@@ -177,7 +179,8 @@ internal sealed class TiffChunkDecoder
         }
 
         if (layout.Compression == TiffCompression.Jpeg
-            && (layout.BitsPerSample != 8 || layout.IsPlanar || layout.SamplesPerPixel is not (1 or 3)))
+            && (layout.BitsPerSample is not (8 or 12) || layout.SamplesPerChunk is not (1 or 3 or 4)
+                || layout.IsPlanar && layout.Photometric == TiffPhotometric.YCbCr))
         {
             throw new NotSupportedException($"TIFF JPEG of {layout.SamplesPerPixel} samples of "
                                             + $"{layout.BitsPerSample} bits, {(layout.IsPlanar ? "planar" : "together")}.");
@@ -290,9 +293,16 @@ internal sealed class TiffChunkDecoder
                 return output.Length;
             case TiffCompression.Jpeg:
                 output.Clear();
-                TiffJpeg.Decode(input, _jpegTables ??= _layout.Directory[TiffTag.JpegTables]?.Bytes.ToArray() ?? [],
+                if (!_jpegTablesRead)
+                {
+                    var field = _layout.Directory[TiffTag.JpegTables];
+                    _jpegTables = field == null ? null : TiffJpeg.Tables(field.Bytes);
+                    _jpegTablesRead = true;
+                }
+
+                TiffJpeg.Decode(input, _jpegTables,
                     _layout.Photometric == TiffPhotometric.Rgb, _layout.ChunkWidth, _layout.ChunkHeight,
-                    _layout.SamplesPerChunk, output);
+                    _layout.SamplesPerChunk, _layout.BitsPerSample, output);
                 return output.Length;
             default:
                 throw new NotSupportedException($"TIFF compression {_layout.Compression} is not read.");
