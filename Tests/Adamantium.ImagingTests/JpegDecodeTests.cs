@@ -71,4 +71,19 @@ public class JpegDecodeTests
         var mean = sum / count;
         Assert.That(mean, Is.LessThan(12.0), $"average channel error {mean:F2} - the decoder is no longer producing the picture it used to");
     }
+
+    // A grayscale JPEG came out RGBA in name only: three bytes a pixel, the alpha never written.
+    [Test]
+    public void AGrayscaleJpeg_ComesOutWholeRgbaOpaque()
+    {
+        var bitmap = BitmapLoader.Load(TestAssets.Path("Gray.jpg"));
+        var pixels = bitmap.GetRawPixels(0);
+
+        Assert.That(pixels, Has.Length.EqualTo(bitmap.Width * bitmap.Height * 4));
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            Assert.That((pixels[i + 1], pixels[i + 2], pixels[i + 3]), Is.EqualTo((pixels[i], pixels[i], (byte)255)),
+                $"pixel {i / 4}");
+        }
+    }
 }

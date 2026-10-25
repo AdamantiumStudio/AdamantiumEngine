@@ -107,7 +107,7 @@ public static class BitmapLoader
         [(byte)'B', (byte)'M', ..] => ImageFileType.Bmp,
         [(byte)'D', (byte)'D', (byte)'S', (byte)' ', ..] => ImageFileType.Dds,
         [0xFF, 0xD8, 0xFF, ..] => ImageFileType.Jpg,
-        [0x49, 0x49, 0x2A, 0x00, ..] or [0x4D, 0x4D, 0x00, 0x2A, ..] => ImageFileType.Tiff,
+        _ when TiffFile.IsTiff(header) => ImageFileType.Tiff,
         [0x00, 0x00, 0x01, 0x00, ..] => ImageFileType.Ico,
         _ => ImageFileType.Unknown,
     };
