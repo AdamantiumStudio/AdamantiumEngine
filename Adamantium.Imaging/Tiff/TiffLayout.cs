@@ -88,6 +88,17 @@ internal sealed class TiffLayout
     public TiffPhotometric DecodedPhotometric =>
         Compression == TiffCompression.Jpeg && Photometric == TiffPhotometric.YCbCr ? TiffPhotometric.Rgb : Photometric;
 
+    /// <summary>The sample that is alpha, the first extra one marked so, and whether the colors are premultiplied by it;
+    /// (-1, false) without one.</summary>
+    public (int Index, bool Associated) Alpha
+    {
+        get
+        {
+            var extra = Array.FindIndex(ExtraSamples, kind => kind is 1 or 2);
+            return extra < 0 ? (-1, false) : (ColorSamples + extra, ExtraSamples[extra] == 1);
+        }
+    }
+
     /// <summary>The samples of the color model, without the extra ones.</summary>
     public int ColorSamples => SamplesPerPixel - ExtraSamples.Length;
 
@@ -109,6 +120,11 @@ internal sealed class TiffLayout
         if (format == TiffSampleFormat.Undefined)
         {
             format = TiffSampleFormat.UnsignedInteger;
+        }
+
+        if (!Enum.IsDefined(format))
+        {
+            throw new NotSupportedException($"TIFF samples of format {(int)format} (complex numbers) are not read.");
         }
 
         if (bits is < 1 or > 64 || format == TiffSampleFormat.Float && bits is not (16 or 24 or 32 or 64))
@@ -238,7 +254,7 @@ internal sealed class TiffLayout
 
     /// <summary>The rows of chunk row <paramref name="down"/> inside the image - fewer than a strip's or tile's height
     /// at the bottom; a tile's rows past the image are never decoded.</summary>
-    public int ChunkRows(int down) => Math.Min(ChunkHeight, Height - down * ChunkHeight);
+    public int ChunkRows(int down) => (int)Math.Min(ChunkHeight, Height - (long)down * ChunkHeight);
 
     private static (int X, int Y) ReadSubsampling(TiffDirectory directory, TiffPhotometric photometric,
         TiffCompression compression)

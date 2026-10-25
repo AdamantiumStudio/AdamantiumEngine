@@ -377,6 +377,7 @@ namespace Adamantium.Imaging.Png.IO
             time.CheckSum = Crc32.CalculateCheckSum(bytes);
 
             state.InfoPng.Time = time;
+            state.InfoPng.IsTimeDefined = true;
 
             return time;
         }

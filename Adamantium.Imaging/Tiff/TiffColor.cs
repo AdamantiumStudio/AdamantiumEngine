@@ -26,7 +26,7 @@ internal static class TiffColor
         }
 
         var signed = layout.SampleFormat == TiffSampleFormat.SignedInteger;
-        return (layout.SamplesPerPixel, TiffDecoder.ContainerBytes(layout), signed) switch
+        return (layout.SamplesPerPixel, TiffChunkDecoder.ContainerBytes(layout), signed) switch
         {
             (1, 1, false) => Format.R8_UINT, (1, 1, true) => Format.R8_SINT,
             (1, 2, false) => Format.R16_UINT, (1, 2, true) => Format.R16_SINT,
@@ -76,7 +76,7 @@ internal static class TiffColor
         var pixelBytes = wide ? 8 : 4;
         var count = (long)samples.Width * samples.Height;
         var pixels = Allocate(count * pixelBytes);
-        var (alpha, associated) = Alpha(layout);
+        var (alpha, associated) = layout.Alpha;
         var convert = Converter(layout, samples, max, inMax);
         Span<ulong> rgb = stackalloc ulong[3];
         for (long p = 0; p < count; p++)
@@ -234,7 +234,7 @@ internal static class TiffColor
 
         var count = (long)samples.Width * samples.Height;
         var pixels = Allocate(count * 16);
-        var (alpha, associated) = Alpha(layout);
+        var (alpha, associated) = layout.Alpha;
         var gray = layout.Photometric != TiffPhotometric.Rgb;
         var inverted = layout.Photometric == TiffPhotometric.MinIsWhite;
         Span<float> rgba = stackalloc float[4];
@@ -262,12 +262,6 @@ internal static class TiffColor
         }
 
         return new TiffBitmap(Format.R32G32B32A32_SFLOAT, samples.Width, samples.Height, 16, pixels);
-    }
-
-    private static (int Index, bool Associated) Alpha(TiffLayout layout)
-    {
-        var extra = Array.FindIndex(layout.ExtraSamples, kind => kind is 1 or 2);
-        return extra < 0 ? (-1, false) : (layout.ColorSamples + extra, layout.ExtraSamples[extra] == 1);
     }
 
     private static byte[] Allocate(long bytes) =>

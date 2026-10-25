@@ -65,6 +65,50 @@ public class TiffHandMadeTests
     }
 
     [Test]
+    public void SamplesOf8Bytes_KeepTheirValues()
+    {
+        byte[] data = [.. BitConverter.GetBytes(-5L), .. BitConverter.GetBytes(1L << 40)];
+        var file = Build(data, [.. Strip(2, 1, 64, 1, 1, data.Length), Field(339, Short, 2)]);
+
+        var bitmap = TiffImage.Load(file);
+
+        Assert.That(bitmap.PixelFormat, Is.EqualTo((SurfaceFormat)Format.R64_SINT));
+        Assert.That(bitmap.GetRawPixels(0), Is.EqualTo(data));
+    }
+
+    [Test]
+    public void DoublesOf8Bytes_AreRead()
+    {
+        byte[] data = [.. BitConverter.GetBytes(2.5), .. BitConverter.GetBytes(-1e10)];
+        var file = Build(data, [.. Strip(2, 1, 64, 1, 1, data.Length), Field(339, Short, 3)]);
+
+        var pixels = TiffImage.Load(file).GetRawPixels(0);
+
+        Assert.That((BinaryPrimitives.ReadSingleLittleEndian(pixels), BinaryPrimitives.ReadSingleLittleEndian(pixels.AsSpan(16))),
+            Is.EqualTo((2.5f, -1e10f)));
+    }
+
+    // Palettes of 4 and 2 bits: indices packed two and four to a byte, each picking its entry of 16 bits a channel.
+    [TestCase(4, new byte[] { 0x01, 0x2F })]
+    [TestCase(2, new byte[] { 0b00_01_10_11 })]
+    public void SmallPalettes_PickTheirEntries(int bits, byte[] data)
+    {
+        var entries = 1 << bits;
+        var map = Enumerable.Range(0, 3 * entries).Select(i => (ulong)(i * 0x0F0F % 65536)).ToArray();
+        var file = Build(data, [.. Strip(4, 1, bits, 1, 3, data.Length), Field(320, Short, map)]);
+
+        var pixels = TiffImage.Load(file).GetRawPixels(0);
+
+        int[] indices = bits == 4 ? [0, 1, 2, 15] : [0, 1, 2, 3];
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.That((pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]),
+                Is.EqualTo(((byte)(map[indices[i]] >> 8), (byte)(map[entries + indices[i]] >> 8),
+                    (byte)(map[2 * entries + indices[i]] >> 8))), $"pixel {i}");
+        }
+    }
+
+    [Test]
     public void SubsampledYCbCr_SpreadsEachUnitOverItsPixels()
     {
         byte[] units =

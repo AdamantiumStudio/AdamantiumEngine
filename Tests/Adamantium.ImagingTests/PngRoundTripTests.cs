@@ -45,6 +45,18 @@ public class PngRoundTripTests
         return BitmapLoader.Load(new MemoryStream(png));
     }
 
+    // A tIME chunk of the current time went into every file: the same picture saved a second apart differed, and what
+    // compared files to skip rewriting them rewrote them.
+    [Test]
+    public void ThePictureEncodedAgain_IsTheSameBytes_WithNoTimeInIt()
+    {
+        Encode(16, 16, out var first);
+        Encode(16, 16, out var second);
+
+        Assert.That(System.Text.Encoding.ASCII.GetString(first), Does.Not.Contain("tIME"));
+        Assert.That(second, Is.EqualTo(first));
+    }
+
     [TestCase(2u, 2u)]
     [TestCase(64u, 64u)]
     [TestCase(257u, 129u)]   // not a multiple of anything - catches stride assumptions

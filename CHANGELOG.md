@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- `TiffReader`: a TIFF raster too large to hold whole, read a tile or a window at a time - opening reads only the
+  file's structure. `Levels` are the full-resolution image and its reduced-resolution copies (from the directory chain
+  or SubIFDs), largest first; `ReadTile` reads all bands or one (only that band's plane when the file keeps bands
+  apart), `ReadWindow` any rectangle, decoding only the rows of a tile inside the level; `HasTile` tells a tile the
+  file leaves out, `TiffLevel.TileArea` the part of an edge tile inside the level - the rest reads as zeros. Samples
+  come as the file holds them, not as colors (`TiffLevel`: bands, bits, `TiffSampleFormat`, `TiffPhotometric`, the
+  color map, the alpha band, the orientation). Opened on a path it reads at offsets from any number of threads at once;
+  on a seekable stream reads take turns. A compression it cannot read refuses the file when it is opened.
+- GeoTIFF (OGC GeoTIFF 1.1) through `TiffReader.GeoReference`: the raster-to-model transformation from a tie point
+  and pixel scale or a matrix, half a pixel off for `PixelIsPoint`, control points as they are; the model type, the
+  projected, geographic and vertical systems by EPSG code, and every key by number with its short, double or text
+  values (`TiffGeoKey`); `Resampled`/`GeoReferenceOf` for a reduced-resolution copy. GDAL's no-data value
+  (`NoData`) and metadata - per band scale, offset and description (`Bands`), and the rest (`Metadata`).
 - TIFF, read and written, written from the specifications (TIFF 6.0, its Technical Notes, BigTIFF, ITU-T T.4/T.6).
   `Image.Load` and `BitmapLoader` read any common TIFF: strips or tiles, classic or BigTIFF, either byte order;
   uncompressed, PackBits, LZW (also the TIFF 5.0 kind), Deflate, CCITT run lengths, Group 3 and Group 4 fax, JPEG;
@@ -929,6 +942,12 @@ All packages share one version.
 
 ### Fixed
 
+- Every PNG the engine wrote carried a `tIME` chunk of the local time it was written: the same picture saved a second
+  apart came out different, and what compared files to skip rewriting them - the Linux desktop entry's icons - wrote
+  them again. `tIME` is written only when `PngInfo.IsTimeDefined` asks, in UTC as PNG keeps it.
+- JPEG scans are decoded unit for unit as T.81 lays them out, the padding at the end of a restart interval or a scan
+  thrown away: a progressive JPEG with restart intervals came out garbled or threw, a tiny gray progressive one read
+  its padding as data, and a scan whose data ended without a marker ran forever.
 - A grayscale JPEG came out as `R8G8B8A8_UNORM` with three bytes a pixel and no alpha written: a quarter of the picture
   missing and the rest shown transparent. It comes out whole and opaque.
 - The views `Texture.GetLevelView` makes were never destroyed: every texture whose levels were drawn into one by one

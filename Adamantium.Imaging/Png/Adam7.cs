@@ -159,7 +159,7 @@
                     {
                         for (int x = 0; x < passw[i]; ++x)
                         {
-                            ibp = (int)((Adam7_DY[i] + y * Adam7_DY[i]) * olinebits + (Adam7_IX[i] + x * Adam7_DX[i]) * bpp);
+                            ibp = (int)((Adam7_IY[i] + y * Adam7_DY[i]) * olinebits + (Adam7_IX[i] + x * Adam7_DX[i]) * bpp);
                             obp = (int)((8 * passStart[i]) + (y * ilinebits + x * bpp));
                             for (int b = 0; b < bpp; ++b)
                             {
