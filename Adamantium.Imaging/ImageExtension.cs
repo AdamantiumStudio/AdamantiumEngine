@@ -126,7 +126,19 @@ public static class ImageExtension
                 }
             case ImageFileType.Tiff:
                 {
-                    break;
+                    if (image.Frames != null)
+                    {
+                        return image.Frames;
+                    }
+
+                    var frames = new List<byte[]>((int)image.Description.ArraySize);
+                    for (var slice = 0; slice < image.Description.ArraySize; slice++)
+                    {
+                        frames.Add(image.GetPixelBuffer(slice, 0).GetPixels<byte>());
+                    }
+
+                    return new FrameBitmap(image.Description.Width, image.Description.Height,
+                        image.Description.Format, frames);
                 }
         }
 

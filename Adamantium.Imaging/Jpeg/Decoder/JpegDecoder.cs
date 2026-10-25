@@ -15,6 +15,10 @@ namespace Adamantium.Imaging.Jpeg.Decoder
     {
         public BlockUpsamplingMode BlockUpsamplingMode { get; set; }
 
+        /// <summary>Whether three components are red, green and blue as they are - as TIFF stores JPEG of RGB data -
+        /// rather than YCbCr to convert.</summary>
+        public bool ComponentsAreRgb { get; set; }
+
         byte majorVersion, minorVersion;
         private enum UnitType { None = 0, Inches = 1, Centimeters = 2 };
         UnitType Units;
@@ -541,7 +545,11 @@ namespace Adamantium.Imaging.Jpeg.Decoder
                         // YCbCr Color Image (3 Components).
                         else if (frame.ComponentCount == 3)
                         {
-                            ColorModel cm = new ColorModel() { Colorspace = ColorSpace.YCbCr, Opaque = true };
+                            ColorModel cm = new ColorModel()
+                            {
+                                Colorspace = ComponentsAreRgb ? ColorSpace.RGB : ColorSpace.YCbCr,
+                                Opaque = true
+                            };
                             componentsBuffer = new ComponentsBuffer(cm, raster, outWidth, outHeight);
                         }
                         // Possibly CMYK or RGBA ?

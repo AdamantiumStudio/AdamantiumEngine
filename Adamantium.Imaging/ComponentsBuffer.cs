@@ -106,7 +106,7 @@ namespace Adamantium.Imaging
                         Cb[x, y] = 128; Cr[x, y] = 128;
                     }
 
-                Raster = new byte[][,] { Raster[0], Cb, Cr };
+                Raster = [Raster[0], Cb, Cr, .. Raster.AsSpan(Math.Min(3, Raster.Length))];
 
                 ColorModel.Colorspace = ColorSpace.YCbCr;
             }

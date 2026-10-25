@@ -7,6 +7,21 @@ All packages share one version.
 
 ### Added
 
+- TIFF, read and written, written from the specifications (TIFF 6.0, its Technical Notes, BigTIFF, ITU-T T.4/T.6).
+  `Image.Load` and `BitmapLoader` read any common TIFF: strips or tiles, classic or BigTIFF, either byte order;
+  uncompressed, PackBits, LZW (also the TIFF 5.0 kind), Deflate, CCITT run lengths, Group 3 and Group 4 fax, JPEG;
+  the horizontal and floating-point predictors; 1 to 64 bits, unsigned, signed or floats of 16, 24, 32 and 64 bits;
+  gray, RGB, palette, CMYK, YCbCr (subsampled too), CIELab; alpha, associated or not; samples in planes; the
+  Orientation tag; every page of the size and format of the first as a frame. Colors come out RGBA8 (up to 8 bits),
+  RGBA16 (up to 16) or RGBA32 float; signed and wider integers keep their values. `.tif`/`.tiff` are known by name
+  and BigTIFF by its header. `TiffEncoder` writes gray, RGB, RGBA, BGRA, 16-bit, float and integer data, a page per
+  frame, in strips or tiles (`TiffSaveOptions`), uncompressed, PackBits, LZW or Deflate with a predictor - Deflate by
+  default - and BigTIFF when the file would pass 4 GB; `Image.Save` writes TIFF. A broken or hostile file fails with
+  `InvalidDataException` or `NotSupportedException`: lengths are bounded by the file, a picture no array holds is
+  refused before it is decoded, and only the rows of a tile inside the image are decoded. A broken link after the first
+  page leaves the pages before it. LERC-compressed files are refused: the
+  format has no specification.
+- `JpegDecoder.ComponentsAreRgb`: three components taken as RGB as they are, as TIFF stores JPEG of RGB data.
 - `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
   application asks before it offers the heap as a choice, and what the device goes by.
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
@@ -914,6 +929,8 @@ All packages share one version.
 
 ### Fixed
 
+- A grayscale JPEG came out as `R8G8B8A8_UNORM` with three bytes a pixel and no alpha written: a quarter of the picture
+  missing and the rest shown transparent. It comes out whole and opaque.
 - The views `Texture.GetLevelView` makes were never destroyed: every texture whose levels were drawn into one by one
   left them behind when it went.
 - A texture made from an image description, and the font atlas, started in `PREINITIALIZED` layout with optimal tiling,

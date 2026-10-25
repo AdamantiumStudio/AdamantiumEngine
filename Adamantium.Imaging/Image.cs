@@ -559,9 +559,10 @@ namespace Adamantium.Imaging
                 case "tga":
                     fileType = ImageFileType.Tga;
                     break;
-                //case "tiff":
-                //    fileType = ImageFileType.Tiff;
-                //    break;
+                case "tif":
+                case "tiff":
+                    fileType = ImageFileType.Tiff;
+                    break;
                 default:
                     fileType = ImageFileType.Unknown;
                     break;
