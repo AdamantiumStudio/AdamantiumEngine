@@ -73,8 +73,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         => a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height && a.MinDepth == b.MinDepth && a.MaxDepth == b.MaxDepth;
 
     private static bool SameScissor(Rect2D a, Rect2D b)
-        => a != null && b != null && a.Offset.X == b.Offset.X && a.Offset.Y == b.Offset.Y
-           && a.Extent.Width == b.Extent.Width && a.Extent.Height == b.Extent.Height;
+        => a != null && b != null && (a.Offset?.X ?? 0) == (b.Offset?.X ?? 0) && (a.Offset?.Y ?? 0) == (b.Offset?.Y ?? 0)
+           && (a.Extent?.Width ?? 0) == (b.Extent?.Width ?? 0) && (a.Extent?.Height ?? 0) == (b.Extent?.Height ?? 0);
 
     private static bool SameBlend(ColorBlendEquationEXT a, ColorBlendEquationEXT b)
         => a.SrcColorBlendFactor == b.SrcColorBlendFactor && a.DstColorBlendFactor == b.DstColorBlendFactor

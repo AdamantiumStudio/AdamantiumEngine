@@ -9,7 +9,8 @@ All packages share one version.
 
 - `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
   at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
-  `ITexture.ReadbackToImage` reads any mip level back, not only the first.
+  `ITexture.ReadbackToImage` reads any mip level back, not only the first. `IDescriptorManager.FallbackTextureIndex`:
+  where the stand-in for a disposed texture is in a shader's texture array of no length.
 - `GraphicsSettings.TextEdges` (`TextEdgeSettings`): how text's edges blend - the gammas of light ink, of small and
   of large dark ink, the sizes dark ink goes from the small curve to the large one between, and how wide a crisp edge
   ramps. Read on every text draw, so the application may tune them while it runs; a value the shader cannot take - a
@@ -1023,6 +1024,13 @@ All packages share one version.
 - `SpriteBatch` drew `BackToFront` front to back and `FrontToBack` back to front; threw at its 257th texture in one
   batch; and drew with a custom effect as points for a geometry shader it no longer has. A custom effect draws as
   the sprite effect does - four vertices a sprite, one instance each - with its parameters of the same names.
+- `SpriteBatch` drew upside down: its projection took the top of the target for its bottom, as Direct3D's clip space
+  has it, not the engine's. `Begin(screenSize, sortMode)` did not compile - two overloads took it. Two batches drawn
+  in one frame, or one past its capacity, wrote their sprites over the ones drawn before them in the frame: every
+  batch of a frame now has its own room. Under the depth test the deepest sprite was drawn in front.
+- Setting scissors whose `Offset` or `Extent` was left null threw on the second set: they compare as zero.
+- A vertex field of `Int4` or `Int3` went to the GPU as unsigned integers, though they are signed and `int` went as
+  signed: a shader reading them as `int4` broke the vertex-input rules.
 - `IRawBitmap.TotalSizeInBytes` counted a compressed format's texels as pixels; it counts whole blocks.
 - `PropertyKeyCollection` never took an enum for one: it asked whether the `Type` object was an enum, which it never
   is. Enum values are kept as their underlying integers now, as `EffectPropertyCollection` keeps them.
@@ -1658,6 +1666,14 @@ All packages share one version.
 
 ### Changed
 
+- `SpriteBatch` draws a batch in one draw whatever textures its sprites have: each sprite carries its texture's place
+  in the device's texture array of no length (`IDescriptorManager.TextureIndex`), on the descriptor heap and on
+  descriptor sets alike, and the sprite effect reads it from `spriteTextures[]` - a custom effect does the same in
+  place of a `Texture` parameter. A batch holds as many sprites as it is given, growing past its first capacity, and
+  sorts them whole; sprites of one depth keep the order they were given. A sprite's depth is its layer depth as it
+  is, 0 nearest, so under the depth test the nearest stays in front. A texture disposed before the batch ends is
+  drawn as the device's stand-in (`IDescriptorManager.FallbackTextureIndex`). A batch's effect is disposed with it.
+  `Begin(screenSize, sortMode, samplerState, effect)` takes a sampler always.
 - Text flowing round `TextLayout.Exclusions` goes on right where the first exclusion across a row it cannot use ends,
   not a whole row further down: under a picture as wide as the frame the next line stands at the picture's bottom, as
   Word sets it.
@@ -1949,6 +1965,8 @@ All packages share one version.
 
 ### Removed
 
+- `SpriteSortMode.Texture`: a batch of any textures is one draw, so there is nothing to sort them for. With it
+  `SpriteEffect.Texture`: the effect reads `SpriteTextures`, the array of no length.
 - With the old `Image`: `PixelBufferArray`, `MipMapDescription`, `AnimatedImageDescription`, `FlipBufferOptions`
   and `PixelBuffer.FlipBuffer`, `Image.ImageLoadDelegate` and `ImageSaveDelegate`, `Image.GetMipMapDescription`,
   `ToDataBox`, `DefaultImage`, `ApplyPixelBuffer`, `New(description, byte[])` and `New(description, IRawBitmap)`,

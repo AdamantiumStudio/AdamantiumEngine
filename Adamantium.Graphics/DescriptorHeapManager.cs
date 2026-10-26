@@ -203,6 +203,8 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
                (uint)DeviceHeapProperties.ImageDescriptorSize;
     }
 
+    public uint FallbackTextureIndex => FallbackTextureOffset / (uint)DeviceHeapProperties.ImageDescriptorSize;
+
     public uint GetOrAllocateTextureOffset(ITexture texture, DescriptorType type)
     {
         if (_textureHeapOffsets.TryGetValue(texture, out var found)) return found;
