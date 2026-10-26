@@ -45,7 +45,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     if (isTop)
                     {
-                        (i1, i2) = (i2, i1);
+                        Utilities.Swap(ref i1, ref i2);
                     }
 
                     int vbase = positions.Count;

@@ -414,6 +414,11 @@ public unsafe class Texture : GraphicsResource, ITexture
                 $"A {kind} texture of {description.Width}×{description.Height} is past this device's {side} a side.");
         }
 
+        if (cube && description.ArrayLayers > 6 && !GraphicsDevice.Adapter.SupportsImageCubeArray)
+        {
+            throw new NotSupportedException("This device makes no array of cubes.");
+        }
+
         if (description.ArrayLayers > limits.MaxImageArrayLayers)
         {
             throw new NotSupportedException(
@@ -525,12 +530,13 @@ public unsafe class Texture : GraphicsResource, ITexture
     {
         var createInfo = new ImageViewCreateInfo();
         createInfo.Image = VulkanImage;
-        // A 2D image with ArrayLayers > 1 (a Texture2DArray) MUST use a 2D-ARRAY view: the spec forbids layerCount > 1 on
-        // a plain VK_IMAGE_VIEW_TYPE_2D view (validation VUID-VkImageViewCreateInfo-imageViewType-04973). The shader then
-        // selects a slice by the layer index.
-        createInfo.ViewType = description.Dimension == TextureDimension.Texture2D && description.ArrayLayers > 1
-            ? ImageViewType._2dArray
-            : (ImageViewType)description.Dimension;
+        createInfo.ViewType = description.Dimension switch
+        {
+            TextureDimension.Texture1D => description.ArrayLayers > 1 ? ImageViewType._1dArray : ImageViewType._1d,
+            TextureDimension.Texture2D => description.ArrayLayers > 1 ? ImageViewType._2dArray : ImageViewType._2d,
+            TextureDimension.TextureCube => description.ArrayLayers > 6 ? ImageViewType.CubeArray : ImageViewType.Cube,
+            _ => ImageViewType._3d
+        };
         createInfo.Format = SurfaceFormat;
         var componentMapping = new ComponentMapping
         {

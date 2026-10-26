@@ -76,7 +76,64 @@ public class BmpCodecTests
         });
     }
 
-    // A run-length file cut off reads as far as it goes, the rest transparent; one that holds a PNG is not read.
+    // A file header and an info header of 40 bytes, then what follows it.
+    private static byte[] Bmp(int width, int height, ushort bits, uint compression, params byte[] after)
+    {
+        var file = new byte[54 + after.Length];
+        "BM"u8.CopyTo(file);
+        BitConverter.GetBytes(file.Length).CopyTo(file, 2);
+        BitConverter.GetBytes(54 + (compression == 3 ? 12 : 0) + (bits <= 8 ? 4 << bits : 0)).CopyTo(file, 10);
+        BitConverter.GetBytes(40).CopyTo(file, 14);
+        BitConverter.GetBytes(width).CopyTo(file, 18);
+        BitConverter.GetBytes(height).CopyTo(file, 22);
+        BitConverter.GetBytes((ushort)1).CopyTo(file, 26);
+        BitConverter.GetBytes(bits).CopyTo(file, 28);
+        BitConverter.GetBytes(compression).CopyTo(file, 30);
+        after.CopyTo(file, 54);
+        return file;
+    }
+
+    // A header whose size its file cannot hold, a run-length one past the pixels read, a height of int's least: refused,
+    // nothing their size made first.
+    [Test]
+    public void AHostileHeader_IsRefusedBeforeAnythingIsMade()
+    {
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.That(() => BmpImage.Read(Bmp(20000, 20000, 24, 0, 0, 0, 0, 0)), Throws.InstanceOf<InvalidDataException>());
+        Assert.That(() => BmpImage.Read(Bmp(60000, 60000, 8, 1, new byte[1024 + 2])),
+            Throws.InstanceOf<NotSupportedException>());
+        Assert.That(() => BmpImage.Read(Bmp(1, int.MinValue, 24, 0, new byte[4])),
+            Throws.InstanceOf<InvalidDataException>());
+        Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.LessThan(1 << 20));
+    }
+
+    // A core header's height is an unsigned word: 40000 rows, not a picture stored top-down.
+    [Test]
+    public void ACoreHeadersHeight_IsUnsigned()
+    {
+        var file = new byte[26 + 4 * 40000];
+        "BM"u8.CopyTo(file);
+        BitConverter.GetBytes(26).CopyTo(file, 10);
+        BitConverter.GetBytes(12).CopyTo(file, 14);
+        BitConverter.GetBytes((ushort)1).CopyTo(file, 18);
+        BitConverter.GetBytes((ushort)40000).CopyTo(file, 20);
+        BitConverter.GetBytes((ushort)1).CopyTo(file, 22);
+        BitConverter.GetBytes((ushort)24).CopyTo(file, 24);
+
+        Assert.That(BmpImage.Read(file).Height, Is.EqualTo(40000));
+    }
+
+    // A mask whose bits are not side by side scales to its own largest value: no channel runs into the next.
+    [Test]
+    public void ABrokenMask_StaysInItsChannel()
+    {
+        var file = Bmp(1, 1, 32, 3, 0b101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0b101, 0, 0, 0);
+
+        Assert.That(BmpImage.Read(file).GetRawPixels(0), Is.EqualTo(new byte[] { 255, 0, 0, 255 }));
+    }
+
+    // A run-length file cut off reads as far as it goes, the rest the table's first color as ImageMagick and Pillow
+    // read it; one that holds a PNG is not read.
     [Test]
     public void RunsCutOff_ReadAsFarAsTheyGo()
     {
@@ -84,8 +141,10 @@ public class BmpCodecTests
         var cut = BmpImage.Read(whole.AsSpan(0, whole.Length / 2)).GetRawPixels(0);
         var png = (byte[])whole.Clone();
         png[30] = 5;
+        var table = 14 + BitConverter.ToInt32(whole, 14);
 
-        Assert.That(cut[3], Is.EqualTo(0), "the top row, which bottom-up data reaches last, is not there");
+        Assert.That(cut[..4], Is.EqualTo(new byte[] { whole[table + 2], whole[table + 1], whole[table], 255 }),
+            "the top row, which bottom-up data reaches last, is not there");
         Assert.That(() => BmpImage.Read(png), Throws.InstanceOf<NotSupportedException>());
     }
 }

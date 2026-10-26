@@ -4,10 +4,11 @@ namespace Adamantium.Imaging;
 
 public static class ImageExtension
 {
-    /// <summary>The image as a picture to save: the animation it was loaded from, as it was, or the image itself -
-    /// its layers the frames, its mip levels the levels. Each codec takes of it what its format holds.</summary>
+    /// <summary>The image as a picture to save: its layers the frames - as they are now, edits and all, timed as the
+    /// animation it was loaded from - and its mip levels the levels. Each codec takes of it what its format holds.
+    /// </summary>
     public static IRawBitmap ConvertToRawBitmap(this Image image, ImageFileType fileType = ImageFileType.Png) =>
-        image.Frames ?? new ImageBitmap(image);
+        new ImageBitmap(image);
 }
 
 /// <summary>An <see cref="Image"/> seen as a picture: layer by layer the frames, the first layer's mip levels the
@@ -28,12 +29,17 @@ internal sealed class ImageBitmap(Image image) : IRawBitmap, ISubresources
 
     public uint MipLevelsCount => image.Description.MipLevels;
 
-    public uint NumberOfReplays => 0;
+    public uint NumberOfReplays => image.Frames?.NumberOfReplays ?? 0;
 
     public uint FramesCount => Layers;
 
     /// <summary>The image this is.</summary>
     public Image Image => image;
+
+    /// <summary>Where the frames of <paramref name="bitmap"/> are timed: the animation an image was loaded from, or
+    /// the bitmap itself.</summary>
+    internal static IRawBitmap TimingOf(IRawBitmap bitmap) =>
+        bitmap is ImageBitmap { Image.Frames: { } frames } ? frames : bitmap;
 
     public byte[] GetRawPixels(uint frameIndex) => image.GetPixelBuffer((int)frameIndex, 0, 0).GetPixels<byte>();
 

@@ -31,7 +31,8 @@ public sealed class DdsImage : IRawBitmap, ISubresources
 
     public SurfaceFormat PixelFormat => Description.Format;
 
-    public bool IsMultiFrame => Layers > 1;
+    /// <summary>False: a DDS's layers are parts of one texture, not frames to play.</summary>
+    public bool IsMultiFrame => false;
 
     public bool HasMipLevels => Description.MipLevels > 1;
 
@@ -39,10 +40,10 @@ public sealed class DdsImage : IRawBitmap, ISubresources
 
     public uint NumberOfReplays => 0;
 
-    /// <summary>The layers - six faces a cube.</summary>
-    public uint FramesCount => Layers;
+    public uint FramesCount => 1;
 
-    private uint Layers => Description.Dimension == TextureDimension.Texture3D ? 1 : Description.ArraySize;
+    /// <summary>The bytes of the first level of the first layer.</summary>
+    public ulong TotalSizeInBytes => (ulong)(_starts[1] - _starts[0]);
 
     /// <summary>Reads the DDS in <paramref name="file"/>.</summary>
     public static DdsImage Read(ReadOnlySpan<byte> file)
@@ -76,6 +77,11 @@ public sealed class DdsImage : IRawBitmap, ISubresources
             var arraySize = Math.Max(1, BinaryPrimitives.ReadUInt32LittleEndian(file[140..]));
             format = DdsFormats.OfDxgi(dxgi);
             opaque = DdsFormats.IgnoresAlpha(dxgi);
+            if (cube && arraySize > uint.MaxValue / 6)
+            {
+                throw new InvalidDataException($"A DDS of {arraySize} cubes.");
+            }
+
             (dimension, layers) = resource switch
             {
                 2 => (TextureDimension.Texture1D, arraySize),
@@ -84,6 +90,15 @@ public sealed class DdsImage : IRawBitmap, ISubresources
                 4 => (TextureDimension.Texture3D, 1u),
                 _ => throw new InvalidDataException($"A DDS resource of dimension {resource}.")
             };
+            if (dimension == TextureDimension.Texture1D)
+            {
+                if (height > 1)
+                {
+                    throw new InvalidDataException($"A 1D DDS of {height} rows.");
+                }
+
+                height = 1;
+            }
             if (format == Format.UNDEFINED)
             {
                 throw new NotSupportedException($"DDS of DXGI format {dxgi} is not read.");
@@ -112,6 +127,11 @@ public sealed class DdsImage : IRawBitmap, ISubresources
             throw new InvalidDataException($"A DDS of {width}×{height}.");
         }
 
+        if (dimension == TextureDimension.TextureCube && width != height)
+        {
+            throw new InvalidDataException($"A DDS cube of {width}×{height} faces.");
+        }
+
         if (dimension != TextureDimension.Texture3D)
         {
             depth = 1;
@@ -124,6 +144,26 @@ public sealed class DdsImage : IRawBitmap, ISubresources
             Dimension = dimension, Width = width, Height = height, Depth = depth,
             ArraySize = dimension == TextureDimension.Texture3D ? 1 : layers, MipLevels = levels, Format = format
         };
+
+        var available = file.Length - at;
+        long layerBytes = 0;
+        try
+        {
+            for (var level = 0; level < levels; level++)
+            {
+                layerBytes = checked(layerBytes + SliceBytes(description, level) * Math.Max(1, depth >> level));
+            }
+
+            if (checked(layerBytes * layers) > available)
+            {
+                throw new InvalidDataException(
+                    $"A DDS file ends before its {layers} layers of {layerBytes} bytes of texels do.");
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidDataException($"A DDS of {width}×{height}×{depth} and {layers} layers.");
+        }
 
         var levelStart = new int[levels + 1];
         for (var level = 0; level < levels; level++)
@@ -164,10 +204,68 @@ public sealed class DdsImage : IRawBitmap, ISubresources
             Opaque(data, format);
         }
 
+        if (at == 128 && Widened(format, pixelFlags) is var (wide, bytes) && wide != format)
+        {
+            var from = TexelBlocks.Of(format).Bytes;
+            data = Widen(data, format, pixelFlags);
+            for (var i = 0; i < starts.Length; i++)
+            {
+                starts[i] = starts[i] / from * bytes;
+            }
+
+            description.Format = wide;
+        }
+
         return new DdsImage(description, data, starts, levelStart);
     }
 
     private static uint Field(ReadOnlySpan<byte> file, int at) => BinaryPrimitives.ReadUInt32LittleEndian(file[(4 + at)..]);
+
+    private static (Format Format, int Bytes) Widened(Format format, uint flags) => format switch
+    {
+        Format.B8G8R8_UNORM or Format.R8G8B8_UNORM or Format.A4R4G4B4_UNORM_PACK16 => (Format.R8G8B8A8_UNORM, 4),
+        Format.R8_UNORM or Format.R8G8_UNORM when (flags & (DdsFormats.Luminance | DdsFormats.AlphaOnly)) != 0 =>
+            (Format.R8G8B8A8_UNORM, 4),
+        Format.R16_UNORM when (flags & DdsFormats.Luminance) != 0 => (Format.R16G16B16A16_UNORM, 8),
+        _ => (format, TexelBlocks.Of(format).Bytes)
+    };
+
+    private static byte[] Widen(byte[] data, Format format, uint flags)
+    {
+        if (format == Format.R16_UNORM)
+        {
+            var gray = new byte[data.Length * 4];
+            for (int from = 0, to = 0; from < data.Length; from += 2, to += 8)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    (gray[to + c * 2], gray[to + c * 2 + 1]) = (data[from], data[from + 1]);
+                }
+
+                (gray[to + 6], gray[to + 7]) = (255, 255);
+            }
+
+            return gray;
+        }
+
+        var bytes = TexelBlocks.Of(format).Bytes;
+        var rgba = new byte[data.Length / bytes * 4];
+        for (int from = 0, to = 0; from < data.Length; from += bytes, to += 4)
+        {
+            (rgba[to], rgba[to + 1], rgba[to + 2], rgba[to + 3]) = format switch
+            {
+                Format.B8G8R8_UNORM => (data[from + 2], data[from + 1], data[from], (byte)255),
+                Format.R8G8B8_UNORM => (data[from], data[from + 1], data[from + 2], (byte)255),
+                Format.A4R4G4B4_UNORM_PACK16 => ((byte)((data[from + 1] & 15) * 17), (byte)((data[from] >> 4) * 17),
+                    (byte)((data[from] & 15) * 17), (byte)((data[from + 1] >> 4) * 17)),
+                Format.R8_UNORM when (flags & DdsFormats.AlphaOnly) != 0 => ((byte)0, (byte)0, (byte)0, data[from]),
+                Format.R8_UNORM => (data[from], data[from], data[from], (byte)255),
+                _ => (data[from], data[from], data[from], data[from + 1])
+            };
+        }
+
+        return rgba;
+    }
 
     public byte[] GetRawPixels(uint frameIndex) => Part((int)frameIndex, 0, 0).ToArray();
 
@@ -196,7 +294,7 @@ public sealed class DdsImage : IRawBitmap, ISubresources
     {
         var (row, rows) = TexelBlocks.Rows(description.Format, Math.Max(1, description.Width >> level),
             Math.Max(1, description.Height >> level));
-        return row * rows;
+        return checked(row * rows);
     }
 
     private static void Opaque(byte[] data, Format format)

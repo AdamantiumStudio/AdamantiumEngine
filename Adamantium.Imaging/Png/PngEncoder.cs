@@ -77,8 +77,7 @@ public static class PngEncoder
         {
             if (animated)
             {
-                // A frame's delay: a PNG's own, a GIF's in hundredths, else a tenth of a second.
-                var (numerator, denominator) = image switch
+                var (numerator, denominator) = ImageBitmap.TimingOf(image) switch
                 {
                     PngImage timed when f < timed.Frames.Count =>
                         (timed.Frames[f].DelayNumerator, timed.Frames[f].DelayDenominator),

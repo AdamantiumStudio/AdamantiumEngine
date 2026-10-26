@@ -82,6 +82,24 @@ public class DisposalTests
         Assert.That(stranger.Times, Is.Zero);
     }
 
+    private sealed class Throwing : IDisposable
+    {
+        public void Dispose() => throw new InvalidOperationException("thrown while freed");
+    }
+
+    // One that throws as it is freed leaves the rest let go of: freeing again frees nothing twice.
+    [Test]
+    public void SomethingThrowingAsItIsFreed_LeavesNothingToFreeTwice()
+    {
+        var collector = new DisposeCollector();
+        collector.Collect(new Throwing());
+        collector.Collect(Utilities.AllocateMemory(64));
+
+        Assert.That(() => collector.DisposeAndClear(), Throws.InvalidOperationException);
+        Assert.That(collector.Count, Is.Zero);
+        Assert.That(() => collector.DisposeAndClear(), Throws.Nothing);
+    }
+
     [Test]
     public void OnlyDisposablesAndPointers_AreCollected() =>
         Assert.That(() => new DisposeCollector().Collect("text"), Throws.ArgumentException);

@@ -28,11 +28,18 @@ public record struct ImageDescription
     /// <summary>The texels' format.</summary>
     public Format Format;
 
-    /// <summary>Bytes a row of the full size takes, a texel the format's size.</summary>
-    public readonly long RowStride => Width * Format.SizeOfInBytes();
+    /// <summary>Bytes a row of the full size takes - a row of blocks for a compressed format.</summary>
+    public readonly long RowStride => TexelBlocks.Rows(Format, Width, Height).RowBytes;
 
     /// <summary>Bytes the full size's first layer takes, rows of <see cref="RowStride"/>.</summary>
-    public readonly long TotalSizeInBytes => RowStride * Height;
+    public readonly long TotalSizeInBytes
+    {
+        get
+        {
+            var (row, rows) = TexelBlocks.Rows(Format, Width, Height);
+            return row * rows;
+        }
+    }
 
     /// <summary>A 2D image of one layer and one mip level.</summary>
     public static ImageDescription Default2D(uint width, uint height, SurfaceFormat format) => new()

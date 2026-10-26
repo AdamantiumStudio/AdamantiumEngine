@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
+  at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
 - `TiffReader`: a TIFF raster too large to hold whole, read a tile or a window at a time - opening reads only the
   file's structure. `Levels` are the full-resolution image and its reduced-resolution copies (from the directory chain
   or SubIFDs), largest first; `ReadTile` reads all bands or one (only that band's plane when the file keeps bands
@@ -991,12 +993,15 @@ All packages share one version.
   threw; pixels they cannot take throw `NotSupportedException`, and TGA throws for a picture past 65535 pixels a
   side, where it wrote an empty header.
 - `TextureCube` from six files read each face as long as the first: faces of other sizes or formats were read past
-  their ends. They are refused now.
+  their ends - and made a cube of one layer, so only its first face went up. Faces must be square, of one size and
+  format, and all six go up.
 - A texture made from a picture of several layers, levels or depth slices - a DDS cube, array, volume or mip chain -
   got only the first level of its first layer. Every part goes up now, each where it belongs, in one copy - from an
-  `Image` and from `Texture.Load` alike.
+  `Image` and from `Texture.Load` alike - a cube made cube-compatible and viewed as a cube or an array of them, an
+  array of 1D textures as one.
+- `IRawBitmap.TotalSizeInBytes` counted a compressed format's texels as pixels; it counts whole blocks.
 - `PropertyKeyCollection` never took an enum for one: it asked whether the `Type` object was an enum, which it never
-  is. Enum values are kept as ints now, as `EffectPropertyCollection` keeps them.
+  is. Enum values are kept as their underlying integers now, as `EffectPropertyCollection` keeps them.
 - Writing a BMP of fewer than 40 bytes of pixels wrote past the end of its buffer and could bring the process down:
   a header was copied in after the file's headers for nothing. It is gone, and the headers' native memory is freed.
 - A BMP of 24 bits whose rows are not a multiple of 4 bytes came out wrong both ways: it was written with the padding
@@ -1674,21 +1679,27 @@ All packages share one version.
 - `Image` is rewritten: one block of memory, layer by layer, level by level and depth slice by slice, each a
   `PixelBuffer` of whole texel blocks tightly packed - the order DDS keeps them in. `Description` is a property,
   `PixelBuffer` a list (`GetPixelBuffer(layer or slice, level)` and `GetPixelBuffer(layer, slice, level)` stand), and
-  a picture of frames loaded is an image of a layer a frame, its frames still at `Frames`. `PixelBuffer` checks
-  `GetPixel`, `SetPixel`, `GetPixels` and `SetPixels` against its size and takes unmanaged types; `ImageDescription`
-  and `MipMapCount` are record structs, `SurfaceFormat` a readonly struct with the formats the engine names.
+  a picture of frames loaded is an image of a layer a frame - saved, the layers as they are now, timed as the frames
+  were. `PixelBuffer` checks its strides and `GetPixel`, `SetPixel`, `GetPixels` and `SetPixels` against its size
+  and takes unmanaged types; an image with a part over 2 GB is refused. `ImageDescription` and `MipMapCount` are
+  record structs - the description's `RowStride` and `TotalSizeInBytes` counting whole blocks - and `SurfaceFormat` a
+  readonly struct with the formats the engine names.
 - DDS is read and written by a new codec, written from Microsoft's "Programming Guide for DDS". It reads 1D, 2D,
-  cube and volume textures and arrays of them with every mip level, in the DX10 header in every DXGI format Vulkan
-  has, and in the older one its compressed formats (DXT1 to DXT5, ATI1 and ATI2, BC4 and BC5), the 16-bit and float
-  ones it numbers, and masked ones - RGB and RGBA of 8 bits in either order, 10-10-10-2, 16-16, 5-6-5, 1-5-5-5,
-  4-4-4-4, luminance with or without alpha; texels are kept as the file has them, and a format whose alpha the file
-  leaves out reads opaque. Pillow 12 reads what it writes as it wrote it.
-  The encoder writes every layer, level and slice an image has, in the older header when its format is there, else
-  in DX10. A file shorter than its texels is refused.
+  cube and volume textures and arrays of them with every mip level: in the DX10 header the DXGI formats Vulkan has a
+  color format for - depth ones as the color they hold, those with stencil refused - ASTC among them; in the older
+  one its compressed formats (DXT1 to DXT5, ATI1 and ATI2, BC4 and BC5), the 16-bit and float ones it numbers, and
+  masked ones - RGBA of 8 bits in either order, 10-10-10-2, 16-16, 5-6-5 and 1-5-5-5 as they are, 24-bit color,
+  luminance with or without alpha, alpha alone and 4-4-4-4, which few devices sample from, widened to RGBA. A format
+  whose alpha the file leaves out reads opaque. The encoder writes every layer, level and slice an image has, in the
+  older header when its format is there, else in DX10; Pillow 12 reads what it writes in the formats it knows. A file
+  shorter than its texels, of sizes that overflow, or of a 1D picture of rows or a cube of unequal sides is refused
+  before anything its size is made.
 - BMP is read and written by a new codec, written from Microsoft's "Bitmap Storage". It reads BITMAPCOREHEADER,
   BITMAPINFOHEADER and its V2 to V5: 1, 2, 4 and 8 bits through a color table, run-length encoded (RLE4, RLE8) or
   not; 16 and 32 bits by their channel masks, 5-5-5 and 8-8-8 when they give none; 24 bits; rows bottom up or top
-  down - as RGBA8, the same as ImageMagick 7 reads them. The encoder writes 24-bit BGR when every pixel is opaque,
+  down - as RGBA8, as Pillow 12 reads them. Pixels a run-length file never sets are the table's first color; a 32-bit
+  file whose alpha is nothing but zeros is opaque. A file shorter than its pixels is refused before they are made, a
+  run-length one past `BitmapLoader.MaxPixels`. The encoder writes 24-bit BGR when every pixel is opaque,
   else 32 bits with a BITMAPV4HEADER whose masks say where alpha is; `BmpImage.Read` and the static
   `BmpEncoder.Encode(image, output)` are its API.
 - PNG is read and written by a new codec, written from PNG's third edition and APNG. It reads every color type and
@@ -1907,7 +1918,8 @@ All packages share one version.
   and `PixelBuffer.FlipBuffer`, `Image.ImageLoadDelegate` and `ImageSaveDelegate`, `Image.GetMipMapDescription`,
   `ToDataBox`, `DefaultImage`, `ApplyPixelBuffer`, `New(description, byte[])` and `New(description, IRawBitmap)`,
   `PixelBuffer`'s `MipMapDescription`, `XOffset`, `YOffset` and the `GetPixels`/`SetPixels` overloads by offset and
-  count; the `SurfaceFormat` classes beyond `R8`, `R8G8B8`, `R8G8B8A8`, `B8G8R8A8` and `R16G16B16A16`.
+  count; the `SurfaceFormat` classes beyond `R8`, `R8G8B8`, `R8G8B8A8`, `B8G8R8A8` and `R16G16B16A16`; the
+  `makeACopy` of `Image.Load` and the file type of `Image.Load(Stream)`, which nothing read.
 - With the old DDS codec: `DdsFlags`, `FourCC` and `ResourceOptionFlags`; `DdsHelper` and `BmpHelper` are static
   classes, `LoadFromMemory` and `SaveToStream` all they have.
 - With the old TGA codec: `TgaDecoder`, `TgaConversionFlags`, `TgaEncoder.SaveToTgaStream` and `TgaImage`'s
@@ -1920,7 +1932,7 @@ All packages share one version.
   `ColorQuantizer` stands for.
 - `DataBuffer.Create`, its constructor from a `DataPointer`, `GetRange` into an array, and `Set` from a pointer or
   part of an array; `ViewportF`'s `Project` and `Unproject` by reference to one matrix.
-- `DataBox`; from `Utilities`: `ReadStream`, `IsEnum`, `IsMemoryAligned`, `GetCustomAttribute(s)`, `Swap`, `Join`,
+- `DataBox`; from `Utilities`: `ReadStream`, `IsEnum`, `IsMemoryAligned`, `GetCustomAttribute(s)`, `Join`,
   `ToLittleEndian`, `SwapEndianness`, `GetBytesWithReversedEndian`, `Dispose`, `GetBitsCount`, `ReverseByte`,
   `IsTypeInheritFrom`, `ToVector2`, `ToVector3` and `Compare` of `ICollection` and of `IEnumerator` - the .NET ones
   stand for them; `Compare` of `IEnumerable` stays.

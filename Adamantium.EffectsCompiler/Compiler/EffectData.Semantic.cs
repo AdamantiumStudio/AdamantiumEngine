@@ -75,12 +75,13 @@ namespace Adamantium.EffectsCompiler
             unchecked
             {
                var hash = Name?.GetHashCode() ?? 0;
-               foreach (var value in new[] { Index, Register, SystemValueType, ComponentType, UsageMask, ReadWriteMask, Stream })
-               {
-                  hash = hash * 31 + value;
-               }
-
-               return hash;
+               hash = hash * 31 + Index;
+               hash = hash * 31 + Register;
+               hash = hash * 31 + SystemValueType;
+               hash = hash * 31 + ComponentType;
+               hash = hash * 31 + UsageMask;
+               hash = hash * 31 + ReadWriteMask;
+               return hash * 31 + Stream;
             }
          }
 

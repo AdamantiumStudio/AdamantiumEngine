@@ -164,7 +164,7 @@ public static class GifEncoder
         return right < 0 ? (0, 0, 1, 1) : (left, top, right - left + 1, bottom - top + 1);
     }
 
-    private static ushort Delay(IRawBitmap image, uint frame) => image switch
+    private static ushort Delay(IRawBitmap image, uint frame) => ImageBitmap.TimingOf(image) switch
     {
         GifImage gif when frame < gif.Frames.Count => gif.Frames[(int)frame].DelayCentiseconds,
         PngImage png when frame < png.Frames.Count =>

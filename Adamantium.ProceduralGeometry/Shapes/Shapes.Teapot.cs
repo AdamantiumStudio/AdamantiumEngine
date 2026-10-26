@@ -482,7 +482,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         if (isMirrored)
                         {
                             Array.Reverse(indices);
-                            (indices[4], indices[0]) = (indices[0], indices[4]);
+                            Utilities.Swap(ref indices[4], ref indices[0]);
                         }
 
                         foreach (var index in indices)

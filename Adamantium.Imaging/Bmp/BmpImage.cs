@@ -59,7 +59,7 @@ public sealed class BmpImage : IRawBitmap
         if (headerSize == 12)
         {
             width = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
-            height = BinaryPrimitives.ReadInt16LittleEndian(header[6..]);
+            height = BinaryPrimitives.ReadUInt16LittleEndian(header[6..]);
             bits = BinaryPrimitives.ReadUInt16LittleEndian(header[10..]);
         }
         else if (headerSize >= 40 && header.Length >= headerSize)
@@ -76,11 +76,12 @@ public sealed class BmpImage : IRawBitmap
         }
 
         var topDown = height < 0;
-        height = Math.Abs(height);
-        if (width <= 0 || height == 0)
+        if (width <= 0 || height is 0 or int.MinValue)
         {
             throw new InvalidDataException($"A BMP of {width}×{height}.");
         }
+
+        height = Math.Abs(height);
 
         if (compression is 4 or 5)
         {
@@ -91,23 +92,26 @@ public sealed class BmpImage : IRawBitmap
         var tableAt = 14 + headerSize;
         if (compression is 3 or 6)
         {
-            if (headerSize < 52 && tableAt + (compression == 6 ? 16 : 12) > file.Length)
+            var inHeader = headerSize >= 56 ? 4 : headerSize >= 52 ? 3 : 0;
+            var after = (compression == 6 ? 4 : 3) - inHeader;
+            if (after > 0 && tableAt + after * 4 > file.Length)
             {
                 throw new InvalidDataException("A BMP file ends in its channel masks.");
             }
 
-            var masks = headerSize >= 52 ? header[40..] : file[tableAt..];
-            (red, green, blue) = (BinaryPrimitives.ReadUInt32LittleEndian(masks),
-                BinaryPrimitives.ReadUInt32LittleEndian(masks[4..]), BinaryPrimitives.ReadUInt32LittleEndian(masks[8..]));
-            if (compression == 6 || headerSize >= 56)
+            Span<uint> masks = stackalloc uint[4];
+            for (var i = 0; i < inHeader; i++)
             {
-                alpha = BinaryPrimitives.ReadUInt32LittleEndian(masks[12..]);
+                masks[i] = BinaryPrimitives.ReadUInt32LittleEndian(header[(40 + i * 4)..]);
             }
 
-            if (headerSize < 52)
+            for (var i = 0; i < after; i++)
             {
-                tableAt += compression == 6 ? 16 : 12;
+                masks[inHeader + i] = BinaryPrimitives.ReadUInt32LittleEndian(file[(tableAt + i * 4)..]);
             }
+
+            (red, green, blue, alpha) = (masks[0], masks[1], masks[2], masks[3]);
+            tableAt += Math.Max(0, after) * 4;
         }
         else if (bits == 16)
         {
@@ -155,25 +159,42 @@ public sealed class BmpImage : IRawBitmap
         }
 
         var data = file[(int)pixelsAt..];
+        var stride = ((long)width * bits + 31) / 32 * 4;
+        if (compression is 1 or 2)
+        {
+            if ((long)width * height > BitmapLoader.MaxPixels)
+            {
+                throw new NotSupportedException(
+                    $"A run-length BMP of {width}×{height} is past the {BitmapLoader.MaxPixels} pixels read.");
+            }
+        }
+        else if (stride * height > data.Length)
+        {
+            throw new InvalidDataException($"A BMP file ends before its {width}×{height} pixels do.");
+        }
+
         var pixels = new byte[(long)width * height * 4];
         var target = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(pixels.AsSpan());
         if (compression is 1 or 2)
         {
+            target.Fill(palette[0]);
             Expand(data, target, width, height, topDown, bits, palette);
         }
         else
         {
-            var stride = ((long)width * bits + 31) / 32 * 4;
-            if (stride * height > data.Length)
-            {
-                throw new InvalidDataException($"A BMP file ends before its {width}×{height} pixels do.");
-            }
-
             for (var row = 0; row < height; row++)
             {
                 var line = data.Slice((int)(row * stride), (int)stride);
                 var to = target.Slice((topDown ? row : height - 1 - row) * width, width);
                 Row(line, to, bits, palette, red, green, blue, alpha);
+            }
+
+            if (alpha != 0 && !target.ContainsAnyExceptInRange(0u, 0x00FFFFFFu))
+            {
+                for (var i = 0; i < target.Length; i++)
+                {
+                    target[i] |= 0xFF000000u;
+                }
             }
         }
 
@@ -207,9 +228,7 @@ public sealed class BmpImage : IRawBitmap
         }
 
         var shift = BitOperations.TrailingZeroCount(mask);
-        var width = BitOperations.PopCount(mask);
-        var raw = (value & mask) >> shift;
-        var top = (1ul << width) - 1;
+        ulong raw = (value & mask) >> shift, top = mask >> shift;
         return (uint)((raw * 255 + top / 2) / top);
     }
 
@@ -245,7 +264,7 @@ public sealed class BmpImage : IRawBitmap
                         return;
                     }
 
-                    (x, row) = (x + data[at], row + data[at + 1]);
+                    (x, row) = (Math.Min(x + data[at], width), row + data[at + 1]);
                     at += 2;
                     break;
                 default:
@@ -274,8 +293,7 @@ public sealed class BmpImage : IRawBitmap
         if (x < width && row < height)
         {
             target[(topDown ? row : height - 1 - row) * width + x] = color;
+            x++;
         }
-
-        x++;
     }
 }

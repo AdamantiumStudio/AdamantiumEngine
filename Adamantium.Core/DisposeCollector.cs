@@ -43,19 +43,20 @@ public class DisposeCollector : DisposableBase
     /// <summary>Lets go of <paramref name="item"/> without freeing it; whether it was held.</summary>
     public bool Remove<T>(T item) => _items.Remove(item);
 
-    /// <summary>Frees what is held, the last first, and lets go of it all. Disposables are disposed only when
+    /// <summary>Frees what is held, the last first, each let go of before it is freed - so one that throws or takes
+    /// another away leaves nothing freed twice. Disposables are disposed only when
     /// <paramref name="disposeManagedResources"/>; native blocks are freed either way.</summary>
     public void DisposeAndClear(bool disposeManagedResources = true)
     {
-        for (var i = _items.Count - 1; i >= 0; i--)
+        while (_items.Count > 0)
         {
-            if (disposeManagedResources || _items[i] is IntPtr)
+            var item = _items[_items.Count - 1];
+            _items.RemoveAt(_items.Count - 1);
+            if (disposeManagedResources || item is IntPtr)
             {
-                Free(_items[i]);
+                Free(item);
             }
         }
-
-        _items.Clear();
     }
 
     protected override void Dispose(bool disposeManaged) => DisposeAndClear(disposeManaged);

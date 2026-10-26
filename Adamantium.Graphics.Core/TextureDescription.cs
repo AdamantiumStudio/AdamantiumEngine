@@ -218,7 +218,8 @@ public struct TextureDescription
             SharingMode = SharingMode.Exclusive,
             ImageType = ConvertToImageType(description.Dimension),
             InitialLayout = ImageLayout.Undefined,
-            ImageAspect = ImageAspectFlagBits.ColorBit
+            ImageAspect = ImageAspectFlagBits.ColorBit,
+            Flags = description.Dimension == TextureDimension.TextureCube ? ImageCreateFlagBits.CubeCompatibleBit : 0
         };
     }
 

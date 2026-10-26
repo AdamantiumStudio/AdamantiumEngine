@@ -65,7 +65,19 @@ internal static class TexelBlocks
         var bytes = format.SizeOfInBytes();
         if (bytes == 0)
         {
-            throw new NotSupportedException($"The size of {format} is not known.");
+            var bits = 0;
+            foreach (System.Text.RegularExpressions.Match channel in
+                     System.Text.RegularExpressions.Regex.Matches(name.Split('_')[0], "[RGBADSXE]([0-9]+)"))
+            {
+                bits += int.Parse(channel.Groups[1].Value);
+            }
+
+            if (bits == 0 || bits % 8 != 0)
+            {
+                throw new NotSupportedException($"The size of {format} is not known.");
+            }
+
+            bytes = bits / 8;
         }
 
         return (1, 1, bytes);

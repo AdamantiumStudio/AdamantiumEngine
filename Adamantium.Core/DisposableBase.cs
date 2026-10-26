@@ -34,9 +34,16 @@ public abstract class DisposableBase : IDisposable
             return;
         }
 
-        Disposing?.Invoke(this, EventArgs.Empty);
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        try
+        {
+            Disposing?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 }

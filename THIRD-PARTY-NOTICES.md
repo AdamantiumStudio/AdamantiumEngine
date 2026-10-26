@@ -391,8 +391,9 @@ SOFTWARE.
 
 ## SharpDX
 
-**Where:** `Adamantium.Mathematics` — its vectors, matrices, quaternions, colors and bounding volumes. Everything else
-that once came from it has been rewritten.
+**Where:** `Adamantium.Mathematics` — its vectors, matrices, quaternions, colors and bounding volumes, taken in without
+the notice in each file; this one covers them until they are rewritten. Everything else that once came from it has
+been rewritten.
 
 **Its own ancestry.** SharpDX did not write its maths either: that part came in from SlimMath, itself a port of the
 maths in SlimDX, under MIT/X11. The terms are the same all the way down, which is why one notice covers the chain.

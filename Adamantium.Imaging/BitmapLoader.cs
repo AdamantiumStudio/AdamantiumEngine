@@ -18,7 +18,11 @@ public static class BitmapLoader
 {
     public delegate IRawBitmap ImageLoadDelegate(IntPtr dataPointer, ulong dataSize);
     public delegate void ImageSaveDelegate(IRawBitmap image, Stream imageStream);
-    
+
+    /// <summary>The most pixels a picture whose size its data does not bound - a run-length BMP - is read at;
+    /// 2<sup>28</sup>, a gigabyte as RGBA, unless set otherwise.</summary>
+    public static long MaxPixels { get; set; } = 1L << 28;
+
     private static readonly List<LoadSaveDelegates> _loadSaveDelegates;
     
     static BitmapLoader()

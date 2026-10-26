@@ -21,11 +21,21 @@ public record struct ViewportF(float X, float Y, float Width, float Height, floa
     /// <summary>Width over height, 0 for no height.</summary>
     public readonly float AspectRatio => Height == 0 ? 0 : Width / Height;
 
-    /// <summary>Where <paramref name="point"/> of world space lands in the viewport, depth in its range.</summary>
-    public readonly Vector3F Project(Vector3F point, Matrix4x4F projection, Matrix4x4F view, Matrix4x4F world) =>
-        Vector3F.Project(point, X, Y, Width, Height, MinDepth, MaxDepth, world * view * projection);
+    /// <summary>Where <paramref name="point"/> of world space lands in the viewport, y down the screen, depth in its
+    /// range.</summary>
+    public readonly Vector3F Project(Vector3F point, Matrix4x4F projection, Matrix4x4F view, Matrix4x4F world)
+    {
+        var clip = Vector3F.TransformCoordinate(point, world * view * projection);
+        return new Vector3F((clip.X + 1f) * 0.5f * Width + X, (1f - clip.Y) * 0.5f * Height + Y,
+            clip.Z * (MaxDepth - MinDepth) + MinDepth);
+    }
 
-    /// <summary>The point of world space that lands at <paramref name="point"/> of the viewport.</summary>
-    public readonly Vector3F Unproject(Vector3F point, Matrix4x4F projection, Matrix4x4F view, Matrix4x4F world) =>
-        Vector3F.Unproject(point, X, Y, Width, Height, MinDepth, MaxDepth, world * view * projection);
+    /// <summary>The point of world space that lands at <paramref name="point"/> of the viewport, y down the screen.
+    /// </summary>
+    public readonly Vector3F Unproject(Vector3F point, Matrix4x4F projection, Matrix4x4F view, Matrix4x4F world)
+    {
+        var clip = new Vector3F((point.X - X) / Width * 2f - 1f, 1f - (point.Y - Y) / Height * 2f,
+            (point.Z - MinDepth) / (MaxDepth - MinDepth));
+        return Vector3F.TransformCoordinate(clip, Matrix4x4F.Invert(world * view * projection));
+    }
 }

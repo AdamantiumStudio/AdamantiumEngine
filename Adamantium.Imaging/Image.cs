@@ -18,9 +18,8 @@ public sealed class Image : DisposableObject
     private readonly int _buffersPerLayer;
     private IntPtr _memory;
     private readonly bool _owned;
-    private GCHandle _pin;
 
-    private Image(ImageDescription description, IntPtr memory, bool owned, GCHandle pin = default)
+    private Image(ImageDescription description, IntPtr memory, bool owned)
     {
         description = Checked(description);
         Description = description;
@@ -33,13 +32,30 @@ public sealed class Image : DisposableObject
 
         _buffersPerLayer = _levelStart[^1];
         TotalSizeInBytes = 0;
-        for (var level = 0; level < description.MipLevels; level++)
+        try
         {
-            var (row, rows) = Level(description, level);
-            TotalSizeInBytes += (ulong)(row * rows * Slices(description, level));
-        }
+            for (var level = 0; level < description.MipLevels; level++)
+            {
+                var (row, rows) = Level(description, level);
+                var part = checked(row * rows);
+                if (part > int.MaxValue)
+                {
+                    throw new NotSupportedException(
+                        $"A level of {part} bytes of a {description.Width}×{description.Height} image is more than one " +
+                        "part of an image holds.");
+                }
 
-        TotalSizeInBytes *= (ulong)layers;
+                TotalSizeInBytes = checked(TotalSizeInBytes + (ulong)part * Slices(description, level));
+            }
+
+            TotalSizeInBytes = checked(TotalSizeInBytes * (ulong)layers);
+        }
+        catch (OverflowException)
+        {
+            throw new NotSupportedException(
+                $"A {description.Width}×{description.Height}×{description.Depth} image of {layers} layers is larger " +
+                "than memory holds.");
+        }
         if (memory == IntPtr.Zero)
         {
             memory = Utilities.AllocateMemory((nuint)TotalSizeInBytes);
@@ -47,7 +63,7 @@ public sealed class Image : DisposableObject
             owned = true;
         }
 
-        (_memory, _owned, _pin) = (memory, owned, pin);
+        (_memory, _owned) = (memory, owned);
         _buffers = new PixelBuffer[_buffersPerLayer * layers];
         var at = memory;
         for (var layer = 0; layer < layers; layer++)
@@ -60,7 +76,7 @@ public sealed class Image : DisposableObject
                     _buffers[layer * _buffersPerLayer + _levelStart[level] + slice] = new PixelBuffer(
                         Math.Max(1, description.Width >> level), Math.Max(1, description.Height >> level),
                         description.Format, (int)row, (int)(row * rows), at) { MipLevel = (uint)level };
-                    at += (int)(row * rows);
+                    at = (IntPtr)((long)at + row * rows);
                 }
             }
         }
@@ -164,13 +180,12 @@ public sealed class Image : DisposableObject
         IntPtr dataPointer) =>
         New(Make(TextureDimension.Texture3D, width, height, depth, mipMapCount, format, 1), dataPointer);
 
-    /// <summary>The picture in the <paramref name="dataSize"/> bytes at <paramref name="dataPointer"/>.</summary>
-    public static Image Load(IntPtr dataPointer, ulong dataSize, bool makeACopy = false) =>
-        From(BitmapLoader.Load(dataPointer, dataSize));
+    /// <summary>The picture in the <paramref name="dataSize"/> bytes at <paramref name="dataPointer"/>, decoded into
+    /// memory of the image's own.</summary>
+    public static Image Load(IntPtr dataPointer, ulong dataSize) => From(BitmapLoader.Load(dataPointer, dataSize));
 
-    /// <summary>The picture in <paramref name="dataBuffer"/>.</summary>
-    public static Image Load(DataPointer dataBuffer, bool makeACopy = false) =>
-        Load(dataBuffer.Pointer, dataBuffer.Size, makeACopy);
+    /// <summary>The picture in <paramref name="dataBuffer"/>, decoded into memory of the image's own.</summary>
+    public static Image Load(DataPointer dataBuffer) => Load(dataBuffer.Pointer, dataBuffer.Size);
 
     /// <summary>The picture in <paramref name="buffer"/>.</summary>
     public static unsafe Image Load(byte[] buffer)
@@ -182,8 +197,9 @@ public sealed class Image : DisposableObject
         }
     }
 
-    /// <summary>The picture in <paramref name="imageStream"/>, read to its end.</summary>
-    public static Image Load(Stream imageStream, ImageFileType fileType = ImageFileType.Unknown)
+    /// <summary>The picture in <paramref name="imageStream"/>, read to its end; its format is told by its bytes.
+    /// </summary>
+    public static Image Load(Stream imageStream)
     {
         var memory = new MemoryStream();
         imageStream.CopyTo(memory);
@@ -219,8 +235,11 @@ public sealed class Image : DisposableObject
     /// <summary>Writes the image to the file <paramref name="fileName"/> as <paramref name="fileType"/>.</summary>
     public void Save(string fileName, ImageFileType fileType)
     {
+        var memory = new MemoryStream();
+        Save(memory, fileType);
         using var stream = new FileStream(fileName, FileMode.Create, FileAccess.Write);
-        Save(stream, fileType);
+        memory.Position = 0;
+        memory.CopyTo(stream);
     }
 
     /// <summary>Writes the image to <paramref name="imageStream"/> as <paramref name="fileType"/>.</summary>
@@ -249,11 +268,6 @@ public sealed class Image : DisposableObject
 
     protected override void Dispose(bool disposeManagedResources)
     {
-        if (_pin.IsAllocated)
-        {
-            _pin.Free();
-        }
-
         if (_owned && _memory != IntPtr.Zero)
         {
             Utilities.FreeMemory(_memory);

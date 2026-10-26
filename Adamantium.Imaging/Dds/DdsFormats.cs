@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.Vulkan.Core;
@@ -16,18 +17,18 @@ internal static class DdsFormats
         (10, Format.R16G16B16A16_SFLOAT), (11, Format.R16G16B16A16_UNORM), (12, Format.R16G16B16A16_UINT),
         (13, Format.R16G16B16A16_SNORM), (14, Format.R16G16B16A16_SINT), (15, Format.R32G32_SFLOAT),
         (16, Format.R32G32_SFLOAT), (17, Format.R32G32_UINT), (18, Format.R32G32_SINT),
-        (20, Format.D32_SFLOAT_S8_UINT), (23, Format.A2B10G10R10_UNORM_PACK32), (24, Format.A2B10G10R10_UNORM_PACK32),
+        (23, Format.A2B10G10R10_UNORM_PACK32), (24, Format.A2B10G10R10_UNORM_PACK32),
         (25, Format.A2B10G10R10_UINT_PACK32), (26, Format.B10G11R11_UFLOAT_PACK32), (27, Format.R8G8B8A8_UNORM),
         (28, Format.R8G8B8A8_UNORM), (29, Format.R8G8B8A8_SRGB), (30, Format.R8G8B8A8_UINT),
         (31, Format.R8G8B8A8_SNORM), (32, Format.R8G8B8A8_SINT), (33, Format.R16G16_UNORM), (34, Format.R16G16_SFLOAT),
         (35, Format.R16G16_UNORM), (36, Format.R16G16_UINT), (37, Format.R16G16_SNORM), (38, Format.R16G16_SINT),
-        (39, Format.R32_SFLOAT), (40, Format.D32_SFLOAT), (41, Format.R32_SFLOAT), (42, Format.R32_UINT),
-        (43, Format.R32_SINT), (45, Format.D24_UNORM_S8_UINT), (48, Format.R8G8_UNORM), (49, Format.R8G8_UNORM),
+        (39, Format.R32_SFLOAT), (40, Format.R32_SFLOAT), (41, Format.R32_SFLOAT), (42, Format.R32_UINT),
+        (43, Format.R32_SINT), (48, Format.R8G8_UNORM), (49, Format.R8G8_UNORM),
         (50, Format.R8G8_UINT), (51, Format.R8G8_SNORM), (52, Format.R8G8_SINT), (53, Format.R16_UNORM),
-        (54, Format.R16_SFLOAT), (55, Format.D16_UNORM), (56, Format.R16_UNORM), (57, Format.R16_UINT),
+        (54, Format.R16_SFLOAT), (55, Format.R16_UNORM), (56, Format.R16_UNORM), (57, Format.R16_UINT),
         (58, Format.R16_SNORM), (59, Format.R16_SINT), (60, Format.R8_UNORM), (61, Format.R8_UNORM),
-        (62, Format.R8_UINT), (63, Format.R8_SNORM), (64, Format.R8_SINT), (65, Format.R8_UNORM),
-        (67, Format.E5B9G9R9_UFLOAT_PACK32), (70, Format.BC1_RGBA_UNORM_BLOCK), (71, Format.BC1_RGBA_UNORM_BLOCK),
+        (62, Format.R8_UINT), (63, Format.R8_SNORM), (64, Format.R8_SINT), (65, Format.A8_UNORM),
+        (67, Format.E5B9G9R9_UFLOAT_PACK32), (68, Format.B8G8R8G8_422_UNORM), (69, Format.G8B8G8R8_422_UNORM), (70, Format.BC1_RGBA_UNORM_BLOCK), (71, Format.BC1_RGBA_UNORM_BLOCK),
         (72, Format.BC1_RGBA_SRGB_BLOCK), (73, Format.BC2_UNORM_BLOCK), (74, Format.BC2_UNORM_BLOCK),
         (75, Format.BC2_SRGB_BLOCK), (76, Format.BC3_UNORM_BLOCK), (77, Format.BC3_UNORM_BLOCK),
         (78, Format.BC3_SRGB_BLOCK), (79, Format.BC4_UNORM_BLOCK), (80, Format.BC4_UNORM_BLOCK),
@@ -37,16 +38,44 @@ internal static class DdsFormats
         (91, Format.B8G8R8A8_SRGB), (92, Format.B8G8R8A8_UNORM), (93, Format.B8G8R8A8_SRGB),
         (94, Format.BC6H_UFLOAT_BLOCK), (95, Format.BC6H_UFLOAT_BLOCK), (96, Format.BC6H_SFLOAT_BLOCK),
         (97, Format.BC7_UNORM_BLOCK), (98, Format.BC7_UNORM_BLOCK), (99, Format.BC7_SRGB_BLOCK),
-        (115, Format.A4R4G4B4_UNORM_PACK16)
+        (107, Format.G8B8G8R8_422_UNORM), (115, Format.A4R4G4B4_UNORM_PACK16), (191, Format.R4G4B4A4_UNORM_PACK16)
     ];
 
-    private static readonly Dictionary<uint, Format> FromDxgi = Table.ToDictionary(entry => entry.Dxgi, entry => entry.Vulkan);
+    private static readonly (uint Dxgi, Format Vulkan)[] Astc = new (int Width, int Height)[]
+        {
+            (4, 4), (5, 4), (5, 5), (6, 5), (6, 6), (8, 5), (8, 6), (8, 8), (10, 5), (10, 6), (10, 8), (10, 10),
+            (12, 10), (12, 12)
+        }
+        .SelectMany((block, i) => new[]
+        {
+            ((uint)(133 + i * 4), Enum.Parse<Format>($"ASTC_{block.Width}x{block.Height}_UNORM_BLOCK")),
+            ((uint)(134 + i * 4), Enum.Parse<Format>($"ASTC_{block.Width}x{block.Height}_UNORM_BLOCK")),
+            ((uint)(135 + i * 4), Enum.Parse<Format>($"ASTC_{block.Width}x{block.Height}_SRGB_BLOCK"))
+        })
+        .ToArray();
 
-    private static readonly Dictionary<Format, uint> ToDxgi = Table
-        .Where(entry => entry.Dxgi is not (1 or 5 or 9 or 15 or 23 or 27 or 33 or 39 or 48 or 53 or 60 or 70 or 73
-            or 76 or 79 or 82 or 90 or 92 or 94 or 97 or 65 or 88))
-        .GroupBy(entry => entry.Vulkan)
-        .ToDictionary(group => group.Key, group => group.First().Dxgi);
+    private static readonly Dictionary<uint, Format> FromDxgi =
+        Table.Concat(Astc).ToDictionary(entry => entry.Dxgi, entry => entry.Vulkan);
+
+    private static readonly Dictionary<Format, uint> ToDxgi = Written();
+
+    private static Dictionary<Format, uint> Written()
+    {
+        var written = new Dictionary<Format, uint>
+        {
+            [Format.BC1_RGB_UNORM_BLOCK] = 71, [Format.BC1_RGB_SRGB_BLOCK] = 72
+        };
+        foreach (var (dxgi, vulkan) in Table.Concat(Astc))
+        {
+            if (dxgi is not (1 or 5 or 9 or 15 or 23 or 27 or 33 or 39 or 40 or 48 or 53 or 55 or 60 or 70 or 73 or 76
+                    or 79 or 82 or 88 or 90 or 92 or 94 or 97 or 107) && (dxgi < 133 || dxgi % 4 != 1))
+            {
+                written.TryAdd(vulkan, dxgi);
+            }
+        }
+
+        return written;
+    }
 
     /// <summary>The Vulkan format of DXGI_FORMAT <paramref name="dxgi"/>, or undefined.</summary>
     public static Format OfDxgi(uint dxgi) => FromDxgi.GetValueOrDefault(dxgi, Format.UNDEFINED);
@@ -96,7 +125,7 @@ internal static class DdsFormats
                 (32, 0x3FF, 0xFFC00, 0x3FF00000, _) => (Format.A2B10G10R10_UNORM_PACK32, alpha == 0),
                 (32, 0x3FF00000, 0xFFC00, 0x3FF, _) => (Format.A2R10G10B10_UNORM_PACK32, alpha == 0),
                 (32, 0xFFFF, 0xFFFF0000, 0, 0) => (Format.R16G16_UNORM, false),
-                (32, 0xFFFFFFFF, 0, 0, 0) => (Format.R32_UINT, false),
+                (32, 0xFFFFFFFF, 0, 0, 0) => (Format.R32_SFLOAT, false),
                 (24, 0xFF0000, 0xFF00, 0xFF, 0) => (Format.B8G8R8_UNORM, false),
                 (24, 0xFF, 0xFF00, 0xFF0000, 0) => (Format.R8G8B8_UNORM, false),
                 (16, 0xF800, 0x7E0, 0x1F, 0) => (Format.R5G6B5_UNORM_PACK16, false),
@@ -144,10 +173,10 @@ internal static class DdsFormats
             Format.R8G8B8A8_UNORM => (Rgb | AlphaPixels, 0, 32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000),
             Format.B8G8R8A8_UNORM => (Rgb | AlphaPixels, 0, 32, 0xFF0000, 0xFF00, 0xFF, 0xFF000000),
             Format.B8G8R8_UNORM => (Rgb, 0, 24, 0xFF0000, 0xFF00, 0xFF, 0),
+            Format.R8G8B8_UNORM => (Rgb, 0, 24, 0xFF, 0xFF00, 0xFF0000, 0),
+            Format.A2R10G10B10_UNORM_PACK32 => (Rgb | AlphaPixels, 0, 32, 0x3FF00000, 0xFFC00, 0x3FF, 0xC0000000),
             Format.R5G6B5_UNORM_PACK16 => (Rgb, 0, 16, 0xF800, 0x7E0, 0x1F, 0),
-            Format.R8_UNORM => (Luminance, 0, 8, 0xFF, 0, 0, 0),
-            Format.R16_UNORM => (Luminance, 0, 16, 0xFFFF, 0, 0, 0),
-            Format.BC1_RGBA_UNORM_BLOCK => (FourCCFlag, Dxt1, 0, 0, 0, 0, 0),
+            Format.BC1_RGBA_UNORM_BLOCK or Format.BC1_RGB_UNORM_BLOCK => (FourCCFlag, Dxt1, 0, 0, 0, 0, 0),
             Format.BC2_UNORM_BLOCK => (FourCCFlag, Dxt3, 0, 0, 0, 0, 0),
             Format.BC3_UNORM_BLOCK => (FourCCFlag, Dxt5, 0, 0, 0, 0, 0),
             _ => null

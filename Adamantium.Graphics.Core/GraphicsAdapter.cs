@@ -56,6 +56,7 @@ public unsafe class GraphicsAdapter
 
         _physicalDevice.GetPhysicalDeviceFeatures2(ref features2);
 
+        SupportsImageCubeArray = features2.Features != null && (bool)features2.Features.ImageCubeArray;
         SupportsHostImageCopy = hostCopy.HostImageCopy;
         SupportsSwapchainMaintenance1 = maintenance.SwapchainMaintenance1;
         SupportsMaintenance7 = maintenance7.Maintenance7;
@@ -92,6 +93,9 @@ public unsafe class GraphicsAdapter
     public ulong MaxMemoryAllocationSize { get; private set; }
 
     public bool SupportsHostImageCopy { get; private set; }
+
+    /// <summary>Whether the device views an array of cubes as one - a DDS of several cubes needs it.</summary>
+    public bool SupportsImageCubeArray { get; private set; }
 
     /// <summary>Whether a storage buffer may hold 8-bit members and a shader may compute with them - the pair the
     /// instance records need to carry color as four BYTES rather than as a packed word.</summary>

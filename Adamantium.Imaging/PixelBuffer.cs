@@ -15,6 +15,13 @@ public sealed class PixelBuffer
     /// <paramref name="bufferStride"/> bytes in all.</summary>
     public PixelBuffer(uint width, uint height, Format format, int rowStride, int bufferStride, IntPtr dataPointer)
     {
+        var (row, rows) = TexelBlocks.Rows(format, width, height);
+        if (rowStride < row || rows > 0 && bufferStride < (rows - 1) * rowStride + row)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowStride),
+                $"Rows {rowStride} bytes apart and {bufferStride} bytes in all do not hold {width}×{height} {format}.");
+        }
+
         (Width, Height, Format, RowStride, BufferStride, DataPointer) =
             (width, height, format, rowStride, bufferStride, dataPointer);
     }

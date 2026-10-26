@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -86,6 +87,16 @@ public static unsafe class Utilities
     public static IntPtr Write<T>(IntPtr destination, T[] data, int offset, int count) where T : struct
     {
         var bytes = (long)count * SizeOf<T>();
+        if (!Layout<T>.SameInMemory)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                Marshal.StructureToPtr(data[offset + i], (IntPtr)((byte*)destination + (long)i * SizeOf<T>()), false);
+            }
+
+            return (IntPtr)((byte*)destination + bytes);
+        }
+
         var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
         try
         {
@@ -111,6 +122,16 @@ public static unsafe class Utilities
     public static IntPtr Read<T>(IntPtr source, T[] data, int offset, int count) where T : struct
     {
         var bytes = (long)count * SizeOf<T>();
+        if (!Layout<T>.SameInMemory)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                data[offset + i] = Marshal.PtrToStructure<T>((IntPtr)((byte*)source + (long)i * SizeOf<T>()));
+            }
+
+            return (IntPtr)((byte*)source + bytes);
+        }
+
         var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
         try
         {
@@ -178,6 +199,9 @@ public static unsafe class Utilities
         return unchecked((int)hash);
     }
 
+    /// <summary>Puts <paramref name="first"/> where <paramref name="second"/> was and the other way round.</summary>
+    public static void Swap<T>(ref T first, ref T second) => (first, second) = (second, first);
+
     /// <summary><paramref name="size"/> rounded up to a multiple of <paramref name="alignment"/>, a power of two.
     /// </summary>
     public static ulong AlignSize(ulong size, ulong alignment) => (size + alignment - 1) & ~(alignment - 1);
@@ -196,7 +220,7 @@ public static unsafe class Utilities
 
             try
             {
-                return Unsafe.SizeOf<T>() == Marshal.SizeOf<T>();
+                return Unsafe.SizeOf<T>() == Marshal.SizeOf<T>() && !Marshaled(typeof(T));
             }
             catch (ArgumentException)
             {
@@ -206,5 +230,12 @@ public static unsafe class Utilities
             return false;
 #endif
         }
+
+        private static bool Marshaled(Type type) =>
+            type == typeof(bool) || type == typeof(char)
+            || !type.IsPrimitive && !type.IsEnum && type.IsValueType && type
+                .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public
+                           | System.Reflection.BindingFlags.NonPublic)
+                .Any(field => Marshaled(field.FieldType));
     }
 }

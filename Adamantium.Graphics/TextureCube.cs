@@ -1,60 +1,43 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
-using Adamantium.Core;
 using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
+using Image = Adamantium.Imaging.Image;
 
 namespace Adamantium.Graphics;
 
 public class TextureCube : Texture
 {
-    internal TextureCube(GraphicsDevice device, ImageDescription description, byte[] rawPixels, ImageUsageFlagBits usage, ImageLayout desiredLayout) 
-        : base(device, description, rawPixels, usage, desiredLayout) 
+    internal TextureCube(GraphicsDevice device, Image image, ImageUsageFlagBits usage, ImageLayout desiredLayout)
+        : base(device, image, usage, desiredLayout)
     {
-        
     }
 
-    public static TextureCube Load(GraphicsDevice device, 
+    /// <summary>A cube of the six square pictures in <paramref name="files"/>, one face each, of one size and format.
+    /// </summary>
+    public static TextureCube Load(GraphicsDevice device,
         string[] files,
         ImageUsageFlagBits usage = ImageUsageFlagBits.SampledBit,
         ImageLayout desiredLayout = ImageLayout.ColorAttachmentOptimal)
     {
         if (files.Length != 6)
             throw new ArgumentOutOfRangeException(nameof(files), "Texture cube should have exactly 6 files");
-        
-        var bitmaps = new List<IRawBitmap>();
-        foreach (var file in files)
+
+        var faces = files.Select(BitmapLoader.Load).ToArray();
+        var first = faces[0];
+        if (first.Width != first.Height || faces.Any(face => face.Width != first.Width || face.Height != first.Height
+                                                             || face.PixelFormat != first.PixelFormat))
         {
-            bitmaps.Add(BitmapLoader.Load(file));
+            throw new ArgumentException("The faces of a texture cube must be square, of one size and pixel format.",
+                nameof(files));
         }
 
-        var totalSize = bitmaps[0].TotalSizeInBytes;
-        // Each face is copied as the first one's size: one of another size or format would be read past its end.
-        if (bitmaps.Any(bitmap => bitmap.Width != bitmaps[0].Width || bitmap.Height != bitmaps[0].Height
-                                  || bitmap.PixelFormat != bitmaps[0].PixelFormat))
+        using var image = Image.NewCube(first.Width, 1, first.PixelFormat);
+        for (var face = 0; face < faces.Length; face++)
         {
-            throw new ArgumentException("The faces of a texture cube must be of one size and pixel format.", nameof(files));
+            image.GetPixelBuffer(face, 0).SetPixels(faces[face].GetRawPixels(0));
         }
 
-        var rawPixels = new byte[totalSize * 6];
-        var destinationHandle = GCHandle.Alloc(rawPixels, GCHandleType.Pinned);
-        var dstPtr = destinationHandle.AddrOfPinnedObject();
-        for (int i = 0; i < bitmaps.Count; i++)
-        {
-            var pixels = bitmaps[i].GetFrameData(0);
-            var sourceHandle = pixels.GetHandle();
-            
-            Utilities.CopyMemory(IntPtr.Add(dstPtr, (int)((ulong)i * totalSize)), sourceHandle.AddrOfPinnedObject(), (long)totalSize);
-            sourceHandle.Free();
-        }
-        
-        destinationHandle.Free();
-
-        var description = bitmaps[0].GetImageDescription();
-        description.Dimension = TextureDimension.TextureCube;
-
-        return new TextureCube(device, description, rawPixels, usage, desiredLayout);
+        return new TextureCube(device, image, usage, desiredLayout);
     }
 }
