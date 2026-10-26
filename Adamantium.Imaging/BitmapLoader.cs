@@ -24,7 +24,7 @@ public static class BitmapLoader
     static BitmapLoader()
     {
         _loadSaveDelegates = new List<LoadSaveDelegates>();
-        Register(ImageFileType.Gif, GIFHelper.LoadFromMemory, GIFHelper.SaveToStream);
+        Register(ImageFileType.Gif, GifHelper.LoadFromMemory, GifHelper.SaveToStream);
         Register(ImageFileType.Png, PngHelper.LoadFromMemory, PngHelper.SaveToStream);
         Register(ImageFileType.Bmp, BmpHelper.LoadFromMemory, BmpHelper.SaveToStream);
         Register(ImageFileType.Dds, DdsHelper.LoadFromMemory, DdsHelper.SaveToStream);

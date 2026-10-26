@@ -1,141 +1,129 @@
 using System;
+using System.Buffers.Binary;
 using System.IO;
-using System.Runtime.InteropServices;
-using Adamantium.Core;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Imaging.Tga;
 
-public class TgaEncoder
+/// <summary>Writes pictures as TGA 2.0: gray when every pixel is gray and opaque, 24-bit color when every pixel is
+/// opaque, else 32-bit with 8 alpha bits; top row first, run-length encoded row by row unless asked not to, with the
+/// extension area saying what the alpha bits hold.</summary>
+public static class TgaEncoder
 {
-    internal static bool EncodeTgaHeader(ImageDescription description, out TgaHeader header, ref TgaConversionFlags flags)
+    private const int ExtensionSize = 495;
+
+    /// <summary>Writes <paramref name="image"/>'s first frame to <paramref name="output"/>: gray, RGB and RGBA pixels
+    /// of 8 or 16 bits, in either channel order, up to 65535 a side; others throw
+    /// <see cref="NotSupportedException"/>.</summary>
+    public static void Encode(IRawBitmap image, Stream output, bool compress = true)
     {
-        header = new TgaHeader();
-        if (description.Width > 0xFFFF || description.Height > 0xFFFF)
+        int width = (int)image.Width, height = (int)image.Height;
+        if (width is < 1 or > ushort.MaxValue || height is < 1 or > ushort.MaxValue)
         {
-            return false;
+            throw new NotSupportedException($"A TGA is 1 to 65535 pixels a side, not {width}×{height}.");
         }
 
-        header.Width = (ushort)description.Width;
-        header.Height = (ushort)description.Height;
-
-        switch (description.Format)
+        var rgba = image.GetRgba8Pixels()
+                   ?? throw new NotSupportedException($"TGA is not written from {(Format)image.PixelFormat} pixels.");
+        var count = width * height;
+        bool gray = true, opaque = true;
+        for (var i = 0; i < count && (gray || opaque); i++)
         {
-            case Format.R8G8B8A8_UNORM:
-            case Format.R8G8B8A8_SRGB:
-                header.ImageType = (byte)TgaImageType.TrueColor;
-                header.BitsPerPixel = 32;
-                header.Descriptor = (byte)TgaDescriptorFlags.InvertY | 8;
-                flags |= TgaConversionFlags.Swizzle;
-                break;
-            case Format.B8G8R8A8_UNORM:
-            case Format.B8G8R8A8_SRGB:
-                // TGA keeps BGRA: these go as they are.
-                header.ImageType = (byte)TgaImageType.TrueColor;
-                header.BitsPerPixel = 32;
-                header.Descriptor = (byte)TgaDescriptorFlags.InvertY | 8;
-                break;
-            case Format.B8G8R8_UNORM:
-            case Format.B8G8R8_SRGB:
-                header.ImageType = (byte)TgaImageType.TrueColor;
-                header.BitsPerPixel = 24;
-                header.Descriptor = (byte)TgaDescriptorFlags.InvertY;
-                flags |= TgaConversionFlags.Format888;
-                break;
-            case Format.R8_UNORM:
-                header.ImageType = (byte)TgaImageType.BlackAndWhite;
-                header.BitsPerPixel = 8;
-                header.Descriptor = (byte)TgaDescriptorFlags.InvertY;
-                break;
-            case Format.B5G5R5A1_UNORM_PACK16:
-                header.ImageType = (byte)TgaImageType.TrueColor;
-                header.BitsPerPixel = 16;
-                header.Descriptor = (byte)TgaDescriptorFlags.InvertY | 1;
-                break;
-
-            default:
-                return false;
+            opaque &= rgba[i * 4 + 3] == 255;
+            gray &= rgba[i * 4 + 3] == 255 && rgba[i * 4] == rgba[i * 4 + 1] && rgba[i * 4 + 1] == rgba[i * 4 + 2];
         }
 
-        return true;
+        var pixelBytes = gray ? 1 : opaque ? 3 : 4;
+        var header = new byte[18];
+        header[2] = (byte)((gray ? 3 : 2) + (compress ? 8 : 0));
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(12), (ushort)width);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(14), (ushort)height);
+        header[16] = (byte)(pixelBytes * 8);
+        // Top row first; 8 alpha bits with the 32-bit pixels.
+        header[17] = (byte)(0x20 | (pixelBytes == 4 ? 8 : 0));
+        output.Write(header);
+
+        var row = new byte[width * pixelBytes];
+        var written = 18L;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var from = (y * width + x) * 4;
+                var to = x * pixelBytes;
+                if (gray)
+                {
+                    row[to] = rgba[from];
+                    continue;
+                }
+
+                (row[to], row[to + 1], row[to + 2]) = (rgba[from + 2], rgba[from + 1], rgba[from]);
+                if (pixelBytes == 4)
+                {
+                    row[to + 3] = rgba[from + 3];
+                }
+            }
+
+            written += compress ? Packets(row, pixelBytes, output) : Plain(row, output);
+        }
+
+        // The extension area - its size and, last, the attributes type: 3 for alpha, 0 for none - and the footer.
+        var extension = new byte[ExtensionSize];
+        BinaryPrimitives.WriteUInt16LittleEndian(extension, ExtensionSize);
+        extension[494] = (byte)(pixelBytes == 4 ? 3 : 0);
+        output.Write(extension);
+        var footer = new byte[26];
+        BinaryPrimitives.WriteUInt32LittleEndian(footer, (uint)written);
+        "TRUEVISION-XFILE.\0"u8.CopyTo(footer.AsSpan(8));
+        output.Write(footer);
+        output.Flush();
     }
-    
-    public static unsafe void SaveToTgaStream(IRawBitmap rawBitmap, Stream imageStream)
+
+    private static int Plain(byte[] row, Stream output)
+    {
+        output.Write(row);
+        return row.Length;
+    }
+
+    // A row as run-length packets: two or more of one pixel as a run, the rest as raw packets, 128 pixels at most each.
+    private static int Packets(byte[] row, int pixelBytes, Stream output)
+    {
+        var pixels = row.Length / pixelBytes;
+        var written = 0;
+        var at = 0;
+        while (at < pixels)
         {
-            // Pixels TGA has no header for - RGB, 16 bits, gray of 16 - are brought to RGBA of 8 bits first.
-            var probe = TgaConversionFlags.None;
-            if (!EncodeTgaHeader(rawBitmap.GetImageDescription(), out _, ref probe)
-                && rawBitmap.GetRgba8Pixels() is { } rgba)
+            var run = 1;
+            while (at + run < pixels && run < 128 && Same(row, at, at + run, pixelBytes))
             {
-                rawBitmap = new FrameBitmap(rawBitmap.Width, rawBitmap.Height, SurfaceFormat.R8G8B8A8.UNorm, [rgba]);
+                run++;
             }
 
-            TgaHeader header;
-            ImageDescription description = rawBitmap.GetImageDescription();
-            TgaConversionFlags flags = TgaConversionFlags.None;
-            if (!EncodeTgaHeader(description, out header, ref flags))
+            if (run >= 2)
             {
-                throw new NotSupportedException(
-                    $"TGA is not written from {(Format)description.Format} pixels of {description.Width}×{description.Height}.");
+                output.WriteByte((byte)(0x80 | (run - 1)));
+                output.Write(row, at * pixelBytes, pixelBytes);
+                written += 1 + pixelBytes;
+                at += run;
+                continue;
             }
 
-            int rowPitch, slicePitch;
-            if (flags.HasFlag(TgaConversionFlags.Format888))
+            // Raw pixels up to the next pair of equal ones.
+            var raw = 1;
+            while (at + raw < pixels && raw < 128 && !(at + raw + 1 < pixels && Same(row, at + raw, at + raw + 1, pixelBytes)))
             {
-                rowPitch = (int)description.Width * 3;
-                slicePitch = (int)description.Height * rowPitch;
-            }
-            else
-            {
-                int widthCount, heightCount;
-                Image.ComputePitch(description.Format, (int)description.Width, (int)description.Height, out rowPitch, out slicePitch, out widthCount, out heightCount);
+                raw++;
             }
 
-            var pixelBuffer = rawBitmap.GetRawPixels(0);
-            var handle = GCHandle.Alloc(pixelBuffer, GCHandleType.Pinned);
-            IntPtr pSource = handle.AddrOfPinnedObject();
-            var sPitch = description.Width * description.Format.SizeOfInBytes();
-
-            int headerSize = Utilities.SizeOf<TgaHeader>();
-            var buffer = new byte[Math.Max(slicePitch, headerSize)];
-            IntPtr memory = Utilities.AllocateMemory(headerSize, 1);
-            Marshal.StructureToPtr(header, memory, true);
-            Utilities.Read(memory, buffer, 0, headerSize);
-            imageStream.Write(buffer, 0, headerSize);
-            Utilities.FreeMemory(memory);
-
-            var size = description.Width * description.Height * description.Format.SizeOfInBytes();
-            var dPtr = Utilities.AllocateMemory((int)size);
-            var finalPixelBufferPtr = dPtr;
-
-            for (int y = 0; y < description.Height; ++y)
-            {
-                if (flags.HasFlag(TgaConversionFlags.Format888))
-                {
-                    ImageHelper.CopyScanline(dPtr, pSource, rowPitch);
-                }
-                else if (flags.HasFlag(TgaConversionFlags.Swizzle))
-                {
-                    ImageHelper.SwizzleScanline(dPtr, rowPitch, pSource, (int)sPitch,
-                       description.Format, ImageHelper.ScanlineFlags.None);
-                }
-                else
-                {
-                    ImageHelper.CopyScanline(dPtr, rowPitch, pSource, (int)sPitch,
-                       description.Format, ImageHelper.ScanlineFlags.None);
-                }
-
-                dPtr = (IntPtr)((byte*)dPtr + rowPitch);
-                pSource = (IntPtr)((byte*)pSource + sPitch);
-            }
-
-            //renew pointer address as far as it was moved by code above
-            dPtr = finalPixelBufferPtr;
-            
-            handle.Free();
-
-            Utilities.Read(dPtr, buffer, 0, slicePitch);
-            imageStream.Write(buffer, 0, slicePitch);
-            Utilities.FreeMemory(dPtr);
+            output.WriteByte((byte)(raw - 1));
+            output.Write(row, at * pixelBytes, raw * pixelBytes);
+            written += 1 + raw * pixelBytes;
+            at += raw;
         }
+
+        return written;
+    }
+
+    private static bool Same(byte[] row, int a, int b, int pixelBytes) =>
+        row.AsSpan(a * pixelBytes, pixelBytes).SequenceEqual(row.AsSpan(b * pixelBytes, pixelBytes));
 }

@@ -1,34 +1,20 @@
 ﻿using System;
 using System.IO;
 
-namespace Adamantium.Imaging.Tga
+namespace Adamantium.Imaging.Tga;
+
+/// <summary>TGA for <see cref="BitmapLoader"/>.</summary>
+internal static class TgaHelper
 {
-    internal class TgaHelper
+    public static unsafe IRawBitmap LoadFromMemory(IntPtr source, ulong size)
     {
-        public static TgaImage LoadFromMemory(IntPtr source, ulong size)
+        if (size > int.MaxValue)
         {
-            TgaConversionFlags conversionFlags = 0;
-            ImageDescription description;
-            var result = TgaDecoder.DecodeTgaHeader(source, size, out description, out var offset, out conversionFlags);
-
-            if (result == false)
-            {
-                return null;
-            }
-
-            if (offset > size)
-            {
-                return null;
-            }
-
-            var image = TgaDecoder.CreateImageFromTGA(source, offset, description, conversionFlags);
-
-            return image;
+            throw new NotSupportedException($"A TGA file of {size} bytes is more than one span holds.");
         }
 
-        public static void SaveToStream(IRawBitmap bitmap, Stream imageStream)
-        {
-            TgaEncoder.SaveToTgaStream(bitmap, imageStream);
-        }
+        return TgaImage.Read(new ReadOnlySpan<byte>((void*)source, (int)size));
     }
+
+    public static void SaveToStream(IRawBitmap bitmap, Stream imageStream) => TgaEncoder.Encode(bitmap, imageStream);
 }

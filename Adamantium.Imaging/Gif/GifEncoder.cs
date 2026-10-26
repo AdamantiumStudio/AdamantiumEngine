@@ -1,190 +1,174 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Adamantium.Core;
-using Adamantium.Imaging.PaletteQuantizer;
-using Adamantium.Imaging.PaletteQuantizer.Helpers;
-using Adamantium.Imaging.PaletteQuantizer.Quantizers.DistinctSelection;
-using Adamantium.Mathematics;
+using Adamantium.Imaging.Png;
 using Adamantium.Vulkan.Core;
 
-namespace Adamantium.Imaging.Gif
+namespace Adamantium.Imaging.Gif;
+
+/// <summary>Writes pictures as GIF89a, several frames as an animation. Each frame is shown as the picture's frame is,
+/// written as only the rectangle that changed from the one before, the pixels in it that did not change transparent;
+/// a frame followed by one with transparent pixels is written whole and cleared after. Each has its own color table:
+/// its colors exactly when there are 256 or fewer, else reduced by <see cref="ColorQuantizer"/>. Pixels of alpha below
+/// 128 are transparent.</summary>
+public static class GifEncoder
 {
-    public class GifEncoder
+    // A frame's delay when the picture gives none.
+    private const ushort DefaultDelay = 10;
+
+    /// <summary>Writes <paramref name="image"/> to <paramref name="output"/>: gray, RGB and RGBA pixels of 8 or 16 bits,
+    /// in either channel order; others throw <see cref="NotSupportedException"/>. Frame delays and the play count are
+    /// taken from a <see cref="GifImage"/> or <see cref="PngImage"/>; <paramref name="dither"/> spreads the error of
+    /// colors reduced.</summary>
+    public static void Encode(IRawBitmap image, Stream output, bool dither = true)
     {
-        private const string GIFHeader = "GIF89a";
-        private const string NetscapeAppExt = "NETSCAPE2.0";
-
-        public GifEncoder()
+        int width = (int)image.Width, height = (int)image.Height;
+        if (width is < 1 or > ushort.MaxValue || height is < 1 or > ushort.MaxValue)
         {
+            throw new NotSupportedException($"A GIF is 1 to 65535 pixels a side, not {width}×{height}.");
         }
 
-        public void Encode(IRawBitmap img, Stream stream)
+        var frames = Math.Max(1u, image.FramesCount);
+        output.Write("GIF89a"u8);
+        Span<byte> header = stackalloc byte[10];
+        BinaryPrimitives.WriteUInt16LittleEndian(header, (ushort)width);
+        BinaryPrimitives.WriteUInt16LittleEndian(header[2..], (ushort)height);
+        // No global table: each frame has its own; 8 bits of color resolution.
+        (header[4], header[5], header[6]) = (0x70, 0, 0);
+        output.Write(header[..7]);
+        // NETSCAPE2.0: the repeats after the first play, 0 for forever; an animation played once has none.
+        var plays = image.NumberOfReplays;
+        if (frames > 1 && plays != 1)
         {
-            WriteGifHeader(stream);
-            WriteHeader(img.GetImageDescription(), stream);
-            WriteApplicationExtension(stream, 0);
-            WriteImageData(img, stream);
-            stream.WriteByte((byte)GifChunkCodes.Trailer);
+            var loops = (ushort)(plays == 0 ? 0 : Math.Min(plays - 1, ushort.MaxValue));
+            output.Write([0x21, 0xFF, 11, .. "NETSCAPE2.0"u8, 3, 1, (byte)loops, (byte)(loops >> 8), 0]);
         }
 
-        private void WriteGifHeader(Stream stream)
+        // What is under the frame about to be drawn: the frame before when it stays, nothing when it was cleared.
+        byte[] under = null;
+        var current = Pixels(image, 0);
+        for (uint f = 0; f < frames; f++)
         {
-            var header = Encoding.ASCII.GetBytes(GIFHeader);
-            stream.WriteBytes(header);
-        }
-
-        private void WriteHeader(ImageDescription description, Stream stream)
-        {
-            stream.WriteUInt16((ushort)description.Width);
-            stream.WriteUInt16((ushort)description.Height);
-
-            byte fields = 0;
-            // 8 bits depth
-            //fields |= (1 << 4);
-            //fields |= (1 << 5);
-            //fields |= (1 << 6);
-            fields = 112;
-
-            //var colorDepth = (((fields >> 4) & 7)+1);
-
-            //fields = 247;
-            stream.WriteByte(fields);
-            stream.WriteByte(0);
-            stream.WriteByte(0);
-        }
-
-        private void WriteApplicationExtension(Stream stream, ushort loopCount)
-        {
-            stream.WriteByte((byte)GifChunkCodes.ExtensionIntroducer);
-
-            stream.WriteByte((byte)GifChunkCodes.ApplicationExtension);
-            stream.WriteByte(11);
-
-            stream.WriteBytes(Encoding.ASCII.GetBytes(NetscapeAppExt));
-            stream.WriteByte(3); // blockSize (Always 3)
-            stream.WriteByte(1); //Always 1 (Don`t know what is it)
-            stream.WriteUInt16(loopCount); // Number of animation loops
-
-            stream.WriteByte(0); // Trailer
-        }
-
-        private void WriteGraphicsControlExtension(Stream stream, UInt16 delay, byte transparentIndex, DisposalMethod disposalMethod)
-        {
-            stream.WriteByte((byte)GifChunkCodes.ExtensionIntroducer);
-
-            stream.WriteByte((byte)GifChunkCodes.GraphicControl);
-            // block size
-            stream.WriteByte(4);
-            
-            // flags
-            stream.WriteByte(5);
-
-            //delay
-            stream.WriteUInt16(delay);
-            //transparent index
-            stream.WriteByte(transparentIndex);
-            
-            stream.WriteByte(0);
-        }
-
-        private void WriteImageData(IRawBitmap img, Stream stream)
-        {
-            // Frames are taken in order - an animation composes each from the one before - and quantized side by side.
-            // The quantizer reads RGBA: frames in another order or depth are brought to it first.
-            var frames = new FrameData[img.FramesCount];
-            for (uint i = 0; i < img.FramesCount; ++i)
+            var next = f + 1 < frames ? Pixels(image, f + 1) : null;
+            var cleared = next != null && AnyTransparent(next);
+            var (x, y, w, h) = cleared || under == null ? (0, 0, width, height) : Changed(current, under, width, height);
+            var region = new byte[w * h * 4];
+            for (var row = 0; row < h; row++)
             {
-                frames[i] = img.GetFrameData(i);
-                if (frames[i].Description.Format != SurfaceFormat.R8G8B8A8.UNorm)
+                var from = ((y + row) * width + x) * 4;
+                current.AsSpan(from, w * 4).CopyTo(region.AsSpan(row * w * 4));
+                if (under == null)
                 {
-                    var rgba = img.GetRgba8Pixels(i)
-                               ?? throw new NotSupportedException($"GIF is not written from {(Format)img.PixelFormat} pixels.");
-                    frames[i] = new FrameData(rgba, ImageDescription.Default2D(img.Width, img.Height,
-                        SurfaceFormat.R8G8B8A8.UNorm));
+                    continue;
                 }
-            }
 
-            var quantizerResults = new QuantizerResult[img.FramesCount];
-            Parallel.For(
-                0,
-                img.FramesCount,
-                index =>
+                // Unchanged pixels are left to show through.
+                for (var i = 0; i < w * 4; i += 4)
                 {
-                    var quant = new DistinctSelectionQuantizer();
-                    var result = ImageBuffer.QuantizeImage(frames[index], quant, null, 256, true, 1);
-
-                    if (result.ColorTable.Length < 256)
+                    if (Same(current, under, from + i))
                     {
-                        var diff = 256 - result.ColorTable.Length;
-                        var lst = result.ColorTable.ToList();
-                        for (int k = 0; k < diff; ++k)
-                        {
-                            lst.Add(new Color());
-                        }
-
-                        result.ColorTable = lst.ToArray();
+                        region[row * w * 4 + i + 3] = 0;
                     }
-                    result.CompressedPixels = LZW.Compress(result.IndexTable, 8);
-                    quantizerResults[index] = result;
-                }
-            );
-            for (var k = 0; k < quantizerResults.Length; k++)
-            {
-                var result = quantizerResults[k];
-                byte fields = 0;
-                //fields |= (1 << 0); // LCT presence flag
-                //// 256 colors
-                //fields |= (1 << 5);
-                //fields |= (1 << 6);
-                //fields |= (1 << 7);
-
-                fields = 135;
-
-                //var s = 1 << ((fields & 0x07) + 1);
-                //var present = fields & 0x80;
-
-                stream.WriteByte((byte) GifChunkCodes.ImageDescriptor);
-                stream.WriteUInt16(0);
-                stream.WriteUInt16(0);
-                stream.WriteUInt16((ushort) result.Image.Description.Width);
-                stream.WriteUInt16((ushort) result.Image.Description.Height);
-                stream.WriteByte(fields);
-
-                //Writing local color table
-                foreach (var color in result.ColorTable)
-                {
-                    stream.WriteBytes(new[] {color.R, color.G, color.B});
-                }
-
-                WriteCompressedImage(stream, result.CompressedPixels, 8);
-                WriteGraphicsControlExtension(stream, 4, 127, DisposalMethod.DoNotDispose);
-            }
-        }
-
-        private void WriteCompressedImage(Stream stream, byte[] compressedData, byte colorDepth)
-        {
-            stream.WriteByte(colorDepth);
-
-            byte blockSize;
-            int offset = 0;
-            int dataSize = compressedData.Length;
-            while (offset < dataSize)
-            {
-                if (offset == dataSize) break;
-
-                blockSize = dataSize - offset > 255 ? byte.MaxValue : (byte)(dataSize - offset);
-                stream.WriteByte(blockSize);
-                for(int i = 0; i<blockSize; ++i)
-                {
-                    stream.WriteByte(compressedData[offset]);
-                    offset++;
                 }
             }
 
-            stream.WriteByte(0);
+            // An animation's every frame says which index is transparent, used or not: readers that clear a frame to
+            // the background clear it to that, and take a first frame without one as never transparent.
+            var quantized = ColorQuantizer.Quantize(region, w, h, frames > 1 ? 255 : 256, dither);
+            if (frames > 1 && quantized.TransparentIndex < 0)
+            {
+                var palette = quantized.Palette;
+                Array.Resize(ref palette, palette.Length + 3);
+                quantized = quantized with { Palette = palette, Colors = quantized.Colors + 1,
+                    TransparentIndex = quantized.Colors };
+            }
+
+            var bits = 1;
+            while (1 << bits < quantized.Colors)
+            {
+                bits++;
+            }
+
+            var transparent = quantized.TransparentIndex >= 0;
+            if (frames > 1 || transparent)
+            {
+                // Graphic Control Extension: disposal, transparency, delay.
+                var disposal = cleared ? GifDisposal.Background : GifDisposal.None;
+                var delay = Delay(image, f);
+                output.Write([
+                    0x21, 0xF9, 4, (byte)(((int)disposal << 2) | (transparent ? 1 : 0)), (byte)delay,
+                    (byte)(delay >> 8), (byte)Math.Max(0, quantized.TransparentIndex), 0
+                ]);
+            }
+
+            header.Clear();
+            header[0] = 0x2C;
+            BinaryPrimitives.WriteUInt16LittleEndian(header[1..], (ushort)x);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[3..], (ushort)y);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[5..], (ushort)w);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[7..], (ushort)h);
+            header[9] = (byte)(0x80 | (bits - 1));
+            output.Write(header);
+            var table = new byte[3 << bits];
+            quantized.Palette.CopyTo(table, 0);
+            output.Write(table);
+            // LZW codes start a bit wider than the indices, 2 bits at least.
+            var codeSize = Math.Max(2, bits);
+            output.WriteByte((byte)codeSize);
+            GifLzw.Encode(quantized.Indices, codeSize, output);
+            under = cleared ? new byte[current.Length] : current;
+            current = next;
         }
+
+        output.WriteByte(0x3B);
+        output.Flush();
     }
+
+    private static byte[] Pixels(IRawBitmap image, uint frame) => image.GetRgba8Pixels(frame)
+        ?? throw new NotSupportedException($"GIF is not written from {(Format)image.PixelFormat} pixels.");
+
+    private static bool AnyTransparent(byte[] rgba)
+    {
+        for (var i = 3; i < rgba.Length; i += 4)
+        {
+            if (rgba[i] < 128)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Pixels the same as shown: both transparent, or both opaque of one color.
+    private static bool Same(byte[] a, byte[] b, int at) => a[at + 3] < 128
+        ? b[at + 3] < 128
+        : b[at + 3] >= 128 && a[at] == b[at] && a[at + 1] == b[at + 1] && a[at + 2] == b[at + 2];
+
+    // The rectangle of pixels that differ from those under them; one pixel when none does.
+    private static (int X, int Y, int Width, int Height) Changed(byte[] current, byte[] under, int width, int height)
+    {
+        int left = width, top = height, right = -1, bottom = -1;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                if (!Same(current, under, (y * width + x) * 4))
+                {
+                    (left, right) = (Math.Min(left, x), Math.Max(right, x));
+                    (top, bottom) = (Math.Min(top, y), Math.Max(bottom, y));
+                }
+            }
+        }
+
+        return right < 0 ? (0, 0, 1, 1) : (left, top, right - left + 1, bottom - top + 1);
+    }
+
+    private static ushort Delay(IRawBitmap image, uint frame) => image switch
+    {
+        GifImage gif when frame < gif.Frames.Count => gif.Frames[(int)frame].DelayCentiseconds,
+        PngImage png when frame < png.Frames.Count =>
+            (ushort)Math.Min(ushort.MaxValue, Math.Round(png.Frames[(int)frame].Delay.TotalMilliseconds / 10)),
+        _ => DefaultDelay
+    };
 }

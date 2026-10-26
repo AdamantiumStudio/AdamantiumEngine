@@ -307,9 +307,39 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
     }
 
+    // A texture past the device's limits is refused here, by name, instead of left for the driver to fail or lose the
+    // device over.
+    private void CheckLimits(TextureDescription description)
+    {
+        // By the image Vulkan is asked for.
+        var limits = GraphicsDevice.Adapter.AdapterProperties.Limits;
+        var cube = (description.Flags & ImageCreateFlagBits.CubeCompatibleBit) != 0;
+        var (side, kind) = description.ImageType switch
+        {
+            ImageType._1d => (limits.MaxImageDimension1D, "1D"),
+            ImageType._3d => (limits.MaxImageDimension3D, "3D"),
+            _ when cube => (limits.MaxImageDimensionCube, "cube"),
+            _ => (limits.MaxImageDimension2D, "2D")
+        };
+        var largest = Math.Max(description.Width, Math.Max(description.Height,
+            description.ImageType == ImageType._3d ? description.Depth : 1));
+        if (largest > side)
+        {
+            throw new NotSupportedException(
+                $"A {kind} texture of {description.Width}×{description.Height} is past this device's {side} a side.");
+        }
+
+        if (description.ArrayLayers > limits.MaxImageArrayLayers)
+        {
+            throw new NotSupportedException(
+                $"A texture of {description.ArrayLayers} layers is past this device's {limits.MaxImageArrayLayers}.");
+        }
+    }
+
     protected void CreateImage(TextureDescription description, MemoryPropertyFlags memoryProperties, out VulkanImage image, out DeviceMemory imageMemory,
         object imagePNext = null, Func<VulkanImage, object> allocPNextFactory = null)
     {
+        CheckLimits(description);
         var device = GraphicsDevice.LogicalDevice;
         var imageInfo = description.ToImageCreateInfo();
         if (imagePNext != null)
