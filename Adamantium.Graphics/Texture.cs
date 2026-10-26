@@ -627,12 +627,9 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     public void Save(string path, ImageFileType fileType)
     {
+        // The pixels as the texture holds them, said to be in its format: the encoders read B8G8R8A8 as such.
         var img = Image.New2D(Width, Height, 1, Description.Format);
         ReadbackInto(img);
-
-        // The render target is stored as B8G8R8A8; the image encoders read pixels as RGBA, so swap R<->B.
-        SwapRedBlueIfBgra(img);
-
         img.Save(path, fileType);
     }
 
@@ -749,21 +746,6 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
 
         return MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent;
-    }
-
-    /// <summary>Swaps red and blue in place for a B8G8R8A8 image so the RGBA-oriented encoders save correct colors.</summary>
-    private static void SwapRedBlueIfBgra(Image image)
-    {
-        if (image.Description.Format != Format.B8G8R8A8_UNORM)
-            return;
-
-        var pixels = (byte*)image.DataPointer.ToPointer();
-        var pixelCount = image.TotalSizeInBytes / 4;
-        for (ulong i = 0; i < pixelCount; i++)
-        {
-            (pixels[0], pixels[2]) = (pixels[2], pixels[0]);
-            pixels += 4;
-        }
     }
 
     public ImageViewCreateInfo Info { get; private set; }

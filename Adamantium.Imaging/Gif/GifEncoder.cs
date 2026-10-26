@@ -8,6 +8,7 @@ using Adamantium.Imaging.PaletteQuantizer;
 using Adamantium.Imaging.PaletteQuantizer.Helpers;
 using Adamantium.Imaging.PaletteQuantizer.Quantizers.DistinctSelection;
 using Adamantium.Mathematics;
+using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Imaging.Gif
 {
@@ -91,10 +92,21 @@ namespace Adamantium.Imaging.Gif
 
         private void WriteImageData(IRawBitmap img, Stream stream)
         {
-            for (uint i = 0; i< img.FramesCount; ++i)
+            // Frames are taken in order - an animation composes each from the one before - and quantized side by side.
+            // The quantizer reads RGBA: frames in another order or depth are brought to it first.
+            var frames = new FrameData[img.FramesCount];
+            for (uint i = 0; i < img.FramesCount; ++i)
             {
-                img.GetRawPixels(i);
+                frames[i] = img.GetFrameData(i);
+                if (frames[i].Description.Format != SurfaceFormat.R8G8B8A8.UNorm)
+                {
+                    var rgba = img.GetRgba8Pixels(i)
+                               ?? throw new NotSupportedException($"GIF is not written from {(Format)img.PixelFormat} pixels.");
+                    frames[i] = new FrameData(rgba, ImageDescription.Default2D(img.Width, img.Height,
+                        SurfaceFormat.R8G8B8A8.UNorm));
+                }
             }
+
             var quantizerResults = new QuantizerResult[img.FramesCount];
             Parallel.For(
                 0,
@@ -102,7 +114,7 @@ namespace Adamantium.Imaging.Gif
                 index =>
                 {
                     var quant = new DistinctSelectionQuantizer();
-                    var result = ImageBuffer.QuantizeImage(img.GetFrameData((uint)index), quant, null, 256, true, 1);
+                    var result = ImageBuffer.QuantizeImage(frames[index], quant, null, 256, true, 1);
 
                     if (result.ColorTable.Length < 256)
                     {

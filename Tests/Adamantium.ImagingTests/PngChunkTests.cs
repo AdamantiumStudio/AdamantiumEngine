@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Adamantium.Imaging;
 using Adamantium.Imaging.Png;
@@ -8,8 +9,8 @@ using static Adamantium.ImagingTests.TestPng;
 namespace Adamantium.ImagingTests;
 
 /// <summary>
-/// Chunks around the image data: the background color keeps all three channels, and an unknown chunk stops the decode
-/// only when it is critical.
+/// Chunks around the image data: the background color keeps all three channels, palettes and their transparency
+/// color the pixels, and an unknown chunk stops the decode only when it is critical.
 /// </summary>
 [TestFixture]
 public class PngChunkTests
@@ -17,30 +18,26 @@ public class PngChunkTests
     private static byte[] Rgb2x2(params (string Type, byte[] Data)[] chunks) =>
         Build(2, 2, 8, 2, Zlib(new byte[2 * (1 + 2 * 3)], CompressionLevel.Optimal), chunks);
 
+    // The background's samples are of the image's depth; they come out scaled to 16 bits.
     [Test]
     public void RgbBackground_KeepsItsGreen()
     {
         var png = Rgb2x2(("bKGD", [0x00, 0x11, 0x00, 0x22, 0x00, 0x33]));
 
-        var info = ((PngImage)BitmapLoader.Load(new MemoryStream(png))).State.InfoPng;
+        var metadata = ((PngImage)BitmapLoader.Load(new MemoryStream(png))).Metadata;
 
-        Assert.That(info.IsBackgroundDefined, Is.True);
-        Assert.That((info.BackgroundR, info.BackgroundG, info.BackgroundB), Is.EqualTo((0x11u, 0x22u, 0x33u)));
+        Assert.That(metadata.Background, Is.EqualTo(((ushort)0x1111, (ushort)0x2222, (ushort)0x3333)));
     }
 
     [Test]
-    public void PaletteColor_ConvertsWithItsGreen()
+    public void APaletteBackground_IsItsPaletteEntry()
     {
-        var palette = PngColorMode.Create(PngColorType.Palette, 8);
-        palette.Palette = [10, 20, 30, 255, 40, 50, 60, 255];
-        palette.PaletteSize = 2;
-        var rgb16 = PngColorMode.Create(PngColorType.RGB, 16);
+        var png = Build(2, 1, 8, 3, Zlib([0, 0, 1], CompressionLevel.Optimal),
+            ("PLTE", [10, 20, 30, 40, 50, 60]), ("bKGD", [1]));
 
-        uint r = 0, g = 0, b = 0;
-        var error = PngColorConversion.ConvertRGB(ref r, ref g, ref b, 1, 0, 0, rgb16, palette);
+        var metadata = ((PngImage)BitmapLoader.Load(new MemoryStream(png))).Metadata;
 
-        Assert.That(error, Is.EqualTo(0u));
-        Assert.That((r, g, b), Is.EqualTo((40u * 257, 50u * 257, 60u * 257)));
+        Assert.That(metadata.Background, Is.EqualTo(((ushort)(40 * 257), (ushort)(50 * 257), (ushort)(60 * 257))));
     }
 
     [Test]
@@ -67,6 +64,6 @@ public class PngChunkTests
     {
         var png = Rgb2x2(("ABCD", [1]));
 
-        Assert.Throws<PngDecodeException>(() => BitmapLoader.Load(new MemoryStream(png)));
+        Assert.Throws<NotSupportedException>(() => BitmapLoader.Load(new MemoryStream(png)));
     }
 }

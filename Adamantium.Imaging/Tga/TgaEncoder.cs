@@ -30,16 +30,10 @@ public class TgaEncoder
                 break;
             case Format.B8G8R8A8_UNORM:
             case Format.B8G8R8A8_SRGB:
+                // TGA keeps BGRA: these go as they are.
                 header.ImageType = (byte)TgaImageType.TrueColor;
                 header.BitsPerPixel = 32;
                 header.Descriptor = (byte)TgaDescriptorFlags.InvertY | 8;
-                flags |= TgaConversionFlags.Swizzle;
-                break;
-            case Format.R8G8B8_UNORM:
-                header.ImageType = (byte)TgaImageType.TrueColor;
-                header.BitsPerPixel = 24;
-                header.Descriptor = (byte)TgaDescriptorFlags.InvertY;
-                flags |= TgaConversionFlags.Format888 | TgaConversionFlags.Swizzle;
                 break;
             case Format.B8G8R8_UNORM:
             case Format.B8G8R8_SRGB:
@@ -68,10 +62,22 @@ public class TgaEncoder
     
     public static unsafe void SaveToTgaStream(IRawBitmap rawBitmap, Stream imageStream)
         {
+            // Pixels TGA has no header for - RGB, 16 bits, gray of 16 - are brought to RGBA of 8 bits first.
+            var probe = TgaConversionFlags.None;
+            if (!EncodeTgaHeader(rawBitmap.GetImageDescription(), out _, ref probe)
+                && rawBitmap.GetRgba8Pixels() is { } rgba)
+            {
+                rawBitmap = new FrameBitmap(rawBitmap.Width, rawBitmap.Height, SurfaceFormat.R8G8B8A8.UNorm, [rgba]);
+            }
+
             TgaHeader header;
             ImageDescription description = rawBitmap.GetImageDescription();
             TgaConversionFlags flags = TgaConversionFlags.None;
-            EncodeTgaHeader(description, out header, ref flags);
+            if (!EncodeTgaHeader(description, out header, ref flags))
+            {
+                throw new NotSupportedException(
+                    $"TGA is not written from {(Format)description.Format} pixels of {description.Width}×{description.Height}.");
+            }
 
             int rowPitch, slicePitch;
             if (flags.HasFlag(TgaConversionFlags.Format888))

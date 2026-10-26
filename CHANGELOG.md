@@ -43,6 +43,12 @@ All packages share one version.
   format has no specification.
 - `JpegDecoder.ComponentsAreRgb`: three components taken as RGB as they are, as TIFF stores JPEG of RGB data.
 - `JpegImage(width, height, format, pixels)`: the picture made from its pixels.
+- `PngImage` (a PNG or APNG read: `Read`, `Frames`, `BitDepth`, `Metadata`, `ReleaseDecodedFrames`) and `PngEncoder`
+  are public, with `PngMetadata`, `PngText`, `PngChromaticities`, `PngRenderingIntent`, `PngFrame`, `PngDispose` and
+  `PngBlend`.
+- `RawBitmapExtension.GetRgba8Pixels`: a frame as RGBA of 8 bits a channel, for what takes nothing else - BGRA
+  swapped, 16 bits by their high bytes, RGB and gray given alpha; the ICO reader and color glyphs read PNG through
+  it, so 16-bit PNG works there too.
 - `JpegEncoder.Encode(image, output, quality)`: a picture written as JPEG at a quality of 1 to 100, from gray, RGB,
   BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100.
 - `JpegDecoder.Size`: the picture's size from its frame header, decoding nothing - what the preview is an eighth of.
@@ -953,9 +959,25 @@ All packages share one version.
 
 ### Fixed
 
+- A BMP read came out RGB but said it was BGR: written as JPEG its red and blue changed places, and a texture made of
+  it showed them swapped. It says RGB now; written, BMP swaps only pixels said to be RGB into its BGR, and
+  `Texture.Save` writes a B8G8R8A8 render target as it is, said to be B8G8R8A8 - every encoder reads the order the
+  pixels say they are in: TGA wrote BGRA pixels with red and blue swapped, and GIF quantized BGRA and 16-bit pixels
+  as if they were 8-bit RGBA. BMP, TGA and GIF write 16-bit and gray pixels as RGBA of 8 bits - they wrote them
+  broken or threw - and TGA writes RGB the same way, its red and blue swapped before; pixels they cannot take throw
+  `NotSupportedException`, and TGA throws for a picture past 65535 pixels a side, where it wrote an empty header.
+- `TextureCube` from six files read each face as long as the first: faces of other sizes or formats were read past
+  their ends. They are refused now.
+- Writing a BMP of fewer than 40 bytes of pixels wrote past the end of its buffer and could bring the process down:
+  a header was copied in after the file's headers for nothing. It is gone, and the headers' native memory is freed.
+- A BMP of 24 bits whose rows are not a multiple of 4 bytes came out wrong both ways: it was written with the padding
+  of its width in pixels, not bytes, and read short of its last rows' padding. A file shorter than its pixels is
+  refused with `InvalidDataException`; a BMP of a palette, compressed or stored top-down - pixels it did not read -
+  throws `NotSupportedException`, where it came out empty or refused for the wrong reason. A BMP of 16 bits threw `IndexOutOfRangeException`: it reads as RGB of 8 bits
+  now, 5-5-5, or 5-6-5 when its BI_BITFIELDS masks say so - green of six bits scaled as six.
 - Every PNG the engine wrote carried a `tIME` chunk of the local time it was written: the same picture saved a second
   apart came out different, and what compared files to skip rewriting them - the Linux desktop entry's icons - wrote
-  them again. `tIME` is written only when `PngInfo.IsTimeDefined` asks, in UTC as PNG keeps it.
+  them again. `tIME` is written only when `PngMetadata.Time` is set, in UTC as PNG keeps it.
 - JPEG scans are decoded unit for unit as T.81 lays them out, the padding at the end of a restart interval or a scan
   thrown away: a progressive JPEG with restart intervals came out garbled or threw, a tiny gray progressive one read
   its padding as data, and a scan whose data ended without a marker ran forever.
@@ -1579,17 +1601,33 @@ All packages share one version.
 
 ### Changed
 
-- JPEG is decoded and encoded by the engine's own codec, written from ITU-T T.81, JFIF (T.871) and Adobe's APP14 - the
-  FJCore code it replaces is gone, and its third-party notice with it. It reads baseline, extended and progressive
-  frames of 8 and 12 bits, restart intervals and DNL, gray, YCbCr, RGB, CMYK and YCCK, any subsampling whose factors
-  divide the largest - halves stretched smoothly between the samples' centers - and streams without Huffman tables (by
-  T.81's K.3 ones). A picture comes out RGBA8, RGBA16 for 12 bits. The scans of a file with restart intervals are
-  decoded side by side, a progressive file's inverse DCT and the colors by rows on the thread pool; the
-  eighth-scale `DecodePreview` works for any file and size, and skips a progressive file's AC scans. TIFF reads JPEG
-  of planes, of four samples and of 12 bits, its JPEGTables read once. Against libjpeg-turbo (Pillow 13, which decodes
-  on one thread) a 10800×5400 photograph decodes in 1.3 times its time, in a fifth of it with restart intervals,
-  measured on 48 cores; the encoder writes
-  baseline JFIF with Huffman tables made for the picture (K.2).
+- PNG is read and written by a new codec, written from PNG's third edition and APNG. It reads every color type and
+  depth, Adam7, palettes and tRNS, and APNG's frames composed as APNG says (dispose None, Background and Previous;
+  blend Source and Over), decoded when first asked for; a 16-bit file comes out RGBA16 now, no longer cut to 8 bits.
+  Chunks are checked by their CRC - a broken critical one refuses the file, a broken ancillary one is passed over - an
+  unknown critical chunk refuses it with `NotSupportedException`, a broken animation reads as its still picture, and
+  data that could not inflate to the image's size is refused before it is inflated - the still picture's too when it
+  is not shown, so a few bytes cannot make an animation's canvas any size. `PngImage.Metadata` holds bKGD, gAMA,
+  cHRM, sRGB, iCCP, the texts, pHYs, tIME and eXIf, and `PngEncoder.Encode` writes them back with the pixels: the
+  smallest color type that holds every pixel and the background - a palette up to 256 colors - each row by the
+  filter that sums least, frames as APNG, asked for one at a time; iCCP rather than sRGB when there are both, as PNG
+  ranks them; two-channel pixels and metadata PNG cannot hold are refused. A keyword's stray spaces, text past a NUL
+  and other slips of writers are read as PNG would have them, so what is read can be written again. Animations keep
+  two canvases - two readers asking for frames in turn each go on from theirs - and one every 16 frames, up to 64 MB,
+  to go back to; a frame that fails to decode leaves the canvas as it was. A file's texts and profile are cut off at
+  64 MB inflated all together, broken ones counted. Against PngSuite all 163 pictures and the broken files come out
+  as PNG says. On 5400×2700 pictures reading takes 0.4 to 0.85 of the old codec's time and 0.9 to 1.8 of Pillow's
+  (libpng with zlib); writing a half to a sixth of the old codec's, as long for 16-bit gray.
+- JPEG is decoded and encoded by a new codec, written from ITU-T T.81, JFIF (T.871) and Adobe's APP14. It reads
+  baseline, extended and progressive frames of 8 and 12 bits, restart intervals and DNL, gray, YCbCr, RGB, CMYK and
+  YCCK, any subsampling whose factors divide the largest - halves stretched smoothly between the samples' centers -
+  and streams without Huffman tables (by T.81's K.3 ones). A picture comes out RGBA8, RGBA16 for 12 bits. The scans of
+  a file with restart intervals are decoded side by side, a progressive file's inverse DCT and the colors by rows on
+  the thread pool; the eighth-scale `DecodePreview` works for any file and size, and skips a progressive file's AC
+  scans. TIFF reads JPEG of planes, of four samples and of 12 bits, its JPEGTables read once. Against libjpeg-turbo
+  (Pillow 13, which decodes on one thread) a 10800×5400 photograph decodes in 1.3 times its time, in a fifth of it
+  with restart intervals, measured on 48 cores; the encoder writes baseline JFIF with Huffman tables made for the
+  picture (K.2).
 - The packages' icons are the redrawn Adamantium family: the mark and the package's letters drawn in Inter.
 - `MainGraphicsDevice.DescriptorHeapManager` and `GraphicsDevice.DescriptorHeapManager` are `DescriptorManager`, an
   `IDescriptorManager`; `IGraphicsDeviceFactory.CreateDescriptorHeapManager` is `CreateDescriptorManager(device,
@@ -1775,7 +1813,12 @@ All packages share one version.
 
 ### Removed
 
-- With FJCore: the `Adamantium.Imaging.Jpeg.Decoder` and `Encoder` namespaces (`JpegDecoder` is in
+- With the old PNG codec: `PngDecoder`, `PngCompressor`, `PngDecoderSettings`, `PngEncoderSettings`,
+  `PNGStreamReader`, `TXTItem`, `ITextItem` (`PngText` stands for both), `Adam7`, `Crc32`, `Adler32`, `BitHelper`,
+  `PngDecodeException` and `PngEncoderException` - broken files fail with `InvalidDataException` and
+  `NotSupportedException` - and the enums `PngColorType`, `InterlaceMethod`, `FilterStrategy`, `CompressionLevel`,
+  `RenderingIntent` (`PngRenderingIntent` stands for it) and `Unit`.
+- With the old JPEG codec: the `Adamantium.Imaging.Jpeg.Decoder` and `Encoder` namespaces (`JpegDecoder` is in
   `Adamantium.Imaging.Jpeg`), `PreviewNotAvailableException` (every file previews), `JpegDecoder.BlockUpsamplingMode`
   and `ExtractHeaders`, `JpegHeader`, the JPEG filters and resizer, `ComponentsBuffer`, `ComponentBufferType`,
   `RawBitmapExtension.ToComponentsBuffer` and `PixelBuffer.GetComponents`.

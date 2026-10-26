@@ -50,7 +50,7 @@ public class PngInflateTests
         var zlib = Zlib(raw, CompressionLevel.Optimal);
         var png = Build(width, height, 8, 6, zlib[..(zlib.Length / 2)]);
 
-        Assert.Throws<PngDecodeException>(() => BitmapLoader.Load(new MemoryStream(png)).GetRawPixels(0));
+        Assert.Throws<InvalidDataException>(() => BitmapLoader.Load(new MemoryStream(png)).GetRawPixels(0));
     }
 
     // 1-bit gray at a width that is not a multiple of 8 is unfiltered in place, every filter type in turn.

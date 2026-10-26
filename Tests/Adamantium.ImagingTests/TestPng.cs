@@ -45,7 +45,7 @@ internal static class TestPng
         return stream.ToArray();
     }
 
-    private static void Chunk(Stream stream, string type, byte[] data)
+    public static void Chunk(Stream stream, string type, byte[] data)
     {
         Span<byte> number = stackalloc byte[4];
         BinaryPrimitives.WriteInt32BigEndian(number, data.Length);
@@ -54,7 +54,7 @@ internal static class TestPng
         var typeAndData = Encoding.ASCII.GetBytes(type).Concat(data).ToArray();
         stream.Write(typeAndData);
 
-        BinaryPrimitives.WriteUInt32BigEndian(number, Crc32.CalculateCheckSum(typeAndData));
+        BinaryPrimitives.WriteUInt32BigEndian(number, PngCrc.Compute(typeAndData));
         stream.Write(number);
     }
 }

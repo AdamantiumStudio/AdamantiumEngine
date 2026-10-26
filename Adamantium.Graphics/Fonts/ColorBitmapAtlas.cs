@@ -265,7 +265,7 @@ internal sealed class ColorBitmapAtlas : DisposableObject
             var image = PngHelper.LoadFromMemory(handle.AddrOfPinnedObject(), (ulong)png.Length);
             width = (int)image.Width;
             height = (int)image.Height;
-            rgba = image.GetRawPixels(0);
+            rgba = image.GetRgba8Pixels();
             return width > 0 && height > 0 && rgba != null && rgba.Length >= width * height * 4;
         }
         catch (Exception)
