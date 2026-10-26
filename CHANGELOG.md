@@ -52,8 +52,8 @@ All packages share one version.
   Its time goes with the colors a picture has: written as GIF, a 3840×1920 photograph takes 0.6 s undithered and
   1.0 dithered, a 3840×2160 one of a million colors 1.4 and 2.6 - Pillow 1.7 and 2.7, ImageMagick 3.1 and 3.9.
 - `ImageShrink.FitWithin`: pixels shrunk to fit a size, the aspect kept - each the average of the area it covers,
-  colors weighted by alpha so transparent pixels lend them none - for 8- and 16-bit gray, RGB and RGBA in either
-  order; read a row at a time, nothing the source's size made.
+  colors weighted by alpha so transparent pixels lend them none, sRGB ones averaged as light - for 8- and 16-bit
+  gray, RGB and RGBA in either order; read a row at a time in bands on every core, nothing the source's size made.
 - `GifImage.Read`, `GifImage.Frames` (`GifFrame`: place, delay, `GifDisposal`) and `GifImage.Comments`;
   `GifEncoder.Encode(image, output, dither)` is static.
 - `PngImage` (a PNG or APNG read: `Read`, `Frames`, `BitDepth`, `Metadata`, `ReleaseDecodedFrames`) and `PngEncoder`
@@ -972,9 +972,14 @@ All packages share one version.
 
 ### Fixed
 
-- A texture larger than the device's limits - a side past its maxImageDimension1D, 2D, 3D or cube, or more layers
-  than its maxImageArrayLayers - went to Vulkan as it was; it is refused with `NotSupportedException` naming the
-  limit.
+- A texture larger than the device's limits - a side past its maxImageDimension1D, 2D, 3D or cube, more layers than
+  its maxImageArrayLayers, past what the device makes of its format, tiling and usage - extent, layers, levels and
+  bytes - or larger than one allocation may be, went to Vulkan as it was; it is refused with `NotSupportedException`
+  naming the limit, before a staging buffer its size is made. A texture that fails while it is made is disposed and
+  its pixels let go, leaving nothing behind; so is a shared surface, any of several, and a multisampled render
+  target whose resolve texture fails. An imported shared surface the device refuses memory for no longer leaks its
+  copy of the descriptor. `TotalSizeInBytes` of a texture array counts every layer.
+- A BMP of 24 or 16 bits read as RGB of 8 bits, a format most devices do not sample from; it reads as RGBA.
 - GIF frames came out other than Pillow and ffmpeg compose them in every animation of the tests, and a GIF's play
   count was always forever. A GIF written made palette entry 127 of each frame transparent - its graphic control
   written after the frame, for the next - and showed every frame 40 ms.
@@ -1627,22 +1632,23 @@ All packages share one version.
   writers leave it and Pillow and ImageMagick read it; the extension area says when they are not alpha or are
   premultiplied, which is divided out. Indices the color map has no entry for are opaque black. Against Pillow 12 and
   ImageMagick 7 the pixels are the same where they read the file as TGA 2.0 does; a file shorter than its pixels is
-  refused, and so are pixels more than the data could hold. The encoder writes gray, 24-bit or 32-bit pixels by what the picture needs,
-  top row first, run-length encoded unless asked not to, with the extension area and footer; `TgaImage.Read`,
-  `TgaImage.Id` and the static `TgaEncoder.Encode(image, output, compress)` are its API. A 4984×3858 picture reads
-  in 0.1 s, 0.8 of Pillow's time.
+  refused, and so are pixels more than the data could hold. The encoder writes gray, 24-bit or 32-bit pixels by what
+  the picture needs, top row first, run-length encoded unless asked not to, with the extension area and footer;
+  `TgaImage.Read`, `TgaImage.Id` and the static `TgaEncoder.Encode(image, output, compress)` are its API. A
+  4984×3858 picture reads in 0.1 s, 0.8 of Pillow's time.
 - GIF is read and written by a new codec, written from GIF89a. It reads GIF87a and GIF89a: global and local color
   tables, interlacing, transparency, every disposal - cleared to transparent, as browsers do - frames placed anywhere
   and cut to the screen, the loop count (`NumberOfReplays`, once when the file does not say) and the comments; frames
   are decoded when asked for and composed on two kept canvases and one saved every 16 frames, as APNG's are. Against
   Pillow 12 and ffmpeg 8 every frame of the test files comes out the same, pixel for pixel, and LZW of every code
   size, 1 to 11, as giflib reads it. A file cut off, or with a block of no kind GIF has, keeps the frames before, and
-  a frame its data ends early; frames are read a row at a time, so one of any size costs only what the screen shows,
-  and data that could not fill the screen is refused before anything is made. Every frame of the test files reads in
-  a third to a half of Pillow's time. The encoder writes each frame as the rectangle that changed, the pixels in it that did not
+  a frame its data ends early; frames are read a row at a time, so one of any size costs only what the screen shows
+  and its data holds, and data that could not fill the screen is refused before anything is made. Read warm, every
+  frame of the test files takes 0.2 to 1.0 of Pillow's time; the first read in a process takes longer while its code
+  is compiled. The encoder writes each frame as the rectangle that changed, the pixels in it that did not
   transparent, in a table of its own - its colors exactly when 256 or fewer, else by `ColorQuantizer` - with the
   source's delays and play count; Pillow and ffmpeg read what it writes as it was. A 960×540 animation panning over
-  a photograph takes 40 to 65 ms a frame undithered and 55 to 125 dithered, by the photograph - Pillow 87 for the
+  a photograph takes 40 to 80 ms a frame undithered and 55 to 145 dithered, by the photograph - Pillow 87 for the
   busier one; one of few colors far less.
 - PNG is read and written by a new codec, written from PNG's third edition and APNG. It reads every color type and
   depth, Adam7, palettes and tRNS, and APNG's frames composed as APNG says (dispose None, Background and Previous;

@@ -336,6 +336,36 @@ public class GifCodecTests
         Assert.That(() => GifImage.Read(gif), Throws.InstanceOf<InvalidDataException>());
     }
 
+    // Frames that each claim the whole screen with no pixels in their data cost as little as their data, not a screen
+    // apiece: only the saved canvases are made as they are played.
+    [Test]
+    public void FramesClaimingTheScreenWithoutData_CostNoScreenEach()
+    {
+        const int side = 1024, frames = 64;
+        var file = new MemoryStream();
+        file.Write([.. "GIF89a"u8, 0x00, 0x04, 0x00, 0x04, 0x80, 0, 0, 0, 0, 0, 255, 255, 255]);
+        for (var i = 0; i < frames; i++)
+        {
+            // A whole-screen image whose data is clear and end, at code size 2.
+            file.Write([0x2C, 0, 0, 0, 0, 0x00, 0x04, 0x00, 0x04, 0, 2, 1, 0x2C, 0]);
+        }
+
+        file.WriteByte(0x3B);
+        var gif = GifImage.Read(file.ToArray());
+        var canvas = new byte[side * side * 4];
+        gif.CopyFrame(0, canvas);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (uint i = 1; i < frames; i++)
+        {
+            gif.CopyFrame(i, canvas);
+        }
+
+        var saved = frames / 16 * canvas.Length;
+        Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.LessThan(saved + canvas.Length));
+        Assert.That(canvas, Is.All.EqualTo(0));
+    }
+
     [TestCase(new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0, 0, 0, 0x3B })]
     [TestCase(new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0, 0, 0, 0x99 })]
     [TestCase(new byte[] { 0x50, 0x4E, 0x47 })]

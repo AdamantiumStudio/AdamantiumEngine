@@ -44,20 +44,30 @@ public unsafe class Texture : GraphicsResource, ITexture
     {
         Description = description;
         ImageLayout = description.InitialLayout;
-        Initialize();
-        this.TransitionImageLayout(description.DesiredImageLayout);
+        Build(() =>
+        {
+            Initialize();
+            this.TransitionImageLayout(description.DesiredImageLayout);
+        });
     }
 
     /// <summary>Creates a texture whose image and memory take part in a cross-API shared-surface chain. The
     /// <paramref name="imagePNext"/> (external-memory image create info) and the <paramref name="allocPNextFactory"/>
     /// (export/import + dedicated allocation, given the created image) make the backing memory exportable or
-    /// imported. The caller (see <see cref="SharedSurface"/>) owns layout transitions and handle export.</summary>
-    protected Texture(IGraphicsDevice device, TextureDescription description, object imagePNext, Func<VulkanImage, object> allocPNextFactory, string name = "") : base(device, name)
+    /// imported. The caller (see <see cref="SharedSurface"/>) owns layout transitions and handle export.
+    /// <paramref name="allocationRefused"/> runs when the device refuses the allocation, so what the factory handed
+    /// over - and the device did not take - is the caller's to free.</summary>
+    protected Texture(IGraphicsDevice device, TextureDescription description, object imagePNext,
+        Func<VulkanImage, object> allocPNextFactory, string name = "", Action allocationRefused = null) : base(device, name)
     {
         Description = description;
         ImageLayout = description.InitialLayout;
-        CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory, imagePNext, allocPNextFactory);
-        CreateImageView(Description);
+        Build(() =>
+        {
+            CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory, imagePNext,
+                allocPNextFactory, allocationRefused);
+            CreateImageView(Description);
+        });
         if (GraphicsDevice.MainDevice.IsInDebugMode)
         {
             GraphicsDevice.SetObjectDebugName((ulong)VulkanImage.NativePointer, ObjectType.Image, Name);
@@ -90,38 +100,29 @@ public unsafe class Texture : GraphicsResource, ITexture
         Description = img.Description;
         Description.Usage |= ImageUsageFlagBits.TransferDstBit | usage;
         Description.DesiredImageLayout = desiredLayout;
-        TotalSizeInBytes = img.TotalSizeInBytes;
 
-        CopyDataToImage(TotalSizeInBytes, img.DataPointer);
+        CopyDataToImage(img.TotalSizeInBytes, img.DataPointer);
     }
-        
-    protected Texture(IGraphicsDevice device, IRawBitmap bitmap, ImageUsageFlagBits usage, ImageLayout desiredLayout) : 
+
+    protected Texture(IGraphicsDevice device, IRawBitmap bitmap, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
         base(device)
     {
         Description = bitmap.GetImageDescription();
         Description.Usage |= ImageUsageFlagBits.TransferDstBit | usage;
         Description.DesiredImageLayout = desiredLayout;
-        TotalSizeInBytes = bitmap.TotalSizeInBytes;
 
-        var pixelData = bitmap.GetRawPixels(0);
-        var handle = GCHandle.Alloc(pixelData, GCHandleType.Pinned);
-
-        CopyDataToImage(TotalSizeInBytes, handle.AddrOfPinnedObject());
-            
-        handle.Free();
+        var pixels = bitmap.GetRawPixels(0);
+        CopyDataToImage((ulong)pixels.Length, pixels);
     }
-        
+
     protected Texture(IGraphicsDevice device, ImageDescription description, byte[] data, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
         base(device)
     {
         Description = description;
         Description.Usage |= ImageUsageFlagBits.TransferDstBit | usage;
         Description.DesiredImageLayout = desiredLayout;
-        TotalSizeInBytes = (ulong)data.Length;
 
-        var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
-        CopyDataToImage(TotalSizeInBytes, handle.AddrOfPinnedObject());
-        handle.Free();
+        CopyDataToImage((ulong)data.Length, data);
     }
 
     // One image, one LAYER per element of <paramref name="layers"/> - an animation's frames, so playing it is choosing a
@@ -136,60 +137,93 @@ public unsafe class Texture : GraphicsResource, ITexture
         Description.DesiredImageLayout = desiredLayout;
 
         var layerSize = (ulong)layers[0].Length;
-        TotalSizeInBytes = layerSize * (ulong)layers.Count;
+        var totalSizeInBytes = layerSize * (ulong)layers.Count;
 
-        CreateBuffer(TotalSizeInBytes,
-            BufferUsageFlagBits.TransferSrcBit,
-            MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent,
-            out var stagingBuffer,
-            out var stagingBufferMemory);
-
-        var mapped = GraphicsDevice.MapMemory(stagingBufferMemory, 0, TotalSizeInBytes, 0);
-        for (var i = 0; i < layers.Count; i++)
+        Build(() =>
         {
-            var handle = GCHandle.Alloc(layers[i], GCHandleType.Pinned);
-            System.Buffer.MemoryCopy(handle.AddrOfPinnedObject().ToPointer(),
-                (byte*)mapped + layerSize * (ulong)i, layerSize, layerSize);
+            CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory);
+            Upload(totalSizeInBytes, mapped =>
+            {
+                for (var i = 0; i < layers.Count; i++)
+                {
+                    fixed (byte* layer = layers[i])
+                    {
+                        System.Buffer.MemoryCopy(layer, (byte*)mapped + layerSize * (ulong)i, layerSize, layerSize);
+                    }
+                }
+            }, stagingBuffer => CopyBufferToLayers(stagingBuffer, vulkanImage, Description, layerSize, layers.Count));
+            CreateImageView(Description);
+        });
+    }
+
+    private void CopyDataToImage(ulong totalSizeInBytes, byte[] pixels)
+    {
+        var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        try
+        {
+            CopyDataToImage(totalSizeInBytes, handle.AddrOfPinnedObject());
+        }
+        finally
+        {
             handle.Free();
         }
-        GraphicsDevice.UnmapMemory(stagingBufferMemory);
-
-        CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory);
-        this.TransitionImageLayout(ImageLayout.TransferDstOptimal);
-        CopyBufferToLayers(stagingBuffer, vulkanImage, Description, layerSize, layers.Count);
-        this.TransitionImageLayout(Description.DesiredImageLayout);
-        CreateImageView(Description);
-
-        GraphicsDevice.Destroy(stagingBuffer);
-        GraphicsDevice.Destroy(stagingBufferMemory);
     }
 
     private void CopyDataToImage(ulong totalSizeInBytes, IntPtr pointerToPixelData)
     {
-        CreateBuffer(TotalSizeInBytes, 
+        Build(() =>
+        {
+            CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory);
+            Upload(totalSizeInBytes,
+                mapped => System.Buffer.MemoryCopy(pointerToPixelData.ToPointer(), (void*)mapped, totalSizeInBytes,
+                    totalSizeInBytes),
+                stagingBuffer => CopyBufferToImage(stagingBuffer, vulkanImage, Description));
+            CreateImageView(Description);
+        });
+    }
+
+    // A texture that fails half built is disposed, so it neither holds what it made nor stays registered with the device.
+    private void Build(Action build)
+    {
+        try
+        {
+            build();
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+    }
+
+    // The image exists - its limits checked - before a staging buffer its size is made, and the buffer goes either way.
+    private void Upload(ulong size, Action<nuint> fill, Action<VkBuffer> copy)
+    {
+        CreateBuffer(size,
             BufferUsageFlagBits.TransferSrcBit,
-            MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent, 
+            MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent,
             out var stagingBuffer,
             out var stagingBufferMemory);
-            
-        var data = GraphicsDevice.MapMemory(stagingBufferMemory, 0, totalSizeInBytes, 0);
-        System.Buffer.MemoryCopy(pointerToPixelData.ToPointer(), (void*)data, totalSizeInBytes, totalSizeInBytes);
-        GraphicsDevice.UnmapMemory(stagingBufferMemory);
-            
-        CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory);
-        this.TransitionImageLayout(ImageLayout.TransferDstOptimal);
-        CopyBufferToImage(stagingBuffer, vulkanImage, Description);
-        this.TransitionImageLayout(Description.DesiredImageLayout);
-        CreateImageView(Description);
-        
-        GraphicsDevice.Destroy(stagingBuffer);
-        GraphicsDevice.Destroy(stagingBufferMemory);
+        try
+        {
+            fill(GraphicsDevice.MapMemory(stagingBufferMemory, 0, size, 0));
+            GraphicsDevice.UnmapMemory(stagingBufferMemory);
+
+            this.TransitionImageLayout(ImageLayout.TransferDstOptimal);
+            copy(stagingBuffer);
+            this.TransitionImageLayout(Description.DesiredImageLayout);
+        }
+        finally
+        {
+            GraphicsDevice.Destroy(stagingBuffer);
+            GraphicsDevice.Destroy(stagingBufferMemory);
+        }
     }
-        
+
     private void CreateBuffer(ulong size, BufferUsageFlagBits usage, MemoryPropertyFlags memoryProperties, out VkBuffer buffer, out DeviceMemory bufferMemory)
     {
         var device = GraphicsDevice.LogicalDevice;
-            
+
         var bufferInfo = new BufferCreateInfo();
         bufferInfo.Size = size;
         bufferInfo.Usage = usage;
@@ -207,11 +241,14 @@ public unsafe class Texture : GraphicsResource, ITexture
 
         if (device.AllocateMemory(allocInfo, null, out bufferMemory) != Result.Success)
         {
+            GraphicsDevice.Destroy(buffer);
             throw new Exception("failed to allocate buffer memory!");
         }
 
         if (GraphicsDevice.LogicalDevice.BindBufferMemory(buffer, bufferMemory, 0) != Result.Success)
         {
+            GraphicsDevice.Destroy(buffer);
+            GraphicsDevice.Destroy(bufferMemory);
             throw new Exception("failed to bind buffer memory!");
         }
     }
@@ -308,8 +345,8 @@ public unsafe class Texture : GraphicsResource, ITexture
     }
 
     // A texture past the device's limits is refused here, by name, instead of left for the driver to fail or lose the
-    // device over.
-    private void CheckLimits(TextureDescription description)
+    // device over. Gives the most bytes the device holds in one such image, 0 when it doesn't say.
+    private ulong CheckLimits(TextureDescription description)
     {
         // By the image Vulkan is asked for.
         var limits = GraphicsDevice.Adapter.AdapterProperties.Limits;
@@ -334,12 +371,43 @@ public unsafe class Texture : GraphicsResource, ITexture
             throw new NotSupportedException(
                 $"A texture of {description.ArrayLayers} layers is past this device's {limits.MaxImageArrayLayers}.");
         }
+
+        // And by what the device allows this format, tiling and usage, which can be less.
+        var result = GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceImageFormatProperties(description.Format,
+            description.ImageType, description.ImageTiling, description.Usage, description.Flags, out var format);
+        if (result == Result.ErrorFormatNotSupported)
+        {
+            throw new NotSupportedException(
+                $"This device makes no {description.Format} texture of {description.ImageTiling} tiling for {description.Usage}.");
+        }
+
+        if (result != Result.Success)
+        {
+            return 0;
+        }
+
+        var extent = format.MaxExtent;
+        if (description.Width > extent.Width || description.Height > extent.Height || description.Depth > extent.Depth)
+        {
+            throw new NotSupportedException(
+                $"A {description.Format} texture of {description.Width}×{description.Height}×{description.Depth} is past " +
+                $"this device's {extent.Width}×{extent.Height}×{extent.Depth} for it.");
+        }
+
+        if (description.ArrayLayers > format.MaxArrayLayers || description.MipLevels > format.MaxMipLevels)
+        {
+            throw new NotSupportedException(
+                $"A {description.Format} texture of {description.ArrayLayers} layers and {description.MipLevels} levels " +
+                $"is past this device's {format.MaxArrayLayers} and {format.MaxMipLevels} for it.");
+        }
+
+        return format.MaxResourceSize;
     }
 
     protected void CreateImage(TextureDescription description, MemoryPropertyFlags memoryProperties, out VulkanImage image, out DeviceMemory imageMemory,
-        object imagePNext = null, Func<VulkanImage, object> allocPNextFactory = null)
+        object imagePNext = null, Func<VulkanImage, object> allocPNextFactory = null, Action allocationRefused = null)
     {
-        CheckLimits(description);
+        var maxResourceSize = CheckLimits(description);
         var device = GraphicsDevice.LogicalDevice;
         var imageInfo = description.ToImageCreateInfo();
         if (imagePNext != null)
@@ -353,11 +421,29 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
 
         device.GetImageMemoryRequirements(image, out var memRequirements);
+        if (maxResourceSize != 0 && memRequirements.Size > maxResourceSize)
+        {
+            throw new NotSupportedException(
+                $"A {description.Format} texture of {description.Width}×{description.Height}×{description.Depth} and " +
+                $"{description.ArrayLayers} layers takes {(ulong)memRequirements.Size} bytes, past this device's " +
+                $"{maxResourceSize} for one image.");
+        }
+
+        var maxAllocation = GraphicsDevice.Adapter.MaxMemoryAllocationSize;
+        if (maxAllocation != 0 && memRequirements.Size > maxAllocation)
+        {
+            throw new NotSupportedException(
+                $"A {description.Format} texture of {description.Width}×{description.Height}×{description.Depth} and " +
+                $"{description.ArrayLayers} layers takes {(ulong)memRequirements.Size} bytes, past this device's " +
+                $"{maxAllocation} for one allocation.");
+        }
+
         TotalSizeInBytes = CalculateTextureSize(description.Width,
             description.Height,
             description.Depth,
             description.MipLevels,
-            (uint)description.Format.SizeOfInBytes());
+            (uint)description.Format.SizeOfInBytes())
+            * (description.ImageType == ImageType._3d ? 1 : Math.Max(1, description.ArrayLayers));
 
         var allocInfo = new MemoryAllocateInfo
         {
@@ -374,6 +460,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         var allocResult = device.AllocateMemory(allocInfo, null, out imageMemory);
         if (allocResult != Result.Success)
         {
+            allocationRefused?.Invoke();
             var mb = memRequirements.Size / (1024.0 * 1024.0);
             throw new Exception(
                 $"failed to allocate image memory: {allocResult}. Requested {mb:F1} MB " +

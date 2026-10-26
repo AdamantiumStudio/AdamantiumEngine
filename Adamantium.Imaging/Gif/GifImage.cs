@@ -133,21 +133,26 @@ public sealed class GifImage : IRawBitmap
     {
         var image = _file.Images[index];
         var region = _regions[index];
-        // Read a row at a time, only as far as the last row on the screen comes in the data.
+        var decodable = region.Width == 0 ? 0
+            : (int)Math.Min(image.Height, (image.Data.Length * GifFile.MostIndicesPerByte + image.Width - 1) / image.Width);
         var rows = 0;
+        var reach = 0;
         for (var row = 0; row < image.Height && region.Width > 0; row++)
         {
             var y = image.Y + (image.Interlaced ? InterlacedRow(row, image.Height) : row);
             if (y >= region.Y && y < region.Y + region.Height)
             {
                 rows = row + 1;
+                if (row < decodable)
+                {
+                    reach = Math.Max(reach, y - region.Y + 1);
+                }
             }
         }
 
         Span<uint> colors = stackalloc uint[256];
         for (var i = 0; i < 256; i++)
         {
-            // Past its table an index is black; with no table at all, a gray ramp.
             colors[i] = image.Palette == null ? 0xFF000000u | (uint)(i * 0x010101)
                 : i * 3 + 2 < image.Palette.Length
                     ? 0xFF000000u | image.Palette[i * 3] | (uint)image.Palette[i * 3 + 1] << 8
@@ -160,8 +165,8 @@ public sealed class GifImage : IRawBitmap
             colors[image.Transparent] = 0;
         }
 
-        var pixels = new byte[region.Width * region.Height * 4];
-        var target = MemoryMarshal.Cast<byte, uint>(pixels.AsSpan());
+        var rowBytes = region.Width * 4;
+        var pixels = new byte[reach * rowBytes];
         var left = region.X - image.X;
         var reader = new GifLzw.Reader(image.Data, image.MinCodeSize);
         var line = new byte[image.Width];
@@ -169,16 +174,15 @@ public sealed class GifImage : IRawBitmap
         {
             var got = reader.Read(line);
             var y = image.Y + (image.Interlaced ? InterlacedRow(row, image.Height) : row) - region.Y;
-            if (y >= 0 && y < region.Height)
+            if (y >= 0 && y < reach && got > left)
             {
-                var to = target.Slice(y * region.Width, region.Width);
+                var to = MemoryMarshal.Cast<byte, uint>(pixels.AsSpan(y * rowBytes, rowBytes));
                 for (var x = 0; x < region.Width && left + x < got; x++)
                 {
                     to[x] = colors[line[left + x]];
                 }
             }
 
-            // Data that ends before the image does leaves the rest as it was.
             if (got < line.Length)
             {
                 break;

@@ -189,8 +189,8 @@ public sealed unsafe class SharedSurface : Texture
     }
 
     private SharedSurface(IGraphicsDevice device, TextureDescription description, object imagePNext,
-        Func<VulkanImage, object> allocPNextFactory, string name)
-        : base(device, description, imagePNext, allocPNextFactory, name)
+        Func<VulkanImage, object> allocPNextFactory, string name, Action allocationRefused = null)
+        : base(device, description, imagePNext, allocPNextFactory, name, allocationRefused)
     {
     }
 
@@ -210,10 +210,18 @@ public sealed unsafe class SharedSurface : Texture
 
         surface._others = new SharedSurface[bufferCount - 1];
         var others = new SharedSurfaceDescriptor[bufferCount - 1];
-        for (var i = 0; i < others.Length; i++)
+        try
         {
-            surface._others[i] = CreateExportableSingle(device, width, height, format, handleType, name);
-            others[i] = surface._others[i].Descriptor;
+            for (var i = 0; i < others.Length; i++)
+            {
+                surface._others[i] = CreateExportableSingle(device, width, height, format, handleType, name);
+                others[i] = surface._others[i].Descriptor;
+            }
+        }
+        catch
+        {
+            surface.Dispose();
+            throw;
         }
 
         surface.Descriptor.Others = others;
@@ -238,16 +246,24 @@ public sealed unsafe class SharedSurface : Texture
 
         var surface = new SharedSurface(device, description, externalInfo, allocFactory, name);
         surface._useFd = IsFdHandle(resolvedType);
-        // TODO: producer/consumer ownership transfer (VK_QUEUE_FAMILY_EXTERNAL) on the shared queue.
-        surface.TransitionImageLayout(description.DesiredImageLayout);
-
-        var logical = surface.GraphicsDevice.LogicalDevice;
-        surface._memoryHandle = surface.ExportMemoryHandle(memHandleType);
-        logical.GetImageMemoryRequirements(surface.VulkanImage, out var req);
-
-        surface._produceHandle = surface.CreateExportableSemaphore(out surface._produceSemaphore);
-        surface._consumeHandle = surface.CreateExportableSemaphore(out surface._consumeSemaphore);
         surface._ownsHandles = true;
+        MemoryRequirements req;
+        try
+        {
+            surface.TransitionImageLayout(description.DesiredImageLayout);
+
+            var logical = surface.GraphicsDevice.LogicalDevice;
+            surface._memoryHandle = surface.ExportMemoryHandle(memHandleType);
+            logical.GetImageMemoryRequirements(surface.VulkanImage, out req);
+
+            surface._produceHandle = surface.CreateExportableSemaphore(out surface._produceSemaphore);
+            surface._consumeHandle = surface.CreateExportableSemaphore(out surface._consumeSemaphore);
+        }
+        catch
+        {
+            surface.Dispose();
+            throw;
+        }
 
         surface.Descriptor = new SharedSurfaceDescriptor
         {
@@ -275,9 +291,17 @@ public sealed unsafe class SharedSurface : Texture
         if (descriptor.Others is { Length: > 0 } others)
         {
             surface._others = new SharedSurface[others.Length];
-            for (var i = 0; i < others.Length; i++)
+            try
             {
-                surface._others[i] = ImportSingle(device, others[i], name);
+                for (var i = 0; i < others.Length; i++)
+                {
+                    surface._others[i] = ImportSingle(device, others[i], name);
+                }
+            }
+            catch
+            {
+                surface.Dispose();
+                throw;
             }
         }
 
@@ -293,11 +317,12 @@ public sealed unsafe class SharedSurface : Texture
         var externalInfo = new ExternalMemoryImageCreateInfo { HandleTypes = memHandleType };
         // Import the producer's memory in place of a normal allocation; still a dedicated allocation for the image.
         // The transport (fd vs Win32 handle) follows the producer's handle type, not our OS.
+        var duplicate = -1;
         Func<VulkanImage, object> allocFactory = image => useFd
             ? (object)new ImportMemoryFdInfoKHR
             {
                 HandleType = memHandleType,
-                Fd = DuplicateForImport(descriptor.MemoryHandle),
+                Fd = duplicate = DuplicateForImport(descriptor.MemoryHandle),
                 PNext = new MemoryDedicatedAllocateInfo { Image = image }
             }
             : new ImportMemoryWin32HandleInfoKHR
@@ -307,20 +332,34 @@ public sealed unsafe class SharedSurface : Texture
                 PNext = new MemoryDedicatedAllocateInfo { Image = image }
             };
 
-        var surface = new SharedSurface(device, description, externalInfo, allocFactory, name);
+        var surface = new SharedSurface(device, description, externalInfo, allocFactory, name, () =>
+        {
+            if (duplicate >= 0)
+            {
+                PosixInterop.Close(duplicate);
+            }
+        });
         surface._useFd = useFd;
-        surface.AcquireFromProducer();
-
-        if (descriptor.ProduceSemaphoreHandle != IntPtr.Zero)
+        surface._ownsHandles = false;
+        try
         {
-            surface._produceSemaphore = surface.ImportSemaphore(descriptor.ProduceSemaphoreHandle);
+            surface.AcquireFromProducer();
+
+            if (descriptor.ProduceSemaphoreHandle != IntPtr.Zero)
+            {
+                surface._produceSemaphore = surface.ImportSemaphore(descriptor.ProduceSemaphoreHandle);
+            }
+            if (descriptor.ConsumeSemaphoreHandle != IntPtr.Zero)
+            {
+                surface._consumeSemaphore = surface.ImportSemaphore(descriptor.ConsumeSemaphoreHandle);
+            }
         }
-        if (descriptor.ConsumeSemaphoreHandle != IntPtr.Zero)
+        catch
         {
-            surface._consumeSemaphore = surface.ImportSemaphore(descriptor.ConsumeSemaphoreHandle);
+            surface.Dispose();
+            throw;
         }
 
-        surface._ownsHandles = false; // the producer owns and closes the handles
         surface.Descriptor = descriptor;
         return surface;
     }
@@ -510,7 +549,7 @@ public sealed unsafe class SharedSurface : Texture
     {
         foreach (var other in _others)
         {
-            other.Dispose();
+            other?.Dispose();
         }
 
         _others = [];

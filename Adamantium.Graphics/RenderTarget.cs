@@ -13,7 +13,15 @@ namespace Adamantium.Graphics
             {
                 var clonedDesc = description;
                 clonedDesc.Samples = MSAALevel.None;
-                ResolveTexture = ToDispose(Texture.New(device, clonedDesc, $"{name}:Resolve"));
+                try
+                {
+                    ResolveTexture = ToDispose(Texture.New(device, clonedDesc, $"{name}:Resolve"));
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
             }
             else
             {

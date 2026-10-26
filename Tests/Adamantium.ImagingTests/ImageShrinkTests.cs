@@ -70,6 +70,61 @@ public class ImageShrinkTests
         Assert.That(shrunk, Has.Length.EqualTo(100 * 3));
     }
 
+    // Black and white sRGB pixels average to half the light, which sRGB writes as 188 - not the 128 of their codes.
+    [Test]
+    public void SrgbPixels_AreAveragedAsLight()
+    {
+        byte[] pixels = [0, 0, 0, 255, 255, 255, 255, 255];
+
+        var shrunk = ImageShrink.FitWithin(pixels, 2, 1, Format.R8G8B8A8_SRGB, 1, 1, out _, out _);
+
+        Assert.That(shrunk, Is.EqualTo(new byte[] { 188, 188, 188, 255 }));
+    }
+
+    // Shrunk in bands on several cores, a tall picture is what one pass over it gives: every pixel the average of its
+    // area, the rows where bands meet included.
+    [TestCase(1000u, 433u)]
+    [TestCase(4097u, 4096u)]
+    public void ATallPicture_IsShrunkWhole(uint height, uint fitted)
+    {
+        const uint width = 7;
+        var pixels = new byte[width * height];
+        new Random((int)height).NextBytes(pixels);
+
+        var shrunk = ImageShrink.FitWithin(pixels, width, height, Format.R8_UNORM, width, fitted, out var w, out var h);
+
+        var scaleX = (double)width / w;
+        var scaleY = (double)height / h;
+        for (var ty = 0; ty < h; ty++)
+        {
+            for (var tx = 0; tx < w; tx++)
+            {
+                var sum = 0.0;
+                for (var y = (int)(ty * scaleY); y < Math.Min(height, Math.Ceiling((ty + 1) * scaleY)); y++)
+                {
+                    var dy = Math.Min(y + 1, (ty + 1) * scaleY) - Math.Max(y, ty * scaleY);
+                    for (var x = (int)(tx * scaleX); x < Math.Min(width, Math.Ceiling((tx + 1) * scaleX)); x++)
+                    {
+                        var dx = Math.Min(x + 1, (tx + 1) * scaleX) - Math.Max(x, tx * scaleX);
+                        sum += pixels[y * width + x] * dx * dy;
+                    }
+                }
+
+                Assert.That(shrunk[ty * w + tx], Is.EqualTo(sum / (scaleX * scaleY)).Within(1), $"pixel {tx}, {ty}");
+            }
+        }
+    }
+
+    [Test]
+    public void APictureOfNoPixels_IsItself()
+    {
+        var pixels = Array.Empty<byte>();
+
+        Assert.That(ImageShrink.FitWithin(pixels, 0, 9000, Format.R8_UNORM, 100, 100, out var w, out var h),
+            Is.SameAs(pixels));
+        Assert.That((w, h), Is.EqualTo((0u, 9000u)));
+    }
+
     [Test]
     public void ACompressedFormat_IsNotShrunk()
     {

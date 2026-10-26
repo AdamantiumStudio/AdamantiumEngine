@@ -11,9 +11,9 @@ namespace Adamantium.Imaging.Gif;
 /// What a file has after it breaks off is passed over, the frames before kept.</summary>
 internal sealed class GifFile
 {
-    // A byte of LZW codes makes at most this many indices - a 12-bit code of a 4095-long string, 8/12 of it a byte:
-    // a picture larger than its data could fill is a bomb.
-    private const long MostIndicesPerByte = 2731;
+    /// <summary>The most indices a byte of LZW codes makes: a 12-bit code of a 4095-long string, 8/12 of it a byte.
+    /// </summary>
+    internal const long MostIndicesPerByte = 2731;
 
     private GifFile()
     {

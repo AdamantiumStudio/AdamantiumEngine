@@ -45,7 +45,8 @@ internal sealed class FrameComposer
     private long _checkpointBytes;
 
     /// <summary>Frames of a <paramref name="width"/> × <paramref name="height"/> canvas of <paramref name="pixel"/>
-    /// bytes a pixel (4 or 8); <paramref name="decode"/> gives a frame's own pixels, its region's size.</summary>
+    /// bytes a pixel (4 or 8); <paramref name="decode"/> gives a frame's own pixels, its region's rows from the top as
+    /// far as it has them - the rows past those are left as they are.</summary>
     public FrameComposer(int width, int height, int pixel, IReadOnlyList<ComposedFrame> frames, Func<int, byte[]> decode)
     {
         (_width, _height, _pixel, _frames, _decode) = (width, height, pixel, frames, decode);
@@ -103,11 +104,16 @@ internal sealed class FrameComposer
                 else if (disposal == FrameDisposal.Previous && canvas.BeforeFrame != null)
                 {
                     var previous = canvas.BeforeFrame;
-                    Region(before, row => previous.AsSpan(row.Start, row.Length).CopyTo(target.AsSpan(row.Start)));
+                    var at = 0;
+                    Region(before, row =>
+                    {
+                        previous.AsSpan(at, row.Length).CopyTo(target.AsSpan(row.Start));
+                        at += row.Length;
+                    });
                 }
             }
 
-            canvas.BeforeFrame = frame.Disposal == FrameDisposal.Previous ? (byte[])target.Clone() : null;
+            canvas.BeforeFrame = frame.Disposal == FrameDisposal.Previous ? Under(frame, target) : null;
             Draw(frame, pixels, target);
             canvas.Frame = number;
 
@@ -136,6 +142,18 @@ internal sealed class FrameComposer
         _checkpointBytes = 0;
     }
 
+    private byte[] Under(ComposedFrame frame, byte[] canvas)
+    {
+        var under = new byte[(long)frame.Width * frame.Height * _pixel];
+        var at = 0;
+        Region(frame, row =>
+        {
+            canvas.AsSpan(row.Start, row.Length).CopyTo(under.AsSpan(at));
+            at += row.Length;
+        });
+        return under;
+    }
+
     private void Region(ComposedFrame frame, Action<(int Start, int Length)> row)
     {
         for (var y = 0; y < frame.Height; y++)
@@ -148,7 +166,8 @@ internal sealed class FrameComposer
     private void Draw(ComposedFrame frame, byte[] pixels, byte[] canvas)
     {
         var rowBytes = frame.Width * _pixel;
-        for (var y = 0; y < frame.Height; y++)
+        var rows = rowBytes == 0 ? 0 : Math.Min(frame.Height, pixels.Length / rowBytes);
+        for (var y = 0; y < rows; y++)
         {
             var source = pixels.AsSpan(y * rowBytes, rowBytes);
             var target = canvas.AsSpan((int)((frame.Y + y) * (long)_width + frame.X) * _pixel, rowBytes);

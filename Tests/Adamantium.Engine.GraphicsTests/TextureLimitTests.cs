@@ -1,4 +1,5 @@
 using System;
+using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
@@ -31,17 +32,19 @@ public class TextureLimitTests
     [Test]
     public void ATexturePastTheDevicesSide_IsRefused()
     {
-        var device = GpuFixture.Main.ResourceLoaderDevice;
+        var device = (GraphicsDevice)GpuFixture.Main.ResourceLoaderDevice;
         var side = device.Adapter.AdapterProperties.Limits.MaxImageDimension2D;
+        var registered = device.RegisteredResourceCount;
 
         Assert.That(() => device.CreateTexture(Description(side + 1, 1), new byte[(side + 1) * 4]),
             Throws.InstanceOf<NotSupportedException>().With.Message.Contains(side.ToString()));
+        Assert.That(device.RegisteredResourceCount, Is.EqualTo(registered), "the refused texture stays registered");
     }
 
     [Test]
     public void ATexturePastTheDevicesLayers_IsRefused()
     {
-        var device = GpuFixture.Main.ResourceLoaderDevice;
+        var device = (GraphicsDevice)GpuFixture.Main.ResourceLoaderDevice;
         var layers = device.Adapter.AdapterProperties.Limits.MaxImageArrayLayers;
         var pixels = new byte[layers + 1][];
         for (var i = 0; i < pixels.Length; i++)
@@ -49,7 +52,10 @@ public class TextureLimitTests
             pixels[i] = new byte[4];
         }
 
+        var registered = device.RegisteredResourceCount;
+
         Assert.That(() => device.CreateTextureArray(Description(1, 1, layers + 1), pixels),
             Throws.InstanceOf<NotSupportedException>());
+        Assert.That(device.RegisteredResourceCount, Is.EqualTo(registered), "the refused texture stays registered");
     }
 }
