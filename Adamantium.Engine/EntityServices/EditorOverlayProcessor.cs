@@ -21,7 +21,6 @@ namespace Adamantium.Engine.EntityServices;
 /// </summary>
 public class EditorOverlayProcessor : RenderingProcessor
 {
-    private const int InstanceCapacity = 64;
     private const int OutlineDirections = 8;
 
     private static readonly Mesh RingSquare = new Mesh(PrimitiveType.TriangleList)
@@ -30,15 +29,10 @@ public class EditorOverlayProcessor : RenderingProcessor
 
     private readonly ToolsService tools;
     private readonly List<Part> parts = [];
-    private readonly Matrix4x4F[] instanceWorld = new Matrix4x4F[InstanceCapacity];
-    private readonly Vector4F[] instanceColors = new Vector4F[InstanceCapacity];
-    private readonly Vector4F[] instanceLines = new Vector4F[InstanceCapacity];
-    private readonly Vector4F[] instanceRings = new Vector4F[InstanceCapacity];
+    private GizmoInstance[] instances = [];
     private readonly Dictionary<Mesh, Ribbon> ribbons = [];
-    private readonly Matrix4x4F[] gridWorld = new Matrix4x4F[1];
     private readonly Vector4F[] gridPhases = new Vector4F[GroundGrid.Levels / 2];
-    private readonly Matrix4x4F[] palette = new Matrix4x4F[SceneData.Controller.MaxDrawnJoints];
-    private int paletteFilled = SceneData.Controller.MaxDrawnJoints;
+    private Matrix4x4F[] palette = [];
     private Skeleton paletteSkeleton;
     private Matrix4x4F paletteMesh;
     private bool[] drawn = [];
@@ -172,18 +166,14 @@ public class EditorOverlayProcessor : RenderingProcessor
 
         var near = Math.Min(radius / center.Length(), 0.9f);
         var reach = radius / MathF.Sqrt(1 - near * near) + (pixels + 4) * unitsPerPixel;
-        instanceWorld[0] = Matrix4x4F.Scaling(reach)
-                           * Matrix4x4F.RotationQuaternion(ScreenSpace.Facing(ActiveCamera))
-                           * Matrix4x4F.Translation(center);
-        instanceColors[0] = ColorOf(ring, transformation);
-        instanceLines[0] = new Vector4F(pixels, frontHalf ? 1 : 0, 0, 0);
-        instanceRings[0] = new Vector4F(normal, radius);
-
+        var placement = Matrix4x4F.Scaling(reach)
+                        * Matrix4x4F.RotationQuaternion(ScreenSpace.Facing(ActiveCamera))
+                        * Matrix4x4F.Translation(center);
         effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
-        effect.InstanceWorld.SetValue(instanceWorld);
-        effect.InstanceColor.SetValue(instanceColors);
-        effect.InstanceLine.SetValue(instanceLines);
-        effect.InstanceRing.SetValue(instanceRings);
+        effect.LineWidth.SetValue(pixels);
+        effect.Ring.SetValue(new Vector4F(normal, radius));
+        effect.FrontHalfOnly.SetValue(frontHalf ? 1u : 0u);
+        UploadInstances([new GizmoInstance(placement, ColorOf(ring, transformation))]);
         effect.BasicSdfRingInstancedPass.Apply();
 
         var blend = GraphicsDevice.ColorBlendEquation;
@@ -199,10 +189,9 @@ public class EditorOverlayProcessor : RenderingProcessor
     {
         var layout = grid.LayoutFor(ActiveCamera);
         var pointPixels = ActiveCamera.PixelsPerPoint;
-        gridWorld[0] = layout.Placement;
         grid.PhasesFor(ActiveCamera, gridPhases);
 
-        gridEffect.InstanceWorld.SetValue(gridWorld);
+        gridEffect.Placement.SetValue(layout.Placement);
         gridEffect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         gridEffect.Phases.SetValue(gridPhases);
         gridEffect.Layout.SetValue(new Vector4F(layout.Cell, layout.Reach, layout.Center.X, layout.Center.Y));
@@ -370,7 +359,6 @@ public class EditorOverlayProcessor : RenderingProcessor
         }
 
         var directions = look == Look.Outline ? OutlineDirections : 1;
-        var capacity = InstanceCapacity / directions;
         effect.ViewProjection.SetValue(viewProjection);
 
         if (drawn.Length < parts.Count)
@@ -397,23 +385,25 @@ public class EditorOverlayProcessor : RenderingProcessor
             var count = 0;
 
             // A skin bends its mesh with its own palette, so its part is drawn alone.
-            for (var j = i; j < parts.Count && count < (head.Skin != null ? 1 : capacity); ++j)
+            for (var j = i; j < parts.Count && (head.Skin == null || count < 1); ++j)
             {
                 if (drawn[j] || !ReferenceEquals(parts[j].Data.Mesh, head.Data.Mesh) || parts[j].Skin != head.Skin)
                 {
                     continue;
                 }
 
-                instanceWorld[count] = parts[j].World;
-                instanceColors[count] = parts[j].Color;
-                instanceLines[count] = new Vector4F(LinePixels, 0, 0, 0);
+                if (count == instances.Length)
+                {
+                    Array.Resize(ref instances, Math.Max(count * 2, 1));
+                }
+
+                instances[count] = new GizmoInstance(parts[j].World, parts[j].Color);
                 drawn[j] = true;
                 ++count;
             }
 
-            effect.InstanceWorld.SetValue(instanceWorld);
-            effect.InstanceColor.SetValue(instanceColors);
-            var instances = (uint)(count * directions);
+            UploadInstances(instances.AsSpan(0, count));
+            var drawnInstances = (uint)(count * directions);
 
             if (head.Line && look is Look.Shaded or Look.Flat)
             {
@@ -431,11 +421,11 @@ public class EditorOverlayProcessor : RenderingProcessor
             {
                 var data = head.Data;
                 var state = new RenderState(data.IsWireFrame, data.CullMode, false, false, data.TopologyOverride);
-                geometry.GetOrCreate(data.Mesh, data.ResolveVertexType()).Draw(GraphicsDevice, state, instances);
+                geometry.GetOrCreate(data.Mesh, data.ResolveVertexType()).Draw(GraphicsDevice, state, drawnInstances);
             }
             else
             {
-                geometry.DrawMesh(GraphicsDevice, head.Data, instances);
+                geometry.DrawMesh(GraphicsDevice, head.Data, drawnInstances);
             }
         }
 
@@ -450,22 +440,27 @@ public class EditorOverlayProcessor : RenderingProcessor
             return;
         }
 
-        var filled = skin.FillPalette(palette, ActiveCamera);
-        if (filled < paletteFilled)
+        if (palette.Length < skin.Joints.Count)
         {
-            Array.Fill(palette, Matrix4x4F.Identity, filled, paletteFilled - filled);
+            palette = new Matrix4x4F[skin.Joints.Count];
         }
 
-        paletteFilled = filled;
+        var filled = skin.FillPalette(palette, ActiveCamera);
         paletteSkeleton = skin.Skeleton;
         paletteMesh = mesh;
-        effect.Joints.SetValue(palette);
+        effect.JointsAddress.SetValue(GraphicsDevice.UploadFrameData<Matrix4x4F>(palette.AsSpan(0, filled)));
+        effect.JointCount.SetValue((uint)filled);
+    }
+
+    private void UploadInstances(ReadOnlySpan<GizmoInstance> batch)
+    {
+        effect.InstancesAddress.SetValue(GraphicsDevice.UploadFrameData(batch));
     }
 
     private void DrawRibbon(MeshData data, bool inFront, uint instances)
     {
-        effect.InstanceLine.SetValue(instanceLines);
         effect.ViewportSize.SetValue(new Vector2F(ActiveCamera.Width, ActiveCamera.Height));
+        effect.LineWidth.SetValue(LinePixels);
         effect.BasicSdfLineInstancedPass.Apply();
 
         var state = inFront

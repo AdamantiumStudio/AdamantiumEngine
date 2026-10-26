@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
@@ -653,9 +654,13 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     public class DynamicBufferPool : IDisposable
     {
+        private const BufferUsageFlags PageUsage = BufferUsageFlags.UniformBuffer | BufferUsageFlags.ShaderDeviceAddress;
+
         private readonly IGraphicsDevice graphicsDevice;
         private readonly ulong pageSize;
         private readonly List<Buffer> pages = new();
+        private readonly List<Buffer> takenOversized = [];
+        private readonly List<Buffer> spareOversized = [];
 
         private int currentPageIndex = 0;
         private ulong currentOffset = 0;
@@ -666,7 +671,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         {
             graphicsDevice = device;
             this.pageSize = pageSize;
-            CreateNewPage();
+            pages.Add(NewPage());
         }
 
         public void Reset()
@@ -674,6 +679,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             currentPageIndex = 0;
             currentOffset = 0;
             generation++;
+            ReleaseUnusedOversized();
         }
 
         /// <summary>The device address of a copy of <paramref name="buffer"/>'s data in this frame's pages: the copy made
@@ -728,15 +734,23 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             public byte[] Data = [];
         }
 
+        /// <summary>Room for <paramref name="size"/> bytes in this frame's pages. More than a page holds gets a buffer of
+        /// its own in system memory, a power of two in size: one the last use of this pool took, of that size or twice
+        /// it, is taken again; one it left unused is disposed of once the frames in flight are done with it.</summary>
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
+            if (size > pageSize)
+            {
+                return (TakeOversized(size), 0);
+            }
+
             ulong alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
             if (alignedOffset + size > pageSize)
             {
                 currentPageIndex++;
                 if (currentPageIndex >= pages.Count)
                 {
-                    CreateNewPage();
+                    pages.Add(NewPage());
                 }
 
                 alignedOffset = 0;
@@ -747,19 +761,64 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             return (page, alignedOffset);
         }
 
-        private void CreateNewPage()
-        {
-            var flags = BufferUsageFlags.UniformBuffer | BufferUsageFlags.ShaderDeviceAddress;
-            var memFlags = BufferMemoryUsage.UploadFromCpuToGpu;
+        private Buffer NewPage() => Buffer.New(graphicsDevice, pageSize, PageUsage, BufferMemoryUsage.UploadFromCpuToGpu);
 
-            var buffer = Buffer.New(graphicsDevice, pageSize, flags, memFlags);
-            pages.Add(buffer);
+        private Buffer TakeOversized(ulong size)
+        {
+            var rounded = BitOperations.RoundUpToPowerOf2(size);
+            var spare = -1;
+            for (var i = 0; i < spareOversized.Count; i++)
+            {
+                var room = spareOversized[i].TotalSize;
+                if ((room == rounded || room == rounded * 2) && (spare < 0 || room < spareOversized[spare].TotalSize))
+                {
+                    spare = i;
+                }
+            }
+
+            Buffer page;
+            if (spare >= 0)
+            {
+                page = spareOversized[spare];
+                spareOversized.RemoveAt(spare);
+            }
+            else
+            {
+                page = Buffer.New(graphicsDevice, rounded, PageUsage, BufferMemoryUsage.StreamFromCpuToGpu);
+            }
+
+            takenOversized.Add(page);
+            return page;
+        }
+
+        private void ReleaseUnusedOversized()
+        {
+            foreach (var page in spareOversized)
+            {
+                graphicsDevice.AddToDeferDisposeQueue(page);
+            }
+
+            spareOversized.Clear();
+            spareOversized.AddRange(takenOversized);
+            takenOversized.Clear();
         }
 
         public void Dispose()
         {
             foreach (var page in pages) page.Dispose();
             pages.Clear();
+            foreach (var page in spareOversized)
+            {
+                page.Dispose();
+            }
+
+            foreach (var page in takenOversized)
+            {
+                page.Dispose();
+            }
+
+            spareOversized.Clear();
+            takenOversized.Clear();
         }
     }
 

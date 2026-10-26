@@ -1,44 +1,62 @@
 ﻿#include "Includes/Skinning.fxh"
 
 float4x4 wvp;
-// Rotation for NORMALS. wvp bakes the projection in, and a normal put through that is no longer a direction - lighting
-// has to be done in a space the light is fixed in, and for a head-lit gizmo that space is the view.
-float4x4 world;
 float3 meshColor;
 float transparency;
 
-// One draw, many copies of the SAME mesh: each copy's own world matrix and color, with the projection shared. The
-// gizmo's seven balls are one sphere seven times over, its three arms one cylinder, its four arrows one triangle.
-// The length is the cap on a single instanced draw - see InstanceCapacity.
-float4x4 instanceWorld[64];
-float4 instanceColor[64];
+// One drawn instance of a gizmo's mesh. The gizmo's seven balls are one sphere seven times over, its three arms one
+// cylinder, its four arrows one triangle: one draw each, with the projection shared.
+struct GizmoInstance
+{
+    float4x4 world;
+    float4 color;
+
+    float4 Placed(float4 position)
+    {
+        return mul(position, world);
+    }
+
+    float4 Placed(float3 position)
+    {
+        return Placed(float4(position, 1.0f));
+    }
+
+    float3 Turned(float3 normal)
+    {
+        return mul(normal, (float3x3)world);
+    }
+};
+
+// The draw's instances.
+uint64_t InstancesAddress;
+// The joints a skinned instance bends with, and how many there are.
+uint64_t JointsAddress;
+uint JointCount;
+
+GizmoInstance InstanceOf(uint instanceId)
+{
+    return ((GizmoInstance*)InstancesAddress)[instanceId];
+}
+
 float4x4 viewProjection;
-// The view's rotation for the instanced normals: identity when the copies are placed on the screen.
+// The view's rotation for the instanced normals: identity when the instances are placed on the screen.
 float4x4 view;
 // The selection outline's width as a clip-space offset per unit of w, along x and along y.
 float2 outlineStep;
-// A line's width in pixels, one per copy in x (and for a ring, 1 in y when only its front half shows); lines are spread
-// on screen, so the viewport's size in pixels too.
-float4 instanceLine[64];
+// The viewport's size in pixels, which lines are spread on.
 float2 viewportSize;
-// A ring's normal (xyz) and radius (w), one per copy.
-float4 instanceRing[64];
-sampler sampleType;
-Texture2D shaderTexture;
+// How wide lines and rings are drawn, in pixels.
+float lineWidth;
+// The ring a ring pass draws: its normal (xyz) and radius (w); its center is the instance's.
+float4 ring;
+// Not zero when only the half of the ring on the eye's side shows.
+uint frontHalfOnly;
 
-struct TexturedVertexInputType
+// A normal of the mesh turned with the instance, then with the view, since the light is fixed in the view.
+float3 InView(GizmoInstance instance, float3 normal)
 {
-	float4 position : POSITION;
-	float4 color: COLOR;
-	float2 texcoord: TEXCOORD;
-};
-
-struct TexturedPixelInputType
-{
-	float4 position : SV_POSITION;
-	float2 texcoord: TEXCOORD;
-	float4 color: COLOR;
-};
+    return mul(instance.Turned(normal), (float3x3)view);
+}
 
 struct MESH_VERTEX
 {
@@ -61,71 +79,34 @@ struct PS_OUTPUT_BASIC
     float3 normal : NORMAL;
 };
 
-
-TexturedPixelInputType TexturedVertexShader(TexturedVertexInputType input)
-{
-    TexturedPixelInputType output;
-    // Change the position vector to be 4 units for proper matrix calculations.
-    output.position = float4(input.position.xyz, 1);
-    // Calculate the position of the vertex against the world, view, and projection matrices.
-	output.position = mul(output.position, wvp);
-	output.texcoord = input.texcoord;
-	output.color = input.color;
-
-	return output;
-}
-
-float4 TexturedPixelShader(TexturedPixelInputType input) : SV_TARGET
-{
-   float4 color = shaderTexture.Sample(sampleType, input.texcoord);
-   return color;
-}
-
-
+[shader("vertex")]
 PS_OUTPUT_BASIC Basic_VS(MESH_VERTEX input)
 {
     PS_OUTPUT_BASIC output;
-   
-    input.position.w = 1.0f;
-    output.position = mul(input.position, wvp);
+    output.position = mul(float4(input.position.xyz, 1.0f), wvp);
     output.uv = input.uv0;
     output.color = input.color;
     output.normal = input.normal;
     return output;
 }
 
-PS_OUTPUT_BASIC BasicLit_VS(MESH_VERTEX input)
-{
-    PS_OUTPUT_BASIC output;
-
-    input.position.w = 1.0f;
-    output.position = mul(input.position, wvp);
-    output.uv = input.uv0;
-    output.color = float4(meshColor, transparency);
-    output.normal = mul(input.normal, (float3x3)world);
-    return output;
-}
-
-// The instanced twin: the placement and the color come from the tables above, everything else is identical. The
-// normal rides the copy's OWN matrix, so copies of one mesh may be turned any way and still light correctly, then the
-// view's, since the light is fixed in the view.
+// The normal rides the instance's OWN matrix, so instances of one mesh may be turned any way and still light correctly.
+[shader("vertex")]
 PS_OUTPUT_BASIC BasicLitInstanced_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
 {
+    GizmoInstance instance = InstanceOf(instanceId);
     PS_OUTPUT_BASIC output;
-
-    float4x4 placement = instanceWorld[instanceId];
-
-    input.position.w = 1.0f;
-    output.position = mul(mul(input.position, placement), viewProjection);
+    output.position = mul(instance.Placed(input.position.xyz), viewProjection);
     output.uv = input.uv0;
-    output.color = instanceColor[instanceId];
-    output.normal = mul(mul(input.normal, (float3x3)placement), (float3x3)view);
+    output.color = instance.color;
+    output.normal = InView(instance, input.normal);
     return output;
 }
 
 // Flat color gives a shape no form at all - every face of it reads as one silhouette. Lit from just off the viewer's
 // shoulder, so a gizmo shades the same however the view turns: a diffuse term for the body, a tight specular so a ball
 // reads as round, and a rim that keeps a dark one off a dark background without an outline pass.
+[shader("fragment")]
 float4 BasicLit_PS(PS_OUTPUT_BASIC input) : SV_TARGET
 {
     float3 normal = normalize(input.normal);
@@ -146,20 +127,19 @@ struct PS_OUTPUT_LINE
     float4 position : SV_POSITION;
     float4 color : COLOR0;
     noperspective float across : TEXCOORD0;
-    nointerpolation float halfWidth : TEXCOORD1;
 };
 
 // A segment of a line mesh turned into a quad (LineRibbon): the corner's own end is the position, the other end rides
-// the normal, uv0 is the side and which end. The quad is spread on screen to the copy's width and a pixel more for the
+// the normal, uv0 is the side and which end. The quad is spread on screen to the line's width and a pixel more for the
 // smoothing, and runs half a width past each end, so the segments of a polyline close over their joints.
+[shader("vertex")]
 PS_OUTPUT_LINE SdfLineInstanced_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
 {
+    GizmoInstance instance = InstanceOf(instanceId);
     PS_OUTPUT_LINE output;
 
-    float4x4 placement = instanceWorld[instanceId];
-    float4 own = mul(float4(input.position.xyz, 1.0f), placement);
-    float4 ownClip = mul(own, viewProjection);
-    float4 otherClip = mul(mul(float4(input.normal, 1.0f), placement), viewProjection);
+    float4 ownClip = mul(instance.Placed(input.position.xyz), viewProjection);
+    float4 otherClip = mul(instance.Placed(input.normal), viewProjection);
 
     float2 halfViewport = viewportSize * 0.5f;
     float2 ownPixel = ownClip.xy / ownClip.w * halfViewport;
@@ -170,21 +150,21 @@ PS_OUTPUT_LINE SdfLineInstanced_VS(MESH_VERTEX input, uint instanceId : SV_Insta
     along = span > 1e-4f ? along / span : float2(1.0f, 0.0f);
     float2 across = float2(-along.y, along.x);
 
-    float halfWidth = instanceLine[instanceId].x * 0.5f;
+    float halfWidth = lineWidth * 0.5f;
     float reach = halfWidth + 1.0f;
     float2 pixel = ownPixel + across * (input.uv0.x * reach) + along * (atStart ? -halfWidth : halfWidth);
 
     output.position = float4(pixel / halfViewport * ownClip.w, ownClip.z, ownClip.w);
-    output.color = instanceColor[instanceId];
+    output.color = instance.color;
     output.across = input.uv0.x * reach;
-    output.halfWidth = halfWidth;
     return output;
 }
 
 // Full inside the line's width, fading out over its last pixel on either side.
+[shader("fragment")]
 float4 SdfLine_PS(PS_OUTPUT_LINE input) : SV_TARGET
 {
-    float coverage = saturate(input.halfWidth + 0.5f - abs(input.across));
+    float coverage = saturate(lineWidth * 0.5f + 0.5f - abs(input.across));
     return float4(input.color.rgb, input.color.a * coverage);
 }
 
@@ -194,25 +174,21 @@ struct PS_OUTPUT_RING
     float4 color : COLOR0;
     float3 world : TEXCOORD0;
     nointerpolation float3 center : TEXCOORD1;
-    nointerpolation float4 ring : TEXCOORD2;
-    nointerpolation float2 stroke : TEXCOORD3;
 };
 
-// A ring drawn as the circle it is. The copy's matrix places a square facing the eye round the ring, its translation is
-// the ring's center; instanceRing holds the ring's normal and radius, instanceLine its width and whether only the half
-// on the eye's side shows. Everything is in the camera-relative space the eye sits at the origin of.
+// A ring drawn as the circle it is. The instance's matrix places a square facing the eye round the ring, its
+// translation is the ring's center. Everything is in the camera-relative space the eye sits at the origin of.
+[shader("vertex")]
 PS_OUTPUT_RING SdfRingInstanced_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
 {
+    GizmoInstance instance = InstanceOf(instanceId);
     PS_OUTPUT_RING output;
 
-    float4x4 placement = instanceWorld[instanceId];
-    float4 world = mul(float4(input.position.xyz, 1.0f), placement);
+    float4 world = instance.Placed(input.position.xyz);
     output.position = mul(world, viewProjection);
-    output.color = instanceColor[instanceId];
+    output.color = instance.color;
     output.world = world.xyz;
-    output.center = placement[3].xyz;
-    output.ring = instanceRing[instanceId];
-    output.stroke = float2(instanceLine[instanceId].x * 0.5f, instanceLine[instanceId].y);
+    output.center = instance.world[3].xyz;
     return output;
 }
 
@@ -274,13 +250,14 @@ float3 NearestOnHalfRing(float3 dir, float3 c, float3 u, float3 v, float r)
 // The pixel's distance to the true circle, in pixels, turned into coverage. The half on the eye's side is split across
 // the sight to the center, not at the ball's silhouette, which would leave less than half of a tilted ring and nothing
 // of one that faces the eye.
+[shader("fragment")]
 float4 SdfRing_PS(PS_OUTPUT_RING input) : SV_TARGET
 {
     float footprint = max(length(ddx(input.world)), length(ddy(input.world))) / length(input.world);
     float3 dir = normalize(input.world);
     float3 c = input.center;
-    float3 n = input.ring.xyz;
-    float r = input.ring.w;
+    float3 n = ring.xyz;
+    float r = ring.w;
 
     float3 toEye = -c - n * dot(-c, n);
     float3 v = dot(toEye, toEye) > 1e-12f * r * r
@@ -289,7 +266,7 @@ float4 SdfRing_PS(PS_OUTPUT_RING input) : SV_TARGET
     float3 u = cross(n, v);
 
     float3 p = NearestOnHalfRing(dir, c, u, v, r);
-    if (input.stroke.y < 0.5f)
+    if (frontHalfOnly == 0)
     {
         float3 back = NearestOnHalfRing(dir, c, u, -v, r);
         if (RayDistance(back, dir) < RayDistance(p, dir))
@@ -300,7 +277,7 @@ float4 SdfRing_PS(PS_OUTPUT_RING input) : SV_TARGET
 
     float depth = dot(p, dir);
     float distance = RayDistance(p, dir) / (footprint * depth);
-    float coverage = depth > 0.0f ? saturate(input.stroke.x + 0.5f - distance) : 0.0f;
+    float coverage = depth > 0.0f ? saturate(lineWidth * 0.5f + 0.5f - distance) : 0.0f;
     if (coverage <= 0.0f)
     {
         discard;
@@ -309,114 +286,81 @@ float4 SdfRing_PS(PS_OUTPUT_RING input) : SV_TARGET
     return float4(input.color.rgb, input.color.a * coverage);
 }
 
-// The selection outline: every copy drawn once per direction, shifted that way by the outline's width on screen, and
-// the stencil keeps only what lands outside the selection itself. Copy k's placement and color sit at k / directions.
-static const uint outlineDirections = 8;
+// The selection outline: every instance drawn once per direction, shifted that way by the outline's width on screen,
+// and the stencil keeps only what lands outside the selection itself. Instance k is drawn by k * directions and on.
+static const uint OutlineDirections = 8;
 
+float4 Shifted(float4 position, uint instanceId)
+{
+    float angle = (instanceId % OutlineDirections) * (6.2831853f / OutlineDirections);
+    position.xy += float2(cos(angle), sin(angle)) * outlineStep * position.w;
+    return position;
+}
+
+[shader("vertex")]
 PS_OUTPUT_BASIC OutlineInstanced_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
 {
+    GizmoInstance instance = InstanceOf(instanceId / OutlineDirections);
     PS_OUTPUT_BASIC output;
-
-    uint copy = instanceId / outlineDirections;
-    float angle = (instanceId % outlineDirections) * (6.2831853f / outlineDirections);
-    float4 position = mul(mul(float4(input.position.xyz, 1.0f), instanceWorld[copy]), viewProjection);
-    position.xy += float2(cos(angle), sin(angle)) * outlineStep * position.w;
-
-    output.position = position;
+    output.position = Shifted(mul(instance.Placed(input.position.xyz), viewProjection), instanceId);
     output.uv = input.uv0;
-    output.color = instanceColor[copy];
+    output.color = instance.color;
     output.normal = input.normal;
     return output;
 }
 
-// The skinned twins: the vertex goes where its joints carry it first, then the copy places it. A skin has one palette,
-// so a skinned mesh is drawn one copy at a time.
+// The skinned twins: the vertex goes where its joints carry it first, then the instance places it. A skin has one
+// palette, so a skinned mesh is drawn one instance at a time.
+GizmoInstance SkinnedInstanceOf(uint instanceId, SKINNED_VERTEX input)
+{
+    GizmoInstance instance = InstanceOf(instanceId);
+    instance.world = mul(SkinOf((float4x4*)JointsAddress, JointCount, input.jointIndices, input.jointWeights),
+        instance.world);
+    return instance;
+}
+
+[shader("vertex")]
 PS_OUTPUT_BASIC SkinnedLitInstanced_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
 {
+    GizmoInstance instance = SkinnedInstanceOf(instanceId, input);
     PS_OUTPUT_BASIC output;
-
-    float4x4 placement = mul(SkinOf(input.jointIndices, input.jointWeights), instanceWorld[instanceId]);
-    output.position = mul(mul(float4(input.position.xyz, 1.0f), placement), viewProjection);
+    output.position = mul(instance.Placed(input.position.xyz), viewProjection);
     output.uv = input.uv0;
-    output.color = instanceColor[instanceId];
-    output.normal = mul(mul(input.normal, (float3x3)placement), (float3x3)view);
+    output.color = instance.color;
+    output.normal = InView(instance, input.normal);
     return output;
 }
 
+[shader("vertex")]
 PS_OUTPUT_BASIC SkinnedOutlineInstanced_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
 {
+    GizmoInstance instance = SkinnedInstanceOf(instanceId / OutlineDirections, input);
     PS_OUTPUT_BASIC output;
-
-    uint copy = instanceId / outlineDirections;
-    float angle = (instanceId % outlineDirections) * (6.2831853f / outlineDirections);
-    float4x4 placement = mul(SkinOf(input.jointIndices, input.jointWeights), instanceWorld[copy]);
-    float4 position = mul(mul(float4(input.position.xyz, 1.0f), placement), viewProjection);
-    position.xy += float2(cos(angle), sin(angle)) * outlineStep * position.w;
-
-    output.position = position;
+    output.position = Shifted(mul(instance.Placed(input.position.xyz), viewProjection), instanceId);
     output.uv = input.uv0;
-    output.color = instanceColor[copy];
+    output.color = instance.color;
     output.normal = input.normal;
     return output;
 }
 
+[shader("fragment")]
 float4 BasicColored_PS(PS_OUTPUT_BASIC input) : SV_TARGET
 {
-    float4 color = float4(meshColor, 1);
-    color.a = transparency;
-    return color;
+    return float4(meshColor, transparency);
 }
 
+[shader("fragment")]
 float4 BasicVertexColored_PS(PS_OUTPUT_BASIC input) : SV_TARGET
 {
     return input.color;
 }
 
-float4 BasicTextured_PS(PS_OUTPUT_BASIC input) : SV_TARGET
-{
-    float4 color = shaderTexture.Sample(sampleType, input.uv);
-    return color;
-}
-
-technique Render
-{
-	pass Textured
-	{
-		VertexShader = TexturedVertexShader;
-		PixelShader = TexturedPixelShader;
-	}
-}
-
 technique Basic
 {
-    pass Default
-    {
-        VertexShader = Basic_VS;
-        PixelShader = BasicColored_PS;
-    }
-    
-    pass Textured
-    {
-        VertexShader = Basic_VS;
-        PixelShader = BasicTextured_PS;
-    }
-        
     pass Colored
     {
         VertexShader = Basic_VS;
         PixelShader = BasicColored_PS;
-    }
-        
-    pass VertexColored
-    {
-        VertexShader = Basic_VS;
-        PixelShader = BasicVertexColored_PS;
-    }
-
-    pass Lit
-    {
-        VertexShader = BasicLit_VS;
-        PixelShader = BasicLit_PS;
     }
 
     pass LitInstanced

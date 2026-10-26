@@ -158,7 +158,13 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         if (allocation?.Block == null) return;
         lock (_lock)
         {
-            InsertFree(allocation.Block, allocation.Offset, allocation.Size);
+            var block = allocation.Block;
+            if (block == null)
+            {
+                return;
+            }
+
+            InsertFree(block, allocation.Offset, allocation.Size);
             allocation.Block = null;
         }
     }

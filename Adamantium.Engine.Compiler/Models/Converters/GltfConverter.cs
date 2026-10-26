@@ -305,11 +305,6 @@ public class GltfConverter : ConverterBase
             }
 
             var skin = file.Root.Skins[skinIndex];
-            if (skin.Joints.Count > SceneData.Controller.MaxDrawnJoints)
-            {
-                Tell($"skin {skinIndex} has {skin.Joints.Count} joints; only the first {SceneData.Controller.MaxDrawnJoints} move its vertices");
-            }
-
             foreach (var joint in skin.Joints)
             {
                 if (shown.Contains(index) && !shown.Contains(joint))

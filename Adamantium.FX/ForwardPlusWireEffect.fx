@@ -21,12 +21,14 @@ float3 OverWire(float3 lit, float3 barycentrics)
     return lerp(wireColor, lit, min(min(inside.x, inside.y), inside.z));
 }
 
+[shader("fragment")]
 float4 LitColoredWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
     float3 lit = Shade(input.albedo, input.viewPosition, input.viewNormal, input.position.xy);
     return float4(OverWire(lit, barycentrics), 1.0f);
 }
 
+[shader("fragment")]
 float4 LitTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);

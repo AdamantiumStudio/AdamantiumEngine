@@ -195,9 +195,8 @@ public class Skin : Component
             return;
         }
 
-        var drawn = Math.Min(Joints.Count, SceneData.Controller.MaxDrawnJoints);
-        var reach = new float[drawn];
-        var used = new bool[drawn];
+        var reach = new float[Joints.Count];
+        var used = new bool[Joints.Count];
         var rest = false;
         var points = mesh.Points;
         var indices = mesh.JointIndices;
@@ -246,7 +245,7 @@ public class Skin : Component
             return false;
         }
 
-        var joint = (int)Math.Clamp(index, 0, SceneData.Controller.MaxDrawnJoints - 1);
+        var joint = (int)Math.Max(index, 0);
         if (joint >= used.Length)
         {
             rest = true;
@@ -298,14 +297,23 @@ public class Skin : Component
 
     private int FillPose(CameraBase camera)
     {
-        pose ??= new Matrix4x4F[SceneData.Controller.MaxDrawnJoints];
+        if (pose == null || pose.Length < Joints.Count)
+        {
+            pose = new Matrix4x4F[Joints.Count];
+        }
+
         return FillPalette(pose, camera);
     }
 
     private void Pose(Mesh mesh, CameraBase camera)
     {
         var filled = FillPose(camera);
-        posedBy ??= new Matrix4x4F[pose.Length];
+        if (posedBy == null || posedBy.Length < pose.Length)
+        {
+            posedBy = new Matrix4x4F[pose.Length];
+            posedMesh = null;
+        }
+
         if (ReferenceEquals(mesh, posedMesh) && mesh.Version == posedVersion && filled == posedByCount
             && pose.AsSpan(0, filled).SequenceEqual(posedBy.AsSpan(0, filled)))
         {
@@ -349,7 +357,7 @@ public class Skin : Component
 
     private Vector3F By(Vector3F point, float joint, int filled)
     {
-        var at = Math.Clamp((int)joint, 0, pose.Length - 1);
+        var at = Math.Max((int)joint, 0);
         return at < filled ? Vector3F.TransformCoordinate(point, pose[at]) : point;
     }
 }

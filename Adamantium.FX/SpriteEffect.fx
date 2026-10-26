@@ -23,11 +23,13 @@ struct PSInput
 
 // Every texture of the resource heap - or of the shared texture set - by its slot there: each sprite names its own,
 // so a batch of any textures is one draw. A set of its own, which descriptor sets bind apart from the other resources.
-Texture2D spriteTextures[] : register(t0, space1);
+[[vk::binding(0, 1)]]
+Texture2D spriteTextures[];
 SamplerState TextureSampler;
 float2 TextureCornerCoords[4];
-matrix MatrixTransform;
+float4x4 MatrixTransform;
 
+[shader("vertex")]
 PSInput SpriteVertexShader(SpriteItem item, uint vertexId : SV_VertexID)
 {
     PSInput vertex;
@@ -74,6 +76,7 @@ PSInput SpriteVertexShader(SpriteItem item, uint vertexId : SV_VertexID)
     return vertex;
 }
 
+[shader("fragment")]
 float4 SpritePixelShader(PSInput input) : SV_TARGET
 {
     if (input.Textured < 0)
@@ -88,7 +91,6 @@ technique SpriteBatch
 {
     pass Render
     {
-        EffectName = "SpriteEffect";
         VertexShader = SpriteVertexShader;
         PixelShader = SpritePixelShader;
     }

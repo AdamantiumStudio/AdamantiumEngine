@@ -5,6 +5,7 @@ using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Graphics.Core.Presentation;
+using Adamantium.Graphics.Effects;
 using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
 
@@ -55,6 +56,69 @@ namespace Adamantium.Engine.GraphicsTests
 
             Assert.That(second.Page != first.Page || second.Offset >= first.Offset + 64, Is.True,
                 "the second constants landed on the first ones");
+        }
+
+        // A buffer of its own is asked of system memory. The next use of the pool takes one again for data of its size
+        // first, then of half its size, but not of a quarter; one it did not take waits for the frames in flight and is
+        // then disposed of. Two in one use are two buffers.
+        [Test]
+        public void ABufferOfItsOwn_IsTakenAgainWhileNeeded_AndDisposedOnceNot()
+        {
+            var device = GpuFixture.CreateRenderDevice();
+            using var pool = new EffectPass.DynamicBufferPool(device, 1024);
+
+            var twice = pool.Allocate(3000, 16).Page;
+            var same = pool.Allocate(1500, 16).Page;
+            var fourTimes = pool.Allocate(6000, 16).Page;
+            pool.Reset();
+            var first = pool.Allocate(1500, 16).Page;
+            var second = pool.Allocate(1500, 16).Page;
+            var third = pool.Allocate(1500, 16).Page;
+            pool.Reset();
+            var waitsForTheFrames = !fourTimes.IsDisposed;
+            GpuFixture.Main.OnFrameStarted();
+            var keptWhileNeeded = !same.IsDisposed && !twice.IsDisposed && !third.IsDisposed;
+            pool.Reset();
+            GpuFixture.Main.OnFrameStarted();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(twice.TotalSize, Is.EqualTo(4096UL), "a power of two");
+                Assert.That(twice.MemoryFlags, Is.EqualTo((MemoryPropertyFlags)BufferMemoryUsage.StreamFromCpuToGpu));
+                Assert.That(first, Is.SameAs(same), "its own size first");
+                Assert.That(second, Is.SameAs(twice), "then twice its size");
+                Assert.That(third, Is.Not.SameAs(fourTimes), "not four times its size");
+                Assert.That(waitsForTheFrames, Is.True, "not disposed of while frames may read it");
+                Assert.That(fourTimes.IsDisposed, Is.True, "disposed of after a use without it");
+                Assert.That(keptWhileNeeded, Is.True);
+                Assert.That(same.IsDisposed && twice.IsDisposed && third.IsDisposed, Is.True,
+                    "disposed of once the next use did not take them");
+            });
+        }
+
+        // More than a page holds gets a buffer of its own; the pages go on where they were, and after a reset the frame
+        // starts on the first page again.
+        [Test]
+        public void AnUploadLargerThanAPage_GetsABufferOfItsOwn_AndThePagesGoOn()
+        {
+            var device = GpuFixture.CreateRenderDevice();
+            using var pool = new EffectPass.DynamicBufferPool(device, 1024);
+            var first = pool.Allocate(64, 16);
+
+            var large = pool.Allocate(4096, 16);
+            var next = pool.Allocate(64, 16);
+            pool.Reset();
+            var afterReset = pool.Allocate(64, 16);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(large.Page, Is.Not.SameAs(first.Page));
+                Assert.That(large.Page.TotalSize, Is.GreaterThanOrEqualTo(4096UL));
+                Assert.That(next.Page, Is.SameAs(first.Page), "the large upload took no room of the pages");
+                Assert.That(next.Offset, Is.GreaterThanOrEqualTo(first.Offset + 64));
+                Assert.That(afterReset.Page, Is.SameAs(first.Page));
+                Assert.That(afterReset.Offset, Is.Zero);
+            });
         }
 
         // A texture a pass declares but nobody bound reads the stand-in. One never set wrote no index at all, so the shader
