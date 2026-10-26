@@ -86,10 +86,32 @@ internal static class DdsFormats
     /// <summary>Whether DXGI_FORMAT <paramref name="dxgi"/> has its alpha left out - read as opaque.</summary>
     public static bool IgnoresAlpha(uint dxgi) => dxgi is 88 or 92 or 93;
 
+    /// <summary>The two bytes of each 4:2:2 pair that DXGI_FORMAT <paramref name="dxgi"/> holds in the other order from
+    /// its Vulkan format: R8G8_B8G8 holds R, G, B, G where B8G8R8G8_422 holds B, G, R, G; G8R8_G8B8 holds G, R, G, B
+    /// where G8B8G8R8_422 holds G, B, G, R. Null for any other.</summary>
+    public static (int First, int Second)? Swapped(uint dxgi) => dxgi switch
+    {
+        68 => (0, 2),
+        69 => (1, 3),
+        _ => null
+    };
+
+    /// <summary>The DXGI_FORMAT of a 4:2:2 four-character code of the older header - RGBG, GRGB, YUY2 - or 0, as
+    /// Microsoft's "Legacy Formats" maps them: Direct3D 9 names a format's channels from the high bits, so its
+    /// R8G8_B8G8 (RGBG) is DXGI's G8R8_G8B8 and its G8R8_G8B8 (GRGB) DXGI's R8G8_B8G8.</summary>
+    public static uint DxgiOfFourCC(uint fourCC) => fourCC switch
+    {
+        Rgbg => 69,
+        Grgb => 68,
+        Yuy2 => 107,
+        _ => 0
+    };
+
     /// <summary>The Vulkan format of a four-character code of the older header (or a D3DFORMAT number in its
     /// place), or undefined.</summary>
     public static Format OfFourCC(uint fourCC) => fourCC switch
     {
+        Rgbg or Grgb or Yuy2 => OfDxgi(DxgiOfFourCC(fourCC)),
         Dxt1 => Format.BC1_RGBA_UNORM_BLOCK,
         Dxt2 or Dxt3 => Format.BC2_UNORM_BLOCK,
         Dxt4 or Dxt5 => Format.BC3_UNORM_BLOCK,
@@ -110,7 +132,8 @@ internal static class DdsFormats
 
     /// <summary>The Vulkan format of an older header's channels by their bit masks - RGB(A), luminance(-alpha),
     /// alpha alone, signed bump maps - and whether alpha it does not have is to be read as opaque; undefined for one not
-    /// known.</summary>
+    /// known. 10-10-10-2's masks are taken the other way round from what they say, as D3DX wrote them and Direct3D's
+    /// loaders read them.</summary>
     public static (Format Format, bool Opaque) OfMasks(uint flags, uint bits, uint red, uint green, uint blue,
         uint alpha)
     {
@@ -122,8 +145,8 @@ internal static class DdsFormats
             {
                 (32, 0xFF, 0xFF00, 0xFF0000, _) => (Format.R8G8B8A8_UNORM, alpha == 0),
                 (32, 0xFF0000, 0xFF00, 0xFF, _) => (Format.B8G8R8A8_UNORM, alpha == 0),
-                (32, 0x3FF, 0xFFC00, 0x3FF00000, _) => (Format.A2B10G10R10_UNORM_PACK32, alpha == 0),
-                (32, 0x3FF00000, 0xFFC00, 0x3FF, _) => (Format.A2R10G10B10_UNORM_PACK32, alpha == 0),
+                (32, 0x3FF, 0xFFC00, 0x3FF00000, _) => (Format.A2R10G10B10_UNORM_PACK32, alpha == 0),
+                (32, 0x3FF00000, 0xFFC00, 0x3FF, _) => (Format.A2B10G10R10_UNORM_PACK32, alpha == 0),
                 (32, 0xFFFF, 0xFFFF0000, 0, 0) => (Format.R16G16_UNORM, false),
                 (32, 0xFFFFFFFF, 0, 0, 0) => (Format.R32_SFLOAT, false),
                 (24, 0xFF0000, 0xFF00, 0xFF, 0) => (Format.B8G8R8_UNORM, false),
@@ -165,8 +188,38 @@ internal static class DdsFormats
         return (Format.UNDEFINED, false);
     }
 
+    /// <summary>The <see cref="DdsPacked"/> layout of an older header's channels by their bit masks, or none.</summary>
+    public static DdsPacked OfPacked(uint flags, uint bits, uint red, uint green, uint blue, uint alpha)
+    {
+        var hasAlpha = (flags & AlphaPixels) != 0;
+        if ((flags & PaletteIndexed8) != 0)
+        {
+            return (bits, hasAlpha) switch
+            {
+                (8, false) => DdsPacked.Palette,
+                (16, true) => DdsPacked.PaletteAlpha,
+                _ => DdsPacked.None
+            };
+        }
+
+        if ((flags & Rgb) != 0 && (red, green, blue) == (0xE0u, 0x1Cu, 0x3u))
+        {
+            return (bits, hasAlpha ? alpha : 0) switch
+            {
+                (8, 0) => DdsPacked.Rgb332,
+                (16, 0xFF00) => DdsPacked.Argb8332,
+                _ => DdsPacked.None
+            };
+        }
+
+        return (flags & Luminance) != 0 && hasAlpha && bits == 8 && red == 0xF && alpha == 0xF0
+            ? DdsPacked.LuminanceAlpha44
+            : DdsPacked.None;
+    }
+
     /// <summary>The older header's code or masks for formats it has, written so that readers of only it read the file;
-    /// null for those the DX10 header carries.</summary>
+    /// null for those the DX10 header carries. 10-10-10-2 with red high, which DXGI has no code for, has its masks
+    /// written the other way round, as <see cref="OfMasks"/> reads them.</summary>
     public static (uint Flags, uint FourCC, uint Bits, uint Red, uint Green, uint Blue, uint Alpha)? Legacy(Format format)
         => format switch
         {
@@ -174,7 +227,7 @@ internal static class DdsFormats
             Format.B8G8R8A8_UNORM => (Rgb | AlphaPixels, 0, 32, 0xFF0000, 0xFF00, 0xFF, 0xFF000000),
             Format.B8G8R8_UNORM => (Rgb, 0, 24, 0xFF0000, 0xFF00, 0xFF, 0),
             Format.R8G8B8_UNORM => (Rgb, 0, 24, 0xFF, 0xFF00, 0xFF0000, 0),
-            Format.A2R10G10B10_UNORM_PACK32 => (Rgb | AlphaPixels, 0, 32, 0x3FF00000, 0xFFC00, 0x3FF, 0xC0000000),
+            Format.A2R10G10B10_UNORM_PACK32 => (Rgb | AlphaPixels, 0, 32, 0x3FF, 0xFFC00, 0x3FF00000, 0xC0000000),
             Format.R5G6B5_UNORM_PACK16 => (Rgb, 0, 16, 0xF800, 0x7E0, 0x1F, 0),
             Format.BC1_RGBA_UNORM_BLOCK or Format.BC1_RGB_UNORM_BLOCK => (FourCCFlag, Dxt1, 0, 0, 0, 0, 0),
             Format.BC2_UNORM_BLOCK => (FourCCFlag, Dxt3, 0, 0, 0, 0, 0),
@@ -182,9 +235,13 @@ internal static class DdsFormats
             _ => null
         };
 
+    /// <summary>Direct3D's most layers - a cube's faces counted - and depth slices of a texture.</summary>
+    public const uint MostLayers = 2048;
+
     public const uint AlphaPixels = 0x1;
     public const uint AlphaOnly = 0x2;
     public const uint FourCCFlag = 0x4;
+    public const uint PaletteIndexed8 = 0x20;
     public const uint Rgb = 0x40;
     public const uint Luminance = 0x20000;
     public const uint BumpDuDv = 0x80000;
@@ -203,4 +260,7 @@ internal static class DdsFormats
     private const uint Bc4S = 0x53344342;
     private const uint Bc5U = 0x55354342;
     private const uint Bc5S = 0x53354342;
+    private const uint Rgbg = 0x47424752;
+    private const uint Grgb = 0x42475247;
+    private const uint Yuy2 = 0x32595559;
 }

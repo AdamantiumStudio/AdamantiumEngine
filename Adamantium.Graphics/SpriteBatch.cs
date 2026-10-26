@@ -24,7 +24,7 @@ namespace Adamantium.Graphics
         private Type vertexType;
 
         private static readonly Vector2F[] UVCornerCoords = [Vector2F.Zero, Vector2F.UnitX, Vector2F.UnitY, Vector2F.One];
-        private byte textureId;
+        private int textureId;
 
         private readonly Int32 initialBatchSize;
 
@@ -61,7 +61,6 @@ namespace Adamantium.Graphics
         private EffectParameter customEffectTexture;
         private EffectParameter customEffectTextureSampler;
         private EffectParameter customTextureCornerCoords;
-        private EffectParameter customEffectSpriteBuffer;
 
         Vector4F? nullRect;
         Vector2F vector2Zero = Vector2F.Zero;
@@ -141,34 +140,22 @@ namespace Adamantium.Graphics
                 customTextureCornerCoords = customEffect.Parameters["TextureCornerCoords"];
                 customEffectMatrixTransform = customEffect.Parameters["MatrixTransform"];
                 customEffectTextureSampler = customEffect.Parameters["TextureSampler"];
-                customEffectTexture = customEffect.Parameters["Textures"];
-                customEffectSpriteBuffer = customEffect.Parameters["SpriteBuffer"];
+                customEffectTexture = customEffect.Parameters["Texture"];
             }
             beginCalled = true;
         }
 
-        /// <summary>
-        /// Begins a sprite batch operation using deferred sort and default state objects (BlendState.AlphaBlend, SamplerState.LinearClamp, DepthStencilState.None, RasterizerState.CullClockwise).
-        /// </summary>
-        /// <param name="sortMode"></param>
-        /// /// <param name="effect"></param>
+        /// <summary>Begins a batch drawn to a target of <paramref name="screenSize"/>, sorted by
+        /// <paramref name="sortMode"/>, sampled anisotropically and repeated, with <paramref name="effect"/> or the
+        /// sprite effect for null.</summary>
         public void Begin(Vector2 screenSize, SpriteSortMode sortMode = SpriteSortMode.NoSort, Effect effect = null)
         {
             spriteSortMode = sortMode;
             SaveState(screenSize, sortMode, null, effect, Matrix4x4F.Identity);
         }
 
-        /// <summary>
-        /// Begins a sprite batch operation using deferred sort and specified blend, sampler, depth stencil and rasterizer states with custom effect.
-        /// You can pass null for any of this objects. In that case default state will be used.
-        /// Passing null effect selects the default spritebatch effect.
-        /// </summary>
-        /// <param name="sortMode">Sprite sort mode</param>
-        /// <param name="blendState">The <see cref="BlendState"/></param>
-        /// <param name="samplerState">The <see cref="SamplerState"/></param>
-        /// <param name="depthStencilState">The <see cref="DepthStencilState"/></param>
-        /// <param name="rasterizerState">The <see cref="RasterizerState"/></param>
-        /// <param name="effect">Custom <see cref="Effect"/></param>
+        /// <summary>Begins a batch as <see cref="Begin(Vector2, SpriteSortMode, Effect)"/> does, sampled with
+        /// <paramref name="samplerState"/> - anisotropic and repeated for null.</summary>
         public void Begin(
             Vector2 screenSize,
             SpriteSortMode sortMode,
@@ -178,16 +165,8 @@ namespace Adamantium.Graphics
             SaveState(screenSize, sortMode, samplerState, effect, Matrix4x4F.Identity);
         }
 
-        /// <summary>
-        /// Begins a sprite batch rendering using the specified sorting mode and blend state, sampler, depth stencil, rasterizer state objects, plus a custom effect and a 2D transformation matrix. Passing null for any of the state objects selects the default default state objects. Passing a null effect selects the default SpriteBatch Class shader. 
-        /// </summary>
-        /// <param name="sortMode">Sprite sort mode</param>
-        /// <param name="blendState">The <see cref="BlendState"/></param>
-        /// <param name="samplerState">The <see cref="SamplerState"/></param>
-        /// <param name="depthStencilState">The <see cref="DepthStencilState"/></param>
-        /// <param name="rasterizerState">The <see cref="RasterizerState"/></param>
-        /// <param name="effect">Custom <see cref="Effect"/></param>
-        /// <param name="transformationMatrix">Transformation matrix</param>
+        /// <summary>Begins a batch as <see cref="Begin(Vector2, SpriteSortMode, SamplerState, Effect)"/> does, every
+        /// sprite moved by <paramref name="transformationMatrix"/> before it is drawn.</summary>
         public void Begin(
             Vector2 screenSize,
             SpriteSortMode sortMode, 
@@ -582,52 +561,45 @@ namespace Adamantium.Graphics
 
         private void DrawBatch(Texture texture, uint startIndex, uint elementsCount)
         {
-            //UpdateSpriteItemsBuffer(startIndex, elementsCount);
-
+            IEffectPass pass;
             if (customEffect != null)
             {
-                var pass = customEffect.CurrentTechnique.Passes["Render"];
+                pass = customEffect.CurrentTechnique.Passes["Render"];
                 customEffectTexture.SetResource(texture);
                 customEffectTextureSampler.SetResource(assignedSamplerState);
                 customEffectMatrixTransform.SetValue(final);
                 customTextureCornerCoords.SetValue(UVCornerCoords);
-                customEffectSpriteBuffer.SetResource(vertexBuffer);
-
-                pass.Apply();
-                graphicsDevice.PrimitiveTopology = PrimitiveTopology.PointList;
-                graphicsDevice.Draw(elementsCount, 1, startIndex);
-                pass.UnApply(true);
             }
             else
             {
+                pass = spriteBatchEffectPass;
                 effectSampler.SetResource(assignedSamplerState);
                 efffectTexture.SetResource(texture);
                 effectMatrixTransform.SetValue(final);
                 effectUVCornerCoords.SetValue(UVCornerCoords);
-                graphicsDevice.VertexType = vertexType;
-                graphicsDevice.SetVertexBuffer(vertexBuffer);
-                spriteBatchEffectPass.Apply();
-                // Instanced quad: 4-vertex triangle strip per sprite (corners from SV_VertexID), one instance per item.
-                // firstInstance = startIndex offsets the per-instance fetch into the batch (replaces the GS point list).
-                graphicsDevice.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
-                graphicsDevice.Draw(VERTICES_PER_SPRITE, elementsCount, 0, startIndex);
-                spriteBatchEffectPass.UnApply(true);
             }
+
+            graphicsDevice.VertexType = vertexType;
+            graphicsDevice.SetVertexBuffer(vertexBuffer);
+            pass.Apply();
+            graphicsDevice.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
+            graphicsDevice.Draw(VERTICES_PER_SPRITE, elementsCount, 0, startIndex);
+            pass.UnApply(true);
         }
 
         class BackToFrontComparer : IComparer<SpriteBatchItem>
         {
-            public int Compare(SpriteBatchItem left, SpriteBatchItem rigth)
+            public int Compare(SpriteBatchItem left, SpriteBatchItem right)
             {
-                return rigth.Depth.CompareTo(left.Depth);
+                return left.Depth.CompareTo(right.Depth);
             }
         }
 
         class FrontToBackComparer : IComparer<SpriteBatchItem>
         {
-            public int Compare(SpriteBatchItem left, SpriteBatchItem rigth)
+            public int Compare(SpriteBatchItem left, SpriteBatchItem right)
             {
-                return left.Depth.CompareTo(rigth.Depth);
+                return right.Depth.CompareTo(left.Depth);
             }
         }
 

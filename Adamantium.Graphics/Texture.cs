@@ -163,10 +163,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         CopyDataToImage((ulong)data.Length, data);
     }
 
-    // One image, one LAYER per element of <paramref name="layers"/> - an animation's frames, so playing it is choosing a
-    // layer instead of swapping textures. All of it goes up in ONE staging buffer and ONE copy (a region per layer):
-    // uploading layer by layer would mean a command buffer, a submit and a fence WAIT each time, which is what made a
-    // 200-frame GIF cost hundreds of separate uploads.
+    /// <summary>One texture whose layers are <paramref name="layers"/>, all uploaded in one copy.</summary>
     protected Texture(IGraphicsDevice device, ImageDescription description, IReadOnlyList<byte[]> layers, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
         base(device)
     {
@@ -320,9 +317,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         commandBuffer.CopyBufferToImage(buffer, image, ImageLayout.TransferDstOptimal, 1, region);
         GraphicsDevice.EndSingleTimeCommand(commandBuffer);
     }
-        
-    // Every layer in ONE command and ONE submit: region i reads its slice of the staging buffer and writes array layer i.
-    // That is the point of the array - uploading an animation costs one fence wait, not one per frame.
+
     private void CopyBufferToLayers(VkBuffer buffer, VulkanImage image, TextureDescription description, ulong layerSize, int layerCount)
     {
         var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
@@ -348,7 +343,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         GraphicsDevice.EndSingleTimeCommand(commandBuffer);
     }
 
-    private void CopyImageToBuffer(VkBuffer buffer, uint layer)
+    private void CopyImageToBuffer(VkBuffer buffer, uint layer, uint level, uint width, uint height)
     {
         var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
 
@@ -358,30 +353,16 @@ public unsafe class Texture : GraphicsResource, ITexture
         region.BufferImageHeight = 0;
         region.ImageSubresource = new ImageSubresourceLayers();
         region.ImageSubresource.AspectMask = ImageAspectFlagBits.ColorBit;
-        region.ImageSubresource.MipLevel = 0;
+        region.ImageSubresource.MipLevel = level;
         region.ImageSubresource.BaseArrayLayer = layer;
         region.ImageSubresource.LayerCount = 1;
         region.ImageOffset = new Offset3D() { X = 0, Y = 0, Z = 0};
-        region.ImageExtent = new Extent3D() {Width = Width, Height = Height, Depth = 1}; 
+        region.ImageExtent = new Extent3D() {Width = width, Height = height, Depth = 1};
             
         commandBuffer.CopyImageToBuffer(vulkanImage, ImageLayout, buffer, 1, region);
         GraphicsDevice.EndSingleTimeCommand(commandBuffer);
     }
         
-    private MemoryPropertyFlags GetStagingMemoryFlags()
-    {
-        var stagingMemoryFlags = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent; // Windows
-        // if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        // {
-        //     stagingMemoryFlags = MemoryPropertyFlags.DeviceLocal | 
-        //                          MemoryPropertyFlags.HostVisible | 
-        //                          MemoryPropertyFlags.HostCoherent | 
-        //                          MemoryPropertyFlags.HostCached; // MacOS
-        // }
-
-        return stagingMemoryFlags;
-    }
-
     protected void Initialize()
     {
         CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory);
@@ -392,11 +373,8 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
     }
 
-    // A texture past the device's limits is refused here, by name, instead of left for the driver to fail or lose the
-    // device over. Gives the most bytes the device holds in one such image, 0 when it doesn't say.
     private ulong CheckLimits(TextureDescription description)
     {
-        // By the image Vulkan is asked for.
         var limits = GraphicsDevice.Adapter.AdapterProperties.Limits;
         var cube = (description.Flags & ImageCreateFlagBits.CubeCompatibleBit) != 0;
         var (side, kind) = description.ImageType switch
@@ -425,7 +403,6 @@ public unsafe class Texture : GraphicsResource, ITexture
                 $"A texture of {description.ArrayLayers} layers is past this device's {limits.MaxImageArrayLayers}.");
         }
 
-        // And by what the device allows this format, tiling and usage, which can be less.
         var result = GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceImageFormatProperties(description.Format,
             description.ImageType, description.ImageTiling, description.Usage, description.Flags, out var format);
         if (result == Result.ErrorFormatNotSupported)
@@ -503,8 +480,6 @@ public unsafe class Texture : GraphicsResource, ITexture
             AllocationSize = memRequirements.Size,
             MemoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(memRequirements.MemoryTypeBits, memoryProperties)
         };
-        // The factory is given the freshly created image so it can build a dedicated-allocation pNext (export and
-        // import of an image's memory both require a dedicated allocation that names the image).
         if (allocPNextFactory != null)
         {
             allocInfo.PNext = allocPNextFactory(image);
@@ -550,8 +525,6 @@ public unsafe class Texture : GraphicsResource, ITexture
         {
             AspectMask = description.ImageAspect,
             BaseMipLevel = 0,
-            // EVERY level the image has, not one. A view over level 0 alone makes the rest unreachable: a shader
-            // sampling an explicit level past the view's range is out of bounds, which is a crash rather than a clamp.
             LevelCount = Math.Max(1u, description.MipLevels),
             BaseArrayLayer = 0,
             LayerCount = description.ArrayLayers > 1 ? description.ArrayLayers : 1
@@ -688,7 +661,6 @@ public unsafe class Texture : GraphicsResource, ITexture
     {
         ArgumentNullException.ThrowIfNull(graphicsDevice);
 
-        // TODO: check how this could be implemented
         if (description.Usage.HasFlag(ImageUsageFlagBits.ColorAttachmentBit))
         {
             return new RenderTarget(graphicsDevice, description, name);
@@ -754,8 +726,6 @@ public unsafe class Texture : GraphicsResource, ITexture
     public static Texture Load(GraphicsDevice device, Stream stream, ImageUsageFlagBits usage = ImageUsageFlagBits.SampledBit, ImageLayout initialLayout = ImageLayout.ShaderReadOnlyOptimal)
     {
         var image = BitmapLoader.Load(stream);
-        // No catch: the one here swallowed whatever went wrong and threw "Dimension not supported" in its place, so
-        // every failure of this call arrived as the same wrong answer.
         return new Texture(device, image, usage, initialLayout);
     }
 
@@ -798,21 +768,16 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     public void Save(string path, ImageFileType fileType)
     {
-        // The pixels as the texture holds them, said to be in its format: the encoders read B8G8R8A8 as such.
         var img = Image.New2D(Width, Height, 1, Description.Format);
         ReadbackInto(img);
         img.Save(path, fileType);
     }
 
-    // Reusable host-side read-back buffer for SaveRaw, so the per-frame live preview doesn't allocate an Image each
-    // frame. Owned by this texture (so it tracks the texture's size and is disposed with it); a resize recreates the
-    // whole render target, hence a fresh texture and buffer.
     private Image _rawReadback;
 
+    /// <summary>Writes the texture's bytes as they are to <paramref name="path"/>, no swap, no encoding.</summary>
     public void SaveRaw(string path)
     {
-        // (Re)create the read-back buffer if missing or sized for a previous resolution (in case the texture was
-        // resized in place rather than recreated), so the read-back always copies into a correctly-sized buffer.
         if (_rawReadback == null || _rawReadback.Description.Width != Width || _rawReadback.Description.Height != Height)
         {
             _rawReadback?.Dispose();
@@ -820,56 +785,55 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
         ReadbackInto(_rawReadback);
 
-        // Write the native bytes straight out (no R<->B swap, no encode); the consumer interprets them as B8G8R8A8.
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
         fs.Write(new ReadOnlySpan<byte>((void*)_rawReadback.DataPointer, (int)_rawReadback.TotalSizeInBytes));
     }
 
-    public Image ReadbackToImage(uint layer = 0)
+    public Image ReadbackToImage(uint layer = 0, uint level = 0)
     {
-        var img = Image.New2D(Width, Height, 1, Description.Format);
-        ReadbackInto(img, layer);
+        if (level >= Description.MipLevels)
+        {
+            throw new ArgumentOutOfRangeException(nameof(level), level,
+                $"The texture has {Description.MipLevels} mip levels.");
+        }
+
+        var img = Image.New2D(Math.Max(1, Width >> (int)level), Math.Max(1, Height >> (int)level), 1, Description.Format);
+        ReadbackInto(img, layer, level);
         return img;
     }
 
-    /// <summary>Reads this texture's pixels into <paramref name="destination"/> via host image copy (fast path) or a
-    /// staging buffer, with no color swap or encoding.</summary>
-    private void ReadbackInto(Image destination, uint layer = 0)
+    private void ReadbackInto(Image destination, uint layer = 0, uint level = 0)
     {
         if (GraphicsDevice.Adapter.SupportsHostImageCopy &&
             Description.Usage.HasFlag(ImageUsageFlagBits.HostTransferBit))
         {
-            CopyImageToHostMemory(destination, layer);
+            CopyImageToHostMemory(destination, layer, level);
         }
         else
         {
-            CopyImageThroughStagingBuffer(destination, layer);
+            CopyImageThroughStagingBuffer(destination, layer, level);
         }
     }
 
-    /// <summary>
-    /// Reads the image straight into host memory via host image copy (Vulkan 1.4 <c>vkCopyImageToMemory</c>) -
-    /// no staging buffer and no queue submit. Requires the device feature and the <c>HostTransferBit</c> usage;
-    /// <see cref="CopyImageThroughStagingBuffer"/> is the fallback.
-    /// </summary>
-    private void CopyImageToHostMemory(Image destination, uint layer)
+    private void CopyImageToHostMemory(Image destination, uint layer, uint level)
     {
         this.TransitionImageLayout(ImageLayout.General);
 
+        var size = destination.Description;
         var region = new ImageToMemoryCopy
         {
             PHostPointer = (nuint)destination.DataPointer.ToPointer(),
-            MemoryRowLength = Width,
-            MemoryImageHeight = Height,
+            MemoryRowLength = 0,
+            MemoryImageHeight = 0,
             ImageSubresource = new ImageSubresourceLayers
             {
                 AspectMask = ImageAspectFlagBits.ColorBit,
-                MipLevel = 0,
+                MipLevel = level,
                 BaseArrayLayer = layer,
                 LayerCount = 1
             },
             ImageOffset = new Offset3D { X = 0, Y = 0, Z = 0 },
-            ImageExtent = new Extent3D { Width = Width, Height = Height, Depth = 1 }
+            ImageExtent = new Extent3D { Width = size.Width, Height = size.Height, Depth = 1 }
         };
 
         var copy = new CopyImageToMemoryInfo
@@ -884,13 +848,12 @@ public unsafe class Texture : GraphicsResource, ITexture
         this.TransitionImageLayout(Description.DesiredImageLayout);
     }
 
-    /// <summary>Fallback read-back: copy the image into a host-visible staging buffer on the GPU, then memcpy it out.</summary>
-    private void CopyImageThroughStagingBuffer(Image destination, uint layer)
+    private void CopyImageThroughStagingBuffer(Image destination, uint layer, uint level)
     {
         CreateBuffer(destination.TotalSizeInBytes, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit,
             ReadbackMemory(), out var stagingBuffer, out var stagingBufferMemory);
         this.TransitionImageLayout(ImageLayout.TransferSrcOptimal);
-        CopyImageToBuffer(stagingBuffer, layer);
+        CopyImageToBuffer(stagingBuffer, layer, level, destination.Description.Width, destination.Description.Height);
         this.TransitionImageLayout(Description.DesiredImageLayout);
 
         var data = GraphicsDevice.MapMemory(stagingBufferMemory, 0, destination.TotalSizeInBytes, 0);
@@ -902,8 +865,6 @@ public unsafe class Texture : GraphicsResource, ITexture
         GraphicsDevice.Destroy(stagingBufferMemory);
     }
 
-    // Cached host memory where the device has it: the CPU reads an uncached mapping about six times slower - 80 ms against
-    // 13 for a 3200x1800 frame, which is what a zoomed designer preview reads back every frame.
     private MemoryPropertyFlags ReadbackMemory()
     {
         const MemoryPropertyFlags cached = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent | MemoryPropertyFlags.HostCached;
@@ -962,8 +923,6 @@ public unsafe class Texture : GraphicsResource, ITexture
         GraphicsDevice.Destroy(ImageView);
         GraphicsDevice.Destroy(ImageMemory);
 
-        // Dispose ToDispose'd children too (e.g. a RenderTarget's resolve texture): without calling base the
-        // DisposeCollector never runs and they leak.
         base.Dispose(disposeManaged);
     }
         

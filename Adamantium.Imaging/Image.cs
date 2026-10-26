@@ -232,15 +232,10 @@ public sealed class Image : DisposableObject
             _ => ImageFileType.Unknown
         };
 
-    /// <summary>Writes the image to the file <paramref name="fileName"/> as <paramref name="fileType"/>.</summary>
-    public void Save(string fileName, ImageFileType fileType)
-    {
-        var memory = new MemoryStream();
-        Save(memory, fileType);
-        using var stream = new FileStream(fileName, FileMode.Create, FileAccess.Write);
-        memory.Position = 0;
-        memory.CopyTo(stream);
-    }
+    /// <summary>Writes the image to the file <paramref name="fileName"/> as <paramref name="fileType"/>, as
+    /// <see cref="BitmapLoader.Save(IRawBitmap, string, ImageFileType)"/> does.</summary>
+    public void Save(string fileName, ImageFileType fileType) =>
+        BitmapLoader.Save(this.ConvertToRawBitmap(), fileName, fileType);
 
     /// <summary>Writes the image to <paramref name="imageStream"/> as <paramref name="fileType"/>.</summary>
     public void Save(Stream imageStream, ImageFileType fileType) =>
@@ -336,7 +331,7 @@ public sealed class Image : DisposableObject
         {
             TextureDimension.Texture1D => width > 0 && height == 1 && depth == 1 && layers > 0,
             TextureDimension.Texture2D => width > 0 && height > 0 && depth == 1 && layers > 0,
-            TextureDimension.TextureCube => width > 0 && height > 0 && depth == 1 && layers > 0 && layers % 6 == 0,
+            TextureDimension.TextureCube => width > 0 && width == height && depth == 1 && layers > 0 && layers % 6 == 0,
             TextureDimension.Texture3D => width > 0 && height > 0 && depth > 0 && layers == 1,
             _ => false
         };

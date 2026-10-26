@@ -6,12 +6,15 @@ using Adamantium.Vulkan.Core;
 namespace Adamantium.Imaging.Dds;
 
 /// <summary>A DDS file (Microsoft, "Programming Guide for DDS"): 1D, 2D, cube and volume textures, arrays of them,
-/// every mip level, in any format the DX10 header names that Vulkan has, and the older header's compressed and
-/// masked formats. The texels are kept as the file has them, layer by layer and level by level; formats whose alpha the
-/// file leaves out read as opaque.</summary>
+/// every mip level, in any format the DX10 header names that Vulkan has, and the older header's compressed, masked and
+/// paletted formats. The texels are kept as the file has them, layer by layer and level by level; formats whose alpha the
+/// file leaves out read as opaque, and older formats few devices sample - 24-bit, 4-4-4-4, 3-3-2, luminance, alpha
+/// alone, paletted - read widened to 8-bit RGBA (16-bit luminance to 16-bit RGBA). Direct3D's limits hold: at most 2048
+/// layers and 2048 slices.</summary>
 public sealed class DdsImage : IRawBitmap, ISubresources
 {
     private const uint Magic = 0x20534444;
+    private const int PaletteBytes = 256 * 4;
 
     private readonly byte[] _data;
     private readonly long[] _starts;
@@ -64,6 +67,8 @@ public sealed class DdsImage : IRawBitmap, ISubresources
         var at = 128;
         Format format;
         bool opaque;
+        var widening = DdsWidening.None;
+        (int First, int Second)? swapped;
         if ((pixelFlags & DdsFormats.FourCCFlag) != 0 && fourCC == DdsFormats.Dx10)
         {
             if (file.Length < 148)
@@ -77,6 +82,7 @@ public sealed class DdsImage : IRawBitmap, ISubresources
             var arraySize = Math.Max(1, BinaryPrimitives.ReadUInt32LittleEndian(file[140..]));
             format = DdsFormats.OfDxgi(dxgi);
             opaque = DdsFormats.IgnoresAlpha(dxgi);
+            swapped = DdsFormats.Swapped(dxgi);
             if (cube && arraySize > uint.MaxValue / 6)
             {
                 throw new InvalidDataException($"A DDS of {arraySize} cubes.");
@@ -108,17 +114,43 @@ public sealed class DdsImage : IRawBitmap, ISubresources
         }
         else
         {
-            format = (pixelFlags & DdsFormats.FourCCFlag) != 0 ? DdsFormats.OfFourCC(fourCC) : Format.UNDEFINED;
             opaque = false;
-            if ((pixelFlags & DdsFormats.FourCCFlag) == 0)
+            if ((pixelFlags & DdsFormats.FourCCFlag) != 0)
             {
-                (format, opaque) = DdsFormats.OfMasks(pixelFlags, Field(file, 84), Field(file, 88), Field(file, 92),
-                    Field(file, 96), Field(file, 100));
+                format = DdsFormats.OfFourCC(fourCC);
+                swapped = DdsFormats.Swapped(DdsFormats.DxgiOfFourCC(fourCC));
+            }
+            else
+            {
+                swapped = null;
+                uint bits = Field(file, 84), red = Field(file, 88), green = Field(file, 92), blue = Field(file, 96),
+                    alpha = Field(file, 100);
+                (format, opaque) = DdsFormats.OfMasks(pixelFlags, bits, red, green, blue, alpha);
+                (format, widening) = format == Format.UNDEFINED
+                    ? DdsFormats.OfPacked(pixelFlags, bits, red, green, blue, alpha) switch
+                    {
+                        DdsPacked.Rgb332 => (Format.R8_UNORM, DdsWidening.Rgb332),
+                        DdsPacked.Argb8332 => (Format.R8G8_UNORM, DdsWidening.Argb8332),
+                        DdsPacked.LuminanceAlpha44 => (Format.R8_UNORM, DdsWidening.LuminanceAlpha44),
+                        DdsPacked.Palette => (Format.R8_UNORM, DdsWidening.Palette),
+                        DdsPacked.PaletteAlpha => (Format.R8G8_UNORM, DdsWidening.PaletteAlpha),
+                        _ => (Format.UNDEFINED, DdsWidening.None)
+                    }
+                    : (format, WideningOf(format, pixelFlags));
             }
 
             if (format == Format.UNDEFINED)
             {
                 throw new NotSupportedException("A DDS of a format the older header has that is not read.");
+            }
+
+            if (widening is DdsWidening.Palette or DdsWidening.PaletteAlpha)
+            {
+                at += PaletteBytes;
+                if (file.Length < at)
+                {
+                    throw new InvalidDataException("A DDS file ends in its palette.");
+                }
             }
         }
 
@@ -138,6 +170,12 @@ public sealed class DdsImage : IRawBitmap, ISubresources
         }
 
         depth = Math.Max(1, depth);
+        if (layers > DdsFormats.MostLayers || depth > DdsFormats.MostLayers)
+        {
+            throw new InvalidDataException(
+                $"A DDS of {layers} layers and {depth} slices: Direct3D's textures have at most {DdsFormats.MostLayers} of each.");
+        }
+
         levels = Math.Min(levels, Image.CalculateMipLevels(width, height, depth, MipMapCount.Auto));
         var description = new ImageDescription
         {
@@ -199,15 +237,32 @@ public sealed class DdsImage : IRawBitmap, ISubresources
         }
 
         var data = file.Slice(at, (int)offset).ToArray();
+        if (swapped is var (first, second))
+        {
+            for (var i = 0; i + 3 < data.Length; i += 4)
+            {
+                (data[i + first], data[i + second]) = (data[i + second], data[i + first]);
+            }
+        }
+
         if (opaque)
         {
             Opaque(data, format);
         }
 
-        if (at == 128 && Widened(format, pixelFlags) is var (wide, bytes) && wide != format)
+        if (widening != DdsWidening.None)
         {
             var from = TexelBlocks.Of(format).Bytes;
-            data = Widen(data, format, pixelFlags);
+            var (wide, bytes) = widening == DdsWidening.Luminance16
+                ? (Format.R16G16B16A16_UNORM, 8)
+                : (Format.R8G8B8A8_UNORM, 4);
+            if (offset / from * bytes > Array.MaxLength)
+            {
+                throw new NotSupportedException(
+                    $"A DDS of {offset / from} texels is more than an array holds once they are widened to {wide}.");
+            }
+
+            data = Widen(data, from, widening, file.Slice(128, Math.Min(PaletteBytes, file.Length - 128)));
             for (var i = 0; i < starts.Length; i++)
             {
                 starts[i] = starts[i] / from * bytes;
@@ -221,18 +276,21 @@ public sealed class DdsImage : IRawBitmap, ISubresources
 
     private static uint Field(ReadOnlySpan<byte> file, int at) => BinaryPrimitives.ReadUInt32LittleEndian(file[(4 + at)..]);
 
-    private static (Format Format, int Bytes) Widened(Format format, uint flags) => format switch
+    private static DdsWidening WideningOf(Format format, uint flags) => format switch
     {
-        Format.B8G8R8_UNORM or Format.R8G8B8_UNORM or Format.A4R4G4B4_UNORM_PACK16 => (Format.R8G8B8A8_UNORM, 4),
-        Format.R8_UNORM or Format.R8G8_UNORM when (flags & (DdsFormats.Luminance | DdsFormats.AlphaOnly)) != 0 =>
-            (Format.R8G8B8A8_UNORM, 4),
-        Format.R16_UNORM when (flags & DdsFormats.Luminance) != 0 => (Format.R16G16B16A16_UNORM, 8),
-        _ => (format, TexelBlocks.Of(format).Bytes)
+        Format.B8G8R8_UNORM => DdsWidening.Bgr,
+        Format.R8G8B8_UNORM => DdsWidening.Rgb,
+        Format.A4R4G4B4_UNORM_PACK16 => DdsWidening.Argb4444,
+        Format.R8_UNORM when (flags & DdsFormats.AlphaOnly) != 0 => DdsWidening.Alpha,
+        Format.R8_UNORM when (flags & DdsFormats.Luminance) != 0 => DdsWidening.Luminance,
+        Format.R8G8_UNORM when (flags & DdsFormats.Luminance) != 0 => DdsWidening.LuminanceAlpha,
+        Format.R16_UNORM when (flags & DdsFormats.Luminance) != 0 => DdsWidening.Luminance16,
+        _ => DdsWidening.None
     };
 
-    private static byte[] Widen(byte[] data, Format format, uint flags)
+    private static byte[] Widen(byte[] data, int bytes, DdsWidening widening, ReadOnlySpan<byte> palette)
     {
-        if (format == Format.R16_UNORM)
+        if (widening == DdsWidening.Luminance16)
         {
             var gray = new byte[data.Length * 4];
             for (int from = 0, to = 0; from < data.Length; from += 2, to += 8)
@@ -248,24 +306,40 @@ public sealed class DdsImage : IRawBitmap, ISubresources
             return gray;
         }
 
-        var bytes = TexelBlocks.Of(format).Bytes;
         var rgba = new byte[data.Length / bytes * 4];
         for (int from = 0, to = 0; from < data.Length; from += bytes, to += 4)
         {
-            (rgba[to], rgba[to + 1], rgba[to + 2], rgba[to + 3]) = format switch
+            (rgba[to], rgba[to + 1], rgba[to + 2], rgba[to + 3]) = widening switch
             {
-                Format.B8G8R8_UNORM => (data[from + 2], data[from + 1], data[from], (byte)255),
-                Format.R8G8B8_UNORM => (data[from], data[from + 1], data[from + 2], (byte)255),
-                Format.A4R4G4B4_UNORM_PACK16 => ((byte)((data[from + 1] & 15) * 17), (byte)((data[from] >> 4) * 17),
-                    (byte)((data[from] & 15) * 17), (byte)((data[from + 1] >> 4) * 17)),
-                Format.R8_UNORM when (flags & DdsFormats.AlphaOnly) != 0 => ((byte)0, (byte)0, (byte)0, data[from]),
-                Format.R8_UNORM => (data[from], data[from], data[from], (byte)255),
-                _ => (data[from], data[from], data[from], data[from + 1])
+                DdsWidening.Bgr => (data[from + 2], data[from + 1], data[from], (byte)255),
+                DdsWidening.Rgb => (data[from], data[from + 1], data[from + 2], (byte)255),
+                DdsWidening.Argb4444 => (Four(data[from + 1]), High(data[from]), Four(data[from]), High(data[from + 1])),
+                DdsWidening.Alpha => ((byte)0, (byte)0, (byte)0, data[from]),
+                DdsWidening.Luminance => (data[from], data[from], data[from], (byte)255),
+                DdsWidening.LuminanceAlpha => (data[from], data[from], data[from], data[from + 1]),
+                DdsWidening.Rgb332 => (Three(data[from] >> 5), Three(data[from] >> 2), Two(data[from]), (byte)255),
+                DdsWidening.Argb8332 => (Three(data[from] >> 5), Three(data[from] >> 2), Two(data[from]), data[from + 1]),
+                DdsWidening.LuminanceAlpha44 => (Four(data[from]), Four(data[from]), Four(data[from]), High(data[from])),
+                DdsWidening.Palette => (palette[data[from] * 4], palette[data[from] * 4 + 1], palette[data[from] * 4 + 2],
+                    palette[data[from] * 4 + 3]),
+                _ => (palette[data[from] * 4], palette[data[from] * 4 + 1], palette[data[from] * 4 + 2], data[from + 1])
             };
         }
 
         return rgba;
     }
+
+    private static byte Four(int value) => (byte)((value & 15) * 17);
+
+    private static byte High(int value) => (byte)((value >> 4) * 17);
+
+    private static byte Three(int value)
+    {
+        var bits = value & 7;
+        return (byte)(bits << 5 | bits << 2 | bits >> 1);
+    }
+
+    private static byte Two(int value) => (byte)((value & 3) * 85);
 
     public byte[] GetRawPixels(uint frameIndex) => Part((int)frameIndex, 0, 0).ToArray();
 

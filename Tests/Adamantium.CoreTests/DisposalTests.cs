@@ -87,17 +87,33 @@ public class DisposalTests
         public void Dispose() => throw new InvalidOperationException("thrown while freed");
     }
 
-    // One that throws as it is freed leaves the rest let go of: freeing again frees nothing twice.
+    // One that throws as it is freed stops nothing: the rest are freed, then what it threw is thrown; freeing again frees
+    // nothing twice.
     [Test]
-    public void SomethingThrowingAsItIsFreed_LeavesNothingToFreeTwice()
+    public void SomethingThrowingAsItIsFreed_LeavesTheRestFreed_AndNothingToFreeTwice()
+    {
+        var log = new List<string>();
+        var before = new Counted(log, "before");
+        var collector = new DisposeCollector();
+        collector.Collect(before);
+        collector.Collect(Utilities.AllocateMemory(64));
+        collector.Collect(new Throwing());
+
+        Assert.That(() => collector.DisposeAndClear(), Throws.InvalidOperationException);
+        Assert.That(before.Times, Is.EqualTo(1));
+        Assert.That(collector.Count, Is.Zero);
+        Assert.That(() => collector.DisposeAndClear(), Throws.Nothing);
+    }
+
+    [Test]
+    public void SeveralThrowingAsTheyAreFreed_AreThrownTogether()
     {
         var collector = new DisposeCollector();
         collector.Collect(new Throwing());
-        collector.Collect(Utilities.AllocateMemory(64));
+        collector.Collect(new Throwing());
 
-        Assert.That(() => collector.DisposeAndClear(), Throws.InvalidOperationException);
-        Assert.That(collector.Count, Is.Zero);
-        Assert.That(() => collector.DisposeAndClear(), Throws.Nothing);
+        Assert.That(() => collector.DisposeAndClear(),
+            Throws.TypeOf<AggregateException>().With.Property("InnerExceptions").Count.EqualTo(2));
     }
 
     [Test]
@@ -141,6 +157,52 @@ public class DisposalTests
 
             Utilities.ClearMemory(memory, 0xAB, 4);
             Assert.That(Utilities.Read<uint>(memory), Is.EqualTo(0xABABABABu));
+        }
+        finally
+        {
+            Utilities.FreeMemory(memory);
+        }
+    }
+
+    [Test]
+    public void CharactersWrittenAndRead_AreThemselves_AsTheirUtf16()
+    {
+        var memory = Utilities.AllocateMemory(64);
+        try
+        {
+            char[] text = ['x', 'Ж', '€'];
+            Utilities.Write(memory, text, 0, text.Length);
+            var read = new char[3];
+            Utilities.Read(memory, read, 0, read.Length);
+
+            Assert.That(read, Is.EqualTo(text));
+            Assert.That(Utilities.SizeOf<char>(), Is.EqualTo(2));
+            Assert.That(Utilities.Read<ushort>(memory + 2), Is.EqualTo((ushort)'Ж'));
+        }
+        finally
+        {
+            Utilities.FreeMemory(memory);
+        }
+    }
+
+    private struct Pair<T> where T : unmanaged
+    {
+        public T First;
+        public T Second;
+    }
+
+    // Marshaling cannot size a generic struct: one holding no bool or char is copied as it is.
+    [Test]
+    public void AGenericStructWrittenAndRead_IsItself()
+    {
+        var memory = Utilities.AllocateMemory(64);
+        try
+        {
+            var pair = new Pair<int> { First = 3, Second = -9 };
+            Utilities.Write(memory, ref pair);
+
+            Assert.That(Utilities.SizeOf<Pair<int>>(), Is.EqualTo(8));
+            Assert.That(Utilities.Read<Pair<int>>(memory), Is.EqualTo(pair));
         }
         finally
         {

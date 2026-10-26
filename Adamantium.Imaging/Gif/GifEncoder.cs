@@ -29,6 +29,7 @@ public static class GifEncoder
         }
 
         var frames = Math.Max(1u, image.FramesCount);
+        var current = Pixels(image, 0);
         output.Write("GIF89a"u8);
         Span<byte> header = stackalloc byte[10];
         BinaryPrimitives.WriteUInt16LittleEndian(header, (ushort)width);
@@ -46,7 +47,6 @@ public static class GifEncoder
 
         // What is under the frame about to be drawn: the frame before when it stays, nothing when it was cleared.
         byte[] under = null;
-        var current = Pixels(image, 0);
         for (uint f = 0; f < frames; f++)
         {
             var next = f + 1 < frames ? Pixels(image, f + 1) : null;

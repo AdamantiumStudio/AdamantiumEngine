@@ -9,6 +9,7 @@ All packages share one version.
 
 - `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
   at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
+  `ITexture.ReadbackToImage` reads any mip level back, not only the first.
 - `GraphicsSettings.TextEdges` (`TextEdgeSettings`): how text's edges blend - the gammas of light ink, of small and
   of large dark ink, the sizes dark ink goes from the small curve to the large one between, and how wide a crisp edge
   ramps. Read on every text draw, so the application may tune them while it runs; a value the shader cannot take - a
@@ -1005,8 +1006,23 @@ All packages share one version.
   format, and all six go up.
 - A texture made from a picture of several layers, levels or depth slices - a DDS cube, array, volume or mip chain -
   got only the first level of its first layer. Every part goes up now, each where it belongs, in one copy - from an
-  `Image` and from `Texture.Load` alike - a cube made cube-compatible and viewed as a cube or an array of them, an
-  array of 1D textures as one.
+  `Image` and from `Texture.Load` alike - a cube made cube-compatible and viewed as a cube or an array of them (the
+  device's imageCubeArray feature turned on where it has it), an array of 1D textures as one. An image of a cube
+  of unequal sides is refused.
+- `ViewportF.Project` and `Unproject` turned y the DirectX way round, against the engine's clip space - y down, as
+  Vulkan's - and against `Vector3F.Project`, `Unproject` and `Ray.GetPickRay`: a point projected and picked through
+  its pixel missed by its mirror image. They are `Vector3F`'s now.
+- `Utilities` wrote and read a `char` as one ANSI byte, losing every character past ASCII; a char alone is its UTF-16
+  unit, two bytes, as in managed memory. A struct holding chars goes through marshaling as its `CharSet` says.
+- Saving to a file - `Image.Save`, `BitmapLoader.Save`, `IRawBitmap.Save` - truncated a file already there before an
+  encoder that refuses the picture threw; the file is opened when the first byte is written, and GIF and PNG refuse
+  a picture - its format, or PNG text it cannot hold - before they write one. A type nothing writes, such as
+  `ImageFileType.Unknown`, throws `NotSupportedException`; it wrote nothing, and said nothing.
+- `Utilities` threw for a generic struct, which marshaling cannot size; one holding no bool or char is copied as it
+  is.
+- `SpriteBatch` drew `BackToFront` front to back and `FrontToBack` back to front; threw at its 257th texture in one
+  batch; and drew with a custom effect as points for a geometry shader it no longer has. A custom effect draws as
+  the sprite effect does - four vertices a sprite, one instance each - with its parameters of the same names.
 - `IRawBitmap.TotalSizeInBytes` counted a compressed format's texels as pixels; it counts whole blocks.
 - `PropertyKeyCollection` never took an enum for one: it asked whether the `Type` object was an enum, which it never
   is. Enum values are kept as their underlying integers now, as `EffectPropertyCollection` keeps them.
@@ -1680,6 +1696,8 @@ All packages share one version.
   buffer of its own starts zeroed. `NamedObject` and `ViewportF` are rewritten; `ViewportF` is a record struct - its
   equality exact, `Project` and `Unproject` taking the three matrices.
 - `Utilities`, `DisposeCollector`, `DisposableBase`, `DisposableObject` and `DataPointer` are rewritten.
+  `DisposeCollector` frees everything it holds even when something throws as it is freed, then throws what was
+  thrown - one exception as it is, several in an `AggregateException`.
   `DisposableBase` is disposed once however many threads ask, `IsDisposed` from the moment disposing starts;
   `DisposableObject` locks a field of its own, no longer itself. `RemoveAndDispose(ref item)` leaves the reference
   null, as it said it did. `DataPointer` is a record struct; `Utilities.ClearMemory` takes the address, not a
@@ -1696,12 +1714,18 @@ All packages share one version.
   cube and volume textures and arrays of them with every mip level: in the DX10 header the DXGI formats Vulkan has a
   color format for - depth ones as the color they hold, those with stencil refused - ASTC among them; in the older
   one its compressed formats (DXT1 to DXT5, ATI1 and ATI2, BC4 and BC5), the 16-bit and float ones it numbers, and
-  masked ones - RGBA of 8 bits in either order, 10-10-10-2, 16-16, 5-6-5 and 1-5-5-5 as they are, 24-bit color,
-  luminance with or without alpha, alpha alone and 4-4-4-4, which few devices sample from, widened to RGBA. A format
-  whose alpha the file leaves out reads opaque. The encoder writes every layer, level and slice an image has, in the
-  older header when its format is there, else in DX10; Pillow 12 reads what it writes in the formats it knows. A file
-  shorter than its texels, of sizes that overflow, or of a 1D picture of rows or a cube of unequal sides is refused
-  before anything its size is made.
+  masked ones - RGBA of 8 bits in either order, 16-16, 5-6-5 and 1-5-5-5 as they are, 10-10-10-2 as they are with
+  its masks taken the other way round, as D3DX wrote them and Direct3D's loaders read them, 24-bit color, luminance
+  with or without alpha, alpha alone, 4-4-4-4, 3-3-2 with or without alpha, 4-4 luminance-alpha and 8-bit paletted
+  with or without alpha, which few devices sample from or none has, widened to RGBA. The 4:2:2 formats - DXGI's
+  R8G8_B8G8 and G8R8_G8B8, the older GRGB, RGBG (as Microsoft maps Direct3D 9's formats to them) and YUY2 - read in
+  the order of Vulkan's B8G8R8G8 and G8B8G8R8. A format whose alpha the file leaves out reads opaque. The encoder
+  writes every layer, level and slice an image has, of any size in bytes, in the older header when its format is
+  there, else in DX10 - 10-10-10-2 with red high, which DXGI has no code for, only as one 2D texture, cube or
+  volume, the older header's; Pillow 12 reads what it writes in the formats it knows. A file shorter than its texels, of
+  sizes that overflow, of more than Direct3D's 2048 layers or slices, or of a 1D picture of rows or a cube of unequal
+  sides is refused before anything its size is made; one too large for an array once widened is refused as not
+  supported, and an image of more layers or slices is not written.
 - BMP is read and written by a new codec, written from Microsoft's "Bitmap Storage". It reads BITMAPCOREHEADER,
   BITMAPINFOHEADER and its V2 to V5: 1, 2, 4 and 8 bits through a color table, run-length encoded (RLE4, RLE8) or
   not; 16 and 32 bits by their channel masks, 5-5-5 and 8-8-8 when they give none; 24 bits; rows bottom up or top

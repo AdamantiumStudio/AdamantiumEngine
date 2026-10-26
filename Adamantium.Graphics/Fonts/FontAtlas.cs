@@ -17,9 +17,6 @@ namespace Adamantium.Graphics.Fonts
         private TextureAtlasGenerator atlasGenerator;
         private HashSet<ulong> processedGlyphs;
 
-        // Glyphs whose MSDF is being generated on a worker RIGHT NOW, and the finished data waiting to be uploaded.
-        // Generation is arithmetic and needs no device; the upload does - so the two live on different threads and meet
-        // here.
         private readonly HashSet<ulong> _inFlight = new();
         private List<GlyphTextureData> _ready = new();
         private readonly HashSet<ulong> _generated = new();
@@ -57,10 +54,8 @@ namespace Adamantium.Graphics.Fonts
 
         private readonly HashSet<ulong> _imagesRequested = new();
 
-        // The images in the atlas, each with the pump it was last drawn at: text built since asked for it.
         private readonly Dictionary<ulong, ResidentImage> _imagesResident = new();
 
-        // Images with no room left under the budget, landing once the ones no text shows are let go.
         private readonly List<(ulong Key, ColorBitmapImage Image, ImagePlace Place)> _imagesWaiting = [];
 
         private int _imagesDecoding;
@@ -69,9 +64,6 @@ namespace Adamantium.Graphics.Fonts
 
         private long _pumps;
 
-        // The pump that bumped the version so that every block drawn builds again and marks its images: -1 when no
-        // images are being let go. A few frames and a quarter of a second later, every cache drawing has built its
-        // blocks again - however many windows and overlays pump each frame; one that drew none since asks again.
         private long _sweepStart = -1;
 
         private long _sweepStartedAt;
@@ -184,7 +176,6 @@ namespace Adamantium.Graphics.Fonts
         /// character maps to, such as ligatures and alternates.</summary>
         public void RequestAsync(IEnumerable<(IFont Font, Glyph Glyph)> glyphs)
         {
-            // A render with no "next frame" (a bitmap, a preview, an off-screen test) cannot let its letters arrive later.
             if (FontAtlasStore.SynchronousFill)
             {
                 ProcessGlyphs(glyphs.ToList());
@@ -209,9 +200,6 @@ namespace Adamantium.Graphics.Fonts
 
             if (toGenerate == null) return;
 
-            // ONE task for the whole batch: the generator parallelizes across the glyphs it is given, so handing it the
-            // batch keeps every core busy - the reason the caller pools a frame's text in the first place. Each glyph
-            // is handed over as soon as it is done, so the next pump uploads it without waiting for the slowest one.
             System.Threading.Tasks.Task.Run(() =>
             {
                 try
@@ -231,8 +219,6 @@ namespace Adamantium.Graphics.Fonts
                 }
                 catch
                 {
-                    // A glyph that cannot be rasterized must not wedge the queue: let it out of flight and go on. The
-                    // block that wanted it draws without it, exactly as it does for a glyph the font has no outline for.
                     lock (_asyncGate)
                     {
                         foreach (var pair in toGenerate)
@@ -395,9 +381,6 @@ namespace Adamantium.Graphics.Fonts
                 region.ImageSubresource = new ImageSubresourceLayers();
                 region.ImageSubresource.AspectMask = ImageAspectFlagBits.ColorBit;
                 region.ImageSubresource.MipLevel = 0;
-                // The glyph goes into its ARRAY LAYER (DepthLayer), at its 2D position within that layer. Depth stays 1
-                // (a 2D-array slice is 1 deep); the layer selects the slice via BaseArrayLayer. The old code put the layer
-                // in ImageExtent.Depth on a 1-deep 2D image, which the GPU rejected once a second layer appeared.
                 region.ImageSubresource.BaseArrayLayer = textureData.DepthLayer;
                 region.ImageSubresource.LayerCount = 1;
                 region.ImageOffset = new Offset3D()
@@ -495,7 +478,6 @@ namespace Adamantium.Graphics.Fonts
                     return true;
                 }
 
-                // On its way, or let go and asked for again.
                 if (!_imagesRequested.Add(key))
                 {
                     return true;
@@ -552,9 +534,6 @@ namespace Adamantium.Graphics.Fonts
                     return;
                 }
 
-                // A render with no next frame cannot wait for images to be let go: it takes the room past the budget.
-                // Right after a sweep that let nothing go, the drawn images take more than the budget: another would only
-                // build every text again for nothing.
                 var cell = _bitmaps.Add(image, FontAtlasStore.SynchronousFill);
                 var sweptInVain = _lastSweepFreed == 0 && Stopwatch.GetElapsedTime(_lastSweepEnded) < SweepRest;
                 if (cell == null && !sweptInVain && (_imagesResident.Count > 0 || _sweepStart >= 0))
@@ -584,7 +563,6 @@ namespace Adamantium.Graphics.Fonts
             _imagesFailed = true;
         }
 
-        // A frame's pump moves a sweep on; an inline fill only uploads what it landed.
         private bool PumpImages(bool frame)
         {
             bool changed;
@@ -597,7 +575,6 @@ namespace Adamantium.Graphics.Fonts
                     _pumps++;
                     if (_imagesWaiting.Count > 0 && _sweepStart < 0)
                     {
-                        // Every block drawn builds again on the new version and marks the images it shows.
                         _sweepStart = _pumps;
                         _sweepStartedAt = Stopwatch.GetTimestamp();
                         changed = true;
@@ -647,8 +624,6 @@ namespace Adamantium.Graphics.Fonts
             return changed || cells.Count > 0;
         }
 
-        // The images no block has asked for since the sweep began give their cells to the ones waiting; those that
-        // still find no room take it past the budget.
         private void LetGoOfUndrawnImages()
         {
             _lastSweepFreed = 0;
@@ -699,7 +674,6 @@ namespace Adamantium.Graphics.Fonts
             public long LastDrawn { get; set; }
         }
 
-        // Where an image lies in its glyph's space, in font units.
         private readonly record struct ImagePlace(double Left, double Bottom, double Width, double Height);
     }
 }

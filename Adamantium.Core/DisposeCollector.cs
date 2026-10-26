@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 
 namespace Adamantium.Core;
 
@@ -43,19 +44,40 @@ public class DisposeCollector : DisposableBase
     /// <summary>Lets go of <paramref name="item"/> without freeing it; whether it was held.</summary>
     public bool Remove<T>(T item) => _items.Remove(item);
 
-    /// <summary>Frees what is held, the last first, each let go of before it is freed - so one that throws or takes
-    /// another away leaves nothing freed twice. Disposables are disposed only when
-    /// <paramref name="disposeManagedResources"/>; native blocks are freed either way.</summary>
+    /// <summary>Frees what is held, the last first, each let go of before it is freed - so one that takes another away
+    /// leaves nothing freed twice. One that throws does not stop the rest: they are all freed, and then what was
+    /// thrown is thrown - the one exception, or an <see cref="AggregateException"/> of several. Disposables are disposed
+    /// only when <paramref name="disposeManagedResources"/>; native blocks are freed either way.</summary>
     public void DisposeAndClear(bool disposeManagedResources = true)
     {
+        List<Exception> thrown = null;
         while (_items.Count > 0)
         {
             var item = _items[_items.Count - 1];
             _items.RemoveAt(_items.Count - 1);
-            if (disposeManagedResources || item is IntPtr)
+            if (!disposeManagedResources && item is not IntPtr)
+            {
+                continue;
+            }
+
+            try
             {
                 Free(item);
             }
+            catch (Exception e)
+            {
+                (thrown ??= []).Add(e);
+            }
+        }
+
+        if (thrown?.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(thrown[0]).Throw();
+        }
+
+        if (thrown != null)
+        {
+            throw new AggregateException(thrown);
         }
     }
 

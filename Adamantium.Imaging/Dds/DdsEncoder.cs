@@ -6,10 +6,15 @@ using Adamantium.Vulkan.Core;
 namespace Adamantium.Imaging.Dds;
 
 /// <summary>Writes pictures as DDS: every layer, mip level and depth slice an <see cref="Image"/> or a DDS has, the
-/// frames of any other picture as layers. Formats the older header has - 8-bit RGBA and BGRA, BGR, 5-6-5, luminance,
-/// BC1 to BC3 - are written in it, so readers of only it read them; any other in the DX10 header.</summary>
+/// frames of any other picture as layers, of any size in bytes; Direct3D's limits hold - at most 2048 layers and 2048
+/// slices - as they do for <see cref="DdsImage"/>. Formats the older header has - 8-bit RGBA and BGRA, 24-bit RGB
+/// and BGR, 5-6-5, BC1 to BC3 - are written in it, so readers of only it read them; any other in the DX10 header. DDS
+/// has no code for BC1 without alpha, so it is written as BC1 and read back with alpha, as every reader of DDS takes it;
+/// 24-bit RGB is read back widened, as <see cref="DdsImage"/> reads it.</summary>
 public static class DdsEncoder
 {
+    private const int Chunk = 1 << 20;
+
     /// <summary>Writes <paramref name="bitmap"/> to <paramref name="output"/>; a format DXGI has no number for throws
     /// <see cref="NotSupportedException"/>.</summary>
     public static void Encode(IRawBitmap bitmap, Stream output)
@@ -27,6 +32,13 @@ public static class DdsEncoder
         if (legacy == null && dxgi == 0)
         {
             throw new NotSupportedException($"DDS is not written of {format} pixels.");
+        }
+
+        if (description.ArraySize > DdsFormats.MostLayers || description.Depth > DdsFormats.MostLayers)
+        {
+            throw new NotSupportedException(
+                $"DDS is not written of {description.ArraySize} layers and {description.Depth} slices: Direct3D's " +
+                $"textures have at most {DdsFormats.MostLayers} of each.");
         }
 
         var header = new byte[legacy == null ? 148 : 128];
@@ -74,11 +86,32 @@ public static class DdsEncoder
                  | (description.MipLevels > 1 ? 0x400000u : 0));
         Put(112, cube ? 0x200u | 0xFC00 : volume ? 0x200000u : 0);
         output.Write(header);
-        unsafe
-        {
-            output.Write(new ReadOnlySpan<byte>((void*)image.DataPointer, (int)image.TotalSizeInBytes));
-        }
-
+        WriteTexels(image, legacy == null ? DdsFormats.Swapped(dxgi) : null, output);
         output.Flush();
+    }
+
+    private static unsafe void WriteTexels(Image image, (int First, int Second)? swapped, Stream output)
+    {
+        var source = (byte*)image.DataPointer;
+        var total = (long)image.TotalSizeInBytes;
+        var buffer = swapped == null ? null : new byte[Math.Min(Chunk, total)];
+        for (long done = 0; done < total;)
+        {
+            var length = (int)Math.Min(Chunk, total - done);
+            var part = new ReadOnlySpan<byte>(source + done, length);
+            if (swapped is var (first, second))
+            {
+                part.CopyTo(buffer);
+                for (var i = 0; i + 3 < length; i += 4)
+                {
+                    (buffer[i + first], buffer[i + second]) = (buffer[i + second], buffer[i + first]);
+                }
+
+                part = buffer.AsSpan(0, length);
+            }
+
+            output.Write(part);
+            done += length;
+        }
     }
 }

@@ -32,6 +32,10 @@ public static class PngEncoder
         var source = new Source(image, width, height, channels, wide, bgr);
         var png = image as PngImage;
         var (colorType, depth, palette) = Choose(source, frameCount, png?.Metadata?.Background);
+        var colorMetadata = new MemoryStream();
+        WriteColorMetadata(new ChunkWriter(colorMetadata), png?.Metadata);
+        var otherMetadata = new MemoryStream();
+        WriteOtherMetadata(new ChunkWriter(otherMetadata), png?.Metadata, colorType, depth, palette);
         var writer = new ChunkWriter(output);
         writer.Signature();
         var header = new byte[13];
@@ -39,7 +43,7 @@ public static class PngEncoder
         BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(4), (uint)height);
         (header[8], header[9]) = ((byte)depth, (byte)colorType);
         writer.Chunk("IHDR", header);
-        WriteColorMetadata(writer, png?.Metadata);
+        colorMetadata.WriteTo(output);
         if (palette != null)
         {
             var entries = new byte[palette.Count * 3];
@@ -62,7 +66,7 @@ public static class PngEncoder
             }
         }
 
-        WriteOtherMetadata(writer, png?.Metadata, colorType, depth, palette);
+        otherMetadata.WriteTo(output);
         var animated = frameCount > 1;
         var sequence = 0u;
         if (animated)

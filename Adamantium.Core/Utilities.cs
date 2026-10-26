@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -64,7 +63,7 @@ public static unsafe class Utilities
         Buffer.MemoryCopy((void*)source, (void*)destination, sizeInBytes, sizeInBytes);
 
     /// <summary>The bytes a <typeparamref name="T"/> takes in native memory.</summary>
-    public static int SizeOf<T>() where T : struct => Marshal.SizeOf<T>();
+    public static int SizeOf<T>() where T : struct => NativeLayout<T>.Size;
 
     /// <summary>The bytes <paramref name="array"/> takes in native memory; 0 for none.</summary>
     public static int SizeOf<T>(T[] array) where T : struct => array == null ? 0 : array.Length * SizeOf<T>();
@@ -72,7 +71,7 @@ public static unsafe class Utilities
     /// <summary>Writes <paramref name="value"/> at <paramref name="destination"/>.</summary>
     public static void Write<T>(IntPtr destination, ref T value) where T : struct
     {
-        if (Layout<T>.SameInMemory)
+        if (NativeLayout<T>.SameInMemory)
         {
             Unsafe.WriteUnaligned((void*)destination, value);
         }
@@ -87,7 +86,7 @@ public static unsafe class Utilities
     public static IntPtr Write<T>(IntPtr destination, T[] data, int offset, int count) where T : struct
     {
         var bytes = (long)count * SizeOf<T>();
-        if (!Layout<T>.SameInMemory)
+        if (!NativeLayout<T>.SameInMemory)
         {
             for (var i = 0; i < count; i++)
             {
@@ -112,7 +111,7 @@ public static unsafe class Utilities
 
     /// <summary>The <typeparamref name="T"/> at <paramref name="source"/>.</summary>
     public static T Read<T>(IntPtr source) where T : struct =>
-        Layout<T>.SameInMemory ? Unsafe.ReadUnaligned<T>((void*)source) : Marshal.PtrToStructure<T>(source);
+        NativeLayout<T>.SameInMemory ? Unsafe.ReadUnaligned<T>((void*)source) : Marshal.PtrToStructure<T>(source);
 
     /// <summary>The <typeparamref name="T"/> at <paramref name="source"/>, into <paramref name="data"/>.</summary>
     public static void Read<T>(IntPtr source, ref T data) where T : struct => data = Read<T>(source);
@@ -122,7 +121,7 @@ public static unsafe class Utilities
     public static IntPtr Read<T>(IntPtr source, T[] data, int offset, int count) where T : struct
     {
         var bytes = (long)count * SizeOf<T>();
-        if (!Layout<T>.SameInMemory)
+        if (!NativeLayout<T>.SameInMemory)
         {
             for (var i = 0; i < count; i++)
             {
@@ -205,37 +204,4 @@ public static unsafe class Utilities
     /// <summary><paramref name="size"/> rounded up to a multiple of <paramref name="alignment"/>, a power of two.
     /// </summary>
     public static ulong AlignSize(ulong size, ulong alignment) => (size + alignment - 1) & ~(alignment - 1);
-
-    private static class Layout<T> where T : struct
-    {
-        public static readonly bool SameInMemory = Ask();
-
-        private static bool Ask()
-        {
-#if NET6_0_OR_GREATER
-            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
-            {
-                return false;
-            }
-
-            try
-            {
-                return Unsafe.SizeOf<T>() == Marshal.SizeOf<T>() && !Marshaled(typeof(T));
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
-#else
-            return false;
-#endif
-        }
-
-        private static bool Marshaled(Type type) =>
-            type == typeof(bool) || type == typeof(char)
-            || !type.IsPrimitive && !type.IsEnum && type.IsValueType && type
-                .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public
-                           | System.Reflection.BindingFlags.NonPublic)
-                .Any(field => Marshaled(field.FieldType));
-    }
 }

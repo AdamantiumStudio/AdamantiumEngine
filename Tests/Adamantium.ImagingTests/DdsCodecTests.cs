@@ -131,7 +131,9 @@ public class DdsCodecTests
             Header(4, 4, depth: 100_000_000, dx10: (28, 4, 0, 1)),
             Header(4, 4, dx10: (28, 3, 4, uint.MaxValue)),
             Header(4, 3, dx10: (28, 2, 0, 1)),
-            Header(4, 2, dx10: (28, 3, 4, 1), data: 4096)
+            Header(4, 2, dx10: (28, 3, 4, 1), data: 4096),
+            Header(1, 1, dx10: (61, 3, 0, 4_000_000), data: 4_000_000),
+            Header(1, 1, depth: 4096, caps2: 0x200000, flags: 0x20000, bits: 8, red: 0xFF, data: 4096)
         ];
 
         foreach (var file in files)
@@ -142,11 +144,16 @@ public class DdsCodecTests
         }
     }
 
-    // The older header's 24-bit color, luminance and 4-4-4-4 - formats few devices sample - are read as RGBA.
+    // The older header's 24-bit color, luminance, 4-4-4-4, 3-3-2 and 4-4 luminance-alpha - formats few devices sample or
+    // none has - are read as RGBA.
     [TestCase(24u, 0xFF0000u, 0xFF00u, 0xFFu, 0u, 0x41u, new byte[] { 30, 20, 10 }, new byte[] { 10, 20, 30, 255 })]
     [TestCase(8u, 0xFFu, 0u, 0u, 0u, 0x20000u, new byte[] { 77 }, new byte[] { 77, 77, 77, 255 })]
     [TestCase(16u, 0xFFu, 0u, 0u, 0xFF00u, 0x20001u, new byte[] { 77, 9 }, new byte[] { 77, 77, 77, 9 })]
     [TestCase(16u, 0xF00u, 0xF0u, 0xFu, 0xF000u, 0x41u, new byte[] { 0x21, 0x83 }, new byte[] { 51, 34, 17, 136 })]
+    [TestCase(8u, 0xE0u, 0x1Cu, 0x3u, 0u, 0x40u, new byte[] { 0xE2 }, new byte[] { 255, 0, 170, 255 })]
+    [TestCase(8u, 0xE0u, 0x1Cu, 0x3u, 0u, 0x40u, new byte[] { 0x89 }, new byte[] { 146, 73, 85, 255 })]
+    [TestCase(16u, 0xE0u, 0x1Cu, 0x3u, 0xFF00u, 0x41u, new byte[] { 0x1C, 0x80 }, new byte[] { 0, 255, 0, 128 })]
+    [TestCase(8u, 0xFu, 0u, 0u, 0xF0u, 0x20001u, new byte[] { 0x3A }, new byte[] { 170, 170, 170, 51 })]
     public void OlderFormats_AreReadAsRgba(uint bits, uint red, uint green, uint blue, uint alpha, uint flags,
         byte[] texel, byte[] expected)
     {
@@ -159,6 +166,107 @@ public class DdsCodecTests
         Assert.That((Format)dds.PixelFormat, Is.EqualTo(Format.R8G8B8A8_UNORM));
         Assert.That(dds.GetRawPixels(0), Is.EqualTo(expected));
     }
+
+    // An index looks its color up in the 256 RGBA entries after the header; with alpha, the alpha is the texel's own.
+    [TestCase(0x20u, 8u, new byte[] { 2 }, new byte[] { 20, 21, 22, 23 })]
+    [TestCase(0x21u, 16u, new byte[] { 2, 99 }, new byte[] { 20, 21, 22, 99 })]
+    public void PalettedTexels_AreReadThroughThePalette(uint flags, uint bits, byte[] texel, byte[] expected)
+    {
+        var file = Header(1, 1, flags: flags, bits: bits, red: 0, green: 0, blue: 0, alpha: 0,
+            data: 1024 + texel.Length);
+        for (var entry = 0; entry < 256; entry++)
+        {
+            for (var channel = 0; channel < 4; channel++)
+            {
+                file[128 + entry * 4 + channel] = (byte)(entry * 10 + channel);
+            }
+        }
+
+        texel.CopyTo(file, 128 + 1024);
+
+        var dds = DdsImage.Read(file);
+
+        Assert.That((Format)dds.PixelFormat, Is.EqualTo(Format.R8G8B8A8_UNORM));
+        Assert.That(dds.GetRawPixels(0), Is.EqualTo(expected));
+    }
+
+    // DXGI's R8G8_B8G8 holds R, G, B, G and G8R8_G8B8 G, R, G, B; Direct3D 9 names channels from the high bits, so its
+    // GRGB is the first and RGBG the second. Vulkan's 4:2:2 formats hold B, G, R, G and G, B, G, R. Read, a pair is in
+    // Vulkan's order; written, back in the file's.
+    [TestCase(68u, 0u, Format.B8G8R8G8_422_UNORM, new byte[] { 30, 20, 10, 40 })]
+    [TestCase(69u, 0u, Format.G8B8G8R8_422_UNORM, new byte[] { 20, 30, 40, 10 })]
+    [TestCase(0u, 0x42475247u, Format.B8G8R8G8_422_UNORM, new byte[] { 30, 20, 10, 40 })]
+    [TestCase(0u, 0x47424752u, Format.G8B8G8R8_422_UNORM, new byte[] { 20, 30, 40, 10 })]
+    public void A422Pair_IsReadInVulkansOrder_AndWrittenInTheFiles(uint dxgi, uint fourCC, Format format,
+        byte[] expected)
+    {
+        byte[] pair = dxgi == 69 || fourCC == 0x47424752 ? [20, 10, 40, 30] : [10, 20, 30, 40];
+        var file = dxgi != 0
+            ? Header(2, 1, dx10: (dxgi, 3, 0, 1), data: 4)
+            : Header(2, 1, flags: 0x4, data: 4);
+        if (dxgi == 0)
+        {
+            BitConverter.GetBytes(fourCC).CopyTo(file, 84);
+        }
+
+        pair.CopyTo(file, file.Length - 4);
+
+        using var image = Image.Load(file);
+        var stream = new MemoryStream();
+        image.Save(stream, ImageFileType.Dds);
+        var written = stream.ToArray();
+
+        Assert.That((Format)image.Description.Format, Is.EqualTo(format));
+        Assert.That(image.GetPixelBuffer(0, 0, 0).GetPixels<byte>(), Is.EqualTo(expected));
+        Assert.That(written[^4..], Is.EqualTo(pair));
+    }
+
+    // D3DX wrote 10-10-10-2's masks the other way round from the data, and Direct3D's loaders read them so: the masks of
+    // red low are red high, and red high red low. Written, red high goes with the masks it is read by.
+    [TestCase(0x3FFu, 0x3FF00000u, Format.A2R10G10B10_UNORM_PACK32)]
+    [TestCase(0x3FF00000u, 0x3FFu, Format.A2B10G10R10_UNORM_PACK32)]
+    public void TenBitMasks_AreReadAsD3DXWroteThem_AndWrittenSo(uint red, uint blue, Format format)
+    {
+        var file = Header(1, 1, flags: 0x41, bits: 32, red: red, green: 0xFFC00, blue: blue, alpha: 0xC0000000, data: 4);
+        BitConverter.GetBytes(0xC00FFC01u).CopyTo(file, 128);
+
+        using var image = Image.Load(file);
+        var stream = new MemoryStream();
+        image.Save(stream, ImageFileType.Dds);
+        using var back = Image.Load(stream.ToArray());
+
+        Assert.That((Format)image.Description.Format, Is.EqualTo(format));
+        Assert.That((Format)back.Description.Format, Is.EqualTo(format));
+        Assert.That(back.GetPixelBuffer(0, 0, 0).GetPixels<byte>(), Is.EqualTo(BitConverter.GetBytes(0xC00FFC01u)));
+    }
+
+    // Refused, the image leaves a file already there as it was.
+    [Test]
+    public void MoreLayersThanDirect3DHas_AreNotWritten_AndTheFileThereIsKept()
+    {
+        using var image = Image.New2D(1, 1, Format.R8G8B8A8_UNORM, 2049);
+        var path = Path.Combine(TestContext.CurrentContext.WorkDirectory, "many-layers.dds");
+        try
+        {
+            File.WriteAllBytes(path, [1, 2, 3]);
+
+            Assert.That(() => image.Save(new MemoryStream(), ImageFileType.Dds), Throws.InstanceOf<NotSupportedException>());
+            Assert.That(() => image.Save(path, ImageFileType.Dds), Throws.InstanceOf<NotSupportedException>());
+            Assert.That(File.ReadAllBytes(path), Is.EqualTo(new byte[] { 1, 2, 3 }));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
+    public void ACubeOfUnequalSides_IsNotMade() =>
+        Assert.That(() => Image.New(new ImageDescription
+        {
+            Dimension = TextureDimension.TextureCube, Width = 4, Height = 2, Depth = 1, ArraySize = 6, MipLevels = 1,
+            Format = Format.R8G8B8A8_UNORM
+        }), Throws.InvalidOperationException);
 
     [Test]
     public void ACompressedDescription_CountsWholeBlocks()

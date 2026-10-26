@@ -64,7 +64,6 @@ public static class ColorQuantizer
         return new QuantizedImage(palette, palette.Length / 3, indices, transparentIndex);
     }
 
-    // Every opaque color in the palette and every pixel its index, when there are no more colors than fit; else null.
     private static byte[] Exact(ReadOnlySpan<byte> rgba, int count, int limit, byte[] indices)
     {
         var index = new Dictionary<int, byte>();
@@ -99,11 +98,9 @@ public static class ColorQuantizer
             indices[i] = lastIndex;
         }
 
-        // A palette has at least one color, for pictures all transparent.
         return palette.Count == 0 ? [0, 0, 0] : palette.ToArray();
     }
 
-    // The opaque colors and how many pixels have each, as keys R | G << 8 | B << 16.
     private static (int[] Keys, int[] Counts) Colors(ReadOnlySpan<byte> rgba, int count)
     {
         var counts = new Dictionary<int, int>();
@@ -147,7 +144,6 @@ public static class ColorQuantizer
         return (keys, weights);
     }
 
-    // Pixels together: how many, their sums by channel and the sum of their squares.
     private struct Sums
     {
         public long Count, R, G, B;
@@ -171,8 +167,6 @@ public static class ColorQuantizer
         };
     }
 
-    // The colors order[Start..End), their sums, and the cut that lowers their error most: across which channel, below
-    // which value, and by how much.
     private sealed class Box
     {
         public int Start, End;
@@ -207,7 +201,6 @@ public static class ColorQuantizer
                 break;
             }
 
-            // The colors below the value go first, the rest to a box of their own.
             var shift = best.Axis * 8;
             int low = best.Start, high = best.End - 1;
             while (low <= high)
@@ -246,8 +239,6 @@ public static class ColorQuantizer
         return result;
     }
 
-    // The box's sums and its best cut: on each channel the colors counted by value, and every value tried as the one
-    // below which they go first.
     private static Box Plan((int[] Keys, int[] Counts) colors, int[] order, Box box)
     {
         var slices = new Sums[3 * 256];
@@ -295,7 +286,6 @@ public static class ColorQuantizer
         return box;
     }
 
-    // k-means over the colors: each goes to the nearest palette color, each palette color to their mean.
     private static void Refine((int[] Keys, int[] Counts) colors, double[] palette)
     {
         var entries = palette.Length / 3;
@@ -329,8 +319,6 @@ public static class ColorQuantizer
         }
     }
 
-    // The nearest palette color to a color: the palette sorted by red, looked through outward from the color's red, and
-    // no further on a side once red alone is farther than the nearest found.
     private sealed class NearestColor
     {
         private readonly double[] _red;
@@ -406,12 +394,9 @@ public static class ColorQuantizer
         }
     }
 
-    // Each opaque pixel's nearest color, with or without its error spread to the pixels after it - rows walked to and
-    // fro so the error does not drift one way.
     private static void Map(ReadOnlySpan<byte> rgba, int width, int height, byte[] palette, byte[] indices,
         bool dither)
     {
-        // The nearest color, by color.
         var nearest = new Dictionary<int, byte>();
         var search = new NearestColor(Array.ConvertAll(palette, value => (double)value));
         var error = dither ? new int[2, (width + 2) * 3] : null;
@@ -437,7 +422,6 @@ public static class ColorQuantizer
                 }
 
                 int r = rgba[at * 4], g = rgba[at * 4 + 1], b = rgba[at * 4 + 2];
-                // The error carried here, in sixteenths.
                 var e = (x + 1) * 3;
                 if (dither)
                 {
@@ -460,7 +444,6 @@ public static class ColorQuantizer
                 }
 
                 Span<int> rest = [r - palette[chosen * 3], g - palette[chosen * 3 + 1], b - palette[chosen * 3 + 2]];
-                // 7/16 ahead, 3/16 behind below, 5/16 below, 1/16 ahead below.
                 var ahead = forward ? 3 : -3;
                 for (var c = 0; c < 3; c++)
                 {
