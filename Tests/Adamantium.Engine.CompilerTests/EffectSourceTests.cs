@@ -47,19 +47,41 @@ technique { pass { ComputeShader = CS; } }");
         });
     }
 
-    // A technique quoted in a comment or a string is code, not a technique.
-    [Test]
-    public void TheWordTechnique_InACommentOrAString_IsLeftAlone()
+    // A technique quoted in a comment, a string or a directive - one spliced over lines, one with a comment running on
+    // past its line - is code, not a technique.
+    [TestCase("\n")]
+    [TestCase("\r\n")]
+    public void TheWordTechnique_InACommentAStringOrADirective_IsLeftAlone(string lineBreak)
     {
-        var result = Compile(@"
-// technique Commented { pass { NotAStage = X; } }
-/* technique Blocked { pass { NotAStage = X; } } */
-static const int technique_count = 1;
-" + Shaders + @"
-technique Real { pass { VertexShader = VS; } }");
+        var source = string.Join(lineBreak,
+            "// technique Commented { pass { NotAStage = X; } }",
+            "// a comment spliced \\",
+            "technique Spliced { pass { NotAStage = X; } }",
+            "/* technique Blocked { pass { NotAStage = X; } } */",
+            "#define QUOTED \"technique Quoted { pass { NotAStage = X; } }\"",
+            "#define LONG 1 \\",
+            "technique Continued { pass { NotAStage = X; } }",
+            "#define OPENED 1 /* opened on the directive's line",
+            "technique InTheComment { pass { NotAStage = X; } }",
+            "*/",
+            "static const int technique_count = 1;",
+            Shaders,
+            "technique Real { pass { VertexShader = VS; } }");
+
+        var result = Compile(source);
 
         Assert.That(result.HasErrors, Is.False, Messages(result));
         Assert.That(result.EffectData.Description.Techniques.Single().Name, Is.EqualTo("Real"));
+    }
+
+    [TestCase("\n")]
+    [TestCase("\r\n")]
+    public void AFileWithoutATechnique_IsAnError(string lineBreak)
+    {
+        var result = Compile(Shaders.Replace("\n", lineBreak) + "technique11 T { pass P { VertexShader = VS; } }");
+
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(Messages(result), Does.Contain("Test.fx(1,1)").And.Contain("has no technique"));
     }
 
     [TestCase("pass { EffectName = \"X\"; VertexShader = VS; }", "(3,22)", "'EffectName' is not a stage")]
@@ -76,6 +98,13 @@ technique Real { pass { VertexShader = VS; } }");
     [TestCase("pass { }", "(3,15)", "The pass runs no shader")]
     [TestCase("pass P { VertexShader = VS; } pass P { VertexShader = VS; }", "(3,45)", "two passes named 'P'")]
     [TestCase("pass { RayGenerationShader = CS; HitGroup H { Closest = CS; } }", "(3,61)", "not a shader of a hit group")]
+    [TestCase("pass { RayGenerationShader = CS; HitGroup H { } }", "(3,48)", "names no shader")]
+    [TestCase("pass { RayGenerationShader = CS; HitGroup H { AnyHit = CS; } HitGroup H { AnyHit = CS; } }", "(3,76)",
+        "two hit groups named 'H'")]
+    [TestCase("pass { VertexShader = VS; MeshShader = CS; }", "(3,15)", "not graphics and mesh")]
+    [TestCase("pass { RayGenerationShader = CS; PixelShader = PS; }", "(3,15)", "A ray-tracing pass has no pixel shader")]
+    [TestCase("pass { VertexShader = VS; } pass { VertexShader = VS; }", "(3,43)", "two passes without a name")]
+    [TestCase("pass { VertexShader = VS;\n#if 1\n}", "(4,1)", "'#' where a stage")]
     public void WhatBreaksTheRules_IsSaidWhereItStands(string pass, string where, string what)
     {
         var result = Compile($"\n\ntechnique T {{ {pass} }}\n" + Shaders);
@@ -84,25 +113,61 @@ technique Real { pass { VertexShader = VS; } }");
         Assert.That(Messages(result), Does.Contain("Test.fx" + where).And.Contain(what));
     }
 
-    // The language describes mesh and ray-tracing passes; until effects run them, compiling one says so.
+    [Test]
+    public void TwoTechniquesOfOneName_AreAnError()
+    {
+        var result = Compile(Shaders + "technique T { pass { VertexShader = VS; } }\ntechnique T { pass { VertexShader = VS; } }");
+
+        Assert.That(Messages(result), Does.Contain("two techniques named 'T'"));
+    }
+
+    [TestCase("technique T { pass { VertexShader = VS; }", "(6,1)", "The technique is not closed")]
+    [TestCase("technique T { pass { VertexShader = VS;", "(6,15)", "The pass is not closed")]
+    [TestCase("technique T { pass { RayGenerationShader = CS; HitGroup H { AnyHit = CS;", "(6,48)",
+        "The hit group is not closed")]
+    public void AnUnclosedBlock_IsSaidWhereItOpens(string tail, string where, string what)
+    {
+        var result = Compile(Shaders + tail);
+
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(Messages(result), Does.Contain("Test.fx" + where).And.Contain(what));
+    }
+
+    // The language describes tessellation, mesh and ray-tracing passes; until effects run them, compiling one is an
+    // error that says so.
+    [TestCase("pass { VertexShader = VS; HullShader = CS; DomainShader = CS; PixelShader = PS; }", "Hull shaders are described")]
     [TestCase("pass { TaskShader = CS; MeshShader = CS; PixelShader = PS; }", "Task shaders are described")]
-    [TestCase("pass { RayGenerationShader = CS; MissShader = CS; MissShader = CS; HitGroup H { ClosestHit = CS; AnyHit = CS; } }",
-        "RayGeneration shaders are described")]
-    public void APassOfAPipelineEffectsDoNotRunYet_IsReadAndSaidSo(string pass, string what)
+    [TestCase("pass { RayGenerationShader = CS; MissShader = CS; MissShader = CS; CallableShader = CS; " +
+              "HitGroup H { ClosestHit = CS; AnyHit = CS; Intersection = CS; } }", "RayGeneration shaders are described")]
+    public void APassOfAPipelineEffectsDoNotRunYet_IsReadAndRefused(string pass, string what)
     {
         var result = Compile($"technique T {{ {pass} }}\n" + Shaders);
 
+        Assert.That(result.HasErrors, Is.True);
         Assert.That(Messages(result), Does.Contain(what).And.Not.Contain("is not a stage"));
     }
 
-    // Slang reports on the file's own lines: the technique before the code takes none of them away.
-    [Test]
-    public void AnErrorInTheCode_IsOnItsLine_AfterATechnique()
+    // Slang reports on the file's own lines and names the file: the technique before the code takes none of them away,
+    // whatever the line breaks.
+    [TestCase("\n")]
+    [TestCase("\r\n")]
+    public void AnErrorInTheCode_IsOnItsLine_AfterATechnique(string lineBreak)
     {
-        var result = Compile("technique T\n{\n    pass { VertexShader = VS; }\n}\nfloat4 VS() : SV_Position { return undefinedName; }\n");
+        var result = Compile(string.Join(lineBreak, "technique T", "{", "    pass { VertexShader = VS; }", "}",
+            "float4 VS() : SV_Position { return undefinedName; }", ""));
 
         Assert.That(result.HasErrors, Is.True);
-        Assert.That(Messages(result), Does.Contain(":5:36").And.Contain("undefinedName"));
+        Assert.That(Messages(result), Does.Contain("Test.fx:5:36").And.Contain("undefinedName"));
+    }
+
+    // An entry point the code does not have is said at the pass's stage that names it.
+    [Test]
+    public void AMissingEntryPoint_IsSaidAtTheStageThatNamesIt()
+    {
+        var result = Compile(Shaders + "technique T\n{\n    pass { VertexShader = Nope; }\n}");
+
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(Messages(result), Does.Contain("Test.fx(8,12)").And.Contain("Vertex shader 'Nope'"));
     }
 
     [Test]

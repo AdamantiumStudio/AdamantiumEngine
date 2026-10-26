@@ -5,16 +5,16 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Adamantium.Core;
-using Adamantium.EffectsCompiler.Compiler;
 using Adamantium.Vulkan.Spirv.Cross;
 using Adamantium.Vulkan.Spirv.Reflection;
 
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
-internal class EffectCompilerInternal
+internal sealed class EffectCompilerInternal : IDisposable
 {
     private readonly List<string> resolvedIncludes = [];
     private readonly Dictionary<(EffectShaderType Type, string EntryPoint), int> compiledShaders = [];
+    private readonly HashSet<(EffectShaderType Type, string EntryPoint)> failedShaders = [];
     private readonly List<ResourceBindingKey> resourceKeys = [];
     private readonly SlangShaderCompiler slangCompiler = new();
     private EffectCompilerFlags compilerFlags;
@@ -77,33 +77,45 @@ internal class EffectCompilerInternal
         return new SpirvReflection(shader.Bytecode).Disassemble(resourceKeys);
     }
 
+    /// <summary>Frees the Slang session.</summary>
+    public void Dispose() => slangCompiler.Dispose();
+
     private void InternalCompile(string sourceCode, string fileName)
     {
         effectData = null;
         resolvedIncludes.Clear();
         compiledShaders.Clear();
-        fileName = fileName.Replace(@"\\", @"\");
+        failedShaders.Clear();
         logger = new EffectCompilerLogger();
         sourceDirectory = null;
         if (includes.IsDefault)
         {
             var directory = Path.GetDirectoryName(fileName);
             sourceDirectory = string.IsNullOrEmpty(directory) ? "." : directory;
-            includes = Directory.GetFiles(sourceDirectory, "*.fxh")
-                .Select(path => new ShaderFileInfo
-                {
-                    Content = File.ReadAllText(path), Path = path, FileName = Path.GetFileName(path)
-                })
-                .ToImmutableArray();
+            includes = Directory.Exists(sourceDirectory)
+                ? Directory.GetFiles(sourceDirectory, "*.fxh")
+                    .Select(path => new ShaderFileInfo
+                    {
+                        Content = File.ReadAllText(path), Path = path, FileName = Path.GetFileName(path)
+                    })
+                    .ToImmutableArray()
+                : [];
         }
 
+        var start = new SourceLocation(fileName, 1, 1);
         var source = EffectSource.Read(sourceCode, fileName, logger);
+        if (!logger.HasErrors && source.Techniques.Count == 0)
+        {
+            logger.Error("The effect has no technique: technique Name { pass Name { VertexShader = Main; ... } }", start);
+        }
+
+        var preamble = Preamble(fileName, start);
         if (logger.HasErrors)
         {
             return;
         }
 
-        slangSource = Preamble() + source.Code;
+        slangSource = preamble + source.Code;
         effectData = new EffectData
         {
             Shaders = [],
@@ -121,20 +133,22 @@ internal class EffectCompilerInternal
         }
     }
 
-    private string Preamble()
+    private string Preamble(string fileName, SourceLocation start)
     {
-        if (macros.Count == 0)
-        {
-            return string.Empty;
-        }
-
         var preamble = new StringBuilder();
         foreach (var macro in macros)
         {
+            if (string.IsNullOrWhiteSpace(macro.Name) || macro.Name.Any(char.IsWhiteSpace)
+                || (macro.Value ?? string.Empty).IndexOfAny(['\r', '\n']) >= 0)
+            {
+                logger.Error($"The macro '{macro.Name}' is not a name with a value of one line.", start);
+                continue;
+            }
+
             preamble.Append("#define ").Append(macro.Name).Append(' ').Append(macro.Value).Append('\n');
         }
 
-        return preamble.Append("#line 1\n").ToString();
+        return preamble.Append("#line 1 \"").Append(fileName.Replace('\\', '/')).Append("\"\n").ToString();
     }
 
     private void CompilePass(EffectPassSource passSource)
@@ -151,7 +165,7 @@ internal class EffectCompilerInternal
         {
             if (TypeOf(stage.Stage) is { } type)
             {
-                CompileShader(type, stage.EntryPoint);
+                CompileShader(type, stage);
             }
             else
             {
@@ -168,19 +182,23 @@ internal class EffectCompilerInternal
     private static EffectShaderType? TypeOf(EffectStage stage) => stage switch
     {
         EffectStage.Vertex => EffectShaderType.Vertex,
-        EffectStage.Hull => EffectShaderType.Hull,
-        EffectStage.Domain => EffectShaderType.Domain,
         EffectStage.Pixel => EffectShaderType.Fragment,
         EffectStage.Compute => EffectShaderType.Compute,
         _ => null
     };
 
-    private void CompileShader(EffectShaderType type, string entryPoint)
+    private void CompileShader(EffectShaderType type, EffectStageSource stage)
     {
+        var entryPoint = stage.EntryPoint;
         var key = (type, entryPoint);
         if (compiledShaders.TryGetValue(key, out var compiled))
         {
             LinkShader(type, compiled, entryPoint);
+            return;
+        }
+
+        if (failedShaders.Contains(key))
+        {
             return;
         }
 
@@ -189,13 +207,15 @@ internal class EffectCompilerInternal
             var result = CompileStage(type, entryPoint);
             if (result.HasErrors || result.Bytecode == null)
             {
-                logger.Errors(result.Errors);
+                failedShaders.Add(key);
+                logger.Error($"{stage.Stage} shader '{entryPoint}': {result.Errors}", stage.Location);
                 return;
             }
 
-            var shader = CreateEffectShader(type, entryPoint, result);
+            var shader = CreateEffectShader(type, entryPoint, result, stage.Location);
             if (logger.HasErrors)
             {
+                failedShaders.Add(key);
                 return;
             }
 
@@ -204,7 +224,8 @@ internal class EffectCompilerInternal
         }
         catch (Exception ex)
         {
-            logger.Error($"{type} {entryPoint}: {ex.Message}");
+            failedShaders.Add(key);
+            logger.Error($"{stage.Stage} shader '{entryPoint}': {ex.Message}", stage.Location);
         }
     }
 
@@ -282,7 +303,8 @@ internal class EffectCompilerInternal
                || normalized.EndsWith("\\" + request, StringComparison.OrdinalIgnoreCase);
     }
 
-    private EffectData.Shader CreateEffectShader(EffectShaderType type, string entryPoint, ShaderCompilationResult compilationResult)
+    private EffectData.Shader CreateEffectShader(EffectShaderType type, string entryPoint,
+        ShaderCompilationResult compilationResult, SourceLocation location)
     {
         var shader = new EffectData.Shader
         {
@@ -300,7 +322,7 @@ internal class EffectCompilerInternal
         {
             var result = reflect.Disassemble(resourceKeys);
             shader.Bytecode = reflect.GetByteCode();
-            BuildParameters(shader, result);
+            BuildParameters(shader, result, location);
         }
 
         return shader;
@@ -338,7 +360,7 @@ internal class EffectCompilerInternal
         pass.Pipeline[type].EntryPoint = entryPoint;
     }
 
-    private void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult)
+    private void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult, SourceLocation location)
     {
         var groupByIds = reflectionResult.AllResources
             .GroupBy(x => (x.Description.DescriptorSet, x.Description.SlotIndex))
@@ -347,7 +369,8 @@ internal class EffectCompilerInternal
         if (groupByIds.Length > 0)
         {
             var names = groupByIds.Select(x => x.Description.Name).ToArray();
-            logger.Error($"{string.Join(", ", names)} has the same binding id {groupByIds[0].Description.SlotIndex} in set {groupByIds[0].Description.DescriptorSet} which is not permitted by Vulkan.\nPlease, change shader code not to have same binding ids in one set.");
+            logger.Error($"{string.Join(", ", names)} take binding {groupByIds[0].Description.SlotIndex} of set " +
+                         $"{groupByIds[0].Description.DescriptorSet} together, which Vulkan does not allow.", location);
             return;
         }
 
@@ -362,7 +385,7 @@ internal class EffectCompilerInternal
                 Size = description.Size,
                 Slot = description.SlotIndex,
                 DescriptorSet = (byte)description.DescriptorSet,
-                Parameters = new List<EffectData.ValueTypeParameter>(),
+                Parameters = [],
             };
             shader.ConstantBuffers.Add(parameterBuffer);
 

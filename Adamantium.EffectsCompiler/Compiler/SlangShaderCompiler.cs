@@ -7,7 +7,8 @@ namespace Adamantium.EffectsCompiler.Compiler;
 /// mapping. One instance per effect compile; the session is reused across its stages.</summary>
 internal sealed class SlangShaderCompiler : IDisposable
 {
-    /// <summary>The SPIR-V version every shader is compiled to.</summary>
+    /// <summary>The SPIR-V version every shader is compiled to. Its entry points keep their own names, not
+    /// <c>main</c>, so shaders are created by them.</summary>
     public const string SpirvProfile = "spirv_1_6";
 
     private SlangCompiler compiler;
@@ -18,8 +19,6 @@ internal sealed class SlangShaderCompiler : IDisposable
     {
         compiler ??= new SlangCompiler(
             SpirvProfile,
-            // VulkanUseEntryPointName keeps the real entry-point name in the SPIR-V (instead of "main") so Vulkan can
-            // create shaders by the shader's name.
             options:
             [
                 new SlangcCompilerOption
@@ -53,7 +52,6 @@ internal sealed class SlangShaderCompiler : IDisposable
             case EffectShaderType.Vertex: return SlangcStage.Vertex;
             case EffectShaderType.Hull: return SlangcStage.Hull;
             case EffectShaderType.Domain: return SlangcStage.Domain;
-            case EffectShaderType.Geometry: return SlangcStage.Geometry;
             case EffectShaderType.Fragment: return SlangcStage.Fragment;
             case EffectShaderType.Compute: return SlangcStage.Compute;
             default: throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported shader stage for Slang.");

@@ -1,7 +1,6 @@
 ﻿using Adamantium.Core;
-using Adamantium.EffectsCompiler.Compiler;
 
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
 /// <summary>A message of an effect's compile and where in the file it stands.</summary>
 internal class EffectCompilerMessage(LogMessageType type, string text, SourceLocation location) : LogMessage(type, text)

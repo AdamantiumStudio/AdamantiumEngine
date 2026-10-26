@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -115,7 +116,7 @@ internal sealed class EffectSource
             return false;
         }
 
-        var passes = new List<EffectPassSource>();
+        List<EffectPassSource> passes = [];
         while (true)
         {
             SkipSpace();
@@ -123,6 +124,11 @@ internal sealed class EffectSource
             {
                 _at++;
                 break;
+            }
+
+            if (_at >= _text.Length)
+            {
+                return Fail(start, "The technique is not closed.");
             }
 
             var at = _at;
@@ -140,18 +146,22 @@ internal sealed class EffectSource
                 return false;
             }
 
-            if (pass.Name != null && passes.Any(other => other.Name == pass.Name))
+            if (passes.Any(other => other.Name == pass.Name))
             {
-                _logger.Error($"The technique has two passes named '{pass.Name}'.", pass.Location);
+                _logger.Error(pass.Name == null
+                    ? "The technique has two passes without a name."
+                    : $"The technique has two passes named '{pass.Name}'.", pass.Location);
             }
 
             passes.Add(pass);
         }
 
         var technique = new EffectTechniqueSource(name, Where(start), passes);
-        if (name != null && _techniques.Any(other => other.Name == name))
+        if (_techniques.Any(other => other.Name == name))
         {
-            _logger.Error($"The effect has two techniques named '{name}'.", technique.Location);
+            _logger.Error(name == null
+                ? "The effect has two techniques without a name."
+                : $"The effect has two techniques named '{name}'.", technique.Location);
         }
 
         _techniques.Add(technique);
@@ -168,8 +178,8 @@ internal sealed class EffectSource
             return null;
         }
 
-        var stages = new List<EffectStageSource>();
-        var groups = new List<EffectHitGroupSource>();
+        List<EffectStageSource> stages = [];
+        List<EffectHitGroupSource> groups = [];
         while (true)
         {
             SkipSpace();
@@ -177,6 +187,12 @@ internal sealed class EffectSource
             {
                 _at++;
                 break;
+            }
+
+            if (_at >= _text.Length)
+            {
+                Fail(start, "The pass is not closed.");
+                return null;
             }
 
             var at = _at;
@@ -246,6 +262,12 @@ internal sealed class EffectSource
                 break;
             }
 
+            if (_at >= _text.Length)
+            {
+                Fail(start, "The hit group is not closed.");
+                return null;
+            }
+
             var at = _at;
             var key = AtWord() ? ReadWord() : null;
             if (key == null || !HitGroupKeys.Contains(key))
@@ -308,15 +330,15 @@ internal sealed class EffectSource
             _logger.Error($"The pass names its {twice.Key} shader twice.", twice.ElementAt(1).Location);
         }
 
-        var stages = new HashSet<EffectStage>(pass.Stages.Select(stage => stage.Stage));
-        var rayTracing = pass.HitGroups.Count > 0 || stages.Overlaps([EffectStage.RayGeneration, EffectStage.Miss, EffectStage.Callable]);
+        HashSet<EffectStage> stages = [.. pass.Stages.Select(stage => stage.Stage)];
+        var rayTracing = pass.HitGroups.Count > 0
+                         || stages.Overlaps([EffectStage.RayGeneration, EffectStage.Miss, EffectStage.Callable]);
         var mesh = stages.Overlaps([EffectStage.Task, EffectStage.Mesh]);
         var compute = stages.Contains(EffectStage.Compute);
         var graphics = stages.Overlaps([EffectStage.Vertex, EffectStage.Hull, EffectStage.Domain]);
-        var kinds = new[] { (graphics, "graphics"), (mesh, "mesh"), (compute, "compute"), (rayTracing, "ray tracing") }
-            .Where(kind => kind.Item1)
-            .Select(kind => kind.Item2)
-            .ToList();
+        (bool Present, string Name)[] all =
+            [(graphics, "graphics"), (mesh, "mesh"), (compute, "compute"), (rayTracing, "ray tracing")];
+        var kinds = all.Where(kind => kind.Present).Select(kind => kind.Name).ToList();
         if (stages.Count == 0 && pass.HitGroups.Count == 0)
         {
             _logger.Error("The pass runs no shader.", pass.Location);
@@ -431,7 +453,7 @@ internal sealed class EffectSource
 
         if (_text[_at + 1] == '/')
         {
-            while (_at < _text.Length && _text[_at] != '\n')
+            while (_at < _text.Length && (_text[_at] != '\n' || Continues(_at)))
             {
                 _at++;
             }
@@ -441,7 +463,7 @@ internal sealed class EffectSource
 
         if (_text[_at + 1] == '*')
         {
-            var end = _text.IndexOf("*/", _at + 2, System.StringComparison.Ordinal);
+            var end = _text.IndexOf("*/", _at + 2, StringComparison.Ordinal);
             _at = end < 0 ? _text.Length : end + 2;
             return true;
         }
@@ -452,20 +474,44 @@ internal sealed class EffectSource
     private void SkipQuoted(char quote)
     {
         _at++;
-        while (_at < _text.Length && _text[_at] != quote && _text[_at] != '\n')
+        while (_at < _text.Length && _text[_at] != quote && (_text[_at] != '\n' || Continues(_at)))
         {
-            _at += _text[_at] == '\\' ? 2 : 1;
+            _at += _text[_at] == '\\' && _at + 1 < _text.Length && _text[_at + 1] != '\r' ? 2 : 1;
         }
 
-        _at++;
+        if (_at < _text.Length && _text[_at] == quote)
+        {
+            _at++;
+        }
     }
 
     private void SkipDirective()
     {
-        while (_at < _text.Length && _text[_at] != '\n')
+        while (_at < _text.Length && (_text[_at] != '\n' || Continues(_at)))
         {
-            _at += _text[_at] == '\\' ? 2 : 1;
+            if (!SkipComment())
+            {
+                if (_text[_at] == '"')
+                {
+                    SkipQuoted('"');
+                }
+                else
+                {
+                    _at++;
+                }
+            }
         }
+    }
+
+    private bool Continues(int lineBreak)
+    {
+        var before = lineBreak - 1;
+        if (before >= 0 && _text[before] == '\r')
+        {
+            before--;
+        }
+
+        return before >= 0 && _text[before] == '\\';
     }
 
     private bool StartsALine(int index)

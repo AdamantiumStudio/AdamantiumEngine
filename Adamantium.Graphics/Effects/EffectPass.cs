@@ -49,7 +49,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     private protected DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
 
     private uint appliesCounter = 0;
-    private bool geometryStagePresent = false;
     public ReadOnlyCollection<PipelineShaderStageCreateInfo> ShaderStages => shaderStages.AsReadOnly();
 
     /// <summary>
@@ -125,23 +124,16 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private void BindAllStages()
     {
-        if (_bindStages == null || _bindStages.Length != stages.Count + (geometryStagePresent ? 0 : 1))
+        if (_bindStages == null || _bindStages.Length != stages.Count)
         {
-            var count = stages.Count + (geometryStagePresent ? 0 : 1);
-            _bindStages = new ShaderStageFlagBits[count];
-            _bindShaders = new ShaderEXT[count];
+            _bindStages = new ShaderStageFlagBits[stages.Count];
+            _bindShaders = new ShaderEXT[stages.Count];
         }
 
         for (var i = 0; i < stages.Count; i++)
         {
             _bindStages[i] = stages[i].Stage;
             _bindShaders[i] = stages[i].ShaderObject;
-        }
-
-        if (!geometryStagePresent)
-        {
-            _bindStages[^1] = ShaderStageFlagBits.GeometryBit;
-            _bindShaders[^1] = null;
         }
 
         ((GraphicsDevice)graphicsDevice).BindShaders(_bindStages, _bindShaders);
@@ -164,7 +156,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         stages.Clear();
         shaderStages.Clear();
         ClearLayoutBindings();
-        geometryStagePresent = false;
         Technique = technique;
         this.pass = pass;
         PropertiesKey = PrepareProperties(logger, pass.Properties);
@@ -197,11 +188,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             stageBlock.CacheName = $"{Effect?.Name}.{Technique?.Name}.{Name}.{link.ShaderType}";
 
             InitStageBlock(stageBlock, logger);
-
-            if (stageBlock.Stage == ShaderStageFlagBits.GeometryBit)
-            {
-                geometryStagePresent = true;
-            }
         }
     }
 
@@ -373,8 +359,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                 return ShaderStageFlagBits.TessellationControlBit;
             case EffectShaderType.Domain:
                 return ShaderStageFlagBits.TessellationEvaluationBit;
-            case EffectShaderType.Geometry:
-                return ShaderStageFlagBits.GeometryBit;
             case EffectShaderType.Fragment:
                 return ShaderStageFlagBits.FragmentBit;
             case EffectShaderType.Compute:
