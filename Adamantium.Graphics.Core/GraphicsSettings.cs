@@ -48,6 +48,9 @@ public sealed class GraphicsSettings
     /// <summary>How many frames the CPU may record ahead of the GPU before it waits for the oldest.</summary>
     public uint FramesInFlight { get; set; } = 3;
 
+    /// <summary>How text's edges blend; it may change while the application runs.</summary>
+    public TextEdgeSettings TextEdges { get; } = new();
+
     /// <summary>The settings the engine needs on this platform: its surfaces, shader objects (from the layer beside the
     /// application where the device has none), the descriptor heap or push descriptors, and what it uses when there.</summary>
     public static GraphicsSettings CreateDefault()
