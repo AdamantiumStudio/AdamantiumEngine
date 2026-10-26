@@ -551,6 +551,11 @@ public class TextLayout : DisposableObject
     /// caret goes on the line before or after, keeping its column.</summary>
     public TextHit HitTestLine(int lineIndex, double x) => _navigator.HitTestLine(lineIndex, x);
 
+    /// <summary>The line the caret goes to from <paramref name="lineIndex"/> one row down or up, keeping its column
+    /// <paramref name="x"/>: the next one, or, where lines stand side by side around an exclusion, the one of the next
+    /// row nearest to <paramref name="x"/>; -1 past the first or the last row.</summary>
+    public int GetLineBeyond(int lineIndex, double x, bool below) => _navigator.GetLineBeyond(lineIndex, x, below);
+
     /// <summary>Where the caret stands for a position along its visual line, and on which line. The X runs along the
     /// line - down a vertical one.</summary>
     public (double X, int LineIndex) GetCaretPoint(CaretPosition position) => _navigator.GetCaretPoint(position);

@@ -46,6 +46,10 @@ internal sealed record LaidOutText
 
     public int[] LineFrames { get; init; }
 
+    /// <summary>Where each line in frames may run across, from its stretch's left edge to its right: lines that share a
+    /// row stand side by side in it.</summary>
+    public (double Left, double Right)[] LineSpans { get; init; }
+
     public RectangleF[] FrameRects { get; init; }
 
     // A line taller than the room it was given that reaches into an exclusion, and its height: laid again to fit.
