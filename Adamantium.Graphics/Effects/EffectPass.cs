@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
@@ -656,7 +657,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         private readonly IGraphicsDevice graphicsDevice;
         private readonly ulong pageSize;
         private readonly List<Buffer> pages = new();
-        private readonly List<Buffer> oversized = [];
+        private readonly List<Buffer> takenOversized = [];
+        private readonly List<Buffer> spareOversized = [];
 
         private int currentPageIndex = 0;
         private ulong currentOffset = 0;
@@ -675,7 +677,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             currentPageIndex = 0;
             currentOffset = 0;
             generation++;
-            ReleaseOversized();
+            ReleaseUnusedOversized();
         }
 
         /// <summary>The device address of a copy of <paramref name="buffer"/>'s data in this frame's pages: the copy made
@@ -731,14 +733,13 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         }
 
         /// <summary>Room for <paramref name="size"/> bytes in this frame's pages. More than a page holds gets a buffer of
-        /// its own, freed when the pool is reset.</summary>
+        /// its own, a power of two in size: one the last use of this pool took is taken again, one it left unused is
+        /// freed when the pool is reset.</summary>
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
             if (size > pageSize)
             {
-                var own = NewPage(size);
-                oversized.Add(own);
-                return (own, 0);
+                return (TakeOversized(size), 0);
             }
 
             ulong alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
@@ -766,26 +767,61 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             return Buffer.New(graphicsDevice, size, flags, memFlags);
         }
 
-        private void ReleaseOversized()
+        private Buffer TakeOversized(ulong size)
         {
-            foreach (var page in oversized)
+            var fit = -1;
+            for (var i = 0; i < spareOversized.Count; i++)
+            {
+                var room = spareOversized[i].TotalSize;
+                if (room >= size && (fit < 0 || room < spareOversized[fit].TotalSize))
+                {
+                    fit = i;
+                }
+            }
+
+            Buffer page;
+            if (fit >= 0)
+            {
+                page = spareOversized[fit];
+                spareOversized.RemoveAt(fit);
+            }
+            else
+            {
+                page = NewPage(BitOperations.RoundUpToPowerOf2(size));
+            }
+
+            takenOversized.Add(page);
+            return page;
+        }
+
+        private void ReleaseUnusedOversized()
+        {
+            foreach (var page in spareOversized)
             {
                 graphicsDevice.AddToDeferDisposeQueue(page);
             }
 
-            oversized.Clear();
+            spareOversized.Clear();
+            spareOversized.AddRange(takenOversized);
+            takenOversized.Clear();
         }
 
         public void Dispose()
         {
             foreach (var page in pages) page.Dispose();
             pages.Clear();
-            foreach (var page in oversized)
+            foreach (var page in spareOversized)
             {
                 page.Dispose();
             }
 
-            oversized.Clear();
+            foreach (var page in takenOversized)
+            {
+                page.Dispose();
+            }
+
+            spareOversized.Clear();
+            takenOversized.Clear();
         }
     }
 

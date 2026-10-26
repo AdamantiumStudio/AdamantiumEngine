@@ -58,6 +58,28 @@ namespace Adamantium.Engine.GraphicsTests
                 "the second constants landed on the first ones");
         }
 
+        // A buffer of its own is taken again while each use of the pool needs one, and freed after a use that did not.
+        [Test]
+        public void ABufferOfItsOwn_IsTakenAgainWhileNeeded_AndFreedOnceNot()
+        {
+            var device = GpuFixture.CreateRenderDevice();
+            using var pool = new EffectPass.DynamicBufferPool(device, 1024);
+
+            var large = pool.Allocate(3000, 16).Page;
+            pool.Reset();
+            var again = pool.Allocate(2500, 16).Page;
+            pool.Reset();
+            pool.Reset();
+            var afterAPause = pool.Allocate(3000, 16).Page;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(large.TotalSize, Is.EqualTo(4096UL), "a power of two");
+                Assert.That(again, Is.SameAs(large), "taken again by the next use");
+                Assert.That(afterAPause, Is.Not.SameAs(large), "freed after a use without it");
+            });
+        }
+
         // More than a page holds gets a buffer of its own; the pages go on where they were, and after a reset the frame
         // starts on the first page again.
         [Test]

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.ECS;
@@ -36,7 +35,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private readonly ClusterLight[] frameLights = new ClusterLight[MaxLights];
     private LightManager lightManager;
-    private Buffer[] lightBuffers = [];
     private Buffer[] clusterCounts = [];
     private Buffer[] clusterLists = [];
     private ForwardPlusEffect effect;
@@ -52,8 +50,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private MeshInstance[] instances = new MeshInstance[256];
     private Matrix4x4F[] palettes = [];
     private int paletteMatrices;
-    private Buffer[] instanceBuffers = [];
-    private Buffer[] paletteBuffers = [];
     private readonly List<(MeshData Data, Matrix4x4F World, bool OverShaded)> wires = [];
     private readonly List<(Entity Entity, Collider Collider)> colliders = [];
     private long trianglesCounted;
@@ -136,19 +132,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         geometryCache = new MeshGeometryCache(GraphicsDevice);
 
         var frames = (int)Math.Max(1u, GraphicsDevice.MaxFramesInFlight);
-        lightBuffers = new Buffer[frames];
         clusterCounts = new Buffer[frames];
         clusterLists = new Buffer[frames];
         for (int i = 0; i < frames; i++)
         {
-            lightBuffers[i] = Buffer.New(GraphicsDevice, (ulong)(MaxLights * Marshal.SizeOf<ClusterLight>()), StorageUsage,
-                MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
             clusterCounts[i] = Buffer.New(GraphicsDevice, ClusterCount * sizeof(uint), StorageUsage);
             clusterLists[i] = Buffer.New(GraphicsDevice, ClusterCount * MaxLightsPerCluster * sizeof(uint), StorageUsage);
         }
 
-        instanceBuffers = new Buffer[frames];
-        paletteBuffers = new Buffer[frames];
         base.CreateDeviceResources();
     }
 
@@ -168,13 +159,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return;
         }
 
-        var frame = (int)(GraphicsDevice.CurrentFrame % (uint)lightBuffers.Length);
+        var frame = (int)(GraphicsDevice.CurrentFrame % (uint)clusterCounts.Length);
         var directional = CollectLights(camera);
-        lightBuffers[frame].SetData<ClusterLight>(frameLights.AsSpan(0, LightCount));
-        SetFrameParameters(effect, camera, frame, directional);
+        var lights = GraphicsDevice.UploadFrameData<ClusterLight>(frameLights.AsSpan(0, LightCount));
+        SetFrameParameters(effect, camera, frame, directional, lights);
         if (wireEffect != null)
         {
-            SetFrameParameters(wireEffect, camera, frame, directional);
+            SetFrameParameters(wireEffect, camera, frame, directional, lights);
             wireEffect.WireColor.SetValue(WireColor);
             wireEffect.WireWidth.SetValue(WireWidth);
         }
@@ -255,7 +246,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         return count;
     }
 
-    private void SetFrameParameters(Effect target, Camera camera, int frame, int directional)
+    private void SetFrameParameters(Effect target, Camera camera, int frame, int directional, ulong lights)
     {
         var near = Math.Max(camera.ZNear, 1e-3f);
         var far = Math.Max(Math.Min(camera.ZFar, ClusterFar), near * 2);
@@ -263,7 +254,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var viewport = Window.Viewport;
         var parameters = target.Parameters;
 
-        parameters["LightsAddress"].SetValue(lightBuffers[frame].GetDeviceAddress());
+        parameters["LightsAddress"].SetValue(lights);
         parameters["ClusterCountsAddress"].SetValue(clusterCounts[frame].GetDeviceAddress());
         parameters["ClusterLightsAddress"].SetValue(clusterLists[frame].GetDeviceAddress());
         parameters["LightCount"].SetValue((uint)LightCount);
@@ -523,9 +514,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             CollectionsMarshal.AsSpan(group.Instances).CopyTo(instances.AsSpan((int)group.First));
         }
 
-        var frame = (int)(GraphicsDevice.CurrentFrame % (uint)instanceBuffers.Length);
-        var instanceAddress = Upload(instanceBuffers, frame, instances.AsSpan(0, count));
-        var paletteAddress = Upload(paletteBuffers, frame, palettes.AsSpan(0, Math.Max(paletteMatrices, 1)));
+        var instanceAddress = GraphicsDevice.UploadFrameData<MeshInstance>(instances.AsSpan(0, count));
+        var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
             target?.Parameters["InstancesAddress"].SetValue(instanceAddress);
@@ -573,27 +563,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         colliders.Clear();
     }
 
-    private ulong Upload<T>(Buffer[] ring, int frame, ReadOnlySpan<T> data) where T : unmanaged
-    {
-        var bytes = (ulong)(data.Length * Unsafe.SizeOf<T>());
-        var buffer = ring[frame];
-        if (buffer == null || buffer.TotalSize < bytes)
-        {
-            if (buffer != null)
-            {
-                GraphicsDevice.AddToDeferDisposeQueue(buffer);
-            }
-
-            var size = Math.Max(bytes, buffer == null ? bytes : buffer.TotalSize * 2);
-            buffer = Buffer.New(GraphicsDevice, size, StorageUsage,
-                MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
-            ring[frame] = buffer;
-        }
-
-        buffer.SetData(data);
-        return buffer.GetDeviceAddress();
-    }
-
     private void DrawCollider(Entity entity, Collider collider)
     {
         var transform = entity.Transform.GetMetadata(ActiveCamera);
@@ -630,11 +599,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         effect?.Dispose();
         wireEffect?.Dispose();
         basicEffect?.Dispose();
-        foreach (var buffer in lightBuffers)
-        {
-            buffer.Dispose();
-        }
-
         foreach (var buffer in clusterCounts)
         {
             buffer.Dispose();
@@ -645,21 +609,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             buffer.Dispose();
         }
 
-        foreach (var buffer in instanceBuffers)
-        {
-            buffer?.Dispose();
-        }
-
-        foreach (var buffer in paletteBuffers)
-        {
-            buffer?.Dispose();
-        }
-
-        lightBuffers = [];
         clusterCounts = [];
         clusterLists = [];
-        instanceBuffers = [];
-        paletteBuffers = [];
         geometryCache = null;
         effect = null;
         wireEffect = null;
