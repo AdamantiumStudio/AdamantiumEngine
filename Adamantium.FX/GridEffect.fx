@@ -1,8 +1,8 @@
 // The editor's ground grid: a square laid flat on the ground round its center, ruled into cells by the pixel shader.
 // Everything is in the camera-relative space the eye sits at the origin of.
 
-// Places the square: one copy is drawn.
-float4x4 instanceWorld[1];
+// Places the square.
+float4x4 placement;
 float4x4 viewProjection;
 // The eye's place in the plane modulo the cells of each level, 1, 10, 100... times the smallest, two levels to an entry
 // (xy, then zw): worked out on the CPU, so what a level's lines are drawn from stays small however far the eye has gone.
@@ -40,11 +40,12 @@ struct PS_INPUT
 // How far behind the ground the grid is drawn, in depth: a floor lying at y = 0 hides it instead of fighting it.
 static const float BehindTheGround = 2e-5f;
 
-PS_INPUT Ground_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
+[shader("vertex")]
+PS_INPUT Ground_VS(MESH_VERTEX input)
 {
     PS_INPUT output;
 
-    float4 world = mul(float4(input.position.xyz, 1.0f), instanceWorld[instanceId]);
+    float4 world = mul(float4(input.position.xyz, 1.0f), placement);
     output.position = mul(world, viewProjection);
     output.position.z = min(output.position.z + BehindTheGround * output.position.w, output.position.w);
     output.plane = world.xz;
@@ -78,6 +79,7 @@ float Strength(float rise)
 
 // Lines of cells 1, 10, 100... times the smallest, the level shown by how big its cells are on screen, and the two axes
 // over them; all of it fades away towards the grid's reach.
+[shader("fragment")]
 float4 Ground_PS(PS_INPUT input) : SV_TARGET
 {
     float2 perPixel = max(fwidth(input.plane), 1e-6f);

@@ -50,7 +50,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private readonly Stack<MeshDrawGroup> spareGroups = new();
     private readonly Dictionary<(Skeleton Skeleton, Matrix4x4F Mesh), (uint First, uint Count)> framePalettes = new();
     private MeshInstance[] instances = new MeshInstance[256];
-    private Matrix4x4F[] palettes = new Matrix4x4F[MaxJoints * 4];
+    private Matrix4x4F[] palettes = [];
     private int paletteMatrices;
     private Buffer[] instanceBuffers = [];
     private Buffer[] paletteBuffers = [];
@@ -63,9 +63,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     /// <summary>The most lights one frame takes, directional ones included; the rest are left out.</summary>
     public const int MaxLights = 1024;
-
-    /// <summary>The most joints a skinned mesh is drawn with; a skin with more bends with the first of them.</summary>
-    public const int MaxJoints = SceneData.Controller.MaxDrawnJoints;
 
     /// <summary>What the scene is drawn over: black by default, so only the lights show the surfaces.</summary>
     public Color ClearColor { get; set; } = Colors.Black;
@@ -489,12 +486,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return known;
         }
 
-        if (palettes.Length < paletteMatrices + MaxJoints)
+        var joints = skin.Joints.Count;
+        if (palettes.Length < paletteMatrices + joints)
         {
-            Array.Resize(ref palettes, Math.Max(palettes.Length * 2, paletteMatrices + MaxJoints));
+            Array.Resize(ref palettes, Math.Max(palettes.Length * 2, paletteMatrices + joints));
         }
 
-        var filled = skin.FillPalette(palettes.AsSpan(paletteMatrices, MaxJoints), ActiveCamera);
+        var filled = skin.FillPalette(palettes.AsSpan(paletteMatrices, joints), ActiveCamera);
         var palette = ((uint)paletteMatrices, (uint)filled);
         paletteMatrices += filled;
         framePalettes.Add((skin.Skeleton, mesh), palette);

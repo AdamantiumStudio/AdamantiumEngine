@@ -8,7 +8,19 @@ static const uint ClusterZ = 24;
 static const uint ClusterCount = ClusterX * ClusterY * ClusterZ;
 static const uint MaxLightsPerCluster = 128;
 
-static const uint SpotLight = 1;
+enum class LightKind : uint
+{
+    Point,
+    Spot,
+    Directional
+};
+
+float3 BlinnPhong(float3 surface, float3 normal, float3 toLight, float3 toEye)
+{
+    float diffuse = saturate(dot(normal, toLight));
+    float specular = diffuse > 0.0f ? pow(saturate(dot(normal, normalize(toLight + toEye))), 32.0f) * 0.25f : 0.0f;
+    return surface * diffuse + specular;
+}
 
 // A light in view space. Directional lights come first in the list.
 struct ClusterLight
@@ -16,7 +28,30 @@ struct ClusterLight
     float4 positionRange;       // xyz position, w range
     float4 colorCosOuter;       // rgb color times intensity, w cosine of the outer half-angle
     float4 directionCosInner;   // xyz where it shines, w cosine of the inner half-angle
-    uint4 kind;                 // x: 0 point, 1 spot, 2 directional
+    LightKind kind;
+    uint3 reserved;
+
+    // What a directional light gives a surface.
+    float3 Shine(float3 surface, float3 normal, float3 toEye)
+    {
+        return BlinnPhong(surface, normal, -directionCosInner.xyz, toEye) * colorCosOuter.rgb;
+    }
+
+    // What a point or spot light gives a surface at a position, fading out towards its range and, for a spot, its cone.
+    float3 Light(float3 surface, float3 position, float3 normal, float3 toEye)
+    {
+        float3 toLight = positionRange.xyz - position;
+        float distance = length(toLight);
+        float3 l = toLight / max(distance, 1e-4f);
+        float reach = saturate(1.0f - (distance * distance) / (positionRange.w * positionRange.w));
+        float fade = reach * reach;
+        if (kind == LightKind.Spot)
+        {
+            fade *= smoothstep(colorCosOuter.w, directionCosInner.w, dot(-l, directionCosInner.xyz));
+        }
+
+        return BlinnPhong(surface, normal, l, toEye) * colorCosOuter.rgb * fade;
+    }
 };
 
 uint64_t LightsAddress;
@@ -43,6 +78,16 @@ struct MeshInstance
     // x: the first matrix of its joints' palette in PalettesAddress, y: how many joints it has (a skinned copy only);
     // z: its texture in meshTextures (a textured pass only).
     uint4 slots;
+
+    float4 Placed(float4 position)
+    {
+        return mul(position, world);
+    }
+
+    float3 Turned(float3 normal)
+    {
+        return mul(normal, (float3x3)world);
+    }
 };
 
 uint64_t InstancesAddress;
@@ -51,10 +96,11 @@ uint InstanceBase;
 
 float4x4 view;
 float4x4 viewProjection;
-sampler sampleType;
+SamplerState sampleType;
 // Every texture of the resource heap - or of the shared texture set - by its slot there: the copies of one draw each name
 // their own. A set of its own, which descriptor sets bind apart from the pass's other resources.
-Texture2D meshTextures[] : register(t0, space1);
+[[vk::binding(0, 1)]]
+Texture2D meshTextures[];
 
 struct MESH_VERTEX
 {
@@ -94,13 +140,6 @@ uint ClusterAt(float2 pixel, float depth)
     return x + y * ClusterX + z * ClusterX * ClusterY;
 }
 
-float3 BlinnPhong(float3 surface, float3 normal, float3 toLight, float3 toEye)
-{
-    float diffuse = saturate(dot(normal, toLight));
-    float specular = diffuse > 0.0f ? pow(saturate(dot(normal, normalize(toLight + toEye))), 32.0f) * 0.25f : 0.0f;
-    return surface * diffuse + specular;
-}
-
 float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
 {
     float3 toEye = normalize(-position);
@@ -114,7 +153,7 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
     float3 lit = surface * Ambient;
     for (uint i = 0; i < DirectionalCount; i++)
     {
-        lit += BlinnPhong(surface, n, -lights[i].directionCosInner.xyz, toEye) * lights[i].colorCosOuter.rgb;
+        lit += lights[i].Shine(surface, n, toEye);
     }
 
     uint cluster = ClusterAt(pixel, position.z);
@@ -123,18 +162,7 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
     uint count = counts[cluster];
     for (uint k = 0; k < count; k++)
     {
-        ClusterLight light = lights[list[cluster * MaxLightsPerCluster + k]];
-        float3 toLight = light.positionRange.xyz - position;
-        float distance = length(toLight);
-        float3 l = toLight / max(distance, 1e-4f);
-        float reach = saturate(1.0f - (distance * distance) / (light.positionRange.w * light.positionRange.w));
-        float fade = reach * reach;
-        if (light.kind.x == SpotLight)
-        {
-            fade *= smoothstep(light.colorCosOuter.w, light.directionCosInner.w, dot(-l, light.directionCosInner.xyz));
-        }
-
-        lit += BlinnPhong(surface, n, l, toEye) * light.colorCosOuter.rgb * fade;
+        lit += lights[list[cluster * MaxLightsPerCluster + k]].Light(surface, position, n, toEye);
     }
 
     return lit;
@@ -145,44 +173,35 @@ MeshInstance InstanceOf(uint instanceId)
     return ((MeshInstance*)InstancesAddress)[InstanceBase + instanceId];
 }
 
-LIT_PIXEL Lit_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
+// A vertex of a copy, at a position and with a normal already in the mesh's own space.
+LIT_PIXEL LitOf(MeshInstance instance, float4 position, float3 normal, float2 uv)
 {
-    MeshInstance instance = InstanceOf(instanceId);
     LIT_PIXEL output;
-    float4 placed = mul(float4(input.position.xyz, 1.0f), instance.world);
+    float4 placed = instance.Placed(position);
     output.position = mul(placed, viewProjection);
     output.viewPosition = mul(placed, view).xyz;
-    output.viewNormal = mul(mul(input.normal, (float3x3)instance.world), (float3x3)view);
-    output.uv = input.uv0;
+    output.viewNormal = mul(instance.Turned(normal), (float3x3)view);
+    output.uv = uv;
     output.albedo = instance.albedo.rgb;
     output.texture = instance.slots.z;
     return output;
 }
 
-#include "SkinnedVertex.fxh"
-
-// A joint of the copy's palette; one past its joints stays where it is, as an unfilled joint of a palette did.
-float4x4 JointOf(MeshInstance instance, uint at)
+[shader("vertex")]
+LIT_PIXEL Lit_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
 {
-    float4x4* palette = (float4x4*)PalettesAddress;
-    return at < instance.slots.y
-        ? palette[instance.slots.x + at]
-        : float4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    return LitOf(InstanceOf(instanceId), float4(input.position.xyz, 1.0f), input.normal, input.uv0);
 }
 
+#include "Skinning.fxh"
+
+// The vertex goes where its joints carry it first, then the copy places it.
+[shader("vertex")]
 LIT_PIXEL LitSkinned_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
 {
     MeshInstance instance = InstanceOf(instanceId);
-    uint4 at = JointSlots(input.jointIndices);
-    float4x4 skin = BlendJoints(JointOf(instance, at.x), JointOf(instance, at.y), JointOf(instance, at.z),
-        JointOf(instance, at.w), input.jointWeights);
-    LIT_PIXEL output;
-    float4 placed = mul(mul(float4(input.position.xyz, 1.0f), skin), instance.world);
-    output.position = mul(placed, viewProjection);
-    output.viewPosition = mul(placed, view).xyz;
-    output.viewNormal = mul(mul(mul(input.normal, (float3x3)skin), (float3x3)instance.world), (float3x3)view);
-    output.uv = input.uv0;
-    output.albedo = instance.albedo.rgb;
-    output.texture = instance.slots.z;
-    return output;
+    float4x4 skin = SkinOf((float4x4*)PalettesAddress + instance.slots.x, instance.slots.y, input.jointIndices,
+        input.jointWeights);
+    return LitOf(instance, mul(float4(input.position.xyz, 1.0f), skin), mul(input.normal, (float3x3)skin),
+        input.uv0);
 }

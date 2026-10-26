@@ -383,6 +383,25 @@ public class SkinAndClipTests
         });
     }
 
+    // A skin may have as many joints as its file gives: a vertex bound to one far along a long skeleton goes where that
+    // joint carries it.
+    [Test]
+    public void AJointFarAlongALongSkeleton_CarriesItsVertex()
+    {
+        Import(SkinnedScene(), out var leg, out var hip, out var knee);
+        var skin = leg.GetComponent<Skin>();
+        skin.Skeleton.Joints.InsertRange(1, Enumerable.Repeat(hip, 198));
+        skin.Skeleton.InverseBindMatrices.InsertRange(1, Enumerable.Repeat(Matrix4x4F.Identity, 198));
+        var mesh = leg.GetComponent<MeshData>().Mesh;
+        mesh.SetJointIndices([Vector4F.Zero, new Vector4F(199, 0, 0, 0), Vector4F.Zero]);
+        mesh.SetJointWeights([Vector4F.UnitX, Vector4F.UnitX, Vector4F.UnitX]);
+        knee.Transform.Position += new Vector3(10, 0, 0);
+
+        var posed = skin.PosePoints(mesh);
+
+        Assert.That(posed[1], Is.EqualTo(new Vector3F(11, 0, 0)).Using<Vector3F>(Near));
+    }
+
     // A joint index below zero, which a signed accessor can hold, is taken as the first joint, as the draw takes it:
     // the hip carries the point three along, where the knee would carry it thirteen and no joint would leave it.
     [Test]

@@ -51,11 +51,13 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
     counts[cluster] = count;
 }
 
+[shader("fragment")]
 float4 LitColored_PS(LIT_PIXEL input) : SV_TARGET
 {
     return float4(Shade(input.albedo, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
 }
 
+[shader("fragment")]
 float4 LitTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);

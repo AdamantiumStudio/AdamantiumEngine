@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `IGraphicsDevice.UploadFrameData`: copies data into the frame's upload pages and gives its device address, for a
+  shader to read through a pointer while the frame lasts. A frame's upload pages take data larger than a page in a
+  page of its own size.
 - `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
   at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
   `ITexture.ReadbackToImage` reads any mip level back, not only the first. `IDescriptorManager.FallbackTextureIndex`:
@@ -1666,6 +1669,13 @@ All packages share one version.
 
 ### Changed
 
+- A skin bends with every joint it has, not the first 128: on the GPU, in picking and in its bounds, and a glTF skin
+  of more joints is no longer told about. A joint index past the skin's joints leaves its vertex where it is.
+- The engine's effects are written in Slang: entry points carry `[shader]`, and resources take Slang's bindings, with
+  no `register()`; an effect is named after its file, so `FontEffect`'s `Name` is `FontEffect`. The editor's gizmos read their instances and a skin's joints through pointers from the frame's upload
+  pages, so a draw takes any number of instances: `BasicEffect` has `InstancesAddress`, `JointsAddress`, `JointCount`,
+  `LineWidth`, `Ring` and `FrontHalfOnly` for `InstanceWorld`, `InstanceColor`, `InstanceLine`, `InstanceRing` and
+  `Joints`, and `GridEffect` has `Placement` for `InstanceWorld`.
 - `SpriteBatch` draws a batch in one draw whatever textures its sprites have: each sprite carries its texture's place
   in the device's texture array of no length (`IDescriptorManager.TextureIndex`), on the descriptor heap and on
   descriptor sets alike, and the sprite effect reads it from `spriteTextures[]` - a custom effect does the same in
@@ -1965,6 +1975,9 @@ All packages share one version.
 
 ### Removed
 
+- `SceneData.Controller.MaxDrawnJoints` and `ForwardPlusRenderingProcessor.MaxJoints`: a skin has no cap on its joints.
+- The `BasicEffect` passes nothing drew - the `Render` technique and `Basic`'s `Default`, `Textured`, `Lit` and
+  `VertexColored` - with the `World`, `ShaderTexture` and `SampleType` parameters only they read.
 - `SpriteSortMode.Texture`: a batch of any textures is one draw, so there is nothing to sort them for. With it
   `SpriteEffect.Texture`: the effect reads `SpriteTextures`, the array of no length.
 - With the old `Image`: `PixelBufferArray`, `MipMapDescription`, `AnimatedImageDescription`, `FlipBufferOptions`

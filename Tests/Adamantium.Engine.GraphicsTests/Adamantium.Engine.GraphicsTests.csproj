@@ -15,6 +15,7 @@
     <None Remove="EffectsData\AtomicAppend.fx" />
     <None Remove="EffectsData\IndirectDraw.fx" />
     <None Remove="EffectsData\DashCut.fx" />
+    <None Remove="EffectsData\SkinningProbe.fx" />
     <None Remove="EffectsData\FontEffect.fx" />
   </ItemGroup>
 
@@ -41,6 +42,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="EffectsData\DashCut.fx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="EffectsData\SkinningProbe.fx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!-- EffectLoadingTest compiles this one; it was the only fixture here without a copy rule, so it never reached the

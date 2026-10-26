@@ -8,9 +8,6 @@ public partial class SceneData
 {
    public class Controller
    {
-      /// <summary>How many joints of one skin move its vertices when it is drawn; joints past them do not.</summary>
-      public const int MaxDrawnJoints = 128;
-
       public Controller()
       {
          BindShapeMatrix = Matrix4x4F.Identity;

@@ -656,6 +656,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         private readonly IGraphicsDevice graphicsDevice;
         private readonly ulong pageSize;
         private readonly List<Buffer> pages = new();
+        private readonly List<Buffer> oversized = [];
 
         private int currentPageIndex = 0;
         private ulong currentOffset = 0;
@@ -666,7 +667,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         {
             graphicsDevice = device;
             this.pageSize = pageSize;
-            CreateNewPage();
+            pages.Add(NewPage(pageSize));
         }
 
         public void Reset()
@@ -674,6 +675,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             currentPageIndex = 0;
             currentOffset = 0;
             generation++;
+            ReleaseOversized();
         }
 
         /// <summary>The device address of a copy of <paramref name="buffer"/>'s data in this frame's pages: the copy made
@@ -728,15 +730,24 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             public byte[] Data = [];
         }
 
+        /// <summary>Room for <paramref name="size"/> bytes in this frame's pages. More than a page holds gets a buffer of
+        /// its own, freed when the pool is reset.</summary>
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
+            if (size > pageSize)
+            {
+                var own = NewPage(size);
+                oversized.Add(own);
+                return (own, 0);
+            }
+
             ulong alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
             if (alignedOffset + size > pageSize)
             {
                 currentPageIndex++;
                 if (currentPageIndex >= pages.Count)
                 {
-                    CreateNewPage();
+                    pages.Add(NewPage(pageSize));
                 }
 
                 alignedOffset = 0;
@@ -747,19 +758,34 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             return (page, alignedOffset);
         }
 
-        private void CreateNewPage()
+        private Buffer NewPage(ulong size)
         {
             var flags = BufferUsageFlags.UniformBuffer | BufferUsageFlags.ShaderDeviceAddress;
             var memFlags = BufferMemoryUsage.UploadFromCpuToGpu;
 
-            var buffer = Buffer.New(graphicsDevice, pageSize, flags, memFlags);
-            pages.Add(buffer);
+            return Buffer.New(graphicsDevice, size, flags, memFlags);
+        }
+
+        private void ReleaseOversized()
+        {
+            foreach (var page in oversized)
+            {
+                graphicsDevice.AddToDeferDisposeQueue(page);
+            }
+
+            oversized.Clear();
         }
 
         public void Dispose()
         {
             foreach (var page in pages) page.Dispose();
             pages.Clear();
+            foreach (var page in oversized)
+            {
+                page.Dispose();
+            }
+
+            oversized.Clear();
         }
     }
 

@@ -5,6 +5,7 @@ using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Graphics.Core.Presentation;
+using Adamantium.Graphics.Effects;
 using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
 
@@ -55,6 +56,31 @@ namespace Adamantium.Engine.GraphicsTests
 
             Assert.That(second.Page != first.Page || second.Offset >= first.Offset + 64, Is.True,
                 "the second constants landed on the first ones");
+        }
+
+        // More than a page holds gets a buffer of its own; the pages go on where they were, and after a reset the frame
+        // starts on the first page again.
+        [Test]
+        public void AnUploadLargerThanAPage_GetsABufferOfItsOwn_AndThePagesGoOn()
+        {
+            var device = GpuFixture.CreateRenderDevice();
+            using var pool = new EffectPass.DynamicBufferPool(device, 1024);
+            var first = pool.Allocate(64, 16);
+
+            var large = pool.Allocate(4096, 16);
+            var next = pool.Allocate(64, 16);
+            pool.Reset();
+            var afterReset = pool.Allocate(64, 16);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(large.Page, Is.Not.SameAs(first.Page));
+                Assert.That(large.Page.TotalSize, Is.GreaterThanOrEqualTo(4096UL));
+                Assert.That(next.Page, Is.SameAs(first.Page), "the large upload took no room of the pages");
+                Assert.That(next.Offset, Is.GreaterThanOrEqualTo(first.Offset + 64));
+                Assert.That(afterReset.Page, Is.SameAs(first.Page));
+                Assert.That(afterReset.Offset, Is.Zero);
+            });
         }
 
         // A texture a pass declares but nobody bound reads the stand-in. One never set wrote no index at all, so the shader

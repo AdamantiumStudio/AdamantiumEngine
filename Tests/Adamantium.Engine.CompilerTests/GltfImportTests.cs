@@ -525,12 +525,12 @@ public class GltfImportTests
     }
 
     [Test]
-    public void ASkinWithMoreJointsThanAreDrawn_IsTold()
+    public void ASkinOfManyJoints_KeepsThemAll_AndTellsNothing()
     {
-        var asset = SkinnedTriangle(out _, out var hip, out _);
+        var asset = SkinnedTriangle(out var meshNode, out var hip, out _);
         var joints = asset.Json["skins"]![0]!["joints"]!.AsArray();
         asset.Json["skins"]![0]!.AsObject().Remove("inverseBindMatrices");
-        while (joints.Count < SceneData.Controller.MaxDrawnJoints + 2)
+        while (joints.Count < 300)
         {
             var joint = asset.Node(new JsonObject());
             joints.Add(joint);
@@ -538,10 +538,13 @@ public class GltfImportTests
         }
 
         var converter = new GltfConverter(asset.WriteGltf(folder), new Compiler.Converter.Configs.ConversionConfig(true));
-        converter.StartConversion();
+        var scene = converter.StartConversion();
 
-        Assert.That(converter.UnsupportedFeatures,
-            Has.Some.Contains($"{SceneData.Controller.MaxDrawnJoints + 2} joints"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(scene.Controllers[GltfConverter.NodeId(meshNode)].JointNames, Has.Count.EqualTo(300));
+            Assert.That(converter.UnsupportedFeatures, Has.None.Contains("joints"));
+        });
     }
 
     [Test]

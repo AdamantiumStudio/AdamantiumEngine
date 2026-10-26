@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Adamantium.Core;
 using Adamantium.Core.Collections;
@@ -555,6 +556,14 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public void AddToDeferDisposeQueue(IDisposable obj)
     {
         MainDevice.RetireResource(obj);
+    }
+
+    public ulong UploadFrameData<T>(ReadOnlySpan<T> data) where T : unmanaged
+    {
+        var bytes = (ulong)(data.Length * Unsafe.SizeOf<T>());
+        var (page, offset) = CurrentBufferPool.Allocate(Math.Max(bytes, 16), 16);
+        page.SetData(data, (uint)offset);
+        return page.GetDeviceAddress() + offset;
     }
 
     public IEffectResourceLinker CreateEffectResourceLinker()
