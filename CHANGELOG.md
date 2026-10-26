@@ -43,6 +43,19 @@ All packages share one version.
   format has no specification.
 - `JpegDecoder.ComponentsAreRgb`: three components taken as RGB as they are, as TIFF stores JPEG of RGB data.
 - `JpegImage(width, height, format, pixels)`: the picture made from its pixels.
+- `ColorQuantizer.Quantize(rgba, width, height, maxColors, dither)`: RGBA pixels in a palette of up to 256 colors
+  (`QuantizedImage`: the palette, an index a pixel, the transparent index). Few enough colors are kept exactly; more
+  are cut into boxes one cut at a time - the cut, across a channel at a value, that lowers the squared error most -
+  the boxes' means refined by k-means over the colors, and pixels mapped to the nearest with Floyd–Steinberg error
+  diffusion if asked. On photographs of 800 to 3840 pixels it comes within 46.5 to 47.9 dB of them undithered and
+  41.7 to 44.8 dithered, where Pillow's median cut comes within 42.8 to 44.6 and ImageMagick 7 within 43.3 to 44.0.
+  Its time goes with the colors a picture has: written as GIF, a 3840×1920 photograph takes 0.6 s undithered and
+  1.0 dithered, a 3840×2160 one of a million colors 1.4 and 2.6 - Pillow 1.7 and 2.7, ImageMagick 3.1 and 3.9.
+- `ImageShrink.FitWithin`: pixels shrunk to fit a size, the aspect kept - each the average of the area it covers,
+  colors weighted by alpha so transparent pixels lend them none, sRGB ones averaged as light - for 8- and 16-bit
+  gray, RGB and RGBA in either order; read a row at a time in bands on every core, nothing the source's size made.
+- `GifImage.Read`, `GifImage.Frames` (`GifFrame`: place, delay, `GifDisposal`) and `GifImage.Comments`;
+  `GifEncoder.Encode(image, output, dither)` is static.
 - `PngImage` (a PNG or APNG read: `Read`, `Frames`, `BitDepth`, `Metadata`, `ReleaseDecodedFrames`) and `PngEncoder`
   are public, with `PngMetadata`, `PngText`, `PngChromaticities`, `PngRenderingIntent`, `PngFrame`, `PngDispose` and
   `PngBlend`.
@@ -959,13 +972,24 @@ All packages share one version.
 
 ### Fixed
 
+- A texture larger than the device's limits - a side past its maxImageDimension1D, 2D, 3D or cube, more layers than
+  its maxImageArrayLayers, past what the device makes of its format, tiling and usage - extent, layers, levels and
+  bytes - or larger than one allocation may be, went to Vulkan as it was; it is refused with `NotSupportedException`
+  naming the limit, before a staging buffer its size is made. A texture that fails while it is made is disposed and
+  its pixels let go, leaving nothing behind; so is a shared surface, any of several, and a multisampled render
+  target whose resolve texture fails. An imported shared surface the device refuses memory for no longer leaks its
+  copy of the descriptor. `TotalSizeInBytes` of a texture array counts every layer.
+- A BMP of 24 or 16 bits read as RGB of 8 bits, a format most devices do not sample from; it reads as RGBA.
+- GIF frames came out other than Pillow and ffmpeg compose them in every animation of the tests, and a GIF's play
+  count was always forever. A GIF written made palette entry 127 of each frame transparent - its graphic control
+  written after the frame, for the next - and showed every frame 40 ms.
 - A BMP read came out RGB but said it was BGR: written as JPEG its red and blue changed places, and a texture made of
   it showed them swapped. It says RGB now; written, BMP swaps only pixels said to be RGB into its BGR, and
   `Texture.Save` writes a B8G8R8A8 render target as it is, said to be B8G8R8A8 - every encoder reads the order the
-  pixels say they are in: TGA wrote BGRA pixels with red and blue swapped, and GIF quantized BGRA and 16-bit pixels
-  as if they were 8-bit RGBA. BMP, TGA and GIF write 16-bit and gray pixels as RGBA of 8 bits - they wrote them
-  broken or threw - and TGA writes RGB the same way, its red and blue swapped before; pixels they cannot take throw
-  `NotSupportedException`, and TGA throws for a picture past 65535 pixels a side, where it wrote an empty header.
+  pixels say they are in: TGA wrote BGRA and RGB pixels with red and blue swapped, and GIF quantized BGRA and 16-bit
+  pixels as if they were 8-bit RGBA. BMP, TGA and GIF write 16-bit and gray pixels too - they wrote them broken or
+  threw; pixels they cannot take throw `NotSupportedException`, and TGA throws for a picture past 65535 pixels a
+  side, where it wrote an empty header.
 - `TextureCube` from six files read each face as long as the first: faces of other sizes or formats were read past
   their ends. They are refused now.
 - Writing a BMP of fewer than 40 bytes of pixels wrote past the end of its buffer and could bring the process down:
@@ -1601,6 +1625,31 @@ All packages share one version.
 
 ### Changed
 
+- TGA is read and written by a new codec, written from Truevision TGA 2.0. It reads color-mapped, true-color and
+  gray images, plain or run-length encoded - packets running on from row to row too - of 8, 15, 16, 24 and 32 bits,
+  maps of 15 to 32 bits starting at any entry, in all four orientations, as RGBA8. Alpha is the bits the image
+  descriptor counts, and the fourth byte of 32-bit pixels and the second of 16-bit gray even where it counts none, as
+  writers leave it and Pillow and ImageMagick read it; the extension area says when they are not alpha or are
+  premultiplied, which is divided out. Indices the color map has no entry for are opaque black. Against Pillow 12 and
+  ImageMagick 7 the pixels are the same where they read the file as TGA 2.0 does; a file shorter than its pixels is
+  refused, and so are pixels more than the data could hold. The encoder writes gray, 24-bit or 32-bit pixels by what
+  the picture needs, top row first, run-length encoded unless asked not to, with the extension area and footer;
+  `TgaImage.Read`, `TgaImage.Id` and the static `TgaEncoder.Encode(image, output, compress)` are its API. A
+  4984×3858 picture reads in 0.1 s, 0.8 of Pillow's time.
+- GIF is read and written by a new codec, written from GIF89a. It reads GIF87a and GIF89a: global and local color
+  tables, interlacing, transparency, every disposal - cleared to transparent, as browsers do - frames placed anywhere
+  and cut to the screen, the loop count (`NumberOfReplays`, once when the file does not say) and the comments; frames
+  are decoded when asked for and composed on two kept canvases and one saved every 16 frames, as APNG's are. Against
+  Pillow 12 and ffmpeg 8 every frame of the test files comes out the same, pixel for pixel, and LZW of every code
+  size, 1 to 11, as giflib reads it. A file cut off, or with a block of no kind GIF has, keeps the frames before, and
+  a frame its data ends early; frames are read a row at a time, so one of any size costs only what the screen shows
+  and its data holds, and data that could not fill the screen is refused before anything is made. Read warm, every
+  frame of the test files takes 0.2 to 1.0 of Pillow's time; the first read in a process takes longer while its code
+  is compiled. The encoder writes each frame as the rectangle that changed, the pixels in it that did not
+  transparent, in a table of its own - its colors exactly when 256 or fewer, else by `ColorQuantizer` - with the
+  source's delays and play count; Pillow and ffmpeg read what it writes as it was. A 960×540 animation panning over
+  a photograph takes 40 to 80 ms a frame undithered and 55 to 145 dithered, by the photograph - Pillow 87 for the
+  busier one; one of few colors far less.
 - Text runs on both sides of an exclusion in a frame, as Word's square wrapping does: a row's line goes on in the next
   stretch past the exclusion, in the order its paragraph reads - right of it, or left of it in a paragraph running
   right to left - before the next row starts. It used to run in the widest stretch only, so a picture moved past the
@@ -1822,6 +1871,14 @@ All packages share one version.
 
 ### Removed
 
+- With the old TGA codec: `TgaDecoder`, `TgaConversionFlags`, `TgaEncoder.SaveToTgaStream` and `TgaImage`'s
+  constructor and `PixelBuffer`.
+- With the old GIF codec: `GifDecoder`, `GIFHelper` (`GifHelper` stands for it), `ScreenDescriptor`,
+  `GifImageDescriptor`, `GraphicControlExtension`, `ApplicationExtension`, `DisposalMethod` (`GifDisposal` stands
+  for it), the old `GifFrame` class, and `GifImage`'s `GlobalColorTable`, `CurrentFrame`, `ColorDepth`,
+  `Descriptor`, `ApplicationExtension`, `AddFrame` and `DecodeFrame`; the whole `Adamantium.Imaging.PaletteQuantizer`
+  namespace - its quantizers, ditherers, color caches, `ImageBuffer`, pixel types and `Extend` - which
+  `ColorQuantizer` stands for.
 - With the old PNG codec: `PngDecoder`, `PngCompressor`, `PngDecoderSettings`, `PngEncoderSettings`,
   `PNGStreamReader`, `TXTItem`, `ITextItem` (`PngText` stands for both), `Adam7`, `Crc32`, `Adler32`, `BitHelper`,
   `PngDecodeException` and `PngEncoderException` - broken files fail with `InvalidDataException` and

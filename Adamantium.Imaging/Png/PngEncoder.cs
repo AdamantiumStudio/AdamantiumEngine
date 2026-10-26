@@ -77,12 +77,19 @@ public static class PngEncoder
         {
             if (animated)
             {
-                var timing = png != null && f < png.Frames.Count ? png.Frames[f] : default;
+                // A frame's delay: a PNG's own, a GIF's in hundredths, else a tenth of a second.
+                var (numerator, denominator) = image switch
+                {
+                    PngImage timed when f < timed.Frames.Count =>
+                        (timed.Frames[f].DelayNumerator, timed.Frames[f].DelayDenominator),
+                    Gif.GifImage timed when f < timed.Frames.Count =>
+                        (timed.Frames[f].DelayCentiseconds, (ushort)100),
+                    _ => ((ushort)1, (ushort)10)
+                };
                 var control = new byte[26];
                 BinaryPrimitives.WriteUInt32BigEndian(control, sequence++);
                 BinaryPrimitives.WriteUInt32BigEndian(control.AsSpan(4), (uint)width);
                 BinaryPrimitives.WriteUInt32BigEndian(control.AsSpan(8), (uint)height);
-                var (numerator, denominator) = png != null ? (timing.DelayNumerator, timing.DelayDenominator) : ((ushort)1, (ushort)10);
                 BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(20), numerator);
                 BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(22), denominator);
                 writer.Chunk("fcTL", control);

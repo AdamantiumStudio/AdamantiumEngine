@@ -7,7 +7,6 @@ using Adamantium.Fonts.TextureGeneration;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Imaging;
-using Adamantium.Imaging.PaletteQuantizer.Extensions;
 using Adamantium.Mathematics;
 using Adamantium.Vulkan.Core;
 

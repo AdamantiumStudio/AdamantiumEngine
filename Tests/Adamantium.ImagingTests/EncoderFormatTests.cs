@@ -64,7 +64,23 @@ public class EncoderFormatTests
         writer.Write(pixels);
         bmp.Position = 0;
 
-        Assert.That(BitmapLoader.Load(bmp).GetRgba8Pixels(), Is.EqualTo(new byte[] { 255, 0, 0, 255, 0, 0, 255, 255 }));
+        var read = BitmapLoader.Load(bmp);
+        Assert.That((Format)read.PixelFormat, Is.EqualTo(Format.R8G8B8A8_UNORM));
+        Assert.That(read.GetRgba8Pixels(), Is.EqualTo(new byte[] { 255, 0, 0, 255, 0, 0, 255, 255 }));
+    }
+
+    // A BMP of 24 bits reads as RGBA, a format every device samples - three channels of 8 bits most do not.
+    [Test]
+    public void ABmpOfTwentyFourBits_ReadsAsRgba()
+    {
+        var stream = new MemoryStream();
+        BitmapLoader.Save(new FrameBitmap(3, 2, Format.R8G8B8A8_UNORM, [Colors]), stream, ImageFileType.Bmp);
+        stream.Position = 0;
+
+        var read = BitmapLoader.Load(stream);
+
+        Assert.That((Format)read.PixelFormat, Is.EqualTo(Format.R8G8B8A8_UNORM));
+        Assert.That(read.GetRawPixels(0), Is.EqualTo(Colors));
     }
 
     // Palette and top-down BMPs are not read yet: refused, not read as empty.

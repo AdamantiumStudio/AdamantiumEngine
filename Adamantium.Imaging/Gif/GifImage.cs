@@ -2,295 +2,215 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Adamantium.Mathematics;
-using Adamantium.Vulkan.Core;
 
-namespace Adamantium.Imaging.Gif
+namespace Adamantium.Imaging.Gif;
+
+/// <summary>A GIF picture or animation (GIF89a, GIF87a) as RGBA of 8 bits a channel, transparent where the file is.
+/// Frames are decoded when asked for and drawn on a transparent canvas as browsers draw them - a frame cleared to the
+/// background is cleared to transparent; two canvases are kept, so frames asked for in order cost one frame each, and
+/// an earlier one is drawn again from the canvas saved every 16 frames (up to 64 MB of them) - all held until
+/// <see cref="ReleaseDecodedFrames"/>. A file that breaks off keeps the frames before it, a frame that breaks off the
+/// pixels it has.</summary>
+public sealed class GifImage : IRawBitmap
 {
-    public class GifImage : IRawBitmap
+    private readonly GifFile _file;
+    private readonly object _decodeLock = new();
+    private readonly ComposedFrame[] _regions;
+    private readonly FrameComposer _composer;
+
+    // The pixels last handed out, by frame.
+    private byte[] _last;
+    private int _lastFrame = -1;
+    private FrameData _firstFrame;
+
+    private GifImage(GifFile file)
     {
-        private readonly List<GifFrame> frames;
-        private readonly object _decodeSync = new();
-        private readonly Walk _decoding = new();
-        private readonly Walk _copying = new();
-
-        private sealed class Walk
+        _file = file;
+        Frames = file.Images.Select(image => new GifFrame((uint)image.X, (uint)image.Y, (uint)image.Width,
+            (uint)image.Height, image.Delay, image.Disposal)).ToArray();
+        // Each image's region on the screen, cut to it.
+        _regions = file.Images.Select(image =>
         {
-            public int At = -1;
-            public int[] Index;
-            public byte[] Scratch;
-
-            public void Reset()
-            {
-                At = -1;
-                Index = null;
-                Scratch = null;
-            }
-        }
-
-        public GifImage()
-        {
-            frames = new List<GifFrame>();
-            GlobalColorTable = new List<ColorRGB>();
-        }
-        
-        public List<ColorRGB> GlobalColorTable { get; internal set; }
-
-        public IReadOnlyList<GifFrame> Frames => frames;
-
-        public GifFrame CurrentFrame { get; internal set; }
-
-        public byte ColorDepth { get; internal set; }
-
-        public ScreenDescriptor Descriptor { get; set; }
-        
-        public ApplicationExtension ApplicationExtension { get; set; }
-
-        public void AddFrame(GifFrame frame)
-        {
-            frames.Add(frame);
-        }
-        
-        public byte[] DecodeFrame(uint frameIndex)
-        {
-            lock (_decodeSync)
-            {
-                var index = Clamp(frameIndex);
-                var frame = frames[index];
-                if (!frame.IsDecoded)
+            int x = Math.Min(image.X, file.Width), y = Math.Min(image.Y, file.Height);
+            return new ComposedFrame(x, y, Math.Min(image.X + image.Width, file.Width) - x,
+                Math.Min(image.Y + image.Height, file.Height) - y, image.Disposal switch
                 {
-                    var pixels = new byte[PixelBytes(frame, (uint)index)];
-                    Compose(_decoding, index, pixels);
-                    frame.RawPixels = pixels;
-                    frame.IsDecoded = true;
-                }
+                    GifDisposal.Background => FrameDisposal.Background,
+                    GifDisposal.Previous => FrameDisposal.Previous,
+                    _ => FrameDisposal.None
+                }, true);
+        }).ToArray();
+        _composer = new FrameComposer(file.Width, file.Height, 4, _regions, Decode);
+    }
 
-                return frame.RawPixels;
-            }
-        }
+    /// <summary>Reads the GIF in <paramref name="data"/>.</summary>
+    public static GifImage Read(ReadOnlySpan<byte> data) => new(GifFile.Read(data));
 
-        /// <summary>Writes one frame's pixels into <paramref name="destination"/> without keeping them: frames read in order
-        /// cost one buffer between them instead of one each. What the frame does not cover is cleared.</summary>
-        public void CopyFrame(uint frameIndex, Span<byte> destination)
+    public uint Width => (uint)_file.Width;
+
+    public uint Height => (uint)_file.Height;
+
+    public SurfaceFormat PixelFormat => SurfaceFormat.R8G8B8A8.UNorm;
+
+    public bool IsMultiFrame => Frames.Count > 1;
+
+    public bool HasMipLevels => false;
+
+    public uint MipLevelsCount => 0;
+
+    /// <summary>How many times the animation plays, 0 for forever; once when the file does not say.</summary>
+    public uint NumberOfReplays => _file.Plays;
+
+    public uint FramesCount => (uint)Frames.Count;
+
+    /// <summary>Each frame's place as the file gives it, its delay and its disposal.</summary>
+    public IReadOnlyList<GifFrame> Frames { get; }
+
+    /// <summary>The file's comments.</summary>
+    public IReadOnlyList<string> Comments => _file.Comments;
+
+    /// <summary>The canvas as frame <paramref name="frameIndex"/> leaves it shown.</summary>
+    public byte[] GetRawPixels(uint frameIndex)
+    {
+        Check(frameIndex);
+        lock (_decodeLock)
         {
-            lock (_decodeSync)
+            if (_lastFrame != frameIndex || _last == null)
             {
-                var index = Clamp(frameIndex);
-                var frame = frames[index];
-                var length = frame.IsDecoded ? frame.RawPixels.Length : PixelBytes(frame, (uint)index);
-                if (frame.IsDecoded)
+                (_last, _lastFrame) = (_composer.Compose((int)frameIndex), (int)frameIndex);
+            }
+
+            return _last;
+        }
+    }
+
+    /// <summary>The canvas as frame <paramref name="frameIndex"/> leaves it, written into
+    /// <paramref name="destination"/> without a copy kept.</summary>
+    public void CopyFrame(uint frameIndex, Span<byte> destination)
+    {
+        Check(frameIndex);
+        lock (_decodeLock)
+        {
+            if (_lastFrame == frameIndex && _last != null)
+            {
+                _last.CopyTo(destination);
+                return;
+            }
+
+            _composer.ComposeInto((int)frameIndex, destination);
+        }
+    }
+
+    public FrameData GetMipLevelData(uint mipLevel) => GetFrameData(0);
+
+    public ImageDescription GetImageDescription() => ImageDescription.Default2D(Width, Height, PixelFormat);
+
+    public FrameData GetFrameData(uint frameIndex) => frameIndex == 0
+        ? _firstFrame ??= new FrameData(GetRawPixels(0), GetImageDescription())
+        : new FrameData(GetRawPixels(frameIndex), GetImageDescription());
+
+    /// <summary>Drops the decoded frames; a frame asked for again is decoded again.</summary>
+    public void ReleaseDecodedFrames()
+    {
+        lock (_decodeLock)
+        {
+            _composer.Release();
+            (_last, _lastFrame, _firstFrame) = (null, -1, null);
+        }
+    }
+
+    private void Check(uint frameIndex)
+    {
+        if (frameIndex >= Frames.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(frameIndex), $"The GIF has {Frames.Count} frames.");
+        }
+    }
+
+    // An image's pixels in its region on the screen: its colors, transparent at its transparent index and where its
+    // data ends before it does.
+    private byte[] Decode(int index)
+    {
+        var image = _file.Images[index];
+        var region = _regions[index];
+        var decodable = region.Width == 0 ? 0
+            : (int)Math.Min(image.Height, (image.Data.Length * GifFile.MostIndicesPerByte + image.Width - 1) / image.Width);
+        var rows = 0;
+        var reach = 0;
+        for (var row = 0; row < image.Height && region.Width > 0; row++)
+        {
+            var y = image.Y + (image.Interlaced ? InterlacedRow(row, image.Height) : row);
+            if (y >= region.Y && y < region.Y + region.Height)
+            {
+                rows = row + 1;
+                if (row < decodable)
                 {
-                    frame.RawPixels.CopyTo(destination);
+                    reach = Math.Max(reach, y - region.Y + 1);
                 }
-                else
+            }
+        }
+
+        Span<uint> colors = stackalloc uint[256];
+        for (var i = 0; i < 256; i++)
+        {
+            colors[i] = image.Palette == null ? 0xFF000000u | (uint)(i * 0x010101)
+                : i * 3 + 2 < image.Palette.Length
+                    ? 0xFF000000u | image.Palette[i * 3] | (uint)image.Palette[i * 3 + 1] << 8
+                      | (uint)image.Palette[i * 3 + 2] << 16
+                    : 0xFF000000u;
+        }
+
+        if (image.Transparent >= 0)
+        {
+            colors[image.Transparent] = 0;
+        }
+
+        var rowBytes = region.Width * 4;
+        var pixels = new byte[reach * rowBytes];
+        var left = region.X - image.X;
+        var reader = new GifLzw.Reader(image.Data, image.MinCodeSize);
+        var line = new byte[image.Width];
+        for (var row = 0; row < rows; row++)
+        {
+            var got = reader.Read(line);
+            var y = image.Y + (image.Interlaced ? InterlacedRow(row, image.Height) : row) - region.Y;
+            if (y >= 0 && y < reach && got > left)
+            {
+                var to = MemoryMarshal.Cast<byte, uint>(pixels.AsSpan(y * rowBytes, rowBytes));
+                for (var x = 0; x < region.Width && left + x < got; x++)
                 {
-                    Compose(_copying, index, destination[..length]);
+                    to[x] = colors[line[left + x]];
                 }
+            }
 
-                destination[length..].Clear();
+            if (got < line.Length)
+            {
+                break;
             }
         }
 
-        private int Clamp(uint frameIndex) => (int)Math.Min(frameIndex, (uint)frames.Count - 1);
+        return pixels;
+    }
 
-        private bool ComposesWholeFrame(GifFrame frame, uint frameIndex) =>
-            frameIndex == 0 ||
-            (frame.Descriptor.Width == Descriptor.Width && frame.Descriptor.Height == Descriptor.Height) ||
-            (frame.GraphicControlExtension != null && frame.GraphicControlExtension.DisposalMethod == DisposalMethod.None);
-
-        private int PixelBytes(GifFrame frame, uint frameIndex) => ComposesWholeFrame(frame, frameIndex)
-            ? frame.Descriptor.Width * frame.Descriptor.Height * 4
-            : Descriptor.Width * Descriptor.Height * 4;
-
-        private void Compose(Walk walk, int index, Span<byte> pixels)
+    // The image row the rowth row of interlaced data is (GIF89a, appendix E): every 8th from 0, every 8th from 4,
+    // every 4th from 2, every 2nd from 1.
+    private static int InterlacedRow(int row, int height)
+    {
+        var first = (height + 7) / 8;
+        if (row < first)
         {
-            if (index <= walk.At)
-            {
-                walk.At = -1;
-                walk.Index = null;
-            }
-
-            for (var i = walk.At + 1; i <= index; i++)
-            {
-                var f = frames[i];
-                var decoded = LZW.Decompress(CollectionsMarshal.AsSpan(f.CompressedData), f.LzwMinimumCodeSize,
-                    f.Descriptor.Width * f.Descriptor.Height);
-                var target = pixels;
-                if (i < index)
-                {
-                    var bytes = PixelBytes(f, (uint)i);
-                    if (walk.Scratch == null || walk.Scratch.Length < bytes)
-                    {
-                        walk.Scratch = new byte[bytes];
-                    }
-
-                    target = walk.Scratch.AsSpan(0, bytes);
-                }
-
-                walk.Index = GetImageFromIndexStream(f, (uint)i, target, decoded, walk.Index);
-                walk.At = i;
-            }
+            return row * 8;
         }
 
-        private int[] GetImageFromIndexStream(GifFrame frame, uint frameIndex, Span<byte> pixels, int[] indexData, int[] previous)
+        row -= first;
+        var second = (height + 3) / 8;
+        if (row < second)
         {
-            var width = frame.Descriptor.Width;
-            var height = frame.Descriptor.Height;
-            var colorTable = frame.ColorTable;
-
-            int offset = 0;
-            int bytesPerPixel = 4;
-
-            if (frame.Interlaced)
-            {
-                indexData = GifDecoder.Deinterlace(frame, indexData);
-            }
-
-            if (ComposesWholeFrame(frame, frameIndex))
-            {
-                for (int i = 0; i < width * height; i++)
-                {
-                    var colors = colorTable[indexData[i]];
-                    pixels[offset] = colors.R;
-                    pixels[offset + 1] = colors.G;
-                    pixels[offset + 2] = colors.B;
-                    if (frame.GraphicControlExtension != null &&
-                        frame.GraphicControlExtension.TransparentColorIndex == i)
-                    {
-                        pixels[offset + 3] = 0;
-                    }
-                    else
-                    {
-                        pixels[offset + 3] = 255;
-                    }
-
-                    offset += bytesPerPixel;
-                }
-
-                return indexData;
-            }
-            else if (frameIndex > 0 &&
-                     (frame.Descriptor.OffsetLeft != Descriptor.Width || frame.Descriptor.OffsetTop != Descriptor.Height))
-                     //frame.GraphicControlExtension != null && 
-                     //frame.GraphicControlExtension.DisposalMethod == DisposalMethod.DoNotDispose)
-            {
-                var baseFrame = Frames[(int)frameIndex - 1];
-                var canvas = previous;
-                var canvasWidth = (int)Descriptor.Width;
-                var left = (int)frame.Descriptor.OffsetLeft;
-                var top = (int)frame.Descriptor.OffsetTop;
-                var frameWidth = (int)frame.Descriptor.Width;
-                var frameHeight = (int)frame.Descriptor.Height;
-
-                int transparentIndex = 0;
-                bool transparencyAvailable = false;
-                if (baseFrame.GraphicControlExtension != null && baseFrame.GraphicControlExtension.TransparencyAvailable)
-                {
-                    transparencyAvailable = baseFrame.GraphicControlExtension.TransparencyAvailable;
-                    transparentIndex = baseFrame.GraphicControlExtension.TransparentColorIndex;
-                }
-
-                for (int i = 0; i < canvas.Length; i++)
-                {
-                    var y = i / canvasWidth;
-                    var x = i - y * canvasWidth;
-                    var original = canvas[i];
-                    var value = original;
-                    if (y >= top && y < top + frameHeight && x >= left && x < left + frameWidth)
-                    {
-                        value = indexData[(y - top) * frameWidth + (x - left)];
-                    }
-
-                    bool useBaseColorTable = false;
-                    if (value == transparentIndex && transparencyAvailable)
-                    {
-                        value = original;
-                        useBaseColorTable = true;
-                    }
-
-                    canvas[i] = value;
-                    var colors = useBaseColorTable ? baseFrame.ColorTable[value] : colorTable[value];
-
-                    pixels[offset] = colors.R;
-                    pixels[offset + 1] = colors.G;
-                    pixels[offset + 2] = colors.B;
-                    if (frame.GraphicControlExtension != null &&
-                        frame.GraphicControlExtension.TransparentColorIndex == i)
-                    {
-                        pixels[offset + 3] = 0;
-                    }
-                    else
-                    {
-                        pixels[offset + 3] = 255;
-                    }
-                    offset += bytesPerPixel;
-                }
-
-                return canvas;
-            }
-            else
-            {
-                throw new NotImplementedException($"Current disposal method: {frame.GraphicControlExtension?.DisposalMethod} is not supported");
-            }
+            return 4 + row * 8;
         }
 
-        public uint Width => Descriptor.Width;
-
-        public uint Height => Descriptor.Height;
-
-        public SurfaceFormat PixelFormat => SurfaceFormat.R8G8B8A8.UNorm;
-        public bool IsMultiFrame => frames.Count > 0;
-        public bool HasMipLevels => false;
-        public uint MipLevelsCount => 0;
-        public uint NumberOfReplays => 0;
-        public uint FramesCount => (uint)frames.Count;
-        public byte[] GetRawPixels(uint frameIndex)
-        {
-            return DecodeFrame(frameIndex);
-        }
-
-        public FrameData GetMipLevelData(uint mipLevel)
-        {
-            return GetFrameData(0);
-        }
-
-        public ImageDescription GetImageDescription()
-        {
-            return new ImageDescription()
-            {
-                Width = Descriptor.Width,
-                Height = Descriptor.Height,
-                Depth = 1,
-                Dimension = TextureDimension.Texture2D,
-                Format = Format.R8G8B8A8_UNORM,
-                ArraySize = 1,
-                MipLevels = 1
-            };
-        }
-
-        public FrameData GetFrameData(uint frameIndex)
-        {
-            var pixels = GetRawPixels(frameIndex);
-            return new FrameData(pixels, GetImageDescription());
-        }
-
-        // Decoded pixels AND the palette-index stream both go: each is width*height*4 bytes per frame, so a 200-frame
-        // 960x540 GIF sits on ~830 MB of them. The compressed data stays, so asking for a frame again simply decodes it
-        // again - from frame 0, since a GIF frame is a delta over the one before it (see DecodeFrame).
-        public void ReleaseDecodedFrames()
-        {
-            lock (_decodeSync)
-            {
-                foreach (var frame in frames)
-                {
-                    frame.RawPixels = null;
-                    frame.IndexData = null;
-                    frame.IsDecoded = false;
-                }
-
-                _decoding.Reset();
-                _copying.Reset();
-            }
-        }
+        row -= second;
+        var third = (height + 1) / 4;
+        return row < third ? 2 + row * 4 : 1 + (row - third) * 2;
     }
 }

@@ -1,10 +1,8 @@
 using System.Collections.Generic;
 using Adamantium.Imaging.Bmp;
 using Adamantium.Imaging.Dds;
-using Adamantium.Imaging.Gif;
 using Adamantium.Imaging.Ico;
 using Adamantium.Imaging.Jpeg;
-using Adamantium.Imaging.Tga;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Imaging;
@@ -28,6 +26,8 @@ public static class ImageExtension
                         pxBuffer.GetPixels<byte>());
                 }
             case ImageFileType.Png:
+            case ImageFileType.Gif:
+            case ImageFileType.Tga:
                 {
                     // Every buffer of the picture's own size is a frame - an animation of several.
                     var frames = new List<byte[]>();
@@ -77,30 +77,6 @@ public static class ImageExtension
                         img.AddMipLevel(frame);
                     }
 
-                    return img;
-                }
-            case ImageFileType.Gif:
-                {
-                    var img = new GifImage();
-                    img.Descriptor = new ScreenDescriptor();
-                    img.Descriptor.Width = (ushort)image.Description.Width;
-                    img.Descriptor.Height = (ushort)image.Description.Height;
-                    img.ColorDepth = (byte)image.Description.Format.SizeOfInBits();
-
-                    for (var index = 0; index < image.PixelBuffer.Count; index++)
-                    {
-                        var pixelBuffer = image.PixelBuffer[index];
-                        var gifFrame = new GifFrame(index);
-                        gifFrame.RawPixels = pixelBuffer.GetPixels<byte>();
-                        img.AddFrame(gifFrame);
-                    }
-
-                    return img;
-                }
-            case ImageFileType.Tga:
-                {
-                    var img = new TgaImage(image.Description.Width, image.Description.Height, image.Description.Format);
-                    img.PixelBuffer = image.PixelBuffer[0].GetPixels<byte>();
                     return img;
                 }
             case ImageFileType.Tiff:

@@ -190,21 +190,35 @@ namespace Adamantium.Imaging.Bmp
                 }
             }
 
-            var bmpImage = new BmpImage(description);
             buffer = ImageHelper.FlipBuffer(
-                buffer, 
-                description.Width, 
-                description.Height, 
+                buffer,
+                description.Width,
+                description.Height,
                 description.Format.SizeOfInBytes(),
                 FlipBufferOptions.FlipVertically);
 
-            if (description.Format.SizeOfInBytes() == 4)
+            if (description.Format == Format.R8G8B8_UNORM)
+            {
+                buffer = Opaque(buffer);
+                description.Format = Format.R8G8B8A8_UNORM;
+            }
+            else
             {
                 ImageHelper.SetAlpha(buffer, 255);
             }
 
-            bmpImage.PixelData = buffer;
-            return bmpImage;
+            return new BmpImage(description) { PixelData = buffer };
+        }
+
+        private static byte[] Opaque(byte[] rgb)
+        {
+            var rgba = new byte[rgb.Length / 3 * 4];
+            for (int from = 0, to = 0; from < rgb.Length; from += 3, to += 4)
+            {
+                (rgba[to], rgba[to + 1], rgba[to + 2], rgba[to + 3]) = (rgb[from], rgb[from + 1], rgb[from + 2], 255);
+            }
+
+            return rgba;
         }
 
         private static int AlignStride(int stride, int align = 4)

@@ -5,7 +5,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Adamantium.Imaging;
-using Adamantium.Imaging.PaletteQuantizer.Extensions;
 using Adamantium.Mathematics;
 
 namespace Adamantium.FontTests
@@ -25,7 +24,7 @@ namespace Adamantium.FontTests
             var atlasData = new FontAtlasData(64, new Size(1024, 1024));
             var atlasGen = new TextureAtlasGenerator(typeface, font, atlasData, FontParameters.Default());
 
-            var glyphs = font.TranslateIntoGlyphs("Hello string").Distinct(x => x.Index).ToArray();
+            var glyphs = font.TranslateIntoGlyphs("Hello string").DistinctBy(x => x.Index).ToArray();
             var textureData = atlasGen.GenerateTextureForGlyphs(glyphs);
             atlasGen.CopyTextureDataToImage(textureData);
             timer.Stop();
@@ -106,7 +105,7 @@ namespace Adamantium.FontTests
             var font = typeface.GetFont(0);
             var atlasData = new FontAtlasData(64, new Size(1024, 1024));
             var atlasGen = new TextureAtlasGenerator(typeface, font, atlasData, FontParameters.Default());
-            var glyphs = font.TranslateIntoGlyphs("Hello string").Distinct(x => x.Index).ToArray();
+            var glyphs = font.TranslateIntoGlyphs("Hello string").DistinctBy(x => x.Index).ToArray();
             var textureData = atlasGen.GenerateTextureForGlyphs(glyphs);
             atlasGen.CopyTextureDataToImage(textureData);
             return atlasData;
