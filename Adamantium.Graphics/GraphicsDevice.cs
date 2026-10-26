@@ -1101,12 +1101,12 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             return false;
         }
         _lastFenceWaitError = Result.Success;   // recovered - re-arm the log for the next new error
-        CurrentBufferPool.Reset();
-
         if (Presenter is { IsReady: false })
         {
             return false;
         }
+
+        CurrentBufferPool.Reset();
 
         // The swapchain image is acquired late, after all fallible recording, so an aborted frame holds no image or semaphore.
 

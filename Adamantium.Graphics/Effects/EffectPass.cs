@@ -654,6 +654,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     public class DynamicBufferPool : IDisposable
     {
+        private const BufferUsageFlags PageUsage = BufferUsageFlags.UniformBuffer | BufferUsageFlags.ShaderDeviceAddress;
+
         private readonly IGraphicsDevice graphicsDevice;
         private readonly ulong pageSize;
         private readonly List<Buffer> pages = new();
@@ -669,7 +671,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         {
             graphicsDevice = device;
             this.pageSize = pageSize;
-            pages.Add(NewPage(pageSize));
+            pages.Add(NewPage());
         }
 
         public void Reset()
@@ -733,8 +735,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         }
 
         /// <summary>Room for <paramref name="size"/> bytes in this frame's pages. More than a page holds gets a buffer of
-        /// its own, a power of two in size: one the last use of this pool took is taken again, one it left unused is
-        /// freed when the pool is reset.</summary>
+        /// its own in system memory, a power of two in size: one of that size the last use of this pool took is taken
+        /// again, one it left unused is freed when the pool is reset.</summary>
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
             if (size > pageSize)
@@ -748,7 +750,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                 currentPageIndex++;
                 if (currentPageIndex >= pages.Count)
                 {
-                    pages.Add(NewPage(pageSize));
+                    pages.Add(NewPage());
                 }
 
                 alignedOffset = 0;
@@ -759,35 +761,21 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             return (page, alignedOffset);
         }
 
-        private Buffer NewPage(ulong size)
-        {
-            var flags = BufferUsageFlags.UniformBuffer | BufferUsageFlags.ShaderDeviceAddress;
-            var memFlags = BufferMemoryUsage.UploadFromCpuToGpu;
-
-            return Buffer.New(graphicsDevice, size, flags, memFlags);
-        }
+        private Buffer NewPage() => Buffer.New(graphicsDevice, pageSize, PageUsage, BufferMemoryUsage.UploadFromCpuToGpu);
 
         private Buffer TakeOversized(ulong size)
         {
-            var fit = -1;
-            for (var i = 0; i < spareOversized.Count; i++)
-            {
-                var room = spareOversized[i].TotalSize;
-                if (room >= size && (fit < 0 || room < spareOversized[fit].TotalSize))
-                {
-                    fit = i;
-                }
-            }
-
+            var rounded = BitOperations.RoundUpToPowerOf2(size);
+            var spare = spareOversized.FindIndex(buffer => buffer.TotalSize == rounded);
             Buffer page;
-            if (fit >= 0)
+            if (spare >= 0)
             {
-                page = spareOversized[fit];
-                spareOversized.RemoveAt(fit);
+                page = spareOversized[spare];
+                spareOversized.RemoveAt(spare);
             }
             else
             {
-                page = NewPage(BitOperations.RoundUpToPowerOf2(size));
+                page = Buffer.New(graphicsDevice, rounded, PageUsage, BufferMemoryUsage.StreamFromCpuToGpu);
             }
 
             takenOversized.Add(page);

@@ -58,7 +58,8 @@ namespace Adamantium.Engine.GraphicsTests
                 "the second constants landed on the first ones");
         }
 
-        // A buffer of its own is taken again while each use of the pool needs one, and freed after a use that did not.
+        // A buffer of its own is taken again by the next use of the pool that needs one of its size, and freed after a
+        // use that did not; two in one use are two buffers.
         [Test]
         public void ABufferOfItsOwn_IsTakenAgainWhileNeeded_AndFreedOnceNot()
         {
@@ -66,17 +67,26 @@ namespace Adamantium.Engine.GraphicsTests
             using var pool = new EffectPass.DynamicBufferPool(device, 1024);
 
             var large = pool.Allocate(3000, 16).Page;
+            var second = pool.Allocate(3000, 16).Page;
+            var smaller = pool.Allocate(1500, 16).Page;
             pool.Reset();
             var again = pool.Allocate(2500, 16).Page;
+            var larger = pool.Allocate(9000, 16).Page;
             pool.Reset();
+            GpuFixture.Main.OnFrameStarted();
+            var keptWhileNeeded = !large.IsDisposed && !larger.IsDisposed;
             pool.Reset();
-            var afterAPause = pool.Allocate(3000, 16).Page;
+            GpuFixture.Main.OnFrameStarted();
 
             Assert.Multiple(() =>
             {
                 Assert.That(large.TotalSize, Is.EqualTo(4096UL), "a power of two");
-                Assert.That(again, Is.SameAs(large), "taken again by the next use");
-                Assert.That(afterAPause, Is.Not.SameAs(large), "freed after a use without it");
+                Assert.That(second, Is.Not.SameAs(large));
+                Assert.That(again, Is.SameAs(large), "taken again by the next use, of its size");
+                Assert.That(larger, Is.Not.SameAs(large).And.Not.SameAs(second).And.Not.SameAs(smaller));
+                Assert.That(second.IsDisposed && smaller.IsDisposed, Is.True, "freed after a use without them");
+                Assert.That(keptWhileNeeded, Is.True);
+                Assert.That(large.IsDisposed && larger.IsDisposed, Is.True, "freed once the next use did not take them");
             });
         }
 

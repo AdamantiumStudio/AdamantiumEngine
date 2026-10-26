@@ -9,8 +9,11 @@ All packages share one version.
 
 - `IGraphicsDevice.UploadFrameData`: copies data into the frame's upload pages and gives its device address, for a
   shader to read through a pointer while the frame lasts; Forward+ uploads its lights, instances and palettes so. Data
-  larger than a page gets a buffer of its own, a power of two in size, kept while the frames need one and freed after
-  a frame that did not.
+  larger than a page gets a buffer of its own in system memory, not in the small window of video memory the CPU can
+  write, a power of two in size: the next frame of the same slot takes it again for data of its size, and one it
+  leaves unused is freed.
+- `DeviceMemoryAllocator` gives a block made for one allocation larger than a shared block back to the driver when
+  that allocation is freed; shared blocks stay for reuse as before.
 - `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
   at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
   `ITexture.ReadbackToImage` reads any mip level back, not only the first. `IDescriptorManager.FallbackTextureIndex`:

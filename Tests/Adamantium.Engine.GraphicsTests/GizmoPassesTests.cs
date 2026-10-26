@@ -13,7 +13,7 @@ using NUnit.Framework;
 namespace Adamantium.Engine.GraphicsTests;
 
 /// <summary>The instanced passes the editor draws its gizmos with: instances and a skin's joints read through pointers to
-/// data uploaded for the frame.</summary>
+/// data uploaded for the frame, the instances after other data, so not at the start of a page.</summary>
 [TestFixture]
 public class GizmoPassesTests
 {
@@ -100,7 +100,8 @@ public class GizmoPassesTests
 
     private static int CellPixel(int cell) => (int)((cell + 0.5f) / Grid * Size);
 
-    private static Vector4F ColorOf(int instance) => new((instance + 20) / 255f, (235 - instance) / 255f, 0.5f, 1);
+    private static Vector4F ColorOf(int instance) =>
+        new((instance % Grid * 25 + 10) / 255f, (instance / Grid * 25 + 10) / 255f, 0.5f, 1);
 
     private static void Write(float[] instances, int index, Matrix4x4F world, Vector4F color)
     {
@@ -135,8 +136,8 @@ public class GizmoPassesTests
         Assert.That(device.BeginDraw(), Is.True);
         device.SetViewports(new Viewport { Width = Size, Height = Size, MinDepth = 0, MaxDepth = 1 });
         device.SetScissors(new Rect2D { Extent = new Extent2D { Width = Size, Height = Size } });
-        parameters["InstancesAddress"].SetValue(device.UploadFrameData<float>(instances));
         parameters["JointsAddress"].SetValue(device.UploadFrameData<Matrix4x4F>(palette));
+        parameters["InstancesAddress"].SetValue(device.UploadFrameData<float>(instances));
         device.VertexType = typeof(TVertex);
         device.PrimitiveTopology = PrimitiveTopology.TriangleList;
         effect.Techniques["Basic"].Passes[pass].Apply();
