@@ -1659,6 +1659,9 @@ All packages share one version.
   so two beside each other are two. `HitTest` finds the line of a row nearest the point, the caret of an empty line
   stands in its own stretch, and `TextLayout.GetLineBeyond` gives the line one row down or up keeping the caret's
   column - into the next frame, the row's first line.
+- `DataBuffer` checks every read and write against its size, throwing `ArgumentOutOfRangeException` past it, and a
+  buffer of its own starts zeroed. `NamedObject` and `ViewportF` are rewritten; `ViewportF` is a record struct - its
+  equality exact, `Project` and `Unproject` taking the three matrices.
 - PNG is read and written by a new codec, written from PNG's third edition and APNG. It reads every color type and
   depth, Adam7, palettes and tRNS, and APNG's frames composed as APNG says (dispose None, Background and Previous;
   blend Source and Over), decoded when first asked for; a 16-bit file comes out RGBA16 now, no longer cut to 8 bits.
@@ -1879,6 +1882,8 @@ All packages share one version.
   `Descriptor`, `ApplicationExtension`, `AddFrame` and `DecodeFrame`; the whole `Adamantium.Imaging.PaletteQuantizer`
   namespace - its quantizers, ditherers, color caches, `ImageBuffer`, pixel types and `Extend` - which
   `ColorQuantizer` stands for.
+- `DataBuffer.Create`, its constructor from a `DataPointer`, `GetRange` into an array, and `Set` from a pointer or
+  part of an array; `ViewportF`'s `Project` and `Unproject` by reference to one matrix.
 - With the old PNG codec: `PngDecoder`, `PngCompressor`, `PngDecoderSettings`, `PngEncoderSettings`,
   `PNGStreamReader`, `TXTItem`, `ITextItem` (`PngText` stands for both), `Adam7`, `Crc32`, `Adler32`, `BitHelper`,
   `PngDecodeException` and `PngEncoderException` - broken files fail with `InvalidDataException` and
