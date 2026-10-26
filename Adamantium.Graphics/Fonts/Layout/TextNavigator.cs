@@ -152,8 +152,9 @@ internal sealed class TextNavigator
         var frames = _laid.FrameRects;
         var lineFrames = _laid.LineFrames;
         var inFrame = frames != null && lineFrames != null && line < lineFrames.Length;
-        double areaLeft = inFrame ? frames[lineFrames[line]].Left : 0;
-        double areaRight = inFrame ? frames[lineFrames[line]].Right : _laid.Size.Width;
+        var spans = _laid.LineSpans;
+        double areaLeft = inFrame ? spans?[line].Left ?? frames[lineFrames[line]].Left : 0;
+        double areaRight = inFrame ? spans?[line].Right ?? frames[lineFrames[line]].Right : _laid.Size.Width;
         var text = Text;
         var options = _laid.Options;
         var rightToLeft = options.Direction == TextDirection.RightToLeft
@@ -900,13 +901,13 @@ internal sealed class TextNavigator
             found = found < 0 || y >= tops[i] ? i : found;
             if (y < tops[i] + heights[i])
             {
-                return i;
+                return NearestInRow(i, x);
             }
         }
 
         if (found >= 0)
         {
-            return found;
+            return NearestInRow(found, x);
         }
 
         for (var i = lineFrames.Length - 1; i >= 0; i--)
@@ -918,6 +919,80 @@ internal sealed class TextNavigator
         }
 
         return 0;
+    }
+
+    public int GetLineBeyond(int lineIndex, double x, bool below)
+    {
+        if (lineIndex < 0 || lineIndex >= LineCount)
+        {
+            return -1;
+        }
+
+        if (_laid.LineSpans == null)
+        {
+            var next = lineIndex + (below ? 1 : -1);
+            return next >= 0 && next < LineCount ? next : -1;
+        }
+
+        var step = below ? 1 : -1;
+        for (var i = lineIndex + step; i >= 0 && i < LineCount; i += step)
+        {
+            if (InRowOf(lineIndex, i))
+            {
+                continue;
+            }
+
+            if (i >= _laid.LineSpans.Length || lineIndex >= _laid.LineSpans.Length ||
+                _laid.LineFrames[i] == _laid.LineFrames[lineIndex])
+            {
+                return NearestInRow(i, x);
+            }
+
+            while (!below && i > 0 && InRowOf(i, i - 1))
+            {
+                i--;
+            }
+
+            return i;
+        }
+
+        return -1;
+    }
+
+    private int NearestInRow(int line, double x)
+    {
+        var spans = _laid.LineSpans;
+        if (spans == null || line >= spans.Length)
+        {
+            return line;
+        }
+
+        var first = line;
+        while (first > 0 && InRowOf(line, first - 1))
+        {
+            first--;
+        }
+
+        var nearest = line;
+        var distance = double.MaxValue;
+        for (var i = first; i < spans.Length && InRowOf(line, i); i++)
+        {
+            var away = Math.Max(0, Math.Max(spans[i].Left - x, x - spans[i].Right));
+            if (away < distance)
+            {
+                distance = away;
+                nearest = i;
+            }
+        }
+
+        return nearest;
+    }
+
+    private bool InRowOf(int line, int other)
+    {
+        var frames = _laid.LineFrames;
+        return line == other || (line < frames.Length && other < frames.Length && frames[other] == frames[line] &&
+                                 Math.Abs(_laid.LineTops[other] - _laid.LineTops[line]) < 1e-6);
     }
 
     private int LineAt(double y)
