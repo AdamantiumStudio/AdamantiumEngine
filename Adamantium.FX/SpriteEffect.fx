@@ -1,9 +1,5 @@
-const static float EPSILON = 1.401298E-45;
-const static int VERTICES_PER_SPRITE = 4;
-
-// Per-instance sprite data (one element = one sprite quad). The quad corners come from SV_VertexID, so the old
-// geometry-shader expansion is gone: this runs as plain instanced rendering (4-vertex triangle strip x N instances),
-// which is portable (no GS on Metal/MoltenVK).
+// Per-instance sprite data (one element = one sprite quad). The quad corners come from SV_VertexID: plain instanced
+// rendering, a 4-vertex triangle strip x N instances.
 struct SpriteItem
 {
     float4 Destination: Position;
@@ -21,10 +17,13 @@ struct PSInput
     float4 Position : SV_Position;
     float2 UV : TEXCOORD0;
     float4 Color : COLOR;
-    int TextureId : FOG;
+    nointerpolation int Textured : TEXCOORD1;
+    nointerpolation uint Slot : TEXCOORD2;
 };
 
-Texture2D Texture;
+// Every texture of the resource heap - or of the shared texture set - by its slot there: each sprite names its own,
+// so a batch of any textures is one draw. A set of its own, which descriptor sets bind apart from the other resources.
+Texture2D spriteTextures[] : register(t0, space1);
 SamplerState TextureSampler;
 float2 TextureCornerCoords[4];
 matrix MatrixTransform;
@@ -32,11 +31,10 @@ matrix MatrixTransform;
 PSInput SpriteVertexShader(SpriteItem item, uint vertexId : SV_VertexID)
 {
     PSInput vertex;
-    int corner = (int)vertexId;   // 0..3, one quad corner per strip vertex
+    int corner = (int)vertexId;
     float2 origin = item.Origin;
 
-    // Normalize the source rectangle by the texture size here (it used to live in a separate VS to keep the geometry
-    // shader divide-free; there is no GS now, so do it directly).
+    // The source rectangle normalized by the texture's size.
     float2 inv = 1.0 / (float2)item.TextureInfo.xy;
     float2 sourceXY = item.Source.xy * inv;
     float2 sourceZW = item.Source.zw * inv;
@@ -69,7 +67,8 @@ PSInput SpriteVertexShader(SpriteItem item, uint vertexId : SV_VertexID)
     float2 uvCorner = TextureCornerCoords[corner ^ item.SpriteEffect];
     vertex.UV = sourceXY + uvCorner * sourceZW;
 
-    vertex.TextureId = item.TextureInfo.z;
+    vertex.Textured = item.TextureInfo.z;
+    vertex.Slot = (uint)item.TextureInfo.w;
 
     vertex.Position = mul(vertex.Position, MatrixTransform);
     return vertex;
@@ -77,13 +76,12 @@ PSInput SpriteVertexShader(SpriteItem item, uint vertexId : SV_VertexID)
 
 float4 SpritePixelShader(PSInput input) : SV_TARGET
 {
-    switch (input.TextureId)
+    if (input.Textured < 0)
     {
-        case -1:
-            return input.Color;
-        default:
-            return Texture.Sample(TextureSampler, input.UV) * input.Color;
+        return input.Color;
     }
+
+    return spriteTextures[NonUniformResourceIndex(input.Slot)].Sample(TextureSampler, input.UV) * input.Color;
 }
 
 technique SpriteBatch

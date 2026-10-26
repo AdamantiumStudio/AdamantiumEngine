@@ -49,9 +49,8 @@ public struct SpriteBatchItem
     [VertexInputElement("COLOR0")]
     public Color Color;
 
-    /// <summary>
-    /// Texture width, height and ID (-1, 0)
-    /// </summary>
+    /// <summary>The texture's width and height, 0 - or -1 for a sprite of no texture - and the texture's place in the
+    /// device's texture array of no length.</summary>
     [VertexInputElement("BINORMAL0")]
     public Int4 TextureInfo;
 

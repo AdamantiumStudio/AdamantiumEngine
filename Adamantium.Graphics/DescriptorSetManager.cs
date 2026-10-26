@@ -73,6 +73,8 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
     {
     }
 
+    public uint FallbackTextureIndex => TextureIndex(FallbackTexture);
+
     public uint TextureIndex(ITexture texture)
     {
         if (_textureIndices.TryGetValue(texture, out var found)) return found;

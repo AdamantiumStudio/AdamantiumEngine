@@ -524,9 +524,9 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
          return Format.B8G8R8A8_UNORM;
 
       if (typeof(Int4) == typeT)
-         return Format.R32G32B32A32_UINT;
+         return Format.R32G32B32A32_SINT;
       if (typeof(Int3) == typeT)
-         return Format.R32G32B32_UINT;
+         return Format.R32G32B32_SINT;
       if (typeof(int) == typeT)
          return Format.R32_SINT;
       if (typeof(uint) == typeT)
