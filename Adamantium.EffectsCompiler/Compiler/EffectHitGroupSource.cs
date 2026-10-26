@@ -1,4 +1,4 @@
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
 /// <summary>A hit group of a ray-tracing pass: <c>HitGroup Name { ClosestHit = ...; AnyHit = ...; Intersection = ...; }
 /// </c>, each entry point null when the group has none.</summary>

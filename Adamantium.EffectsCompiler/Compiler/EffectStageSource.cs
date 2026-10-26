@@ -1,4 +1,4 @@
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
 /// <summary>A stage of a pass as the effect file names it: <c>VertexShader = Main;</c>.</summary>
 internal sealed class EffectStageSource(EffectStage stage, string entryPoint, SourceLocation location)

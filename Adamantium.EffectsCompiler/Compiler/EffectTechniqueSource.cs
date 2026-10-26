@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
 /// <summary>A technique of an effect file: its name - null for none - and its passes in order.</summary>
 internal sealed class EffectTechniqueSource(string name, SourceLocation location, IReadOnlyList<EffectPassSource> passes)

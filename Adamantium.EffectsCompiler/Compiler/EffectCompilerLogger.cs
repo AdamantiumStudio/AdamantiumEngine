@@ -1,4 +1,5 @@
 ﻿using Adamantium.Core;
+using Adamantium.EffectsCompiler.Compiler;
 
 namespace Adamantium.EffectsCompiler;
 

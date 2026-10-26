@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
 /// <summary>A pass of an effect file: its name - null for none - and the entry points of its stages and hit groups.
 /// </summary>

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Adamantium.EffectsCompiler;
+namespace Adamantium.EffectsCompiler.Compiler;
 
 /// <summary>An effect file read: its techniques and passes - the entry point each stage of a pass runs - and its code with
 /// them blanked out, line for line, for Slang. A technique is <c>technique Name { pass Name { VertexShader = Main; } }</c>,
