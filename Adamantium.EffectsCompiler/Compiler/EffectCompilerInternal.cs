@@ -50,12 +50,8 @@ namespace Adamantium.EffectsCompiler
         private string preprocessorText;
         private EffectData.Technique technique;
         private int nextSubPassCount;
-        // The SPIR-V profile THIS pass asked for, or null when it named none - then the newest is used. Reset per pass:
-        // a Profile is a statement inside one pass and must not leak into the next, which is what a plain field did.
         private string passSpirvProfile;
         private List<ResourceBindingKey> resourceKeys = new List<ResourceBindingKey>();
-
-        //private StreamOutputElement[] currentStreamOutputElements;
 
         private readonly List<string> resolvedIncludes = [];
         private readonly Dictionary<(EffectShaderType Type, string EntryPoint, string Profile, string Preprocessor), int> compiledShaders = [];
@@ -109,7 +105,6 @@ namespace Adamantium.EffectsCompiler
 
             var result = new EffectCompilerResult(effectData, logger, resolvedIncludes);
 
-            // If dynamic compiling, store the parameters used to compile this effect directly in the bytecode
             if (allowDynamicCompiling && !result.HasErrors && result.EffectData != null)
             {
                 var compilerArguments = new EffectData.CompilerArguments { FilePath = filePath, Macros = new List<EffectData.ShaderMacro>(), IncludeDirectoryList = new List<string>(), Includes = new List<string>(resolvedIncludes) };
@@ -171,8 +166,6 @@ namespace Adamantium.EffectsCompiler
 
             logger = new EffectCompilerLogger();
 
-            // Slang pulls each header itself through its VFS callback, so sources go to it untouched and its diagnostics
-            // keep honest line numbers.
             sourceDirectory = null;
             if (includes == null)
             {
@@ -227,7 +220,6 @@ namespace Adamantium.EffectsCompiler
         {
             SetupTechnique(techniqueAst.Name, techniqueAst.Span);
             
-            // Process passes for this technique
             foreach (var passAst in techniqueAst.Passes)
             {
                 HandlePass(passAst);
@@ -242,7 +234,6 @@ namespace Adamantium.EffectsCompiler
                 Passes = new List<EffectData.Pass>()
             };
 
-            // Check that the name of this technique is not already used.
             if (technique.Name != null)
             {
                 foreach (var registeredTechnique in effect.Techniques)
@@ -255,7 +246,6 @@ namespace Adamantium.EffectsCompiler
                 }
             }
 
-            // Adds the technique to the list of technique for the current effect
             effect.Techniques.Add(technique);
         }
 
@@ -271,7 +261,6 @@ namespace Adamantium.EffectsCompiler
                 nextSubPassCount--;
             }
 
-            // Process all statements inside this pass.
             foreach (var statement in passAst.Statements)
             {
                 if (!(statement is Ast.ExpressionStatement expressionStatement))
@@ -291,10 +280,8 @@ namespace Adamantium.EffectsCompiler
                 Properties = new EffectPropertyCollection()
             };
 
-            // Clear current exports
             currentExports.Clear();
 
-            // Check that the name of this pass is not already used.
             if (pass.Name != null)
             {
                 foreach (var registeredPass in technique.Passes)
@@ -307,13 +294,11 @@ namespace Adamantium.EffectsCompiler
                 }
             }
 
-            // Adds the pass to the list of pass for the current technique
             technique.Passes.Add(pass);
         }
 
         private void CheckPassConsistency(SourceSpan span)
         {
-            // Check pass consistency (mainly for the GS)
             var gsLink = pass.Pipeline[EffectShaderType.Geometry];
             if (gsLink != null && gsLink.IsNullShader && (gsLink.StreamOutputRasterizedStream >= 0 /*|| gsLink.StreamOutputElements != null*/))
             {
@@ -321,7 +306,6 @@ namespace Adamantium.EffectsCompiler
                     logger.Error("Cannot specify StreamOutput for null geometry shader / vertex shader", span);
                 else
                 {
-                    // For null geometry shaders with StreamOutput, directly use the VertexShader
                     gsLink.Index = pass.Pipeline[EffectShaderType.Vertex].Index;
                     gsLink.ImportName = pass.Pipeline[EffectShaderType.Vertex].ImportName;
                 }
@@ -442,7 +426,6 @@ namespace Adamantium.EffectsCompiler
 
         private List<string> ExtractStringOrArrayOfStrings(Ast.Expression expression)
         {
-            // TODO implement this method using generics
             if (!ExtractValue(expression, out var value))
                 return null;
 
@@ -523,11 +506,9 @@ namespace Adamantium.EffectsCompiler
             if (!ExtractValue(expression, out var value))
                 return;
 
-            // If null, then preprocessor is reset
             if (value == null)
                 preprocessorText = null;
 
-            // Else parse preprocessor directive
             var builder = new StringBuilder();
             if (value is string str)
             {
@@ -549,7 +530,6 @@ namespace Adamantium.EffectsCompiler
 
         private void HandleAttribute(Ast.AssignExpression expression)
         {
-            // Extract the value and store it in the attribute
             if (ExtractValue(expression.Value, out var value))
             {
                 pass.Properties[expression.Name.Text] = value;
@@ -558,7 +538,6 @@ namespace Adamantium.EffectsCompiler
 
         private void HandleAttribute<T>(Ast.AssignExpression expression)
         {
-            // Extract the value and store it in the attribute
             if (ExtractValue(expression.Value, out var value))
             {
                 if (typeof(T) == typeof(uint) && value is int i)
@@ -631,7 +610,6 @@ namespace Adamantium.EffectsCompiler
                 return null;
             }
 
-            // Check for arguments
             if (converter.ArgumentCount != methodExpression.Arguments.Count)
             {
                 logger.Error("Unexpected number of arguments (expecting {0} arguments)", methodExpression.Span, converter.ArgumentCount);
@@ -662,7 +640,6 @@ namespace Adamantium.EffectsCompiler
                 }
                 catch (Exception)
                 {
-                    // ignored
                 }
 
                 if (string.IsNullOrEmpty(literalValue))
@@ -670,12 +647,8 @@ namespace Adamantium.EffectsCompiler
             }
         }
 
-        /// <summary>A pass's <c>Profile</c> - the SPIR-V version its shaders are compiled to, e.g. <c>Profile = 1.4</c>.
-        /// A pass that names none takes the newest the compiler supports.</summary>
         private void HandleProfile(Ast.Expression expression)
         {
-            // INVARIANT all the way: the literal's value arrives as a number, and ToString() on a comma-decimal locale
-            // renders 1.4 as "1,4", which no invariant parse accepts. The same trap the markup numbers fell into.
             var text = expression switch
             {
                 Ast.IdentifierExpression identifier => identifier.Name.Text,
@@ -690,8 +663,6 @@ namespace Adamantium.EffectsCompiler
                 return;
             }
 
-            // Named, so it must be a version this compiler can actually target. Anything else is an error and not a
-            // fallback: a number that silently means nothing is the whole reason this attribute was rewritten.
             var name = "spirv_" + version.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', '_');
             if (!SlangShaderCompiler.SpirvProfiles.Contains(name))
             {
@@ -758,7 +729,6 @@ namespace Adamantium.EffectsCompiler
                         return null;
                     }
 
-                    // Extract level (11.0 10.0) from profile name (
                     if (!ExtractValue(compileExpression.Arguments[0], out var profileName))
                         return null;
 
@@ -808,7 +778,6 @@ namespace Adamantium.EffectsCompiler
                 return;
             }
 
-            // Passes often share a stage: compile it once and link the rest to the same shader.
             var key = (type, entryPoint, passSpirvProfile, preprocessorText);
             if (compiledShaders.TryGetValue(key, out var compiled))
             {
@@ -826,10 +795,6 @@ namespace Adamantium.EffectsCompiler
                 }
                 else
                 {
-                    //logger.Warnings(result.Warnings);
-
-                    // Only an exported shader is named: the pool merges unnamed copies silently and treats a name as
-                    // the one other effects import it by.
                     var shaderName = currentExports.Contains(entryPoint) ? entryPoint : null;
                     var shader = CreateEffectShader(type, shaderName, entryPoint, result);
 
@@ -850,10 +815,6 @@ namespace Adamantium.EffectsCompiler
             }
         }
 
-        /// <summary>Compiles ONE stage. Slang is the only backend - there is no second one to fall back to, and the
-        /// difference shows in what this hands it: the source with its `#include` directives INTACT, resolved by Slang
-        /// itself through <see cref="ResolveSlangInclude"/>. Only the `technique { pass { ... } }` blocks are blanked,
-        /// because that grammar is the effect file's own and Slang's HLSL front end has never seen it.</summary>
         private ShaderCompilationResult CompileParsedShader(EffectShaderType shaderKind, string entryPoint)
         {
             var slangSourceBuilder = new StringBuilder();
@@ -877,16 +838,12 @@ namespace Adamantium.EffectsCompiler
             }
         }
 
-        // Resolves a Slang #include request against the engine's include collection (same matching as
-        // IncludeParser: by path suffix or file name). Returns null if not found, so Slang reports it.
-        // A file compiled from disk also finds a header by its path from the file's folder ("Includes/X.fxh").
         private string ResolveSlangInclude(string requestedPath)
         {
             if (string.IsNullOrEmpty(requestedPath))
                 return null;
 
             var includePath = requestedPath.Replace("\"", string.Empty).Replace('/', '\\');
-            // Not Path.GetFileName: '\' separates nothing on Linux, where that would hand back the whole request.
             var fileName = includePath.Substring(includePath.LastIndexOf('\\') + 1);
 
             foreach (var include in includes.IsDefault ? ImmutableArray<ShaderFileInfo>.Empty : includes)
@@ -903,8 +860,6 @@ namespace Adamantium.EffectsCompiler
                 return null;
             }
 
-            // Slang asks for a nested header from its includer's folder ("Includes/Includes/X.fxh"): the shorter
-            // tails of the request are tried too.
             var parts = includePath.Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
             for (var skip = 0; skip < parts.Length; skip++)
             {
@@ -928,7 +883,6 @@ namespace Adamantium.EffectsCompiler
             return content;
         }
 
-        // "Shading.fxh" names Shading.fxh, not ForwardPlusShading.fxh: the request ends the path at a folder boundary.
         private static bool EndsWithPath(string path, string request)
         {
             if (path == null)
@@ -941,10 +895,6 @@ namespace Adamantium.EffectsCompiler
                    || normalized.EndsWith("\\" + request, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Replaces every top-level `technique { ... }` block with spaces (newlines kept so line numbers in
-        // Slang diagnostics stay aligned with the source). Scans the exact string handed to Slang rather than
-        // relying on AST span offsets, which don't survive include expansion. Comments and strings are skipped
-        // so a stray `technique` inside them is never matched.
         private static string BlankTechniqueBlocks(string source)
         {
             if (string.IsNullOrEmpty(source) || source.IndexOf("technique", StringComparison.Ordinal) < 0)
@@ -956,18 +906,18 @@ namespace Adamantium.EffectsCompiler
             {
                 var c = s[i];
 
-                if (c == '/' && i + 1 < n && s[i + 1] == '/')        // line comment
+                if (c == '/' && i + 1 < n && s[i + 1] == '/')
                 {
                     i += 2;
                     while (i < n && s[i] != '\n') i++;
                 }
-                else if (c == '/' && i + 1 < n && s[i + 1] == '*')   // block comment
+                else if (c == '/' && i + 1 < n && s[i + 1] == '*')
                 {
                     i += 2;
                     while (i + 1 < n && !(s[i] == '*' && s[i + 1] == '/')) i++;
                     i = Math.Min(i + 2, n);
                 }
-                else if (c == '"')                                   // string literal
+                else if (c == '"')
                 {
                     i++;
                     while (i < n && s[i] != '"') { if (s[i] == '\\') i++; i++; }
@@ -976,7 +926,7 @@ namespace Adamantium.EffectsCompiler
                 else if (c == 't' && IsKeywordAt(s, i, "technique"))
                 {
                     var end = FindBlockEnd(s, i + "technique".Length);
-                    if (end < 0) break; // unbalanced; leave the rest untouched
+                    if (end < 0) break;
                     for (var k = i; k < end; k++)
                         if (s[k] != '\n' && s[k] != '\r') s[k] = ' ';
                     i = end;
@@ -1002,7 +952,6 @@ namespace Adamantium.EffectsCompiler
 
         private static bool IsIdentChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
-        // From just past the `technique` keyword, returns the index one past the matching closing brace.
         private static int FindBlockEnd(char[] s, int pos)
         {
             var n = s.Length;
@@ -1044,11 +993,9 @@ namespace Adamantium.EffectsCompiler
 
         private void ProcessShaderData(EffectShaderType type, ShaderCompilationResult bytecode, EffectData.Shader shader)
         {
-            // if No debug is required, take the bytecode without any debug/reflection info.
             if ((compilerFlags & EffectCompilerFlags.Debug) == 0)
                 shader.Bytecode = bytecode;
 
-            // Check that this shader was not already generated
             int shaderIndex;
             for (shaderIndex = 0; shaderIndex < effectData.Shaders.Count; shaderIndex++)
             {
@@ -1057,7 +1004,6 @@ namespace Adamantium.EffectsCompiler
                     break;
             }
 
-            // Check if there is a new shader to store in the archive
             if (shaderIndex >= effectData.Shaders.Count)
             {
                 shaderIndex = effectData.Shaders.Count;
@@ -1114,11 +1060,6 @@ namespace Adamantium.EffectsCompiler
             }
         }
 
-        /// <summary>
-        ///   Builds the parameters for a particular shader.
-        /// </summary>
-        /// <param name="shader"> The shader to build parameters. </param>
-        /// <param name="reflectionResult"> A shader-reflection interface accesses shader information.</param>
         private void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult)
         {
             var groupByIds = reflectionResult.AllResources
@@ -1128,18 +1069,15 @@ namespace Adamantium.EffectsCompiler
             if (groupByIds.Length > 0)
             {
                 var names = groupByIds.Select(x => x.Description.Name).ToArray();
-                logger.Error($"{Utilities.Join(", ", names)} has the same binding id {groupByIds[0].Description.SlotIndex} in set {groupByIds[0].Description.DescriptorSet} which is not permitted by Vulkan.\nPlease, change shader code not to have same binding ids in one set.");
+                logger.Error($"{string.Join(", ", names)} has the same binding id {groupByIds[0].Description.SlotIndex} in set {groupByIds[0].Description.DescriptorSet} which is not permitted by Vulkan.\nPlease, change shader code not to have same binding ids in one set.");
                 return;
             }
 
-            // Iterate on all Constant buffers used by this shader
-            // Build all ParameterBuffers
             for (int i = 0; i < reflectionResult.UniformBuffers.Count; i++)
             {
                 var reflectConstantBuffer = reflectionResult.UniformBuffers[i];
                 var description = reflectConstantBuffer.Description;
 
-                // Create the buffer
                 var parameterBuffer = new EffectData.ConstantBuffer()
                 {
                     Name = description.Name,
@@ -1150,33 +1088,23 @@ namespace Adamantium.EffectsCompiler
                 };
                 shader.ConstantBuffers.Add(parameterBuffer);
 
-                // Iterate on each variable declared inside this buffer
                 for (uint j = 0; j < reflectConstantBuffer.VariablesCount; j++)
                 {
                     var variableBuffer = reflectConstantBuffer.GetVariable(j);
-
-                    // Build constant buffer parameter
                     var parameter = BuildConstantBufferParameter(variableBuffer);
-
-                    // Add this parameter to the ConstantBuffer
                     parameterBuffer.Parameters.Add(parameter);
                 }
             }
 
             var resourceParameters = new Dictionary<string, EffectData.ResourceParameter>();
 
-            // Iterate on all resources bound in order to resolve resource dependencies for this shader.
-            // If the shader is dependent from an object variable, then create this variable as well.
             foreach (var resource in reflectionResult.AllResources)
             {
                 var bindingDescription = resource.Description;
                 string name = bindingDescription.Name;
 
-                // In the case of SM5.0 and texture array, there can be several input binding descriptions, so we ignore them
-                // here, as we are going to recover them outside this loop.
                 if (!resourceParameters.ContainsKey(name))
                 {
-                    // Build resource parameter
                     var parameter = BuildResourceParameter(name, bindingDescription);
                     shader.ResourceParameters.Add(parameter);
                     resourceParameters.Add(name, parameter);
@@ -1184,10 +1112,6 @@ namespace Adamantium.EffectsCompiler
             }
         }
 
-        /// <summary>
-        ///   Builds an effect parameter from a reflection variable.
-        /// </summary>
-        /// <returns> an EffectParameter, null if not handled </returns>
         private EffectData.ValueTypeParameter BuildConstantBufferParameter(ShaderReflectionVariable variable)
         {
             var parameter = new EffectData.ValueTypeParameter()
@@ -1205,8 +1129,6 @@ namespace Adamantium.EffectsCompiler
             return parameter;
         }
 
-        // spirv-cross numbers its base types its own way; the effect keeps D3D's numbering, so a cast lands on the
-        // wrong names.
         private static EffectParameterType ToParameterType(Basetype type)
         {
             switch (type)
@@ -1227,10 +1149,6 @@ namespace Adamantium.EffectsCompiler
             }
         }
 
-        /// <summary>
-        ///   Builds an effect parameter from a reflection variable.
-        /// </summary>
-        /// <returns> an EffectParameter, null if not handled </returns>
         private static EffectData.ResourceParameter BuildResourceParameter(string name, ShaderReflectionVariable variableBinding)
         {
             if (variableBinding.ElementCount > byte.MaxValue)

@@ -1,407 +1,126 @@
-// Copyright (c) 2010-2014 SharpDX - Alexandre Mutel
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-// 
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 using System;
-using System.IO;
-using Adamantium.Core;
-using Adamantium.Imaging.Jpeg;
-using Adamantium.Mathematics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Adamantium.Vulkan.Core;
 
-namespace Adamantium.Imaging
+namespace Adamantium.Imaging;
+
+/// <summary>One part of an image's memory: a mip level of a layer, or a depth slice of it - its size, its format, how
+/// far apart its rows lie and where it starts. Pixels are read and written by value, every access checked against its
+/// bounds. The memory is the image's; a pixel buffer lives no longer than it.</summary>
+public sealed class PixelBuffer
 {
-    /// <summary>
-    /// An unmanaged buffer of pixels.
-    /// </summary>
-    public sealed partial class PixelBuffer
+    /// <summary>The <paramref name="width"/> × <paramref name="height"/> pixels of <paramref name="format"/> at
+    /// <paramref name="dataPointer"/>, rows <paramref name="rowStride"/> bytes apart and
+    /// <paramref name="bufferStride"/> bytes in all.</summary>
+    public PixelBuffer(uint width, uint height, Format format, int rowStride, int bufferStride, IntPtr dataPointer)
     {
-        private Format format;
-
-        /// <summary>
-        /// True when RowStride == sizeof(pixelformat) * width
-        /// </summary>
-        private readonly bool isStrictRowStride;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PixelBuffer" /> struct.
-        /// </summary>
-        /// <param name="width">The width.</param>
-        /// <param name="height">The height.</param>
-        /// <param name="format">The format.</param>
-        /// <param name="rowStride">The row pitch.</param>
-        /// <param name="bufferStride">The slice pitch.</param>
-        /// <param name="dataPointer">The pixels.</param>
-        public PixelBuffer(uint width, uint height, Format format, int rowStride, int bufferStride, IntPtr dataPointer)
+        var (row, rows) = TexelBlocks.Rows(format, width, height);
+        if (rowStride < row || rows > 0 && bufferStride < (rows - 1) * rowStride + row)
         {
-            if (dataPointer == IntPtr.Zero)
-                throw new ArgumentException("Pointer cannot be equal to IntPtr.Zero", nameof(dataPointer));
-
-            Width = width;
-            Height = height;
-            this.format = format;
-            RowStride = rowStride;
-            BufferStride = bufferStride;
-            DataPointer = dataPointer;
-            PixelSize = format.SizeOfInBytes();
-            isStrictRowStride = (PixelSize * width) == rowStride;
-        }
-        
-        public uint MipLevel { get; set; }
-        
-        public MipMapDescription MipMapDescription { get; set; }
-
-        public ImageDescription GetDescription()
-        {
-            return new ImageDescription()
-            {
-                Width = Width,
-                Height = Height,
-                Depth = 1,
-                ArraySize = 1,
-                MipLevels = 1,
-                Dimension = TextureDimension.Texture2D,
-                Format = Format
-            };
-        }
-        
-        /// <summary>
-        /// Gets the width.
-        /// </summary>
-        /// <value>The width.</value>
-        public uint Width { get; internal set; }
-
-        /// <summary>
-        /// Gets the height.
-        /// </summary>
-        /// <value>The height.</value>
-        public uint Height { get; internal set; }
-
-        /// <summary>
-        /// Gets the format (this value can be changed)
-        /// </summary>
-        /// <value>The format.</value>
-        public Format Format
-        {
-            get => format;
-            set
-            {
-                if (PixelSize != value.SizeOfInBytes())
-                {
-                    throw new ArgumentException(
-                       $"Format [{value}] doesn't have same pixel size in bytes than current format [{format}]");
-                }
-                format = value;
-            }
+            throw new ArgumentOutOfRangeException(nameof(rowStride),
+                $"Rows {rowStride} bytes apart and {bufferStride} bytes in all do not hold {width}×{height} {format}.");
         }
 
-        /// <summary>
-        /// Gets the pixel size in bytes.
-        /// </summary>
-        /// <value>The pixel size in bytes.</value>
-        public int PixelSize { get; private set; }
+        (Width, Height, Format, RowStride, BufferStride, DataPointer) =
+            (width, height, format, rowStride, bufferStride, dataPointer);
+    }
 
-        /// <summary>
-        /// Gets the row stride in number of bytes.
-        /// </summary>
-        /// <value>The row stride in number of bytes.</value>
-        public int RowStride { get; private set; }
+    /// <summary>Width in pixels.</summary>
+    public uint Width { get; }
 
-        /// <summary>
-        /// Gets the total size in bytes of this pixel buffer.
-        /// </summary>
-        /// <value>The size in bytes of the pixel buffer.</value>
-        public int BufferStride { get; private set; }
+    /// <summary>Height in pixels.</summary>
+    public uint Height { get; }
 
-        /// <summary>
-        /// Gets the pointer to the pixel buffer.
-        /// </summary>
-        /// <value>The pointer to the pixel buffer.</value>
-        public IntPtr DataPointer { get; private set; }
+    /// <summary>The pixels' format.</summary>
+    public Format Format { get; }
 
-        /// <summary>
-        /// Gets the horizontal offset to this pixel buffer regarding main image
-        /// </summary>
-        public uint XOffset { get; internal set; }
+    /// <summary>Bytes a pixel takes - a block's for a compressed format.</summary>
+    public int PixelSize => TexelBlocks.Of(Format).Bytes;
 
-        /// <summary>
-        /// Gets the vertical offset to this pixel buffer regarding main image
-        /// </summary>
-        public uint YOffset { get; internal set; }
+    /// <summary>Bytes from one row to the next - a row of blocks for a compressed format.</summary>
+    public int RowStride { get; }
 
-        /// <summary>
-        /// Copies this pixel buffer to a destination pixel buffer.
-        /// </summary>
-        /// <param name="pixelBuffer">The destination pixel buffer.</param>
-        /// <remarks>
-        /// The destination pixel buffer must have exactly the same dimensions (width, height) and format than this instance.
-        /// Destination buffer can have different row stride.
-        /// </remarks>
-        public unsafe void CopyTo(PixelBuffer pixelBuffer)
+    /// <summary>Bytes the buffer takes.</summary>
+    public int BufferStride { get; }
+
+    /// <summary>Where the pixels start.</summary>
+    public IntPtr DataPointer { get; }
+
+    /// <summary>The mip level this buffer is of.</summary>
+    public uint MipLevel { get; init; }
+
+    /// <summary>The buffer as a 2D image of one layer and one level.</summary>
+    public ImageDescription GetDescription() => ImageDescription.Default2D(Width, Height, Format);
+
+    /// <summary>The pixel at <paramref name="x"/>, <paramref name="y"/>, as a value of the pixel's size.</summary>
+    public unsafe T GetPixel<T>(int x, int y) where T : unmanaged =>
+        Unsafe.ReadUnaligned<T>((byte*)DataPointer + At<T>(x, y));
+
+    /// <summary>Writes <paramref name="value"/> as the pixel at <paramref name="x"/>, <paramref name="y"/>.</summary>
+    public unsafe void SetPixel<T>(int x, int y, T value) where T : unmanaged =>
+        Unsafe.WriteUnaligned((byte*)DataPointer + At<T>(x, y), value);
+
+    /// <summary>Every row's pixels, one after another, without the space between rows.</summary>
+    public T[] GetPixels<T>() where T : unmanaged
+    {
+        var row = (int)Math.Min(RowStride, TexelBlocks.Rows(Format, Width, 1).RowBytes);
+        var rows = (int)TexelBlocks.Rows(Format, Width, Height).Rows;
+        var pixels = new T[(long)row * rows / Unsafe.SizeOf<T>()];
+        var target = MemoryMarshal.AsBytes(pixels.AsSpan());
+        for (var y = 0; y < rows; y++)
         {
-            // Check that buffers are identical
-            if (Width != pixelBuffer.Width
-                || Height != pixelBuffer.Height
-                || PixelSize != pixelBuffer.Format.SizeOfInBytes())
-            {
-                throw new ArgumentException("Invalid destination pixelBufferArray. Mush have same Width, Height and Format", nameof(pixelBuffer));
-            }
-
-            // If buffers have same size, than we can copy it directly
-            if (this.BufferStride == pixelBuffer.BufferStride)
-            {
-                Utilities.CopyMemory(pixelBuffer.DataPointer, DataPointer, BufferStride);
-            }
-            else
-            {
-                var srcPointer = (byte*)this.DataPointer;
-                var dstPointer = (byte*)pixelBuffer.DataPointer;
-                var rowStride = Math.Min(RowStride, pixelBuffer.RowStride);
-
-                // Copy per scanline
-                for (int i = 0; i < Height; i++)
-                {
-                    Utilities.CopyMemory(new IntPtr(dstPointer), new IntPtr(srcPointer), rowStride);
-                    srcPointer += this.RowStride;
-                    dstPointer += pixelBuffer.RowStride;
-                }
-            }
+            Row(y, row).CopyTo(target.Slice(y * row, row));
         }
 
-        /// <summary>
-        /// Gets the pixel value at a specified position.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="x">The x-coordinate.</param>
-        /// <param name="y">The y-coordinate.</param>
-        /// <returns>The pixel value.</returns>
-        /// <remarks>
-        /// Caution, this method doesn't check bounding.
-        /// </remarks>
-        public unsafe T GetPixel<T>(int x, int y) where T : struct
+        return pixels;
+    }
+
+    /// <summary>Writes <paramref name="pixels"/> - every row's, one after another - into the rows.</summary>
+    public void SetPixels<T>(T[] pixels) where T : unmanaged
+    {
+        var row = (int)Math.Min(RowStride, TexelBlocks.Rows(Format, Width, 1).RowBytes);
+        var rows = (int)TexelBlocks.Rows(Format, Width, Height).Rows;
+        var source = MemoryMarshal.AsBytes(pixels.AsSpan());
+        if (source.Length < (long)row * rows)
         {
-            return Utilities.Read<T>(new IntPtr(((byte*)DataPointer + RowStride * y + x * PixelSize)));
+            throw new ArgumentException($"{Width}×{Height} pixels take {row * rows} bytes, not {source.Length}.",
+                nameof(pixels));
         }
 
-        /// <summary>
-        /// Gets the pixel value at a specified position.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="x">The x-coordinate.</param>
-        /// <param name="y">The y-coordinate.</param>
-        /// <param name="value">The pixel value.</param>
-        /// <remarks>
-        /// Caution, this method doesn't check bounding.
-        /// </remarks>
-        public unsafe void SetPixel<T>(int x, int y, T value) where T : struct
+        for (var y = 0; y < rows; y++)
         {
-            Utilities.Write(new IntPtr((byte*)DataPointer + RowStride * y + x * PixelSize), ref value);
+            source.Slice(y * row, row).CopyTo(Row(y, row));
+        }
+    }
+
+    /// <summary>Copies the pixels into <paramref name="destination"/>, of the same size and format, row by row.</summary>
+    public void CopyTo(PixelBuffer destination)
+    {
+        if (destination.Width != Width || destination.Height != Height || destination.Format != Format)
+        {
+            throw new ArgumentException("A pixel buffer is copied into one of its own size and format.",
+                nameof(destination));
         }
 
-        /// <summary>
-        /// Gets scanline pixels from the buffer.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="yOffset">The y line offset.</param>
-        /// <returns>Scanline pixels from the buffer</returns>
-        /// <exception cref="System.ArgumentException">If the sizeof(T) is an invalid size</exception>
-        /// <remarks>
-        /// This method is working on a row basis. The <paramref name="yOffset"/> is specifying the first row to get 
-        /// the pixels from.
-        /// </remarks>
-        public T[] GetPixels<T>(int yOffset = 0) where T : struct
+        var row = (int)Math.Min(Math.Min(RowStride, destination.RowStride), TexelBlocks.Rows(Format, Width, 1).RowBytes);
+        var rows = (int)TexelBlocks.Rows(Format, Width, Height).Rows;
+        for (var y = 0; y < rows; y++)
         {
-            var sizeOfOutputPixel = Utilities.SizeOf<T>();
-            var totalSize = Width * Height * PixelSize;
-            if ((totalSize % sizeOfOutputPixel) != 0)
-                throw new ArgumentException($"Invalid sizeof(T), not a multiple of current size [{totalSize}]in bytes ");
+            Row(y, row).CopyTo(destination.Row(y, row));
+        }
+    }
 
-            var buffer = new T[totalSize / sizeOfOutputPixel];
-            GetPixels(buffer, yOffset);
-            return buffer;
+    private unsafe Span<byte> Row(int y, int length) => new((byte*)DataPointer + (long)y * RowStride, length);
+
+    private long At<T>(int x, int y) where T : unmanaged
+    {
+        var size = Unsafe.SizeOf<T>();
+        if (x < 0 || y < 0 || x >= Width || y >= Height || (long)y * RowStride + (long)(x + 1) * size > BufferStride)
+        {
+            throw new ArgumentOutOfRangeException(nameof(x), $"({x}, {y}) is outside the {Width}×{Height} pixels.");
         }
 
-        /// <summary>
-        /// Gets scanline pixels from the buffer.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="pixels">An allocated scanline pixel buffer</param>
-        /// <param name="yOffset">The y line offset.</param>
-        /// <returns>Scanline pixels from the buffer</returns>
-        /// <exception cref="System.ArgumentException">If the sizeof(T) is an invalid size</exception>
-        /// <remarks>
-        /// This method is working on a row basis. The <paramref name="yOffset"/> is specifying the first row to get 
-        /// the pixels from.
-        /// </remarks>
-        public void GetPixels<T>(T[] pixels, int yOffset = 0) where T : struct
-        {
-            GetPixels(pixels, yOffset, 0, pixels.Length);
-        }
-
-        /// <summary>
-        /// Gets scanline pixels from the buffer.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="pixels">An allocated scanline pixel buffer</param>
-        /// <param name="yOffset">The y line offset.</param>
-        /// <param name="pixelIndex">Offset into the destination <paramref name="pixels"/> buffer.</param>
-        /// <param name="pixelCount">Number of pixels to write into the destination <paramref name="pixels"/> buffer.</param>
-        /// <exception cref="System.ArgumentException">If the sizeof(T) is an invalid size</exception>
-        /// <remarks>
-        /// This method is working on a row basis. The <paramref name="yOffset"/> is specifying the first row to get 
-        /// the pixels from.
-        /// </remarks>
-        public unsafe void GetPixels<T>(T[] pixels, int yOffset, uint pixelIndex, int pixelCount) where T : struct
-        {
-            var pixelPointer = (byte*)this.DataPointer + yOffset * RowStride;
-            if (isStrictRowStride)
-            {
-                Utilities.Read(new IntPtr(pixelPointer), pixels, 0, pixelCount);
-            }
-            else
-            {
-                var sizeOfOutputPixel = Utilities.SizeOf<T>() * pixelCount;
-                var sizePerWidth = sizeOfOutputPixel / Width;
-                var remainingPixels = sizeOfOutputPixel % Width;
-                for (int i = 0; i < sizePerWidth; i++)
-                {
-                    Utilities.Read(new IntPtr(pixelPointer), pixels, (int)pixelIndex, (int)Width);
-                    pixelPointer += RowStride;
-                    pixelIndex += Width;
-                }
-                if (remainingPixels > 0)
-                {
-                    Utilities.Read(new IntPtr(pixelPointer), pixels, (int)pixelIndex, (int)remainingPixels);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Sets scanline pixels to the buffer.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="sourcePixels">Source pixel buffer</param>
-        /// <param name="yOffset">The y line offset.</param>
-        /// <exception cref="System.ArgumentException">If the sizeof(T) is an invalid size</exception>
-        /// <remarks>
-        /// This method is working on a row basis. The <paramref name="yOffset"/> is specifying the first row to get 
-        /// the pixels from.
-        /// </remarks>
-        public void SetPixels<T>(T[] sourcePixels, int yOffset = 0) where T : struct
-        {
-            SetPixels(sourcePixels, yOffset, 0, sourcePixels.Length);
-        }
-
-        /// <summary>
-        /// Sets scanline pixels to the buffer.
-        /// </summary>
-        /// <typeparam name="T">Type of the pixel data</typeparam>
-        /// <param name="sourcePixels">Source pixel buffer</param>
-        /// <param name="yOffset">The y line offset.</param>
-        /// <param name="pixelIndex">Offset into the source <paramref name="sourcePixels"/> buffer.</param>
-        /// <param name="pixelCount">Number of pixels to write into the source <paramref name="sourcePixels"/> buffer.</param>
-        /// <exception cref="System.ArgumentException">If the sizeof(T) is an invalid size</exception>
-        /// <remarks>
-        /// This method is working on a row basis. The <paramref name="yOffset"/> is specifying the first row to get 
-        /// the pixels from.
-        /// </remarks>
-        public unsafe void SetPixels<T>(T[] sourcePixels, int yOffset, uint pixelIndex, int pixelCount) where T : struct
-        {
-            var pixelPointer = (byte*)DataPointer + yOffset * RowStride;
-            if (isStrictRowStride)
-            {
-                Utilities.Write(new IntPtr(pixelPointer), sourcePixels, 0, pixelCount);
-            }
-            else
-            {
-                var sizeOfOutputPixel = Utilities.SizeOf<T>() * pixelCount;
-                var sizePerWidth = sizeOfOutputPixel / Width;
-                var remainingPixels = sizeOfOutputPixel % Width;
-                for (int i = 0; i < sizePerWidth; i++)
-                {
-                    Utilities.Write(new IntPtr(pixelPointer), sourcePixels, (int)pixelIndex, (int)Width);
-                    pixelPointer += RowStride;
-                    pixelIndex += Width;
-                }
-                if (remainingPixels > 0)
-                {
-                    Utilities.Write(new IntPtr(pixelPointer), sourcePixels, (int)pixelIndex, (int)remainingPixels);
-                }
-            }
-        }
-
-        public static PixelBuffer FlipBuffer(PixelBuffer pixelBuffer, FlipBufferOptions flipOptions)
-        {
-            var bufferStride = pixelBuffer.BufferStride;
-            var dataPointer = pixelBuffer.DataPointer;
-            var rowStride = pixelBuffer.RowStride;
-            var pixelSize = pixelBuffer.PixelSize;
-            var height = pixelBuffer.Height;
-            var width = pixelBuffer.Width;
-
-            var buffer = new byte[bufferStride];
-            var flipped = new byte[bufferStride];
-            Utilities.Read(dataPointer, buffer, 0, bufferStride);
-            if (flipOptions == FlipBufferOptions.FlipVertically)
-            {
-                int offset = 0;
-                for (int i = (int)height - 1; i >= 0; --i)
-                {
-                    System.Buffer.BlockCopy(buffer, i * rowStride, flipped, offset, rowStride);
-                    offset += rowStride;
-                }
-            }
-            else if (flipOptions == FlipBufferOptions.FlipHorizontally)
-            {
-                for (int i = 0; i < height; ++i)
-                {
-                    var originalOffset = i * rowStride;
-                    var offset = ((i + 1) * rowStride) - pixelSize;
-                    for (int k = 0; k < width; ++k)
-                    {
-                        System.Buffer.BlockCopy(buffer, originalOffset, flipped, offset, pixelSize);
-                        offset -= pixelSize;
-                        originalOffset += pixelSize;
-                    }
-                }
-            }
-            else
-            {
-                int rowOffset = 0;
-                for (int i = (int)height - 1; i >= 0; --i)
-                {
-                    System.Buffer.BlockCopy(buffer, i * rowStride, flipped, rowOffset, rowStride);
-                    var originalOffset = i * rowStride;
-                    var columnOffset = rowOffset + rowStride - pixelSize;
-                    for (int k = 0; k < width; ++k)
-                    {
-                        System.Buffer.BlockCopy(buffer, originalOffset, flipped, columnOffset, pixelSize);
-                        columnOffset -= pixelSize;
-                        originalOffset += pixelSize;
-                    }
-                    rowOffset += rowStride;
-                }
-            }
-
-            var ptr = Utilities.AllocateMemory((uint)bufferStride);
-            Utilities.Write(ptr, flipped, 0, bufferStride);
-            return new PixelBuffer(width, height, pixelBuffer.Format, rowStride, bufferStride, ptr);
-        }
+        return (long)y * RowStride + (long)x * size;
     }
 }

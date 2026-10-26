@@ -40,9 +40,6 @@ namespace Adamantium.Graphics
         {
             usage |= ImageUsageFlagBits.ColorAttachmentBit | ImageUsageFlagBits.SampledBit;
 
-            // No HostTransferBit: without Resizable BAR it puts the image in the small BAR heap, which one 4K MSAA target
-            // exhausts.
-
             var description = new TextureDescription
             {
                 Width = width,

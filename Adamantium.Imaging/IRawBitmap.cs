@@ -8,7 +8,15 @@ public interface IRawBitmap
     
     public SurfaceFormat PixelFormat { get; }
 
-    public ulong TotalSizeInBytes => Width * Height * (ulong)PixelFormat.SizeInBytes;
+    /// <summary>The bytes of one frame - whole blocks for a compressed format.</summary>
+    public ulong TotalSizeInBytes
+    {
+        get
+        {
+            var (row, rows) = TexelBlocks.Rows(PixelFormat, Width, Height);
+            return (ulong)(row * rows);
+        }
+    }
     
     public bool IsMultiFrame { get; } 
     

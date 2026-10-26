@@ -21,10 +21,6 @@ public unsafe class GraphicsAdapter
 
     public void UpdateData()
     {
-        // ONE call per kind, with everything wanted chained onto it - which is how Vulkan is meant to be asked. This
-        // used to be a call PER STRUCTURE, each one hand-marshaled into unmanaged memory and read back with a raw
-        // cast, because the binding handed an output chain back as a bare address and dropped the typed objects. It
-        // marshals them into the objects the caller supplied now, so the chain can simply be built and read.
         var vulkan11Properties = new PhysicalDeviceVulkan11Properties();
         var vulkan12Properties = new PhysicalDeviceVulkan12Properties { PNext = vulkan11Properties };
         var vulkan14Properties = new PhysicalDeviceVulkan14Properties { PNext = vulkan12Properties };
@@ -43,8 +39,6 @@ public unsafe class GraphicsAdapter
         Vulkan12Properties = vulkan12Properties;
         MaxMemoryAllocationSize = vulkan11Properties.MaxMemoryAllocationSize;
 
-        // swapchainMaintenance1 is a feature, not just an extension: its structures are invalid with the feature off, so it
-        // is queried here and enabled at device creation.
         var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR();
         var maintenance = new PhysicalDeviceSwapchainMaintenance1FeaturesKHR { PNext = maintenance7 };
         var hostCopy = new PhysicalDeviceVulkan14Features { PNext = maintenance };
@@ -56,6 +50,7 @@ public unsafe class GraphicsAdapter
 
         _physicalDevice.GetPhysicalDeviceFeatures2(ref features2);
 
+        SupportsImageCubeArray = features2.Features != null && (bool)features2.Features.ImageCubeArray;
         SupportsHostImageCopy = hostCopy.HostImageCopy;
         SupportsSwapchainMaintenance1 = maintenance.SwapchainMaintenance1;
         SupportsMaintenance7 = maintenance7.Maintenance7;
@@ -92,6 +87,9 @@ public unsafe class GraphicsAdapter
     public ulong MaxMemoryAllocationSize { get; private set; }
 
     public bool SupportsHostImageCopy { get; private set; }
+
+    /// <summary>Whether the device views an array of cubes as one - a DDS of several cubes needs it.</summary>
+    public bool SupportsImageCubeArray { get; private set; }
 
     /// <summary>Whether a storage buffer may hold 8-bit members and a shader may compute with them - the pair the
     /// instance records need to carry color as four BYTES rather than as a packed word.</summary>

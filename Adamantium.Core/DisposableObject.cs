@@ -1,130 +1,96 @@
 using System;
 
-namespace Adamantium.Core
+namespace Adamantium.Core;
+
+/// <summary>A named object disposed once, under a lock: <see cref="Disposing"/>, then <see cref="Dispose(bool)"/>,
+/// which frees what it was given through <see cref="ToDispose{T}"/>.</summary>
+public abstract class DisposableObject : NamedObject, IDisposable
 {
-   /// <summary>
-   /// A disposable object base class.
-   /// </summary>
-   public abstract class DisposableObject : NamedObject, IDisposable
-   {
-      /// <summary>
-      /// Gets or sets the disposables.
-      /// </summary>
-      /// <value>The disposables.</value>
-      protected DisposeCollector DisposeCollector { get; set; }
+    private readonly object _disposeLock = new();
 
-      /// <summary>
-      /// Initializes a new instance of the <see cref="DisposableObject"/> class.
-      /// </summary>
-      protected internal DisposableObject()
-      {
-      }
+    /// <summary>What is freed with this object.</summary>
+    protected DisposeCollector DisposeCollector { get; set; }
 
-      /// <summary>
-      /// Initializes a new instance of the <see cref="DisposableObject" /> class with an immutable name.
-      /// </summary>
-      /// <param name="name">The name.</param>
-      protected DisposableObject(string name) : base(name)
-      {
-      }
+    protected internal DisposableObject()
+    {
+    }
 
-      /// <summary>
-      /// Gets a value indicating whether this instance is disposed.
-      /// </summary>
-      /// <value>
-      /// <c>true</c> if this instance is disposed; otherwise, <c>false</c>.
-      /// </value>
-      public bool IsDisposed { get; private set; }
+    /// <summary>An object whose name is <paramref name="name"/>, for good.</summary>
+    protected DisposableObject(string name) : base(name)
+    {
+    }
 
-      /// <summary>
-      /// Gets a value indicating whether this instance is currently disposing.
-      /// </summary>
-      /// <value>
-      /// <c>true</c> if this instance is disposed; otherwise, <c>false</c>.
-      /// </value>
-      protected internal bool IsDisposing { get; private set; }
+    /// <summary>Whether it is disposed.</summary>
+    public bool IsDisposed { get; private set; }
 
-      /// <summary>
-      /// Occurs when Dispose is called.
-      /// </summary>
-      public event EventHandler<EventArgs> Disposing;
+    /// <summary>Whether it is being disposed now.</summary>
+    protected internal bool IsDisposing { get; private set; }
 
-      /// <summary>
-      /// Releases unmanaged and - optionally - managed resources
-      /// </summary>
-      public void Dispose()
-      {
-         lock (this)
-         {
-            if (!IsDisposed)
+    /// <summary>Raised as disposing starts.</summary>
+    public event EventHandler<EventArgs> Disposing;
+
+    public void Dispose()
+    {
+        lock (_disposeLock)
+        {
+            if (IsDisposed)
             {
-               IsDisposing = true;
-
-               // Call the disposing event.
-               var handler = Disposing;
-               handler?.Invoke(this, EventArgs.Empty);
-
-               Dispose(true);
-               IsDisposed = true;
+                return;
             }
-         }
-      }
 
-      /// <summary>
-      /// Disposes of object resources.
-      /// </summary>
-      /// <param name="disposeManagedResources">If true, managed resources should be
-      /// disposed of in addition to unmanaged resources.</param>
-      protected virtual void Dispose(bool disposeManagedResources)
-      {
-         if (disposeManagedResources)
-         {
-            // Dispose all ComObjects
+            IsDisposing = true;
+            Disposing?.Invoke(this, EventArgs.Empty);
+            Dispose(true);
+            IsDisposed = true;
+        }
+    }
+
+    /// <summary>Frees what it holds - with <paramref name="disposeManagedResources"/>, what it was given to free too.
+    /// </summary>
+    protected virtual void Dispose(bool disposeManagedResources)
+    {
+        if (disposeManagedResources)
+        {
             DisposeCollector?.Dispose();
             DisposeCollector = null;
-         }
-      }
+        }
+    }
 
-      /// <summary>
-      /// Adds a disposable object to the list of the objects to dispose.
-      /// </summary>
-      /// <param name="toDisposeArg">To dispose.</param>
-      protected internal T ToDispose<T>(T toDisposeArg)
-      {
-         if (!ReferenceEquals(toDisposeArg, null))
-         {
-            if (DisposeCollector == null)
-               DisposeCollector = new DisposeCollector();
-            return DisposeCollector.Collect(toDisposeArg);
-         }
-         return default(T);
-      }
+    /// <summary>Frees <paramref name="item"/> - an <see cref="IDisposable"/> or native memory - with this object; gives
+    /// it back.</summary>
+    protected internal T ToDispose<T>(T item)
+    {
+        if (item == null)
+        {
+            return default;
+        }
 
-      /// <summary>
-      /// Dispose a disposable object and set the reference to null. Removes this object from the ToDispose list.
-      /// </summary>
-      /// <param name="objectToDispose">Object to dispose.</param>
-      protected internal void RemoveAndDispose<T>(ref T objectToDispose)
-      {
-         lock (this)
-         {
-            if (!ReferenceEquals(objectToDispose, null))
-               DisposeCollector?.RemoveAndDispose(ref objectToDispose);
-         }
-      }
+        DisposeCollector ??= new DisposeCollector();
+        return DisposeCollector.Collect(item);
+    }
 
-      /// <summary>
-      /// Removes a disposable object to the list of the objects to dispose.
-      /// </summary>
-      /// <typeparam name="T"></typeparam>
-      /// <param name="toDisposeArg">To dispose.</param>
-      protected internal void RemoveToDispose<T>(T toDisposeArg)
-      {
-         lock (this)
-         {
-            if (!ReferenceEquals(toDisposeArg, null))
-               DisposeCollector?.Remove(toDisposeArg);
-         }
-      }
-   }
+    /// <summary>Frees <paramref name="item"/> now and leaves it default, if it was to be freed with this object.
+    /// </summary>
+    protected internal void RemoveAndDispose<T>(ref T item)
+    {
+        lock (_disposeLock)
+        {
+            if (item != null)
+            {
+                DisposeCollector?.RemoveAndDispose(ref item);
+            }
+        }
+    }
+
+    /// <summary>No longer frees <paramref name="item"/> with this object.</summary>
+    protected internal void RemoveToDispose<T>(T item)
+    {
+        lock (_disposeLock)
+        {
+            if (item != null)
+            {
+                DisposeCollector?.Remove(item);
+            }
+        }
+    }
 }

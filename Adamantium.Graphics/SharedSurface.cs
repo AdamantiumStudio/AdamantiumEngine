@@ -17,13 +17,10 @@ public sealed unsafe class SharedSurface : Texture
 {
     private static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-    private Semaphore _produceSemaphore;   // signaled by the producer when a frame is ready; consumer waits on it
-    private Semaphore _consumeSemaphore;   // signaled by the consumer after sampling; producer waits before reuse
+    private Semaphore _produceSemaphore;
+    private Semaphore _consumeSemaphore;
 
-    // The exporter owns the handles it created and must close them; the importer borrows the producer's.
     private bool _ownsHandles;
-    // Transport for this surface's handles: POSIX fd vs Win32 NT handle. Chosen from the handle TYPE (the producer
-    // decides), not the consumer's OS — an OpaqueFd producer can exist on Windows, a D3D/Win32 producer is an NT handle.
     private bool _useFd;
     private IntPtr _memoryHandle;
     private IntPtr _produceHandle;
@@ -148,7 +145,6 @@ public sealed unsafe class SharedSurface : Texture
             source._produceSemaphore, PipelineStageFlagBits2.AllTransferBit, frame, released);
     }
 
-    // Both images rest in ShaderReadOnly: the producer leaves the surface there, and the copy is only ever sampled.
     private void RecordCopy(IGraphicsDevice device, CommandBuffer commandBuffer, ITexture copy)
     {
         device.InsertImageMemoryBarrier(commandBuffer, this,
@@ -237,7 +233,6 @@ public sealed unsafe class SharedSurface : Texture
         var description = BuildDescription(width, height, format);
 
         var externalInfo = new ExternalMemoryImageCreateInfo { HandleTypes = memHandleType };
-        // Exporting an image's memory requires a dedicated allocation that names the image.
         Func<VulkanImage, object> allocFactory = image => new ExportMemoryAllocateInfo
         {
             HandleTypes = memHandleType,
@@ -315,8 +310,6 @@ public sealed unsafe class SharedSurface : Texture
         var description = BuildDescription(descriptor.Width, descriptor.Height, descriptor.Format);
 
         var externalInfo = new ExternalMemoryImageCreateInfo { HandleTypes = memHandleType };
-        // Import the producer's memory in place of a normal allocation; still a dedicated allocation for the image.
-        // The transport (fd vs Win32 handle) follows the producer's handle type, not our OS.
         var duplicate = -1;
         Func<VulkanImage, object> allocFactory = image => useFd
             ? (object)new ImportMemoryFdInfoKHR
@@ -364,11 +357,8 @@ public sealed unsafe class SharedSurface : Texture
         return surface;
     }
 
-    // VK_QUEUE_FAMILY_EXTERNAL: the producer owns the memory as it hands it over.
     private const uint QueueFamilyExternal = ~1u;
 
-    // Taken over from the producer in the layout it keeps the surface in, not moved out of Undefined: the producer may
-    // already have written a frame, and a transition from Undefined may discard it.
     private void AcquireFromProducer()
     {
         var device = GraphicsDevice;
@@ -428,8 +418,6 @@ public sealed unsafe class SharedSurface : Texture
 
         var info = new SemaphoreCreateInfo
         {
-            // Timeline (monotonic) so producer/consumer can poll progress and order across queues without binary
-            // ping-pong deadlocks. Exportable like a binary one (verified working + importable on this GPU).
             PNext = new ExportSemaphoreCreateInfo
             {
                 HandleTypes = semHandleType,
@@ -455,7 +443,6 @@ public sealed unsafe class SharedSurface : Texture
     private Semaphore ImportSemaphore(IntPtr handle)
     {
         var logical = GraphicsDevice.LogicalDevice;
-        // Created as timeline before importing the producer's timeline payload.
         var semaphore = logical.CreateSemaphore(new SemaphoreCreateInfo
         {
             PNext = new SemaphoreTypeCreateInfo { SemaphoreType = SemaphoreType.Timeline, InitialValue = 0 }
@@ -491,7 +478,6 @@ public sealed unsafe class SharedSurface : Texture
 
     private static SharedHandleType DefaultHandleType => IsWindows ? SharedHandleType.OpaqueWin32 : SharedHandleType.OpaqueFd;
 
-    // Only the opaque-fd type uses the POSIX fd transport; Win32/D3D11/D3D12 are all NT-handle (Win32) transports.
     private static bool IsFdHandle(SharedHandleType type) => type == SharedHandleType.OpaqueFd;
 
     private static ExternalMemoryHandleTypeFlagBits ToMemoryHandleType(SharedHandleType type) => type switch
@@ -514,10 +500,6 @@ public sealed unsafe class SharedSurface : Texture
         MipLevels = 1,
         Format = format,
         Samples = MSAALevel.None,
-        // Producer copies its resolved frame INTO this surface (TransferDst, then transitions it to ShaderReadOnly);
-        // consumer copies it out (TransferSrc, see LatchCopy) or samples it. Producer and consumer are different queues
-        // of the SAME graphics family, so a semaphore (the Produce/Consume timeline) is enough to order the layout
-        // transition + write vs the read (no queue-family ownership transfer needed).
         Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit | ImageUsageFlagBits.TransferSrcBit,
         SharingMode = SharingMode.Exclusive,
         ImageTiling = ImageTiling.Optimal,
@@ -540,7 +522,6 @@ public sealed unsafe class SharedSurface : Texture
     private void CloseSharedHandle(IntPtr handle)
     {
         if (handle == IntPtr.Zero) return;
-        // POSIX fd vs Win32 NT handle, per this surface's transport. The unused platform's library is never resolved.
         if (_useFd) PosixInterop.Close((int)handle);
         else Win32Interop.CloseHandle(handle);
     }
@@ -559,8 +540,6 @@ public sealed unsafe class SharedSurface : Texture
         if (_produceSemaphore != null) { logical.DestroySemaphore(_produceSemaphore); _produceSemaphore = null; }
         if (_consumeSemaphore != null) { logical.DestroySemaphore(_consumeSemaphore); _consumeSemaphore = null; }
 
-        // Close the handles we exported; the importer borrows the producer's and must not close them. Null each
-        // out after closing so a second pass can never double-close (the zero check would otherwise re-enter).
         if (_ownsHandles)
         {
             CloseSharedHandle(_memoryHandle); _memoryHandle = IntPtr.Zero;
@@ -568,7 +547,6 @@ public sealed unsafe class SharedSurface : Texture
             CloseSharedHandle(_consumeHandle); _consumeHandle = IntPtr.Zero;
         }
 
-        // Frees the image, view and (imported or exported) memory.
         base.Dispose(disposeManaged);
     }
 }

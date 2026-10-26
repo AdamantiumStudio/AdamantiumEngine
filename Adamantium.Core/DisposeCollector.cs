@@ -1,97 +1,97 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Runtime.ExceptionServices;
 
-namespace Adamantium.Core
+namespace Adamantium.Core;
+
+/// <summary>Things to free together: disposables, and native blocks of <see cref="Utilities.AllocateMemory(nuint)"/>.
+/// Freed last-in first-out, each once.</summary>
+public class DisposeCollector : DisposableBase
 {
-    public class DisposeCollector : DisposableBase
+    private readonly List<object> _items = new();
+
+    /// <summary>How many things are held.</summary>
+    public int Count => _items.Count;
+
+    /// <summary>Holds <paramref name="item"/> - an <see cref="IDisposable"/> or an <see cref="IntPtr"/> to native memory -
+    /// to free with the rest, once however often it is given; gives it back.</summary>
+    public T Collect<T>(T item)
     {
-        private List<object> disposables;
-
-        public DisposeCollector()
+        if (item is not (IDisposable or IntPtr))
         {
-            disposables = new List<object>();
+            throw new ArgumentException("Only an IDisposable or an IntPtr to native memory is collected.", nameof(item));
         }
 
-        public int Count => disposables.Count;
-
-        public T Collect<T>(T toDispose)
+        if (!EqualityComparer<T>.Default.Equals(item, default) && !_items.Contains(item))
         {
-            if (!(toDispose is IDisposable || toDispose is IntPtr))
-                throw new ArgumentException("Argument must be IDisposable or IntPtr");
+            _items.Add(item);
+        }
 
-            // Check memory alignment
-            if (toDispose is IntPtr)
+        return item;
+    }
+
+    /// <summary>Frees <paramref name="item"/> and leaves it default - if it is held here; otherwise leaves it as it is.
+    /// </summary>
+    public void RemoveAndDispose<T>(ref T item)
+    {
+        if (Remove(item))
+        {
+            Free(item);
+            item = default;
+        }
+    }
+
+    /// <summary>Lets go of <paramref name="item"/> without freeing it; whether it was held.</summary>
+    public bool Remove<T>(T item) => _items.Remove(item);
+
+    /// <summary>Frees what is held, the last first, each let go of before it is freed - so one that takes another away
+    /// leaves nothing freed twice. One that throws does not stop the rest: they are all freed, and then what was
+    /// thrown is thrown - the one exception, or an <see cref="AggregateException"/> of several. Disposables are disposed
+    /// only when <paramref name="disposeManagedResources"/>; native blocks are freed either way.</summary>
+    public void DisposeAndClear(bool disposeManagedResources = true)
+    {
+        List<Exception> thrown = null;
+        while (_items.Count > 0)
+        {
+            var item = _items[_items.Count - 1];
+            _items.RemoveAt(_items.Count - 1);
+            if (!disposeManagedResources && item is not IntPtr)
             {
-                var memoryPtr = (IntPtr)(object)toDispose;
-                if (!Utilities.IsMemoryAligned(memoryPtr))
-                    throw new ArgumentException("Memory pointer is invalid. Memory must have been allocated with Utilties.AllocateMemory");
+                continue;
             }
 
-            if (!Equals(toDispose, default(T)))
+            try
             {
-                if (disposables == null)
-                    disposables = new List<object>();
-
-                if (!disposables.Contains(toDispose))
-                {
-                    disposables.Add(toDispose);
-                }
+                Free(item);
             }
-            return toDispose;
-        }
-
-        public void RemoveAndDispose<T>(ref T objectToDispose)
-        {
-            if (Remove(objectToDispose))
+            catch (Exception e)
             {
-                if (objectToDispose is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-                else
-                {
-                    var obj = (object)objectToDispose;
-                    var ptr = (IntPtr)obj;
-                    Utilities.FreeMemory(ptr);
-                }
+                (thrown ??= []).Add(e);
             }
         }
 
-        public bool Remove<T>(T toDisposeArg)
+        if (thrown?.Count == 1)
         {
-            return disposables.Remove(toDisposeArg);
+            ExceptionDispatchInfo.Capture(thrown[0]).Throw();
         }
 
-        public void DisposeAndClear(bool disposeManagedResources = true)
+        if (thrown != null)
         {
-            if (disposables == null)
-                return;
-
-            for (int i = disposables.Count - 1; i >= 0; i--)
-            {
-                var objectToDispose = disposables[i];
-
-                if (objectToDispose is IDisposable disposable)
-                {
-                    if (disposeManagedResources)
-                    {
-                        disposable.Dispose();
-                    }
-                }
-                else
-                {
-                    Utilities.FreeMemory((IntPtr)objectToDispose);
-                }
-
-                disposables.RemoveAt(i);
-            }
-            disposables.Clear();
+            throw new AggregateException(thrown);
         }
+    }
 
-        protected override void Dispose(bool disposeManaged)
+    protected override void Dispose(bool disposeManaged) => DisposeAndClear(disposeManaged);
+
+    private static void Free(object item)
+    {
+        if (item is IDisposable disposable)
         {
-            DisposeAndClear(disposeManaged);
+            disposable.Dispose();
+        }
+        else
+        {
+            Utilities.FreeMemory((IntPtr)item);
         }
     }
 }

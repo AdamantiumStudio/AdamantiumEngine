@@ -27,9 +27,6 @@ namespace Adamantium.Graphics
         /// Gets the content of this texture to an array of data.
         /// </summary>
         /// <returns>An array of data.</returns>
-        /// <msdn-id>ff476457</msdn-id>
-        ///   <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-        ///   <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
         /// <remarks>This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice" />.
         /// This method creates internally a staging resource if this texture is not already a staging resource, copies to it and map it to memory. Use method with explicit staging resource
         /// for optimal performances.</remarks>
@@ -46,11 +43,8 @@ namespace Adamantium.Graphics
         /// <param name="options">Buffer data behavior.</param>
         /// <exception cref="System.ArgumentException"></exception>
         /// <remarks>
-        /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>. See the unmanaged documentation about Map/UnMap for usage and restrictions.
+        /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
         public void SetData(ref T fromData, uint offsetInBytes = 0)
         {
             base.SetData(ref fromData, offsetInBytes);
@@ -65,11 +59,8 @@ namespace Adamantium.Graphics
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
         /// <param name="options">Buffer data behavior.</param>
         /// <remarks>
-        /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>. See the unmanaged documentation about Map/UnMap for usage and restrictions.
+        /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
         public void SetData(T[] fromData, uint startIndex = 0, uint elementCount = 0, uint offsetInBytes = 0)
         {
             base.SetData(fromData, startIndex, elementCount, offsetInBytes);

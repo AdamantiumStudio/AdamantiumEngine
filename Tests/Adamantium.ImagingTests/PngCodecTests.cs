@@ -200,8 +200,10 @@ public class PngCodecTests
     {
         var source = PngImage.Read(Build(1, 1, 8, 0, Zlib([0, 7], CompressionLevel.Optimal)));
         source.Metadata.Texts.Add(new PngText(keyword, "text"));
+        var output = new MemoryStream();
 
-        Assert.That(() => PngEncoder.Encode(source, new MemoryStream()), Throws.ArgumentException);
+        Assert.That(() => PngEncoder.Encode(source, output), Throws.ArgumentException);
+        Assert.That(output.Length, Is.Zero, "refused before a byte is written");
     }
 
     [Test]

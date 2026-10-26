@@ -465,6 +465,7 @@ public class MainGraphicsDevice : DisposableBase
 
         deviceFeatures2.Features.SamplerAnisotropy = true;
         deviceFeatures2.Features.GeometryShader = true;
+        deviceFeatures2.Features.ImageCubeArray = GraphicsAdapter.SupportsImageCubeArray;
         // The stroke expander's compute shader dereferences BDA pointers (uint64_t).
         deviceFeatures2.Features.ShaderInt64 = true;
 

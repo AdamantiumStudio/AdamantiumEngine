@@ -294,7 +294,7 @@ public class Mesh
     {
         if (points == null) return this;
 
-        return SetPoints(Utilities.ToVector3(points), updateBoundingBox);
+        return SetPoints(points.Select(point => (Vector3)point).ToArray(), updateBoundingBox);
     }
         
     public Mesh SetPoints(IEnumerable<Vector3> points, bool updateBoundingBox = true)
@@ -395,7 +395,6 @@ public class Mesh
         return this;
     }
 
-    // A bitangent is cross(normal, tangent) times the tangent's w; derived whenever both are there a vertex.
     private void DeriveBiTangents()
     {
         if (Tangents.Length > 0 && Tangents.Length == Normals.Length)
@@ -807,13 +806,9 @@ public class Mesh
             ReverseWinding();
         }
 
-        // Normals the mesh already CARRIES are moved, not re-derived: a generator's exact normals survive being placed,
-        // and a plain translation leaves them alone. Re-averaging them off the triangles here threw that away.
         if (Normals.Length == Points.Length) TransformNormals(ref transformMatrix);
         else CalculateNormals();
 
-        // A morph target's moves are directions: they take the transform without its translation, and its normals'
-        // moves the inverse transpose the normals take.
         if (MorphTargets.Count > 0)
         {
             var linear = (Matrix4x4F)transformMatrix;
@@ -842,7 +837,6 @@ public class Mesh
         }
     }
 
-    // Normals follow the inverse transpose, which is what keeps them perpendicular through a non-uniform scale.
     private void TransformNormals(ref Matrix4x4 transform)
     {
         Normals = TransformedNormals(Normals, transform);
@@ -914,8 +908,6 @@ public class Mesh
         clonedMesh.Colors = new Color[Colors.Length];
         Colors.CopyTo(clonedMesh.Colors, 0);
 
-        // Copied whatever the transform is - ApplyTransform moves them. Skipping the copy for a placed clone left it
-        // with no normals to move, so every placed copy fell back to averaging them out of its own triangles.
         clonedMesh.Normals = new Vector3F[Normals.Length];
         Normals.CopyTo(clonedMesh.Normals, 0);
 
@@ -965,8 +957,6 @@ public class Mesh
             GenerateBasicIndices();
         }
 
-        // What a Vertex does not hold - tangents, the attributes beyond, the morph targets - joins it only where it is
-        // the same: a vertex differing in it is kept apart, and it follows the vertices to their new numbers.
         var oldCount = Points.Length;
         var keepTangents = !recalculateTangents;
         var sameData = CarriesMoreThanAVertex(keepTangents)
@@ -1064,7 +1054,6 @@ public class Mesh
         Points = optimizedPositions.ToArray();
         Indices = indices.ToArray();
 
-        // Normals used not to be carried over: the array stayed on the OLD vertex numbering, i.e. plain garbage.
         if (Semantic.HasFlag(VertexSemantic.Normal))
         {
             Normals = optimizedNormals.ToArray();
@@ -1131,8 +1120,6 @@ public class Mesh
         return first;
     }
 
-    // Puts what a Vertex does not hold on the new vertex numbering: new vertex n takes what old vertex firstOld[n] had.
-    // An array not one value a vertex is left as it is.
     private void CarryOver(List<int> firstOld, int oldCount)
     {
         Tangents = Pick(Tangents, firstOld, oldCount);
@@ -1187,8 +1174,6 @@ public class Mesh
         attribute.Values = picked;
     }
 
-    // Two old vertices are the same here when everything a Vertex does not hold is the same at both.
-    // A value past the end of its array reads as the default, in the comparison and the hash alike.
     private sealed class SameVertexData(Mesh mesh, bool tangents) : IEqualityComparer<int>
     {
         public bool Equals(int a, int b)
@@ -1339,7 +1324,6 @@ public class Mesh
 
     public Mesh CalculateTangentsAndBinormals(int uvChannel = 0)
     {
-        // Multiple of three, as in CalculateNormals: on a malformed index array the loop read past the end
         if (MeshTopology == PrimitiveType.TriangleList && Semantic.HasFlag(VertexSemantic.UV0)
             && Semantic.HasFlag(VertexSemantic.Position) && Indices.Length % 3 == 0)
         {
@@ -1368,8 +1352,6 @@ public class Mesh
                 float s2 = uv3.X - uv1.X;
                 float t2 = uv3.Y - uv1.Y;
 
-                // Divided by the texture coordinates' determinant: without it a triangle whose texture is laid on
-                // mirrored had its u and v directions reversed both.
                 var determinant = s1 * t2 - s2 * t1;
                 if (determinant == 0)
                 {
@@ -1397,14 +1379,12 @@ public class Mesh
             {
                 Vector3F normal = Normals[k];
 
-                // Gram-Schmidt orthogonalize
                 var value = tan1[k] - normal * Vector3F.Dot(normal, tan1[k]);
                 if (value.LengthSquared() > 0)
                 {
                     value = Vector3F.Normalize(value);
                 }
 
-                // Calculate handedness (for case if tangent is Vector4F)
                 var handedness = Vector3F.Dot(Vector3F.Cross(normal, tan1[k]), tan2[k]) < 0.0f ? -1.0f : 1.0f;
                 tangentArray[k] = new Vector4F(value, handedness);
                 bitangentArray[k] = Vector3F.Cross(normal, (Vector3F)tangentArray[k]) * handedness;
@@ -1517,8 +1497,6 @@ public class Mesh
         var assembledBoneWeights = new List<Vector4F>();
         for (int i = 0; i < positionIndices.Count; i++)
         {
-            // A skin with fewer weights than the mesh has vertices is a broken file. A vertex without a weight is
-            // left unbound, which beats an IndexOutOfRange from deep inside the assembly.
             var index = positionIndices[i];
             var known = index >= 0 && index < JointIndices.Length && index < JointWeights.Length;
             assembledBoneIndices.Add(known ? JointIndices[index] : Vector4F.Zero);
@@ -1630,7 +1608,6 @@ public class Mesh
         return this;
     }
 
-    // Says the first point of each run of the strip from `from` on twice: every triangle after it turns over.
     private static void TurnStripOver(List<int> indices, int from)
     {
         var runStarts = true;
@@ -1647,8 +1624,6 @@ public class Mesh
         }
     }
 
-    // The same axis change the points get. A normal is a direction, so it takes the rotation and nothing else - but it
-    // must take it, or a mesh that brought its own normals would be lit by the source format's axes.
     private void TurnNormals(System.Func<Vector3F, Vector3F> turn)
     {
         for (int i = 0; i < Normals.Length; i++)
@@ -1674,7 +1649,6 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            //Меняем позиции вершин
                             var z = -position.Y;
                             position.Y = position.Z;
                             position.Z = z;
@@ -1690,7 +1664,6 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            //Меняем позиции вершин
                             (position.Y, position.Z) = (position.Z, position.Y);
                             Points[i] = position;
 
@@ -1702,8 +1675,6 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            //Меняем позиции вершин
-
                             (position.Y, position.Z) = (position.Z, position.Y);
                             Points[i] = position;
 
@@ -1721,7 +1692,6 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            //Меняем позиции вершин
                             position.Z = -position.Z;
                             Points[i] = position;
 
@@ -1733,7 +1703,6 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            //Меняем позиции вершин
                             position.Y = -position.Y;
                             Points[i] = position;
 
@@ -1765,10 +1734,6 @@ public class Mesh
             TurnTangentsAndTargets(conversion);
         }
 
-        // Re-wind the faces only when the change MIRRORS the mesh, which negating or swapping an axis does and a
-        // plain rotation does not. Every branch used to do it unconditionally, so on Z_UP -> Y_UP_RH - a proper
-        // rotation - every triangle came out facing backwards. Nothing caught it while normals were re-derived
-        // from that same winding: both were wrong together, and nothing culls back faces here.
         if (AxisConversion.MirrorsHandedness(AxisConversion.Between(UpAxis, destinationUpAxis)))
         {
             ReverseWinding();
@@ -1778,9 +1743,6 @@ public class Mesh
         return this;
     }
 
-    // Tangents and morph targets take the turn the normals take. A tangent's w says which way its bitangent runs, as
-    // cross(normal, tangent) * w: a mirroring turn reverses that cross, and the texture coordinates' v turned over
-    // reverses the bitangent - so w changes only under a turn that does not mirror. The bitangents are derived anew.
     private void TurnTangentsAndTargets(Matrix4x4F conversion)
     {
         var handedness = AxisConversion.MirrorsHandedness(conversion) ? 1f : -1f;

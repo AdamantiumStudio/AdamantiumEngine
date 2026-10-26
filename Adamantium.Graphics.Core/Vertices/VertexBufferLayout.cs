@@ -13,9 +13,6 @@ namespace Adamantium.Graphics.Core.Vertices;
 /// this <see cref="VertexBufferLayout"/> structure encapsulates a set of <see cref="VertexInputElement"/> for a particular slot, instance count.
 /// </remarks>	
 /// <seealso cref="VertexInputElement"/>
-/// <msdn-id>ff476180</msdn-id>	
-/// <unmanaged>D3D11_INPUT_ELEMENT_DESC</unmanaged>	
-/// <unmanaged-short>D3D11_INPUT_ELEMENT_DESC</unmanaged-short>
 public class VertexBufferLayout : IEquatable<VertexBufferLayout>
 {
    /// <summary>
@@ -23,12 +20,7 @@ public class VertexBufferLayout : IEquatable<VertexBufferLayout>
    /// </summary>
    public readonly int SlotIndex;
 
-   /// <summary>	
-   /// The number of instances to draw using the same per-instance data before advancing in the buffer by one element. This value must be 0 for an  element that contains per-vertex data (the slot class is set to <see cref="per-vertex data"/>).
-   /// </summary>	
-   /// <msdn-id>ff476180</msdn-id>	
-   /// <unmanaged>unsigned int InstanceDataStepRate</unmanaged>	
-   /// <unmanaged-short>unsigned int InstanceDataStepRate</unmanaged-short>	
+   /// <summary>How many instances share one element of per-instance data; 0 for per-vertex data.</summary>
    public readonly int InstanceCount;
 
    /// <summary>
@@ -36,17 +28,8 @@ public class VertexBufferLayout : IEquatable<VertexBufferLayout>
    /// </summary>
    public readonly ReadOnlyCollection<VertexInputElement> VertexElements;
 
-   /// <summary>
-   /// Precalculate hashcode for faster comparison.
-   /// </summary>
    private int hashCode;
 
-   /// <summary>
-   /// Initializes a new instance of the <see cref="VertexBufferLayout" /> struct.
-   /// </summary>
-   /// <param name="slot">The slot to bind this vertex buffer to. </param>
-   /// <param name="elements">The elements.</param>
-   /// <param name="instanceCount">The instance data step rate.</param>
    private VertexBufferLayout(int slot, VertexInputElement[] elements, int instanceCount)
    {
       if (elements == null)
@@ -55,7 +38,6 @@ public class VertexBufferLayout : IEquatable<VertexBufferLayout>
       if (elements.Length == 0)
          throw new ArgumentException("Vertex elements cannot have zero elements.", nameof(elements));
 
-      // Make a copy of the elements.
       var copyElements = new VertexInputElement[elements.Length];
       Array.Copy(elements, copyElements, elements.Length);
 
@@ -125,13 +107,11 @@ public class VertexBufferLayout : IEquatable<VertexBufferLayout>
       int offset = 0;
       for (int i = 0; i < vertexElements.Length; i++)
       {
-         // If offset is not specified, use the current offset
          if (vertexElements[i].AlignedByteOffset == -1)
             vertexElements[i].AlignedByteOffset = offset;
          else
             offset = vertexElements[i].AlignedByteOffset;
 
-         // Move to the next field.
          offset += FormatHelper.SizeOfInBytes(vertexElements[i].Format);
       }
       return vertexElements;
@@ -159,7 +139,6 @@ public class VertexBufferLayout : IEquatable<VertexBufferLayout>
 
    private void ComputeHashcode()
    {
-      // precalculate the hashcode for this instance
       hashCode = InstanceCount;
       hashCode = (hashCode * 397) ^ VertexElements.GetHashCode();
    }

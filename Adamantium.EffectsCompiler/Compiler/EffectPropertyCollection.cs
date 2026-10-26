@@ -8,10 +8,9 @@ public class EffectPropertyCollection : Dictionary<string, object>
 {
     public void SetProperty<T>(PropertyKey<T> key, T value)
     {
-        if (Utilities.IsEnum<T>(value))
+        if (value is Enum)
         {
-            var intValue = Convert.ToInt32(value);
-            Add(key.Name, intValue);
+            Add(key.Name, Convert.ChangeType(value, Enum.GetUnderlyingType(typeof(T))));
         }
         else
         {

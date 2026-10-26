@@ -3,46 +3,21 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics.Core.Vertices;
 
-/// <summary>	
-/// An attribute to use on a field in a structure, to describe a single vertex element for the input-assembler stage.
-/// </summary>	
+/// <summary>Marks a field or property of a vertex structure as one vertex element.</summary>
 /// <seealso cref="VertexInputElement"/>
-/// <msdn-id>ff476180</msdn-id>	
-/// <unmanaged>D3D11_INPUT_ELEMENT_DESC</unmanaged>	
-/// <unmanaged-short>D3D11_INPUT_ELEMENT_DESC</unmanaged-short>	
 [AttributeUsage(AttributeTargets.Field|AttributeTargets.Property)]
 public class VertexInputElementAttribute :Attribute
 {
-   /// <summary>	
-   /// <dd> <p>The HLSL semantic associated with this element in a shader input-signature.</p> </dd>	
-   /// </summary>	
-   /// <msdn-id>ff476180</msdn-id>	
-   /// <unmanaged>const char* SemanticName</unmanaged>	
-   /// <unmanaged-short>char SemanticName</unmanaged-short>	
+   /// <summary>The semantic the shader knows the element by.</summary>
    public String SemanticName { get; private set; }
 
-   /// <summary>	
-   /// <dd> <p>The semantic index for the element. A semantic index modifies a semantic, with an integer index number. A semantic index is only needed in a  case where there is more than one element with the same semantic. For example, a 4x4 matrix would have four components each with the semantic  name </p>  <pre><code>matrix</code></pre>  <p>, however each of the four component would have different semantic indices (0, 1, 2, and 3).</p> </dd>	
-   /// </summary>	
-   /// <msdn-id>ff476180</msdn-id>	
-   /// <unmanaged>unsigned int SemanticIndex</unmanaged>	
-   /// <unmanaged-short>unsigned int SemanticIndex</unmanaged-short>	
+   /// <summary>Which of the elements of one semantic this is - the rows of a matrix are four, 0 to 3.</summary>
    public Int32 SemanticIndex { get; private set; }
 
-   /// <summary>	
-   /// <dd> <p>The data type of the element data. See <strong><see cref="Adamantium.Vulkan.Core"/></strong>.</p> </dd>	
-   /// </summary>	
-   /// <msdn-id>ff476180</msdn-id>	
-   /// <unmanaged>Vulkan Format</unmanaged>	
-   /// <unmanaged-short>Vulkan Format</unmanaged-short>	
+   /// <summary>The element's data format; <see cref="Format.UNDEFINED"/> to take it from the field's type.</summary>
    public Format Format { get; private set; }
 
-   /// <summary>	
-   /// <dd> <p>Optional. Offset (in bytes) between each element. Used for convenience to define the current element directly  after the previous one, including any packing if necessary.</p> </dd>	
-   /// </summary>	
-   /// <msdn-id>ff476180</msdn-id>	
-   /// <unmanaged>unsigned int BytesOffset</unmanaged>	
-   /// <unmanaged-short>unsigned int BytesOffset</unmanaged-short>	
+   /// <summary>The element's offset in bytes, -1 to place it right after the one before.</summary>
    public Int32 BytesOffset { get; private set; }
 
    /// <summary>

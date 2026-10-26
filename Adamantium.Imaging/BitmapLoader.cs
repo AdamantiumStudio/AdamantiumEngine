@@ -18,7 +18,11 @@ public static class BitmapLoader
 {
     public delegate IRawBitmap ImageLoadDelegate(IntPtr dataPointer, ulong dataSize);
     public delegate void ImageSaveDelegate(IRawBitmap image, Stream imageStream);
-    
+
+    /// <summary>The most pixels a picture whose size its data does not bound - a run-length BMP - is read at;
+    /// 2<sup>28</sup>, a gigabyte as RGBA, unless set otherwise.</summary>
+    public static long MaxPixels { get; set; } = 1L << 28;
+
     private static readonly List<LoadSaveDelegates> _loadSaveDelegates;
     
     static BitmapLoader()
@@ -148,26 +152,23 @@ public static class BitmapLoader
         return null;
     }
 
+    /// <summary>Writes <paramref name="bitmap"/> to the file <paramref name="path"/> as <paramref name="fileType"/>. The
+    /// file is opened when the first byte is written, so a bitmap the encoder refuses leaves a file already there as it
+    /// was; a type nothing writes throws <see cref="NotSupportedException"/>.</summary>
     public static void Save(IRawBitmap bitmap, string path, ImageFileType fileType)
     {
-        var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
-        try
-        {
-            var saveDelegate = _loadSaveDelegates.FirstOrDefault(x => x.FileType == fileType);
-            saveDelegate?.Saver?.Invoke(bitmap, stream);
-        }
-        finally
-        {
-            stream.Flush();
-            stream.Dispose();
-        }
+        var saver = SaverOf(fileType);
+        using var stream = new FileOnFirstWrite(path);
+        saver(bitmap, stream);
     }
-    
-    public static void Save(IRawBitmap bitmap, Stream stream, ImageFileType fileType)
-    {
-        var saveDelegate = _loadSaveDelegates.FirstOrDefault(x => x.FileType == fileType);
-        saveDelegate?.Saver?.Invoke(bitmap, stream);
-    }
+
+    /// <summary>Writes <paramref name="bitmap"/> to <paramref name="stream"/> as <paramref name="fileType"/>; a type
+    /// nothing writes throws <see cref="NotSupportedException"/>.</summary>
+    public static void Save(IRawBitmap bitmap, Stream stream, ImageFileType fileType) => SaverOf(fileType)(bitmap, stream);
+
+    private static ImageSaveDelegate SaverOf(ImageFileType fileType) =>
+        _loadSaveDelegates.FirstOrDefault(x => x.FileType == fileType)?.Saver
+        ?? throw new NotSupportedException($"No picture is written as {fileType}.");
     
     private class LoadSaveDelegates
     {

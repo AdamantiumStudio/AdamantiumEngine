@@ -23,10 +23,8 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
    ///   should be aligned directly after the previous element, including any packing if necessary.
    /// </summary>
    /// <returns>A value used to align input elements.</returns>
-   /// <unmanaged>D3D11_APPEND_ALIGNED_ELEMENT</unmanaged>
    public const int AppendAligned = -1;
 
-   // Match the last digit of a semantic name.
    internal static readonly Regex MatchSemanticIndex = new Regex(@"(.*)(\d+)$");
 
    /// <summary>
@@ -43,7 +41,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
       if (semanticName == null)
          throw new ArgumentNullException(nameof(semanticName));
 
-      // All semantics will be upper case.
       semanticName = semanticName.ToUpperInvariant();
 
       var match = MatchSemanticIndex.Match(semanticName);
@@ -60,7 +57,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
       Format = format;
       AlignedByteOffset = alignedByteOffset;
 
-      // Precalculate hashcode
       hashCode = CalculateHashCode();
    }
 
@@ -77,7 +73,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
       if (semanticName == null)
          throw new ArgumentNullException(nameof(semanticName));
 
-      // All semantics will be upper case.
       semanticName = semanticName.ToUpperInvariant();
 
       var match = MatchSemanticIndex.Match(semanticName);
@@ -90,7 +85,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
       Format = format;
       AlignedByteOffset = alignedByteOffset;
 
-      // Precalculate hashcode
       hashCode = CalculateHashCode();
    }
 
@@ -108,7 +102,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
 
    public bool Equals(VertexInputElement other)
    {
-      // First use hashCode to compute
       return hashCode == other.hashCode && SemanticName.Equals(other.SemanticName) && SemanticIndex == other.SemanticIndex && Format == other.Format && AlignedByteOffset == other.AlignedByteOffset;
    }
 
@@ -481,7 +474,7 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
       var vertexElements = new List<VertexInputElement>();
       foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public))
       {
-         var attributes = Utilities.GetCustomAttributes<VertexInputElementAttribute>(field);
+         var attributes = field.GetCustomAttributes<VertexInputElementAttribute>();
          foreach (var vertexElementAttribute in attributes)
          {
             var fieldFormat = vertexElementAttribute.Format;
@@ -529,13 +522,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
          return Format.R8G8B8A8_UNORM;
       if (typeof(ColorBGRA) == typeT)
          return Format.B8G8R8A8_UNORM;
-
-      //if (typeof(Half4) == typeT)
-      //   return Format.R16G16B16A16_Float;
-      //if (typeof(Half2) == typeT)
-      //   return Format.R16G16_Float;
-      //if (typeof(Half) == typeT)
-      //   return Format.R16_Float;
 
       if (typeof(Int4) == typeT)
          return Format.R32G32B32A32_UINT;
