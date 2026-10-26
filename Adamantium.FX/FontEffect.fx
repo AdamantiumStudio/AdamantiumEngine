@@ -1011,14 +1011,12 @@ technique FontBatch
 {
     pass RenderMsdf
     {
-        EffectName = "FontEffectMsdf";
         VertexShader = FontVertexShader;
         PixelShader = FontPixelShaderMsdf;
     }
 
     pass RenderMsdfBatchInstanced
     {
-        EffectName = "FontEffectMsdfBatchInstanced";
         VertexShader = FontBatchInstancedVS;
         PixelShader = FontPixelShaderMsdfBatch;
     }

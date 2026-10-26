@@ -27,7 +27,6 @@ technique StrokeDraw
 {
     pass Run
     {
-        EffectName = "StrokeDraw";
         VertexShader = StrokeVS;
         PixelShader = StrokePS;
     }

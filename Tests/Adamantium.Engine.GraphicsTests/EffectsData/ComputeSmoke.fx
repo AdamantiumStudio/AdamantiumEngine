@@ -19,9 +19,6 @@ technique ComputeSmoke
 {
     pass Run
     {
-        // Slang (primary backend) IGNORES this and targets spirv_1_6; the parser just requires it non-zero, and it
-        // only feeds the DXC fallback. Set to SM 6.6 so even that fallback supports pointers/compute (vs the legacy 5.1).
-        EffectName = "ComputeSmoke";
         ComputeShader = ComputeSmokeCS;
     }
 }

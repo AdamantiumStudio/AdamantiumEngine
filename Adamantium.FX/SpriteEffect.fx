@@ -88,7 +88,6 @@ technique SpriteBatch
 {
     pass Render
     {
-        EffectName = "SpriteEffect";
         VertexShader = SpriteVertexShader;
         PixelShader = SpritePixelShader;
     }

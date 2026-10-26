@@ -1,61 +1,29 @@
-﻿using System;
-using Adamantium.Core;
+﻿using Adamantium.Core;
 
-namespace Adamantium.EffectsCompiler
+namespace Adamantium.EffectsCompiler;
+
+/// <summary>What compiling an effect has to say: errors and warnings, each where in the file it stands when it stands
+/// somewhere.</summary>
+internal class EffectCompilerLogger : Logger
 {
-    internal class EffectCompilerLogger : Logger
+    /// <summary>Logs an error at <paramref name="location"/>.</summary>
+    public void Error(string text, SourceLocation location) =>
+        LogMessage(new EffectCompilerMessage(LogMessageType.Error, text, location));
+
+    /// <summary>Logs each of <paramref name="texts"/> that says something as an error of no place - Slang's own
+    /// messages name theirs.</summary>
+    public void Errors(params string[] texts)
     {
-        public void Error(string errorMessage, SourceSpan span)
+        foreach (var text in texts)
         {
-            LogMessage(new EffectCompilerMessage(LogMessageType.Error, errorMessage, span));
-        }
-
-        public void Errors(params string[] errorMessages)
-        {
-            foreach(var message in errorMessages)
+            if (!string.IsNullOrEmpty(text))
             {
-                if (string.IsNullOrEmpty(message)) continue;
-
-                Error(message);
+                Error(text);
             }
-        }
-
-        public void Error(string errorMessage, SourceSpan span, params object[] parameters)
-        {
-            if (parameters == null) throw new ArgumentNullException(nameof(parameters));
-            Error(string.Format(errorMessage, parameters), span);
-        }
-
-        public void Warning(string warningMessage, SourceSpan span)
-        {
-            LogMessage(new EffectCompilerMessage(LogMessageType.Warning, warningMessage, span));
-        }
-
-        public void Warnings(params string[] warningMessages)
-        {
-            foreach (var message in warningMessages)
-            {
-                if (string.IsNullOrEmpty(message)) continue;
-
-                Warning(message);
-            }
-        }
-
-        public void Warning(string warningMessage, SourceSpan span, params object[] parameters)
-        {
-            if (parameters == null) throw new ArgumentNullException("parameters");
-            Warning(string.Format(warningMessage, parameters), span);
-        }
-
-        public void Info(string infoMessage, SourceSpan span)
-        {
-            LogMessage(new EffectCompilerMessage(LogMessageType.Info, infoMessage, span));
-        }
-
-        public void Info(string infoMessage, SourceSpan span, params object[] parameters)
-        {
-            if (parameters == null) throw new ArgumentNullException("parameters");
-            Info(string.Format(infoMessage, parameters), span);
         }
     }
+
+    /// <summary>Logs a warning at <paramref name="location"/>.</summary>
+    public void Warning(string text, SourceLocation location) =>
+        LogMessage(new EffectCompilerMessage(LogMessageType.Warning, text, location));
 }
