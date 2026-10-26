@@ -9,6 +9,10 @@ All packages share one version.
 
 - `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
   at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
+- `GraphicsSettings.TextEdges` (`TextEdgeSettings`): how text's edges blend - the gammas of light ink, of small and
+  of large dark ink, the sizes dark ink goes from the small curve to the large one between, and how wide a crisp edge
+  ramps. Read on every text draw, so the application may tune them while it runs; a value the shader cannot take - a
+  gamma or a width not above zero, a size below zero - is refused.
 - `TiffReader`: a TIFF raster too large to hold whole, read a tile or a window at a time - opening reads only the
   file's structure. `Levels` are the full-resolution image and its reduced-resolution copies (from the directory chain
   or SubIFDs), largest first; `ReadTile` reads all bands or one (only that band's plane when the file keeps bands
@@ -974,6 +978,10 @@ All packages share one version.
 
 ### Fixed
 
+- Dark text on a light background had a grey rim round bold letters and stepped slanted edges on large letters at 100%
+  scale: its edge coverage was raised for light ink on dark. The coverage is now curved by the ink's lightness and the
+  text's size, and taken as the share of the pixel the outline covers (four samples across it) rather than its
+  distance from the pixel's middle. Shadows, glows and reflections blend as before.
 - A texture larger than the device's limits - a side past its maxImageDimension1D, 2D, 3D or cube, more layers than
   its maxImageArrayLayers, past what the device makes of its format, tiling and usage - extent, layers, levels and
   bytes - or larger than one allocation may be, went to Vulkan as it was; it is refused with `NotSupportedException`
