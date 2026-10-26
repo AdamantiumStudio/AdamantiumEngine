@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
@@ -85,7 +86,6 @@ public class ContentManager : DisposableObject, IContentManager
 
         lock (Resolvers)
         {
-            //First resolve asset path
             if (Resolvers.Count == 0)
             {
                 throw new InvalidOperationException("No content resolver registered to this content manager");
@@ -132,7 +132,6 @@ public class ContentManager : DisposableObject, IContentManager
                 {
                     if (LoadedAssets.TryGetValue(assetKey, out result))
                     {
-                        // A GPU asset dies with its device; then it is loaded again, for the new one.
                         if (result is not DisposableObject { IsDisposed: true })
                         {
                             return result;
@@ -143,7 +142,6 @@ public class ContentManager : DisposableObject, IContentManager
                 }
             }
 
-            //Else we need to load it from a content resolver
             string assetPath = Path.Combine(RootDirectory ?? string.Empty, assetName);
 
             if (loadOptions?.IgnoreRootDirectory == true)
@@ -167,7 +165,6 @@ public class ContentManager : DisposableObject, IContentManager
             parameters.OutputPath = OutputDirectory;
 
             result = Task.Run(()=>LoadAsset(parameters)).Result;
-            //result = LoadAsset(parameters);
         }
 
         if (loadOptions?.AllowDuplication == false)
@@ -185,7 +182,6 @@ public class ContentManager : DisposableObject, IContentManager
     {
         lock (Resolvers)
         {
-            //First resolve asset path
             if (Resolvers.Count == 0)
             {
                 throw new InvalidOperationException("No content resolver registered to this content manager");
@@ -235,7 +231,7 @@ public class ContentManager : DisposableObject, IContentManager
 
         if (contentReader == null)
         {
-            var contentReaderAttribute = Utilities.GetCustomAttribute<ContentReaderAttribute>(parameters.AssetType, true);
+            var contentReaderAttribute = parameters.AssetType.GetCustomAttribute<ContentReaderAttribute>(true);
 
             if (contentReaderAttribute != null)
             {

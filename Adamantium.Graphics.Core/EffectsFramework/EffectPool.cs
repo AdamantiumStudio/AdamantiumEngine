@@ -50,7 +50,6 @@ public sealed class EffectPool : DisposableObject
     /// <returns>The effect description.</returns>
     public EffectData.Effect RegisterBytecode(EffectData data)
     {
-        // Lock the whole EffectPool in case multiple threads would add EffectData at the same time.
         lock (syncObj)
         {
             EffectData.Effect effect;
@@ -60,7 +59,6 @@ public sealed class EffectPool : DisposableObject
                 effect = RegisterInternal(data);
                 registered.Add(data, effect);
 
-                // Just allocate the compiled shaders array according to the current size of shader data
                 foreach (var compiledShaders in compiledShadersGroup)
                 {
                     for (int i = compiledShaders.Count; i < RegisteredShaders.Count; i++)
@@ -123,12 +121,6 @@ public sealed class EffectPool : DisposableObject
         lock (syncObj)
         {
             shader = compiledShadersGroup[(int)shaderType][index];
-            if (shader == null)
-            {
-                var bytecodeRaw = RegisteredShaders[index].Bytecode;
-                // shader = graphicsDevice.CreateShaderModule(bytecodeRaw);
-                // compiledShadersGroup[(int)shaderType][index] = shader;
-            }
         }
         return shader;
     }
@@ -141,25 +133,17 @@ public sealed class EffectPool : DisposableObject
 
     internal EffectConstantBuffer GetOrCreateConstantBuffer(EffectData.ConstantBuffer bufferRaw)
     {
-        // Only lock the constant buffer object
         lock (mapNameToConstantBuffer)
         {
-            // ----------------------------------------------------------------------------
-            // Get a set of constant buffers for a particular constant buffer name
-            // ----------------------------------------------------------------------------
             if (!mapNameToConstantBuffer.TryGetValue(bufferRaw.Name, out var bufferSet))
             {
                 bufferSet = new Dictionary<EffectConstantBufferKey, EffectConstantBuffer>();
                 mapNameToConstantBuffer[bufferRaw.Name] = bufferSet;
             }
 
-            // ----------------------------------------------------------------------------
-            // 3) Get an existing constant buffer having the same name/size/layout/parameters
-            // ----------------------------------------------------------------------------
             var bufferKey = new EffectConstantBufferKey(bufferRaw);
             if (!bufferSet.TryGetValue(bufferKey, out var buffer))
             {
-                // 4) If this buffer doesn't exist, create a new one and register it.
                 buffer = new EffectConstantBuffer(bufferRaw);
                 bufferSet[bufferKey] = ToDispose(buffer);
             }
@@ -215,11 +199,6 @@ public sealed class EffectPool : DisposableObject
         {
             var group = compiledShadersGroup[index];
             Log.Logger.Debug($"Disposing shader modules in group [{index}]");
-            foreach (var module in group)
-            {
-                //graphicsDevice.LogicalDevice.DestroyShaderModule(module);
-            }
-
             group.Clear();
         }
 
@@ -227,12 +206,6 @@ public sealed class EffectPool : DisposableObject
         base.Dispose(disposeManagedResources);
     }
 
-    /// <summary>
-    /// Merges an existing <see cref="EffectData" /> into this instance.
-    /// </summary>
-    /// <param name="source">The EffectData to merge.</param>
-    /// <returns><c>true</c> if XXXX, <c>false</c> otherwise</returns>
-    /// <remarks>This method is useful to build an archive of several effects.</remarks>
     private EffectData.Effect RegisterInternal(EffectData source)
     {
         var effect = source.Description;
@@ -256,10 +229,8 @@ public sealed class EffectPool : DisposableObject
             {
                 foreach (var shaderLink in pass.Pipeline)
                 {
-                    // No shader set for this stage
                     if (shaderLink == null) continue;
 
-                    // If the shader is an import, we try first to resolve it directly
                     if (shaderLink.IsImport)
                     {
                         var index = FindShaderByName(shaderLink.ImportName);
@@ -282,17 +253,14 @@ public sealed class EffectPool : DisposableObject
                     {
                         var shader = source.Shaders[shaderLink.Index];
 
-                        // Find a similar shader
                         var shaderIndex = FindSimilarShader(shader);
 
                         if (shaderIndex >= 0)
                         {
                             var previousShader = RegisteredShaders[shaderIndex];
 
-                            // If the previous shader is 
                             if (shader.Name != null)
                             {
-                                // if shader from this instance is local and shader from source is global => transform current shader to global
                                 if (previousShader.Name == null)
                                 {
                                     previousShader.Name = shader.Name;
@@ -303,7 +271,6 @@ public sealed class EffectPool : DisposableObject
                                     {
                                         logger = new Logger();
                                     }
-                                    // If shader from this instance is global and shader from source is global => check names. If exported names are different, this is an error
                                     logger.Error("Cannot merge shader [{0}] into this instance, as there is already a global shader with a different name [{1}]", shader.Name, previousShader.Name);
                                 }
                             }
@@ -321,7 +288,7 @@ public sealed class EffectPool : DisposableObject
         }
 
         if (logger != null && logger.HasErrors)
-            throw new InvalidOperationException(Utilities.Join("\r\n", logger.Messages));
+            throw new InvalidOperationException(string.Join("\r\n", logger.Messages));
 
         return effectRuntime;
     }

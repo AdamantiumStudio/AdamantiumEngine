@@ -992,13 +992,17 @@ All packages share one version.
   side, where it wrote an empty header.
 - `TextureCube` from six files read each face as long as the first: faces of other sizes or formats were read past
   their ends. They are refused now.
+- A texture made from a picture of several layers, levels or depth slices - a DDS cube, array, volume or mip chain -
+  got only the first level of its first layer. Every part goes up now, each where it belongs, in one copy - from an
+  `Image` and from `Texture.Load` alike.
+- `PropertyKeyCollection` never took an enum for one: it asked whether the `Type` object was an enum, which it never
+  is. Enum values are kept as ints now, as `EffectPropertyCollection` keeps them.
 - Writing a BMP of fewer than 40 bytes of pixels wrote past the end of its buffer and could bring the process down:
   a header was copied in after the file's headers for nothing. It is gone, and the headers' native memory is freed.
 - A BMP of 24 bits whose rows are not a multiple of 4 bytes came out wrong both ways: it was written with the padding
   of its width in pixels, not bytes, and read short of its last rows' padding. A file shorter than its pixels is
-  refused with `InvalidDataException`; a BMP of a palette, compressed or stored top-down - pixels it did not read -
-  throws `NotSupportedException`, where it came out empty or refused for the wrong reason. A BMP of 16 bits threw `IndexOutOfRangeException`: it reads as RGB of 8 bits
-  now, 5-5-5, or 5-6-5 when its BI_BITFIELDS masks say so - green of six bits scaled as six.
+  refused with `InvalidDataException`. A BMP of a palette, compressed or stored top-down came out empty, and one of
+  16 bits threw `IndexOutOfRangeException`: they are read now, by the new BMP codec.
 - Every PNG the engine wrote carried a `tIME` chunk of the local time it was written: the same picture saved a second
   apart came out different, and what compared files to skip rewriting them - the Linux desktop entry's icons - wrote
   them again. `tIME` is written only when `PngMetadata.Time` is set, in UTC as PNG keeps it.
@@ -1662,6 +1666,31 @@ All packages share one version.
 - `DataBuffer` checks every read and write against its size, throwing `ArgumentOutOfRangeException` past it, and a
   buffer of its own starts zeroed. `NamedObject` and `ViewportF` are rewritten; `ViewportF` is a record struct - its
   equality exact, `Project` and `Unproject` taking the three matrices.
+- `Utilities`, `DisposeCollector`, `DisposableBase`, `DisposableObject` and `DataPointer` are rewritten.
+  `DisposableBase` is disposed once however many threads ask, `IsDisposed` from the moment disposing starts;
+  `DisposableObject` locks a field of its own, no longer itself. `RemoveAndDispose(ref item)` leaves the reference
+  null, as it said it did. `DataPointer` is a record struct; `Utilities.ClearMemory` takes the address, not a
+  reference to it, and a size past 2 GB.
+- `Image` is rewritten: one block of memory, layer by layer, level by level and depth slice by slice, each a
+  `PixelBuffer` of whole texel blocks tightly packed - the order DDS keeps them in. `Description` is a property,
+  `PixelBuffer` a list (`GetPixelBuffer(layer or slice, level)` and `GetPixelBuffer(layer, slice, level)` stand), and
+  a picture of frames loaded is an image of a layer a frame, its frames still at `Frames`. `PixelBuffer` checks
+  `GetPixel`, `SetPixel`, `GetPixels` and `SetPixels` against its size and takes unmanaged types; `ImageDescription`
+  and `MipMapCount` are record structs, `SurfaceFormat` a readonly struct with the formats the engine names.
+- DDS is read and written by a new codec, written from Microsoft's "Programming Guide for DDS". It reads 1D, 2D,
+  cube and volume textures and arrays of them with every mip level, in the DX10 header in every DXGI format Vulkan
+  has, and in the older one its compressed formats (DXT1 to DXT5, ATI1 and ATI2, BC4 and BC5), the 16-bit and float
+  ones it numbers, and masked ones - RGB and RGBA of 8 bits in either order, 10-10-10-2, 16-16, 5-6-5, 1-5-5-5,
+  4-4-4-4, luminance with or without alpha; texels are kept as the file has them, and a format whose alpha the file
+  leaves out reads opaque. Pillow 12 reads what it writes as it wrote it.
+  The encoder writes every layer, level and slice an image has, in the older header when its format is there, else
+  in DX10. A file shorter than its texels is refused.
+- BMP is read and written by a new codec, written from Microsoft's "Bitmap Storage". It reads BITMAPCOREHEADER,
+  BITMAPINFOHEADER and its V2 to V5: 1, 2, 4 and 8 bits through a color table, run-length encoded (RLE4, RLE8) or
+  not; 16 and 32 bits by their channel masks, 5-5-5 and 8-8-8 when they give none; 24 bits; rows bottom up or top
+  down - as RGBA8, the same as ImageMagick 7 reads them. The encoder writes 24-bit BGR when every pixel is opaque,
+  else 32 bits with a BITMAPV4HEADER whose masks say where alpha is; `BmpImage.Read` and the static
+  `BmpEncoder.Encode(image, output)` are its API.
 - PNG is read and written by a new codec, written from PNG's third edition and APNG. It reads every color type and
   depth, Adam7, palettes and tRNS, and APNG's frames composed as APNG says (dispose None, Background and Previous;
   blend Source and Over), decoded when first asked for; a 16-bit file comes out RGBA16 now, no longer cut to 8 bits.
@@ -1874,6 +1903,13 @@ All packages share one version.
 
 ### Removed
 
+- With the old `Image`: `PixelBufferArray`, `MipMapDescription`, `AnimatedImageDescription`, `FlipBufferOptions`
+  and `PixelBuffer.FlipBuffer`, `Image.ImageLoadDelegate` and `ImageSaveDelegate`, `Image.GetMipMapDescription`,
+  `ToDataBox`, `DefaultImage`, `ApplyPixelBuffer`, `New(description, byte[])` and `New(description, IRawBitmap)`,
+  `PixelBuffer`'s `MipMapDescription`, `XOffset`, `YOffset` and the `GetPixels`/`SetPixels` overloads by offset and
+  count; the `SurfaceFormat` classes beyond `R8`, `R8G8B8`, `R8G8B8A8`, `B8G8R8A8` and `R16G16B16A16`.
+- With the old DDS codec: `DdsFlags`, `FourCC` and `ResourceOptionFlags`; `DdsHelper` and `BmpHelper` are static
+  classes, `LoadFromMemory` and `SaveToStream` all they have.
 - With the old TGA codec: `TgaDecoder`, `TgaConversionFlags`, `TgaEncoder.SaveToTgaStream` and `TgaImage`'s
   constructor and `PixelBuffer`.
 - With the old GIF codec: `GifDecoder`, `GIFHelper` (`GifHelper` stands for it), `ScreenDescriptor`,
@@ -1884,6 +1920,10 @@ All packages share one version.
   `ColorQuantizer` stands for.
 - `DataBuffer.Create`, its constructor from a `DataPointer`, `GetRange` into an array, and `Set` from a pointer or
   part of an array; `ViewportF`'s `Project` and `Unproject` by reference to one matrix.
+- `DataBox`; from `Utilities`: `ReadStream`, `IsEnum`, `IsMemoryAligned`, `GetCustomAttribute(s)`, `Swap`, `Join`,
+  `ToLittleEndian`, `SwapEndianness`, `GetBytesWithReversedEndian`, `Dispose`, `GetBitsCount`, `ReverseByte`,
+  `IsTypeInheritFrom`, `ToVector2`, `ToVector3` and `Compare` of `ICollection` and of `IEnumerator` - the .NET ones
+  stand for them; `Compare` of `IEnumerable` stays.
 - With the old PNG codec: `PngDecoder`, `PngCompressor`, `PngDecoderSettings`, `PngEncoderSettings`,
   `PNGStreamReader`, `TXTItem`, `ITextItem` (`PngText` stands for both), `Adam7`, `Crc32`, `Adler32`, `BitHelper`,
   `PngDecodeException` and `PngEncoderException` - broken files fail with `InvalidDataException` and

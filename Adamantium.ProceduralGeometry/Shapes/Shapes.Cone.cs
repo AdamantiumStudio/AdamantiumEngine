@@ -9,12 +9,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
     {
         public class Cone
         {
-            // Up is -Y, so the top is at -Y; the circle runs the other way round in z with it, which keeps the triangles
-            // facing out.
             private static readonly Vector3 Up = -Vector3.UnitY;
 
-            //Computes a point on a unit circle, aligned to the x/z plane and centered on the origin, starting at the back
-            //(+Z), where the side's picture meets itself out of a camera in front's sight.
             private static Vector3 GetCircleVector(
                 int i,
                 int tessellation)
@@ -26,13 +22,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return new Vector3(-dx, 0, dz);
             }
 
-            // A point and its normal of the round shape, as they stand once it is stretched along z by depth over width.
             private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
 
             private static Vector3F StretchNormal(Vector3 normal, double depth) =>
                 (Vector3F)Vector3.Normalize(new Vector3(normal.X, normal.Y, normal.Z / depth));
 
-            // Creates a triangle fan to close the end of a cylinder.
             private static void CreateConeCap(
                 List<Vector3> positions,
                 List<Vector3F> normals,
@@ -44,7 +38,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double depth,
                 bool isTop)
             {
-                // Create cap indices.
                 for (int i = 0; i < tessellation - 2; i++)
                 {
                     int i1 = (i + 1) % tessellation;
@@ -52,7 +45,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     if (isTop)
                     {
-                        Utilities.Swap(ref i1, ref i2);
+                        (i1, i2) = (i2, i1);
                     }
 
                     int vbase = positions.Count;
@@ -61,7 +54,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     indices.Add(vbase + i2);
                 }
 
-                // Which end of the cylinder is this?
                 var normal = Up;
                 var downTheTexture = -1.0;
 
@@ -72,7 +64,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
 
                 var diameter = new Vector2F((float)radius * 2);
-                // Create cap vertices.
                 for (int i = 0; i < tessellation; i++)
                 {
                     var circleVector = GetCircleVector(i, tessellation);
@@ -82,8 +73,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         0.5f + (float)(downTheTexture * position.Z / diameter.Y));
 
                     positions.Add(Stretch(position, depth));
-                    // A cap is FLAT: its whole face looks one way, which is also what keeps the rim a hard edge rather
-                    // than blending into the side.
                     normals.Add((Vector3F)normal);
                     uvs.Add(uv);
                 }
@@ -167,7 +156,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 int stride = tessellation + 1;
 
-                // Create a ring of triangles around the outside of the cylinder.
                 for (int i = 0; i <= tessellation; i++)
                 {
                     var circle = GetCircleVector(i, tessellation);
@@ -175,10 +163,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var sideOffsetTop = circle * topRadius;
                     var sideOffsetBottom = circle * bottomRadius;
 
-                    // The side's normal is the circle direction LEANED toward the narrow end by as much as the radius
-                    // falls away over the height - straight out only when the two radii match and it is a cylinder.
-                    // Written rather than averaged back out of the triangles, which a cone's apex cannot survive: every
-                    // vertex there is the same point, so the faces meeting it have no area to weigh.
                     var sideNormal = StretchNormal(circle * (height * 2) + Up * (bottomRadius - topRadius), depth);
 
                     var uv = new Vector2F(i / (float)tessellation, 0);
@@ -201,9 +185,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     indices.Add((i * 2 + 3) % (stride * 2));
                 }
 
-                // Flat triangle fans to seal the ends - but only an end that HAS a radius. A cone's point is already
-                // closed, and capping it produced a fan of zero-area triangles with NaN texture coordinates (the cap's
-                // uv divides by the diameter, which is zero there).
                 if (topRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, topRadius, depth, true);
                 if (bottomRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, bottomRadius, depth, false);
 
@@ -217,8 +198,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            // The rim stands at the end with a diameter and the point at the other: at the bottom unless only the top
-            // has one.
             private static Mesh GenerateOutlinedGeometry(
                 double height,
                 double topDiameter,
@@ -247,7 +226,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     indices.Add(lastIndex++);
                 }
 
-                // The point.
                 vertices.Add(rimAtTop ? -topOffset : topOffset);
 
                 var vertexCount = tessellation + 1;
@@ -255,10 +233,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var quarterIndex = vertexCount / 4;
                 var halfIndex = vertexCount / 2;
 
-                //Add index for top position
                 indices.Add(++indexQuantity);
 
-                //Add index for left position
                 indices.Add(indices[halfIndex]);
                 indices.Add(PrimitiveRestartValue);
                 indices.Add(indices[quarterIndex]);

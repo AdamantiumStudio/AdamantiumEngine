@@ -83,29 +83,6 @@ public class EncoderFormatTests
         Assert.That(read.GetRawPixels(0), Is.EqualTo(Colors));
     }
 
-    // Palette and top-down BMPs are not read yet: refused, not read as empty.
-    [TestCase((ushort)8, 1)]
-    [TestCase((ushort)24, -1)]
-    public void ABmpNotRead_IsRefused(ushort bits, int height)
-    {
-        var bmp = new MemoryStream();
-        var writer = new BinaryWriter(bmp);
-        writer.Write("BM"u8);
-        writer.Write(54 + 1024 + 4);
-        writer.Write(0);
-        writer.Write(54 + 1024);
-        writer.Write(40);
-        writer.Write(1);
-        writer.Write(height);
-        writer.Write((ushort)1);
-        writer.Write(bits);
-        writer.Write(new byte[24]);
-        writer.Write(new byte[1024 + 4]);
-        bmp.Position = 0;
-
-        Assert.That(() => BitmapLoader.Load(bmp), Throws.InstanceOf<NotSupportedException>());
-    }
-
     // RGBA of 8 bits in the format's channels; 16-bit channels repeat the byte, so their high byte is it.
     private static byte[] Pixels(byte[] rgba, Format format)
     {

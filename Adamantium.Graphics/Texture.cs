@@ -101,7 +101,38 @@ public unsafe class Texture : GraphicsResource, ITexture
         Description.Usage |= ImageUsageFlagBits.TransferDstBit | usage;
         Description.DesiredImageLayout = desiredLayout;
 
-        CopyDataToImage(img.TotalSizeInBytes, img.DataPointer);
+        CopyDataToImage(img.TotalSizeInBytes, img.DataPointer, Regions(img));
+    }
+
+    private static BufferImageCopy[] Regions(Image image)
+    {
+        var description = image.Description;
+        var volume = description.Dimension == TextureDimension.Texture3D;
+        var layers = volume ? 1 : (int)description.ArraySize;
+        var regions = new BufferImageCopy[layers * description.MipLevels];
+        for (var layer = 0; layer < layers; layer++)
+        {
+            for (var level = 0; level < description.MipLevels; level++)
+            {
+                var buffer = image.GetPixelBuffer(layer, 0, level);
+                regions[layer * description.MipLevels + level] = new BufferImageCopy
+                {
+                    BufferOffset = (ulong)(buffer.DataPointer - image.DataPointer),
+                    ImageSubresource = new ImageSubresourceLayers
+                    {
+                        AspectMask = ImageAspectFlagBits.ColorBit, MipLevel = (uint)level,
+                        BaseArrayLayer = (uint)layer, LayerCount = 1
+                    },
+                    ImageExtent = new Extent3D
+                    {
+                        Width = buffer.Width, Height = buffer.Height,
+                        Depth = volume ? Math.Max(1, description.Depth >> level) : 1
+                    }
+                };
+            }
+        }
+
+        return regions;
     }
 
     protected Texture(IGraphicsDevice device, IRawBitmap bitmap, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
@@ -110,6 +141,13 @@ public unsafe class Texture : GraphicsResource, ITexture
         Description = bitmap.GetImageDescription();
         Description.Usage |= ImageUsageFlagBits.TransferDstBit | usage;
         Description.DesiredImageLayout = desiredLayout;
+
+        if (Description.ArrayLayers > 1 || Description.MipLevels > 1 || Description.Depth > 1)
+        {
+            using var image = Image.From(bitmap);
+            CopyDataToImage(image.TotalSizeInBytes, image.DataPointer, Regions(image));
+            return;
+        }
 
         var pixels = bitmap.GetRawPixels(0);
         CopyDataToImage((ulong)pixels.Length, pixels);
@@ -169,7 +207,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
     }
 
-    private void CopyDataToImage(ulong totalSizeInBytes, IntPtr pointerToPixelData)
+    private void CopyDataToImage(ulong totalSizeInBytes, IntPtr pointerToPixelData, BufferImageCopy[] regions = null)
     {
         Build(() =>
         {
@@ -177,12 +215,23 @@ public unsafe class Texture : GraphicsResource, ITexture
             Upload(totalSizeInBytes,
                 mapped => System.Buffer.MemoryCopy(pointerToPixelData.ToPointer(), (void*)mapped, totalSizeInBytes,
                     totalSizeInBytes),
-                stagingBuffer => CopyBufferToImage(stagingBuffer, vulkanImage, Description));
+                stagingBuffer =>
+                {
+                    if (regions == null)
+                    {
+                        CopyBufferToImage(stagingBuffer, vulkanImage, Description);
+                        return;
+                    }
+
+                    var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
+                    commandBuffer.CopyBufferToImage(stagingBuffer, vulkanImage, ImageLayout.TransferDstOptimal,
+                        (uint)regions.Length, regions);
+                    GraphicsDevice.EndSingleTimeCommand(commandBuffer);
+                });
             CreateImageView(Description);
         });
     }
 
-    // A texture that fails half built is disposed, so it neither holds what it made nor stays registered with the device.
     private void Build(Action build)
     {
         try
@@ -196,7 +245,6 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
     }
 
-    // The image exists - its limits checked - before a staging buffer its size is made, and the buffer goes either way.
     private void Upload(ulong size, Action<nuint> fill, Action<VkBuffer> copy)
     {
         CreateBuffer(size,

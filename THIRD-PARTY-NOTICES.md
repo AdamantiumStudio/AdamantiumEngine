@@ -391,23 +391,11 @@ SOFTWARE.
 
 ## SharpDX
 
-**Where:** ten files still carry its notice, and only those ten are derived from it —
-
-- `Adamantium.Imaging`: `ImageDescription.cs`, `PixelBuffer.cs`, `PixelBufferArray.cs`, and DDS handling
-  (`DdsHelper.cs`, `DdsFlags.cs`, `FourCC.cs`, `HeaderDXT10.cs`)
-- `Adamantium.Core`: `DataBuffer.cs`, `NamedObject.cs`
-- `Adamantium.Mathematics`: `ViewportF.cs`
-
-Everything else that once came from it has been rewritten and carries no notice.
+**Where:** `Adamantium.Mathematics` — its vectors, matrices, quaternions, colors and bounding volumes. Everything else
+that once came from it has been rewritten.
 
 **Its own ancestry.** SharpDX did not write its maths either: that part came in from SlimMath, itself a port of the
-maths in SlimDX, under MIT/X11. So `ViewportF.cs` — and anything else here descended from that maths — traces back
-further than the header says. The terms are the same all the way down, which is why one notice covers the chain; it is
-recorded because provenance is worth knowing accurately, not because a second obligation exists.
-
-Maths is also where this project keeps rewriting. As a file stops containing any of the original, its notice stops
-applying and can go — but that is judged per file, on what is actually left in it, not on how much work has been done
-around it.
+maths in SlimDX, under MIT/X11. The terms are the same all the way down, which is why one notice covers the chain.
 
 ```
 Copyright (c) 2010-2014 SharpDX - Alexandre Mutel

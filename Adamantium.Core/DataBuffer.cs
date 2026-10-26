@@ -18,7 +18,7 @@ public class DataBuffer : DisposableBase
         }
 
         _pointer = Utilities.AllocateMemory((int)sizeInBytes);
-        Utilities.ClearMemory(ref _pointer, 0, (int)sizeInBytes);
+        Utilities.ClearMemory(_pointer, 0, (long)sizeInBytes);
         Size = sizeInBytes;
         _owned = true;
     }
@@ -42,8 +42,7 @@ public class DataBuffer : DisposableBase
     /// <summary>Sets every byte to <paramref name="value"/>.</summary>
     public void Clear(byte value = 0)
     {
-        var pointer = _pointer;
-        Utilities.ClearMemory(ref pointer, value, (int)Size);
+        Utilities.ClearMemory(_pointer, value, (long)Size);
     }
 
     /// <summary>The value at <paramref name="positionInBytes"/>.</summary>
@@ -92,7 +91,6 @@ public class DataBuffer : DisposableBase
         }
     }
 
-    // The address of length bytes from position, refused past the end.
     private IntPtr At(int position, long length)
     {
         if (position < 0 || length < 0 || (ulong)position + (ulong)length > Size)

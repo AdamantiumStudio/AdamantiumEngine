@@ -121,19 +121,15 @@ public class Effect : GraphicsResource
 
         Pool = effectPool ?? device.DefaultEffectPool;
 
-        // Sets the effect name
         Name = effectData.Description.Name;
 
         var t = Stopwatch.StartNew();
-        // Register the bytecode to the pool
         var effect = Pool.RegisterBytecode(effectData);
 
-        // Initialize from effect
         InitializeFrom(effect, null);
 
         t.Stop();
         Debug.WriteLine($"Effect initialized in {t.ElapsedMilliseconds} ms");
-        // If everything was fine, then we can register it into the pool
         Pool.AddEffect(this);
 
         if (IsSupportingDynamicCompilation)
@@ -151,7 +147,6 @@ public class Effect : GraphicsResource
     /// <exception cref="System.ArgumentException">If unable to find effect [effectName] from the EffectPool.</exception>
     internal void InitializeFrom(EffectData.Effect effectDataArg, Effect cloneFromEffect)
     {
-        // Clean any previously allocated resources
         DisposeCollector?.DisposeAndClear();
         ConstantBuffers.Clear();
         Parameters.Clear();
@@ -166,11 +161,9 @@ public class Effect : GraphicsResource
         RawEffectData = effectDataArg;
         ResourceLinker = GraphicsDevice.CreateEffectResourceLinker();
 
-        // Copy data
         IsSupportingDynamicCompilation = RawEffectData.Arguments != null;
         ShareConstantBuffers = RawEffectData.ShareConstantBuffers;
 
-        // Create the local effect constant buffers cache
         if (!ShareConstantBuffers)
             effectConstantBuffersCache ??= new Dictionary<EffectConstantBufferKey, EffectConstantBuffer>();
 
@@ -201,34 +194,25 @@ public class Effect : GraphicsResource
                 technique.Passes.Add(pass);
             }
 
-            // Count the number of passes
             totalPassCount += technique.Passes.Count;
         }
 
         if (totalPassCount == 0)
             throw new InvalidOperationException("No passes found in this effect.");
 
-        // Log all the exception in a single throw
         if (logger.HasErrors)
-            throw new InvalidOperationException(Utilities.Join("\n", logger.Messages));
+            throw new InvalidOperationException(string.Join("\n", logger.Messages));
 
-        // Initialize the resource linker when we are done with all pass/parameters
         ResourceLinker.Initialize();
 
-        //// Sort all parameters by their resource types
-        //// in order to achieve better local cache coherency in resource linker
         Parameters.Items.Sort((left, right) =>
         {
-            // First, order first all value types, then resource type
             var comparison = left.IsValueType != right.IsValueType ? left.IsValueType ? -1 : 1 : 0;
 
-            // If same type
             if (comparison == 0)
             {
-                // Order by resource type
                 comparison = ((int) left.ResourceType).CompareTo((int) right.ResourceType);
 
-                // If same, order by resource index
                 if (comparison == 0)
                 {
                     comparison = left.Offset.CompareTo(right.Offset);
@@ -238,25 +222,21 @@ public class Effect : GraphicsResource
             return comparison;
         });
 
-        // Prelink constant buffers
         uint resourceIndex = 0;
         foreach (var parameter in Parameters)
         {
-            // Recalculate parameter resource index
             if (!parameter.IsValueType)
             {
                 parameter.Offset = (int)resourceIndex;
                 resourceIndex += parameter.ElementCount;
             }
 
-            // Set the default values 
             parameter.SetDefaultValue();
 
             if (parameter.ResourceType == EffectResourceType.ConstantBuffer)
                 parameter.SetResource(ConstantBuffers[parameter.Name]);
         }
 
-        // Compute slot links
         foreach (var technique in Techniques)
         {
             foreach (var pass in technique.Passes)
@@ -265,20 +245,14 @@ public class Effect : GraphicsResource
             }
         }
 
-        // Setup the first Current Technique.
         CurrentTechnique = Techniques[0];
 
-        // If this is a clone, we need to 
         if (cloneFromEffect != null)
         {
-            // Copy the content of the constant buffers to the new instance.
             for (int i = 0; i < ConstantBuffers.Count; i++)
             {
                 cloneFromEffect.ConstantBuffers[i].CopyTo(ConstantBuffers[i]);
             }
-
-            // Copy back all bound resources except constant buffers
-            // that are already initialized with InitializeFrom method.
 
             foreach (var boundResource in cloneFromEffect.ResourceLinker.GetBoundResources())
             {
@@ -288,11 +262,9 @@ public class Effect : GraphicsResource
                 ResourceLinker.AddBoundResource(boundResource.Key, boundResource.Value);
             }
 
-            // If everything was fine, then we can register it into the pool
             Pool.AddEffect(this);
         }
 
-        // Allow subclasses to complete initialization.
         Initialize();
 
         OnInitialized();
@@ -571,16 +543,9 @@ public class Effect : GraphicsResource
         effect.Techniques = new EffectTechniqueCollection();
         effect.effectConstantBuffersCache = null;
 
-        // Initialize from effect
         effect.InitializeFrom(effect.RawEffectData, this);
 
         return effect;
-    }
-
-    internal new DisposeCollector DisposeCollector
-    {
-        get => base.DisposeCollector;
-        private set => base.DisposeCollector = value;
     }
 
     protected internal virtual IEffectPass OnApply(IEffectPass pass)
@@ -598,7 +563,6 @@ public class Effect : GraphicsResource
     /// disposed of in addition to unmanaged resources.</param>
     protected override void Dispose(bool disposeManagedResources)
     {
-        // Remove this instance from the pool
         Pool.RemoveEffect(this);
 
         base.Dispose(disposeManagedResources);
@@ -607,21 +571,15 @@ public class Effect : GraphicsResource
     public EffectConstantBuffer GetOrCreateConstantBuffer(EffectData.ConstantBuffer bufferRaw)
     {
         EffectConstantBuffer constantBuffer;
-        // Is the effect is using shared constant buffers via the EffectPool?
         if (ShareConstantBuffers)
         {
-            // Use the pool to share constant buffers
             constantBuffer = Pool.GetOrCreateConstantBuffer(bufferRaw);
         }
         else
         {
-            // ----------------------------------------------------------------------------
-            // Get an existing constant buffer having the same name/size/layout/parameters
-            // ----------------------------------------------------------------------------
             var bufferKey = new EffectConstantBufferKey(bufferRaw);
             if (!effectConstantBuffersCache.TryGetValue(bufferKey, out constantBuffer))
             {
-                // 4) If this buffer doesn't exist, create a new one and register it.
                 constantBuffer = new EffectConstantBuffer(bufferRaw);
                 effectConstantBuffersCache.Add(bufferKey, constantBuffer);
                 ToDispose(constantBuffer);

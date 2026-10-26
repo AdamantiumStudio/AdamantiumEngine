@@ -33,7 +33,7 @@ namespace Adamantium.EffectsCompiler
 
       public void SetProperty<T>(PropertyKey<T> key, T value)
       {
-         if (Utilities.IsEnum(typeof(T)))
+         if (typeof(T).IsEnum)
          {
             var intValue = Convert.ToInt32(value);
             Add(key, intValue);
@@ -51,7 +51,7 @@ namespace Adamantium.EffectsCompiler
 
       public T GetProperty<T>(PropertyKey<T> key)
       {
-         return TryGetValue(key, out var value) ? Utilities.IsEnum(typeof(T)) ? (T)Enum.ToObject(typeof(T), (int)value) : (T)value : default(T);
+         return TryGetValue(key, out var value) ? typeof(T).IsEnum ? (T)Enum.ToObject(typeof(T), (int)value) : (T)value : default(T);
       }
 
       public virtual PropertyKeyCollection Clone()

@@ -59,7 +59,6 @@ public sealed class EffectParameter : NamedObject
         Offset = (int) parameterDescription.Offset;
         Size = parameterDescription.Size;
 
-        // If the expected matrix is column_major, or its size differs from Matrix4x4F, ours has to be remapped into it.
         if (ParameterClass is EffectParameterClass.MatrixRows or EffectParameterClass.MatrixColumns)
         {
             matrixSize = (ParameterClass == EffectParameterClass.MatrixColumns ? ColumnCount : RowCount) * 4 *
@@ -251,7 +250,6 @@ public sealed class EffectParameter : NamedObject
     {
         var result = new Matrix4x4F[count];
         var localOffset = offset + (startIndex * matrixSize);
-        // Fix the whole buffer
         fixed (Matrix4x4F* pMatrix = result)
         {
             for (int i = 0; i < result.Length; i++, localOffset += matrixSize)
@@ -305,9 +303,6 @@ public sealed class EffectParameter : NamedObject
     /// <param name = "values">An array of matrices to be written to the current buffer.</param>
     public unsafe void SetValue(Matrix4x4F[] values)
     {
-        // A parameter the reflection gave no matrix layout for has nothing to remap into and no element stride to step
-        // by. Its elements sit one matrix apart, which is exactly what the direct copy below writes for a single one -
-        // better than dying on the null delegate, which is what an array of matrices used to do.
         if (CopyMatrix == null)
         {
             Buffer.BackingBuffer.Set(offset, values);
@@ -315,7 +310,6 @@ public sealed class EffectParameter : NamedObject
         }
 
         var localOffset = offset;
-        // Fix the whole buffer
         fixed (Matrix4x4F* pMatrix = values)
         {
             for (int i = 0; i < values.Length; i++, localOffset += matrixSize)
@@ -341,7 +335,6 @@ public sealed class EffectParameter : NamedObject
     public unsafe void SetValue(int index, Matrix4x4F[] values)
     {
         var localOffset = this.offset + (index * matrixSize);
-        // Fix the whole buffer
         fixed (Matrix4x4F* pMatrix = values)
         {
             for (int i = 0; i < values.Length; i++, localOffset += matrixSize)
@@ -504,26 +497,14 @@ public sealed class EffectParameter : NamedObject
             $"[{Index}] {Name} Class: {ParameterClass}, Resource: {ResourceType}, Type: {ParameterType}, IsValue: {IsValueType}, RowCount: {RowCount}, ColumnCount: {ColumnCount}, ElementCount: {ElementCount} Offset: {Offset}";
     }
 
-    /// <summary>
-    /// CopyMatrix delegate used to reorder matrix when copying from <see cref="Matrix4x4F"/>.
-    /// </summary>
-    /// <param name="matrix">The source matrix.</param>
-    /// <param name="offset">The offset in bytes to write to</param>
     private delegate void CopyMatrixDelegate(ref Matrix4x4F matrix, int offset);
 
-    /// <summary>
-    /// Copy matrix in row major order.
-    /// </summary>
-    /// <param name="matrix">The source matrix.</param>
-    /// <param name="offset">The offset in bytes to write to</param>
     private unsafe void CopyMatrixRowMajor(ref Matrix4x4F matrix, int offset)
     {
         var pDest = (float*) ((byte*) Buffer.BackingBuffer.DataPointer + offset);
         fixed (void* pMatrix = &matrix)
         {
             var pSrc = (float*) pMatrix;
-            // If Matrix4x4F is row_major but expecting less columns/rows
-            // then copy only necessary columns/rows.
             for (int i = 0; i < RowCount; i++, pSrc += 4, pDest += 4)
             {
                 for (int j = 0; j < ColumnCount; j++)
@@ -532,18 +513,12 @@ public sealed class EffectParameter : NamedObject
         }
     }
 
-    /// <summary>
-    /// Copy matrix in column major order.
-    /// </summary>
-    /// <param name="matrix">The source matrix.</param>
-    /// <param name="offset">The offset in bytes to write to</param>
     private unsafe void CopyMatrixColumnMajor(ref Matrix4x4F matrix, int offset)
     {
         var pDest = (float*) ((byte*) Buffer.BackingBuffer.DataPointer + offset);
         fixed (void* pMatrix = &matrix)
         {
             var pSrc = (float*) pMatrix;
-            // If Matrix4x4F is column_major, then we need to transpose it
             for (int i = 0; i < ColumnCount; i++, pSrc++, pDest += 4)
             {
                 for (int j = 0; j < RowCount; j++)
@@ -560,34 +535,19 @@ public sealed class EffectParameter : NamedObject
         return requireAlign;
     }
 
-    /// <summary>
-    /// Straight Matrix4x4F copy, no conversion.
-    /// </summary>
-    /// <param name="matrix">The source matrix.</param>
-    /// <param name="offset">The offset in bytes to write to</param>
     private void CopyMatrixDirect(ref Matrix4x4F matrix, int offset)
     {
         Buffer.BackingBuffer.Set(offset, matrix);
     }
 
-    /// <summary>
-    /// CopyMatrix delegate used to reorder matrix when copying from <see cref="Matrix4x4F"/>.
-    /// </summary>
-    /// <param name="offset">The offset in bytes to write to</param>
     private delegate Matrix4x4F GetMatrixDelegate(int offset);
 
-    /// <summary>
-    /// Copy matrix in row major order.
-    /// </summary>
-    /// <param name="offset">The offset in bytes to write to</param>
     private unsafe Matrix4x4F GetMatrixRowMajorFrom(int offset)
     {
         var result = default(Matrix4x4F);
         var pSrc = (float*) ((byte*) Buffer.BackingBuffer.DataPointer + offset);
         var pDest = (float*) &result;
 
-        // If Matrix4x4F is row_major but expecting less columns/rows
-        // then copy only necessary columns/rows.
         for (int i = 0; i < RowCount; i++, pSrc += 4, pDest += 4)
         {
             for (int j = 0; j < ColumnCount; j++)
@@ -597,17 +557,12 @@ public sealed class EffectParameter : NamedObject
         return result;
     }
 
-    /// <summary>
-    /// Copy matrix in column major order.
-    /// </summary>
-    /// <param name="offset">The offset in bytes to write to</param>
     private unsafe Matrix4x4F GetMatrixColumnMajorFrom(int offset)
     {
         var result = default(Matrix4x4F);
         var pSrc = (float*) ((byte*) Buffer.BackingBuffer.DataPointer + offset);
         var pDest = (float*) &result;
 
-        // If Matrix4x4F is column_major, then we need to transpose it
         for (int i = 0; i < ColumnCount; i++, pSrc += 4, pDest++)
         {
             for (int j = 0; j < RowCount; j++)
@@ -617,10 +572,6 @@ public sealed class EffectParameter : NamedObject
         return result;
     }
 
-    /// <summary>
-    /// Straight Matrix4x4F copy, no conversion.
-    /// </summary>
-    /// <param name="offset">The offset in bytes to write to</param>
     private Matrix4x4F GetMatrixDirectFrom(int offset)
     {
         return Buffer.BackingBuffer.Get<Matrix4x4F>(offset);

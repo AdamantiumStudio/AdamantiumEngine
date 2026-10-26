@@ -1,97 +1,74 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 
-namespace Adamantium.Core
+namespace Adamantium.Core;
+
+/// <summary>Things to free together: disposables, and native blocks of <see cref="Utilities.AllocateMemory(nuint)"/>.
+/// Freed last-in first-out, each once.</summary>
+public class DisposeCollector : DisposableBase
 {
-    public class DisposeCollector : DisposableBase
+    private readonly List<object> _items = new();
+
+    /// <summary>How many things are held.</summary>
+    public int Count => _items.Count;
+
+    /// <summary>Holds <paramref name="item"/> - an <see cref="IDisposable"/> or an <see cref="IntPtr"/> to native memory -
+    /// to free with the rest, once however often it is given; gives it back.</summary>
+    public T Collect<T>(T item)
     {
-        private List<object> disposables;
-
-        public DisposeCollector()
+        if (item is not (IDisposable or IntPtr))
         {
-            disposables = new List<object>();
+            throw new ArgumentException("Only an IDisposable or an IntPtr to native memory is collected.", nameof(item));
         }
 
-        public int Count => disposables.Count;
-
-        public T Collect<T>(T toDispose)
+        if (!EqualityComparer<T>.Default.Equals(item, default) && !_items.Contains(item))
         {
-            if (!(toDispose is IDisposable || toDispose is IntPtr))
-                throw new ArgumentException("Argument must be IDisposable or IntPtr");
-
-            // Check memory alignment
-            if (toDispose is IntPtr)
-            {
-                var memoryPtr = (IntPtr)(object)toDispose;
-                if (!Utilities.IsMemoryAligned(memoryPtr))
-                    throw new ArgumentException("Memory pointer is invalid. Memory must have been allocated with Utilties.AllocateMemory");
-            }
-
-            if (!Equals(toDispose, default(T)))
-            {
-                if (disposables == null)
-                    disposables = new List<object>();
-
-                if (!disposables.Contains(toDispose))
-                {
-                    disposables.Add(toDispose);
-                }
-            }
-            return toDispose;
+            _items.Add(item);
         }
 
-        public void RemoveAndDispose<T>(ref T objectToDispose)
+        return item;
+    }
+
+    /// <summary>Frees <paramref name="item"/> and leaves it default - if it is held here; otherwise leaves it as it is.
+    /// </summary>
+    public void RemoveAndDispose<T>(ref T item)
+    {
+        if (Remove(item))
         {
-            if (Remove(objectToDispose))
+            Free(item);
+            item = default;
+        }
+    }
+
+    /// <summary>Lets go of <paramref name="item"/> without freeing it; whether it was held.</summary>
+    public bool Remove<T>(T item) => _items.Remove(item);
+
+    /// <summary>Frees what is held, the last first, and lets go of it all. Disposables are disposed only when
+    /// <paramref name="disposeManagedResources"/>; native blocks are freed either way.</summary>
+    public void DisposeAndClear(bool disposeManagedResources = true)
+    {
+        for (var i = _items.Count - 1; i >= 0; i--)
+        {
+            if (disposeManagedResources || _items[i] is IntPtr)
             {
-                if (objectToDispose is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-                else
-                {
-                    var obj = (object)objectToDispose;
-                    var ptr = (IntPtr)obj;
-                    Utilities.FreeMemory(ptr);
-                }
+                Free(_items[i]);
             }
         }
 
-        public bool Remove<T>(T toDisposeArg)
+        _items.Clear();
+    }
+
+    protected override void Dispose(bool disposeManaged) => DisposeAndClear(disposeManaged);
+
+    private static void Free(object item)
+    {
+        if (item is IDisposable disposable)
         {
-            return disposables.Remove(toDisposeArg);
+            disposable.Dispose();
         }
-
-        public void DisposeAndClear(bool disposeManagedResources = true)
+        else
         {
-            if (disposables == null)
-                return;
-
-            for (int i = disposables.Count - 1; i >= 0; i--)
-            {
-                var objectToDispose = disposables[i];
-
-                if (objectToDispose is IDisposable disposable)
-                {
-                    if (disposeManagedResources)
-                    {
-                        disposable.Dispose();
-                    }
-                }
-                else
-                {
-                    Utilities.FreeMemory((IntPtr)objectToDispose);
-                }
-
-                disposables.RemoveAt(i);
-            }
-            disposables.Clear();
-        }
-
-        protected override void Dispose(bool disposeManaged)
-        {
-            DisposeAndClear(disposeManaged);
+            Utilities.FreeMemory((IntPtr)item);
         }
     }
 }
