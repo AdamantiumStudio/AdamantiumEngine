@@ -212,8 +212,7 @@ internal class EffectCompilerInternal
     {
         try
         {
-            return slangCompiler.Compile(slangSource, entryPoint, type, SlangShaderCompiler.LatestSpirvProfile,
-                ResolveSlangInclude);
+            return slangCompiler.Compile(slangSource, entryPoint, type, ResolveSlangInclude);
         }
         catch (Exception ex)
         {
@@ -289,7 +288,7 @@ internal class EffectCompilerInternal
         {
             Name = null,
             EntryPoint = entryPoint,
-            Level = SlangShaderCompiler.LatestSpirvProfile,
+            Level = SlangShaderCompiler.SpirvProfile,
             Bytecode = compilationResult.Bytecode,
             Hashcode = Utilities.ComputeHashFNV1Modified(compilationResult.Bytecode),
             Type = type,
