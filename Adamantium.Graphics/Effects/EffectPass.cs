@@ -736,7 +736,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
         /// <summary>Room for <paramref name="size"/> bytes in this frame's pages. More than a page holds gets a buffer of
         /// its own in system memory, a power of two in size: one the last use of this pool took, of that size or twice
-        /// it, is taken again; one it left unused is freed when the pool is reset.</summary>
+        /// it, is taken again; one it left unused is disposed of once the frames in flight are done with it.</summary>
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
             if (size > pageSize)

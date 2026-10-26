@@ -58,39 +58,41 @@ namespace Adamantium.Engine.GraphicsTests
                 "the second constants landed on the first ones");
         }
 
-        // The next use of the pool takes a buffer of its own again for data of its size or half of it, but not for much
-        // less, and disposes of one it did not take; two in one use are two buffers.
+        // A buffer of its own is asked of system memory. The next use of the pool takes one again for data of its size
+        // first, then of half its size, but not of a quarter; one it did not take waits for the frames in flight and is
+        // then disposed of. Two in one use are two buffers.
         [Test]
         public void ABufferOfItsOwn_IsTakenAgainWhileNeeded_AndDisposedOnceNot()
         {
             var device = GpuFixture.CreateRenderDevice();
             using var pool = new EffectPass.DynamicBufferPool(device, 1024);
 
-            var large = pool.Allocate(3000, 16).Page;
-            var second = pool.Allocate(3000, 16).Page;
-            var peak = pool.Allocate(9000, 16).Page;
+            var twice = pool.Allocate(3000, 16).Page;
+            var same = pool.Allocate(1500, 16).Page;
+            var fourTimes = pool.Allocate(6000, 16).Page;
             pool.Reset();
-            var again = pool.Allocate(1500, 16).Page;
-            var alsoAgain = pool.Allocate(1500, 16).Page;
-            var notThePeak = pool.Allocate(1500, 16).Page;
+            var first = pool.Allocate(1500, 16).Page;
+            var second = pool.Allocate(1500, 16).Page;
+            var third = pool.Allocate(1500, 16).Page;
+            pool.Reset();
+            var waitsForTheFrames = !fourTimes.IsDisposed;
+            GpuFixture.Main.OnFrameStarted();
+            var keptWhileNeeded = !same.IsDisposed && !twice.IsDisposed && !third.IsDisposed;
             pool.Reset();
             GpuFixture.Main.OnFrameStarted();
-            var keptWhileNeeded = !large.IsDisposed && !second.IsDisposed && !notThePeak.IsDisposed;
-            pool.Reset();
-            GpuFixture.Main.OnFrameStarted();
-            Adamantium.Graphics.Buffer[] takenAgain = [again, alsoAgain];
-            Adamantium.Graphics.Buffer[] spares = [large, second];
 
             Assert.Multiple(() =>
             {
-                Assert.That(large.TotalSize, Is.EqualTo(4096UL), "a power of two");
-                Assert.That(second, Is.Not.SameAs(large));
-                Assert.That(takenAgain, Is.EquivalentTo(spares), "twice the size is taken again");
-                Assert.That(notThePeak, Is.Not.SameAs(peak), "eight times the size is not");
-                Assert.That(peak.IsDisposed, Is.True, "disposed after a use without it");
+                Assert.That(twice.TotalSize, Is.EqualTo(4096UL), "a power of two");
+                Assert.That(twice.MemoryFlags, Is.EqualTo((MemoryPropertyFlags)BufferMemoryUsage.StreamFromCpuToGpu));
+                Assert.That(first, Is.SameAs(same), "its own size first");
+                Assert.That(second, Is.SameAs(twice), "then twice its size");
+                Assert.That(third, Is.Not.SameAs(fourTimes), "not four times its size");
+                Assert.That(waitsForTheFrames, Is.True, "not disposed of while frames may read it");
+                Assert.That(fourTimes.IsDisposed, Is.True, "disposed of after a use without it");
                 Assert.That(keptWhileNeeded, Is.True);
-                Assert.That(large.IsDisposed && second.IsDisposed && notThePeak.IsDisposed, Is.True,
-                    "disposed once the next use did not take them");
+                Assert.That(same.IsDisposed && twice.IsDisposed && third.IsDisposed, Is.True,
+                    "disposed of once the next use did not take them");
             });
         }
 
