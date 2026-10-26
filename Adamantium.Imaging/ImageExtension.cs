@@ -4,8 +4,6 @@ using Adamantium.Imaging.Dds;
 using Adamantium.Imaging.Gif;
 using Adamantium.Imaging.Ico;
 using Adamantium.Imaging.Jpeg;
-using Adamantium.Imaging.Png;
-using Adamantium.Imaging.Png.Chunks;
 using Adamantium.Imaging.Tga;
 using Adamantium.Vulkan.Core;
 
@@ -31,29 +29,19 @@ public static class ImageExtension
                 }
             case ImageFileType.Png:
                 {
-                    var img = new PngImage();
-                    img.Header = new IHDR();
-                    img.Header.Width = (int)image.Description.Width;
-                    img.Header.Height = (int)image.Description.Height;
-                    img.Header.ColorType = PngColorType.RGBA;
-                    var bitDepth = image.Description.Format.SizeOfInBits();
-                    img.Header.BitDepth = (byte)bitDepth;
+                    // Every buffer of the picture's own size is a frame - an animation of several.
+                    var frames = new List<byte[]>();
                     for (var index = 0; index < image.PixelBuffer.Count; index++)
                     {
                         var pixelBuffer = image.PixelBuffer[index];
-                        var frame = new PngFrame(pixelBuffer.GetPixels<byte>(), pixelBuffer.Width, pixelBuffer.Height,
-                            bitDepth);
-                        frame.IsDecoded = true;
-                        frame.SequenceNumberFCTL = (uint)index;
-
-                        if (index == 0)
+                        if (pixelBuffer.Width == image.Description.Width && pixelBuffer.Height == image.Description.Height)
                         {
-                            img.DefaultImage = frame;
+                            frames.Add(pixelBuffer.GetPixels<byte>());
                         }
-                        img.Frames.Add(frame);
                     }
 
-                    return img;
+                    return new FrameBitmap(image.Description.Width, image.Description.Height, image.Description.Format,
+                        frames);
                 }
             case ImageFileType.Dds:
                 {

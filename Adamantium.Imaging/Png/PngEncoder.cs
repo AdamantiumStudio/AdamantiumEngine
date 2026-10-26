@@ -1,485 +1,550 @@
-﻿using System;
+using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
-using Adamantium.Imaging.Png.Chunks;
-using Adamantium.Imaging.Png.IO;
+using System.Text;
+using Adamantium.Vulkan.Core;
 
-namespace Adamantium.Imaging.Png
+namespace Adamantium.Imaging.Png;
+
+/// <summary>Writes pictures as PNG (PNG, third edition), several frames as APNG. The smallest color type that holds
+/// every pixel is chosen - a palette for up to 256 colors, gray when every pixel is, no alpha when every pixel is
+/// opaque - each row filtered by the filter whose bytes sum least, as PNG suggests; a <see cref="PngImage"/>'s
+/// metadata and frame timing are written with it.</summary>
+public static class PngEncoder
 {
-    internal class PngEncoder
+    private const int ChunkData = 1 << 20;
+
+    /// <summary>Writes <paramref name="image"/> to <paramref name="output"/>: gray, RGB, BGR, RGBA and BGRA pixels of 8
+    /// or 16 bits. Two-channel pixels throw <see cref="NotSupportedException"/> - they say nothing of being gray and
+    /// alpha; metadata PNG cannot hold - a keyword not of 1 to 79 printable Latin-1 characters, text with a NUL -
+    /// <see cref="ArgumentException"/>.</summary>
+    public static void Encode(IRawBitmap image, Stream output, CompressionLevel level = CompressionLevel.Optimal)
     {
-        private PngCompressor compressor;
-        private Stream outputStream;
-        private PNGStreamWriter pngStream;
-        public PngEncoder(Stream outputStream)
+        var description = image.GetImageDescription();
+        var (channels, wide, bgr) = Layout(description.Format);
+        int width = (int)description.Width, height = (int)description.Height;
+        // Frames are asked for one at a time, twice - an animation's are composed when asked for, and all of them
+        // together could be any size.
+        var frameCount = (int)Math.Max(1, image.FramesCount);
+        var source = new Source(image, width, height, channels, wide, bgr);
+        var png = image as PngImage;
+        var (colorType, depth, palette) = Choose(source, frameCount, png?.Metadata?.Background);
+        var writer = new ChunkWriter(output);
+        writer.Signature();
+        var header = new byte[13];
+        BinaryPrimitives.WriteUInt32BigEndian(header, (uint)width);
+        BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(4), (uint)height);
+        (header[8], header[9]) = ((byte)depth, (byte)colorType);
+        writer.Chunk("IHDR", header);
+        WriteColorMetadata(writer, png?.Metadata);
+        if (palette != null)
         {
-            compressor = new PngCompressor();
-            this.outputStream = outputStream;
-            pngStream = new PNGStreamWriter();
+            var entries = new byte[palette.Count * 3];
+            var alphas = new List<byte>();
+            for (var i = 0; i < palette.Count; i++)
+            {
+                (entries[i * 3], entries[i * 3 + 1], entries[i * 3 + 2]) = (palette[i].R, palette[i].G, palette[i].B);
+                alphas.Add(palette[i].A);
+            }
+
+            writer.Chunk("PLTE", entries);
+            while (alphas.Count > 0 && alphas[^1] == 255)
+            {
+                alphas.RemoveAt(alphas.Count - 1);
+            }
+
+            if (alphas.Count > 0)
+            {
+                writer.Chunk("tRNS", alphas.ToArray());
+            }
         }
 
-        public PngEncoder()
+        WriteOtherMetadata(writer, png?.Metadata, colorType, depth, palette);
+        var animated = frameCount > 1;
+        var sequence = 0u;
+        if (animated)
         {
-            compressor = new PngCompressor();
-            pngStream = new PNGStreamWriter();
+            var control = new byte[8];
+            BinaryPrimitives.WriteUInt32BigEndian(control, (uint)frameCount);
+            BinaryPrimitives.WriteUInt32BigEndian(control.AsSpan(4), image.NumberOfReplays);
+            writer.Chunk("acTL", control);
         }
 
-        public uint Encode(PngImage pngImage, PngState state)
+        for (var f = 0; f < frameCount; f++)
         {
-            uint error = 0;
-
-            /*check input values validity*/
-            if ((state.InfoPng.ColorMode.ColorType == PngColorType.Palette || state.EncoderSettings.ForcePalette)
-                && (state.InfoPng.ColorMode.PaletteSize == 0 || state.InfoPng.ColorMode.PaletteSize > 256))
+            if (animated)
             {
-                /*invalid palette size, it is only allowed to be 1-256*/
-                return 68;
+                var timing = png != null && f < png.Frames.Count ? png.Frames[f] : default;
+                var control = new byte[26];
+                BinaryPrimitives.WriteUInt32BigEndian(control, sequence++);
+                BinaryPrimitives.WriteUInt32BigEndian(control.AsSpan(4), (uint)width);
+                BinaryPrimitives.WriteUInt32BigEndian(control.AsSpan(8), (uint)height);
+                var (numerator, denominator) = png != null ? (timing.DelayNumerator, timing.DelayDenominator) : ((ushort)1, (ushort)10);
+                BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(20), numerator);
+                BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(22), denominator);
+                writer.Chunk("fcTL", control);
             }
 
-            if (state.EncoderSettings.BType > 2)
+            var compressed = Compress(Scanlines(source, f, colorType, depth, palette), level);
+            for (var at = 0; at < compressed.Length; at += ChunkData)
             {
-                /*error: unexisting btype*/
-                return 61;
-            }
-
-            state.Error = PngColorConversion.CheckColorValidity(state.InfoPng.ColorMode.ColorType, state.InfoPng.ColorMode.BitDepth);
-            if (state.Error > 0)
-            {
-                return state.Error;
-            }
-
-            state.Error = PngColorConversion.CheckColorValidity(state.ColorModeRaw.ColorType, state.ColorModeRaw.BitDepth);
-            if (state.Error > 0)
-            {
-                return state.Error;
-            }
-
-            // A PngImage that came out of the DECODER holds its frames still encoded - the pixels AND the frame's size
-            // appear only when somebody asks for them. Everything below reads both, starting with the color-mode
-            // choice, so ask first: encoding a picture straight after loading it (which is what transcoding does) was
-            // otherwise deciding on a zero-sized image and throwing IndexOutOfRangeException further down.
-            // ONLY when the pixels are genuinely missing: an image built from another format (a GIF, a JPEG) already
-            // carries them, and asking it to decode would send it looking for compressed data it never had.
-            for (uint i = 0; i < pngImage.Frames.Count; i++)
-            {
-                if (pngImage.Frames[(int)i].RawPixelBuffer is not { Length: > 0 }) pngImage.GetRawPixels(i);
-            }
-
-            /* color convert and compute scanline filter types */
-            PngInfo info = new PngInfo(state.InfoPng);
-
-            if (state.EncoderSettings.AutoConvert)
-            {
-                if (state.InfoPng.IsBackgroundDefined)
+                var part = compressed.AsSpan(at, Math.Min(ChunkData, compressed.Length - at));
+                if (f == 0)
                 {
-                    var bgR = state.InfoPng.BackgroundR;
-                    var bgG = state.InfoPng.BackgroundG;
-                    var bgB = state.InfoPng.BackgroundB;
-                    uint r = 0;
-                    uint g = 0;
-                    uint b = 0;
-
-                    PngColorProfile profile = new PngColorProfile();
-                    PngColorMode mode16 = PngColorMode.Create(PngColorType.RGB, 16);
-                    PngColorConversion.ConvertRGB(ref r, ref g, ref b, bgR, bgG, bgB, mode16, state.InfoPng.ColorMode);
-                    var frame = pngImage.Frames[0];
-                    var (profileWidth, profileHeight) = SizeOf(frame);
-                    PngColorConversion.GetColorProfile(profile, frame.RawPixelBuffer, profileWidth, profileHeight, state.ColorModeRaw);
-                    profile.Add(r, g, b, ushort.MaxValue);
-                    PngColorProfile.AutoChooseColorFromProfile(info.ColorMode, state.ColorModeRaw, profile);
-                    error = PngColorConversion.ConvertRGB(ref info.BackgroundR, ref info.BackgroundG,
-                        ref info.BackgroundB, bgR, bgG, bgB, info.ColorMode, state.InfoPng.ColorMode);
-                    if (error > 0)
-                    {
-                        throw new PngEncoderException(error);
-                    }
+                    writer.Chunk("IDAT", part);
                 }
                 else
                 {
-                    var frame = pngImage.DefaultImage;
-                    if (frame == null)
-                    {
-                        frame = pngImage.Frames[0];
-                    }
-                    // The frame's size, NOT its APNG sub-rectangle: fed the zeros a plain PNG carries there, the chooser
-                    // inspects no pixels at all and leaves the color mode at gray/bit-depth-0 - which then sizes every
-                    // buffer downstream to nothing and blows up inside the color conversion.
-                    var (chooseWidth, chooseHeight) = SizeOf(frame);
-                    PngColorProfile.AutoChooseColor(info.ColorMode, frame.RawPixelBuffer, chooseWidth, chooseHeight, state.ColorModeRaw);
-                    //state.InfoRaw.ColorType = info.ColorMode.ColorType;
-                    //state.InfoRaw.BitDepth = info.ColorMode.BitDepth;
-                    state.ColorModeRaw = info.ColorMode;
-                }
-            }
-
-            if (state.InfoPng.IsIccpDefined)
-            {
-                var grayICC = iCCP.IsGrayICCProfile(state.InfoPng.IccpProfile);
-                var grayPng = info.ColorMode.ColorType == PngColorType.Gray || info.ColorMode.ColorType == PngColorType.GrayAlpha;
-                /* TODO: perhaps instead of giving errors or less optimal compression, we can automatically modify
-                the ICC profile here to say "GRAY" or "RGB " to match the PNG color type, unless this will require
-                non trivial changes to the rest of the ICC profile */
-                if (!grayICC && !iCCP.IsRGBICCProfile(state.InfoPng.IccpProfile))
-                {
-                    /* Disallowed profile color type for PNG */
-                    throw new PngEncoderException(100);
-                }
-                if (!state.EncoderSettings.AutoConvert && grayICC != grayPng)
-                {
-                    /* Non recoverable: encoder not allowed to convert color type, and requested color type not
-                    compatible with ICC color type */
-                    throw new PngEncoderException(101);
-                }
-                if (grayICC && !grayPng)
-                {
-                    /* Non recoverable: trying to set grayscale ICC profile while colored pixels were given */
-                    throw new PngEncoderException(102);
-                    /* NOTE: this relies on the fact that PNGColorProfile.AutoChooseColor never returns palette for grayscale pixels */
-                }
-                if (!grayICC && grayPng)
-                {
-                    /* Recoverable but an unfortunate loss in compression density: We have grayscale pixels but
-                    are forced to store them in more expensive RGB format that will repeat each value 3 times
-                    because the PNG spec does not allow an RGB ICC profile with internal grayscale color data */
-                    if (info.ColorMode.ColorType == PngColorType.Gray) info.ColorMode.ColorType = PngColorType.RGB;
-                    if (info.ColorMode.ColorType == PngColorType.GrayAlpha) info.ColorMode.ColorType = PngColorType.RGBA;
-                    if (info.ColorMode.BitDepth < 8) info.ColorMode.BitDepth = 8;
-                }
-            }
-
-            if (state.InfoPng.ColorMode != info.ColorMode)
-            {
-                foreach (PngFrame frame in pngImage.Frames)
-                {
-                    var (frameWidth, frameHeight) = SizeOf(frame);
-                    // PER SCANLINE, not for the image as a whole: PNG pads every row up to a byte boundary, so a
-                    // sub-byte depth (a palette, gray) at a width that is not a multiple of 8/bpp needs one extra byte
-                    // per row. Sizing it in one go came up short and the conversion wrote past the end of the buffer.
-                    var bitsPerPixel = PngColorConversion.GetBitsPerPixel(info.ColorMode);
-                    long size = (frameWidth * frameHeight * bitsPerPixel + 7) / 8;
-                    var converted = new byte[size];
-                    state.Error = PngColorConversion.Convert(converted, frame.RawPixelBuffer, info.ColorMode, state.InfoPng.ColorMode, (int)frameWidth, (int)frameHeight);
-                    if (state.Error > 0)
-                    {
-                        throw new PngEncoderException(state.Error);
-                    }
-                    var compressedBuffer = new byte[0];
-                    state.Error = PreprocessScanlines(ref compressedBuffer, converted, frameWidth, frameHeight, info, state.EncoderSettings);
-                    frame.FrameData = compressedBuffer;
-                    if (state.Error > 0)
-                    {
-                        throw new PngEncoderException(state.Error);
-                    }
-                }
-            }
-            else
-            {
-                foreach (PngFrame frame in pngImage.Frames)
-                {
-                    var (frameWidth, frameHeight) = SizeOf(frame);
-                    var compressedBuffer = Array.Empty<byte>();
-                    state.Error = PreprocessScanlines(ref compressedBuffer, frame.RawPixelBuffer, frameWidth, frameHeight, info, state.EncoderSettings);
-                    frame.FrameData = compressedBuffer;
-                    if (state.Error > 0)
-                    {
-                        throw new PngEncoderException(state.Error);
-                    }
-                }
-            }
-            state.InfoPng = info;
-            var width = pngImage.Header.Width;
-            var height = pngImage.Header.Height;
-            pngStream.WriteSignature();
-            pngStream.WriteIHDR(state, width, height);
-
-            if (info.IsIccpDefined)
-            {
-                pngStream.WriteiCCP(state);
-            }
-            if (info.IsSrgbDefined)
-            {
-                pngStream.WritesRGB(state);
-            }
-            if (info.IsGamaDefined)
-            {
-                pngStream.WritegAMA(state);
-            }
-            if (info.IsChrmDefined)
-            {
-                pngStream.WritecHRM(state);
-            }
-
-            /*PLTE*/
-            if (info.ColorMode.ColorType == PngColorType.Palette)
-            {
-                pngStream.WritePLTE(state);
-            }
-            if (state.EncoderSettings.ForcePalette 
-                && (info.ColorMode.ColorType == PngColorType.RGB 
-                || info.ColorMode.ColorType == PngColorType.RGBA))
-            {
-                pngStream.WritePLTE(state);
-            }
-            /*tRNS*/
-            if ((info.ColorMode.ColorType == PngColorType.Gray ||
-                info.ColorMode.ColorType == PngColorType.RGB)
-                && info.ColorMode.IsKeyDefined)
-            {
-                pngStream.WritetRNS(state);
-            }
-
-            /*bKGD (must come between PLTE and the IDAt chunks*/
-            if (info.IsBackgroundDefined)
-            {
-                pngStream.WritebKGD(state);
-            }
-
-            /*pHYs (must come before the IDAT chunks)*/
-            if (info.IsPhysDefined)
-            {
-                pngStream.WritepHYs(state);
-            }
-
-            if (pngImage.IsMultiFrame)
-            {
-                pngStream.WriteacTL(state);
-                if (pngImage.DefaultImage != null)
-                {
-                    pngStream.WriteIDAT(state, pngImage.DefaultImage.FrameData);
-                }
-
-                uint sequenceNumber = 0;
-                for(int i = 0; i< pngImage.Frames.Count; ++i)
-                {
-                    var frame = pngImage.Frames[i];
-                    if (pngImage.DefaultImage == null && i == 0)
-                    {
-                        pngStream.WritefcTL(frame);
-                        pngStream.WriteIDAT(state, frame.FrameData);
-                        ++sequenceNumber;
-                        continue;
-                    }
-
-                    if (pngImage.DefaultImage!= null && frame.SequenceNumberFCTL == pngImage.DefaultImage.SequenceNumberFCTL)
-                        continue;
-
-                    frame.SequenceNumberFCTL = sequenceNumber;
-                    ++sequenceNumber;
-                    pngStream.WritefcTL(frame);
-                    pngStream.WritefdAT(frame.FrameData, sequenceNumber, state);
-                    sequenceNumber++;
-                }
-            }
-            else
-            {
-                /*IDAT (multiple IDAT chunks must be consecutive)*/
-                pngStream.WriteIDAT(state, pngImage.Frames[0].FrameData);
-            }
-
-            if (state.InfoPng.IsTimeDefined)
-            {
-                pngStream.WritetIME(state);
-            }
-
-            pngStream.WriteIEND(state);
-
-            pngStream.Position = 0;
-            pngStream.CopyTo(outputStream);
-
-            return error;
-        }
-
-        public byte[] GetAllBytes()
-        {
-            pngStream.Position = 0;
-            return pngStream.GetBuffer();
-        }
-
-        private unsafe void AddPaddingBits(byte[] outData, byte* inData, long olineBits, long ilineBits, uint height)
-        {
-            /*The opposite of the removePaddingBits function
-            olinebits must be >= ilinebits*/
-            var diff = olineBits - ilineBits;
-            /*bit pointers*/
-            int obp = 0;
-            int ibp = 0;
-            for (int y = 0; y != height; ++y)
-            {
-                for (int x = 0; x < ilineBits; ++x)
-                {
-                    byte bit = BitHelper.ReadBitFromReversedStream(ref ibp, inData);
-                    BitHelper.SetBitOfReversedStream(ref obp, outData, bit);
-                }
-                /*obp += diff; --> no, fill in some value in the padding bits too, to avoid
-                "Use of uninitialised value of size ###" warning from valgrind*/
-                for (int x = 0; x != diff; ++x)
-                {
-                    BitHelper.SetBitOfReversedStream(ref obp, outData, 0);
+                    var data = new byte[part.Length + 4];
+                    BinaryPrimitives.WriteUInt32BigEndian(data, sequence++);
+                    part.CopyTo(data.AsSpan(4));
+                    writer.Chunk("fdAT", data);
                 }
             }
         }
 
-        /*
-        This function converts the pure 2D image with the PNG's colortype, into filtered-padded-interlaced data. Steps:
-        *) if no Adam7: 1) add padding bits (= possible extra bits per scanline if bpp < 8) 2) filter
-        *) if adam7: 1) Adam7_interlace 2) 7x add padding bits 3) 7x filter
-        */
-        /*out must be buffer big enough to contain uncompressed IDAT chunk data, and in must contain the full image.
-        return value is error**/
-        /// <summary>
-        /// The size to encode a frame at. <see cref="PngFrame.EncodedWidth"/> is the APNG SUB-FRAME rectangle and stays
-        /// ZERO for an ordinary single-image PNG - the decoder uses that zero to mean "not an animation frame". Reading
-        /// it blindly therefore produced a zero-sized buffer for every plain PNG, and encoding one threw
-        /// IndexOutOfRangeException on the empty array; the whole-image size lives in <see cref="PngFrame.Width"/>.
-        /// </summary>
-        private static (uint Width, uint Height) SizeOf(PngFrame frame) =>
-            frame.EncodedWidth != 0 && frame.EncodedHeight != 0
-                ? (frame.EncodedWidth, frame.EncodedHeight)
-                : (frame.Width, frame.Height);
+        writer.Chunk("IEND", []);
+        output.Flush();
+    }
 
-        private unsafe uint PreprocessScanlines(ref byte[] outData, byte[] inData, uint width, uint height, PngInfo pngInfo, PngEncoderSettings settings)
+    private static (int Channels, bool Wide, bool Bgr) Layout(SurfaceFormat format) => (Format)format switch
+    {
+        Format.R8_UNORM or Format.R8_UINT or Format.R8_SRGB => (1, false, false),
+        Format.R8G8B8_UNORM or Format.R8G8B8_SRGB => (3, false, false),
+        Format.B8G8R8_UNORM or Format.B8G8R8_SRGB => (3, false, true),
+        Format.R8G8B8A8_UNORM or Format.R8G8B8A8_SRGB => (4, false, false),
+        Format.B8G8R8A8_UNORM or Format.B8G8R8A8_SRGB => (4, false, true),
+        Format.R16_UNORM or Format.R16_UINT => (1, true, false),
+        Format.R16G16B16_UNORM => (3, true, false),
+        Format.R16G16B16A16_UNORM => (4, true, false),
+        _ => throw new NotSupportedException($"PNG is not written from {(Format)format} pixels.")
+    };
+
+    // The source's pixels as RGBA of 16 bits, read one at a time.
+    private sealed class Source(IRawBitmap image, int width, int height, int channels, bool wide, bool bgr)
+    {
+        public byte[] Frame(int index) => image.GetRawPixels((uint)index);
+
+        public int Width => width;
+
+        public int Height => height;
+
+        public bool Wide => wide;
+
+        public (ushort R, ushort G, ushort B, ushort A) Pixel(byte[] pixels, long index)
         {
-            uint error = 0;
-            var bpp = PngColorConversion.GetBitsPerPixel(pngInfo.ColorMode);
-
-            if (pngInfo.InterlaceMethod == InterlaceMethod.None)
+            var size = wide ? 2 : 1;
+            var at = index * channels * size;
+            ushort Read(int c) => wide
+                ? BinaryPrimitives.ReadUInt16LittleEndian(pixels.AsSpan((int)(at + c * 2)))
+                : pixels[at + c];
+            var top = wide ? ushort.MaxValue : (ushort)255;
+            return channels switch
             {
-                /*image size plus an extra byte per scanline + possible padding bits*/
-                var outSize = height + (height * ((width * bpp + 7) / 8));
-                outData = new byte[outSize];
+                1 => (Read(0), Read(0), Read(0), top),
+                3 => bgr ? (Read(2), Read(1), Read(0), top) : (Read(0), Read(1), Read(2), top),
+                _ => bgr ? (Read(2), Read(1), Read(0), Read(3)) : (Read(0), Read(1), Read(2), Read(3))
+            };
+        }
+    }
 
-                /*non multiple of 8 bits per scanline, padding bits needed per scanline*/
-                if (bpp < 8 && width * bpp != ((width * bpp + 7) / 8) * 8)
+    private readonly record struct Color(byte R, byte G, byte B, byte A)
+    {
+        public uint Key => (uint)(R | (G << 8) | (B << 16) | (A << 24));
+
+        public static Color Of(uint key) => new((byte)key, (byte)(key >> 8), (byte)(key >> 16), (byte)(key >> 24));
+    }
+
+    private static uint Key(ushort r, ushort g, ushort b, ushort a) =>
+        (uint)((byte)r | ((byte)g << 8) | ((byte)b << 16) | ((byte)a << 24));
+
+    // The color type and depth that hold every pixel of every frame and the background, and the palette when one does.
+    private static (int ColorType, int Depth, List<Color> Palette) Choose(Source source, int frameCount,
+        (ushort R, ushort G, ushort B)? background)
+    {
+        var gray = background is not { } shade || shade.R == shade.G && shade.G == shade.B;
+        var opaque = true;
+        var top = source.Wide ? ushort.MaxValue : 255;
+        var colors = source.Wide ? null : new HashSet<uint>();
+        var last = 0u;
+        for (var f = 0; f < frameCount; f++)
+        {
+            var pixels = source.Frame(f);
+            for (long i = 0; i < (long)source.Width * source.Height; i++)
+            {
+                var (r, g, b, a) = source.Pixel(pixels, i);
+                gray &= r == g && g == b;
+                opaque &= a == top;
+                if (colors is { Count: <= 256 })
                 {
-                    byte[] padded = new byte[height * ((width * bpp + 7) / 8)];
-                    fixed (byte* inPtr = &inData[0])
+                    // Neighbors are mostly of one color: the set is asked only when it changes.
+                    var key = Key(r, g, b, a);
+                    if (key != last || colors.Count == 0)
                     {
-                        AddPaddingBits(padded, inPtr, ((width * bpp + 7) / 8) * 8, (width * bpp), height);
-                    }
-                    fixed (byte* paddedPtr = &padded[0])
-                    {
-                        fixed (byte* inPtr = &inData[0])
-                        {
-                            error = PNGFilter.Filter(paddedPtr, inPtr, width, height, pngInfo.ColorMode, settings);
-                        }
+                        colors.Add(key);
+                        last = key;
                     }
                 }
-                else
+                else if (!gray && !opaque)
                 {
-                    /*we can immediately filter into the out buffer, no other steps needed*/
-                    fixed (byte* outPtr = &outData[0])
-                    {
-                        fixed (byte* inPtr = &inData[0])
-                        {
-                            error = PNGFilter.Filter(outPtr, inPtr, width, height, pngInfo.ColorMode, settings);
-                        }
-                    }
+                    break;
                 }
             }
-            else
+        }
+
+        var depth = source.Wide ? 16 : 8;
+        if (gray)
+        {
+            return (opaque ? 0 : 4, depth, null);
+        }
+
+        // bKGD of a palette image is an entry of it: the background takes one when no pixel's color is it.
+        if (colors is { Count: <= 256 } && background is { } color
+            && !colors.Any(key => Color.Of(key) is var entry && entry.R == color.R >> 8 && entry.G == color.G >> 8
+                                  && entry.B == color.B >> 8))
+        {
+            colors.Add(Key((ushort)(color.R >> 8), (ushort)(color.G >> 8), (ushort)(color.B >> 8), 255));
+        }
+
+        if (colors is { Count: <= 256 })
+        {
+            // Translucent entries first, so tRNS stops at the last of them; by key after, so the order is the same
+            // whatever order the pixels came in.
+            var palette = new List<Color>();
+            foreach (var key in colors)
             {
-                uint[] passWidth = new uint[7];
-                uint[] passHeight = new uint[7];
-                uint[] filterPassStart = new uint[8];
-                uint[] paddedPassStart = new uint[8];
-                uint[] passStart = new uint[8];
-                byte[] adam7;
+                palette.Add(Color.Of(key));
+            }
 
-                Adam7.GetPassValues(passWidth, passHeight, filterPassStart, paddedPassStart, passStart, width, height, bpp);
+            palette.Sort((x, y) => x.A != y.A ? x.A.CompareTo(y.A) : x.Key.CompareTo(y.Key));
+            var bits = palette.Count <= 2 ? 1 : palette.Count <= 4 ? 2 : palette.Count <= 16 ? 4 : 8;
+            return (3, bits, palette);
+        }
 
-                var outSize = filterPassStart[7]; /*image size plus an extra byte per scanline + possible padding bits*/
-                outData = new byte[outSize];
+        return (opaque ? 2 : 6, depth, null);
+    }
 
-                adam7 = new byte[passStart[7]];
+    // The frame's rows in the chosen form, each after its filter byte.
+    private static byte[] Scanlines(Source source, int frame, int colorType, int depth, List<Color> palette)
+    {
+        var channels = colorType switch { 0 => 1, 2 => 3, 3 => 1, 4 => 2, _ => 4 };
+        var rowBytes = (source.Width * channels * depth + 7) / 8;
+        var bytesPerPixel = Math.Max(1, channels * depth / 8);
+        var result = new byte[(long)(rowBytes + 1) * source.Height];
+        var raw = new byte[rowBytes];
+        var prior = new byte[rowBytes];
+        var best = new byte[rowBytes];
+        Dictionary<uint, int> indices = null;
+        if (palette != null)
+        {
+            indices = new Dictionary<uint, int>();
+            for (var i = 0; i < palette.Count; i++)
+            {
+                indices[palette[i].Key] = i;
+            }
+        }
 
-                Adam7.Interlace(adam7, inData, width, height, bpp);
-                for (int i = 0; i != 7; ++i)
+        var pixels = source.Frame(frame);
+        var lastKey = 0u;
+        var lastIndex = -1;
+        for (var y = 0; y < source.Height; y++)
+        {
+            Array.Clear(raw);
+            for (var x = 0; x < source.Width; x++)
+            {
+                var (r, g, b, a) = source.Pixel(pixels, (long)y * source.Width + x);
+                if (palette != null)
                 {
-                    if (bpp < 8)
+                    var key = Key(r, g, b, a);
+                    if (key != lastKey || lastIndex < 0)
                     {
-                        byte[] padded = new byte[paddedPassStart[i + 1] - paddedPassStart[i]];
+                        (lastKey, lastIndex) = (key, indices[key]);
+                    }
 
-                        fixed (byte* adam7Ptr = &adam7[passStart[i]])
-                        {
-                            var olineBits = ((passWidth[i] * bpp + 7) / 8) * 8;
-                            var ilineBits = passWidth[i] * bpp;
-                            AddPaddingBits(padded, adam7Ptr, olineBits, ilineBits, passHeight[i]);
-                        }
+                    var index = lastIndex;
+                    raw[x * depth / 8] |= (byte)(index << (8 - depth - x * depth % 8));
+                    continue;
+                }
 
-                        fixed (byte* outPtr = &outData[filterPassStart[i]])
-                        {
-                            fixed (byte* paddedPtr = &padded[0])
-                            {
-                                error = PNGFilter.Filter(outPtr, paddedPtr, width, height, pngInfo.ColorMode, settings);
-                            }
-                        }
+                Span<ushort> samples = [r, a, 0, 0];
+                if (colorType is 2 or 6)
+                {
+                    (samples[0], samples[1], samples[2], samples[3]) = (r, g, b, a);
+                }
+
+                for (var c = 0; c < channels; c++)
+                {
+                    if (depth == 16)
+                    {
+                        BinaryPrimitives.WriteUInt16BigEndian(raw.AsSpan((x * channels + c) * 2), samples[c]);
                     }
                     else
                     {
-                        fixed (byte* outPtr = &outData[filterPassStart[i]])
-                        {
-                            fixed (byte* paddedPtr = &adam7[paddedPassStart[i]])
-                            {
-                                error = PNGFilter.Filter(outPtr, paddedPtr, passWidth[i], passHeight[i], pngInfo.ColorMode, settings);
-                            }
-                        }
+                        raw[x * channels + c] = (byte)samples[c];
                     }
-
-                    if (error > 0) break; 
                 }
             }
 
-            return error;
+            var row = result.AsSpan(y * (rowBytes + 1), rowBytes + 1);
+            var filter = palette != null || depth < 8 ? (byte)0 : Filter(raw, prior, best, bytesPerPixel);
+            row[0] = filter;
+            (filter == 0 ? raw : best).AsSpan().CopyTo(row[1..]);
+            (raw, prior) = (prior, raw);
         }
 
-        /*
-        palette must have 4 * palettesize bytes allocated, and given in format RGBARGBARGBARGBA...
-        returns 0 if the palette is opaque,
-        returns 1 if the palette has a single color with alpha 0 ==> color key
-        returns 2 if the palette is semi-translucent.
-        */
-        private PaletteTranslucency GetPaletteTranslucency(byte[] palette)
-        {
-            byte key = 0;
-            /*the value of the color with alpha 0, so long as color keying is possible*/
-            byte r = 0;
-            byte g = 0;
-            byte b = 0;
+        return result;
+    }
 
-            for (int i = 0; i != palette.Length; ++i)
+    // 12.8: the filter of the five whose output, its bytes taken as signed, sums least in magnitude - the sums of all
+    // five in one pass - and its output into best.
+    private static byte Filter(byte[] raw, byte[] prior, byte[] best, int bytesPerPixel)
+    {
+        long none = 0, sub = 0, up = 0, average = 0, paeth = 0;
+        for (var i = 0; i < raw.Length; i++)
+        {
+            int x = raw[i], above = prior[i];
+            int left = 0, upperLeft = 0;
+            if (i >= bytesPerPixel)
             {
-                if (key == 0 && palette[4 * i + 3] == 0)
-                {
-                    r = palette[4 * i];
-                    g = palette[4 * i + 1];
-                    b = palette[4 * i + 2];
-                    key = 1;
-                    i = -1; /*restart from beginning, to detect earlier opaque colors with key's value*/
-                }
-                else if (palette[4 * i + 3] != 255)
-                {
-                    key = 2;
-                    break;
-                }
-                /*when key, no opaque RGB may have key's RGB*/
-                else if (key != 0 
-                    && r == palette[i * 4]
-                    && g == palette[i * 4 + 1]
-                    && b == palette[i * 4 + 2])
-                {
-                    key = 2;
-                    break;
-                }
+                (left, upperLeft) = (raw[i - bytesPerPixel], prior[i - bytesPerPixel]);
             }
 
-            return (PaletteTranslucency)key;
+            none += Math.Abs((int)(sbyte)x);
+            sub += Math.Abs((int)(sbyte)(x - left));
+            up += Math.Abs((int)(sbyte)(x - above));
+            average += Math.Abs((int)(sbyte)(x - ((left + above) >> 1)));
+            paeth += Math.Abs((int)(sbyte)(x - PngRaster.Paeth((byte)left, (byte)above, (byte)upperLeft)));
         }
 
-        enum PaletteTranslucency : byte
+        Span<long> sums = [none, sub, up, average, paeth];
+        byte chosen = 0;
+        for (byte type = 1; type < 5; type++)
         {
-            Opaque = 0,
-            ColorKey = 1,
-            SemiTranslucent = 2
+            if (sums[type] < sums[chosen])
+            {
+                chosen = type;
+            }
+        }
+
+        for (var i = 0; i < raw.Length; i++)
+        {
+            int left = 0, upperLeft = 0;
+            if (i >= bytesPerPixel)
+            {
+                (left, upperLeft) = (raw[i - bytesPerPixel], prior[i - bytesPerPixel]);
+            }
+
+            best[i] = (byte)(raw[i] - chosen switch
+            {
+                0 => 0,
+                1 => left,
+                2 => prior[i],
+                3 => (left + prior[i]) >> 1,
+                _ => PngRaster.Paeth((byte)left, prior[i], (byte)upperLeft)
+            });
+        }
+
+        return chosen;
+    }
+
+    private static byte[] Compress(byte[] scanlines, CompressionLevel level)
+    {
+        using var memory = new MemoryStream(scanlines.Length / 2 + 64);
+        using (var deflater = new ZLibStream(memory, level))
+        {
+            deflater.Write(scanlines);
+        }
+
+        return memory.ToArray();
+    }
+
+    private static void WriteColorMetadata(ChunkWriter writer, PngMetadata metadata)
+    {
+        if (metadata == null)
+        {
+            return;
+        }
+
+        if (metadata.Gamma is { } gamma)
+        {
+            var data = new byte[4];
+            BinaryPrimitives.WriteUInt32BigEndian(data, (uint)Math.Round(gamma * 100000));
+            writer.Chunk("gAMA", data);
+        }
+
+        if (metadata.Chromaticities is { } c)
+        {
+            var data = new byte[32];
+            double[] points = [c.WhiteX, c.WhiteY, c.RedX, c.RedY, c.GreenX, c.GreenY, c.BlueX, c.BlueY];
+            for (var i = 0; i < 8; i++)
+            {
+                BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(i * 4), (uint)Math.Round(points[i] * 100000));
+            }
+
+            writer.Chunk("cHRM", data);
+        }
+
+        // PNG has iCCP and sRGB not both: the profile, which ranks above sRGB, is kept.
+        if (metadata.IccProfile != null)
+        {
+            var name = Keyword(string.IsNullOrEmpty(metadata.IccProfileName) ? "ICC profile" : metadata.IccProfileName);
+            writer.Chunk("iCCP", [.. name, 0, 0, .. Deflate(metadata.IccProfile)]);
+        }
+        else if (metadata.SrgbIntent is { } intent)
+        {
+            writer.Chunk("sRGB", [(byte)intent]);
+        }
+    }
+
+    private static void WriteOtherMetadata(ChunkWriter writer, PngMetadata metadata, int colorType, int depth,
+        List<Color> palette)
+    {
+        if (metadata == null)
+        {
+            return;
+        }
+
+        if (metadata.Background is { } background)
+        {
+            var data = BackgroundOf(background, colorType, depth, palette);
+            if (data != null)
+            {
+                writer.Chunk("bKGD", data);
+            }
+        }
+
+        if (metadata.PixelsPerUnit is { } units)
+        {
+            var data = new byte[9];
+            BinaryPrimitives.WriteUInt32BigEndian(data, units.X);
+            BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(4), units.Y);
+            data[8] = units.Meters ? (byte)1 : (byte)0;
+            writer.Chunk("pHYs", data);
+        }
+
+        if (metadata.Time is { } time)
+        {
+            // A time of unspecified kind is taken as UTC, as tIME's are read.
+            var utc = time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
+            var data = new byte[7];
+            BinaryPrimitives.WriteUInt16BigEndian(data, (ushort)utc.Year);
+            (data[2], data[3], data[4], data[5], data[6]) = ((byte)utc.Month, (byte)utc.Day, (byte)utc.Hour,
+                (byte)utc.Minute, (byte)utc.Second);
+            writer.Chunk("tIME", data);
+        }
+
+        foreach (var text in metadata.Texts)
+        {
+            WriteText(writer, text);
+        }
+
+        if (metadata.Exif != null)
+        {
+            writer.Chunk("eXIf", metadata.Exif);
+        }
+    }
+
+    // bKGD in the image's own samples - of its depth, or its palette's entry; null for a color the palette lacks.
+    private static byte[] BackgroundOf((ushort R, ushort G, ushort B) color, int colorType, int depth,
+        List<Color> palette)
+    {
+        int Sample(ushort value) => depth == 16 ? value : value >> 8;
+        switch (colorType)
+        {
+            case 3:
+                var index = palette.FindIndex(entry => entry.R == color.R >> 8 && entry.G == color.G >> 8
+                                                                                && entry.B == color.B >> 8);
+                return index < 0 ? null : [(byte)index];
+            case 0 or 4:
+                var gray = new byte[2];
+                BinaryPrimitives.WriteUInt16BigEndian(gray, (ushort)Sample(color.R));
+                return gray;
+            default:
+                var rgb = new byte[6];
+                BinaryPrimitives.WriteUInt16BigEndian(rgb, (ushort)Sample(color.R));
+                BinaryPrimitives.WriteUInt16BigEndian(rgb.AsSpan(2), (ushort)Sample(color.G));
+                BinaryPrimitives.WriteUInt16BigEndian(rgb.AsSpan(4), (ushort)Sample(color.B));
+                return rgb;
+        }
+    }
+
+    // 11.3.3.2: 1 to 79 Latin-1 characters that print, spaces only single and inside.
+    private static byte[] Keyword(string keyword)
+    {
+        var bytes = Latin1(keyword ?? "", "A PNG keyword");
+        if (bytes.Length is 0 or > 79 || bytes[0] == ' ' || bytes[^1] == ' '
+            || bytes.AsSpan().IndexOf("  "u8) >= 0 || Array.Exists(bytes, b => b is < 32 or > 126 and < 161))
+        {
+            throw new ArgumentException($"\"{keyword}\" is not a PNG keyword: 1 to 79 printable Latin-1 characters.");
+        }
+
+        return bytes;
+    }
+
+    private static byte[] Latin1(string text, string what)
+    {
+        if (text.Contains('\0') || text.Any(c => c > 255))
+        {
+            throw new ArgumentException($"{what} holds a NUL or a character Latin-1 lacks: \"{text}\".");
+        }
+
+        return Encoding.Latin1.GetBytes(text);
+    }
+
+    private static byte[] Utf8(string text, string what) => text.Contains('\0')
+        ? throw new ArgumentException($"{what} holds a NUL.")
+        : Encoding.UTF8.GetBytes(text);
+
+    private static void WriteText(ChunkWriter writer, PngText text)
+    {
+        var keyword = Keyword(text.Keyword);
+        if (text.International)
+        {
+            var value = Utf8(text.Text ?? "", "A PNG text");
+            var language = text.Language ?? "";
+            if (language.Any(c => c is not ('-' or '_' or >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9')))
+            {
+                throw new ArgumentException($"\"{language}\" is not a language tag.");
+            }
+
+            writer.Chunk("iTXt", [.. keyword, 0, text.Compressed ? (byte)1 : (byte)0, 0,
+                .. Encoding.ASCII.GetBytes(language), 0,
+                .. Utf8(text.TranslatedKeyword ?? "", "A PNG translated keyword"), 0,
+                .. text.Compressed ? Deflate(value) : value]);
+            return;
+        }
+
+        var latin = Latin1(text.Text ?? "", "A PNG text");
+        if (text.Compressed)
+        {
+            writer.Chunk("zTXt", [.. keyword, 0, 0, .. Deflate(latin)]);
+        }
+        else
+        {
+            writer.Chunk("tEXt", [.. keyword, 0, .. latin]);
+        }
+    }
+
+    private static byte[] Deflate(byte[] bytes) => Compress(bytes, CompressionLevel.Optimal);
+
+    private sealed class ChunkWriter(Stream output)
+    {
+        public void Signature() => output.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        public void Chunk(string type, ReadOnlySpan<byte> data)
+        {
+            Span<byte> head = stackalloc byte[8];
+            BinaryPrimitives.WriteUInt32BigEndian(head, (uint)data.Length);
+            Encoding.ASCII.GetBytes(type, head[4..]);
+            output.Write(head);
+            output.Write(data);
+            var crc = PngCrc.Finish(PngCrc.Update(PngCrc.Update(PngCrc.Start, head[4..]), data));
+            Span<byte> tail = stackalloc byte[4];
+            BinaryPrimitives.WriteUInt32BigEndian(tail, crc);
+            output.Write(tail);
         }
     }
 }

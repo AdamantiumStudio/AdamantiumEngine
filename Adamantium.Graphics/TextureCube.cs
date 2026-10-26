@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.Imaging;
@@ -30,6 +31,13 @@ public class TextureCube : Texture
         }
 
         var totalSize = bitmaps[0].TotalSizeInBytes;
+        // Each face is copied as the first one's size: one of another size or format would be read past its end.
+        if (bitmaps.Any(bitmap => bitmap.Width != bitmaps[0].Width || bitmap.Height != bitmaps[0].Height
+                                  || bitmap.PixelFormat != bitmaps[0].PixelFormat))
+        {
+            throw new ArgumentException("The faces of a texture cube must be of one size and pixel format.", nameof(files));
+        }
+
         var rawPixels = new byte[totalSize * 6];
         var destinationHandle = GCHandle.Alloc(rawPixels, GCHandleType.Pinned);
         var dstPtr = destinationHandle.AddrOfPinnedObject();

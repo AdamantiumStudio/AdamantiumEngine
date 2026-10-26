@@ -69,25 +69,8 @@ namespace Adamantium.Imaging.Ico
         private static FrameData DecodePng(IntPtr source, uint length)
         {
             var png = PngHelper.LoadFromMemory(source, length);
-            var pixels = png.GetRawPixels(0);
-            var count = (int)(png.Width * png.Height);
-            var rgba = new byte[count * 4];
-            var channels = pixels.Length / Math.Max(1, count);
-            if (channels is not (1 or 3 or 4) || pixels.Length != count * channels)
-            {
-                throw new NotSupportedException("An ICO image in PNG is read only with 8-bit gray, RGB or RGBA pixels");
-            }
-
-            for (var pixel = 0; pixel < count; pixel++)
-            {
-                var from = pixel * channels;
-                var to = pixel * 4;
-                rgba[to] = pixels[from];
-                rgba[to + 1] = pixels[channels == 1 ? from : from + 1];
-                rgba[to + 2] = pixels[channels == 1 ? from : from + 2];
-                rgba[to + 3] = channels == 4 ? pixels[from + 3] : byte.MaxValue;
-            }
-
+            var rgba = png.GetRgba8Pixels()
+                       ?? throw new NotSupportedException($"An ICO image in PNG of {png.PixelFormat} pixels.");
             return new FrameData(rgba, ImageDescription.Default2D(png.Width, png.Height, SurfaceFormat.R8G8B8A8.UNorm));
         }
 

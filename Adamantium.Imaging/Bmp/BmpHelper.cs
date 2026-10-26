@@ -18,6 +18,13 @@ namespace Adamantium.Imaging.Bmp
                 throw new ArgumentException("Given file is not a BMP file");
             }
 
+            // Rows are padded to 4 bytes: the file must hold every padded row.
+            var row = (ulong)description.Width * (ulong)description.Format.SizeOfInBytes();
+            if (row > int.MaxValue - 3 || (ulong)dataOffset + (row + 3) / 4 * 4 * description.Height > size)
+            {
+                throw new InvalidDataException("The BMP file ends before its pixels do.");
+            }
+
             return CreateImageFromBitmap(pSource, dataOffset, description);
         }
         
@@ -42,9 +49,10 @@ namespace Adamantium.Imaging.Bmp
             var infoHeader = Utilities.Read<BitmapInfoHeader>(IntPtr.Add(headerPtr, Marshal.SizeOf<BitmapFileHeader>()));
 
             // The BMPColorHeader is used only for transparent images
+            // The file's BGR comes out RGB (see CreateImageFromBitmap), and is said to be RGB.
             if (infoHeader.bitCount == 32)
             {
-                description.Format = Format.B8G8R8A8_UNORM;
+                description.Format = Format.R8G8B8A8_UNORM;
                 // Check if the file has bit mask color information
                 if (infoHeader.size >= (Marshal.SizeOf<BitmapInfoHeader>() + Marshal.SizeOf<BitmapColorHeader>()))
                 {
@@ -55,11 +63,38 @@ namespace Adamantium.Imaging.Bmp
             }
             else if(infoHeader.bitCount == 24)
             {
-                description.Format = Format.B8G8R8_UNORM;
+                description.Format = Format.R8G8B8_UNORM;
             }
             else if (infoHeader.bitCount == 16)
             {
-                description.Format = Format.B5G6R5_UNORM_PACK16;
+                // BI_RGB pixels of 16 bits are 5-5-5; BI_BITFIELDS puts the masks after the 40-byte header, 5-6-5 by
+                // its green.
+                var masks = Marshal.SizeOf<BitmapFileHeader>() + Marshal.SizeOf<BitmapInfoHeader>();
+                var green = infoHeader.compression == BitmapCompressionMode.BITFIELDS && size >= (ulong)masks + 12
+                    ? (uint)Marshal.ReadInt32(headerPtr, masks + 4)
+                    : ColorMasks.RGB555.GreenMask;
+                description.Format = green == ColorMasks.RGB565.GreenMask
+                    ? Format.B5G6R5_UNORM_PACK16
+                    : Format.B5G5R5A1_UNORM_PACK16;
+            }
+            else
+            {
+                throw new NotSupportedException($"BMP pixels of {infoHeader.bitCount} bits are not read.");
+            }
+
+            if (infoHeader.compression is not (BitmapCompressionMode.RGB or BitmapCompressionMode.BITFIELDS))
+            {
+                throw new NotSupportedException($"BMP compressed as {infoHeader.compression} is not read.");
+            }
+
+            if (infoHeader.height < 0)
+            {
+                throw new NotSupportedException("A BMP stored top-down is not read.");
+            }
+
+            if (infoHeader.width <= 0 || infoHeader.height == 0)
+            {
+                throw new InvalidDataException($"A BMP of {infoHeader.width}×{infoHeader.height} pixels.");
             }
 
             description.MipLevels = 1;
@@ -79,6 +114,12 @@ namespace Adamantium.Imaging.Bmp
         {
             var originalFormat = description.Format;
             var realFormatSize = description.Format.SizeOfInBytes();
+            if (realFormatSize == 2)
+            {
+                // Pixels of 16 bits come out as RGB of 8.
+                description.Format = Format.R8G8B8_UNORM;
+            }
+
             var sizeInBytes = description.Format.SizeOfInBytes();
             var bufferSize = description.Width * description.Height * sizeInBytes;
             byte[] buffer = new byte[bufferSize];
@@ -91,7 +132,7 @@ namespace Adamantium.Imaging.Bmp
                 conversionFlags = originalFormat == Format.B5G5R5A1_UNORM_PACK16 ? ConversionFlags.RGB555 : ConversionFlags.RGB565;
             }
 
-            using (var stream = new UnmanagedMemoryStream((byte*)pSource, rowStride * description.Height + offset))
+            using (var stream = new UnmanagedMemoryStream((byte*)pSource, alignedRowStride * description.Height + offset))
             {
                 int bufferOffset = 0;
                 var streamOffset = 0;
@@ -123,7 +164,7 @@ namespace Adamantium.Imaging.Bmp
                         }
 
                         r = (byte)Math.Round(255.0d / 31 * r);
-                        g = (byte)Math.Round(255.0d / 31 * g);
+                        g = (byte)Math.Round(255.0d / (conversionFlags == ConversionFlags.RGB565 ? 63 : 31) * g);
                         b = (byte)Math.Round(255.0d / 31 * b);
 
                         buffer[origin] = r;
@@ -194,6 +235,16 @@ namespace Adamantium.Imaging.Bmp
 
         public static void SaveToStream(IRawBitmap img, Stream imageStream)
         {
+            // BMP is written from 8-bit RGB(A) or BGR(A): other pixels are brought to RGBA of 8 bits first.
+            if ((Format)img.PixelFormat is not (Format.R8G8B8A8_UNORM or Format.R8G8B8A8_SRGB or Format.B8G8R8A8_UNORM
+                    or Format.B8G8R8A8_SRGB or Format.R8G8B8_UNORM or Format.R8G8B8_SRGB or Format.B8G8R8_UNORM
+                    or Format.B8G8R8_SRGB))
+            {
+                var rgba = img.GetRgba8Pixels()
+                           ?? throw new NotSupportedException($"BMP is not written from {(Format)img.PixelFormat} pixels.");
+                img = new FrameBitmap(img.Width, img.Height, SurfaceFormat.R8G8B8A8.UNorm, [rgba]);
+            }
+
             SaveToBitmapStream(img, imageStream);
         }
 
@@ -211,8 +262,8 @@ namespace Adamantium.Imaging.Bmp
             }
             else
             {
-                var width = AlignStride((int)rawBitmap.Width);
-                var size = width * rawBitmap.Height * rawBitmap.PixelFormat.SizeInBytes;
+                // Each row is padded to 4 bytes.
+                var size = AlignStride((int)(rawBitmap.Width * rawBitmap.PixelFormat.SizeInBytes)) * rawBitmap.Height;
                 fileSize += (uint)size;
             }
 
@@ -232,15 +283,14 @@ namespace Adamantium.Imaging.Bmp
             IntPtr fileHeaderMemoryPtr = Utilities.AllocateMemory(Marshal.SizeOf<BitmapFileHeader>(), 2);
             Marshal.StructureToPtr(fileHeader, fileHeaderMemoryPtr, true);
             Utilities.Read(fileHeaderMemoryPtr, buffer, 0, Marshal.SizeOf<BitmapFileHeader>());
+            Utilities.FreeMemory(fileHeaderMemoryPtr);
 
             IntPtr infoHeaderMemoryPtr = Utilities.AllocateMemory(Marshal.SizeOf<BitmapInfoHeader>());
             Marshal.StructureToPtr(infoHeader, infoHeaderMemoryPtr, true);
             Utilities.Read(infoHeaderMemoryPtr, buffer, Marshal.SizeOf<BitmapFileHeader>(), Marshal.SizeOf<BitmapInfoHeader>());
+            Utilities.FreeMemory(infoHeaderMemoryPtr);
 
-            IntPtr colorHeaderMemoryPtr = Utilities.AllocateMemory(Marshal.SizeOf<BitmapColorHeader>());
-            Marshal.StructureToPtr(infoHeader, colorHeaderMemoryPtr, true);
             var bufferOffset = Marshal.SizeOf<BitmapFileHeader>() + Marshal.SizeOf<BitmapInfoHeader>();
-            Utilities.Read(colorHeaderMemoryPtr, buffer, bufferOffset, Marshal.SizeOf<BitmapInfoHeader>());
 
             var colors = ImageHelper.FlipBuffer(
                 frameData.RawPixels, 
@@ -248,8 +298,11 @@ namespace Adamantium.Imaging.Bmp
                 frameData.Description.Height,
                 frameData.Description.Format.SizeOfInBytes(),
                 FlipBufferOptions.FlipVertically);
+            // BMP keeps BGR: pixels said to be RGB are swapped into it, BGR ones go as they are.
             var pixelSize = rawBitmap.PixelFormat.SizeInBytes;
-            for (int i = 0; i < colors.Length; i+=pixelSize)
+            var bgr = (Format)rawBitmap.PixelFormat is Format.B8G8R8A8_UNORM or Format.B8G8R8A8_SRGB
+                or Format.B8G8R8_UNORM or Format.B8G8R8_SRGB;
+            for (int i = 0; !bgr && i < colors.Length; i+=pixelSize)
             {
                 Utilities.Swap(ref colors[i], ref colors[i+2]);
             }
@@ -265,9 +318,8 @@ namespace Adamantium.Imaging.Bmp
             }
             else
             {
-                var alignedWidth = AlignStride((int)frameData.Description.Width);
-                var alignDiff = alignedWidth - frameData.Description.Width;
                 int rowStride = (int)(frameData.Description.Width * frameData.Description.Format.SizeOfInBytes());
+                var alignDiff = AlignStride(rowStride) - rowStride;
                 for (int i = 0; i < frameData.Description.Height; ++i)
                 {
                     imageStream.Write(buffer, (int)offsetData, rowStride);
