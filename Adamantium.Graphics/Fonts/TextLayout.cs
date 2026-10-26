@@ -119,8 +119,9 @@ public class TextLayout : DisposableObject
     public IReadOnlyList<RectangleF> Frames { get; set; }
 
     /// <summary>
-    /// Areas the text of <see cref="Frames"/> flows around, in the same units: a line runs in the widest part of its
-    /// frame that none of them covers, and skips a row they leave too little of.
+    /// Areas the text of <see cref="Frames"/> flows around, in the same units: a row holds a line in each part of its
+    /// frame none of them covers that is wide enough, in the order the text reads; past a row they leave too little of,
+    /// the text goes on where the first of them across it ends.
     /// </summary>
     public IReadOnlyList<RectangleF> Exclusions { get; set; }
 

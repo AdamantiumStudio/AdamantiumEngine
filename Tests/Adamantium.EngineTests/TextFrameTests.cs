@@ -135,7 +135,7 @@ public class TextFrameTests
         var exclusion = new RectangleF(0, (float)(LineHeight + 1), 300, (float)LineHeight - 2);
         var layout = Layout(Prose, [frame], [exclusion]);
 
-        Assert.That(layout.GetLine(1).Top, Is.EqualTo(2 * LineHeight).Within(1e-3));
+        Assert.That(layout.GetLine(1).Top, Is.EqualTo(exclusion.Bottom).Within(1e-3), "right under it");
     }
 
     // Word's "square" wrapping on both sides: a row runs on past the exclusion before the next row starts.
@@ -468,5 +468,19 @@ public class TextFrameTests
 
         Assert.That(cap.PenX, Is.EqualTo(50).Within(1e-3));
         Assert.That(Ink(layout, 0).Where(g => g.PositionInString > 0).Min(g => g.Rect.Left), Is.GreaterThan(cap.Rect.Right));
+    }
+
+    [TestCase(LineBreaking.Greedy)]
+    [TestCase(LineBreaking.Paragraph)]
+    public void UnderAnExclusionAcrossTheWholeFrame_TheTextGoesOnRightWhereItEnds(LineBreaking breaking)
+    {
+        var bottom = (float)(1.4 * LineHeight);
+        var layout = Layout(Prose, [new RectangleF(0, 0, 300, 1000)], [new RectangleF(-50, 0, 400, bottom)], breaking);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetLine(0).Top, Is.EqualTo(bottom).Within(1e-3), "not a whole row on");
+            Assert.That(layout.GetLine(1).Top - layout.GetLine(0).Top, Is.EqualTo(LineHeight).Within(1e-3));
+        });
     }
 }
