@@ -1845,22 +1845,27 @@ internal sealed class LineComposer
                     return true;
                 }
 
-                var cleared = ClearedFrom(rowTop, rowHeight);
-                if (cleared > rowTop + 1e-6 && cleared < top)
+                var cleared = ClearedFrom(frame, rowTop, rowHeight);
+                if (cleared < top && OnGrid(cleared, RowBaseline(line), line) > rowTop + 1e-6)
                 {
                     top = cleared;
+                    if (rows > 1)
+                    {
+                        rows--;
+                    }
                 }
             }
 
             return false;
         }
 
-        double ClearedFrom(double top, double rowHeight)
+        double ClearedFrom(RectangleF frame, double top, double rowHeight)
         {
             var cleared = double.PositiveInfinity;
             foreach (var exclusion in exclusions ?? [])
             {
-                if (exclusion.Top < top + rowHeight && exclusion.Bottom > top)
+                if (exclusion.Top < top + rowHeight && exclusion.Bottom > top && exclusion.Left < frame.Right &&
+                    exclusion.Right > frame.Left)
                 {
                     cleared = Math.Min(cleared, exclusion.Bottom);
                 }

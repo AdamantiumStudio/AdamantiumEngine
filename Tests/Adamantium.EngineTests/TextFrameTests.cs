@@ -470,6 +470,20 @@ public class TextFrameTests
         Assert.That(Ink(layout, 0).Where(g => g.PositionInString > 0).Min(g => g.Rect.Left), Is.GreaterThan(cap.Rect.Right));
     }
 
+    [Test]
+    public void ExclusionsOutsideAFrame_DoNotSendShortTextOnToTheNext()
+    {
+        var outside = Enumerable.Range(0, 30).Select(i => new RectangleF(1000, 0, 10, 10 + 3 * i));
+        var layout = Layout("Hi", [new RectangleF(0, 0, 300, 400), new RectangleF(400, 0, 300, 400)],
+            [new RectangleF(-10, 0, 320, 100), .. outside]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetLineFrame(0), Is.Zero);
+            Assert.That(layout.GetLine(0).Top, Is.EqualTo(100).Within(1e-3));
+        });
+    }
+
     [TestCase(LineBreaking.Greedy)]
     [TestCase(LineBreaking.Paragraph)]
     public void UnderAnExclusionAcrossTheWholeFrame_TheTextGoesOnRightWhereItEnds(LineBreaking breaking)
