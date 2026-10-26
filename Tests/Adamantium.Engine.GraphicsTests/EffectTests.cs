@@ -58,10 +58,10 @@ namespace Adamantium.Engine.GraphicsTests
                 "the second constants landed on the first ones");
         }
 
-        // A buffer of its own is in system memory. The next use of the pool takes it again for data of its size or half
-        // of it, but not for much less, and frees it after a use that did not take it; two in one use are two buffers.
+        // The next use of the pool takes a buffer of its own again for data of its size or half of it, but not for much
+        // less, and disposes of one it did not take; two in one use are two buffers.
         [Test]
-        public void ABufferOfItsOwn_IsTakenAgainWhileNeeded_AndFreedOnceNot()
+        public void ABufferOfItsOwn_IsTakenAgainWhileNeeded_AndDisposedOnceNot()
         {
             var device = GpuFixture.CreateRenderDevice();
             using var pool = new EffectPass.DynamicBufferPool(device, 1024);
@@ -71,23 +71,26 @@ namespace Adamantium.Engine.GraphicsTests
             var peak = pool.Allocate(9000, 16).Page;
             pool.Reset();
             var again = pool.Allocate(1500, 16).Page;
+            var alsoAgain = pool.Allocate(1500, 16).Page;
             var notThePeak = pool.Allocate(1500, 16).Page;
             pool.Reset();
             GpuFixture.Main.OnFrameStarted();
-            var keptWhileNeeded = !large.IsDisposed && !notThePeak.IsDisposed;
+            var keptWhileNeeded = !large.IsDisposed && !second.IsDisposed && !notThePeak.IsDisposed;
             pool.Reset();
             GpuFixture.Main.OnFrameStarted();
+            Adamantium.Graphics.Buffer[] takenAgain = [again, alsoAgain];
+            Adamantium.Graphics.Buffer[] spares = [large, second];
 
             Assert.Multiple(() =>
             {
                 Assert.That(large.TotalSize, Is.EqualTo(4096UL), "a power of two");
-                Assert.That(large.MemoryFlags.HasFlag(MemoryPropertyFlags.DeviceLocal), Is.False, "in system memory");
                 Assert.That(second, Is.Not.SameAs(large));
-                Assert.That(again, Is.SameAs(large).Or.SameAs(second), "twice the size is taken again");
+                Assert.That(takenAgain, Is.EquivalentTo(spares), "twice the size is taken again");
                 Assert.That(notThePeak, Is.Not.SameAs(peak), "eight times the size is not");
-                Assert.That(peak.IsDisposed, Is.True, "freed after a use without it");
+                Assert.That(peak.IsDisposed, Is.True, "disposed after a use without it");
                 Assert.That(keptWhileNeeded, Is.True);
-                Assert.That(large.IsDisposed && notThePeak.IsDisposed, Is.True, "freed once the next use did not take them");
+                Assert.That(large.IsDisposed && second.IsDisposed && notThePeak.IsDisposed, Is.True,
+                    "disposed once the next use did not take them");
             });
         }
 
