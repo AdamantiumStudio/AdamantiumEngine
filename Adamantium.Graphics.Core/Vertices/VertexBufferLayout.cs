@@ -13,9 +13,6 @@ namespace Adamantium.Graphics.Core.Vertices;
 /// this <see cref="VertexBufferLayout"/> structure encapsulates a set of <see cref="VertexInputElement"/> for a particular slot, instance count.
 /// </remarks>	
 /// <seealso cref="VertexInputElement"/>
-/// <msdn-id>ff476180</msdn-id>	
-/// <unmanaged>D3D11_INPUT_ELEMENT_DESC</unmanaged>	
-/// <unmanaged-short>D3D11_INPUT_ELEMENT_DESC</unmanaged-short>
 public class VertexBufferLayout : IEquatable<VertexBufferLayout>
 {
    /// <summary>
@@ -23,12 +20,7 @@ public class VertexBufferLayout : IEquatable<VertexBufferLayout>
    /// </summary>
    public readonly int SlotIndex;
 
-   /// <summary>	
-   /// The number of instances to draw using the same per-instance data before advancing in the buffer by one element. This value must be 0 for an  element that contains per-vertex data (the slot class is set to <see cref="per-vertex data"/>).
-   /// </summary>	
-   /// <msdn-id>ff476180</msdn-id>	
-   /// <unmanaged>unsigned int InstanceDataStepRate</unmanaged>	
-   /// <unmanaged-short>unsigned int InstanceDataStepRate</unmanaged-short>	
+   /// <summary>How many instances share one element of per-instance data; 0 for per-vertex data.</summary>
    public readonly int InstanceCount;
 
    /// <summary>

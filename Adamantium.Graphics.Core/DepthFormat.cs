@@ -1,52 +1,23 @@
 ﻿namespace Adamantium.Graphics.Core;
 
-/// <summary>
-/// Defines the format of data in a depth-stencil buffer.
-/// </summary>
+/// <summary>The format of a depth-stencil buffer, by its Vulkan format.</summary>
 public enum DepthFormat : uint
 {
-    /// <summary>
-    /// No depth stencil buffer.
-    /// </summary>
+    /// <summary>No depth-stencil buffer.</summary>
     None = 0,
 
-    /// <summary>
-    /// A buffer that contains 16-bits of depth data.
-    /// </summary>
-    /// <msdn-id>bb173059</msdn-id>	
-    /// <unmanaged>DXGI_FORMAT_D16_UNORM</unmanaged>	
-    /// <unmanaged-short>DXGI_FORMAT_D16_UNORM</unmanaged-short>	
+    /// <summary>16 bits of depth.</summary>
     Depth16 = Adamantium.Vulkan.Core.Format.D16_UNORM,
 
-    /// <summary>
-    /// A buffer that contains 16-bits of depth data and 8 bits of stencil data.
-    /// </summary>
-    /// <msdn-id>bb173059</msdn-id>	
-    /// <unmanaged>D16_UNORM_S8_UINT</unmanaged>	
-    /// <unmanaged-short>D16_UNORM_S8_UINT</unmanaged-short>	
+    /// <summary>16 bits of depth and 8 of stencil.</summary>
     Depth16Stencil8 = Adamantium.Vulkan.Core.Format.D16_UNORM_S8_UINT,
 
-    /// <summary>
-    /// A 32 bit buffer that contains 24 bits of depth data and 8 bits of stencil data.
-    /// </summary>
-    /// <msdn-id>bb173059</msdn-id>	
-    /// <unmanaged>DXGI_FORMAT_D24_UNORM_S8_UINT</unmanaged>	
-    /// <unmanaged-short>DXGI_FORMAT_D24_UNORM_S8_UINT</unmanaged-short>	
+    /// <summary>24 bits of depth and 8 of stencil.</summary>
     Depth24Stencil8 = Adamantium.Vulkan.Core.Format.D24_UNORM_S8_UINT,
 
-    /// <summary>
-    /// A buffer that contains 32-bits of depth data.
-    /// </summary>
-    /// <msdn-id>bb173059</msdn-id>	
-    /// <unmanaged>DXGI_FORMAT_D32_FLOAT</unmanaged>	
-    /// <unmanaged-short>DXGI_FORMAT_D32_FLOAT</unmanaged-short>	
+    /// <summary>A 32-bit float of depth.</summary>
     Depth32 = Adamantium.Vulkan.Core.Format.D32_SFLOAT,
 
-    /// <summary>
-    /// A double 32 bit buffer that contains 32 bits of depth data and 8 bits padded with 24 zero bits of stencil data.
-    /// </summary>
-    /// <msdn-id>bb173059</msdn-id>	
-    /// <unmanaged>DXGI_FORMAT_D32_FLOAT_S8X24_UINT</unmanaged>	
-    /// <unmanaged-short>DXGI_FORMAT_D32_FLOAT_S8X24_UINT</unmanaged-short>	
+    /// <summary>A 32-bit float of depth and 8 bits of stencil.</summary>
     Depth32Stencil8X24 = Adamantium.Vulkan.Core.Format.D32_SFLOAT_S8_UINT,
 }

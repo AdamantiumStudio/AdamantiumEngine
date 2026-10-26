@@ -133,13 +133,11 @@ public sealed class EffectParameter : NamedObject
     /// <summary>
     /// Number of rows in a matrix. Otherwise a numeric type returns 1, any other type returns 0.
     /// </summary>
-    /// <unmanaged>int Rows</unmanaged>
     public int RowCount { get; private set; }
 
     /// <summary>
     /// Number of columns in a matrix. Otherwise a numeric type returns 1, any other type returns 0.
     /// </summary>
-    /// <unmanaged>int Columns</unmanaged>
     public int ColumnCount { get; private set; }
 
     /// <summary>

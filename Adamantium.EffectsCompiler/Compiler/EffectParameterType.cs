@@ -1,411 +1,163 @@
 ﻿namespace Adamantium.EffectsCompiler
 {
-   /// <summary>	
-   /// <p>Values that identify various data, texture, and buffer types that can be assigned to a shader variable.</p>	
-   /// </summary>	
-   /// <remarks>	
-   /// <p>Reflecting over a compiled shader reports one of these for every variable it declares.</p><p>The types in a structured buffer describe the structure of the elements in the buffer. The layout of these types generally match their C++ struct counterparts. The following examples show structured buffers:</p><pre><code>struct mystruct {float4 val; uint ind;}; RWStructuredBuffer&lt;mystruct&gt; rwbuf;	
-   /// RWStructuredBuffer&lt;float3&gt; rwbuf2;</code></pre>	
-   /// </remarks>	
-   /// <msdn-id>ff728735</msdn-id>	
-   /// <unmanaged>D3D_SHADER_VARIABLE_TYPE</unmanaged>	
-   /// <unmanaged-short>D3D_SHADER_VARIABLE_TYPE</unmanaged-short>	
+   /// <summary>The type of an effect parameter's value - a number type, a texture, sampler or buffer kind, or a
+   /// pipeline object. The numbers are those the compiled effects store.</summary>
    public enum EffectParameterType : byte
    {
-      /// <summary>	
-      /// <dd> <p>The variable is a void reference.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_VOID</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_VOID</unmanaged-short>	
-      Void = unchecked((int)0),
+      /// <summary>No type.</summary>
+      Void = 0,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a boolean.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_BOOL</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_BOOL</unmanaged-short>	
-      Bool = unchecked((int)1),
+      /// <summary>A bool.</summary>
+      Bool = 1,
 
-      /// <summary>	
-      /// <dd> <p>The variable is an integer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_INT</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_INT</unmanaged-short>	
-      Int = unchecked((int)2),
+      /// <summary>A 32-bit signed integer.</summary>
+      Int = 2,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a floating-point number.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_FLOAT</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_FLOAT</unmanaged-short>	
-      Float = unchecked((int)3),
+      /// <summary>A 32-bit float.</summary>
+      Float = 3,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a string.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_STRING</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_STRING</unmanaged-short>	
-      String = unchecked((int)4),
+      /// <summary>A string.</summary>
+      String = 4,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE</unmanaged-short>	
-      Texture = unchecked((int)5),
+      /// <summary>A texture of any kind.</summary>
+      Texture = 5,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 1D texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE1D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE1D</unmanaged-short>	
-      Texture1D = unchecked((int)6),
+      /// <summary>A 1D texture.</summary>
+      Texture1D = 6,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 2D texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE2D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE2D</unmanaged-short>	
-      Texture2D = unchecked((int)7),
+      /// <summary>A 2D texture.</summary>
+      Texture2D = 7,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 3D texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE3D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE3D</unmanaged-short>	
-      Texture3D = unchecked((int)8),
+      /// <summary>A 3D texture.</summary>
+      Texture3D = 8,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a texture cube.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURECUBE</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURECUBE</unmanaged-short>	
-      TextureCube = unchecked((int)9),
+      /// <summary>A cube texture.</summary>
+      TextureCube = 9,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a sampler.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_SAMPLER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_SAMPLER</unmanaged-short>	
-      Sampler = unchecked((int)10),
+      /// <summary>A sampler of any kind.</summary>
+      Sampler = 10,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a sampler.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_SAMPLER1D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_SAMPLER1D</unmanaged-short>	
-      Sampler1D = unchecked((int)11),
+      /// <summary>A 1D sampler.</summary>
+      Sampler1D = 11,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a sampler.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_SAMPLER2D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_SAMPLER2D</unmanaged-short>	
-      Sampler2D = unchecked((int)12),
+      /// <summary>A 2D sampler.</summary>
+      Sampler2D = 12,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a sampler.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_SAMPLER3D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_SAMPLER3D</unmanaged-short>	
-      Sampler3D = unchecked((int)13),
+      /// <summary>A 3D sampler.</summary>
+      Sampler3D = 13,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a sampler.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_SAMPLERCUBE</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_SAMPLERCUBE</unmanaged-short>	
-      SamplerCube = unchecked((int)14),
+      /// <summary>A cube sampler.</summary>
+      SamplerCube = 14,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a pixel shader.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_PIXELSHADER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_PIXELSHADER</unmanaged-short>	
-      Pixelshader = unchecked((int)15),
+      /// <summary>A pixel shader.</summary>
+      Pixelshader = 15,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a vertex shader.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_VERTEXSHADER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_VERTEXSHADER</unmanaged-short>	
-      Vertexshader = unchecked((int)16),
+      /// <summary>A vertex shader.</summary>
+      Vertexshader = 16,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a pixel shader.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_PIXELFRAGMENT</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_PIXELFRAGMENT</unmanaged-short>	
-      Pixelfragment = unchecked((int)17),
+      /// <summary>A pixel fragment.</summary>
+      Pixelfragment = 17,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a vertex shader.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_VERTEXFRAGMENT</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_VERTEXFRAGMENT</unmanaged-short>	
-      Vertexfragment = unchecked((int)18),
+      /// <summary>A vertex fragment.</summary>
+      Vertexfragment = 18,
 
-      /// <summary>	
-      /// <dd> <p>The variable is an unsigned integer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_UINT</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_UINT</unmanaged-short>	
-      UInt = unchecked((int)19),
+      /// <summary>A 32-bit unsigned integer.</summary>
+      UInt = 19,
 
-      /// <summary>	
-      /// <dd> <p>The variable is an 8-bit unsigned integer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_UINT8</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_UINT8</unmanaged-short>	
-      UInt8 = unchecked((int)20),
+      /// <summary>An 8-bit unsigned integer.</summary>
+      UInt8 = 20,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a geometry shader.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_GEOMETRYSHADER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_GEOMETRYSHADER</unmanaged-short>	
-      Geometryshader = unchecked((int)21),
+      /// <summary>A geometry shader.</summary>
+      Geometryshader = 21,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a rasterizer-state object.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RASTERIZER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RASTERIZER</unmanaged-short>	
-      Rasterizer = unchecked((int)22),
+      /// <summary>Rasterizer state.</summary>
+      Rasterizer = 22,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a depth-stencil-state object.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_DEPTHSTENCIL</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_DEPTHSTENCIL</unmanaged-short>	
-      Depthstencil = unchecked((int)23),
+      /// <summary>Depth-stencil state.</summary>
+      Depthstencil = 23,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a blend-state object.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_BLEND</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_BLEND</unmanaged-short>	
-      Blend = unchecked((int)24),
+      /// <summary>Blend state.</summary>
+      Blend = 24,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a buffer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_BUFFER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_BUFFER</unmanaged-short>	
-      Buffer = unchecked((int)25),
+      /// <summary>A buffer.</summary>
+      Buffer = 25,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a constant buffer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_CBUFFER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_CBUFFER</unmanaged-short>	
-      ConstantBuffer = unchecked((int)26),
+      /// <summary>A constant buffer.</summary>
+      ConstantBuffer = 26,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a texture buffer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TBUFFER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TBUFFER</unmanaged-short>	
-      TextureBuffer = unchecked((int)27),
+      /// <summary>A texture buffer.</summary>
+      TextureBuffer = 27,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 1D-texture array.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE1DARRAY</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE1DARRAY</unmanaged-short>	
-      Texture1DArray = unchecked((int)28),
+      /// <summary>An array of 1D textures.</summary>
+      Texture1DArray = 28,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 2D-texture array.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE2DARRAY</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE2DARRAY</unmanaged-short>	
-      Texture2DArray = unchecked((int)29),
+      /// <summary>An array of 2D textures.</summary>
+      Texture2DArray = 29,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a render-target view.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RENDERTARGETVIEW</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RENDERTARGETVIEW</unmanaged-short>	
-      Rendertargetview = unchecked((int)30),
+      /// <summary>A render-target view.</summary>
+      Rendertargetview = 30,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a depth-stencil view.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_DEPTHSTENCILVIEW</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_DEPTHSTENCILVIEW</unmanaged-short>	
-      Depthstencilview = unchecked((int)31),
+      /// <summary>A depth-stencil view.</summary>
+      Depthstencilview = 31,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 2D-multisampled texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE2DMS</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE2DMS</unmanaged-short>	
-      Texture2DMultisampled = unchecked((int)32),
+      /// <summary>A multisampled 2D texture.</summary>
+      Texture2DMultisampled = 32,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 2D-multisampled-texture array.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURE2DMSARRAY</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURE2DMSARRAY</unmanaged-short>	
-      Texture2DMultisampledArray = unchecked((int)33),
+      /// <summary>An array of multisampled 2D textures.</summary>
+      Texture2DMultisampledArray = 33,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a texture-cube array.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_TEXTURECUBEARRAY</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_TEXTURECUBEARRAY</unmanaged-short>	
-      TextureCubeArray = unchecked((int)34),
+      /// <summary>An array of cube textures.</summary>
+      TextureCubeArray = 34,
 
-      /// <summary>	
-      /// <dd> <p>The variable holds a compiled hull-shader binary.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_HULLSHADER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_HULLSHADER</unmanaged-short>	
-      Hullshader = unchecked((int)35),
+      /// <summary>A hull shader.</summary>
+      Hullshader = 35,
 
-      /// <summary>	
-      /// <dd> <p>The variable holds a compiled domain-shader binary.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_DOMAINSHADER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_DOMAINSHADER</unmanaged-short>	
-      Domainshader = unchecked((int)36),
+      /// <summary>A domain shader.</summary>
+      Domainshader = 36,
 
-      /// <summary>	
-      /// <dd> <p>The variable is an interface.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_INTERFACE_POINTER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_INTERFACE_POINTER</unmanaged-short>	
-      InterfacePointer = unchecked((int)37),
+      /// <summary>An interface pointer.</summary>
+      InterfacePointer = 37,
 
-      /// <summary>	
-      /// <dd> <p>The variable holds a compiled compute-shader binary.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_COMPUTESHADER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_COMPUTESHADER</unmanaged-short>	
-      Computeshader = unchecked((int)38),
+      /// <summary>A compute shader.</summary>
+      Computeshader = 38,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a double precision (64-bit) floating-point number.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_DOUBLE</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_DOUBLE</unmanaged-short>	
-      Double = unchecked((int)39),
+      /// <summary>A 64-bit float.</summary>
+      Double = 39,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 1D read-and-write texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RWTEXTURE1D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RWTEXTURE1D</unmanaged-short>	
-      RWTexture1D = unchecked((int)40),
+      /// <summary>A 1D texture read and written.</summary>
+      RWTexture1D = 40,
 
-      /// <summary>	
-      /// <dd> <p>The variable is an array of 1D read-and-write textures.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RWTEXTURE1DARRAY</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RWTEXTURE1DARRAY</unmanaged-short>	
-      RWTexture1DArray = unchecked((int)41),
+      /// <summary>An array of 1D textures read and written.</summary>
+      RWTexture1DArray = 41,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 2D read-and-write texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RWTEXTURE2D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RWTEXTURE2D</unmanaged-short>	
-      RWTexture2D = unchecked((int)42),
+      /// <summary>A 2D texture read and written.</summary>
+      RWTexture2D = 42,
 
-      /// <summary>	
-      /// <dd> <p>The variable is an array of 2D read-and-write textures.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RWTEXTURE2DARRAY</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RWTEXTURE2DARRAY</unmanaged-short>	
-      RWTexture2DArray = unchecked((int)43),
+      /// <summary>An array of 2D textures read and written.</summary>
+      RWTexture2DArray = 43,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a 3D read-and-write texture.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RWTEXTURE3D</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RWTEXTURE3D</unmanaged-short>	
-      RWTexture3D = unchecked((int)44),
+      /// <summary>A 3D texture read and written.</summary>
+      RWTexture3D = 44,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a read-and-write buffer.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_RWBUFFER</unmanaged>	
-      /// <unmanaged-short>D3D_SVT_RWBUFFER</unmanaged-short>	
-      StorageImage = unchecked((int)45),
+      /// <summary>A storage image.</summary>
+      StorageImage = 45,
 
-      /// <summary>	
-      /// <dd> <p>The variable is a storage (structured) buffer. </p> <p>For more information about structured buffer, see the <strong>Remarks</strong> section.</p> </dd>	
-      /// </summary>	
-      /// <msdn-id>ff728735</msdn-id>	
-      /// <unmanaged>D3D_SVT_STRUCTURED_BUFFER</unmanaged>
-      /// <unmanaged-short>D3D_SVT_STRUCTURED_BUFFER</unmanaged-short>
-      StorageBuffer = unchecked((int)48),
+      /// <summary>A storage buffer.</summary>
+      StorageBuffer = 48,
 
       /// <summary>A 16-bit signed integer.</summary>
-      /// <unmanaged>D3D_SVT_INT16</unmanaged>
       Int16 = 58,
 
       /// <summary>A 16-bit unsigned integer.</summary>
-      /// <unmanaged>D3D_SVT_UINT16</unmanaged>
       UInt16 = 59,
 
-      /// <summary>A 16-bit floating-point number.</summary>
-      /// <unmanaged>D3D_SVT_FLOAT16</unmanaged>
+      /// <summary>A 16-bit float.</summary>
       Float16 = 60,
 
       /// <summary>A 64-bit signed integer.</summary>
-      /// <unmanaged>D3D_SVT_INT64</unmanaged>
       Int64 = 61,
 
-      /// <summary>A 64-bit unsigned integer, a buffer device address among others.</summary>
-      /// <unmanaged>D3D_SVT_UINT64</unmanaged>
+      /// <summary>A 64-bit unsigned integer.</summary>
       UInt64 = 62,
    }
 }

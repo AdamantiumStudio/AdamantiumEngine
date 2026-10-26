@@ -214,9 +214,6 @@ namespace Adamantium.Graphics
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// This method creates internally a staging resource if this texture is not already a staging resource, copies to it and map it to memory. Use method with explicit staging resource
         /// for optimal performances.</remarks>
-        /// <msdn-id>ff476457</msdn-id>	
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
         public TData[] GetData<TData>() where TData : struct
         {
             var toData = new TData[TotalSize / (ulong)Utilities.SizeOf<TData>()];
@@ -234,9 +231,6 @@ namespace Adamantium.Graphics
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>	
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
         public void GetData<TData>(ref TData toData) where TData : struct
         {
             GCHandle handle = GCHandle.Alloc(toData, GCHandleType.Pinned);
@@ -254,9 +248,6 @@ namespace Adamantium.Graphics
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>	
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
         public void GetData<TData>(TData[] toData) where TData : struct
         {
             GCHandle handle = GCHandle.Alloc(toData, GCHandleType.Pinned);
@@ -273,9 +264,6 @@ namespace Adamantium.Graphics
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>	
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
         public unsafe void GetData(DataPointer toData)
         {
             // Check size validity of data to copy to
@@ -307,12 +295,6 @@ namespace Adamantium.Graphics
         /// <param name="fromData">The data to copy from.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
         /// <exception cref="System.ArgumentException"></exception>
-        /// <remarks>
-        /// See the unmanaged documentation about Map/UnMap for usage and restrictions.
-        /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
         public void SetData<TData>(ref TData fromData, uint offsetInBytes = 0) where TData : struct
         {
             GCHandle handle = GCHandle.Alloc(fromData, GCHandleType.Pinned);
@@ -329,12 +311,6 @@ namespace Adamantium.Graphics
         /// <param name="elementCount">The number of elements to set.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
         /// <exception cref="System.ArgumentException"></exception>
-        /// <remarks>
-        /// See the unmanaged documentation about Map/UnMap for usage and restrictions.
-        /// </remarks>
-        /// <msdn-id>ff476457</msdn-id>
-        /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-        /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
         public unsafe void SetData<TData>(TData[] fromData, uint startIndex = 0, uint elementCount = 0, uint offsetInBytes = 0) where TData : struct
         {
             GCHandle handle = GCHandle.Alloc(fromData, GCHandleType.Pinned);
@@ -372,12 +348,6 @@ namespace Adamantium.Graphics
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
         /// <param name="options">Buffer data behavior.</param>
         /// <exception cref="System.ArgumentException"></exception>
-        /// <msdn-id>ff476457</msdn-id>
-        ///   <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-        ///   <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
-        /// <remarks>
-        /// See the unmanaged documentation about Map/UnMap for usage and restrictions.
-        /// </remarks>
         public void SetData(DataPointer fromData, ulong offsetInBytes = 0)
         {
             // Check size validity of data to copy to
@@ -414,8 +384,6 @@ namespace Adamantium.Graphics
         /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
         /// <param name="description">The description of the buffer.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, BufferCreateInfo description, uint count, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
             return new Buffer(device, description, count, memoryFlags);
@@ -429,9 +397,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, ulong bufferSize, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
             return New(device, bufferSize, (int)bufferSize, bufferFlags, memoryFlags, SharingMode.Exclusive);
@@ -472,9 +437,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, ulong bufferSize, int elementSize, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal, SharingMode sharingMode = SharingMode.Exclusive)
         {
             uint count = (uint)(bufferSize / (ulong)elementSize);
@@ -491,9 +453,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, ulong bufferSize, int elementSize, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
             return New(device, bufferSize, elementSize, bufferFlags, memoryFlags, SharingMode.Exclusive);
@@ -508,9 +467,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer<T> New<T>(IGraphicsDevice device, ref T value, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal) where T : struct
         {
             GCHandle handle = GCHandle.Alloc(value, GCHandleType.Pinned);
@@ -537,9 +493,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer<T> New<T>(IGraphicsDevice device, T[] initialValue, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal) where T : struct
         {
             return New(device, initialValue, bufferFlags, memoryFlags, SharingMode.Exclusive);
@@ -554,9 +507,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer<T> New<T>(IGraphicsDevice device, T[] initialValue, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal, SharingMode sharingMode = SharingMode.Exclusive) where T : struct
         {
             GCHandle handle = GCHandle.Alloc(initialValue, GCHandleType.Pinned);
@@ -583,9 +533,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, byte[] initialValue, int elementSize, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
             GCHandle handle = GCHandle.Alloc(initialValue, GCHandleType.Pinned);
@@ -610,9 +557,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, DataPointer dataPointer, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
             return New(device, dataPointer, bufferFlags, memoryFlags, SharingMode.Exclusive);
@@ -626,9 +570,6 @@ namespace Adamantium.Graphics
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
-        /// <msdn-id>ff476501</msdn-id>
-        /// <unmanaged>HRESULT ID3D11Device::CreateBuffer([In] const D3D11_BUFFER_DESC* pDesc,[In, Optional] const D3D11_SUBRESOURCE_DATA* pInitialData,[Out, Fast] ID3D11Buffer** ppBuffer)</unmanaged>
-        /// <unmanaged-short>ID3D11Device::CreateBuffer</unmanaged-short>
         public static Buffer New(IGraphicsDevice device, DataPointer dataPointer, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal, SharingMode sharingMode = SharingMode.Exclusive)
         {
             return new Buffer(device, bufferFlags, dataPointer, memoryFlags, sharingMode);

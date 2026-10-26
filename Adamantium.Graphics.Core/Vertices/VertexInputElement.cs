@@ -23,7 +23,6 @@ public struct VertexInputElement : IEquatable<VertexInputElement>
    ///   should be aligned directly after the previous element, including any packing if necessary.
    /// </summary>
    /// <returns>A value used to align input elements.</returns>
-   /// <unmanaged>D3D11_APPEND_ALIGNED_ELEMENT</unmanaged>
    public const int AppendAligned = -1;
 
    // Match the last digit of a semantic name.

@@ -4,17 +4,8 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics.Core;
 
-/// <summary>
-/// Values that indicate how the pipeline interprets vertex data that is bound to the input-assembler stage. These primitive topology values determine how the vertex data is rendered on screen.
-/// PrimitiveType is equivalent to <see cref="Adamantium.Vulkan.Core.PrimitiveTopology"/>.
-/// </summary>
-/// <remarks>
-/// This structure is implicitly castable to and from <see cref="Adamantium.Vulkan.Core.PrimitiveTopology"/>, you can use it in place where <see cref="Adamantium.Vulkan.Core.PrimitiveTopology"/> is required
-/// and vice-versa.
-/// </remarks>
-/// <msdn-id>ff728726</msdn-id>	
-/// <unmanaged>D3D_PRIMITIVE_TOPOLOGY</unmanaged>	
-/// <unmanaged-short>D3D_PRIMITIVE_TOPOLOGY</unmanaged-short>
+/// <summary>How vertices are joined into primitives - a Vulkan <see cref="PrimitiveTopology"/>, to and from which it
+/// converts.</summary>
 [StructLayout(LayoutKind.Sequential, Size = 4)]
 public readonly struct PrimitiveType : IEquatable<PrimitiveType>
 {

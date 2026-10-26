@@ -57,9 +57,6 @@ public interface IBuffer: IDisposable
     /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
     /// This method creates internally a staging resource if this texture is not already a staging resource, copies to it and map it to memory. Use method with explicit staging resource
     /// for optimal performances.</remarks>
-    /// <msdn-id>ff476457</msdn-id>	
-    /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-    /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
     TData[] GetData<TData>() where TData : struct;
 
     /// <summary>
@@ -71,9 +68,6 @@ public interface IBuffer: IDisposable
     /// <remarks>
     /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
     /// </remarks>
-    /// <msdn-id>ff476457</msdn-id>	
-    /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-    /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
     void GetData<TData>(ref TData toData) where TData : struct;
 
     /// <summary>
@@ -85,9 +79,6 @@ public interface IBuffer: IDisposable
     /// <remarks>
     /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
     /// </remarks>
-    /// <msdn-id>ff476457</msdn-id>	
-    /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-    /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
     void GetData<TData>(TData[] toData) where TData : struct;
 
     /// <summary>
@@ -98,9 +89,6 @@ public interface IBuffer: IDisposable
     /// <remarks>
     /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
     /// </remarks>
-    /// <msdn-id>ff476457</msdn-id>	
-    /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>	
-    /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>	
     void GetData(DataPointer toData);
 
     nuint MapMemory();
@@ -113,12 +101,6 @@ public interface IBuffer: IDisposable
     /// <param name="fromData">The data to copy from.</param>
     /// <param name="offsetInBytes">The offset in bytes to write to.</param>
     /// <exception cref="System.ArgumentException"></exception>
-    /// <remarks>
-    /// See the unmanaged documentation about Map/UnMap for usage and restrictions.
-    /// </remarks>
-    /// <msdn-id>ff476457</msdn-id>
-    /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-    /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
     void SetData<TData>(ref TData fromData, uint offsetInBytes = 0) where TData : struct;
 
     /// <summary>
@@ -130,12 +112,6 @@ public interface IBuffer: IDisposable
     /// <param name="elementCount">The number of elements to set.</param>
     /// <param name="offsetInBytes">The offset in bytes to write to.</param>
     /// <exception cref="System.ArgumentException"></exception>
-    /// <remarks>
-    /// See the unmanaged documentation about Map/UnMap for usage and restrictions.
-    /// </remarks>
-    /// <msdn-id>ff476457</msdn-id>
-    /// <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-    /// <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
     unsafe void SetData<TData>(TData[] fromData, uint startIndex = 0, uint elementCount = 0, uint offsetInBytes = 0) where TData : struct;
 
     /// <summary>
@@ -144,12 +120,6 @@ public interface IBuffer: IDisposable
     /// <param name="fromData">A data pointer.</param>
     /// <param name="offsetInBytes">The offset in bytes to write to.</param>
     /// <exception cref="System.ArgumentException"></exception>
-    /// <msdn-id>ff476457</msdn-id>
-    ///   <unmanaged>HRESULT ID3D11DeviceContext::Map([In] ID3D11Resource* pResource,[In] unsigned int Subresource,[In] D3D11_MAP MapType,[In] D3D11_MAP_FLAG MapFlags,[Out] D3D11_MAPPED_SUBRESOURCE* pMappedResource)</unmanaged>
-    ///   <unmanaged-short>ID3D11DeviceContext::Map</unmanaged-short>
-    /// <remarks>
-    /// See the unmanaged documentation about Map/UnMap for usage and restrictions.
-    /// </remarks>
     void SetData(DataPointer fromData, ulong offsetInBytes = 0);
 
     UInt64 GetDeviceAddress();

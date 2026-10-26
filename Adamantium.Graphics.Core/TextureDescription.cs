@@ -16,90 +16,31 @@ public struct TextureDescription
     /// </summary>
     public TextureDimension Dimension;
 
-    /// <summary>	
-    /// <dd> <p>Texture width (in texels). The  range is from 1 to 16384. However, the range is actually constrained by the feature level at which you create the rendering device. For more information about restrictions, see Remarks.</p> </dd>	
-    /// </summary>	
-    /// <remarks>
-    /// This field is valid for all textures: <see cref="Texture1D"/>, <see cref="Texture2D"/>, <see cref="Texture3D"/> and <see cref="TextureCube"/>.
-    /// </remarks>
-    /// <msdn-id>ff476252</msdn-id>	
-    /// <unmanaged>unsigned int Width</unmanaged>	
-    /// <unmanaged-short>unsigned int Width</unmanaged-short>	
+    /// <summary>Width in texels, of every texture.</summary>
     public uint Width;
 
-    /// <summary>	
-    /// <dd> <p>Texture height (in texels). The  range is from 1 to 2048. However, the range is actually constrained by the feature level at which you create the rendering device. For more information about restrictions, see Remarks.</p> </dd>	
-    /// </summary>	
-    /// <remarks>
-    /// This field is only valid for <see cref="Texture2D"/>, <see cref="Texture3D"/> and <see cref="TextureCube"/>.
-    /// </remarks>
-    /// <msdn-id>ff476254</msdn-id>	
-    /// <unmanaged>unsigned int Height</unmanaged>	
-    /// <unmanaged-short>unsigned int Height</unmanaged-short>	
+    /// <summary>Height in texels, of 2D, 3D and cube textures.</summary>
     public uint Height;
 
-    /// <summary>	
-    /// <dd> <p>Texture depth (in texels). The  range is from 1 to 2048. However, the range is actually constrained by the feature level at which you create the rendering device. For more information about restrictions, see Remarks.</p> </dd>	
-    /// </summary>	
-    /// <remarks>
-    /// This field is only valid for <see cref="Texture3D"/>.
-    /// </remarks>
-    /// <msdn-id>ff476254</msdn-id>	
-    /// <unmanaged>unsigned int Depth</unmanaged>	
-    /// <unmanaged-short>unsigned int Depth</unmanaged-short>	
+    /// <summary>Depth in texels, of 3D textures.</summary>
     public uint Depth;
 
-    /// <summary>	
-    /// <dd> <p>Number of textures in the array. The  range is from 1 to 2048. However, the range is actually constrained by the feature level at which you create the rendering device. For more information about restrictions, see Remarks.</p> </dd>	
-    /// </summary>	
-    /// <remarks>
-    /// This field is only valid for <see cref="Texture1D"/>, <see cref="Texture2D"/> and <see cref="TextureCube"/>
-    /// </remarks>
-    /// <remarks>
-    /// This field is only valid for textures: <see cref="Texture1D"/>, <see cref="Texture2D"/> and <see cref="TextureCube"/>.
-    /// </remarks>
-    /// <msdn-id>ff476252</msdn-id>	
-    /// <unmanaged>unsigned int ArraySize</unmanaged>	
-    /// <unmanaged-short>unsigned int ArraySize</unmanaged-short>	
+    /// <summary>How many layers the texture has, for 1D, 2D and cube textures.</summary>
     public uint ArrayLayers;
 
-    /// <summary>	
-    /// <dd> <p>The maximum number of mipmap levels in the texture. Use 1 for a multisampled texture; or 0 to generate a full set of subtextures.</p> </dd>	
-    /// </summary>	
-    /// <msdn-id>ff476252</msdn-id>	
-    /// <unmanaged>unsigned int MipLevels</unmanaged>	
-    /// <unmanaged-short>unsigned int MipLevels</unmanaged-short>	
+    /// <summary>How many mip levels the texture has.</summary>
     public uint MipLevels;
 
-    /// <summary>	
-    /// <dd> <p>Texture format (see <strong><see cref="Adamantium.Vulkan.Core.Format"/></strong>).</p> </dd>	
-    /// </summary>	
-    /// <msdn-id>ff476252</msdn-id>	
-    /// <unmanaged>DXGI_FORMAT Format</unmanaged>	
-    /// <unmanaged-short>DXGI_FORMAT Format</unmanaged-short>	
+    /// <summary>The texels' format.</summary>
     public Format Format;
 
-    /// <summary>	
-    /// <dd> <p>Structure that specifies multisampling parameters for the texture. See <strong><see cref="SampleCountFlagBits"/></strong>.</p> </dd>	
-    /// </summary>	
-    /// <remarks>
-    /// This field is only valid for <see cref="Texture2D"/>.
-    /// </remarks>
-    /// <unmanaged-short>DXGI_SAMPLE_DESC SampleDesc</unmanaged-short>	
+    /// <summary>Samples a texel, for 2D textures.</summary>
     public MSAALevel Samples;
 
-    /// <summary>	
-    /// <dd> <p>Value that identifies how the texture is to be read from and written to.</p> </dd>	
-    /// </summary>	
-    /// <unmanaged-short>ImageUsageFlagBits</unmanaged-short>	
+    /// <summary>What the texture is used for.</summary>
     public ImageUsageFlagBits Usage;
 
-    /// <summary>	
-    /// <dd> <p>Flags (see <strong><see cref="SharingMode"/></strong>) for binding to pipeline stages. The flags can be combined by a logical OR. For a 1D texture, the allowable values are: <see cref="BindFlags.ShaderResource"/>, <see cref="BindFlags.RenderTarget"/> and <see cref="BindFlags.DepthStencil"/>.</p> </dd>	
-    /// </summary>	
-    /// <msdn-id>ff476252</msdn-id>	
-    /// <unmanaged>D3D11_BIND_FLAG BindFlags</unmanaged>	
-    /// <unmanaged-short>D3D11_BIND_FLAG BindFlags</unmanaged-short>	
+    /// <summary>Whether queue families share the texture.</summary>
     public SharingMode SharingMode;
 
     public ImageTiling ImageTiling;
