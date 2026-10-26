@@ -164,7 +164,12 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     void RemoveResource(GraphicsResource resource);
     
     void AddToDeferDisposeQueue(IDisposable obj);
-    
+
+    /// <summary>Copies <paramref name="data"/> into this frame's upload pages and gives the copy's device address, for a
+    /// shader to read through a pointer. It lives as long as the frame's constants do. The address differs every frame,
+    /// so a draw a recording replays must not take it: the replay would never match its recording.</summary>
+    ulong UploadFrameData<T>(ReadOnlySpan<T> data) where T : unmanaged;
+
     IEffectResourceLinker CreateEffectResourceLinker();
     
     IEffectPass CreateEffectPass(Logger logger, Effect effect, EffectTechnique technique, EffectData.Pass pass, string name);

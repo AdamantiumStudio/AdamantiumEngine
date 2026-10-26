@@ -1,7 +1,4 @@
-// A skinned mesh's vertex and how the joints it names are blended, shared by the effects that draw one.
-
-// The most joints one skinned draw takes; a vertex naming one past them is held at the last.
-#define MAX_JOINTS 128
+// A skinned mesh's vertex, shared by the effects that draw one.
 
 struct SKINNED_VERTEX
 {
@@ -17,23 +14,3 @@ struct SKINNED_VERTEX
     float4 jointIndices : BLENDINDICES;
     float4 jointWeights : BLENDWEIGHT;
 };
-
-// Which joints a vertex names, held within MAX_JOINTS.
-uint4 JointSlots(float4 indices)
-{
-    return (uint4)clamp(indices, 0, MAX_JOINTS - 1);
-}
-
-// The four joints' matrices blended by the vertex's weights, a weight below zero taken as none; a vertex weighed to none
-// stays where it is.
-float4x4 BlendJoints(float4x4 a, float4x4 b, float4x4 c, float4x4 d, float4 weights)
-{
-    weights = max(weights, 0);
-    float total = weights.x + weights.y + weights.z + weights.w;
-    if (total < 1e-6f)
-    {
-        return float4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-    }
-
-    return (a * weights.x + b * weights.y + c * weights.z + d * weights.w) / total;
-}

@@ -87,10 +87,10 @@ float SlantShift(float4 synthesis, float cornerY, float height)
     return (synthesis.z - cornerY) * height * synthesis.y;
 }
 
-Texture2DArray Texture : register(t1);
-SamplerState TextureSampler : register(s1);
+Texture2DArray Texture;
+SamplerState TextureSampler;
 // Color glyph images ('CBDT', 'sbix'): premultiplied, each in a cell with its own mip chain.
-Texture2DArray ColorTexture : register(t2);
+Texture2DArray ColorTexture;
 
 float4x4 MatrixTransform;
 float2 TextureCornerCoords[4];
