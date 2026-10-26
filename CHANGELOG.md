@@ -1601,6 +1601,15 @@ All packages share one version.
 
 ### Changed
 
+- Text runs on both sides of an exclusion in a frame, as Word's square wrapping does: a row's line goes on in the next
+  stretch past the exclusion, in the order its paragraph reads - right of it, or left of it in a paragraph running
+  right to left - before the next row starts. It used to run in the widest stretch only, so a picture moved past the
+  middle of a column took the text from one side to the other. A line starts a row of its own when it opens a
+  paragraph with room above, reads the other way, stands on a baseline grid elsewhere, would not fit the frame, or
+  is one a drop cap stands beside; a stretch narrower than two ems is still left empty. `MaxLines` counts the lines,
+  so two beside each other are two. `HitTest` finds the line of a row nearest the point, the caret of an empty line
+  stands in its own stretch, and `TextLayout.GetLineBeyond` gives the line one row down or up keeping the caret's
+  column - into the next frame, the row's first line.
 - PNG is read and written by a new codec, written from PNG's third edition and APNG. It reads every color type and
   depth, Adam7, palettes and tRNS, and APNG's frames composed as APNG says (dispose None, Background and Previous;
   blend Source and Over), decoded when first asked for; a 16-bit file comes out RGBA16 now, no longer cut to 8 bits.

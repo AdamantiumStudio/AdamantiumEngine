@@ -28,7 +28,7 @@ public class TextFrameTests
 
     private static TextLayout Layout(string text, RectangleF[] frames, RectangleF[] exclusions = null,
         LineBreaking breaking = LineBreaking.Greedy, HorizontalTextAlignment alignment = HorizontalTextAlignment.Left,
-        DropCap dropCap = null)
+        DropCap dropCap = null, TextDirection direction = TextDirection.Auto)
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0])
@@ -38,6 +38,7 @@ public class TextFrameTests
             Exclusions = exclusions,
             LineBreaking = breaking,
             DropCap = dropCap,
+            Direction = direction,
         };
         layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
@@ -135,6 +136,161 @@ public class TextFrameTests
         var layout = Layout(Prose, [frame], [exclusion]);
 
         Assert.That(layout.GetLine(1).Top, Is.EqualTo(2 * LineHeight).Within(1e-3));
+    }
+
+    // Word's "square" wrapping on both sides: a row runs on past the exclusion before the next row starts.
+    [TestCase(TextDirection.LeftToRight)]
+    [TestCase(TextDirection.RightToLeft)]
+    public void AnExclusionInTheMiddle_HasTextOnBothSides_ARowReadInTheTextsOrder(TextDirection direction)
+    {
+        var frame = new RectangleF(0, 0, 400, (float)(10 * LineHeight));
+        var exclusion = new RectangleF(160, 0, 80, (float)(2 * LineHeight - 1));
+        var layout = Layout(Prose, [frame], [exclusion], direction: direction);
+        var first = direction == TextDirection.LeftToRight ? (Left: 0f, Right: 160f) : (Left: 240f, Right: 400f);
+        var second = direction == TextDirection.LeftToRight ? (Left: 240f, Right: 400f) : (Left: 0f, Right: 160f);
+
+        Assert.Multiple(() =>
+        {
+            for (var line = 0; line < 4; line++)
+            {
+                var side = line % 2 == 0 ? first : second;
+                Assert.That(Ink(layout, line).Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(side.Left - 0.5),
+                    $"line {line}");
+                Assert.That(Ink(layout, line).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(side.Right + 0.5),
+                    $"line {line}");
+                Assert.That(layout.GetLine(line).Top, Is.EqualTo(line / 2 * LineHeight).Within(1e-3), $"line {line}");
+            }
+
+            Assert.That(layout.GetLine(4).Top, Is.EqualTo(2 * LineHeight).Within(1e-3), "past it, a row of one line");
+            Assert.That(layout.GetLine(5).Top, Is.EqualTo(3 * LineHeight).Within(1e-3));
+        });
+    }
+
+    [Test]
+    public void AParagraphBesideAnExclusion_GoesOnBesideIt_UnlessItKeepsRoomAbove()
+    {
+        var typeface = SourceSans.Value;
+        AttributedText Two(double spaceBefore)
+        {
+            var text = new AttributedText("one" + (char)0x2029 + "two words more");
+            text.SetParagraph(0, 4, new ParagraphAttributes());
+            text.SetParagraph(4, 14, new ParagraphAttributes { SpaceBefore = spaceBefore });
+            return text;
+        }
+
+        TextLayout Lay(double spaceBefore)
+        {
+            var layout = new TextLayout(typeface, typeface.Fonts[0])
+            {
+                Fallback = null,
+                Frames = [new RectangleF(0, 0, 400, (float)(10 * LineHeight))],
+                Exclusions = [new RectangleF(160, 0, 80, (float)(3 * LineHeight))],
+            };
+            layout.ProcessText(Two(spaceBefore), FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+                TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+            return layout;
+        }
+
+        var beside = Lay(0);
+        var spaced = Lay(10);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(beside.GetLine(1).Top, Is.EqualTo(beside.GetLine(0).Top).Within(1e-3));
+            Assert.That(Ink(beside, 1).Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(239.5));
+            Assert.That(spaced.GetLine(1).Top, Is.EqualTo(LineHeight + 10).Within(1e-3), "a row of its own");
+            Assert.That(Ink(spaced, 1).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(160.5));
+        });
+    }
+
+    [Test]
+    public void ADropCapBesideAnExclusionInTheMiddle_IsStillSet_ItsLinesOneARow()
+    {
+        var frame = new RectangleF(0, 0, 400, (float)(10 * LineHeight));
+        var exclusion = new RectangleF(200, 0, 80, (float)(5 * LineHeight));
+        var layout = Layout(Prose, [frame], [exclusion], dropCap: new DropCap(3));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetTextData().Any(g => g.FontSize > FontSize), "the drop cap");
+            Assert.That(layout.GetLine(1).Top, Is.GreaterThan(layout.GetLine(0).Top));
+            Assert.That(layout.GetLine(2).Top, Is.GreaterThan(layout.GetLine(1).Top));
+        });
+    }
+
+    [Test]
+    public void AnEmptyLineBesideAnExclusion_HasItsCaretInItsOwnStretch()
+    {
+        var frame = new RectangleF(0, 0, 400, (float)(10 * LineHeight));
+        var layout = Layout("Hello\n\nWorld", [frame], [new RectangleF(160, 0, 80, (float)(2 * LineHeight - 1))]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetLine(1).Top, Is.EqualTo(layout.GetLine(0).Top).Within(1e-3), "beside the first");
+            Assert.That(layout.GetCaretRect(new CaretPosition(6), 1).X, Is.GreaterThanOrEqualTo(239.5));
+        });
+    }
+
+    [Test]
+    public void ParagraphsReadingEachTheirOwnWay_TakeTheirStretchesInTheirOrder()
+    {
+        var frame = new RectangleF(0, 0, 400, (float)(10 * LineHeight));
+        var exclusion = new RectangleF(160, 0, 80, (float)(4 * LineHeight - 1));
+        var hebrew = string.Join(' ', Enumerable.Repeat("עברית", 30));
+        var layout = Layout("one\n" + hebrew, [frame], [exclusion]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetLine(1).Top, Is.EqualTo(LineHeight).Within(1e-3), "the other way, a row of its own");
+            Assert.That(Ink(layout, 1).Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(239.5), "the right first");
+            Assert.That(layout.GetLine(2).Top, Is.EqualTo(LineHeight).Within(1e-3));
+            Assert.That(Ink(layout, 2).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(160.5));
+        });
+    }
+
+    [Test]
+    public void AnArrowPastTheEmptyLastLine_OfAFullFrame_GoesNowhereAmiss()
+    {
+        var layout = Layout("one two\n", [new RectangleF(0, 0, 400, (float)LineHeight + 1)],
+            [new RectangleF(300, 0, 20, 5)]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.DoesNotThrow(() => layout.GetLineBeyond(0, 10, true));
+            Assert.DoesNotThrow(() => layout.GetLineBeyond(layout.LineCount - 1, 10, false));
+        });
+    }
+
+    [Test]
+    public void AStretchTooNarrowForText_IsLeftEmpty()
+    {
+        var frame = new RectangleF(0, 0, 400, (float)(10 * LineHeight));
+        var exclusion = new RectangleF(20, 0, 200, (float)(LineHeight - 1));
+        var layout = Layout(Prose, [frame], [exclusion]);
+
+        Assert.That(Ink(layout, 0).Min(g => g.Rect.Left), Is.GreaterThanOrEqualTo(220));
+        Assert.That(layout.GetLine(1).Top, Is.EqualTo(LineHeight).Within(1e-3));
+    }
+
+    [Test]
+    public void AClickOrAnArrowBesideAnExclusion_FindsTheLineOnItsSide()
+    {
+        var frame = new RectangleF(0, 0, 400, (float)(10 * LineHeight));
+        var exclusion = new RectangleF(160, 0, 80, (float)(2 * LineHeight - 1));
+        var layout = Layout(Prose, [frame], [exclusion]);
+        var right = layout.GetLine(1);
+
+        var hit = layout.HitTest(300, right.Top + right.Height / 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hit.CaretIndex, Is.InRange(right.Start, right.End));
+            Assert.That(layout.GetLineBeyond(0, 50, true), Is.EqualTo(2), "down from the left, the left below");
+            Assert.That(layout.GetLineBeyond(1, 300, true), Is.EqualTo(3), "down from the right, the right");
+            Assert.That(layout.GetLineBeyond(3, 300, true), Is.EqualTo(4), "past it, the one line of the row below");
+            Assert.That(layout.GetLineBeyond(4, 50, false), Is.EqualTo(2));
+            Assert.That(layout.GetLineBeyond(0, 50, false), Is.EqualTo(-1));
+        });
     }
 
     [Test]

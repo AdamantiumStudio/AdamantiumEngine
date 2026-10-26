@@ -328,22 +328,30 @@ internal sealed class LineComposer
         var lineParagraph = ParagraphOf(0);
         var paragraphOpenLine = 0;
         var lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
+        var plainRightToLeft = text.Length > 0 && IsRightToLeftParagraph(0);
         double pendingGap = 0;
         var lineStates = new List<(ParagraphAttributes Paragraph, bool Opens, bool RightToLeft, double Gap)>();
         HashSet<int> linesAfterBreaks = null;
         double verticalShift = 0;
         Size? realTextDimensions = null;
         int[] laidOutLineFrames = null;
+        (double Left, double Right)[] laidOutLineSpans = null;
         var lineBreaks = renderingParameters.TextWrapping == TextWrapping.WrapByWords
             ? TextBoundaries.LineBreaks(text)
             : null;
         var slots = lineBreaks != null && frames is { Count: > 0 }
             ? new List<(int Frame, double Left, double Right, double Top, double Unsnapped)>()
             : null;
-        // Per slot: where the next one is looked for (frame, top, rows tried in it), and the room above and the height
-        // it was found for, so a line that turns out otherwise finds its slot again.
-        var slotCursors = new List<(int Frame, double Top, int Rows)>();
-        var slotBases = new List<(double Gap, double Height, bool Gridded)>();
+        // Per slot: where the next one is looked for - the frame, the top of the next row and the rows tried in it; for
+        // a line beside it in its row, the edge its stretch ends at, which way it reads and the row's tops - and the
+        // room above and the height it was found for, so a line that turns out otherwise finds its slot again.
+        var slotCursors =
+            new List<(int Frame, double Top, int Rows, double Beside, bool RightToLeft, double RowTop,
+                double RowUnsnapped)>();
+        var slotBases = new List<(double Gap, double Height, bool Gridded, bool RightToLeft)>();
+        List<(double Left, double Right)> rowSpans = [];
+        List<(double Left, double Right)> spansLeft = [];
+        List<bool> lineReads = [];
         var frameRects = slots != null ? frames.ToArray() : null;
         if (slots != null && !HasSlot(0))
         {
@@ -426,6 +434,7 @@ internal sealed class LineComposer
             lineParagraph = ParagraphOf(0);
             paragraphOpenLine = 0;
             lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
+            plainRightToLeft = text.Length > 0 && IsRightToLeftParagraph(0);
             pendingGap = 0;
         }
 
@@ -684,6 +693,7 @@ internal sealed class LineComposer
             LineSpacing = lineSpacing,
             ColumnsRight = columnsRight,
             LineFrames = laidOutLineFrames,
+            LineSpans = laidOutLineSpans,
             FrameRects = frameRects,
             LineOverAnExclusion = lineOverAnExclusion,
             Paragraphs = paragraphs,
@@ -1549,6 +1559,7 @@ internal sealed class LineComposer
             {
                 lineStates.Add((lineParagraph, lineStates.Count == paragraphOpenLine, lineRightToLeft,
                     lineStates.Count == line ? gap : 0));
+                lineReads.Add(plainRightToLeft);
             }
 
             ForgetSlotsFrom(line, gap);
@@ -1563,14 +1574,14 @@ internal sealed class LineComposer
             }
 
             var (lineBaseline, lineBox) = MeasuredLine(line);
-            var (frame, next, rows) = slotCursors[line];
+            var cursor = slotCursors[line];
             var bottom = OnGrid(slots[line].Unsnapped, lineBaseline, line) + lineBox + SpacingAfter(line);
-            if (bottom <= next + 1e-6)
+            if (bottom <= cursor.Top + 1e-6)
             {
                 return;
             }
 
-            slotCursors[line] = (frame, bottom, rows);
+            slotCursors[line] = cursor with { Top = bottom };
             if (slots.Count > line + 1)
             {
                 slots.RemoveRange(line + 1, slots.Count - line - 1);
@@ -1661,7 +1672,8 @@ internal sealed class LineComposer
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
         void ForgetSlotsFrom(int line, double gap)
         {
-            if (slots != null && line < slots.Count && slotBases[line] != (gap, SlotHeight(line), GridsLine(line)))
+            if (slots != null && line < slots.Count &&
+                slotBases[line] != (gap, SlotHeight(line), GridsLine(line), ReadsRightToLeft(line)))
             {
                 slots.RemoveRange(line, slots.Count - line);
                 slotCursors.RemoveRange(line, slotCursors.Count - line);
@@ -1767,21 +1779,40 @@ internal sealed class LineComposer
             return true;
         }
 
-        // The next line's slot: below the line before by the room its paragraph keeps (none at the top of a frame), as
-        // tall as its own lines, in the widest stretch the exclusions leave if it is wide enough.
+        // The next line's slot: in the row of the line before, in a stretch the exclusions leave past its own in the
+        // order the line reads; else below it by the room its paragraph keeps (none at the top of a frame), as tall as
+        // its own lines, in the first stretch wide enough.
         bool AddSlot()
         {
             var line = slots.Count;
             var gap = line < lineStates.Count ? lineStates[line].Gap : line == paragraphOpenLine ? pendingGap : 0;
             var rowHeight = SlotHeight(line);
-            var (f, top, rows) = line == 0 ? (0, (double)frames[0].Top, 0) : slotCursors[line - 1];
+            var rightToLeft = ReadsRightToLeft(line);
+            var (f, top, rows, beside, besideRightToLeft, rowAt, rowUnsnapped) = line == 0
+                ? (0, (double)frames[0].Top, 0, double.NaN, false, 0.0, 0.0)
+                : slotCursors[line - 1];
+            var from = -1;
+            var pushedOn = pushed != null && pushed.TryGetValue(line, out from) && f < from;
+            if (exclusions is { Count: > 0 } && !double.IsNaN(beside) && besideRightToLeft == rightToLeft && gap <= 0 &&
+                !pushedOn && !(dropEnd > 0 && line < options.DropCap.Lines) &&
+                Math.Abs(OnGrid(rowUnsnapped, RowBaseline(line), line) - rowAt) < 1e-6 &&
+                rowAt + rowHeight <= frames[f].Bottom + 1e-6 &&
+                SpanPast(frames[f], rowAt, rowHeight, beside, rightToLeft) is { } next)
+            {
+                slots.Add((f, next.Left - frames[f].Left, next.Right - frames[f].Left, rowAt, rowUnsnapped));
+                slotCursors.Add((f, Math.Max(top, rowAt + rowHeight + SpacingAfter(line)), rows,
+                    rightToLeft ? next.Left : next.Right, rightToLeft, rowAt, rowUnsnapped));
+                slotBases.Add((gap, rowHeight, GridsLine(line), rightToLeft));
+                return true;
+            }
+
             if (rows > 0)
             {
                 top += gap;
             }
 
             // A line an earlier layout found too tall for the rest of its frame starts in a later one.
-            if (pushed != null && pushed.TryGetValue(line, out var from) && f < from)
+            if (pushedOn)
             {
                 f = from;
                 rows = 0;
@@ -1804,11 +1835,13 @@ internal sealed class LineComposer
                 rows++;
                 var unsnapped = top;
                 top = rowTop + rowHeight + SpacingAfter(line);
-                if (WidestSpan(frame, rowTop, rowHeight) is { } widest)
+                var edge = rightToLeft ? double.PositiveInfinity : double.NegativeInfinity;
+                if (SpanPast(frame, rowTop, rowHeight, edge, rightToLeft) is { } first)
                 {
-                    slots.Add((f, widest.Left - frame.Left, widest.Right - frame.Left, rowTop, unsnapped));
-                    slotCursors.Add((f, top, rows));
-                    slotBases.Add((gap, rowHeight, GridsLine(line)));
+                    slots.Add((f, first.Left - frame.Left, first.Right - frame.Left, rowTop, unsnapped));
+                    slotCursors.Add((f, top, rows, rightToLeft ? first.Left : first.Right, rightToLeft, rowTop,
+                        unsnapped));
+                    slotBases.Add((gap, rowHeight, GridsLine(line), rightToLeft));
                     return true;
                 }
             }
@@ -1816,9 +1849,31 @@ internal sealed class LineComposer
             return false;
         }
 
-        (double Left, double Right)? WidestSpan(RectangleF frame, double top, double rowHeight)
+        bool ReadsRightToLeft(int line) => paragraphRuns != null ? LineState(line).RightToLeft
+            : line < lineReads.Count ? lineReads[line]
+            : plainRightToLeft;
+
+        (double Left, double Right)? SpanPast(RectangleF frame, double top, double rowHeight, double edge,
+            bool rightToLeft)
         {
-            List<(double Left, double Right)> spans = [(frame.Left, frame.Right)];
+            var spans = Spans(frame, top, rowHeight);
+            for (var i = 0; i < spans.Count; i++)
+            {
+                var span = spans[rightToLeft ? spans.Count - 1 - i : i];
+                var past = rightToLeft ? span.Right <= edge + 1e-6 : span.Left >= edge - 1e-6;
+                if (past && span.Right - span.Left >= 2 * fontSize)
+                {
+                    return span;
+                }
+            }
+
+            return null;
+        }
+
+        List<(double Left, double Right)> Spans(RectangleF frame, double top, double rowHeight)
+        {
+            rowSpans.Clear();
+            rowSpans.Add((frame.Left, frame.Right));
             foreach (var exclusion in exclusions ?? [])
             {
                 if (exclusion.Top >= top + rowHeight || exclusion.Bottom <= top)
@@ -1826,25 +1881,24 @@ internal sealed class LineComposer
                     continue;
                 }
 
-                List<(double Left, double Right)> rest = [];
-                foreach (var (left, right) in spans)
+                spansLeft.Clear();
+                foreach (var (left, right) in rowSpans)
                 {
                     if (exclusion.Left > left)
                     {
-                        rest.Add((left, Math.Min(right, exclusion.Left)));
+                        spansLeft.Add((left, Math.Min(right, exclusion.Left)));
                     }
 
                     if (exclusion.Right < right)
                     {
-                        rest.Add((Math.Max(left, exclusion.Right), right));
+                        spansLeft.Add((Math.Max(left, exclusion.Right), right));
                     }
                 }
 
-                spans = rest;
+                (rowSpans, spansLeft) = (spansLeft, rowSpans);
             }
 
-            var widest = spans.OrderByDescending(span => span.Right - span.Left).FirstOrDefault();
-            return spans.Count > 0 && widest.Right - widest.Left >= 2 * fontSize ? widest : null;
+            return rowSpans;
         }
 
         (ParagraphAttributes Paragraph, bool Opens, bool RightToLeft) LineState(int line) => line < lineStates.Count
@@ -1860,6 +1914,11 @@ internal sealed class LineComposer
         // empty line after the text's last break starts one only after a paragraph separator.
         void BreakInto(int next, int openLine)
         {
+            if (paragraphRuns == null && next < text.Length)
+            {
+                plainRightToLeft = IsRightToLeftParagraph(next);
+            }
+
             var paragraph = ParagraphOf(next);
             var startsHere = AttributedText.ParagraphIn(paragraphRuns, next, text.Length)?.Start == next;
             if (paragraphRuns == null || next > text.Length
@@ -2536,11 +2595,13 @@ internal sealed class LineComposer
             var shiftsX = new double[lineCount];
             var shiftsY = new double[lineCount];
             var lettersShiftsY = new double[lineCount];
+            var spans = new (double Left, double Right)[lineCount];
             for (var i = 0; i < lineCount; i++)
             {
                 var slot = SlotOf(i);
                 lineFrames[i] = slot.Frame;
                 shiftsX[i] = frames[slot.Frame].Left;
+                spans[i] = (frames[slot.Frame].Left + slot.Left, frames[slot.Frame].Left + slot.Right);
                 var top = OnGrid(slot.Unsnapped, lineBaselines[i], i);
                 shiftsY[i] = top - lineTops[i];
                 lettersShiftsY[i] = Math.Round(top + lineBaselines[i]) - Math.Round(lineTops[i] + lineBaselines[i]);
@@ -2558,6 +2619,7 @@ internal sealed class LineComposer
             }
 
             laidOutLineFrames = lineFrames;
+            laidOutLineSpans = spans;
         }
 
         // The first line that came out taller than the room its slot was found for and reaches into an exclusion beside
