@@ -75,49 +75,6 @@ limitations under the License.
 
 ---
 
-## FJCore — JPEG codec
-
-**Where:** `Adamantium.Imaging/Jpeg/` (22 files: decoder, encoder, DCT, colour models, filters)
-
-A pure C# JPEG codec, originally a Fluxcapacity Open Source project by Jeffrey Powers, later mirrored on GitHub after
-Google Code shut down. Upstream is no longer maintained — the last code change was in 2016 — which changes nothing about
-the grant: an MIT licence, once given, is not withdrawn by a project going quiet.
-
-Our copy diverged from upstream long ago and keeps diverging: it was reworked to fit this engine's imaging types, and
-most recently the inverse DCT was rebuilt for speed and a forced `GC.Collect()` taken out of the decode path. Those
-changes are this project's; the notice below covers what they were made to.
-
-```
-Copyright (c) 2008 Jeffrey Powers for Fluxcapacity Open Source.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-Later maintainers of the same codebase state their copyright as
-`(c) 2008-2009 Occipital Open Source, (c) 2010-2013 Brian Donahue, (c) 2012-2013 Anders Gustafsson, Cureos AB`,
-under the same licence.
-
-**What it supports**, so nobody expects more from it than it has: baseline (SOF0) and progressive (SOF2) JPEG. Not
-JPEG 2000 — that is a different format built on wavelets, and there is no code for it here.
-
----
-
 ## HarfBuzz — Arabic shaper, modified combining classes, vertical forms, `stch`, fallback marks, Hebrew composition
 
 **Where:** `Adamantium.Fonts/Shaping/ArabicShaper.cs`, `Adamantium.Fonts/Shaping/ArabicFallback.cs`, `GetModifiedCombiningClass` in

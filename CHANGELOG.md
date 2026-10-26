@@ -10,8 +10,10 @@ All packages share one version.
 - `TiffReader`: a TIFF raster too large to hold whole, read a tile or a window at a time - opening reads only the
   file's structure. `Levels` are the full-resolution image and its reduced-resolution copies (from the directory chain
   or SubIFDs), largest first; `ReadTile` reads all bands or one (only that band's plane when the file keeps bands
-  apart), `ReadWindow` any rectangle, decoding only the rows of a tile inside the level; `HasTile` tells a tile the
-  file leaves out, `TiffLevel.TileArea` the part of an edge tile inside the level - the rest reads as zeros. Samples
+  apart), `ReadWindow` any rectangle, decoding only the rows of a tile inside the level and the tiles under it on the
+  thread pool, as many at once as 64 MB of decoding buffers allow; `HasTile` tells a tile the file leaves out - it reads as `NoData` when the samples can
+  hold that value, else as zeros - and `TiffLevel.TileArea` the part of an edge tile inside the level - the rest reads
+  as zeros. Samples
   come as the file holds them, not as colors (`TiffLevel`: bands, bits, `TiffSampleFormat`, `TiffPhotometric`, the
   color map, the alpha band, the orientation). Opened on a path it reads at offsets from any number of threads at once;
   on a seekable stream reads take turns. A compression it cannot read refuses the file when it is opened.
@@ -19,7 +21,9 @@ All packages share one version.
   and pixel scale or a matrix, half a pixel off for `PixelIsPoint`, control points as they are; the model type, the
   projected, geographic and vertical systems by EPSG code, and every key by number with its short, double or text
   values (`TiffGeoKey`); `Resampled`/`GeoReferenceOf` for a reduced-resolution copy. GDAL's no-data value
-  (`NoData`) and metadata - per band scale, offset and description (`Bands`), and the rest (`Metadata`).
+  (`NoData`, as the samples hold it - rounded to a float for float samples; infinities and NaN as C runtimes print
+  them, MSVC's too) and metadata - per band scale, offset and description (`Bands`), and the rest (`Metadata`).
+  Checked against GDAL 3.12 on Natural Earth, USGS 3DEP, Landsat 8 and GDAL's own test files.
 - TIFF, read and written, written from the specifications (TIFF 6.0, its Technical Notes, BigTIFF, ITU-T T.4/T.6).
   `Image.Load` and `BitmapLoader` read any common TIFF: strips or tiles, classic or BigTIFF, either byte order;
   uncompressed, PackBits, LZW (also the TIFF 5.0 kind), Deflate, CCITT run lengths, Group 3 and Group 4 fax, JPEG;
@@ -31,10 +35,17 @@ All packages share one version.
   frame, in strips or tiles (`TiffSaveOptions`), uncompressed, PackBits, LZW or Deflate with a predictor - Deflate by
   default - and BigTIFF when the file would pass 4 GB; `Image.Save` writes TIFF. A broken or hostile file fails with
   `InvalidDataException` or `NotSupportedException`: lengths are bounded by the file, a picture no array holds is
-  refused before it is decoded, and only the rows of a tile inside the image are decoded. A broken link after the first
+  refused before it is decoded, and only the rows of a tile inside the image are decoded; a compressed strip or tile
+  is not read past 16 times its decoded size and 64 KB, more than any codec needs; a field that only describes
+  the image (resolution, color profile, geotags, GDAL's) whose values would run past the file's end is left out, as if
+  the file did not have it. A broken link after the first
   page leaves the pages before it. LERC-compressed files are refused: the
   format has no specification.
 - `JpegDecoder.ComponentsAreRgb`: three components taken as RGB as they are, as TIFF stores JPEG of RGB data.
+- `JpegImage(width, height, format, pixels)`: the picture made from its pixels.
+- `JpegEncoder.Encode(image, output, quality)`: a picture written as JPEG at a quality of 1 to 100, from gray, RGB,
+  BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100.
+- `JpegDecoder.Size`: the picture's size from its frame header, decoding nothing - what the preview is an eighth of.
 - `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
   application asks before it offers the heap as a choice, and what the device goes by.
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
@@ -1568,6 +1579,17 @@ All packages share one version.
 
 ### Changed
 
+- JPEG is decoded and encoded by the engine's own codec, written from ITU-T T.81, JFIF (T.871) and Adobe's APP14 - the
+  FJCore code it replaces is gone, and its third-party notice with it. It reads baseline, extended and progressive
+  frames of 8 and 12 bits, restart intervals and DNL, gray, YCbCr, RGB, CMYK and YCCK, any subsampling whose factors
+  divide the largest - halves stretched smoothly between the samples' centers - and streams without Huffman tables (by
+  T.81's K.3 ones). A picture comes out RGBA8, RGBA16 for 12 bits. The scans of a file with restart intervals are
+  decoded side by side, a progressive file's inverse DCT and the colors by rows on the thread pool; the
+  eighth-scale `DecodePreview` works for any file and size, and skips a progressive file's AC scans. TIFF reads JPEG
+  of planes, of four samples and of 12 bits, its JPEGTables read once. Against libjpeg-turbo (Pillow 13, which decodes
+  on one thread) a 10800×5400 photograph decodes in 1.3 times its time, in a fifth of it with restart intervals,
+  measured on 48 cores; the encoder writes
+  baseline JFIF with Huffman tables made for the picture (K.2).
 - The packages' icons are the redrawn Adamantium family: the mark and the package's letters drawn in Inter.
 - `MainGraphicsDevice.DescriptorHeapManager` and `GraphicsDevice.DescriptorHeapManager` are `DescriptorManager`, an
   `IDescriptorManager`; `IGraphicsDeviceFactory.CreateDescriptorHeapManager` is `CreateDescriptorManager(device,
@@ -1753,6 +1775,10 @@ All packages share one version.
 
 ### Removed
 
+- With FJCore: the `Adamantium.Imaging.Jpeg.Decoder` and `Encoder` namespaces (`JpegDecoder` is in
+  `Adamantium.Imaging.Jpeg`), `PreviewNotAvailableException` (every file previews), `JpegDecoder.BlockUpsamplingMode`
+  and `ExtractHeaders`, `JpegHeader`, the JPEG filters and resizer, `ComponentsBuffer`, `ComponentBufferType`,
+  `RawBitmapExtension.ToComponentsBuffer` and `PixelBuffer.GetComponents`.
 - `ADAM_FRAMES_IN_FLIGHT`: the frames in flight are `GraphicsSettings.FramesInFlight`.
 - `AnimationComponent.StartingKeyFrame` and `EndingKeyFrame`: nothing read what was set in them, and a key's number
   is no range of a clip whose channels key at their own times. A clip is chosen by name and played by speed, pause and

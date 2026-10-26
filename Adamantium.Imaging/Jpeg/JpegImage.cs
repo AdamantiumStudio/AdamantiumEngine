@@ -1,62 +1,51 @@
-using System.Collections.Generic;
-using Adamantium.Imaging.Jpeg.Decoder;
-
 namespace Adamantium.Imaging.Jpeg;
 
+/// <summary>A JPEG's picture: one frame of pixels in one format.</summary>
 public class JpegImage : IRawBitmap
 {
-    private List<JpegFrame> _frames;
-    private FrameData _defaultFrame;
+    private readonly byte[] _pixels;
+    private FrameData _frame;
 
-    public JpegImage()
+    /// <summary>A picture of <paramref name="width"/> × <paramref name="height"/> <paramref name="pixels"/> in
+    /// <paramref name="format"/>, rows top to bottom.</summary>
+    public JpegImage(uint width, uint height, SurfaceFormat format, byte[] pixels)
     {
-        _frames = new List<JpegFrame>();
+        Width = width;
+        Height = height;
+        PixelFormat = format;
+        _pixels = pixels;
     }
 
-    public uint Width { get; set; }
-    public uint Height { get; set; }
-    public SurfaceFormat PixelFormat { get; set; }
-    
+    public uint Width { get; }
+
+    public uint Height { get; }
+
+    public SurfaceFormat PixelFormat { get; }
+
     public bool IsMultiFrame => false;
+
     public bool HasMipLevels => false;
+
     public uint MipLevelsCount => 0;
+
     public uint NumberOfReplays => 0;
-    public uint FramesCount => (uint)_frames.Count;
-    public byte[] GetRawPixels(uint frameIndex)
-    {
-        return FramesCount == 1 ? _frames[0].PixelData : _frames[(int)frameIndex].PixelData;
-    }
 
-    internal void AddFrame(JpegFrame frame)
-    {
-        _frames.Add(frame);
-    }
+    public uint FramesCount => 1;
 
-    public FrameData GetMipLevelData(uint mipLevel)
-    {
-        return GetFrameData(0);
-    }
+    public byte[] GetRawPixels(uint frameIndex) => _pixels;
 
-    public ImageDescription GetImageDescription()
-    {
-        ImageDescription description = new ImageDescription();
-        description.Width = Width;
-        description.Height = Height;
-        description.Depth = 1;
-        description.Dimension = TextureDimension.Texture2D;
-        description.ArraySize = 1;
-        description.MipLevels = 1;
-        description.Format = PixelFormat;
-        return description;
-    }
+    public FrameData GetMipLevelData(uint mipLevel) => GetFrameData(0);
 
-    public FrameData GetFrameData(uint frameIndex)
+    public ImageDescription GetImageDescription() => new()
     {
-        if (FramesCount > 1)
-        {
-            return new FrameData(GetRawPixels(frameIndex), GetImageDescription());
-        }
+        Width = Width,
+        Height = Height,
+        Depth = 1,
+        Dimension = TextureDimension.Texture2D,
+        ArraySize = 1,
+        MipLevels = 1,
+        Format = PixelFormat
+    };
 
-        return _defaultFrame ??= new FrameData(GetRawPixels(0), GetImageDescription());
-    }
+    public FrameData GetFrameData(uint frameIndex) => _frame ??= new FrameData(_pixels, GetImageDescription());
 }

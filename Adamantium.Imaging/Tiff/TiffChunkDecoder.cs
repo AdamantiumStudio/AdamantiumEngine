@@ -1,6 +1,9 @@
 using System;
 using System.Buffers.Binary;
 using System.IO;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using Adamantium.Imaging.Jpeg;
 
 namespace Adamantium.Imaging.Tiff;
 
@@ -14,9 +17,12 @@ internal sealed class TiffChunkDecoder
     private readonly TiffLayout _layout;
     private readonly bool _littleEndian;
     private readonly long _chunkBytes;
+    private readonly long _inputLimit;
     private byte[] _chunk;
     private byte[] _compressed;
     private byte[] _native;
+    private JpegStream _jpegTables;
+    private bool _jpegTablesRead;
 
     /// <summary>A decoder of <paramref name="layout"/>'s strips or tiles; one the reader cannot take throws
     /// <see cref="NotSupportedException"/>, a broken one <see cref="InvalidDataException"/>.</summary>
@@ -37,7 +43,31 @@ internal sealed class TiffChunkDecoder
         }
 
         _chunkBytes = chunkBytes;
+        _inputLimit = InputLimit(chunkBytes);
     }
+
+    /// <summary>The most bytes of one compressed strip or tile of <paramref name="layout"/> a decoder reads and keeps:
+    /// the largest the file gives, up to what a compression can take to hold it.</summary>
+    public static long InputBytes(TiffLayout layout)
+    {
+        if (layout.Compression == TiffCompression.None)
+        {
+            return 0;
+        }
+
+        ulong largest = 0;
+        foreach (var count in layout.ChunkByteCounts)
+        {
+            largest = Math.Max(largest, count);
+        }
+
+        var rows = Math.Min(layout.ChunkHeight, layout.Height);
+        return (long)Math.Min(largest, (ulong)InputLimit(ChunkBytes(layout, rows)));
+    }
+
+    // No codec needs more than this to fill a strip or tile - CCITT, the most at worst, takes about 7 bits for a
+    // pixel of one - so a file that claims more is not read past it.
+    private static long InputLimit(long chunkBytes) => 16 * chunkBytes + 65536;
 
     /// <summary>Bytes of each sample's container.</summary>
     public int Container { get; }
@@ -149,7 +179,8 @@ internal sealed class TiffChunkDecoder
         }
 
         if (layout.Compression == TiffCompression.Jpeg
-            && (layout.BitsPerSample != 8 || layout.IsPlanar || layout.SamplesPerPixel is not (1 or 3)))
+            && (layout.BitsPerSample is not (8 or 12) || layout.SamplesPerChunk is not (1 or 3 or 4)
+                || layout.IsPlanar && layout.Photometric == TiffPhotometric.YCbCr))
         {
             throw new NotSupportedException($"TIFF JPEG of {layout.SamplesPerPixel} samples of "
                                             + $"{layout.BitsPerSample} bits, {(layout.IsPlanar ? "planar" : "together")}.");
@@ -183,6 +214,11 @@ internal sealed class TiffChunkDecoder
         }
 
         var remaining = Math.Min(count, (ulong)_source.Length - offset);
+        if (_layout.Compression != TiffCompression.None)
+        {
+            remaining = Math.Min(remaining, (ulong)_inputLimit);
+        }
+
         if (remaining > (ulong)Array.MaxLength)
         {
             throw new NotSupportedException($"TIFF strip or tile {index} of {remaining} bytes is more than one array "
@@ -201,10 +237,10 @@ internal sealed class TiffChunkDecoder
 
     private void Read(int index, Span<byte> output)
     {
-        output.Clear();
         var count = Available(index, _layout.ChunkRows(index / _layout.ChunksAcross % _layout.ChunksDown));
         if (count == 0)
         {
+            output.Clear();
             return;
         }
 
@@ -233,34 +269,41 @@ internal sealed class TiffChunkDecoder
             ReverseBits(input);
         }
 
-        Decompress(input, output);
+        output[Decompress(input, output)..].Clear();
     }
 
-    private void Decompress(ReadOnlySpan<byte> input, Span<byte> output)
+    // Returns the bytes written from the start of output; past them it is cleared.
+    private int Decompress(ReadOnlySpan<byte> input, Span<byte> output)
     {
         switch (_layout.Compression)
         {
             case TiffCompression.PackBits:
-                TiffPackBits.Decode(input, output);
-                break;
+                return TiffPackBits.Decode(input, output);
             case TiffCompression.Lzw:
-                TiffLzw.Decode(input, output);
-                break;
+                return TiffLzw.Decode(input, output);
             case TiffCompression.Deflate:
             case TiffCompression.OldDeflate:
-                TiffDeflate.Decode(input, output);
-                break;
+                return TiffDeflate.Decode(input, output);
             case TiffCompression.CcittRle:
             case TiffCompression.CcittGroup3:
             case TiffCompression.CcittGroup4:
+                output.Clear();
                 TiffCcitt.Decode(input, output, _layout.ChunkWidth, _layout.Compression,
                     _layout.Directory.GetUnsigned(TiffTag.T4Options, 0));
-                break;
+                return output.Length;
             case TiffCompression.Jpeg:
-                TiffJpeg.Decode(input, _layout.Directory[TiffTag.JpegTables]?.Bytes.ToArray(),
+                output.Clear();
+                if (!_jpegTablesRead)
+                {
+                    var field = _layout.Directory[TiffTag.JpegTables];
+                    _jpegTables = field == null ? null : TiffJpeg.Tables(field.Bytes);
+                    _jpegTablesRead = true;
+                }
+
+                TiffJpeg.Decode(input, _jpegTables,
                     _layout.Photometric == TiffPhotometric.Rgb, _layout.ChunkWidth, _layout.ChunkHeight,
-                    _layout.SamplesPerChunk, output);
-                break;
+                    _layout.SamplesPerChunk, _layout.BitsPerSample, output);
+                return output.Length;
             default:
                 throw new NotSupportedException($"TIFF compression {_layout.Compression} is not read.");
         }
@@ -342,29 +385,38 @@ internal sealed class TiffChunkDecoder
 
     private static void UndoHorizontalPredictor(Span<byte> row, int size, int stride)
     {
-        var count = row.Length / size;
-        for (var i = stride; i < count; i++)
+        if (!BitConverter.IsLittleEndian && size > 1)
         {
-            var at = row.Slice(i * size, size);
-            var before = row.Slice((i - stride) * size, size);
-            switch (size)
-            {
-                case 1:
-                    at[0] += before[0];
-                    break;
-                case 2:
-                    BinaryPrimitives.WriteUInt16LittleEndian(at, (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(at)
-                        + BinaryPrimitives.ReadUInt16LittleEndian(before)));
-                    break;
-                case 4:
-                    BinaryPrimitives.WriteUInt32LittleEndian(at, BinaryPrimitives.ReadUInt32LittleEndian(at)
-                        + BinaryPrimitives.ReadUInt32LittleEndian(before));
-                    break;
-                default:
-                    BinaryPrimitives.WriteUInt64LittleEndian(at, BinaryPrimitives.ReadUInt64LittleEndian(at)
-                        + BinaryPrimitives.ReadUInt64LittleEndian(before));
-                    break;
-            }
+            SwapBytes(row, size);
+        }
+
+        switch (size)
+        {
+            case 1:
+                Accumulate(row, stride);
+                break;
+            case 2:
+                Accumulate(MemoryMarshal.Cast<byte, ushort>(row), stride);
+                break;
+            case 4:
+                Accumulate(MemoryMarshal.Cast<byte, uint>(row), stride);
+                break;
+            default:
+                Accumulate(MemoryMarshal.Cast<byte, ulong>(row), stride);
+                break;
+        }
+
+        if (!BitConverter.IsLittleEndian && size > 1)
+        {
+            SwapBytes(row, size);
+        }
+    }
+
+    private static void Accumulate<T>(Span<T> samples, int stride) where T : struct, IBinaryInteger<T>
+    {
+        for (var i = stride; i < samples.Length; i++)
+        {
+            samples[i] += samples[i - stride];
         }
     }
 
@@ -453,9 +505,28 @@ internal sealed class TiffChunkDecoder
 
     private static void SwapBytes(Span<byte> data, int size)
     {
-        for (var i = 0; i + size <= data.Length; i += size)
+        var whole = data[..(data.Length / size * size)];
+        switch (size)
         {
-            data.Slice(i, size).Reverse();
+            case 2:
+                var shorts = MemoryMarshal.Cast<byte, ushort>(whole);
+                BinaryPrimitives.ReverseEndianness(shorts, shorts);
+                break;
+            case 4:
+                var ints = MemoryMarshal.Cast<byte, uint>(whole);
+                BinaryPrimitives.ReverseEndianness(ints, ints);
+                break;
+            case 8:
+                var longs = MemoryMarshal.Cast<byte, ulong>(whole);
+                BinaryPrimitives.ReverseEndianness(longs, longs);
+                break;
+            default:
+                for (var i = 0; i < whole.Length; i += size)
+                {
+                    whole.Slice(i, size).Reverse();
+                }
+
+                break;
         }
     }
 

@@ -1,8 +1,14 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Adamantium.Imaging.Tiff;
 
@@ -15,10 +21,17 @@ public sealed class TiffReader : IDisposable
 {
     private const int MaxLevels = 32;
 
+    // What the decoders of one level keep in buffers, decoding at once and pooled - at least one decoder, whatever its
+    // strips or tiles take.
+    private const long DecoderMemory = 64L << 20;
+
     private readonly ITiffSource _source;
     private readonly bool _littleEndian;
     private readonly TiffLevel[] _levels;
     private readonly ConcurrentBag<TiffChunkDecoder>[] _decoders;
+    private readonly int[] _pooled;
+    private readonly int[] _decoderLimits;
+    private readonly byte[][] _fills;
     private volatile bool _disposed;
 
     private TiffReader(ITiffSource source, bool littleEndian, TiffDirectory page, List<(TiffLevel, TiffChunkDecoder)> levels)
@@ -27,9 +40,15 @@ public sealed class TiffReader : IDisposable
         _littleEndian = littleEndian;
         _levels = levels.Select(level => level.Item1).ToArray();
         _decoders = levels.Select(ConcurrentBag<TiffChunkDecoder> (level) => [level.Item2]).ToArray();
+        _pooled = levels.Select(_ => 1).ToArray();
+        _decoderLimits = levels.Select(level => (int)Math.Clamp(DecoderMemory / Math.Max(1,
+                2 * level.Item2.NativeChunkBytes + TiffChunkDecoder.InputBytes(level.Item1.Layout)), 1,
+            Environment.ProcessorCount)).ToArray();
         Levels = Array.AsReadOnly(_levels);
         GeoReference = TiffTry.Read(() => TiffGeoReference.Read(page), null);
-        NoData = TiffTry.Read(() => TiffGdalMetadata.NoData(page), null);
+        NoData = AsSample(TiffTry.Read(() => TiffGdalMetadata.NoData(page), null), _levels[0]);
+        var exact = TiffTry.Read(() => TiffGdalMetadata.IntegerNoData(page), default);
+        _fills = _levels.Select(level => Fill(NoData, exact, level)).ToArray();
         var (metadata, bands) = TiffTry.Read(() => TiffGdalMetadata.Read(page, _levels[0].Bands),
             TiffGdalMetadata.Read(null, _levels[0].Bands));
         Metadata = metadata;
@@ -42,7 +61,9 @@ public sealed class TiffReader : IDisposable
     /// <summary>Where the full-resolution image lies, for a GeoTIFF; null for a file without its tags.</summary>
     public TiffGeoReference GeoReference { get; }
 
-    /// <summary>The value that means "no data" in every band (GDAL_NODATA); null when the file gives none.</summary>
+    /// <summary>The value that means "no data" in every band (GDAL_NODATA), as the samples hold it - rounded to a
+    /// float of 16, 24 or 32 bits for samples of that size; integers of 64 bits past 2^53 only as near as a double
+    /// comes. Null when the file gives none.</summary>
     public double? NoData { get; }
 
     /// <summary>GDAL's metadata of the whole raster, by item name.</summary>
@@ -89,8 +110,8 @@ public sealed class TiffReader : IDisposable
     }
 
     /// <summary>Whether the file holds tile (<paramref name="column"/>, <paramref name="row"/>) of
-    /// <paramref name="level"/>, any band of it; a tile it leaves out reads as zeros, which may mean no data rather than
-    /// a value.</summary>
+    /// <paramref name="level"/>, any band of it. A tile it leaves out reads as <see cref="NoData"/> when the samples can
+    /// hold that value, else as zeros.</summary>
     public bool HasTile(int level, int column, int row)
     {
         var at = Level(level);
@@ -105,7 +126,8 @@ public sealed class TiffReader : IDisposable
 
     /// <summary>Reads tile (<paramref name="column"/>, <paramref name="row"/>) of <paramref name="level"/>, all bands,
     /// into the first <see cref="TiffLevel.TileBytes"/> of <paramref name="destination"/>. Pixels of the tile outside
-    /// the level (<see cref="TiffLevel.TileArea"/>), and a tile the file leaves out, come out zero.</summary>
+    /// the level (<see cref="TiffLevel.TileArea"/>) come out zero; a tile the file leaves out reads as
+    /// <see cref="HasTile"/> says.</summary>
     public void ReadTile(int level, int column, int row, Span<byte> destination) =>
         ReadTile(level, column, row, -1, destination);
 
@@ -136,8 +158,12 @@ public sealed class TiffReader : IDisposable
         }
 
         var tile = destination[..(int)length];
-        tile.Clear();
         var (columns, rows) = at.TileArea(column, row);
+        if (columns < at.TileWidth || rows < at.TileHeight)
+        {
+            tile.Clear();
+        }
+
         Decode(level, column, row, band, 0, 0, columns, rows, tile, at.TileWidth);
     }
 
@@ -145,7 +171,8 @@ public sealed class TiffReader : IDisposable
     /// (<paramref name="x"/>, <paramref name="y"/>) of <paramref name="level"/>, all bands, into
     /// <paramref name="destination"/> - <paramref name="width"/> × <paramref name="height"/> ×
     /// <see cref="TiffLevel.Bands"/> × <see cref="TiffLevel.BytesPerSample"/> bytes, rows top to bottom - gathered from
-    /// the tiles under it, decoding only their rows inside the level.</summary>
+    /// the tiles under it, decoding only their rows inside the level - the tiles on the thread pool, as many at once as
+    /// 64 MB of decoding buffers allow.</summary>
     public void ReadWindow(int level, int x, int y, int width, int height, Span<byte> destination)
     {
         var at = Level(level);
@@ -166,19 +193,47 @@ public sealed class TiffReader : IDisposable
             return;
         }
 
-        for (var row = y / at.TileHeight; row <= (int)(((long)y + height - 1) / at.TileHeight); row++)
+        var firstColumn = x / at.TileWidth;
+        var firstRow = y / at.TileHeight;
+        var columns = (int)(((long)x + width - 1) / at.TileWidth) - firstColumn + 1;
+        var tiles = (long)columns * ((int)(((long)y + height - 1) / at.TileHeight) - firstRow + 1);
+        if (tiles == 1)
         {
-            for (var column = x / at.TileWidth; column <= (int)(((long)x + width - 1) / at.TileWidth); column++)
+            DecodeInto(level, firstColumn, firstRow, x, y, width, height, destination);
+            return;
+        }
+
+        unsafe
+        {
+            fixed (byte* pointer = destination)
             {
-                var left = Math.Max(x, (long)column * at.TileWidth);
-                var right = Math.Min((long)x + width, ((long)column + 1) * at.TileWidth);
-                var top = Math.Max(y, (long)row * at.TileHeight);
-                var bottom = Math.Min((long)y + height, ((long)row + 1) * at.TileHeight);
-                var into = destination[(int)(((top - y) * width + left - x) * at.Bands * at.BytesPerSample)..];
-                Decode(level, column, row, -1, (int)(left - (long)column * at.TileWidth),
-                    (int)(top - (long)row * at.TileHeight), (int)(right - left), (int)(bottom - top), into, width);
+                var address = (nint)pointer;
+                var bytes = destination.Length;
+                try
+                {
+                    var options = new ParallelOptions { MaxDegreeOfParallelism = _decoderLimits[level] };
+                    Parallel.For(0L, tiles, options, tile => DecodeInto(level, firstColumn + (int)(tile % columns),
+                        firstRow + (int)(tile / columns), x, y, width, height, new Span<byte>((byte*)address, bytes)));
+                }
+                catch (AggregateException failure) when (failure.InnerExceptions.Count > 0)
+                {
+                    ExceptionDispatchInfo.Capture(failure.InnerExceptions[0]).Throw();
+                }
             }
         }
+    }
+
+    private void DecodeInto(int level, int column, int row, int x, int y, int width, int height,
+        Span<byte> destination)
+    {
+        var at = _levels[level];
+        var left = Math.Max(x, (long)column * at.TileWidth);
+        var right = Math.Min((long)x + width, ((long)column + 1) * at.TileWidth);
+        var top = Math.Max(y, (long)row * at.TileHeight);
+        var bottom = Math.Min((long)y + height, ((long)row + 1) * at.TileHeight);
+        var into = destination[(int)(((top - y) * width + left - x) * at.Bands * at.BytesPerSample)..];
+        Decode(level, column, row, -1, (int)(left - (long)column * at.TileWidth),
+            (int)(top - (long)row * at.TileHeight), (int)(right - left), (int)(bottom - top), into, width);
     }
 
     /// <summary>Closes the file, or the stream unless it was to be left open; reading after throws
@@ -264,6 +319,153 @@ public sealed class TiffReader : IDisposable
             : throw new ArgumentOutOfRangeException(nameof(level), $"The TIFF raster has {_levels.Length} levels.");
     }
 
+    private static void Gather(ReadOnlySpan<byte> from, int fromStep, Span<byte> to, int toStep, int count, int bytes)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        if ((long)(count - 1) * fromStep + bytes > from.Length || (long)(count - 1) * toStep + bytes > to.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        ref var source = ref MemoryMarshal.GetReference(from);
+        ref var target = ref MemoryMarshal.GetReference(to);
+        switch (bytes)
+        {
+            case 1:
+                for (var i = 0; i < count; i++)
+                {
+                    Unsafe.Add(ref target, i * toStep) = Unsafe.Add(ref source, i * fromStep);
+                }
+
+                break;
+            case 2:
+                Copy<ushort>(ref source, fromStep, ref target, toStep, count);
+                break;
+            case 4:
+                Copy<uint>(ref source, fromStep, ref target, toStep, count);
+                break;
+            case 8:
+                Copy<ulong>(ref source, fromStep, ref target, toStep, count);
+                break;
+            default:
+                for (var i = 0; i < count; i++)
+                {
+                    from.Slice(i * fromStep, bytes).CopyTo(to[(i * toStep)..]);
+                }
+
+                break;
+        }
+    }
+
+    private static void Copy<T>(ref byte source, int fromStep, ref byte target, int toStep, int count)
+        where T : unmanaged
+    {
+        for (var i = 0; i < count; i++)
+        {
+            Unsafe.WriteUnaligned(ref Unsafe.Add(ref target, i * toStep),
+                Unsafe.ReadUnaligned<T>(ref Unsafe.Add(ref source, i * fromStep)));
+        }
+    }
+
+    private static double? AsSample(double? value, TiffLevel level) => value is { } number
+                                                                       && level.SampleFormat == TiffSampleFormat.Float
+        ? level.BitsPerSample switch
+        {
+            16 => (double)(Half)number,
+            24 => Float24(number),
+            32 => (float)number,
+            _ => number
+        }
+        : value;
+
+    // A float of 24 bits: 16 bits of mantissa, exponents from -62 (below them, steps of 2^-78) to 63. The value
+    // rounded to it once, to nearest, ties to even; past the largest it is infinite.
+    private static float Float24(double value)
+    {
+        if (!double.IsFinite(value) || value == 0)
+        {
+            return (float)value;
+        }
+
+        var magnitude = Math.Abs(value);
+        var step = Math.ScaleB(1.0, Math.Max(Math.ILogB(magnitude), -62) - 16);
+        var rounded = Math.Round(magnitude / step, MidpointRounding.ToEven) * step;
+        return (float)Math.CopySign(rounded > Math.ScaleB(2 - Math.ScaleB(1.0, -16), 63) ? double.PositiveInfinity
+            : rounded, value);
+    }
+
+    // The integer, when the text is one, is taken as it is: a double rounds those past 2^53.
+    private static byte[] Fill(double? noData, (long? Signed, ulong? Unsigned) exact, TiffLevel level)
+    {
+        if (noData is not { } value || value == 0)
+        {
+            return null;
+        }
+
+        var size = level.BytesPerSample;
+        var sample = new byte[size];
+        if (level.SampleFormat == TiffSampleFormat.Float)
+        {
+            switch (size)
+            {
+                case 2:
+                    BinaryPrimitives.WriteHalfLittleEndian(sample, (Half)value);
+                    break;
+                case 4:
+                    BinaryPrimitives.WriteSingleLittleEndian(sample, (float)value);
+                    break;
+                default:
+                    BinaryPrimitives.WriteDoubleLittleEndian(sample, value);
+                    break;
+            }
+
+            return sample;
+        }
+
+        var bits = level.BitsPerSample;
+        var signed = level.SampleFormat == TiffSampleFormat.SignedInteger;
+        ulong raw;
+        if (signed && exact.Signed is { } whole)
+        {
+            if (bits < 64 && (whole < -(1L << (bits - 1)) || whole >= 1L << (bits - 1)))
+            {
+                return null;
+            }
+
+            raw = (ulong)whole;
+        }
+        else if (!signed && exact.Unsigned is { } natural)
+        {
+            if (bits < 64 && natural >= 1UL << bits)
+            {
+                return null;
+            }
+
+            raw = natural;
+        }
+        else
+        {
+            var (low, high) = signed ? (-Math.Pow(2, bits - 1), Math.Pow(2, bits - 1)) : (0, Math.Pow(2, bits));
+            if (value != Math.Floor(value) || value < low || value >= high)
+            {
+                return null;
+            }
+
+            raw = signed ? (ulong)(long)value : (ulong)value;
+        }
+
+        for (var b = 0; b < size; b++)
+        {
+            sample[b] = (byte)(raw >> (8 * b));
+        }
+
+        return sample;
+    }
+
     private static void CheckTile(TiffLevel at, int column, int row)
     {
         if ((uint)column >= (uint)at.TilesAcross)
@@ -283,20 +485,50 @@ public sealed class TiffReader : IDisposable
         var at = _levels[level];
         var size = at.BytesPerSample;
         var outBands = band < 0 ? at.Bands : 1;
-        var decoder = _decoders[level].TryTake(out var pooled)
-            ? pooled
-            : new TiffChunkDecoder(_source, at.Layout, _littleEndian);
+        TiffChunkDecoder decoder;
+        if (_decoders[level].TryTake(out var pooled))
+        {
+            Interlocked.Decrement(ref _pooled[level]);
+            decoder = pooled;
+        }
+        else
+        {
+            decoder = new TiffChunkDecoder(_source, at.Layout, _littleEndian);
+        }
+
         try
         {
-            for (var line = 0; line < height; line++)
+            var (firstPlane, lastPlane) = !at.Layout.IsPlanar ? (0, 0) : band < 0 ? (0, at.Bands - 1) : (band, band);
+            var missing = false;
+            for (var plane = firstPlane; plane <= lastPlane; plane++)
             {
-                destination.Slice((int)((long)line * destinationWidth * outBands * size), width * outBands * size)
-                    .Clear();
+                missing |= !decoder.Holds(column, row, plane);
             }
 
-            IEnumerable<int> planes = at.Layout.IsPlanar ? band < 0 ? Enumerable.Range(0, at.Bands) : [band] : [0];
-            foreach (var plane in planes.Where(plane => decoder.Holds(column, row, plane)))
+            for (var line = 0; missing && line < height; line++)
             {
+                var into = destination.Slice((int)((long)line * destinationWidth * outBands * size),
+                    width * outBands * size);
+                if (_fills[level] == null)
+                {
+                    into.Clear();
+                    continue;
+                }
+
+                _fills[level].CopyTo(into);
+                for (var filled = size; filled < into.Length; filled *= 2)
+                {
+                    into[..Math.Min(filled, into.Length - filled)].CopyTo(into[filled..]);
+                }
+            }
+
+            for (var plane = firstPlane; plane <= lastPlane; plane++)
+            {
+                if (!decoder.Holds(column, row, plane))
+                {
+                    continue;
+                }
+
                 decoder.Decode(column, row, plane, decoder.Native);
                 var inBands = at.Layout.IsPlanar ? 1 : at.Bands;
                 var firstBand = at.Layout.IsPlanar ? 0 : Math.Max(band, 0);
@@ -313,19 +545,20 @@ public sealed class TiffReader : IDisposable
                         continue;
                     }
 
-                    for (var x = 0; x < width; x++)
-                    {
-                        decoder.Native.AsSpan((int)(from + ((long)x * inBands + firstBand) * size), bandsCopied * size)
-                            .CopyTo(destination[(int)(to + ((long)x * outBands + outBand) * size)..]);
-                    }
+                    Gather(decoder.Native.AsSpan((int)(from + firstBand * size)), inBands * size,
+                        destination[(int)(to + outBand * size)..], outBands * size, width, bandsCopied * size);
                 }
             }
         }
         finally
         {
-            if (_decoders[level].Count < Environment.ProcessorCount)
+            if (Interlocked.Increment(ref _pooled[level]) <= _decoderLimits[level])
             {
                 _decoders[level].Add(decoder);
+            }
+            else
+            {
+                Interlocked.Decrement(ref _pooled[level]);
             }
         }
     }

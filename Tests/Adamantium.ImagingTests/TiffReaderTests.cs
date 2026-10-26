@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Adamantium.Imaging.Tiff;
 using NUnit.Framework;
@@ -198,6 +199,59 @@ public class TiffReaderTests
         using var reader = TiffReader.Open(new MemoryStream(file));
 
         Assert.That((reader.HasTile(0, 0, 0), reader.HasTile(0, 1, 0)), Is.EqualTo((true, false)));
+    }
+
+    // GDAL's sparse files: a tile left out is no data, read as the no-data value when the samples can hold it.
+    [TestCase("7", 7)]
+    [TestCase("-1", 0)]
+    [TestCase("2.5", 0)]
+    public void ATileTheFileLeavesOut_ReadsAsNoData(string noData, int expected)
+    {
+        var text = Encoding.ASCII.GetBytes(noData + "\0").Select(b => (ulong)b).ToArray();
+        var file = HandMadeTiff.Build(Enumerable.Repeat((byte)5, 256).ToArray(),
+            [.. TiledGray(32, 16, [8, 0, 8, 8], [256, 0, 256, 256]), (42113, 2, text)]);
+        using var reader = TiffReader.Open(new MemoryStream(file));
+        var window = new byte[32 * 32];
+        var tile = new byte[256];
+
+        reader.ReadWindow(0, 0, 0, 32, 32, window);
+        reader.ReadTile(0, 1, 0, tile);
+
+        Assert.That((window[0], window[16], window[16 * 32 + 16]), Is.EqualTo((5, expected, 5)));
+        Assert.That(tile, Has.All.EqualTo(expected));
+    }
+
+    // A tile that claims a megabyte for 256 pixels is read, and kept, only as far as any codec needs: 16 times its
+    // pixels and 64 KB.
+    [Test]
+    public void ACompressedTileOfPadding_IsNotReadPastWhatACodecNeeds()
+    {
+        var file = HandMadeTiff.Build(new byte[1 << 20], TiledGray(16, 16, [8], [1 << 20], compression: 5));
+        var tiff = TiffFile.Open(new TiffMemorySource(file));
+
+        Assert.That(TiffChunkDecoder.InputBytes(TiffLayout.Read(tiff.Directories[0])), Is.EqualTo(16 * 256 + 65536));
+    }
+
+    // Integers of 64 bits past 2^53 fill a tile left out as written, not as near as a double comes.
+    [TestCase(1, "9223372036854775807", 9223372036854775807UL)]
+    [TestCase(1, "18446744073709551615", ulong.MaxValue)]
+    [TestCase(2, "-9223372036854775808", 0x8000000000000000UL)]
+    [TestCase(2, "9007199254740993", 9007199254740993UL)]
+    public void A64BitNoData_FillsATileLeftOutExactly(int format, string noData, ulong expected)
+    {
+        var text = Encoding.ASCII.GetBytes(noData + "\0").Select(b => (ulong)b).ToArray();
+        (ushort, ushort, ulong[])[] fields =
+        [
+            (256, 4, [32]), (257, 4, [16]), (258, 3, [64]), (259, 3, [1]), (262, 3, [1]), (322, 4, [16]),
+            (323, 4, [16]), (324, 4, [8, 0]), (325, 4, [2048, 0]), (339, 3, [(ulong)format]), (42113, 2, text)
+        ];
+        using var reader = TiffReader.Open(new MemoryStream(HandMadeTiff.Build(new byte[2048], fields)));
+        var tile = new byte[2048];
+
+        reader.ReadTile(0, 1, 0, tile);
+
+        Assert.That(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, ulong>(tile).ToArray(),
+            Has.All.EqualTo(expected));
     }
 
     [Test]

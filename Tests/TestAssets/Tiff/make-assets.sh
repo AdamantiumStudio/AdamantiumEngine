@@ -41,6 +41,8 @@ rgba8 bilevel-g4-lsb
 magick base-rgb.png -compress jpeg -quality 92 jpeg-rgb.tif; rgba8 jpeg-rgb
 magick base-gray.png -compress jpeg -quality 92 jpeg-gray.tif; rgba8 jpeg-gray
 magick base-rgb.png -compress jpeg -quality 92 -define tiff:tile-geometry=32x32 jpeg-tiled.tif; rgba8 jpeg-tiled
+magick base-rgb.png -interlace plane -compress jpeg -quality 92 jpeg-planar.tif; rgba8 jpeg-planar
+magick base.png -compress jpeg -quality 92 jpeg-rgba.tif; rgba8 jpeg-rgba
 python3 -I -c "
 from PIL import Image
 source = Image.open('base-rgb.png').convert('RGB')

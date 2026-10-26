@@ -4,7 +4,6 @@ using Adamantium.Imaging.Dds;
 using Adamantium.Imaging.Gif;
 using Adamantium.Imaging.Ico;
 using Adamantium.Imaging.Jpeg;
-using Adamantium.Imaging.Jpeg.Decoder;
 using Adamantium.Imaging.Png;
 using Adamantium.Imaging.Png.Chunks;
 using Adamantium.Imaging.Tga;
@@ -26,17 +25,9 @@ public static class ImageExtension
                 }
             case ImageFileType.Jpg:
                 {
-                    var img = new JpegImage();
-                    img.Width = image.Description.Width;
-                    img.Height = image.Description.Height;
-                    img.PixelFormat = image.Description.Format;
-                    var frame = new JpegFrame();
                     var pxBuffer = image.PixelBuffer[0];
-                    frame.PixelData = pxBuffer.GetPixels<byte>();
-                    frame.Width = (ushort)pxBuffer.Width;
-                    frame.Height = (ushort)pxBuffer.Height;
-                    img.AddFrame(frame);
-                    return img;
+                    return new JpegImage((uint)pxBuffer.Width, (uint)pxBuffer.Height, image.Description.Format,
+                        pxBuffer.GetPixels<byte>());
                 }
             case ImageFileType.Png:
                 {

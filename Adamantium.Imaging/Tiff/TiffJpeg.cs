@@ -1,7 +1,8 @@
 using System;
+using System.Buffers;
+using System.Buffers.Binary;
 using System.IO;
 using Adamantium.Imaging.Jpeg;
-using Adamantium.Imaging.Jpeg.Decoder;
 
 namespace Adamantium.Imaging.Tiff;
 
@@ -10,53 +11,88 @@ namespace Adamantium.Imaging.Tiff;
 internal static class TiffJpeg
 {
     /// <summary>Decodes one strip or tile into <paramref name="output"/> as rows of <paramref name="width"/> pixels of
-    /// <paramref name="samples"/> 8-bit samples: gray, or RGB - YCbCr data is converted. A stream whose frame is larger
-    /// than <paramref name="width"/> × <paramref name="height"/>, or that the JPEG decoder cannot read, throws
-    /// <see cref="InvalidDataException"/>.</summary>
-    public static void Decode(ReadOnlySpan<byte> input, byte[] tables, bool rgb, int width, int height, int samples,
-        Span<byte> output)
+    /// <paramref name="samples"/> samples of <paramref name="bits"/> - 8, or 12 packed as TIFF keeps them: gray, RGB -
+    /// YCbCr data converted - or CMYK. Rows of the frame past the output are left out. A stream whose frame is wider
+    /// than <paramref name="width"/> or taller than <paramref name="height"/>, or that does not match the samples, or
+    /// that the JPEG decoder cannot read, throws <see cref="InvalidDataException"/>.</summary>
+    public static void Decode(ReadOnlySpan<byte> input, JpegStream tables, bool rgb, int width, int height,
+        int samples, int bits, Span<byte> output)
     {
-        byte[] stream = tables is { Length: > 4 } && input is [0xFF, 0xD8, ..]
-            ? [.. tables.AsSpan(0, tables.Length - 2), .. input[2..]]
-            : input.ToArray();
-        var (frames, frameWidth, frameHeight) = Frames(stream);
+        var (frames, frameWidth, frameHeight) = Frames(input);
         if (frames != 1 || frameWidth == 0 || frameHeight == 0 || frameWidth > width || frameHeight > height)
         {
             throw new InvalidDataException($"A JPEG strip or tile of {frames} frames, {frameWidth}×{frameHeight}, in "
                                            + $"one of {width}×{height}.");
         }
 
-        JpegImage image;
-        byte[] pixels;
         try
         {
-            image = new JpegDecoder(new MemoryStream(stream)) { ComponentsAreRgb = rgb }.Decode();
-            pixels = image.GetRawPixels(0);
+            if (bits == 8)
+            {
+                Check(JpegDecoder.DecodeSamples(input, tables, rgb, output, width * samples,
+                    output.Length / (width * samples)), samples, bits);
+                return;
+            }
+
+            // Samples of 12 bits come packed, as TIFF keeps them: two in three bytes, most significant first.
+            var packedRow = (width * samples * 12 + 7) / 8;
+            var rows = Math.Min(height, output.Length / packedRow);
+            var wide = ArrayPool<byte>.Shared.Rent(width * samples * 2 * rows);
+            try
+            {
+                Check(JpegDecoder.DecodeSamples(input, tables, rgb, wide, width * samples * 2, rows), samples, bits);
+                for (var y = 0; y < rows; y++)
+                {
+                    Pack(wide.AsSpan(y * width * samples * 2, width * samples * 2), output.Slice(y * packedRow,
+                        packedRow));
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(wide);
+            }
         }
         catch (Exception exception) when (exception is not (InvalidDataException or NotSupportedException
                                               or OutOfMemoryException))
         {
             throw new InvalidDataException("A JPEG strip or tile is broken: " + exception.Message, exception);
         }
+    }
 
-        if (pixels == null || pixels.Length < (long)image.Width * image.Height * 4)
+    private static void Check((int Width, int Height, int Channels, int Precision) decoded, int samples, int bits)
+    {
+        if (decoded.Channels != samples || decoded.Precision != bits)
         {
-            throw new InvalidDataException("A JPEG strip or tile decoded to fewer pixels than its frame.");
+            throw new InvalidDataException($"A JPEG strip or tile of {decoded.Channels} channels of "
+                                           + $"{decoded.Precision} bits, in an image of {samples} of {bits}.");
         }
+    }
 
-        var rows = Math.Min(output.Length / (width * samples), (int)image.Height);
-        var columns = Math.Min(width, (int)image.Width);
-        for (var y = 0; y < rows; y++)
+    // 12-bit samples, each in 2 little-endian bytes, packed into a row of 12 bits a sample.
+    private static void Pack(ReadOnlySpan<byte> samples, Span<byte> row)
+    {
+        row.Clear();
+        long bit = 0;
+        for (var i = 0; i + 1 < samples.Length; i += 2, bit += 12)
         {
-            for (var x = 0; x < columns; x++)
+            var value = BinaryPrimitives.ReadUInt16LittleEndian(samples[i..]) & 0xFFF;
+            var at = (int)(bit >> 3);
+            if ((bit & 7) == 0)
             {
-                for (var s = 0; s < samples; s++)
-                {
-                    output[(y * width + x) * samples + s] = pixels[((long)y * image.Width + x) * 4 + s];
-                }
+                row[at] = (byte)(value >> 4);
+                row[at + 1] = (byte)((value & 15) << 4);
+            }
+            else
+            {
+                row[at] |= (byte)(value >> 8);
+                row[at + 1] = (byte)value;
             }
         }
     }
+
+    /// <summary>The tables the JPEGTables tag holds - an abbreviated JPEG stream (B.5) - read once for all the strips
+    /// and tiles; null for none.</summary>
+    public static JpegStream Tables(ReadOnlySpan<byte> tag) => tag.Length > 4 ? JpegStream.Tables(tag) : null;
 
     private static (int Count, int Width, int Height) Frames(ReadOnlySpan<byte> stream)
     {
