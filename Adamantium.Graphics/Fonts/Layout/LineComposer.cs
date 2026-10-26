@@ -1844,9 +1844,34 @@ internal sealed class LineComposer
                     slotBases.Add((gap, rowHeight, GridsLine(line), rightToLeft));
                     return true;
                 }
+
+                var cleared = ClearedFrom(frame, rowTop, rowHeight);
+                if (cleared < top && OnGrid(cleared, RowBaseline(line), line) > rowTop + 1e-6)
+                {
+                    top = cleared;
+                    if (rows > 1)
+                    {
+                        rows--;
+                    }
+                }
             }
 
             return false;
+        }
+
+        double ClearedFrom(RectangleF frame, double top, double rowHeight)
+        {
+            var cleared = double.PositiveInfinity;
+            foreach (var exclusion in exclusions ?? [])
+            {
+                if (exclusion.Top < top + rowHeight && exclusion.Bottom > top && exclusion.Left < frame.Right &&
+                    exclusion.Right > frame.Left)
+                {
+                    cleared = Math.Min(cleared, exclusion.Bottom);
+                }
+            }
+
+            return cleared;
         }
 
         bool ReadsRightToLeft(int line) => paragraphRuns != null ? LineState(line).RightToLeft

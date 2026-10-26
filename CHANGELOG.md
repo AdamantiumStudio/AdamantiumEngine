@@ -1658,6 +1658,9 @@ All packages share one version.
 
 ### Changed
 
+- Text flowing round `TextLayout.Exclusions` goes on right where the first exclusion across a row it cannot use ends,
+  not a whole row further down: under a picture as wide as the frame the next line stands at the picture's bottom, as
+  Word sets it.
 - TGA is read and written by a new codec, written from Truevision TGA 2.0. It reads color-mapped, true-color and
   gray images, plain or run-length encoded - packets running on from row to row too - of 8, 15, 16, 24 and 32 bits,
   maps of 15 to 32 bits starting at any entry, in all four orientations, as RGBA8. Alpha is the bits the image

@@ -358,4 +358,28 @@ public class BaselineGridTests
 
         Assert.That(glyphs[1], Is.EqualTo(glyphs[0]));
     }
+
+    [TestCase(2)]
+    [TestCase(11)]
+    public void UnderAnExclusionEndingJustPastAGridRow_TheTextGoesOnFromTheNextRow(int row)
+    {
+        var plain = Layout(new BaselineGrid(Step));
+        plain.Frames = [new RectangleF(0, 0, 300, 1200)];
+        plain.ProcessText(Prose, FontSize, new Size(300, 1200), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+        var rowTop = (float)(plain.GetLine(0).Top + row * Step);
+        var bottom = MathF.BitIncrement(rowTop);
+        var layout = Layout(new BaselineGrid(Step));
+        layout.Frames = [new RectangleF(0, 0, 300, 1200)];
+        layout.Exclusions = [new RectangleF(-10, 0, 320, bottom)];
+
+        layout.ProcessText(Prose, FontSize, new Size(300, 1200), TextWrapping.WrapByWords, TextTrimming.None,
+            HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.OversetIndex, Is.EqualTo(Prose.Length), "none of it lost");
+            Assert.That(layout.GetLine(0).Top, Is.GreaterThanOrEqualTo(bottom).And.LessThan(bottom + Step + 1e-3));
+        });
+    }
 }
