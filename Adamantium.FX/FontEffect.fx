@@ -106,6 +106,13 @@ float2 MSDFAtlasSize;
 // at that size). Smoothly blended in between so there is no pop across the size threshold.
 float SdfBlendLo;
 float SdfBlendHi;
+// The edge curve, as TextEdgeSettings gives it: see InkCoverage and AreaCoverage.
+float LightInkGamma;
+float SmallDarkInkGamma;
+float LargeDarkInkGamma;
+float LargeTextFrom;
+float LargeTextAt;
+float EdgeWidth;
 // The element's fade, raised to 2.2, for glyphs with a color of their own; ForegroundColor already carries it.
 float GlyphFade;
 
@@ -613,17 +620,19 @@ float ScreenPxRange(float2 uv)
 }
 
 // Coverage as the alpha that blends the ink over the paper as light adds up, the blend itself being one of encoded
-// values: light ink on dark paper takes coverage raised by 1/2.2; dark ink on light paper, once its stems are a few
-// pixels wide, what it leaves uncovered raised by 1/1.6 - raised the other way, a large dark letter's partly covered
-// pixels came out nearly as dark as its inside, a grey rim round bold text and its slanted edges stepping. Small dark
-// text keeps its coverage raised, by 1/1.9, so a stem a pixel wide across two pixels stays dark rather than fading.
-// Ink between light and dark takes a share of each by its lightness; `pxRange` is the field's range in screen pixels.
+// values: light ink on dark paper takes coverage raised by 1/LightInkGamma; dark ink on light paper, once its stems are
+// a few pixels wide, what it leaves uncovered raised by 1/LargeDarkInkGamma - raised the other way, a large dark
+// letter's partly covered pixels came out nearly as dark as its inside, a grey rim round bold text and its slanted
+// edges stepping. Small dark text keeps its coverage raised, by 1/SmallDarkInkGamma, so a stem a pixel wide across two
+// pixels stays dark rather than fading; the two blend as the field's range in screen pixels, `pxRange`, goes from
+// LargeTextFrom to LargeTextAt. Ink between light and dark takes a share of each by its lightness.
 float InkCoverage(float coverage, float3 ink, float pxRange)
 {
     float light = saturate(dot(ink, float3(0.2126, 0.7152, 0.0722)));
-    float onDark = pow(coverage, 1.0 / 2.2);
-    float grown = saturate((pxRange - 3.0) / 4.0);
-    float onLight = lerp(pow(coverage, 1.0 / 1.9), 1.0 - pow(1.0 - coverage, 1.0 / 1.6), grown);
+    float onDark = pow(coverage, 1.0 / LightInkGamma);
+    float grown = saturate((pxRange - LargeTextFrom) / max(LargeTextAt - LargeTextFrom, 0.001));
+    float onLight = lerp(pow(coverage, 1.0 / SmallDarkInkGamma), 1.0 - pow(1.0 - coverage, 1.0 / LargeDarkInkGamma),
+                         grown);
     return lerp(onLight, onDark, light);
 }
 
@@ -671,7 +680,7 @@ float GlyphField(float4 samp, float2 uv, float2 secondUV, float2 second)
 }
 
 // How much of the pixel a crisp glyph covers, as the share of four points across it inside the outline: each point's
-// edge ramps over half a pixel, so their mean follows the outline's area in the pixel rather than its distance from
+// edge ramps over EdgeWidth pixels (half a pixel by default), so their mean follows the outline's area in the pixel rather than its distance from
 // the pixel's middle - a slanted edge steps up evenly, row by row. A shadow's or a glow's soft edge keeps the one
 // sample at the middle.
 float AreaCoverage(float2 uv, float2 secondUV, float2 second, float layer, float soft, float sd, float level)
@@ -685,7 +694,7 @@ float AreaCoverage(float2 uv, float2 secondUV, float2 second, float layer, float
         return Coverage(sd - 0.5 + level, uv, soft, sd);
     }
 
-    float pixel = 2.0 * ScreenPxRange(uv);
+    float pixel = ScreenPxRange(uv) / max(EdgeWidth, 0.01);
     const float2 points[4] = { float2(-0.375, -0.125), float2(0.125, -0.375), float2(0.375, 0.125),
                                float2(-0.125, 0.375) };
     float covered = 0.0;

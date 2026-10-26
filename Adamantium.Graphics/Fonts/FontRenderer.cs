@@ -47,6 +47,12 @@ public class FontRenderer : GraphicsResource
     private EffectParameter effectAtlasSize;
     private EffectParameter effectSdfBlendLo;
     private EffectParameter effectSdfBlendHi;
+    private EffectParameter effectLightInkGamma;
+    private EffectParameter effectSmallDarkInkGamma;
+    private EffectParameter effectLargeDarkInkGamma;
+    private EffectParameter effectLargeTextFrom;
+    private EffectParameter effectLargeTextAt;
+    private EffectParameter effectEdgeWidth;
     private EffectParameter effectGlyphFade;
     private EffectParameter effectDirectClipBox;
     private EffectParameter effectDirectClipRadii;
@@ -76,6 +82,12 @@ public class FontRenderer : GraphicsResource
         effectAtlasSize = fontEffect.MSDFAtlasSize;
         effectSdfBlendLo = fontEffect.SdfBlendLo;
         effectSdfBlendHi = fontEffect.SdfBlendHi;
+        effectLightInkGamma = fontEffect.LightInkGamma;
+        effectSmallDarkInkGamma = fontEffect.SmallDarkInkGamma;
+        effectLargeDarkInkGamma = fontEffect.LargeDarkInkGamma;
+        effectLargeTextFrom = fontEffect.LargeTextFrom;
+        effectLargeTextAt = fontEffect.LargeTextAt;
+        effectEdgeWidth = fontEffect.EdgeWidth;
         effectGlyphFade = fontEffect.GlyphFade;
         effectDirectClipBox = fontEffect.DirectClipBox;
         effectDirectClipRadii = fontEffect.DirectClipRadii;
@@ -128,6 +140,7 @@ public class FontRenderer : GraphicsResource
         effectAtlasSize.SetValue(new Vector2F(atlas.Atlas.Width, atlas.Atlas.Height));
         effectSdfBlendLo.SetValue(SdfBlendLo);
         effectSdfBlendHi.SetValue(SdfBlendHi);
+        SetEdges();
         effectDirectClipBox.SetValue(clipBox);       // zero size = no rounded clip
         effectDirectClipRadii.SetValue(clipRadii);
         SetEffects(effects, effectHead);
@@ -164,6 +177,7 @@ public class FontRenderer : GraphicsResource
         effectAtlasSize.SetValue(new Vector2F(atlas.Atlas.Width, atlas.Atlas.Height));
         effectSdfBlendLo.SetValue(SdfBlendLo);
         effectSdfBlendHi.SetValue(SdfBlendHi);
+        SetEdges();
         effectGlyphInstances.SetValue(instancesAddress);
         effectTransforms.SetValue(transformsAddress);
         SetTargetOrigin();
@@ -172,6 +186,17 @@ public class FontRenderer : GraphicsResource
         GraphicsDevice.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
         fontEffect.FontBatchRenderMsdfBatchInstancedPass.Apply();
         GraphicsDevice.Draw(4, glyphCount, 0, 0);   // 4 strip verts x glyphCount instances; address already at this segment
+    }
+
+    private void SetEdges()
+    {
+        var edges = GraphicsDevice.MainDevice.Settings.TextEdges;
+        effectLightInkGamma.SetValue(edges.LightInkGamma);
+        effectSmallDarkInkGamma.SetValue(edges.SmallDarkInkGamma);
+        effectLargeDarkInkGamma.SetValue(edges.LargeDarkInkGamma);
+        effectLargeTextFrom.SetValue(edges.LargeTextFrom);
+        effectLargeTextAt.SetValue(edges.LargeTextAt);
+        effectEdgeWidth.SetValue(edges.EdgeWidth);
     }
 
     private void SetTargetOrigin()
