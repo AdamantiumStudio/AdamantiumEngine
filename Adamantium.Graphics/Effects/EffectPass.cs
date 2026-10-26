@@ -735,8 +735,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         }
 
         /// <summary>Room for <paramref name="size"/> bytes in this frame's pages. More than a page holds gets a buffer of
-        /// its own in system memory, a power of two in size: one of that size the last use of this pool took is taken
-        /// again, one it left unused is freed when the pool is reset.</summary>
+        /// its own in system memory, a power of two in size: one the last use of this pool took, of that size or twice
+        /// it, is taken again; one it left unused is freed when the pool is reset.</summary>
         public (Buffer Page, ulong Offset) Allocate(ulong size, ulong alignment)
         {
             if (size > pageSize)
@@ -766,7 +766,16 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         private Buffer TakeOversized(ulong size)
         {
             var rounded = BitOperations.RoundUpToPowerOf2(size);
-            var spare = spareOversized.FindIndex(buffer => buffer.TotalSize == rounded);
+            var spare = -1;
+            for (var i = 0; i < spareOversized.Count; i++)
+            {
+                var room = spareOversized[i].TotalSize;
+                if ((room == rounded || room == rounded * 2) && (spare < 0 || room < spareOversized[spare].TotalSize))
+                {
+                    spare = i;
+                }
+            }
+
             Buffer page;
             if (spare >= 0)
             {

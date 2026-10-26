@@ -68,8 +68,8 @@ public class MemoryFallbackTests
         }
     }
 
-    /// <summary>A block made for one allocation larger than a shared block goes back to the driver when that allocation
-    /// is freed; a shared block stays for the next.</summary>
+    /// <summary>A block made for one allocation larger than a shared block goes back to the driver once that allocation
+    /// is freed and the frames in flight are done with it; a shared block stays for the next.</summary>
     [Test]
     public void ABlockMadeForOneLargeAllocation_GoesBackToTheDriver_ASharedOneStays()
     {
@@ -85,11 +85,14 @@ public class MemoryFallbackTests
         var large = allocator.Allocate(80 * Chunk, 256, type.Value, 1u << (int)type.Value, true, false);
         var withLarge = allocator.BytesInBlocks;
         allocator.Free(large);
+        var whileFramesMayReadIt = allocator.BytesInBlocks;
+        GpuFixture.Main.OnFrameStarted();
 
         Assert.Multiple(() =>
         {
             Assert.That(afterShared, Is.EqualTo(withShared), "the shared block stays");
             Assert.That(withLarge - withShared, Is.GreaterThanOrEqualTo(80 * Chunk));
+            Assert.That(whileFramesMayReadIt, Is.EqualTo(withLarge), "kept until the frames in flight are done");
             Assert.That(allocator.BytesInBlocks, Is.EqualTo(withShared), "the large one's block went back");
         });
     }
