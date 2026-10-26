@@ -636,6 +636,14 @@ float InkCoverage(float coverage, float3 ink, float pxRange)
     return lerp(onLight, onDark, light);
 }
 
+// The alpha a glyph's pixel blends by: crisp text's coverage curved by its ink, a shadow's or a glow's soft edge raised
+// by 1/2.2 as it always was; the reflection's fade and the color's alpha raised by 1/2.2 apart from the curve.
+float GlyphAlpha(float coverage, float soft, float fade, float4 color, float pxRange)
+{
+    float curved = soft > 0.0 ? pow(coverage, 1.0 / 2.2) : InkCoverage(coverage, color.rgb, pxRange);
+    return curved * pow(max(fade, 0.0) * max(color.a, 0.0), 1.0 / 2.2);
+}
+
 // How much of the pixel the glyph covers, `edge` being its field less the outline's level: crisp over one screen pixel,
 // or spread over `soft` field units - never less than the pixel - for a shadow or a glow. Where the field `sd` runs out
 // (its range past the outline) nothing is covered, so a band grown or softened up to it fades there rather than filling
@@ -680,9 +688,9 @@ float GlyphField(float4 samp, float2 uv, float2 secondUV, float2 second)
 }
 
 // How much of the pixel a crisp glyph covers, as the share of four points across it inside the outline: each point's
-// edge ramps over EdgeWidth pixels (half a pixel by default), so their mean follows the outline's area in the pixel rather than its distance from
-// the pixel's middle - a slanted edge steps up evenly, row by row. A shadow's or a glow's soft edge keeps the one
-// sample at the middle.
+// edge ramps over EdgeWidth pixels, so their mean follows the outline's area in the pixel rather than its distance from
+// the pixel's middle - a slanted edge steps up evenly, row by row. The points spread 3/4 of a pixel, so an edge ramps
+// over EdgeWidth + 3/4 pixels in all. A shadow's or a glow's soft edge keeps the one sample at the middle.
 float AreaCoverage(float2 uv, float2 secondUV, float2 second, float layer, float soft, float sd, float level)
 {
     float2 dx = ddx(uv);
@@ -861,7 +869,7 @@ float4 FontPixelShaderMsdf(PSInput input) : SV_Target
     float4 samp = Texture.Sample(TextureSampler, float3(input.UV, input.Layer));
     float sd = GlyphField(samp, input.UV, input.SecondUV, input.Second);
     float opacity = AreaCoverage(input.UV, input.SecondUV, input.Second, input.Layer, input.Soft, sd,
-                        FontWeight + input.Embolden) * ReflectionFade(input.Reflection, input.ReflectY);
+                        FontWeight + input.Embolden);
     // A glyph of attributed text brings its own color; a negative alpha means the element's foreground.
     float4 color = input.Color.a < 0 ? ForegroundColor : float4(input.Color.rgb, input.Color.a * GlyphFade);
     if (input.PaintProgram > 0.5)
@@ -872,7 +880,8 @@ float4 FontPixelShaderMsdf(PSInput input) : SV_Target
         return painted * Cut(input);
     }
     // The element's fade arrives pre-raised to 2.2, so the boost hands it back linear.
-    float alpha = InkCoverage(opacity, color.rgb, ScreenPxRange(input.UV)) * pow(max(color.a, 0.0), 1.0 / 2.2);
+    float alpha = GlyphAlpha(opacity, input.Soft, ReflectionFade(input.Reflection, input.ReflectY), color,
+                      ScreenPxRange(input.UV));
     // The rounded ancestor clip, as coverage, exactly as the batch pass applies it. Both the premultiplied color and
     // the alpha are cut: this pass outputs rgb*alpha, so cutting one without the other leaves color where the glyph
     // was cut away. A zero-size box gives 1 and costs nothing.
@@ -890,7 +899,7 @@ float4 FontPixelShaderMsdfBatch(PSInput input) : SV_Target
     float4 samp = Texture.Sample(TextureSampler, float3(input.UV, input.Layer));
     float sd = GlyphField(samp, input.UV, input.SecondUV, input.Second);
     float opacity = AreaCoverage(input.UV, input.SecondUV, input.Second, input.Layer, input.Soft, sd,
-                        FontWeight + input.Embolden) * ReflectionFade(input.Reflection, input.ReflectY);
+                        FontWeight + input.Embolden);
     // Unchanged on purpose - the element's fade is pre-compensated in the vertex stage so that this very boost hands
     // it back linear. See the FADE line in FontBatchInstancedVS.
     float4 color = input.Color;
@@ -902,7 +911,8 @@ float4 FontPixelShaderMsdfBatch(PSInput input) : SV_Target
         return painted * Cut(input);
     }
 
-    float alpha = InkCoverage(opacity, color.rgb, ScreenPxRange(input.UV)) * pow(max(color.a, 0.0), 1.0 / 2.2);
+    float alpha = GlyphAlpha(opacity, input.Soft, ReflectionFade(input.Reflection, input.ReflectY), color,
+                      ScreenPxRange(input.UV));
     // The rounded ancestor clip, as coverage. Applied to the PREMULTIPLIED color as well as the alpha - this pass
     // outputs rgb*alpha, so cutting only the alpha would leave the color standing where the glyph was cut away.
     alpha *= Cut(input);
