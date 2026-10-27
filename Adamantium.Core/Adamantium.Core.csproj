@@ -19,11 +19,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    <PackageReference Include="System.Memory" Version="4.5.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
   </ItemGroup>
 
   <ItemGroup>

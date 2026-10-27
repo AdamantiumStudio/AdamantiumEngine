@@ -2,9 +2,12 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Adamantium.Core.TypeParsing;
+using Adamantium.Mathematics.TypeParsing;
 
 namespace Adamantium.Mathematics;
 
+[TypeParser(typeof(ThicknessParser))]
 public struct Thickness
 {
    public Double Left { get; set; }

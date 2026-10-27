@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Adamantium.Fonts.Shaping;
 
@@ -7,8 +8,10 @@ namespace Adamantium.Fonts;
 
 /// <summary>
 /// The fonts a text falls back on for a character its own font does not have: families tried in order, each in the
-/// face nearest to the weight, slant and width of the text's font. Han, kana and Hangul, and the punctuation and
-/// full-width forms set among them, try the family the text's language reads them in first (Japanese, Korean,
+/// face nearest to the weight, slant and width of the text's font, and then any other family of the collection - those
+/// sharing most words of the text's family name first ("Noto Sans Hebrew" for "Noto Sans"), the rest by name - so a
+/// script the list does not name is still drawn by a font installed for it. Han, kana and Hangul, and the punctuation
+/// and full-width forms set among them, try the family the text's language reads them in first (Japanese, Korean,
 /// Traditional or Simplified Chinese), as the same character is drawn differently in each. A family's character map is
 /// read without loading the font, so only the font chosen is loaded.
 /// </summary>
@@ -100,6 +103,11 @@ public sealed class FontFallback
                     break;
                 }
             }
+
+            if (font == null && !pending)
+            {
+                font = FindInOtherFamilies(codepoint, like, preferred, wait, ref pending);
+            }
         }
 
         if (!pending)
@@ -112,6 +120,71 @@ public sealed class FontFallback
 
         return font;
     }
+
+    private IFont FindInOtherFamilies(int codepoint, IFont like, string preferred, bool wait, ref bool pending)
+    {
+        var reading = false;
+        foreach (var family in OrderOtherFamilies(like, preferred))
+        {
+            if (reading)
+            {
+                _fonts.Match(family, like.Weight, like.Style, like.Stretch)?.TryHasCharacter(codepoint, out _);
+                continue;
+            }
+
+            var font = Find(family, codepoint, like, wait, ref reading);
+            if (font != null)
+            {
+                return font;
+            }
+        }
+
+        pending |= reading;
+        return null;
+    }
+
+    private List<string> OrderOtherFamilies(IFont like, string preferred)
+    {
+        var likeFamily = string.IsNullOrEmpty(like.TypographicFamilyName) ? like.FontFamily : like.TypographicFamilyName;
+        var likeWords = new HashSet<string>(SplitWords(likeFamily), StringComparer.OrdinalIgnoreCase);
+        var others = new List<(string Family, int Shared)>();
+        foreach (var family in _fonts.Families)
+        {
+            if (string.Equals(family, preferred, StringComparison.OrdinalIgnoreCase) || IsListed(family))
+            {
+                continue;
+            }
+
+            var shared = 0;
+            foreach (var word in SplitWords(family))
+            {
+                if (likeWords.Contains(word))
+                {
+                    shared++;
+                }
+            }
+
+            others.Add((family, shared));
+        }
+
+        return [.. others.OrderByDescending(other => other.Shared).Select(other => other.Family)];
+    }
+
+    private bool IsListed(string family)
+    {
+        foreach (var listed in _families)
+        {
+            if (string.Equals(listed, family, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string[] SplitWords(string name) =>
+        string.IsNullOrEmpty(name) ? [] : name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     private IFont Find(string family, int codepoint, IFont like, bool wait, ref bool pending)
     {

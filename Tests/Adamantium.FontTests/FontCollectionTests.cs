@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Adamantium.Core.Fonts;
 using Adamantium.Fonts;
 using NUnit.Framework;
 

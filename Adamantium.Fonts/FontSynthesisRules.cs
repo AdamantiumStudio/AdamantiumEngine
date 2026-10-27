@@ -1,3 +1,5 @@
+using Adamantium.Core.Fonts;
+
 namespace Adamantium.Fonts;
 
 /// <summary>When synthesis draws a face the family lacks, and how much: the rules browsers follow.</summary>

@@ -2,6 +2,8 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Adamantium.Core.TypeParsing;
+using Adamantium.Mathematics.TypeParsing;
 
 namespace Adamantium.Mathematics
 {
@@ -9,6 +11,7 @@ namespace Adamantium.Mathematics
     /// Represents a 32-bit color (4 bytes) in the form of RGBA (in byte order: R, G, B, A).
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Size = 4)]
+    [TypeParser(typeof(ColorParser))]
     public struct Color : IEquatable<Color>, IFormattable
     {
         private const string toStringFormat = "A:{0} R:{1} G:{2} B:{3}";

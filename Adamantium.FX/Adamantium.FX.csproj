@@ -32,11 +32,10 @@
         <ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
         <ProjectReference Include="..\Adamantium.EffectsCompiler\Adamantium.EffectsCompiler.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
         <ProjectReference Include="..\Adamantium.Engine.Generators\Adamantium.Engine.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <!-- The source generators above are Roslyn analyzers (netstandard2.0); they need Core/Mathematics as analyzer
-             assemblies too. Analyzer-ONLY (ReferenceOutputAssembly=false) so the netstandard2.0 build is NOT copied into
-             this net10.0 app's output - the runtime/compile Core+Mathematics come from the normal net10.0 refs above. -->
+        <!-- The source generators above are Roslyn analyzers (netstandard2.0); they need Core as an analyzer assembly
+             too. Analyzer-ONLY (ReferenceOutputAssembly=false) so the netstandard2.0 build is NOT copied into this
+             net10.0 app's output - the runtime/compile Core comes from the normal net10.0 ref above. -->
         <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=netstandard2.0" />
-        <ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=netstandard2.0" />
     </ItemGroup>
 
     <ItemGroup>

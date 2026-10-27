@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Adamantium.Fonts.Common
+namespace Adamantium.Core.Fonts
 {
     public static class FeatureInfos
     {

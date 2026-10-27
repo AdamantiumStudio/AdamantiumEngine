@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
-using Adamantium.Mathematics;
+using Adamantium.Core.TypeParsing;
 
-namespace Adamantium.Core.TypeParsing;
+namespace Adamantium.Mathematics.TypeParsing;
 
 public class Vector2Parser : ITypeParser<Vector2>
 {

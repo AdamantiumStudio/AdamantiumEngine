@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Adamantium.Core.Fonts.Shaping;
 
 namespace Adamantium.Fonts.Shaping;
 

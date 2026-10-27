@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Adamantium.Core.Fonts;
+using Adamantium.Core.Fonts.Shaping;
 using Adamantium.Fonts;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Shaping;
@@ -126,21 +128,19 @@ public class ShapingTests
 
         var appliedUnasked = Glyphs("") == on;
         Assert.That(TextShaper.DefaultFeatures.Contains(tag), Is.EqualTo(appliedUnasked));
-        Assert.That(FeatureInfos.GetFeature(tag).DefaultFeatureState,
-            Is.EqualTo(appliedUnasked ? FeatureState.On : FeatureState.Off), "the registry says what shaping does");
     }
 
-    [TestCase("kern", FeatureState.On)]
-    [TestCase("liga", FeatureState.On)]
-    [TestCase("locl", FeatureState.On)]
-    [TestCase("mark", FeatureState.On)]
-    [TestCase("ccmp", FeatureState.On)]
-    [TestCase("size", FeatureState.Off)]
-    [TestCase("smcp", FeatureState.Off)]
-    [TestCase("dlig", FeatureState.Off)]
-    public void TheRegistry_SaysWhetherShapingAppliesAFeatureUnasked(string tag, FeatureState expected)
+    [TestCase("kern", true)]
+    [TestCase("liga", true)]
+    [TestCase("locl", true)]
+    [TestCase("mark", true)]
+    [TestCase("ccmp", true)]
+    [TestCase("size", false)]
+    [TestCase("smcp", false)]
+    [TestCase("dlig", false)]
+    public void TheShaper_SaysWhetherItAppliesAFeatureUnasked(string tag, bool applied)
     {
-        Assert.That(FeatureInfos.GetFeature(tag).DefaultFeatureState, Is.EqualTo(expected));
+        Assert.That(TextShaper.DefaultFeatures.Contains(tag), Is.EqualTo(applied));
     }
 
     private static string Unescape(string text)

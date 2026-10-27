@@ -1,4 +1,5 @@
 using System;
+using Adamantium.Core.Fonts;
 using Adamantium.FX;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
