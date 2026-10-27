@@ -225,10 +225,32 @@ public sealed unsafe class SharedSurface : Texture
         return surface;
     }
 
+    /// <summary>Whether the device exports the timeline semaphores a surface shared through handles of this type
+    /// signals its frames with - the platform's opaque type when none is given. The memory is checked as it is made.
+    /// </summary>
+    public static bool CanExport(IGraphicsDevice device, SharedHandleType? handleType = null) =>
+        HasSemaphoreFeature(device, handleType ?? DefaultHandleType, ExternalSemaphoreFeatureFlagBits.ExportableBit);
+
+    /// <summary>Whether the device imports the timeline semaphores of a surface shared through handles of this type -
+    /// the platform's opaque type when none is given. The memory is checked as it is imported.</summary>
+    public static bool CanImport(IGraphicsDevice device, SharedHandleType? handleType = null) =>
+        HasSemaphoreFeature(device, handleType ?? DefaultHandleType, ExternalSemaphoreFeatureFlagBits.ImportableBit);
+
+    private static bool HasSemaphoreFeature(IGraphicsDevice device, SharedHandleType handleType,
+        ExternalSemaphoreFeatureFlagBits feature) =>
+        (device.Adapter.GetTimelineSemaphoreFeatures(ToSemaphoreHandleType(handleType)) & feature) != 0;
+
     private static SharedSurface CreateExportableSingle(IGraphicsDevice device, uint width, uint height, SurfaceFormat format,
         SharedHandleType? handleType, string name)
     {
         var resolvedType = handleType ?? DefaultHandleType;
+        if (!CanExport(device, resolvedType))
+        {
+            throw new NotSupportedException($"{device.Adapter.AdapterProperties.DeviceName} cannot export timeline " +
+                                            $"semaphores as {ToSemaphoreHandleType(resolvedType)} handles, so it " +
+                                            "cannot share a surface through them.");
+        }
+
         var memHandleType = ToMemoryHandleType(resolvedType);
         var description = BuildDescription(width, height, format);
 
@@ -305,6 +327,13 @@ public sealed unsafe class SharedSurface : Texture
 
     private static SharedSurface ImportSingle(IGraphicsDevice device, SharedSurfaceDescriptor descriptor, string name)
     {
+        if (!CanImport(device, descriptor.HandleType))
+        {
+            throw new NotSupportedException($"{device.Adapter.AdapterProperties.DeviceName} cannot import timeline " +
+                                            $"semaphores from {ToSemaphoreHandleType(descriptor.HandleType)} handles, " +
+                                            "so it cannot import a surface shared through them.");
+        }
+
         var memHandleType = ToMemoryHandleType(descriptor.HandleType);
         var useFd = IsFdHandle(descriptor.HandleType);
         var description = BuildDescription(descriptor.Width, descriptor.Height, descriptor.Format);
@@ -479,6 +508,10 @@ public sealed unsafe class SharedSurface : Texture
     private static SharedHandleType DefaultHandleType => IsWindows ? SharedHandleType.OpaqueWin32 : SharedHandleType.OpaqueFd;
 
     private static bool IsFdHandle(SharedHandleType type) => type == SharedHandleType.OpaqueFd;
+
+    private static ExternalSemaphoreHandleTypeFlagBits ToSemaphoreHandleType(SharedHandleType type) => IsFdHandle(type)
+        ? ExternalSemaphoreHandleTypeFlagBits.OpaqueFdBit
+        : ExternalSemaphoreHandleTypeFlagBits.OpaqueWin32Bit;
 
     private static ExternalMemoryHandleTypeFlagBits ToMemoryHandleType(SharedHandleType type) => type switch
     {

@@ -28,14 +28,14 @@ struct GizmoInstance
 };
 
 // The draw's instances.
-uint64_t InstancesAddress;
+GizmoInstance* Instances;
 // The joints a skinned instance bends with, and how many there are.
-uint64_t JointsAddress;
+float4x4* Joints;
 uint JointCount;
 
 GizmoInstance InstanceOf(uint instanceId)
 {
-    return ((GizmoInstance*)InstancesAddress)[instanceId];
+    return Instances[instanceId];
 }
 
 float4x4 viewProjection;
@@ -314,7 +314,7 @@ PS_OUTPUT_BASIC OutlineInstanced_VS(MESH_VERTEX input, uint instanceId : SV_Inst
 GizmoInstance SkinnedInstanceOf(uint instanceId, SKINNED_VERTEX input)
 {
     GizmoInstance instance = InstanceOf(instanceId);
-    instance.world = mul(SkinOf((float4x4*)JointsAddress, JointCount, input.jointIndices, input.jointWeights),
+    instance.world = mul(SkinOf(Joints, JointCount, input.jointIndices, input.jointWeights),
         instance.world);
     return instance;
 }

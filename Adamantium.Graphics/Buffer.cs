@@ -130,7 +130,12 @@ namespace Adamantium.Graphics
 
         private void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags memoryProperties, out VulkanBuffer buffer, out DeviceMemoryAllocator.MemoryAllocation allocation)
         {
-            BufferCreateInfo bufferInfo = new BufferCreateInfo();
+            if ((usage & (BufferUsageFlags.StorageBuffer | BufferUsageFlags.UniformBuffer)) != 0)
+            {
+                usage |= BufferUsageFlags.ShaderDeviceAddress;
+            }
+
+            var bufferInfo = new BufferCreateInfo();
             bufferInfo.Size = size;
             bufferInfo.Usage = (BufferUsageFlagBits)usage;
             bufferInfo.SharingMode = SharingMode.Exclusive;
@@ -145,7 +150,6 @@ namespace Adamantium.Graphics
                 memoryRequirements.Alignment,
                 memoryTypeIndex,
                 memoryRequirements.MemoryTypeBits,
-                memoryProperties.HasFlag(MemoryPropertyFlags.HostVisible),
                 usage.HasFlag(BufferUsageFlags.ShaderDeviceAddress));
 
             var result = GraphicsDevice.LogicalDevice.BindBufferMemory(buffer, allocation.Memory, allocation.Offset);

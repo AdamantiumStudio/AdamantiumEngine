@@ -3,26 +3,24 @@
 // then a DrawIndirect reads the GPU-produced count and rasterizes them. Combined with AtomicAppend, this is the whole
 // "GPU decides how much to draw, in one dispatch" pipeline. Shader body is Slang.
 
-uint64_t IndirectAddress;   // VkDrawIndirectCommand = 4 uints
-uint64_t OutputAddress;     // float2[] vertices
+uint* Indirect;     // VkDrawIndirectCommand = 4 uints
+float2* Output;     // vertices
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void IndirectDrawCS(uint3 tid : SV_DispatchThreadID)
 {
-    uint* cmd = (uint*)IndirectAddress;
-    cmd[0] = 6u;   // vertexCount: two triangles
-    cmd[1] = 1u;   // instanceCount
-    cmd[2] = 0u;   // firstVertex
-    cmd[3] = 0u;   // firstInstance
+    Indirect[0] = 6u;   // vertexCount: two triangles
+    Indirect[1] = 1u;   // instanceCount
+    Indirect[2] = 0u;   // firstVertex
+    Indirect[3] = 0u;   // firstInstance
 
-    float2* v = (float2*)OutputAddress;
-    v[0] = float2(10.0, 10.0);
-    v[1] = float2(50.0, 10.0);
-    v[2] = float2(10.0, 50.0);
-    v[3] = float2(50.0, 10.0);
-    v[4] = float2(50.0, 50.0);
-    v[5] = float2(10.0, 50.0);
+    Output[0] = float2(10.0, 10.0);
+    Output[1] = float2(50.0, 10.0);
+    Output[2] = float2(10.0, 50.0);
+    Output[3] = float2(50.0, 10.0);
+    Output[4] = float2(50.0, 50.0);
+    Output[5] = float2(10.0, 50.0);
 }
 
 technique IndirectDraw

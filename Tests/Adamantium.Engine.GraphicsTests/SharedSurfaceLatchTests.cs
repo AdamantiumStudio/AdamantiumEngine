@@ -21,7 +21,7 @@ public class SharedSurfaceLatchTests
     [Test]
     public void ANewFrame_IsHandedOutOnce_WhoeverAsks()
     {
-        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        var device = (GraphicsDevice)CreateSharingDevice();
         using var surface = SharedSurface.CreateExportable(device, 4, 4, SurfaceFormat.B8G8R8A8.UNorm);
 
         Assert.That(surface.LatchNewFrame(), Is.Zero, "nothing produced yet");
@@ -39,7 +39,7 @@ public class SharedSurfaceLatchTests
     [Test]
     public void ANewFrame_IsCopiedOnce_AndReleasedToTheProducerOnlyByTheCopy()
     {
-        var device = GpuFixture.CreateRenderDevice();
+        var device = CreateSharingDevice();
         var gd = (GraphicsDevice)device;
         var prms = new PresentationParameters(PresenterType.RenderTarget, 4, 4, IntPtr.Zero);
         using var presenter = GraphicsPresenter.Create(device, prms, "shared_surface_latch");
@@ -69,7 +69,7 @@ public class SharedSurfaceLatchTests
     [Test]
     public void AnImport_CopiesTheFrame_AndReleasesItToTheProducer()
     {
-        var device = GpuFixture.CreateRenderDevice();
+        var device = CreateSharingDevice();
         var gd = (GraphicsDevice)device;
         var prms = new PresentationParameters(PresenterType.RenderTarget, 4, 4, IntPtr.Zero);
         using var presenter = GraphicsPresenter.Create(device, prms, "shared_surface_import_latch");
@@ -91,7 +91,7 @@ public class SharedSurfaceLatchTests
     [Test]
     public void OfTwoSurfaces_TheNewestFrameIsCopied_AndBothAreGivenBack()
     {
-        var device = GpuFixture.CreateRenderDevice();
+        var device = CreateSharingDevice();
         var gd = (GraphicsDevice)device;
         var prms = new PresentationParameters(PresenterType.RenderTarget, 4, 4, IntPtr.Zero);
         using var presenter = GraphicsPresenter.Create(device, prms, "shared_surface_two_buffers");
@@ -118,6 +118,14 @@ public class SharedSurfaceLatchTests
         Produce(gd, surface.SurfaceAt(0), 3);
         Frame(device, presenter, import);
         Assert.That(surface.SurfaceAt(0).ConsumeValue, Is.EqualTo(3ul), "the next frame, written over the older one, comes through");
+    }
+
+    private static IGraphicsDevice CreateSharingDevice()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        Assume.That(SharedSurface.CanExport(device) && SharedSurface.CanImport(device), Is.True,
+            $"{device.Adapter.AdapterProperties.DeviceName} cannot share timeline semaphores");
+        return device;
     }
 
     private static void Frame(IGraphicsDevice device, GraphicsPresenter presenter, SharedSurface surface)

@@ -92,11 +92,11 @@ public class FontRenderer : GraphicsResource
         effectDirectClipBox = fontEffect.DirectClipBox;
         effectDirectClipRadii = fontEffect.DirectClipRadii;
         effectTargetOrigin = fontEffect.TargetOrigin;
-        effectGlyphInstances = fontEffect.GlyphInstancesAddress;
-        effectTransforms = fontEffect.TransformsAddress;
+        effectGlyphInstances = fontEffect.GlyphInstances;
+        effectTransforms = fontEffect.Transforms;
         effectEffectHead = fontEffect.EffectHead;
-        effectPaintPrograms = fontEffect.PaintProgramsAddress;
-        effectPaintStops = fontEffect.PaintStopsAddress;
+        effectPaintPrograms = fontEffect.PaintPrograms;
+        effectPaintStops = fontEffect.PaintStops;
         effectColorTexture = fontEffect.ColorTexture;
     }
 

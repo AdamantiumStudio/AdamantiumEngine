@@ -104,7 +104,5 @@ public class CameraGizmo
         effect.Parameters["meshColor"].SetValue(Colors.Beige.ToVector3());
         effect.Techniques["MeshVertex"].Passes["NoLight"].Apply();
         geometryCache.DrawMesh(drawingContext, cameraRender);
-
-        effect.Techniques["MeshVertex"].Passes["NoLight"].UnApply();
     }
 }

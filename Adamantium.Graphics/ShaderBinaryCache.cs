@@ -36,6 +36,8 @@ public static class ShaderBinaryCache
         var buf = new MemoryStream();
         if (!info.PCode.IsEmpty) buf.Write(info.PCode.Span);
         buf.Write(BitConverter.GetBytes((uint)info.Stage));
+        buf.Write(BitConverter.GetBytes((uint)info.NextStage));
+        buf.Write(BitConverter.GetBytes((uint)info.Flags));
         buf.Write(BitConverter.GetBytes(layout));
         if (!string.IsNullOrEmpty(info.PName)) buf.Write(System.Text.Encoding.UTF8.GetBytes(info.PName));
         var hash = Convert.ToHexString(sha.ComputeHash(buf.ToArray())).Substring(0, 16);

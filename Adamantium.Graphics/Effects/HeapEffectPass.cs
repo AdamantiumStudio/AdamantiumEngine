@@ -54,9 +54,9 @@ internal sealed class HeapEffectPass : EffectPass
                 *(ulong*)(pushDataBytes + pushOffset) = swallowing ? 0 : dynamicPool.Upload(link.ConstantBuffer, alignment);
             }
 
-            WriteHeapOffsets(pushDataBytes, stageBlock.SampledImageLinks, HeapResourceKind.SampledImage);
-            WriteHeapOffsets(pushDataBytes, stageBlock.SamplerLinks, HeapResourceKind.Sampler);
-            WriteHeapOffsets(pushDataBytes, stageBlock.StorageBufferLinks, HeapResourceKind.StorageBuffer);
+            WriteHeapOffsets(pushDataBytes, stageBlock.SampledImages, HeapResourceKind.SampledImage);
+            WriteHeapOffsets(pushDataBytes, stageBlock.Samplers, HeapResourceKind.Sampler);
+            WriteHeapOffsets(pushDataBytes, stageBlock.StorageBuffers, HeapResourceKind.StorageBuffer);
         }
 
         BindShaders();
@@ -71,21 +71,21 @@ internal sealed class HeapEffectPass : EffectPass
             device.PushData(_pushDataInfo);
         }
 
-        void WriteHeapOffsets(byte* push, List<SlotLink> links, HeapResourceKind kind)
+        void WriteHeapOffsets(byte* push, List<EffectParameter> parameters, HeapResourceKind kind)
         {
-            for (int i = 0; i < links.Count; ++i)
+            for (int i = 0; i < parameters.Count; ++i)
             {
-                var link = links[i];
+                var parameter = parameters[i];
                 IHeapResource[] resources = kind switch
                 {
-                    HeapResourceKind.SampledImage => resourceLinker.GetSampledImages(link.ResourceParamDescription),
-                    HeapResourceKind.Sampler => resourceLinker.GetSamplers(link.ResourceParamDescription),
-                    _ => resourceLinker.GetStorageBuffers(link.ResourceParamDescription),
+                    HeapResourceKind.SampledImage => resourceLinker.GetSampledImages(parameter.ParameterDescription),
+                    HeapResourceKind.Sampler => resourceLinker.GetSamplers(parameter.ParameterDescription),
+                    _ => resourceLinker.GetStorageBuffers(parameter.ParameterDescription),
                 };
-                uint basePushOffset = parameterPushOffsets[link.Parameter];
+                uint basePushOffset = parameterPushOffsets[parameter];
 
                 var isBuffer = kind == HeapResourceKind.StorageBuffer;
-                var wholeHeap = kind == HeapResourceKind.SampledImage && link.Parameter.ElementCount == 0;
+                var wholeHeap = kind == HeapResourceKind.SampledImage && parameter.ElementCount == 0;
                 if (wholeHeap)
                 {
                     *(uint*)(push + basePushOffset) = 0;
@@ -97,7 +97,7 @@ internal sealed class HeapEffectPass : EffectPass
                     continue;
                 }
 
-                var declared = isBuffer ? resources.Length : Math.Max(resources.Length, (int)link.Parameter.ElementCount);
+                var declared = isBuffer ? resources.Length : Math.Max(resources.Length, (int)parameter.ElementCount);
                 for (int resIdx = 0; resIdx < declared; resIdx++)
                 {
                     var resource = resIdx < resources.Length ? resources[resIdx] : null;
@@ -105,7 +105,7 @@ internal sealed class HeapEffectPass : EffectPass
                         : resource is { HasLiveSlot: true } ? resource.GlobalHeapOffset : uint.MaxValue;
                     if (slot == uint.MaxValue)
                     {
-                        ReportUnbound(link.Parameter);
+                        ReportUnbound(parameter);
                         if (device.DescriptorManager is IDescriptorHeapManager heap)
                             slot = kind == HeapResourceKind.Sampler ? heap.FallbackSamplerOffset : heap.FallbackTextureOffset;
                     }
@@ -124,8 +124,6 @@ internal sealed class HeapEffectPass : EffectPass
         for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
         {
             var stageBlock = pipelineStages[stageIndex];
-            if (stageBlock == null || stageBlock.Index < 0) continue;
-
             foreach (var link in stageBlock.ConstantBufferLinks)
             {
                 if (!parameterPushOffsets.ContainsKey(link.Parameter))
@@ -137,26 +135,11 @@ internal sealed class HeapEffectPass : EffectPass
             }
         }
 
-        for (int stageIndex = 0; stageIndex < pipelineStages.Count; stageIndex++)
+        foreach (var stageBlock in pipelineStages)
         {
-            var stageBlock = pipelineStages[stageIndex];
-            if (stageBlock == null || stageBlock.Index < 0) continue;
-
-            if (stageBlock.Parameters != null)
-            {
-                foreach (var param in stageBlock.Parameters)
-                {
-                    if (param.Parameter.ParameterType == EffectParameterType.UniformBuffer)
-                        continue;
-
-                    if (!parameterPushOffsets.ContainsKey(param.Parameter))
-                    {
-                        currentOffset = (currentOffset + 3) & ~3U;
-                        parameterPushOffsets[param.Parameter] = currentOffset;
-                        currentOffset += Math.Max(param.Parameter.ElementCount, 1) * 4;
-                    }
-                }
-            }
+            PlaceIndices(stageBlock.SampledImages);
+            PlaceIndices(stageBlock.Samplers);
+            PlaceIndices(stageBlock.StorageBuffers);
         }
 
         totalPushDataSize = currentOffset;
@@ -165,6 +148,17 @@ internal sealed class HeapEffectPass : EffectPass
         {
             var createInfo = MappedCreateInfo(stage, out var layout);
             stage.CreateShader(createInfo, layout);
+        }
+
+        void PlaceIndices(List<EffectParameter> parameters)
+        {
+            foreach (var parameter in parameters)
+            {
+                if (parameterPushOffsets.TryAdd(parameter, currentOffset))
+                {
+                    currentOffset += Math.Max(parameter.ElementCount, 1) * 4;
+                }
+            }
         }
     }
 
@@ -177,13 +171,13 @@ internal sealed class HeapEffectPass : EffectPass
     private ShaderCreateInfoEXT MappedCreateInfo(StageBlock stage, out ulong layout)
     {
         var shaderCreateInfo = stage.NewCreateInfo();
-        shaderCreateInfo.Flags = ShaderCreateFlagBitsEXT.DescriptorHeapBitExt;
+        shaderCreateInfo.Flags |= ShaderCreateFlagBitsEXT.DescriptorHeapBitExt;
         layout = LayoutSeed;
 
         int mappingCount = stage.ConstantBufferLinks.Count +
-                           stage.SampledImageLinks.Count +
-                           stage.SamplerLinks.Count +
-                           stage.StorageBufferLinks.Count;
+                           stage.SampledImages.Count +
+                           stage.Samplers.Count +
+                           stage.StorageBuffers.Count;
 
         if (mappingCount == 0)
         {
@@ -209,25 +203,25 @@ internal sealed class HeapEffectPass : EffectPass
             mapIdx++;
         }
 
-        foreach (var link in stage.SampledImageLinks)
+        foreach (var parameter in stage.SampledImages)
         {
-            mappings[mapIdx] = PushIndexed(link,
+            mappings[mapIdx] = PushIndexed(parameter,
                 SpirvResourceTypeFlagBitsEXT.SampledImageBitExt | SpirvResourceTypeFlagBitsEXT.ReadOnlyImageBitExt,
                 (uint)heapProperties.ImageDescriptorSize);
             mapIdx++;
         }
 
-        foreach (var link in stage.SamplerLinks)
+        foreach (var parameter in stage.Samplers)
         {
-            mappings[mapIdx] = PushIndexed(link, SpirvResourceTypeFlagBitsEXT.SamplerBitExt,
+            mappings[mapIdx] = PushIndexed(parameter, SpirvResourceTypeFlagBitsEXT.SamplerBitExt,
                 (uint)heapProperties.SamplerDescriptorSize);
             mapIdx++;
         }
 
-        foreach (var link in stage.StorageBufferLinks)
+        foreach (var parameter in stage.StorageBuffers)
         {
-            mappings[mapIdx] = PushIndexed(link,
-                link.Parameter.Access == EffectResourceAccess.ReadOnly
+            mappings[mapIdx] = PushIndexed(parameter,
+                parameter.Access == EffectResourceAccess.ReadOnly
                     ? SpirvResourceTypeFlagBitsEXT.ReadOnlyStorageBufferBitExt
                     : SpirvResourceTypeFlagBitsEXT.ReadWriteStorageBufferBitExt,
                 (uint)heapProperties.BufferDescriptorSize);
@@ -259,13 +253,13 @@ internal sealed class HeapEffectPass : EffectPass
         return shaderCreateInfo;
     }
 
-    private DescriptorSetAndBindingMappingEXT PushIndexed(SlotLink link, SpirvResourceTypeFlagBitsEXT resourceMask,
-        uint heapArrayStride)
+    private DescriptorSetAndBindingMappingEXT PushIndexed(EffectParameter parameter,
+        SpirvResourceTypeFlagBitsEXT resourceMask, uint heapArrayStride)
     {
         var mapping = new DescriptorSetAndBindingMappingEXT
         {
-            DescriptorSet = link.Set,
-            FirstBinding = link.Binding,
+            DescriptorSet = parameter.Set,
+            FirstBinding = parameter.Binding,
             BindingCount = 1,
             ResourceMask = resourceMask,
             Source = DescriptorMappingSourceEXT.HeapWithPushIndexExt
@@ -273,7 +267,7 @@ internal sealed class HeapEffectPass : EffectPass
         mapping.SourceData = new DescriptorMappingSourceDataEXT();
         mapping.SourceData.PushIndex = new DescriptorMappingSourcePushIndexEXT
         {
-            PushOffset = parameterPushOffsets[link.Parameter],
+            PushOffset = parameterPushOffsets[parameter],
             HeapOffset = 0,
             HeapIndexStride = 1,
             HeapArrayStride = heapArrayStride

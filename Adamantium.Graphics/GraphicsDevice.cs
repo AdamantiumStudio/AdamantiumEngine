@@ -88,6 +88,13 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private Type _cVertexType;
     private bool _cRasterizerDiscard;
     private PrimitiveTopology _cTopology;
+    private bool _isTessellating;
+    private uint _inputPatchSize;
+    private bool _isMeshShaderBound;
+    private uint _cPatchControlPoints;
+    private TessellationDomainOrigin _cDomainOrigin;
+    private bool _isTessellationKnown;
+    private bool _isTaskShaderBound;
     private bool _cPrimitiveRestart;
     private MSAALevel _cMsaa;
     private bool _cAlphaToCoverage;
@@ -190,8 +197,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         EnableDynamicRendering = mainDevice.EnableDynamicRendering;
 
-        EffectPools = new List<EffectPool>();
-        DefaultEffectPool = EffectPool.New(this);
         MaxFramesInFlight = mainDevice.BuffersCount;
         InitializeRenderDevice();
         InitializePipeline();
@@ -270,10 +275,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     }
 
     public ulong FrameTicket { get; private set; }
-
-    public List<EffectPool> EffectPools { get; private set; }
-
-    public EffectPool DefaultEffectPool { get; private set; }
 
     public MainGraphicsDevice MainDevice { get; private set; }
     
@@ -390,6 +391,10 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public Single LineWidth { get; set; } = 1.0f;
 
     public FrontFace FrontFace { get; set; } = FrontFace.Clockwise;
+
+    public uint PatchControlPoints { get; set; }
+
+    public TessellationDomainOrigin TessellationDomainOrigin { get; set; } = TessellationDomainOrigin.UpperLeft;
 
     public bool DepthTestEnabled { get; set; } = true;
 
@@ -603,9 +608,21 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     }
 
     /// <summary>Binds a pass's stages on the buffer draws go to now - or, while a fingerprint is taken, only counts them
-    /// into it.</summary>
-    public unsafe void BindShaders(ShaderStageFlagBits[] stages, ShaderEXT[] shaders)
+    /// into it. <paramref name="inputPatchSize"/>: how many control points its hull shader reads a patch of, 0 for any.
+    /// </summary>
+    public unsafe void BindShaders(ShaderStageFlagBits[] stages, ShaderEXT[] shaders, uint inputPatchSize)
     {
+        _inputPatchSize = inputPatchSize;
+        _isTessellating = false;
+        _isMeshShaderBound = false;
+        _isTaskShaderBound = false;
+        for (var i = 0; i < stages.Length; i++)
+        {
+            _isTessellating |= stages[i] == ShaderStageFlagBits.TessellationControlBit && shaders[i] != null;
+            _isMeshShaderBound |= stages[i] == ShaderStageFlagBits.MeshBitExt && shaders[i] != null;
+            _isTaskShaderBound |= stages[i] == ShaderStageFlagBits.TaskBitExt && shaders[i] != null;
+        }
+
         if (_hashing)
         {
             for (var i = 0; i < stages.Length; i++)
@@ -1143,6 +1160,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         // Fresh command buffer => dynamic state is undefined, so the state cache must re-emit everything next draw.
         _stateInitialized = false;
         _depthBiasKnown = false;
+        _isTessellationKnown = false;
         _boundShaderPass = null;
         _originX = 0;
         _originY = 0;
@@ -1160,6 +1178,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
 
         StartGpuTimer(commandBuffer);
+        DescriptorManager.BindTo(this);
         TransitionImagesForRendering(commandBuffer, renderTargets);
         TransitionDepthBufferForRendering(commandBuffer, depthBuffer);
 
@@ -1760,6 +1779,10 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         { commandBuffer.SetRasterizerDiscardEnable(RasterizerDiscardEnabled); _cRasterizerDiscard = RasterizerDiscardEnabled; }
         if (!_stateInitialized || _cTopology != PrimitiveTopology)
         { commandBuffer.SetPrimitiveTopology(PrimitiveTopology); _cTopology = PrimitiveTopology; }
+        if (!_isMeshShaderBound && (_isTessellating || PrimitiveTopology == PrimitiveTopology.PatchList))
+        {
+            SetTessellationState(commandBuffer);
+        }
         var primitiveRestart = PrimitiveRestartEnable && IsStripTopology(PrimitiveTopology);
         if (!_stateInitialized || _cPrimitiveRestart != primitiveRestart)
         { commandBuffer.SetPrimitiveRestartEnable(primitiveRestart); _cPrimitiveRestart = primitiveRestart; }
@@ -1829,6 +1852,42 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         _stateInitialized = true;
     }
 
+    private void SetTessellationState(CommandBuffer commandBuffer)
+    {
+        var maxPatchSize = Adapter.AdapterProperties.Limits.MaxTessellationPatchSize;
+        if (!_isTessellating)
+        {
+            throw new InvalidOperationException($"{CurrentEffectPass?.Name} does not tessellate, so it draws no " +
+                                                $"{nameof(PrimitiveTopology.PatchList)}.");
+        }
+
+        if (PrimitiveTopology != PrimitiveTopology.PatchList)
+        {
+            throw new InvalidOperationException($"{CurrentEffectPass?.Name} tessellates, so it draws a " +
+                                                $"{nameof(PrimitiveTopology.PatchList)}, not a {PrimitiveTopology}.");
+        }
+
+        if (PatchControlPoints < 1 || PatchControlPoints > maxPatchSize)
+        {
+            throw new InvalidOperationException($"{CurrentEffectPass?.Name} tessellates patches of " +
+                                                $"{nameof(PatchControlPoints)} points, from 1 to {maxPatchSize} on " +
+                                                $"this device, and it is {PatchControlPoints}.");
+        }
+
+        if (_inputPatchSize != 0 && PatchControlPoints != _inputPatchSize)
+        {
+            throw new InvalidOperationException($"{CurrentEffectPass?.Name} reads patches of {_inputPatchSize} " +
+                                                $"control points, and {nameof(PatchControlPoints)} is " +
+                                                $"{PatchControlPoints}.");
+        }
+
+        if (!_isTessellationKnown || _cPatchControlPoints != PatchControlPoints)
+        { commandBuffer.SetPatchControlPointsEXT(PatchControlPoints); _cPatchControlPoints = PatchControlPoints; }
+        if (!_isTessellationKnown || _cDomainOrigin != TessellationDomainOrigin)
+        { commandBuffer.SetTessellationDomainOriginEXT(TessellationDomainOrigin); _cDomainOrigin = TessellationDomainOrigin; }
+        _isTessellationKnown = true;
+    }
+
     public void Draw(ulong vertexCount, uint instanceCount, uint firstVertex = 0, uint firstInstance = 0)
     {
         if (CurrentEffectPass == null)
@@ -1836,6 +1895,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             throw new ArgumentNullException("Effect pass should be applied before executing draw");
         }
 
+        CheckDrawKind(isMeshTaskDraw: false);
         if (_hashing)
         {
             HashDrawState();
@@ -1856,10 +1916,76 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         commandBuffer.Draw((uint)vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
+    public void DrawMeshTasks(uint groupCountX, uint groupCountY = 1, uint groupCountZ = 1)
+    {
+        if (CurrentEffectPass == null)
+        {
+            throw new ArgumentNullException("Effect pass should be applied before executing draw");
+        }
+
+        CheckDrawKind(isMeshTaskDraw: true);
+        CheckMeshTaskCount(groupCountX, groupCountY, groupCountZ);
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD5);
+            Hash(((ulong)groupCountX << 32) | groupCountY);
+            Hash(groupCountZ);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
+        var commandBuffer = CurrentCommandBuffer;
+        SetDrawingState(commandBuffer);
+
+        commandBuffer.DrawMeshTasksEXT(groupCountX, groupCountY, groupCountZ);
+    }
+
+    private void CheckDrawKind(bool isMeshTaskDraw)
+    {
+        if (_isMeshShaderBound && !isMeshTaskDraw)
+        {
+            throw new InvalidOperationException($"{CurrentEffectPass?.Name} is a mesh pass, drawn by " +
+                                                $"{nameof(DrawMeshTasks)}, not by vertices.");
+        }
+
+        if (!_isMeshShaderBound && isMeshTaskDraw)
+        {
+            throw new InvalidOperationException($"{CurrentEffectPass?.Name} has no mesh shader to launch tasks of; " +
+                                                "it is drawn by vertices.");
+        }
+    }
+
+    private void CheckMeshTaskCount(uint groupCountX, uint groupCountY, uint groupCountZ)
+    {
+        var limits = Adapter.MeshShaderProperties;
+        if (limits == null)
+        {
+            throw new NotSupportedException($"{Adapter.AdapterProperties.DeviceName} has no VK_EXT_mesh_shader to " +
+                                            "draw mesh tasks with.");
+        }
+
+        var (stage, maxCounts, maxTotal) = _isTaskShaderBound
+            ? ("task", limits.MaxTaskWorkGroupCount, limits.MaxTaskWorkGroupTotalCount)
+            : ("mesh", limits.MaxMeshWorkGroupCount, limits.MaxMeshWorkGroupTotalCount);
+        var maxCount = maxCounts.Span;
+        var total = (ulong)groupCountX * groupCountY * groupCountZ;
+        if (groupCountX > maxCount[0] || groupCountY > maxCount[1] || groupCountZ > maxCount[2] || total > maxTotal)
+        {
+            throw new ArgumentOutOfRangeException(nameof(groupCountX),
+                $"{groupCountX}x{groupCountY}x{groupCountZ} {stage} workgroups are more than this device launches: " +
+                $"at most {maxCount[0]}x{maxCount[1]}x{maxCount[2]}, {maxTotal} in all.");
+        }
+    }
+
     // indexCount lets the caller draw fewer indices than the buffer holds - needed for an over-allocated/reused index
     // buffer (its capacity exceeds the live geometry). 0 means "the whole buffer" (its ElementCount), as before.
     public void DrawIndexed(IBuffer vertexBuffer, IBuffer indexBuffer, uint instanceCount = 1, uint indexCount = 0)
     {
+        CheckDrawKind(isMeshTaskDraw: false);
         if (_hashing)
         {
             HashDrawState();
@@ -1891,6 +2017,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     // twin of DrawIndexed; instancing (instanceCount) works identically, indices are not required.
     public void Draw(IBuffer vertexBuffer, uint vertexCount, uint instanceCount = 1)
     {
+        CheckDrawKind(isMeshTaskDraw: false);
         if (_hashing)
         {
             HashDrawState();
@@ -1934,6 +2061,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     /// </summary>
     public void DrawIndirect(IBuffer vertexBuffer, IBuffer indirectBuffer, uint drawCount = 1, uint stride = 16)
     {
+        CheckDrawKind(isMeshTaskDraw: false);
         if (_hashing)
         {
             HashDrawState();
@@ -2012,16 +2140,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         _submissionSync?.Release();
         MainDevice.Observe(submitted);
         MainDevice.Observe(waited);
-    }
-
-    public void AddEffectPool(EffectPool pool)
-    {
-        EffectPools.Add(pool);
-    }
-
-    public void RemoveEffectPool(EffectPool pool)
-    {
-        EffectPools.Remove(pool);
     }
 
     public void Destroy(Adamantium.Vulkan.Core.Buffer buffer)
@@ -2112,7 +2230,10 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         else
         {
             Log.Logger.Debug("Disposing render device");
-            DefaultEffectPool?.Dispose();
+            foreach (var effect in MainDevice.ShaderHotReload.GetEffects(this))
+            {
+                effect.Dispose();
+            }
 
             // Counted by their OWN arrays, not by the command buffers': the three are created together but nothing keeps
             // their lengths tied, and freeing a fence per command buffer is how a device came to be destroyed with its

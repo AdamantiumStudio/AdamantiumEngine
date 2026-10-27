@@ -24,7 +24,7 @@ public class ShaderHotReloadTests
     private const string Bumped = @"
 #include ""Bump.fxh""
 
-uint64_t OutputAddress;
+uint* Output;
 uint Count;
 
 [shader(""compute"")]
@@ -34,8 +34,7 @@ void BumpCS(uint3 tid : SV_DispatchThreadID)
     if (tid.x >= Count)
         return;
 
-    uint* output = (uint*)OutputAddress;
-    output[tid.x] = tid.x + Bump();
+    Output[tid.x] = tid.x + Bump();
 }
 
 technique Bumped { pass Run { ComputeShader = BumpCS; } }
@@ -246,8 +245,8 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
 
 #if DEBUG
         Assert.That(effect.IsSupportingDynamicCompilation, Is.True);
-        Assert.That(Path.GetFileName(effect.RawEffectData.Arguments.FilePath), Is.EqualTo("SpriteEffect.fx"));
-        Assert.That(File.Exists(effect.RawEffectData.Arguments.FilePath), Is.True);
+        Assert.That(Path.GetFileName(effect.Data.Description.Arguments.FilePath), Is.EqualTo("SpriteEffect.fx"));
+        Assert.That(File.Exists(effect.Data.Description.Arguments.FilePath), Is.True);
 #else
         Assert.That(effect.IsSupportingDynamicCompilation, Is.False);
 #endif
@@ -259,7 +258,7 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
         var device = GpuFixture.CreateRenderDevice();
         using var effect = Effect.CompileFromFile(SmokePath, device);
         var pass = effect.Techniques[0].Passes[0];
-        var address = effect.Parameters["OutputAddress"];
+        var address = effect.Parameters["Output"];
         using var output = NewOutput(device);
         address.SetValue(output.GetDeviceAddress());
         effect.Parameters["Count"].SetValue((uint)Count);
@@ -268,7 +267,7 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
 
         Assert.That(refused, Is.Null);
         Assert.That(effect.Techniques[0].Passes[0], Is.SameAs(pass));
-        Assert.That(effect.Parameters["OutputAddress"], Is.SameAs(address));
+        Assert.That(effect.Parameters["Output"], Is.SameAs(address));
         var written = Run(device, pass, output);
         for (int i = 0; i < Count; i++)
         {
@@ -283,7 +282,7 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
         using var effect = Effect.CompileFromFile(SmokePath, device);
         var pass = effect.Techniques[0].Passes[0];
         using var output = NewOutput(device);
-        effect.Parameters["OutputAddress"].SetValue(output.GetDeviceAddress());
+        effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
         effect.Parameters["Count"].SetValue((uint)Count);
 
         var refused = effect.Reload(Recompiled(source => source.Replace("pass Run", "pass Go")));
@@ -316,7 +315,7 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
     public void ABoundSampler_IsStillBoundAfterAReload()
     {
         const string sampling = @"
-uint64_t OutputAddress;
+uint* Output;
 Texture2D Picture;
 SamplerState PictureSampler;
 
@@ -324,8 +323,7 @@ SamplerState PictureSampler;
 [numthreads(1, 1, 1)]
 void SampleCS(uint3 tid : SV_DispatchThreadID)
 {
-    uint* output = (uint*)OutputAddress;
-    output[0] = (uint)(Picture.SampleLevel(PictureSampler, float2(0.5, 0.5), 0).x * VALUE);
+    Output[0] = (uint)(Picture.SampleLevel(PictureSampler, float2(0.5, 0.5), 0).x * VALUE);
 }
 
 technique Sampling { pass Run { ComputeShader = SampleCS; } }
@@ -405,7 +403,7 @@ technique Sampling { pass Run { ComputeShader = SampleCS; } }
         Assert.That(compiled.HasErrors, Is.False, string.Join(Environment.NewLine, compiled.Logger.Messages));
         var effect = new Effect(device, compiled.EffectData);
         var output = NewOutput(device);
-        effect.Parameters["OutputAddress"].SetValue(output.GetDeviceAddress());
+        effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
         effect.Parameters["Count"].SetValue((uint)Count);
         var pass = effect.Techniques[0].Passes[0];
         Assert.That(Run(device, pass, output)[0], Is.EqualTo(1));
@@ -418,7 +416,7 @@ technique Sampling { pass Run { ComputeShader = SampleCS; } }
         for (var i = 0; i < passes; i++)
         {
             text.Append($"[shader(\"compute\")] [numthreads(64, 1, 1)] void Extra{i}CS(uint3 tid : SV_DispatchThreadID) ");
-            text.Append($"{{ uint* output = (uint*)OutputAddress; output[tid.x] = Bump() + {i}; }}\n");
+            text.Append($"{{ Output[tid.x] = Bump() + {i}; }}\n");
         }
 
         text.Append("technique Bumped { pass Run { ComputeShader = BumpCS; }");

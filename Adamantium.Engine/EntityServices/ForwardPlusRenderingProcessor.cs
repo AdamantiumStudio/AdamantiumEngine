@@ -254,9 +254,9 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var viewport = Window.Viewport;
         var parameters = target.Parameters;
 
-        parameters["LightsAddress"].SetValue(lights);
-        parameters["ClusterCountsAddress"].SetValue(clusterCounts[frame].GetDeviceAddress());
-        parameters["ClusterLightsAddress"].SetValue(clusterLists[frame].GetDeviceAddress());
+        parameters["Lights"].SetValue(lights);
+        parameters["ClusterCounts"].SetValue(clusterCounts[frame].GetDeviceAddress());
+        parameters["ClusterLights"].SetValue(clusterLists[frame].GetDeviceAddress());
         parameters["LightCount"].SetValue((uint)LightCount);
         parameters["DirectionalCount"].SetValue((uint)directional);
         parameters["ClusterDepth"].SetValue(new Vector4F(near, far, ClusterSlices / MathF.Log(far / near), MathF.Log(near)));
@@ -424,7 +424,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             GraphicsDevice.DepthBiasEnabled = false;
             GraphicsDevice.DepthBiasConstantFactor = 0;
             GraphicsDevice.DepthBiasSlopeFactor = 0;
-            basicEffect.BasicColoredPass.UnApply();
         }
     }
 
@@ -518,8 +517,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
-            target?.Parameters["InstancesAddress"].SetValue(instanceAddress);
-            target?.Parameters["PalettesAddress"].SetValue(paletteAddress);
+            target?.Parameters["Instances"].SetValue(instanceAddress);
+            target?.Parameters["Palettes"].SetValue(paletteAddress);
             target?.Parameters["sampleType"].SetResource(SamplerStates.LinearRepeat);
         }
 
@@ -578,8 +577,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         {
             geometryCache.GetOrCreate(collider.Geometry, typeof(MeshVertex)).Draw(GraphicsDevice, RenderState.Default);
         }
-
-        basicEffect.BasicColoredPass.UnApply();
     }
 
     private Vector3F AlbedoOf(Material material)

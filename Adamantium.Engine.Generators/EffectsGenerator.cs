@@ -1,15 +1,19 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Adamantium.Core;
 using Adamantium.EffectsCompiler;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Adamantium.Engine.Generators;
 
 [Generator]
 public class EffectsGenerator : IIncrementalGenerator
 {
+    private const string EffectTypeName = "Adamantium.Graphics.Core.EffectsFramework.Effect";
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var effectFiles = context.AdditionalTextsProvider.Where(file => file.Path.EndsWith(".fx"));
@@ -40,7 +44,8 @@ public class EffectsGenerator : IIncrementalGenerator
                 pair.Right.GlobalOptions.TryGetValue("build_property.adamantiumslangpath", out var slangPath);
                 pair.Right.GlobalOptions.TryGetValue("build_property.adamantiumshaderhotreload", out var hotReload);
                 return (AssemblyName: pair.Left.AssemblyName, ProjectDir: projectDir, SlangPath: slangPath,
-                    HotReload: string.Equals(hotReload, "true", System.StringComparison.OrdinalIgnoreCase));
+                    HotReload: string.Equals(hotReload, "true", System.StringComparison.OrdinalIgnoreCase),
+                    Inherited: GetInheritedMembers(pair.Left));
             });
 
         var sourceProvider = fxNamesAndContents
@@ -71,7 +76,15 @@ public class EffectsGenerator : IIncrementalGenerator
                 var compilerResult = EffectCompiler.Compile(text, file.name, includes);
                 if (compilerResult.HasErrors)
                 {
-                    CreateDiagnostic(ref spc, compilerResult, file.name);
+                    CreateDiagnostics(ref spc, compilerResult, file.name, file.path);
+                    return;
+                }
+
+                var parameterNames = GetParameterNames(compilerResult.EffectData);
+                var clash = FindNameClash(compilerResult.EffectData, parameterNames, place.Inherited, file.fxName);
+                if (clash != null)
+                {
+                    CreateDiagnostic(ref spc, file.name, clash, DiagnosticSeverity.Error);
                 }
                 else
                 {
@@ -81,7 +94,7 @@ public class EffectsGenerator : IIncrementalGenerator
                     }
 
                     var @namespace = ComposeNamespace(place.AssemblyName, place.ProjectDir, file.path);
-                    var result = GenerateEffect(compilerResult, file.fxName, @namespace);
+                    var result = GenerateEffect(compilerResult, parameterNames, file.fxName, @namespace);
                     spc.AddSource($"{file.fxName}.g.cs", result);
                 }
             }
@@ -134,7 +147,7 @@ public class EffectsGenerator : IIncrementalGenerator
         return cleaned.Length > 0 && char.IsDigit(cleaned[0]) ? "_" + cleaned : cleaned;
     }
 
-    private string GenerateEffect(EffectCompilerResult result, string fxName, string @namespace)
+    private string GenerateEffect(EffectCompilerResult result, List<string> parameterNames, string fxName, string @namespace)
     {
         var textGenerator = new TextGenerator();
         textGenerator.WriteLine("using Adamantium.EffectsCompiler;");
@@ -158,65 +171,58 @@ public class EffectsGenerator : IIncrementalGenerator
 
         textGenerator.NewLine();
 
-        textGenerator.WriteLine($"public {fxName}(IGraphicsDevice device, EffectPool effectPool = null) " +
-                                $": base(device, bytecode, effectPool)");
+        textGenerator.WriteLine($"public {fxName}(IGraphicsDevice device) : this(device, bytecode)");
+        textGenerator.WriteOpenBraceAndIndent();
+        textGenerator.UnindentAndWriteCloseBrace();
+
+        textGenerator.NewLine();
+        textGenerator.WriteLine($"private {fxName}(IGraphicsDevice device, EffectData data) : base(device, data)");
         textGenerator.WriteOpenBraceAndIndent();
 
-        var effectParameters = new List<string>();
-        var effectPasses = new List<string>();
-        foreach (var technique in result.EffectData.Description.Techniques)
+        var techniques = result.EffectData.Description.Techniques;
+        var unnamedTechniques = 0;
+        foreach (var technique in techniques)
         {
-            foreach (var pass in technique.Passes)
+            var techniqueName = GetNameOrIndex(technique.Name, ref unnamedTechniques);
+            var unnamedPasses = 0;
+            for (var p = 0; p < technique.Passes.Count; p++)
             {
-                var passName = $"{technique.Name}{pass.Name}Pass";
-                passName = char.ToUpper(passName[0]) + passName.Substring(1);
-                effectPasses.Add(passName);
-                textGenerator.WriteLine($"{passName} = Techniques[\"{technique.Name}\"].Passes[\"{pass.Name}\"];");
+                var passName = GetNameOrIndex(technique.Passes[p].Name, ref unnamedPasses);
+                textGenerator.WriteLine(
+                    $"{ToPassProperty(technique, p)} = Techniques[\"{techniqueName}\"].Passes[\"{passName}\"];");
             }
         }
 
-        var parametersIdentity = new HashSet<string>();
-        foreach (var shader in result.EffectData.Shaders)
+        foreach (var name in parameterNames)
         {
-            foreach (var constantBuffer in shader.ConstantBuffers)
-            {
-                foreach (var parameter in constantBuffer.Parameters)
-                {
-                    if (parametersIdentity.Contains(parameter.Name)) continue;
-
-                    parametersIdentity.Add(parameter.Name);
-                    var name = char.ToUpper(parameter.Name[0]) + parameter.Name.Substring(1);
-                    effectParameters.Add(name);
-                    textGenerator.WriteLine($"{name} = Parameters[\"{parameter.Name}\"];");
-                }
-            }
-
-            foreach (var resource in shader.ResourceParameters)
-            {
-                if (parametersIdentity.Contains(resource.Name) || resource.Name == "type.$Globals") continue;
-
-                parametersIdentity.Add(resource.Name);
-                var name = char.ToUpper(resource.Name[0]) + resource.Name.Substring(1);
-                effectParameters.Add(name);
-                textGenerator.WriteLine($"{name} = Parameters[\"{resource.Name}\"];");
-            }
+            textGenerator.WriteLine($"{ToProperty(name)} = Parameters[\"{name}\"];");
         }
 
         textGenerator.UnindentAndWriteCloseBrace();
 
+        textGenerator.NewLine();
+        textGenerator.WriteLine($"public override {fxName} Clone()");
+        textGenerator.WriteOpenBraceAndIndent();
+        textGenerator.WriteLine($"var effect = new {fxName}(GraphicsDevice, Data);");
+        textGenerator.WriteLine("effect.CopyValuesFrom(this);");
+        textGenerator.WriteLine("return effect;");
+        textGenerator.UnindentAndWriteCloseBrace();
 
         textGenerator.NewLine();
 
-        foreach (var pass in effectPasses)
+        foreach (var technique in techniques)
         {
-            textGenerator.WriteLine($"public IEffectPass {pass} {{get;}}");
+            for (var p = 0; p < technique.Passes.Count; p++)
+            {
+                textGenerator.WriteLine($"public IEffectPass {ToPassProperty(technique, p)} {{get;}}");
+            }
         }
 
         textGenerator.NewLine();
 
-        foreach (var parameter in effectParameters)
+        foreach (var name in parameterNames)
         {
-            textGenerator.WriteLine($"public EffectParameter {parameter} {{get;}}");
+            textGenerator.WriteLine($"public EffectParameter {ToProperty(name)} {{get;}}");
         }
 
         textGenerator.UnindentAndWriteCloseBrace(); // close class
@@ -225,20 +231,126 @@ public class EffectsGenerator : IIncrementalGenerator
         return textGenerator.ToString();
     }
 
-    private void CreateDiagnostic(ref SourceProductionContext spc, EffectCompilerResult result, string filePath)
+    private static List<string> GetParameterNames(EffectData data)
+    {
+        var names = new List<string>();
+        foreach (var shader in data.Shaders)
+        {
+            foreach (var buffer in shader.ConstantBuffers)
+            {
+                foreach (var parameter in buffer.Parameters)
+                {
+                    AddOnce(names, parameter.Name);
+                }
+            }
+
+            foreach (var resource in shader.ResourceParameters)
+            {
+                AddOnce(names, resource.Name);
+            }
+        }
+
+        return names;
+    }
+
+    private static void AddOnce(List<string> names, string name)
+    {
+        if (!names.Contains(name))
+        {
+            names.Add(name);
+        }
+    }
+
+    private static string FindNameClash(EffectData data, List<string> parameterNames, string inherited, string className)
+    {
+        var members = new Dictionary<string, string> { [className] = $"the class {className}" };
+        foreach (var name in inherited.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            members[name] = $"the inherited member {name}";
+        }
+
+        foreach (var technique in data.Description.Techniques)
+        {
+            for (var p = 0; p < technique.Passes.Count; p++)
+            {
+                var clash = AddMember(members, ToPassProperty(technique, p),
+                    $"technique '{technique.Name}' pass '{technique.Passes[p].Name}'");
+                if (clash != null) return clash;
+            }
+        }
+
+        foreach (var name in parameterNames)
+        {
+            var clash = AddMember(members, ToProperty(name), $"parameter '{name}'");
+            if (clash != null) return clash;
+        }
+
+        return null;
+    }
+
+    private static string AddMember(Dictionary<string, string> members, string property, string from)
+    {
+        if (members.TryGetValue(property, out var taken))
+        {
+            return $"{taken} and {from} would be one property, {property}, in the generated class; rename one.";
+        }
+
+        members.Add(property, from);
+        return null;
+    }
+
+    private static string GetInheritedMembers(Compilation compilation)
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        for (var type = compilation.GetTypeByMetadataName(EffectTypeName); type != null; type = type.BaseType)
+        {
+            foreach (var member in type.GetMembers())
+            {
+                if (member.CanBeReferencedByName && (member.DeclaredAccessibility is Accessibility.Public
+                        or Accessibility.Protected or Accessibility.ProtectedOrInternal))
+                {
+                    names.Add(member.Name);
+                }
+            }
+        }
+
+        return string.Join(",", names);
+    }
+
+    private static string GetNameOrIndex(string name, ref int unnamed) =>
+        string.IsNullOrEmpty(name) ? $"${unnamed++}" : name;
+
+    private static string ToPassProperty(EffectData.Technique technique, int pass) =>
+        ToProperty($"{technique.Name}{technique.Passes[pass].Name}Pass");
+
+    private static string ToProperty(string name) => char.ToUpper(name[0]) + name.Substring(1);
+
+    private static void CreateDiagnostics(ref SourceProductionContext spc, EffectCompilerResult result, string fileName,
+        string filePath)
     {
         foreach (var message in result.Logger.Messages)
         {
             var descriptor = new DiagnosticDescriptor(
                 id: "EffectGenerator",
-                title: "Effects parsing error",
-                messageFormat: "Error while parsing {0}: {1}",
-                category: "EffectParser",
+                title: "Effect compiler",
+                messageFormat: "{0}",
+                category: "EffectCompiler",
                 (DiagnosticSeverity)message.Type,
                 isEnabledByDefault: true);
-            var diagnostic = Diagnostic.Create(descriptor, Location.None, filePath, message.ToString());
-            spc.ReportDiagnostic(diagnostic);
+            spc.ReportDiagnostic(Diagnostic.Create(descriptor, GetLocation(message, fileName, filePath), message.Text));
         }
+    }
+
+    private static Location GetLocation(LogMessage message, string fileName, string filePath)
+    {
+        if (message is not EffectCompilerMessage placed || placed.Location.Line < 1)
+        {
+            return Location.Create(filePath, default, default);
+        }
+
+        var path = placed.Location.FilePath == fileName ? filePath : placed.Location.FilePath;
+        var position = new LinePosition(placed.Location.Line - 1, Math.Max(0, placed.Location.Column - 1));
+        return Location.Create(path, default, new LinePositionSpan(position, position));
     }
 
     private void CreateDiagnostic(ref SourceProductionContext spc, string filePath, string diagnosticText, DiagnosticSeverity severity)

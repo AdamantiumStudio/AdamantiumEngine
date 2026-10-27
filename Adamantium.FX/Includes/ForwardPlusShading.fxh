@@ -54,9 +54,10 @@ struct ClusterLight
     }
 };
 
-uint64_t LightsAddress;
-uint64_t ClusterCountsAddress;
-uint64_t ClusterLightsAddress;
+ClusterLight* Lights;
+// How many lights each cluster has, and for each the lights it has, MaxLightsPerCluster per cluster.
+uint* ClusterCounts;
+uint* ClusterLights;
 uint LightCount;
 uint DirectionalCount;
 // x near, y far, z slices per unit of log depth, w log(near).
@@ -75,7 +76,7 @@ struct MeshInstance
     float4x4 world;
     // rgb: the surface color when it has no texture.
     float4 albedo;
-    // x: the first matrix of its joints' palette in PalettesAddress, y: how many joints it has (a skinned copy only);
+    // x: the first matrix of its joints' palette in Palettes, y: how many joints it has (a skinned copy only);
     // z: its texture in meshTextures (a textured pass only).
     uint4 slots;
 
@@ -90,8 +91,8 @@ struct MeshInstance
     }
 };
 
-uint64_t InstancesAddress;
-uint64_t PalettesAddress;
+MeshInstance* Instances;
+float4x4* Palettes;
 uint InstanceBase;
 
 float4x4 view;
@@ -149,20 +150,17 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
         n = -n;
     }
 
-    ClusterLight* lights = (ClusterLight*)LightsAddress;
     float3 lit = surface * Ambient;
     for (uint i = 0; i < DirectionalCount; i++)
     {
-        lit += lights[i].Shine(surface, n, toEye);
+        lit += Lights[i].Shine(surface, n, toEye);
     }
 
     uint cluster = ClusterAt(pixel, position.z);
-    uint* counts = (uint*)ClusterCountsAddress;
-    uint* list = (uint*)ClusterLightsAddress;
-    uint count = counts[cluster];
+    uint count = ClusterCounts[cluster];
     for (uint k = 0; k < count; k++)
     {
-        lit += lights[list[cluster * MaxLightsPerCluster + k]].Light(surface, position, n, toEye);
+        lit += Lights[ClusterLights[cluster * MaxLightsPerCluster + k]].Light(surface, position, n, toEye);
     }
 
     return lit;
@@ -170,7 +168,7 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
 
 MeshInstance InstanceOf(uint instanceId)
 {
-    return ((MeshInstance*)InstancesAddress)[InstanceBase + instanceId];
+    return Instances[InstanceBase + instanceId];
 }
 
 // A vertex of a copy, at a position and with a normal already in the mesh's own space.
@@ -200,7 +198,7 @@ LIT_PIXEL Lit_VS(MESH_VERTEX input, uint instanceId : SV_InstanceID)
 LIT_PIXEL LitSkinned_VS(SKINNED_VERTEX input, uint instanceId : SV_InstanceID)
 {
     MeshInstance instance = InstanceOf(instanceId);
-    float4x4 skin = SkinOf((float4x4*)PalettesAddress + instance.slots.x, instance.slots.y, input.jointIndices,
+    float4x4 skin = SkinOf(Palettes + instance.slots.x, instance.slots.y, input.jointIndices,
         input.jointWeights);
     return LitOf(instance, mul(float4(input.position.xyz, 1.0f), skin), mul(input.normal, (float3x3)skin),
         input.uv0);

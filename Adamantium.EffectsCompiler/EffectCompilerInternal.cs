@@ -4,7 +4,6 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Adamantium.Core;
 using Adamantium.Vulkan.Spirv.Cross;
 using Adamantium.Vulkan.Spirv.Reflection;
 
@@ -16,9 +15,7 @@ internal sealed class EffectCompilerInternal : IDisposable
     private readonly Dictionary<(EffectStage Stage, string EntryPoint), int> compiledShaders = [];
     private readonly Dictionary<(EffectStage Stage, string EntryPoint), string> failedShaders = [];
     private readonly HashSet<(string Text, SourceLocation Location)> reportedSlangErrors = [];
-    private readonly List<ResourceBindingKey> resourceKeys = [];
     private readonly SlangShaderCompiler slangCompiler = new();
-    private EffectCompilerFlags compilerFlags;
     private EffectData effectData;
     private EffectCompilerLogger logger;
     private List<EffectData.ShaderMacro> macros;
@@ -28,20 +25,18 @@ internal sealed class EffectCompilerInternal : IDisposable
     private EffectData.Technique technique;
 
     /// <summary>Compiles the effect at <paramref name="filePath"/>.</summary>
-    public EffectCompilerResult CompileFromFile(string filePath, EffectCompilerFlags flags = EffectCompilerFlags.None,
-        List<EffectData.ShaderMacro> macros = null, List<string> includeDirectoryList = null,
-        bool allowDynamicCompiling = false) =>
-        Compile(File.ReadAllText(filePath, Encoding.UTF8), filePath, flags, macros, includeDirectoryList,
+    public EffectCompilerResult CompileFromFile(string filePath, List<EffectData.ShaderMacro> macros = null,
+        List<string> includeDirectoryList = null, bool allowDynamicCompiling = false) =>
+        Compile(File.ReadAllText(filePath, Encoding.UTF8), filePath, macros, includeDirectoryList,
             allowDynamicCompiling);
 
     /// <summary>Compiles the effect <paramref name="sourceCode"/> of <paramref name="filePath"/>, its includes found
     /// beside it; <paramref name="macrosArgs"/> are defined for Slang. With <paramref name="allowDynamicCompiling"/> the
     /// effect keeps what it was compiled from, to compile it again.</summary>
-    public EffectCompilerResult Compile(string sourceCode, string filePath, EffectCompilerFlags flags = EffectCompilerFlags.None,
+    public EffectCompilerResult Compile(string sourceCode, string filePath,
         List<EffectData.ShaderMacro> macrosArgs = null, List<string> includeDirectoryList = null,
         bool allowDynamicCompiling = false)
     {
-        compilerFlags = flags;
         macros = macrosArgs ?? [];
         InternalCompile(sourceCode, filePath);
 
@@ -74,7 +69,8 @@ internal sealed class EffectCompilerInternal : IDisposable
     /// <summary>The reflection of <paramref name="shader"/>'s SPIR-V.</summary>
     public SpirvReflectionResult DisassembleShader(EffectData.Shader shader)
     {
-        return new SpirvReflection(shader.Bytecode).Disassemble(resourceKeys);
+        using var reflection = new SpirvReflection(shader.Bytecode);
+        return reflection.Disassemble();
     }
 
     /// <summary>Frees the Slang session.</summary>
@@ -176,7 +172,6 @@ internal sealed class EffectCompilerInternal : IDisposable
 
     private void CompilePass(EffectPassSource passSource)
     {
-        resourceKeys.Clear();
         var pass = new EffectData.Pass { Name = passSource.Name };
         technique.Passes.Add(pass);
         foreach (var stage in passSource.Stages)
@@ -191,6 +186,23 @@ internal sealed class EffectCompilerInternal : IDisposable
             foreach (var stage in groupSource.Stages)
             {
                 CompileShader(stage, group.Shaders);
+            }
+        }
+
+        ReportSharedBindings(pass, passSource.Location);
+    }
+
+    private void ReportSharedBindings(EffectData.Pass pass, SourceLocation location)
+    {
+        var resources = pass.Stages.Concat(pass.HitGroups.SelectMany(group => group.Shaders))
+            .SelectMany(link => effectData.Shaders[link.Index].ResourceParameters);
+        foreach (var shared in resources.GroupBy(resource => (resource.Set, resource.Binding)))
+        {
+            var names = shared.Select(resource => resource.Name).Distinct().ToList();
+            if (names.Count > 1)
+            {
+                logger.Error($"{string.Join(", ", names)} take binding {shared.Key.Binding} of set {shared.Key.Set} " +
+                             "together, which Vulkan does not allow.", location);
             }
         }
     }
@@ -231,11 +243,6 @@ internal sealed class EffectCompilerInternal : IDisposable
             {
                 failedShaders[key] = null;
                 return;
-            }
-
-            if ((compilerFlags & EffectCompilerFlags.Debug) == 0)
-            {
-                shader.Bytecode = result.Bytecode;
             }
 
             var index = effectData.Shaders.Count;
@@ -418,26 +425,14 @@ internal sealed class EffectCompilerInternal : IDisposable
         };
 
         using var reflection = new SpirvReflection(shader.Bytecode);
-        var reflected = reflection.Disassemble(resourceKeys);
-        shader.Bytecode = reflection.GetByteCode();
-        BuildParameters(shader, reflected, stage.Location);
+        var reflected = reflection.Disassemble();
+        BuildParameters(shader, reflected);
+        shader.InputPatchSize = reflected.InputPatchSize;
         return shader;
     }
 
-    private void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult, SourceLocation location)
+    private static void BuildParameters(EffectData.Shader shader, SpirvReflectionResult reflectionResult)
     {
-        var groupByIds = reflectionResult.AllResources
-            .GroupBy(x => (x.Description.DescriptorSet, x.Description.SlotIndex))
-            .Where(group => group.Count() > 1).SelectMany(g => g).ToArray();
-
-        if (groupByIds.Length > 0)
-        {
-            var names = groupByIds.Select(x => x.Description.Name).ToArray();
-            logger.Error($"{string.Join(", ", names)} take binding {groupByIds[0].Description.SlotIndex} of set " +
-                         $"{groupByIds[0].Description.DescriptorSet} together, which Vulkan does not allow.", location);
-            return;
-        }
-
         for (int i = 0; i < reflectionResult.UniformBuffers.Count; i++)
         {
             var reflectConstantBuffer = reflectionResult.UniformBuffers[i];
@@ -477,7 +472,7 @@ internal sealed class EffectCompilerInternal : IDisposable
         }
     }
 
-    private EffectData.ValueTypeParameter BuildConstantBufferParameter(ShaderReflectionVariable variable)
+    private static EffectData.ValueTypeParameter BuildConstantBufferParameter(ShaderReflectionVariable variable)
     {
         var parameter = new EffectData.ValueTypeParameter()
         {

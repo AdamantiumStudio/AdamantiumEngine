@@ -29,7 +29,7 @@ namespace Adamantium.EffectsCompiler
         // stale one meets a newer loader as a wall of characters: without a mark of its own it fails as garbage.
         private static readonly byte[] Magic = [(byte)'A', (byte)'E', (byte)'F', (byte)'X'];
 
-        private const int Version = 2;
+        private const int Version = 3;
 
         /// <summary>
         /// Saves this <see cref="EffectData"/> instance to the specified stream.

@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using Adamantium.Core;
 using Adamantium.EffectsCompiler;
@@ -9,320 +7,179 @@ using Adamantium.EffectsCompiler;
 namespace Adamantium.Graphics.Core.EffectsFramework;
 
 /// <summary>
-/// Effect class. Representing a wrapper over the shaders to make work with shaders easier
+/// A compiled effect made ready on one device: its techniques and passes, the parameters its shaders declare and the
+/// constant buffers those values live in. Every pass of the effect shares the parameters and buffers declared alike. The
+/// main device's <see cref="ShaderHotReload"/> holds it among the live effects until it is disposed.
 /// </summary>
 public class Effect : GraphicsResource
 {
-    /// <summary>
-    /// Occurs when the effect is being initialized (after a recompilation at runtime for example)
-    /// </summary>
-    public event EventHandler<EventArgs> Initialized;
-
-    /// <summary>
-    /// Occurs after <see cref="Reload"/> has put a recompiled version of this effect in place.
-    /// </summary>
-    public event EventHandler<EventArgs> Reloaded;
-
-    public delegate IEffectPass OnApplyDelegate(IEffectPass pass);
-
-    private Dictionary<EffectConstantBufferKey, EffectConstantBuffer> effectConstantBuffersCache;
+    private readonly Dictionary<EffectData.ConstantBuffer, EffectConstantBuffer> buffersByDeclaration = [];
     private Dictionary<string, EffectParameter> reusableParameters;
     private Dictionary<string, EffectTechnique> reusableTechniques;
     private Dictionary<(string Technique, string Pass), IEffectPass> reusablePasses;
+    private List<IEffectPass> madePasses;
 
-    public IEffectResourceLinker ResourceLinker { get; private set; }
-
-    /// <summary>
-    /// Gets a collection of constant buffers that are defined for this effect.
-    /// </summary>
-    public EffectConstantBufferCollection ConstantBuffers { get; private set; }
-
-    /// <summary>
-    /// Gets a collection of parameters that are defined for this effect.
-    /// </summary>
-    public EffectParameterCollection Parameters { get; private set; }
-
-    /// <summary>
-    /// Gets a collection of techniques that are defined for this effect.
-    /// </summary>
-    public EffectTechniqueCollection Techniques { get; private set; }
-
-    /// <summary>
-    /// Gets the data associated to this effect.
-    /// </summary> 
-    public EffectData.Effect RawEffectData { get; private set; }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Effect"/> class with the specified bytecode effect. See remarks.
-    /// </summary>
-    /// <param name="device">The device.</param>
-    /// <param name="bytecode">The bytecode to add to <see cref="IGraphicsDevice.DefaultEffectPool"/>. This bytecode must contain only one effect.</param>
-    /// <exception cref="ArgumentException">If the bytecode doesn't contain a single effect.</exception>
-    /// <remarks>
-    /// The effect bytecode must contain only a single effect and will be registered into the <see cref="IGraphicsDevice.DefaultEffectPool"/>.
-    /// </remarks>
+    /// <summary>An effect of the saved <see cref="EffectData"/> in <paramref name="bytecode"/>.</summary>
     public Effect(IGraphicsDevice device, byte[] bytecode)
         : this(device, EffectData.Load(bytecode))
     {
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Effect" /> class with the specified bytecode effect. See remarks.
-    /// </summary>
-    /// <param name="device">The device.</param>
-    /// <param name="effectData">The bytecode to add to the Effect Pool. This bytecode must contain only one effect.</param>
-    /// <param name="effectPool">The effect pool used to register the bytecode. Default is <see cref="IGraphicsDevice.DefaultEffectPool"/>.</param>
-    /// <exception cref="ArgumentException">If the bytecode doesn't contain a single effect.</exception>
-    /// <remarks>The effect bytecode must contain only a single effect and will be registered into the <see cref="IGraphicsDevice.DefaultEffectPool"/>.</remarks>
-    public Effect(IGraphicsDevice device, EffectData effectData, EffectPool effectPool = null) : base(device)
+    /// <summary>An effect of <paramref name="data"/> on <paramref name="device"/>.</summary>
+    /// <exception cref="InvalidOperationException">The effect has no pass, or a pass could not be made.</exception>
+    public Effect(IGraphicsDevice device, EffectData data) : base(device)
     {
-        CreateInstanceFrom(device, effectData, effectPool);
+        Name = data.Description.Name;
+        Build(data);
+        device.MainDevice?.ShaderHotReload.Add(this);
     }
 
-    /// <summary>
-    /// Gets the pool this effect attached to.
-    /// </summary>
-    /// <value> The pool. </value>
-    public EffectPool Pool { get; private set; }
+    /// <summary>The compiled effect this one runs: its techniques and passes, and the shaders they link.</summary>
+    public EffectData Data { get; private set; }
 
-    /// <summary>
-    /// Occurs when the on apply is applied on a pass.
-    /// </summary>
-    /// <remarks>
-    /// This external hook provides a way to pre-configure a pipeline when a pass is applied.
-    /// Subclass of this class can override the method <see cref="OnApply"/>.
-    /// </remarks>
-    public event OnApplyDelegate OnApplyCallback;
+    /// <summary>The techniques of the effect, in the order it declares them.</summary>
+    public EffectCollection<EffectTechnique> Techniques { get; } = new();
 
-    /// <summary>
-    /// Gets or sets the current technique. By default, it is set to the first available technique in this effect.
-    /// </summary>
-    /// <value>The current technique.</value>
+    /// <summary>The parameters of the effect: the values first, then the resources.</summary>
+    public EffectCollection<EffectParameter> Parameters { get; } = new();
+
+    /// <summary>The constant buffers the values live in.</summary>
+    public EffectCollection<EffectConstantBuffer> ConstantBuffers { get; } = new();
+
+    /// <summary>Where the resources set on the parameters are kept until a pass binds them.</summary>
+    public IEffectResourceLinker ResourceLinker { get; private set; }
+
+    /// <summary>The technique a pass of which was applied last; the first one until then.</summary>
     public EffectTechnique CurrentTechnique { get; set; }
 
-    /// <summary>
-    /// The effect is supporting dynamic compilation.
-    /// </summary>
+    /// <summary>Whether the effect carries the source it was compiled from, so it can be compiled again.</summary>
     public bool IsSupportingDynamicCompilation { get; private set; }
 
-    internal void CreateInstanceFrom(IGraphicsDevice device, EffectData effectData, EffectPool effectPool)
+    /// <summary>Compiles the effect at <paramref name="path"/> for <paramref name="device"/>; null when it does not
+    /// compile.</summary>
+    public static Effect CompileFromFile(string path, IGraphicsDevice device)
     {
-        ConstantBuffers = new EffectConstantBufferCollection();
-        Parameters = new EffectParameterCollection();
-        Techniques = new EffectTechniqueCollection();
-
-        Pool = effectPool ?? device.DefaultEffectPool;
-
-        Name = effectData.Description.Name;
-
-        var t = Stopwatch.StartNew();
-        var effect = Pool.RegisterBytecode(effectData);
-
-        InitializeFrom(effect, null);
-
-        t.Stop();
-        Debug.WriteLine($"Effect initialized in {t.ElapsedMilliseconds} ms");
-        Pool.AddEffect(this);
-
-        if (IsSupportingDynamicCompilation)
-        {
-            device.MainDevice?.ShaderHotReload.Track(this);
-        }
-    }
-
-    /// <summary>
-    /// Binds the specified effect data to this instance.
-    /// </summary>
-    /// <param name="effectDataArg">The effect data arg.</param>
-    /// <param name="cloneFromEffect">The clone from effect.</param>
-    /// <exception cref="System.InvalidOperationException">If no techniques found in this effect.</exception>
-    /// <exception cref="System.ArgumentException">If unable to find effect [effectName] from the EffectPool.</exception>
-    internal void InitializeFrom(EffectData.Effect effectDataArg, Effect cloneFromEffect)
-    {
-        DisposeCollector?.DisposeAndClear();
-        ConstantBuffers.Clear();
-        Parameters.Clear();
-        Techniques.Clear();
-        effectConstantBuffersCache?.Clear();
-
-        Build(effectDataArg, cloneFromEffect);
-    }
-
-    private void Build(EffectData.Effect effectDataArg, Effect cloneFromEffect)
-    {
-        RawEffectData = effectDataArg;
-        ResourceLinker = GraphicsDevice.CreateEffectResourceLinker();
-
-        IsSupportingDynamicCompilation = RawEffectData.Arguments != null;
-        effectConstantBuffersCache ??= new Dictionary<EffectConstantBufferKey, EffectConstantBuffer>();
-
-        var logger = new Logger();
-        int techniqueIndex = 0;
-        int totalPassCount = 0;
-
-        foreach (var techniqueRaw in RawEffectData.Techniques)
-        {
-            var name = techniqueRaw.Name;
-            if (string.IsNullOrEmpty(name))
-                name = $"${techniqueIndex++}";
-
-            var technique = TechniqueFor(name);
-            Techniques.Add(technique);
-
-            int passIndex = 0;
-            foreach (var passRaw in techniqueRaw.Passes)
-            {
-                name = passRaw.Name;
-                if (string.IsNullOrEmpty(name))
-                    name = $"${passIndex++}";
-
-                var pass = PassFor(logger, technique, passRaw, name);
-
-                pass.Initialize(logger);
-                
-                technique.Passes.Add(pass);
-            }
-
-            totalPassCount += technique.Passes.Count;
-        }
-
-        if (totalPassCount == 0)
-            throw new InvalidOperationException("No passes found in this effect.");
-
-        if (logger.HasErrors)
-            throw new InvalidOperationException(string.Join("\n", logger.Messages));
-
-        ResourceLinker.Initialize();
-
-        Parameters.Items.Sort((left, right) =>
-        {
-            var comparison = left.IsValueType != right.IsValueType ? left.IsValueType ? -1 : 1 : 0;
-
-            if (comparison == 0)
-            {
-                comparison = ((int) left.ParameterType).CompareTo((int) right.ParameterType);
-
-                if (comparison == 0)
-                {
-                    comparison = left.Offset.CompareTo(right.Offset);
-                }
-            }
-
-            return comparison;
-        });
-
-        uint resourceIndex = 0;
-        foreach (var parameter in Parameters)
-        {
-            if (!parameter.IsValueType)
-            {
-                parameter.Offset = (int)resourceIndex;
-                resourceIndex += parameter.ElementCount;
-            }
-
-            if (parameter.ParameterType == EffectParameterType.UniformBuffer)
-            {
-                parameter.SetResource(ConstantBuffers[parameter.Name]);
-            }
-        }
-
-        foreach (var technique in Techniques)
-        {
-            foreach (var pass in technique.Passes)
-            {
-                pass.PrepareData();
-            }
-        }
-
-        CurrentTechnique = Techniques[0];
-
-        if (cloneFromEffect != null)
-        {
-            for (int i = 0; i < ConstantBuffers.Count; i++)
-            {
-                cloneFromEffect.ConstantBuffers[i].CopyTo(ConstantBuffers[i]);
-            }
-
-            foreach (var boundResource in cloneFromEffect.ResourceLinker.GetBoundResources())
-            {
-                if (boundResource.Value is EffectConstantBuffer)
-                    continue;
-
-                ResourceLinker.AddBoundResource(boundResource.Key, boundResource.Value);
-            }
-
-            Pool.AddEffect(this);
-        }
-
-        Initialize();
-
-        OnInitialized();
-    }
-
-    protected virtual void Initialize()
-    {
+        var result = EffectCompiler.CompileFromFile(path);
+        return result.HasErrors ? null : new Effect(device, result.EffectData);
     }
 
     /// <summary>Puts a recompiled version in place, keeping the technique, pass and parameter objects and the values of
     /// unchanged parameters. Call it between frames.</summary>
-    /// <returns>Null when in place, otherwise why it was refused: a version that drops a technique or a pass.</returns>
+    /// <returns>Null when in place, otherwise why it was refused: a version that drops a technique or a pass, or one
+    /// that could not be made - the running version then stays, with its values.</returns>
     public string Reload(EffectData effectData)
     {
-        var effect = Pool.RegisterBytecode(effectData);
-        var dropped = FirstDroppedPass(effect);
+        var dropped = FindDroppedPass(effectData.Description);
         if (dropped != null)
         {
             return $"{Name}: the new version has no pass {dropped}; rebuild the application to take it.";
         }
 
+        var running = Data;
         var carried = CarryValues();
-        var previousParameters = Parameters.Items.ToList();
-        var previousBuffers = ConstantBuffers.Items.ToList();
-
-        reusableParameters = new Dictionary<string, EffectParameter>();
-        foreach (var parameter in previousParameters)
+        var parameters = Parameters.ToList();
+        var techniques = Techniques.ToList();
+        var passes = new List<(string Technique, IEffectPass Pass)>();
+        foreach (var technique in techniques)
         {
-            reusableParameters[parameter.Name] = parameter;
-        }
-
-        reusableTechniques = new Dictionary<string, EffectTechnique>();
-        reusablePasses = new Dictionary<(string Technique, string Pass), IEffectPass>();
-        foreach (var technique in Techniques)
-        {
-            reusableTechniques[technique.Name] = technique;
             foreach (var pass in technique.Passes)
             {
-                reusablePasses[(technique.Name, pass.Name)] = pass;
+                passes.Add((technique.Name, pass));
             }
         }
 
+        string refused = null;
+        madePasses = [];
         try
         {
-            ConstantBuffers.Clear();
-            Parameters.Clear();
-            Techniques.Clear();
-            Build(effect, null);
+            BuildReusing(effectData, parameters, techniques, passes);
         }
-        finally
+        catch (Exception exception)
         {
-            reusableParameters = null;
-            reusableTechniques = null;
-            reusablePasses = null;
+            BuildReusing(running, parameters, techniques, passes);
+            refused = $"{Name}: the new version could not be made, so the running one stays: {exception.Message}";
         }
 
         RestoreValues(carried);
-        RetireStaleBuffers(previousParameters, previousBuffers);
-        Reloaded?.Invoke(this, EventArgs.Empty);
-        return null;
+        RetireStale(parameters);
+        madePasses = null;
+        return refused;
     }
 
-    /// <summary>
-    /// The effect-level parameter a constant buffer of a pass declares: a new one, or - while <see cref="Reload"/>
-    /// runs - the one the previous version had under that name, pointed at the new declaration.
-    /// </summary>
-    public EffectParameter DeclareValueParameter(EffectData.ValueTypeParameter description, EffectConstantBuffer buffer)
+    /// <summary>A new effect of the same data on the same device, with this one's values and bound resources.</summary>
+    public virtual Effect Clone()
     {
-        var parameter = Reused(description.Name, isValueType: true);
+        var effect = new Effect(GraphicsDevice, Data);
+        effect.CopyValuesFrom(this);
+        return effect;
+    }
+
+    /// <summary>Takes the values and the bound resources of <paramref name="source"/>, an effect of the same data.</summary>
+    protected void CopyValuesFrom(Effect source)
+    {
+        for (var i = 0; i < ConstantBuffers.Count; i++)
+        {
+            source.ConstantBuffers[i].CopyTo(ConstantBuffers[i]);
+        }
+
+        foreach (var parameter in source.Parameters)
+        {
+            if (parameter.IsValueType || parameter.ParameterType == EffectParameterType.UniformBuffer)
+            {
+                continue;
+            }
+
+            var bound = source.ResourceLinker.GetBoundValues(parameter.ParameterDescription);
+            if (bound != null && Parameters[parameter.Name] is { } own)
+            {
+                ResourceLinker.SetResource<object>((EffectData.ResourceParameter)own.ParameterDescription, bound);
+            }
+        }
+    }
+
+    /// <summary>The constant buffer a pass declares - the one the effect already has for that name, or a new one - and,
+    /// the first time the effect meets a buffer of that name, the values it holds. A buffer declared differently by
+    /// two shaders, or a value one buffer declares that another declared differently, is an error in
+    /// <paramref name="logger"/>.</summary>
+    public EffectConstantBuffer DeclareConstantBuffer(EffectData.ConstantBuffer description, Logger logger)
+    {
+        if (!buffersByDeclaration.TryGetValue(description, out var buffer))
+        {
+            buffer = ToDispose(new EffectConstantBuffer(description));
+            buffersByDeclaration.Add(description, buffer);
+        }
+
+        if (ConstantBuffers[description.Name] is { } named)
+        {
+            if (!ReferenceEquals(named, buffer))
+            {
+                logger.Error("{0}: constant buffer {1} is declared differently by two shaders.", Name, description.Name);
+            }
+
+            return named;
+        }
+
+        ConstantBuffers.Add(buffer);
+        foreach (var value in description.Parameters)
+        {
+            var declared = Parameters[value.Name];
+            if (declared == null)
+            {
+                DeclareValueParameter(value, buffer);
+            }
+            else if (declared.ParameterDescription != value || declared.Buffer != buffer)
+            {
+                logger.Error("{0}: {1} of constant buffer {2} is declared differently in {3}.", Name, value.Name,
+                    description.Name, declared.Buffer?.Name);
+            }
+        }
+
+        return buffer;
+    }
+
+    private EffectParameter DeclareValueParameter(EffectData.ValueTypeParameter description, EffectConstantBuffer buffer)
+    {
+        var parameter = TakeReusable(description.Name, isValueType: true);
         if (parameter == null)
         {
             parameter = new EffectParameter(description, buffer);
@@ -342,7 +199,7 @@ public class Effect : GraphicsResource
     public EffectParameter DeclareResourceParameter(EffectData.ResourceParameter description)
     {
         var offset = ResourceLinker.Count;
-        var parameter = Reused(description.Name, isValueType: false);
+        var parameter = TakeReusable(description.Name, isValueType: false);
         if (parameter == null)
         {
             parameter = new EffectParameter(description, offset, ResourceLinker);
@@ -356,7 +213,122 @@ public class Effect : GraphicsResource
         return Parameters.Add(parameter);
     }
 
-    private EffectParameter Reused(string name, bool isValueType)
+    protected override void Dispose(bool disposeManagedResources)
+    {
+        GraphicsDevice.MainDevice?.ShaderHotReload.Remove(this);
+        base.Dispose(disposeManagedResources);
+    }
+
+    private void BuildReusing(EffectData data, List<EffectParameter> parameters, List<EffectTechnique> techniques,
+        List<(string Technique, IEffectPass Pass)> passes)
+    {
+        reusableParameters = parameters.ToDictionary(parameter => parameter.Name);
+        reusableTechniques = techniques.ToDictionary(technique => technique.Name);
+        reusablePasses = [];
+        foreach (var (technique, pass) in passes)
+        {
+            reusablePasses[(technique, pass.Name)] = pass;
+        }
+
+        try
+        {
+            Build(data);
+        }
+        finally
+        {
+            reusableParameters = null;
+            reusableTechniques = null;
+            reusablePasses = null;
+        }
+    }
+
+    private void Build(EffectData data)
+    {
+        Data = data;
+        IsSupportingDynamicCompilation = data.Description.Arguments != null;
+        ConstantBuffers.Clear();
+        Parameters.Clear();
+        Techniques.Clear();
+        ResourceLinker = GraphicsDevice.CreateEffectResourceLinker();
+
+        var logger = new Logger();
+        BuildTechniques(data.Description, logger);
+        if (logger.HasErrors)
+        {
+            throw new InvalidOperationException(string.Join("\n", logger.Messages));
+        }
+
+        ResourceLinker.Initialize();
+        PlaceParameters();
+        foreach (var technique in Techniques)
+        {
+            foreach (var pass in technique.Passes)
+            {
+                pass.PrepareData();
+            }
+        }
+
+        CurrentTechnique = Techniques[0];
+    }
+
+    private void BuildTechniques(EffectData.Effect description, Logger logger)
+    {
+        var unnamedTechniques = 0;
+        var passCount = 0;
+        foreach (var techniqueData in description.Techniques)
+        {
+            var technique = TakeTechnique(GetNameOrIndex(techniqueData.Name, ref unnamedTechniques));
+            Techniques.Add(technique);
+
+            var unnamedPasses = 0;
+            foreach (var passData in techniqueData.Passes)
+            {
+                var pass = TakePass(logger, technique, passData, GetNameOrIndex(passData.Name, ref unnamedPasses));
+                pass.Initialize(logger);
+                technique.Passes.Add(pass);
+                passCount++;
+            }
+        }
+
+        if (passCount == 0)
+        {
+            throw new InvalidOperationException($"{Name} has no pass.");
+        }
+    }
+
+    private void PlaceParameters()
+    {
+        Parameters.Sort((left, right) =>
+        {
+            if (left.IsValueType != right.IsValueType)
+            {
+                return left.IsValueType ? -1 : 1;
+            }
+
+            var byType = ((int)left.ParameterType).CompareTo((int)right.ParameterType);
+            return byType != 0 ? byType : left.Offset.CompareTo(right.Offset);
+        });
+
+        var slot = 0u;
+        foreach (var parameter in Parameters)
+        {
+            if (!parameter.IsValueType)
+            {
+                parameter.Offset = (int)slot;
+                slot += parameter.ElementCount;
+            }
+
+            if (parameter.ParameterType == EffectParameterType.UniformBuffer)
+            {
+                parameter.SetResource(ConstantBuffers[parameter.Name]);
+            }
+        }
+    }
+
+    private static string GetNameOrIndex(string name, ref int unnamed) =>
+        string.IsNullOrEmpty(name) ? $"${unnamed++}" : name;
+
+    private EffectParameter TakeReusable(string name, bool isValueType)
     {
         if (reusableParameters == null
             || !reusableParameters.TryGetValue(name, out var parameter)
@@ -369,7 +341,7 @@ public class Effect : GraphicsResource
         return parameter;
     }
 
-    private EffectTechnique TechniqueFor(string name)
+    private EffectTechnique TakeTechnique(string name)
     {
         if (reusableTechniques != null && reusableTechniques.Remove(name, out var technique))
         {
@@ -380,28 +352,30 @@ public class Effect : GraphicsResource
         return new EffectTechnique(name);
     }
 
-    private IEffectPass PassFor(Logger logger, EffectTechnique technique, EffectData.Pass passRaw, string name)
+    private IEffectPass TakePass(Logger logger, EffectTechnique technique, EffectData.Pass passData, string name)
     {
         if (reusablePasses != null && reusablePasses.Remove((technique.Name, name), out var pass))
         {
-            pass.Reset(technique, passRaw, logger);
+            pass.Reset(technique, passData, logger);
             return pass;
         }
 
-        return ToDispose(GraphicsDevice.CreateEffectPass(logger, this, technique, passRaw, name));
+        var made = ToDispose(GraphicsDevice.CreateEffectPass(logger, this, technique, passData, name));
+        madePasses?.Add(made);
+        return made;
     }
 
-    private string FirstDroppedPass(EffectData.Effect effect)
+    private string FindDroppedPass(EffectData.Effect description)
     {
         var offered = new HashSet<(string, string)>();
-        int techniqueIndex = 0;
-        foreach (var technique in effect.Techniques)
+        var unnamedTechniques = 0;
+        foreach (var technique in description.Techniques)
         {
-            var techniqueName = string.IsNullOrEmpty(technique.Name) ? $"${techniqueIndex++}" : technique.Name;
-            int passIndex = 0;
+            var techniqueName = GetNameOrIndex(technique.Name, ref unnamedTechniques);
+            var unnamedPasses = 0;
             foreach (var pass in technique.Passes)
             {
-                offered.Add((techniqueName, string.IsNullOrEmpty(pass.Name) ? $"${passIndex++}" : pass.Name));
+                offered.Add((techniqueName, GetNameOrIndex(pass.Name, ref unnamedPasses)));
             }
         }
 
@@ -447,7 +421,7 @@ public class Effect : GraphicsResource
         foreach (var (description, bytes, resources) in carried)
         {
             var parameter = Parameters[description.Name];
-            if (parameter == null || !Unchanged(description, parameter.ParameterDescription))
+            if (parameter == null || !IsUnchanged(description, parameter.ParameterDescription))
             {
                 continue;
             }
@@ -464,7 +438,7 @@ public class Effect : GraphicsResource
         }
     }
 
-    private static bool Unchanged(EffectData.Parameter previous, EffectData.Parameter current)
+    private static bool IsUnchanged(EffectData.Parameter previous, EffectData.Parameter current)
     {
         if (previous is EffectData.ValueTypeParameter before && current is EffectData.ValueTypeParameter after)
         {
@@ -480,7 +454,7 @@ public class Effect : GraphicsResource
         return false;
     }
 
-    private void RetireStaleBuffers(List<EffectParameter> previousParameters, List<EffectConstantBuffer> previousBuffers)
+    private void RetireStale(List<EffectParameter> previousParameters)
     {
         var kept = new HashSet<EffectConstantBuffer>(ReferenceEqualityComparer.Instance);
         foreach (var buffer in ConstantBuffers)
@@ -496,107 +470,24 @@ public class Effect : GraphicsResource
             }
         }
 
-        foreach (var (key, buffer) in effectConstantBuffersCache.ToList())
+        foreach (var (description, buffer) in buffersByDeclaration.ToList())
         {
             if (!kept.Contains(buffer))
             {
-                effectConstantBuffersCache.Remove(key);
-            }
-        }
-
-        foreach (var buffer in previousBuffers)
-        {
-            if (!kept.Contains(buffer))
-            {
-                DisposeCollector.Remove(buffer);
+                buffersByDeclaration.Remove(description);
+                RemoveToDispose(buffer);
                 GraphicsDevice.MainDevice.RetireResource(buffer);
             }
         }
-    }
 
-    /// <summary>
-    /// Clones this instance.
-    /// </summary>
-    /// <returns>A new instance of this Effect.</returns>
-    public virtual Effect Clone()
-    {
-        var effect = (Effect)MemberwiseClone();
-        effect.DisposeCollector = new DisposeCollector();
-        effect.ConstantBuffers = new EffectConstantBufferCollection();
-        effect.Parameters = new EffectParameterCollection();
-        effect.Techniques = new EffectTechniqueCollection();
-        effect.effectConstantBuffersCache = null;
-
-        effect.InitializeFrom(effect.RawEffectData, this);
-
-        return effect;
-    }
-
-    protected internal virtual IEffectPass OnApply(IEffectPass pass)
-    {
-        var handler = OnApplyCallback;
-        if (handler != null) pass = handler(pass);
-
-        return pass;
-    }
-
-    /// <summary>
-    /// Disposes of object resources.
-    /// </summary>
-    /// <param name="disposeManagedResources">If true, managed resources should be
-    /// disposed of in addition to unmanaged resources.</param>
-    protected override void Dispose(bool disposeManagedResources)
-    {
-        Pool.RemoveEffect(this);
-
-        base.Dispose(disposeManagedResources);
-    }
-
-    public EffectConstantBuffer GetOrCreateConstantBuffer(EffectData.ConstantBuffer bufferRaw)
-    {
-        var bufferKey = new EffectConstantBufferKey(bufferRaw);
-        if (!effectConstantBuffersCache.TryGetValue(bufferKey, out var constantBuffer))
+        foreach (var pass in madePasses)
         {
-            constantBuffer = new EffectConstantBuffer(bufferRaw);
-            effectConstantBuffersCache.Add(bufferKey, constantBuffer);
-            ToDispose(constantBuffer);
+            if (!Techniques.Any(technique => technique.Passes.Contains(pass.Name)
+                                             && ReferenceEquals(technique.Passes[pass.Name], pass)))
+            {
+                RemoveToDispose(pass);
+                GraphicsDevice.MainDevice.RetireResource(pass);
+            }
         }
-
-        return constantBuffer;
-    }
-
-    /// <summary>
-    /// Initialized event handler
-    /// </summary>
-    protected virtual void OnInitialized()
-    {
-        EventHandler<EventArgs> handler = Initialized;
-        handler?.Invoke(this, EventArgs.Empty);
-    }
-
-    public static Effect Load(string path, IGraphicsDevice device)
-    {
-        var data = EffectData.Load(path);
-        return new Effect(device, data);
-    }
-
-    public static Effect Load(Stream stream, IGraphicsDevice device)
-    {
-        var data = EffectData.Load(stream);
-        return new Effect(device, data);
-    }
-
-    public static Effect Load(byte[] data, IGraphicsDevice device)
-    {
-        var effectData = EffectData.Load(data);
-        return new Effect(device, effectData);
-    }
-
-    public static Effect CompileFromFile(string path, IGraphicsDevice device)
-    {
-        var result = EffectCompiler.CompileFromFile(path);
-        if (result.HasErrors) return null;
-
-        return new Effect(device, result.EffectData);
     }
 }

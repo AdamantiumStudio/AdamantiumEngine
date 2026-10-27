@@ -7,6 +7,7 @@ using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Graphics.Effects;
 using Adamantium.Imaging;
+using Adamantium.Mathematics;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Engine.GraphicsTests
@@ -131,10 +132,10 @@ namespace Adamantium.Engine.GraphicsTests
         {
             const string source = @"
 Texture2D Source;
-uint64_t OutputAddress;
+float4* Output;
 [shader(""compute"")]
 [numthreads(1, 1, 1)]
-void CS(uint3 tid : SV_DispatchThreadID) { float4* o = (float4*)OutputAddress; o[0] = Source.Load(int3(0, 0, 0)); }
+void CS(uint3 tid : SV_DispatchThreadID) { Output[0] = Source.Load(int3(0, 0, 0)); }
 technique T { pass P { ComputeShader = CS; } }
 ";
             var compiled = EffectCompiler.Compile(source, "UnboundSource.fx");
@@ -173,10 +174,46 @@ technique T { pass P { ComputeShader = CS; } }
             Assert.That(pass.ResourcesBound, Is.False, "the pass has to know it read the stand-in");
         }
 
-        // The pool keeps one copy of a stage two effects share word for word. It used to refuse the second effect: every
-        // shader was named after its effect, and one shader under two names read as a clash.
+        // A clone was a copy of the object: its generated properties were the original's parameters, it shared the
+        // original's dispose lock, disposing it took the original off the device's resources, and the resources bound
+        // to the original never reached the clone's draws.
         [Test]
-        public void TwoEffectsSharingAStage_ShareOneShader()
+        public void AClone_HasItsOwnParameters_WithTheOriginalsValues_AndGoesAlone()
+        {
+            var device = GpuFixture.CreateRenderDevice();
+            var registry = device.MainDevice.ShaderHotReload;
+            using var original = new Adamantium.FX.SpriteEffect(device);
+            var transform = Matrix4x4F.Translation(1, 2, 3);
+            original.MatrixTransform.SetValue(transform);
+            original.TextureSampler.SetResource(SamplerStates.LinearClampToEdge);
+
+            var clone = original.Clone();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(clone.MatrixTransform, Is.Not.SameAs(original.MatrixTransform));
+                Assert.That(clone.MatrixTransform.GetValue<Matrix4x4F>(), Is.EqualTo(transform));
+                Assert.That(clone.ResourceLinker.GetBoundValues(clone.TextureSampler.ParameterDescription),
+                    Is.EqualTo(new object[] { SamplerStates.LinearClampToEdge }), "the bound sampler goes with it");
+                Assert.That(registry.GetEffects(device), Does.Contain(clone));
+            });
+
+            clone.MatrixTransform.SetValue(Matrix4x4F.Identity);
+            clone.Dispose();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(original.MatrixTransform.GetValue<Matrix4x4F>(), Is.EqualTo(transform));
+                Assert.That(original.IsDisposed, Is.False);
+                Assert.That(registry.GetEffects(device), Does.Contain(original).And.Not.Contain(clone));
+            });
+        }
+
+        // Two effects sharing a stage word for word are both made and both held among the device's live effects until
+        // disposed. The second used to be refused: every shader was named after its effect, and one shader under two names
+        // read as a clash.
+        [Test]
+        public void TwoEffectsSharingAStage_AreBothLiveUntilDisposed()
         {
             const string source = @"
 float4 VS(float4 p : POSITION) : SV_Position { return p; }
@@ -187,12 +224,16 @@ technique T { pass P { VertexShader = VS; PixelShader = PS; } }
             var second = EffectCompiler.Compile(source.Replace("SV_Target0 { return p; }", "SV_Target0 { return p * 0.5; }"), "Second.fx");
             Assert.That(first.HasErrors || second.HasErrors, Is.False);
             var device = GpuFixture.CreateRenderDevice();
-            using var firstEffect = new Effect(device, first.EffectData);
-            var registered = device.DefaultEffectPool.RegisteredShaders.Count;
+            var registry = device.MainDevice.ShaderHotReload;
+            var firstEffect = new Effect(device, first.EffectData);
+            var secondEffect = new Effect(device, second.EffectData);
 
-            using var secondEffect = new Effect(device, second.EffectData);
+            Assert.That(registry.GetEffects(device), Does.Contain(firstEffect).And.Contain(secondEffect));
 
-            Assert.That(device.DefaultEffectPool.RegisteredShaders.Count - registered, Is.EqualTo(1), "only the new pixel shader");
+            firstEffect.Dispose();
+            secondEffect.Dispose();
+
+            Assert.That(registry.GetEffects(device), Does.Not.Contain(firstEffect).And.Not.Contain(secondEffect));
         }
     }
 }

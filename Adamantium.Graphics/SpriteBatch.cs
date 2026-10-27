@@ -493,7 +493,6 @@ public class SpriteBatch : DisposableObject
         pass.Apply();
         graphicsDevice.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
         graphicsDevice.Draw(VerticesPerSprite, spriteItemsCount, 0, first);
-        pass.UnApply(true);
         spriteItemsCount = 0;
     }
 }

@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
+  `PatchList`, set by the caller; `IGraphicsDevice.TessellationDomainOrigin`: the corner of the domain at (0, 0), upper
+  left unless set. A tessellated draw of another topology, or of patches of no points or more than the device's
+  `maxTessellationPatchSize`, or of another number of points than the pass's hull shader reads a patch of
+  (`EffectData.Shader.InputPatchSize`), and patches drawn by a pass that does not tessellate, are refused before they
+  reach the device.
+- Mesh passes draw: `IGraphicsDevice.DrawMeshTasks` launches workgroups of the pass's task shader, or of its mesh shader
+  when it has none - a mesh shader without a task shader is made as one. More workgroups than the device launches for
+  that stage are refused, and so are mesh tasks of a pass without a mesh shader and vertices of a pass with one.
+  `GraphicsAdapter.MeshShaderProperties`: the device's limits for mesh and task shaders.
+- `SharedSurface.CanExport` and `CanImport`: whether the device exports, or imports, the timeline semaphores a surface
+  shared through handles of a type signals its frames with (`GraphicsAdapter.GetTimelineSemaphoreFeatures`). A device
+  that cannot is refused with that said, not left to fail in Vulkan; the memory is still checked as it is made.
 - `EffectSource`: the effect file reader is public, for tools that read effect files as the compiler does - its
   techniques, passes and hit groups with each stage's entry point, place and the stage Slang compiles it for
   (`EffectStageSource.SlangStage`), what breaks the rules (`Errors`, in file order) and the code with the techniques
@@ -991,6 +1004,22 @@ All packages share one version.
 
 ### Fixed
 
+- A hot-reloaded version of an effect that could not be made left the effect half rebuilt, its old version gone and
+  its resources unbound. The running version is now built again with its values, and the new one refused.
+- An effect's constant buffers never freed the native memory their bytes were in.
+- A cloned effect was a copy of the object: a generated effect's parameter properties were still the original's, the
+  clone shared the original's dispose lock, and disposing it took the original off its device's resources.
+- A compute pass reading storage buffers through the descriptor heap before the render pass read nothing: the heaps
+  were bound only when the render pass began. They are bound as the frame's command buffer begins. A storage or uniform
+  buffer is made with a device address, which the heap writes its descriptor by.
+- A block of buffer memory was mapped by what its first buffer asked for, not by its memory type: on a device whose
+  one memory type is device-local and host-visible, a device-local vertex buffer made the block unmapped and the next
+  upload through it wrote nowhere.
+- The shader binary cache named a binary without the stage after it and the shader's flags, so a mesh shader made
+  without a task shader could load the binary of the same code made with one.
+- The effect generator's messages stood at no place and named the file twice; a compile error now stands at its line
+  and column. A technique A with a pass BC and a technique AB with a pass C - or a parameter named as a pass - made two
+  properties of one name, and the generated class did not compile; that is now an error naming both.
 - Every effect compile - hot reload, the effect generator in the IDE - kept its Slang session, about 150 MB of
   native memory each; it is freed when the compile ends.
 - A pass with a vertex shader and no pixel shader drew with the pixel shader the pass before it left bound.
@@ -1680,9 +1709,30 @@ All packages share one version.
 
 ### Changed
 
-- Effect data (format version 2, effects are compiled again on the next build) is cut to what Vulkan has. A pass holds
+- A buffer larger than a shared block of device memory gives its memory back to the driver once it is freed and no
+  frame in flight can still read it; shared blocks stay for reuse until the device goes.
+- The engine's effects take typed pointers, `T* X;`, for what they read and write by address, and their parameters
+  are named for what they point at: `BasicEffect` `Instances` and `Joints`; `FontEffect` `GlyphInstances`, `Transforms`,
+  `PaintPrograms` and `PaintStops`; Forward+ `Lights`, `ClusterCounts`, `ClusterLights`, `Instances` and `Palettes` -
+  each in place of the `...Address` it was.
+- Effects have no pool. An effect holds the data it was made from (`Effect.Data`, in place of `RawEffectData`) and each
+  pass its own shaders from it; `Effect(device, data)` and the generated effects take no pool. The main device's
+  `ShaderHotReload` holds the live effects (`Add`, `Remove`, `GetEffects` of a device, `DisposeEffects`): a render
+  device disposes those made on it as it goes, the main device the rest.
+- The effects framework is written anew. An effect's techniques, a technique's passes, its parameters and constant
+  buffers are each an `EffectCollection<T>`, found by index or name and walked without allocating. An effect declares a
+  pass's constant buffer and the values in it itself (`Effect.DeclareConstantBuffer`); a constant buffer is its bytes
+  and its declaration. A value array's elements are written and read at the stride the shaders declare, not at one
+  rounded up to 16 bytes.
+- `Effect.Clone` makes a new effect of the same data and copies the values and bound resources into it
+  (`Effect.CopyValuesFrom`); a generated effect's `Clone` returns its own class. The effect generator also refuses a
+  parameter or pass named as a member the generated class inherits.
+- The effects compiler takes two resources of a pass in one binding of one set for an error, naming them; the
+  reflection no longer moves one of them to a free binding in the SPIR-V (`Adamantium.Vulkan.Spirv` 2.0.0).
+- Effect data (format version 3, effects are compiled again on the next build) is cut to what Vulkan has. A pass holds
   its stages as a list of `ShaderLink { Stage, Index }` - `EffectStage`, every stage the language describes - and
-  its hit groups; a shader its entry point, stage, level, SPIR-V, constant buffers and resources. A resource is bound
+  its hit groups; a shader its entry point, stage, level, SPIR-V, constant buffers and resources, and a hull shader
+  the size of the patch it reads. A resource is bound
   by `Set` and `Binding`, takes `Count` descriptors (0 for an array of no length, no limit of 255 any more) and has an
   `Access`: read only, written only or both, from SPIR-V's `NonWritable`/`NonReadable`. `EffectParameterType` names
   scalars and Vulkan's descriptor kinds - uniform, storage and texel buffers, sampled and storage images, samplers,
@@ -1691,11 +1741,10 @@ All packages share one version.
 - A pass's stages are the device's to run: hull and domain shaders need the `tessellationShader` feature, task and
   mesh shaders `VK_EXT_mesh_shader`, each enabled when the device has it (`GraphicsAdapter.SupportsTessellationShaders`,
   `SupportsMeshShaders`, `SupportsTaskShaders`; `MainGraphicsDevice.IsTessellationEnabled`, `IsMeshShaderEnabled`,
-  `IsTaskShaderEnabled`). A pass the device cannot run says so when it is applied, and so - until effects draw them -
-  do tessellated and mesh passes and ray-tracing passes; the effect's other passes run, and the refused pass's
-  parameters are there to set. Every graphics pass binds the stages the device enabled and it has none for empty, in
-  pipeline order whatever order the file names them in. `EffectParameter.SetResource(index, ...)` binds from that
-  index, not from the first element.
+  `IsTaskShaderEnabled`). A pass the device cannot run says so when it is applied, and so do ray-tracing passes; the
+  effect's other passes run, and the refused pass's parameters are there to set. Every graphics pass binds the stages
+  the device enabled and it has none for empty, in pipeline order whatever order the file names them in.
+  `EffectParameter.SetResource(index, ...)` binds from that index, not from the first element.
 - Uniform buffers, storage buffers, sampled images and samplers are bound by their kind: a read-only and a read-write
   storage buffer are one kind, as in Vulkan; on the descriptor heap the read-only one maps as such. A resource of
   another kind refuses its pass when applied.
@@ -2016,6 +2065,19 @@ All packages share one version.
 
 ### Removed
 
+- `EffectPool` and `EffectPoolEventArgs`, `Effect.Pool`, `IGraphicsDevice.DefaultEffectPool`, `AddEffectPool` and
+  `RemoveEffectPool`, `GraphicsDevice.EffectPools`, `ShaderHotReload.Track` (an effect is held from its making), and
+  `EffectPass.ShaderStages` with its unused shader modules.
+- From the effects framework, what nothing used: `EffectParameterCollection`, `EffectTechniqueCollection`,
+  `EffectPassCollection`, `EffectConstantBufferCollection`, `EffectConstantBufferKey` and `NamedObjectsCollection`;
+  `EffectParameter.GetMatrix`, `GetMatrixArray`, `GetValueArray`, `SetRawValue` and `Index`;
+  `EffectConstantBuffer.IsDirty`, `CheckForChanges`, `Parameters`, `Id` and its equality; `Effect.Initialized`,
+  `Reloaded`, `OnApplyDelegate`, `OnApplyCallback`, `OnApply`, `Initialize`, `OnInitialized`, `Load`,
+  `GetOrCreateConstantBuffer` and `DeclareValueParameter`; `IEffectResourceLinker.GetBoundResources` and
+  `AddBoundResource`; `IEffectPass.UnApply`, which did nothing. A pass's stages hold its parameters themselves, not
+  copies of their set and binding, and nothing builds the descriptor-set layout bindings nobody read.
+- `EffectCompilerFlags`, the `flags` of `EffectCompiler.Compile` and `CompileFromFile`, and
+  `EffectData.CompilerArguments.CompilerFlags`: Direct3D compiler flags Slang does not take.
 - From effect data, what Direct3D 11 had and Vulkan does not: input signatures (`Signature`, `Semantic`), stream
   output, sub-passes, pass properties (`EffectPropertyCollection`, `PropertyKey`, `PropertyKeyCollection`,
   `EffectPass.PropertiesKey`), shader import and export, default values, `Shader.Hashcode` and `CompilerFlags`,

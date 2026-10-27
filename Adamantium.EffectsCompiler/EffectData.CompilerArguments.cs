@@ -15,12 +15,6 @@ namespace Adamantium.EffectsCompiler
          public string FilePath;
 
          /// <summary>
-         /// The flags used to compile an effect.
-         /// </summary>
-         [Key(1)]
-         public EffectCompilerFlags CompilerFlags;
-
-         /// <summary>
          /// The macros used to compile this effect (may be null).
          /// </summary>
          [Key(2)]
@@ -47,7 +41,7 @@ namespace Adamantium.EffectsCompiler
          /// <filterpriority>2</filterpriority>
          public override string ToString()
          {
-            return $"FilePath: {FilePath}, CompilerFlags: {CompilerFlags}";
+            return $"FilePath: {FilePath}";
          }
       }
    }

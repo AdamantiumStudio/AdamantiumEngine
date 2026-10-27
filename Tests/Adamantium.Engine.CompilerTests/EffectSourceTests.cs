@@ -389,6 +389,92 @@ technique { pass { ComputeShader = CS; } }");
         Assert.That(Messages(result), Does.Contain("Test.fx(8,12)").And.Contain("Vertex shader 'Nope'"));
     }
 
+    // Two resources of a pass on one binding is the effect's mistake to fix, said where the pass stands - not renumbered
+    // behind its back; one resource every stage reads is no clash.
+    [Test]
+    public void TwoResourcesOfAPassOnOneBinding_AreAnError()
+    {
+        var result = Compile("""
+            [[vk::binding(3, 0)]] Texture2D First;
+            [[vk::binding(3, 0)]] Texture2D Second;
+            float4 VS(float4 position : POSITION) : SV_Position { return position + First.Load(int3(0, 0, 0)); }
+            float4 PS() : SV_Target { return Second.Load(int3(0, 0, 0)); }
+            technique T { pass { VertexShader = VS; PixelShader = PS; } }
+            """);
+
+        Assert.That(Messages(result), Does.Contain("Test.fx(5,15)").And.Contain("First, Second take binding 3 of set 0"));
+    }
+
+    // The patch a draw hands a hull shader has to be the one it reads, so the effect keeps its size - the patch's, not
+    // that of an array a control point holds.
+    [Test]
+    public void AHullShader_KeepsTheSizeOfThePatchItReads()
+    {
+        var result = Compile("""
+            struct ControlPoint { float4 position : POSITION; float2 uvs[2] : TEXCOORD0; };
+            struct PatchConstants { float edges[3] : SV_TessFactor; float inside : SV_InsideTessFactor; };
+            ControlPoint PatchVS(ControlPoint point) { return point; }
+            PatchConstants Constants(InputPatch<ControlPoint, 4> patch)
+            {
+                PatchConstants constants;
+                constants.edges[0] = constants.edges[1] = constants.edges[2] = patch[3].uvs[1].x;
+                constants.inside = 4;
+                return constants;
+            }
+            [domain("tri")]
+            [partitioning("integer")]
+            [outputtopology("triangle_cw")]
+            [outputcontrolpoints(3)]
+            [patchconstantfunc("Constants")]
+            ControlPoint HS(InputPatch<ControlPoint, 4> patch, uint id : SV_OutputControlPointID) { return patch[id]; }
+            [domain("tri")]
+            float4 DS(PatchConstants constants, float3 at : SV_DomainLocation, const OutputPatch<ControlPoint, 3> patch)
+                : SV_Position { return patch[0].position * at.x + patch[1].position * at.y + patch[2].position * at.z; }
+            float4 PS() : SV_Target { return 1; }
+            technique T { pass { VertexShader = PatchVS; HullShader = HS; DomainShader = DS; PixelShader = PS; } }
+            """);
+
+        Assert.That(result.HasErrors, Is.False, Messages(result));
+        var sizes = result.EffectData.Shaders.ToDictionary(shader => shader.Stage, shader => shader.InputPatchSize);
+        Assert.That(sizes, Is.EqualTo(new Dictionary<EffectStage, uint>
+        {
+            [EffectStage.Vertex] = 0, [EffectStage.Hull] = 4, [EffectStage.Domain] = 0, [EffectStage.Pixel] = 0
+        }));
+    }
+
+    // A control point of built-ins only reads its patch through gl_in, which is no stage input to SPIRV-Cross.
+    [Test]
+    public void AHullShaderReadingOnlyBuiltIns_KeepsTheSizeOfItsPatch()
+    {
+        var result = Compile("""
+            struct ControlPoint { float4 position : SV_Position; };
+            struct PatchConstants { float edges[3] : SV_TessFactor; float inside : SV_InsideTessFactor; };
+            ControlPoint PatchVS(float4 position : POSITION) { ControlPoint point; point.position = position; return point; }
+            PatchConstants Constants(InputPatch<ControlPoint, 3> patch)
+            {
+                PatchConstants constants;
+                constants.edges[0] = constants.edges[1] = constants.edges[2] = patch[0].position.x;
+                constants.inside = 4;
+                return constants;
+            }
+            [domain("tri")]
+            [partitioning("integer")]
+            [outputtopology("triangle_cw")]
+            [outputcontrolpoints(3)]
+            [patchconstantfunc("Constants")]
+            ControlPoint HS(InputPatch<ControlPoint, 3> patch, uint id : SV_OutputControlPointID) { return patch[id]; }
+            [domain("tri")]
+            float4 DS(PatchConstants constants, float3 at : SV_DomainLocation, const OutputPatch<ControlPoint, 3> patch)
+                : SV_Position { return patch[0].position * at.x + patch[1].position * at.y + patch[2].position * at.z; }
+            float4 PS() : SV_Target { return 1; }
+            technique T { pass { VertexShader = PatchVS; HullShader = HS; DomainShader = DS; PixelShader = PS; } }
+            """);
+
+        Assert.That(result.HasErrors, Is.False, Messages(result));
+        Assert.That(result.EffectData.Shaders.Single(shader => shader.Stage == EffectStage.Hull).InputPatchSize,
+            Is.EqualTo(3));
+    }
+
     [Test]
     public void TheMacrosGiven_AreDefinedForSlang()
     {

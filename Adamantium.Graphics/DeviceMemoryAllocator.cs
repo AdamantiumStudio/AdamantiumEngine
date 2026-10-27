@@ -25,6 +25,8 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
     private readonly MemoryPropertyFlags[] _flagsByType;
     private readonly ulong[] _blockBytesByHeap;
     private readonly bool[] _fellBackFromType;
+    private readonly HashSet<Block> _retiring = [];
+    private bool _disposed;
 
     public DeviceMemoryAllocator(IGraphicsDevice device)
     {
@@ -45,11 +47,11 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
     }
 
     /// <summary>Reserves <paramref name="size"/> bytes (aligned to <paramref name="alignment"/>) inside a shared block of
-    /// the given memory type, allocating a new block only when no existing one has room. <paramref name="hostVisible"/>
-    /// blocks are persistently mapped; <paramref name="deviceAddress"/> selects a block allocated with the BDA flag.
+    /// the given memory type, allocating a new block only when no existing one has room. Blocks of a host-visible type
+    /// are persistently mapped; <paramref name="deviceAddress"/> selects a block allocated with the BDA flag.
     /// When the device-local host-visible window is full - it is shared by every process on the GPU - the block comes
     /// from a host-visible type in system memory that <paramref name="memoryTypeBits"/> allows.</summary>
-    public MemoryAllocation Allocate(ulong size, ulong alignment, uint memoryTypeIndex, uint memoryTypeBits, bool hostVisible, bool deviceAddress)
+    public MemoryAllocation Allocate(ulong size, ulong alignment, uint memoryTypeIndex, uint memoryTypeBits, bool deviceAddress)
     {
         if (size == 0) size = 1;
         if (alignment == 0) alignment = 1;
@@ -57,7 +59,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
 
         lock (_lock)
         {
-            var allocation = TryAllocate(size, alignment, memoryTypeIndex, hostVisible, deviceAddress);
+            var allocation = TryAllocate(size, alignment, memoryTypeIndex, deviceAddress);
             if (allocation != null)
             {
                 return allocation;
@@ -66,7 +68,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
             var fallback = FallbackType(memoryTypeIndex, memoryTypeBits);
             if (fallback != NoType)
             {
-                allocation = TryAllocate(size, alignment, fallback, hostVisible, deviceAddress);
+                allocation = TryAllocate(size, alignment, fallback, deviceAddress);
                 if (allocation != null)
                 {
                     WarnFallback(memoryTypeIndex, fallback);
@@ -82,7 +84,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         }
     }
 
-    private MemoryAllocation TryAllocate(ulong size, ulong alignment, uint memoryTypeIndex, bool hostVisible, bool deviceAddress)
+    private MemoryAllocation TryAllocate(ulong size, ulong alignment, uint memoryTypeIndex, bool deviceAddress)
     {
         var key = GroupKey(memoryTypeIndex, deviceAddress);
         if (!_groups.TryGetValue(key, out var blocks))
@@ -100,13 +102,17 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         }
 
         var heapCap = Math.Max(MinBlockSize, _heapSizeByType[memoryTypeIndex] / HeapShareOfBlock);
-        var blockSize = Math.Max(Math.Min(DefaultBlockSize, heapCap), size);
-        var fresh = TryCreateBlock(blockSize, memoryTypeIndex, hostVisible, deviceAddress);
+        var sharedSize = Math.Min(DefaultBlockSize, heapCap);
+        var blockSize = Math.Max(sharedSize, size);
+        var fresh = TryCreateBlock(blockSize, memoryTypeIndex, deviceAddress);
         if (fresh == null)
         {
             return null;
         }
 
+        fresh.Group = blocks;
+        fresh.TypeIndex = memoryTypeIndex;
+        fresh.IsDedicated = blockSize > sharedSize;
         blocks.Add(fresh);
         if (!TryCarve(fresh, size, alignment, out var freshOffset))
         {
@@ -151,21 +157,34 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
             wanted, _heapIndexByType[wanted], taken, _heapIndexByType[taken]);
     }
 
-    /// <summary>Returns a sub-allocation's range to its block's free list (coalescing neighbors). The block itself is
-    /// retained for reuse - blocks are freed only on <see cref="Dispose"/>.</summary>
+    /// <summary>Returns a sub-allocation's range to its block's free list (coalescing neighbors). A shared block is
+    /// retained for reuse until <see cref="Dispose"/>; a block made for one allocation larger than a shared block goes
+    /// back to the driver once that allocation is freed and no frame in flight can still read it.</summary>
     public void Free(MemoryAllocation allocation)
     {
         if (allocation?.Block == null) return;
+        Block retired = null;
         lock (_lock)
         {
             var block = allocation.Block;
-            if (block == null)
+            if (block == null || _disposed)
             {
                 return;
             }
 
             InsertFree(block, allocation.Offset, allocation.Size);
             allocation.Block = null;
+            if (block.IsDedicated && block.Free.Count == 1 && block.Free[0].Size == block.Size)
+            {
+                block.Group.Remove(block);
+                _retiring.Add(block);
+                retired = block;
+            }
+        }
+
+        if (retired != null)
+        {
+            _device.MainDevice.RetireResource(new RetiredBlock(this, retired));
         }
     }
 
@@ -173,14 +192,58 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
     {
         lock (_lock)
         {
+            _disposed = true;
             foreach (var blocks in _groups.Values)
                 foreach (var block in blocks)
                 {
-                    if (block.MappedBase != 0) _device.UnmapMemory(block.Memory);
-                    _device.Destroy(block.Memory);
+                    Destroy(block);
                 }
+            foreach (var block in _retiring)
+            {
+                Destroy(block);
+            }
             _groups.Clear();
+            _retiring.Clear();
         }
+    }
+
+    /// <summary>How many bytes the blocks this allocator holds take, in every heap.</summary>
+    internal ulong BytesInBlocks
+    {
+        get
+        {
+            lock (_lock)
+            {
+                var total = 0UL;
+                foreach (var bytes in _blockBytesByHeap)
+                {
+                    total += bytes;
+                }
+
+                return total;
+            }
+        }
+    }
+
+    private void Release(Block block)
+    {
+        lock (_lock)
+        {
+            if (!_retiring.Remove(block))
+            {
+                return;
+            }
+
+            _blockBytesByHeap[_heapIndexByType[block.TypeIndex]] -= block.Size;
+        }
+
+        Destroy(block);
+    }
+
+    private void Destroy(Block block)
+    {
+        if (block.MappedBase != 0) _device.UnmapMemory(block.Memory);
+        _device.Destroy(block.Memory);
     }
 
     private MemoryAllocation MakeAllocation(Block block, ulong offset, ulong size) => new()
@@ -192,7 +255,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         MappedBase = block.MappedBase == 0 ? 0 : block.MappedBase + (nuint)offset,
     };
 
-    private Block TryCreateBlock(ulong size, uint memoryTypeIndex, bool hostVisible, bool deviceAddress)
+    private Block TryCreateBlock(ulong size, uint memoryTypeIndex, bool deviceAddress)
     {
         var allocInfo = new MemoryAllocateInfo { AllocationSize = size, MemoryTypeIndex = memoryTypeIndex };
         if (deviceAddress)
@@ -209,6 +272,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
             throw new GraphicsEngineException($"vkAllocateMemory returned {result} for {size} bytes in memory type {memoryTypeIndex}");
         }
 
+        var hostVisible = _flagsByType[memoryTypeIndex].HasFlag(MemoryPropertyFlags.HostVisible);
         nuint mappedBase = hostVisible ? _device.MapMemory(memory, 0, size, 0) : 0;
 
         var heap = _heapIndexByType[memoryTypeIndex];
@@ -274,6 +338,14 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         public ulong Size;
         public nuint MappedBase;   // persistent map base, or 0 for a device-local (non-host-visible) block
         public List<FreeRange> Free;
+        public List<Block> Group;
+        public uint TypeIndex;
+        public bool IsDedicated;
+    }
+
+    private sealed class RetiredBlock(DeviceMemoryAllocator allocator, Block block) : IDisposable
+    {
+        public void Dispose() => allocator.Release(block);
     }
 
     internal readonly record struct FreeRange(ulong Offset, ulong Size);
