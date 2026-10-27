@@ -25,62 +25,39 @@ float2 TextureCornerCoords[4];
 matrix MatrixTransform;
 float4 ForegroundColor;
 
-void GenerateSprite(FontItem item, inout TriangleStream<PSInput> triStream)
+// One quad an item: its corners from SV_VertexID, a 4-vertex triangle strip an instance.
+PSInput FontVertexShader(FontItem item, uint vertexId : SV_VertexID)
 {
     PSInput vertex;
+    int corner = (int)vertexId;
     float2 origin = item.Origin;
-
     float2 rotation = float2(cos(item.Rotation), sin(item.Rotation));
+    float2 size = TextureCornerCoords[corner] * item.Destination.zw;
+    float2 position = size - origin;
 
-    for (int i = 0; i < VERTICES_PER_SPRITE; i++)
+    [flatten]
+    if (item.Rotation != 0.0)
     {
-        // Gets the corner and take into account the Flip mode.
-        float2 corner = TextureCornerCoords[i];
-
-        //Calculate size of sprite in current point 
-        float2 size = corner * item.Destination.zw;
-        //origin of sprite for current point
-        float2 position = size - origin;
-
-        [flatten]
-        if (item.Rotation != 0.0)
-        {
-            vertex.Position.x = item.Destination.x + (position.x * rotation.x) - (position.y * rotation.y);
-            vertex.Position.y = item.Destination.y + (position.x * rotation.y) + (position.y * rotation.x);
-
-            //Because earlier we made "position - origin", now we move point back to its original position 
-            vertex.Position.xy += origin;
-        }
-        else
-        {
-            vertex.Position.xy = item.Destination.xy + size;
-        }
-
-        vertex.Position.z = item.Depth;
-        vertex.Position.w = 1;
-        vertex.Color = item.Color;
-
-        corner = TextureCornerCoords[i ^ item.SpriteEffect];
-        vertex.UV = item.Source.xy + corner * item.Source.zw;
-
-        float4 pos = mul(vertex.Position, MatrixTransform);
-        vertex.Position = pos;
-
-        triStream.Append(vertex);
+        vertex.Position.x = item.Destination.x + (position.x * rotation.x) - (position.y * rotation.y);
+        vertex.Position.y = item.Destination.y + (position.x * rotation.y) + (position.y * rotation.x);
+        vertex.Position.xy += origin;
     }
+    else
+    {
+        vertex.Position.xy = item.Destination.xy + size;
+    }
+
+    vertex.Position.z = item.Depth;
+    vertex.Position.w = 1;
+    vertex.Color = item.Color;
+    vertex.UV = item.Source.xy + TextureCornerCoords[corner ^ item.SpriteEffect] * item.Source.zw;
+    vertex.Position = mul(vertex.Position, MatrixTransform);
+    return vertex;
 }
 
 float median(float a, float b, float c)
 {
     return max(min(a,b), min(max(a,b), c));
-}
-
-void FontVertexShader(inout FontItem input) {}
-
-[maxvertexcount(4)]
-void FontItemGenerationGS(point FontItem input[1], inout TriangleStream<PSInput> triStream)
-{
-    GenerateSprite(input[0], triStream);
 }
 
 float4 FontPixelShader(PSInput input) : SV_TARGET
@@ -103,9 +80,7 @@ technique FontBatch
 {
     pass Render
     {
-        EffectName = "FontEffect";
         VertexShader = FontVertexShader;
-        GeometryShader = FontItemGenerationGS;
         PixelShader = FontPixelShader;
     }
 }

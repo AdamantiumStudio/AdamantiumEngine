@@ -1,20 +1,12 @@
 ﻿using Adamantium.Core;
 
-namespace Adamantium.EffectsCompiler
+namespace Adamantium.EffectsCompiler.Compiler;
+
+/// <summary>A message of an effect's compile and where in the file it stands.</summary>
+internal class EffectCompilerMessage(LogMessageType type, string text, SourceLocation location) : LogMessage(type, text)
 {
-   class EffectCompilerMessage : LogMessage
-   {
-      public readonly SourceSpan Span;
+    /// <summary>Where in the file the message stands.</summary>
+    public SourceLocation Location { get; } = location;
 
-      public EffectCompilerMessage(LogMessageType type, string text, SourceSpan span)
-         : base(type, text)
-      {
-         Span = span;
-      }
-
-      public override string ToString()
-      {
-         return $"{Span}: {Type.ToString().ToLowerInvariant()} X000: {Text}";
-      }
-   }
+    public override string ToString() => $"{Location}: {Type.ToString().ToLowerInvariant()}: {Text}";
 }

@@ -135,7 +135,7 @@ uint64_t OutputAddress;
 [shader(""compute"")]
 [numthreads(1, 1, 1)]
 void CS(uint3 tid : SV_DispatchThreadID) { float4* o = (float4*)OutputAddress; o[0] = Source.Load(int3(0, 0, 0)); }
-technique T { pass P { EffectName = ""UnboundSource""; ComputeShader = CS; } }
+technique T { pass P { ComputeShader = CS; } }
 ";
             var compiled = EffectCompiler.Compile(source, "UnboundSource.fx");
             Assert.That(compiled.HasErrors, Is.False);

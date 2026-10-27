@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.IO;
 using System.Text;
+using Adamantium.EffectsCompiler.Compiler;
 using Adamantium.Vulkan.Spirv.Reflection;
 
 namespace Adamantium.EffectsCompiler
@@ -37,13 +38,13 @@ namespace Adamantium.EffectsCompiler
       /// <returns>The result of compilation.</returns>
       public static EffectCompilerResult Compile(string sourceCode, string filePath, EffectCompilerFlags flags = EffectCompilerFlags.None, List<EffectData.ShaderMacro> macrosArgs = null, List<string> includeDirectoryList = null, bool allowDynamicCompiling = false)
       {
-         var compiler = new EffectCompilerInternal();
+         using var compiler = new EffectCompilerInternal();
          return compiler.Compile(sourceCode, filePath, flags, macrosArgs, includeDirectoryList, allowDynamicCompiling);
       }
-      
+
       public static EffectCompilerResult Compile(string sourceCode, string filePath, ImmutableArray<ShaderFileInfo> includes, List<EffectData.ShaderMacro> macrosArgs = null, List<string> includeDirectoryList = null)
       {
-         var compiler = new EffectCompilerInternal();
+         using var compiler = new EffectCompilerInternal();
          return compiler.Compile(sourceCode, filePath, includes, macrosArgs, includeDirectoryList);
       }
 
@@ -54,7 +55,7 @@ namespace Adamantium.EffectsCompiler
       /// <returns>A string containing asm code decoded from HLSL bytecode.</returns>
       public static SpirvReflectionResult DisassembleShader(EffectData.Shader shader)
       {
-         var compiler = new EffectCompilerInternal();
+         using var compiler = new EffectCompilerInternal();
          return compiler.DisassembleShader(shader);
       }
 

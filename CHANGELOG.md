@@ -985,6 +985,9 @@ All packages share one version.
 
 ### Fixed
 
+- Every effect compile - hot reload, the effect generator in the IDE - kept its Slang session, about 150 MB of
+  native memory each; it is freed when the compile ends.
+- A pass with a vertex shader and no pixel shader drew with the pixel shader the pass before it left bound.
 - Dark text on a light background had a grey rim round bold letters and stepped slanted edges on large letters at 100%
   scale: its edge coverage was raised for light ink on dark. The coverage is now curved by the ink's lightness and the
   text's size, and taken as the share of the pixel the outline covers (four samples across it) rather than its
@@ -1671,6 +1674,16 @@ All packages share one version.
 
 ### Changed
 
+- An effect's `technique` and `pass` blocks are read by the effect compiler's own reader: comments and strings
+  aware, errors at the line and column they stand on, the blocks blanked to spaces so Slang's messages keep the file's
+  lines. A pass names its stages - `VertexShader`, `HullShader`, `DomainShader`, `PixelShader`; `TaskShader`,
+  `MeshShader`, `PixelShader`; `ComputeShader`; `RayGenerationShader`, `MissShader`, `CallableShader` and `HitGroup`
+  blocks of `ClosestHit`, `AnyHit`, `Intersection` - and nothing else: an unknown key, a stage of
+  another kind of pass, a hull shader without a domain shader, two techniques or passes of one name or both without
+  one, a file with no technique is an error. The stages effects do not run yet - tessellation, mesh, ray tracing -
+  are described and refused with a message that says so. Slang's errors are said once each, where they stand in the
+  file or its includes; a missing entry point at the stage that names it. A macro given to the compiler is a name
+  with a value of one line and no comment. Every shader is compiled to SPIR-V 1.6.
 - A skin bends with every joint it has, not the first 128: on the GPU, in picking and in its bounds, and a glTF skin
   of more joints is no longer told about. A joint index past the skin's joints leaves its vertex where it is.
 - The engine's effects are written in Slang: entry points carry `[shader]`, and resources take Slang's bindings, with
@@ -1977,6 +1990,9 @@ All packages share one version.
 
 ### Removed
 
+- From the effect language: `EffectName` (an effect is named after its file), `Profile`, `GeometryShader`, the blend,
+  rasterizer and depth state keys, and the rest of the FX syntax no effect used. The `sampler` spelling is no longer
+  defined for Slang: write `SamplerState`. The device no longer asks for the geometry shader feature.
 - `SceneData.Controller.MaxDrawnJoints` and `ForwardPlusRenderingProcessor.MaxJoints`: a skin has no cap on its joints.
 - The `BasicEffect` passes nothing drew - the `Render` technique and `Basic`'s `Default`, `Textured`, `Lit` and
   `VertexColored` - with the `World`, `ShaderTexture` and `SampleType` parameters only they read.

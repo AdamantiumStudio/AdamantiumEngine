@@ -109,7 +109,6 @@ technique DashCut
 {
     pass Run
     {
-        EffectName = "DashCut";
         ComputeShader = DashCutCS;
     }
 }

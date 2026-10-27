@@ -3,7 +3,7 @@
 matrix wvp;
 
 float4 fillColor;
-sampler sampleType;
+SamplerState sampleType;
 Texture2D shaderTexture;
 
 float zNear;

@@ -282,7 +282,7 @@ technique T { pass P { ComputeShader = MainCS; } }
         public void TextureArrays_AreReflectedWithTheirLength()
         {
             var source = @"
-sampler s;
+SamplerState s;
 Texture2D four[4];
 Texture2D heap[];
 struct P { float4 pos : SV_Position; nointerpolation uint t : TEXCOORD0; };

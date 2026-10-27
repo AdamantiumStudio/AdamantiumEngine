@@ -1,7 +1,7 @@
 ﻿float4x4 wvp;
 float3 meshColor;
 float transparency;
-sampler sampleType;
+SamplerState sampleType;
 Texture2D shaderTexture;
 float4 foregroundColor;
 float gamma;

@@ -29,7 +29,6 @@ technique IndirectDraw
 {
     pass Run
     {
-        EffectName = "IndirectDraw";
         ComputeShader = IndirectDrawCS;
     }
 }
