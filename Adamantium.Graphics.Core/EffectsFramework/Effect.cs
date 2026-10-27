@@ -51,14 +51,6 @@ public class Effect : GraphicsResource
     /// Gets the data associated to this effect.
     /// </summary> 
     public EffectData.Effect RawEffectData { get; private set; }
-        
-    /// <summary>
-    /// Set to <c>true</c> to force all constant shaders to be shared between other effects within a common <see cref="EffectPool"/>. Default is <c>false</c>.
-    /// </summary>
-    /// <remarks>
-    /// This value can also be set in the TKFX file directly by setting ShareConstantBuffers = <c>true</c>; in a pass.
-    /// </remarks>
-    protected internal bool ShareConstantBuffers;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Effect"/> class with the specified bytecode effect. See remarks.
@@ -162,10 +154,7 @@ public class Effect : GraphicsResource
         ResourceLinker = GraphicsDevice.CreateEffectResourceLinker();
 
         IsSupportingDynamicCompilation = RawEffectData.Arguments != null;
-        ShareConstantBuffers = RawEffectData.ShareConstantBuffers;
-
-        if (!ShareConstantBuffers)
-            effectConstantBuffersCache ??= new Dictionary<EffectConstantBufferKey, EffectConstantBuffer>();
+        effectConstantBuffersCache ??= new Dictionary<EffectConstantBufferKey, EffectConstantBuffer>();
 
         var logger = new Logger();
         int techniqueIndex = 0;
@@ -211,7 +200,7 @@ public class Effect : GraphicsResource
 
             if (comparison == 0)
             {
-                comparison = ((int) left.ResourceType).CompareTo((int) right.ResourceType);
+                comparison = ((int) left.ParameterType).CompareTo((int) right.ParameterType);
 
                 if (comparison == 0)
                 {
@@ -231,10 +220,10 @@ public class Effect : GraphicsResource
                 resourceIndex += parameter.ElementCount;
             }
 
-            parameter.SetDefaultValue();
-
-            if (parameter.ResourceType == EffectResourceType.ConstantBuffer)
+            if (parameter.ParameterType == EffectParameterType.UniformBuffer)
+            {
                 parameter.SetResource(ConstantBuffers[parameter.Name]);
+            }
         }
 
         foreach (var technique in Techniques)
@@ -350,20 +339,20 @@ public class Effect : GraphicsResource
     /// The effect-level parameter a resource of a pass declares, taking the next slots of <see cref="ResourceLinker"/>:
     /// a new one, or - while <see cref="Reload"/> runs - the one the previous version had under that name.
     /// </summary>
-    public EffectParameter DeclareResourceParameter(EffectData.ResourceParameter description, EffectResourceType resourceType)
+    public EffectParameter DeclareResourceParameter(EffectData.ResourceParameter description)
     {
         var offset = ResourceLinker.Count;
         var parameter = Reused(description.Name, isValueType: false);
         if (parameter == null)
         {
-            parameter = new EffectParameter(description, resourceType, offset, ResourceLinker);
+            parameter = new EffectParameter(description, offset, ResourceLinker);
         }
         else
         {
-            parameter.BindResource(description, resourceType, offset, ResourceLinker);
+            parameter.BindResource(description, offset, ResourceLinker);
         }
 
-        ResourceLinker.Count += description.Count;
+        ResourceLinker.Count += (int)description.Count;
         return Parameters.Add(parameter);
     }
 
@@ -440,7 +429,7 @@ public class Effect : GraphicsResource
                 carried.Add((parameter.ParameterDescription,
                     parameter.Buffer.BackingBuffer.GetRange<byte>(parameter.Offset, parameter.Size), null));
             }
-            else if (parameter.ResourceType != EffectResourceType.ConstantBuffer)
+            else if (parameter.ParameterType != EffectParameterType.UniformBuffer)
             {
                 var resources = ResourceLinker.GetBoundValues(parameter.ParameterDescription);
                 if (resources != null)
@@ -470,7 +459,7 @@ public class Effect : GraphicsResource
             else
             {
                 ResourceLinker.SetResource<object>((EffectData.ResourceParameter)parameter.ParameterDescription,
-                    parameter.ResourceType, resources);
+                    resources);
             }
         }
     }
@@ -485,7 +474,7 @@ public class Effect : GraphicsResource
 
         if (previous is EffectData.ResourceParameter was && current is EffectData.ResourceParameter now)
         {
-            return was.Class == now.Class && was.Type == now.Type && was.Count == now.Count;
+            return was.Class == now.Class && was.Type == now.Type && was.Count == now.Count && was.Access == now.Access;
         }
 
         return false;
@@ -493,11 +482,6 @@ public class Effect : GraphicsResource
 
     private void RetireStaleBuffers(List<EffectParameter> previousParameters, List<EffectConstantBuffer> previousBuffers)
     {
-        if (ShareConstantBuffers)
-        {
-            return;
-        }
-
         var kept = new HashSet<EffectConstantBuffer>(ReferenceEqualityComparer.Instance);
         foreach (var buffer in ConstantBuffers)
         {
@@ -570,20 +554,12 @@ public class Effect : GraphicsResource
 
     public EffectConstantBuffer GetOrCreateConstantBuffer(EffectData.ConstantBuffer bufferRaw)
     {
-        EffectConstantBuffer constantBuffer;
-        if (ShareConstantBuffers)
+        var bufferKey = new EffectConstantBufferKey(bufferRaw);
+        if (!effectConstantBuffersCache.TryGetValue(bufferKey, out var constantBuffer))
         {
-            constantBuffer = Pool.GetOrCreateConstantBuffer(bufferRaw);
-        }
-        else
-        {
-            var bufferKey = new EffectConstantBufferKey(bufferRaw);
-            if (!effectConstantBuffersCache.TryGetValue(bufferKey, out constantBuffer))
-            {
-                constantBuffer = new EffectConstantBuffer(bufferRaw);
-                effectConstantBuffersCache.Add(bufferKey, constantBuffer);
-                ToDispose(constantBuffer);
-            }
+            constantBuffer = new EffectConstantBuffer(bufferRaw);
+            effectConstantBuffersCache.Add(bufferKey, constantBuffer);
+            ToDispose(constantBuffer);
         }
 
         return constantBuffer;

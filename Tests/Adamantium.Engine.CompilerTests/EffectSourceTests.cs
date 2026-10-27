@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.EffectsCompiler;
+using Adamantium.Vulkan.Slang;
 using NUnit.Framework;
 
 namespace Adamantium.Engine.CompilerTests;
@@ -42,10 +43,15 @@ technique { pass { ComputeShader = CS; } }");
             Assert.That(result.EffectData.Description.Name, Is.EqualTo("Test"), "the file's name");
             Assert.That(techniques.Select(t => t.Name), Is.EqualTo(new[] { "Draw", null }));
             Assert.That(techniques[0].Passes.Select(p => p.Name), Is.EqualTo(new[] { "First", "Second" }));
-            Assert.That(techniques[0].Passes[0].Pipeline[EffectShaderType.Fragment].EntryPoint, Is.EqualTo("PS"));
-            Assert.That(techniques[1].Passes[0].Pipeline[EffectShaderType.Compute].EntryPoint, Is.EqualTo("CS"));
+            Assert.That(StagesOf(result.EffectData, techniques[0].Passes[0]), Is.EqualTo(new[] { "Vertex VS", "Pixel PS" }));
+            Assert.That(StagesOf(result.EffectData, techniques[0].Passes[1]), Is.EqualTo(new[] { "Vertex VS" }));
+            Assert.That(StagesOf(result.EffectData, techniques[1].Passes[0]), Is.EqualTo(new[] { "Compute CS" }));
+            Assert.That(result.EffectData.Shaders, Has.Count.EqualTo(3), "a stage of two passes is compiled once");
         });
     }
+
+    private static IEnumerable<string> StagesOf(EffectData data, EffectData.Pass pass) =>
+        pass.Stages.Select(link => $"{link.Stage} {data.Shaders[link.Index].EntryPoint}");
 
     // A technique quoted in a comment, a string or a directive - one spliced over lines, one with a comment running on
     // past its line - is code, not a technique.
@@ -231,15 +237,109 @@ technique { pass { ComputeShader = CS; } }");
         Assert.That(Messages(result), Does.Contain("undefinedA").And.Contain("undefinedB"));
     }
 
-    // A stage refused does not take the stages after it down with it: they compile, or say what is wrong with them.
     [Test]
-    public void ARefusedStage_LeavesTheOthersOfItsPassCompiled()
+    public void ATessellationPass_CompilesItsHullAndDomainShaders()
     {
-        var result = Compile(Shaders + "technique T { pass { VertexShader = VS; HullShader = VS; DomainShader = VS; PixelShader = PS; } }");
+        var result = Compile("""
+            struct ControlPoint { float4 position : POSITION; };
+            struct PatchConstants { float edges[3] : SV_TessFactor; float inside : SV_InsideTessFactor; };
 
-        Assert.That(result.HasErrors, Is.True);
-        Assert.That(result.EffectData.Description.Techniques[0].Passes[0].Pipeline[EffectShaderType.Fragment]?.EntryPoint,
-            Is.EqualTo("PS"));
+            ControlPoint VS(ControlPoint point) { return point; }
+
+            PatchConstants Constants(InputPatch<ControlPoint, 3> patch)
+            {
+                PatchConstants constants;
+                constants.edges[0] = constants.edges[1] = constants.edges[2] = 4;
+                constants.inside = 4;
+                return constants;
+            }
+
+            [domain("tri")]
+            [partitioning("integer")]
+            [outputtopology("triangle_cw")]
+            [outputcontrolpoints(3)]
+            [patchconstantfunc("Constants")]
+            ControlPoint HS(InputPatch<ControlPoint, 3> patch, uint id : SV_OutputControlPointID) { return patch[id]; }
+
+            [domain("tri")]
+            float4 DS(PatchConstants constants, float3 at : SV_DomainLocation, const OutputPatch<ControlPoint, 3> patch)
+                : SV_Position
+            {
+                return patch[0].position * at.x + patch[1].position * at.y + patch[2].position * at.z;
+            }
+
+            float4 PS() : SV_Target { return 1; }
+
+            technique T { pass { VertexShader = VS; HullShader = HS; DomainShader = DS; PixelShader = PS; } }
+            """);
+
+        Assert.That(result.HasErrors, Is.False, Messages(result));
+        Assert.That(StagesOf(result.EffectData, result.EffectData.Description.Techniques[0].Passes[0]),
+            Is.EqualTo(new[] { "Vertex VS", "Hull HS", "Domain DS", "Pixel PS" }));
+    }
+
+    private const string MeshAndRayTracingShaders = """
+        struct MeshVertex { float4 position : SV_Position; };
+        struct TaskPayload { uint count; };
+        struct RayPayload { float4 color; };
+
+        groupshared TaskPayload payload;
+
+        [shader("amplification")]
+        [numthreads(1, 1, 1)]
+        void TS()
+        {
+            payload.count = 1;
+            DispatchMesh(1, 1, 1, payload);
+        }
+
+        [shader("mesh")]
+        [outputtopology("triangle")]
+        [numthreads(1, 1, 1)]
+        void MS(out vertices MeshVertex vertices[3], out indices uint3 triangles[1])
+        {
+            SetMeshOutputCounts(3, 1);
+            vertices[0].position = float4(0, 0, 0, 1);
+            vertices[1].position = float4(1, 0, 0, 1);
+            vertices[2].position = float4(0, 1, 0, 1);
+            triangles[0] = uint3(0, 1, 2);
+        }
+
+        float4 PS() : SV_Target { return 1; }
+
+        void RG() {}
+
+        void Miss(inout RayPayload payload) { payload.color = MISS_COLOR; }
+
+        void Hit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes attributes) { payload.color = 1; }
+
+        technique T
+        {
+            pass Mesh { TaskShader = TS; MeshShader = MS; PixelShader = PS; }
+            pass Trace { RayGenerationShader = RG; MissShader = Miss; HitGroup Triangles { ClosestHit = Hit; } }
+        }
+        """;
+
+    // The compiler compiles every stage the language describes and the effect data holds them all, a hit group's too;
+    // what Slang finds wrong in a mesh or a ray-tracing shader is said as in any other.
+    [Test]
+    public void MeshAndRayTracingPasses_Compile_AndTheirShadersMistakesAreSaid()
+    {
+        var clean = Compile(MeshAndRayTracingShaders, [new EffectData.ShaderMacro("MISS_COLOR", "0")]);
+        var broken = Compile(MeshAndRayTracingShaders, [new EffectData.ShaderMacro("MISS_COLOR", "missColour")]);
+
+        Assert.That(clean.HasErrors, Is.False, Messages(clean));
+        var passes = clean.EffectData.Description.Techniques[0].Passes;
+        var hitGroup = passes[1].HitGroups.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(StagesOf(clean.EffectData, passes[0]), Is.EqualTo(new[] { "Task TS", "Mesh MS", "Pixel PS" }));
+            Assert.That(StagesOf(clean.EffectData, passes[1]), Is.EqualTo(new[] { "RayGeneration RG", "Miss Miss" }));
+            Assert.That(hitGroup.Name, Is.EqualTo("Triangles"));
+            Assert.That(hitGroup.Shaders.Select(link => $"{link.Stage} {clean.EffectData.Shaders[link.Index].EntryPoint}"),
+                Is.EqualTo(new[] { "ClosestHit Hit" }));
+            Assert.That(Messages(broken), Does.Contain("missColour"));
+        });
     }
 
     [TestCase("/no/such/folder/Test.fx")]
@@ -264,20 +364,6 @@ technique { pass { ComputeShader = CS; } }");
 
         Assert.That(result.HasErrors, Is.True);
         Assert.That(Messages(result), Does.Contain("Test.fx" + where).And.Contain(what));
-    }
-
-    // The language describes tessellation, mesh and ray-tracing passes; until effects run them, compiling one is an
-    // error that says so.
-    [TestCase("pass { VertexShader = VS; HullShader = CS; DomainShader = CS; PixelShader = PS; }", "Hull shaders are described")]
-    [TestCase("pass { TaskShader = CS; MeshShader = CS; PixelShader = PS; }", "Task shaders are described")]
-    [TestCase("pass { RayGenerationShader = CS; MissShader = CS; MissShader = CS; CallableShader = CS; " +
-              "HitGroup H { ClosestHit = CS; AnyHit = CS; Intersection = CS; } }", "RayGeneration shaders are described")]
-    public void APassOfAPipelineEffectsDoNotRunYet_IsReadAndRefused(string pass, string what)
-    {
-        var result = Compile($"technique T {{ {pass} }}\n" + Shaders);
-
-        Assert.That(result.HasErrors, Is.True);
-        Assert.That(Messages(result), Does.Contain(what).And.Not.Contain("is not a stage"));
     }
 
     // Slang reports on the file's own lines and names the file: the technique before the code takes none of them away,
@@ -320,5 +406,136 @@ technique T { pass { VertexShader = VS; } }";
             Assert.That(without.HasErrors, Is.True, "no entry point without the macro");
             Assert.That(with.HasErrors, Is.False, Messages(with));
         });
+    }
+
+    [Test]
+    public void EveryStage_IsReadWithTheStageSlangCompilesItFor()
+    {
+        var source = EffectSource.Read(@"
+technique T
+{
+    pass Draw { VertexShader = VS; HullShader = HS; DomainShader = DS; PixelShader = PS; }
+    pass Mesh { TaskShader = TS; MeshShader = MS; PixelShader = PS; }
+    pass Trace { RayGenerationShader = RG; MissShader = M; CallableShader = C; HitGroup H { AnyHit = AH; ClosestHit = CH; Intersection = I; } }
+}", "Test.fx");
+
+        var passes = source.Techniques.Single().Passes;
+        var group = passes[2].HitGroups.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(source.Errors, Is.Empty);
+            Assert.That(passes.SelectMany(pass => pass.Stages).Select(stage => (stage.EntryPoint, stage.SlangStage)),
+                Is.EqualTo(new[]
+                {
+                    ("VS", SlangcStage.Vertex), ("HS", SlangcStage.Hull), ("DS", SlangcStage.Domain),
+                    ("PS", SlangcStage.Fragment), ("TS", SlangcStage.Amplification), ("MS", SlangcStage.Mesh),
+                    ("PS", SlangcStage.Fragment), ("RG", SlangcStage.RayGeneration), ("M", SlangcStage.Miss),
+                    ("C", SlangcStage.Callable)
+                }));
+            Assert.That(group.Name, Is.EqualTo("H"));
+            Assert.That(group.Stages.Select(stage => (stage.EntryPoint, stage.SlangStage)), Is.EqualTo(new[]
+            {
+                ("AH", SlangcStage.AnyHit), ("CH", SlangcStage.ClosestHit), ("I", SlangcStage.Intersection)
+            }));
+            Assert.That(group.Stages[1].Location.ToString(), Is.EqualTo("Test.fx(6,106)"));
+        });
+    }
+
+    // What follows a technique that breaks the rules is read as ever: its own techniques, its code on its own lines.
+    [Test]
+    public void ATechniqueThatBreaksTheRules_IsBlankedToItsClose_AndTheFileReadOn()
+    {
+        const string text = "technique A { pass { NotAStage = X; } }\nfloat4 Kept;\ntechnique B { pass { VertexShader = VS; } }";
+
+        var source = EffectSource.Read(text, "Test.fx");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(source.Errors.Select(error => error.ToString()), Is.EqualTo(new[]
+            {
+                "Test.fx(1,22): error: 'NotAStage' is not a stage of a pass: VertexShader, HullShader, DomainShader, " +
+                "PixelShader, TaskShader, MeshShader, ComputeShader, RayGenerationShader, MissShader, CallableShader or HitGroup"
+            }));
+            Assert.That(source.Techniques.Select(technique => technique.Name), Is.EqualTo(new[] { "B" }));
+            Assert.That(source.Code.Split('\n'), Is.EqualTo(new[] { new string(' ', 39), "float4 Kept;", new string(' ', 43) }));
+        });
+    }
+
+    // A technique left open ends at the next technique or the end of the file; a misspelt pass or a stray mark inside
+    // one is blanked with it, to its close; a brace it did not open is the code's, and ends it; a directive inside is
+    // no brace of it.
+    [TestCase("technique T { pass { VertexShader = VS;\nfloat4 Gone;", "                                       \n            ")]
+    [TestCase("technique T { pass A { VertexShader = VS; } Pass B { VertexShader = VS; } }\nint Kept;",
+        "                                                                           \nint Kept;")]
+    [TestCase("technique T { pass A { VertexShader = VS; } ; }\nint Kept;", "                                               \nint Kept;")]
+    [TestCase("technique A { pass { VertexShader = VS;\ntechnique B { pass { VertexShader = VS; } }\nint Kept;",
+        "                                       \n                                           \nint Kept;")]
+    [TestCase("technique T { pass { NotAStage = X; }\n#define A {\n}\nint Kept;", "                                     \n           \n \nint Kept;")]
+    [TestCase("void F() { technique }\nint Kept;", "void F() {           }\nint Kept;")]
+    public void ATechniqueBrokenOffEarly_IsBlankedAsFarAsItGoes(string text, string code)
+    {
+        var source = EffectSource.Read(text, "Test.fx");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(source.Errors, Is.Not.Empty);
+            Assert.That(source.Code, Is.EqualTo(code));
+        });
+    }
+
+    [Test]
+    public void ATechniqueLeftOpen_LeavesTheNextOneRead()
+    {
+        var source = EffectSource.Read("technique A { pass { VertexShader = VS; }\ntechnique B { pass { VertexShader = VS; } }",
+            "Test.fx");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(source.Errors.Select(error => error.ToString()),
+                Is.EqualTo(new[] { "Test.fx(2,1): error: 'technique' where a pass was expected" }));
+            Assert.That(source.Techniques.Select(technique => technique.Name), Is.EqualTo(new[] { "B" }));
+        });
+    }
+
+    // A directive after a technique that breaks the rules is still a directive: the word technique in it is not one.
+    [Test]
+    public void ADirectiveAfterATechniqueThatBreaksTheRules_IsADirective()
+    {
+        const string text = "technique T { pass A { NotAStage = VS; } }\n#define T2 technique\nfloat4 x;\n";
+
+        var source = EffectSource.Read(text, "Test.fx");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(source.Errors, Has.Count.EqualTo(1));
+            Assert.That(source.Code.Split('\n').Skip(1), Is.EqualTo(new[] { "#define T2 technique", "float4 x;", "" }));
+        });
+    }
+
+    // A lone CR ends a line, as for Slang: errors stand on the line after it, a comment ends at it.
+    [Test]
+    public void ALoneCarriageReturn_EndsALine()
+    {
+        var misspelt = EffectSource.Read("float4 VS();\rtechnique T { pass { VertexShadr = VS; } }", "Test.fx");
+        var commented = EffectSource.Read("// a comment\rtechnique T { pass { VertexShader = VS; } }\r", "Test.fx");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(misspelt.Errors.Single().Location.ToString(), Is.EqualTo("Test.fx(2,22)"));
+            Assert.That(commented.Errors, Is.Empty);
+            Assert.That(commented.Techniques, Has.Count.EqualTo(1));
+            Assert.That(commented.Code, Does.Not.Contain("technique"));
+        });
+    }
+
+    [Test]
+    public void Errors_AreInTheOrderOfTheFile()
+    {
+        var source = EffectSource.Read(
+            "technique T { pass { VertexShader = VS; } }\ntechnique T { pass P { PixelShader = PS; } pass P { VertexShader = VS; } }",
+            "Test.fx");
+
+        Assert.That(source.Errors.Select(error => error.Location.ToString()),
+            Is.EqualTo(new[] { "Test.fx(2,1)", "Test.fx(2,15)", "Test.fx(2,44)" }));
     }
 }

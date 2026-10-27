@@ -27,11 +27,11 @@ public sealed class EffectParameter : NamedObject
     /// <summary>
     /// Initializes a new instance of the <see cref="EffectParameter"/> class.
     /// </summary>
-    public EffectParameter(EffectData.ResourceParameter parameterDescription, EffectResourceType resourceType,
-        int offset, IEffectResourceLinker resourceLinker)
+    public EffectParameter(EffectData.ResourceParameter parameterDescription, int offset,
+        IEffectResourceLinker resourceLinker)
         : base(parameterDescription.Name)
     {
-        BindResource(parameterDescription, resourceType, offset, resourceLinker);
+        BindResource(parameterDescription, offset, resourceLinker);
     }
 
     /// <summary>The declaration this parameter was built from.</summary>
@@ -49,7 +49,6 @@ public sealed class EffectParameter : NamedObject
         GetMatrixImpl = null;
         matrixSize = 0;
 
-        ResourceType = EffectResourceType.None;
         IsValueType = true;
         ParameterClass = parameterDescription.Class;
         ParameterType = parameterDescription.Type;
@@ -78,8 +77,8 @@ public sealed class EffectParameter : NamedObject
         }
     }
 
-    internal void BindResource(EffectData.ResourceParameter parameterDescription, EffectResourceType resourceType,
-        int offset, IEffectResourceLinker resourceLinker)
+    internal void BindResource(EffectData.ResourceParameter parameterDescription, int offset,
+        IEffectResourceLinker resourceLinker)
     {
         ParameterDescription = parameterDescription;
         Buffer = null;
@@ -88,15 +87,15 @@ public sealed class EffectParameter : NamedObject
         GetMatrixImpl = null;
         matrixSize = 0;
 
-        ResourceType = resourceType;
         IsValueType = false;
         ParameterClass = parameterDescription.Class;
         ParameterType = parameterDescription.Type;
         RowCount = ColumnCount = 0;
         ElementCount = parameterDescription.Count;
         Offset = offset;
-        SlotIndex = parameterDescription.Slot;
-        DescriptorSet = parameterDescription.DescriptorSet;
+        Set = parameterDescription.Set;
+        Binding = parameterDescription.Binding;
+        Access = parameterDescription.Access;
     }
 
     /// <summary>
@@ -113,16 +112,11 @@ public sealed class EffectParameter : NamedObject
     /// <value>The parameter class.</value>
     public EffectParameterClass ParameterClass { get; private set; }
 
-    /// <summary>
-    /// Gets the resource type.
-    /// </summary>
-    public EffectResourceType ResourceType { get; private set; }
-
-    /// <summary>
-    /// Gets the type of the parameter.
-    /// </summary>
-    /// <value>The type of the parameter.</value>
+    /// <summary>The scalar type of a value, or the kind of descriptor a resource is bound by.</summary>
     public EffectParameterType ParameterType { get; private set; }
+
+    /// <summary>What the shaders do with a resource: read it, write it or both.</summary>
+    public EffectResourceAccess Access { get; private set; }
 
     /// <summary>
     /// Gets a boolean indicating if this parameter is a value type (true) or a resource type (false).
@@ -162,12 +156,11 @@ public sealed class EffectParameter : NamedObject
         internal set => offset = value;
     }
 
-    /// <summary>
-    /// Index of the resource to be set inside <see cref="CommonShaderStage"/>
-    /// </summary>
-    public int SlotIndex { get; internal set; }
-        
-    public uint DescriptorSet { get; internal set; }
+    /// <summary>The descriptor set a resource is bound in.</summary>
+    public uint Set { get; internal set; }
+
+    /// <summary>A resource's binding in its set.</summary>
+    public uint Binding { get; internal set; }
 
     /// <summary>
     /// Gets a single value to the associated parameter in the constant buffer.
@@ -435,7 +428,7 @@ public sealed class EffectParameter : NamedObject
     /// <param name="resourceView">The resource view.</param>
     public void SetResource<T>(T resourceView) where T : class
     {
-        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, ResourceType, resourceView);
+        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, resourceView);
     }
 
     /// <summary>
@@ -445,8 +438,7 @@ public sealed class EffectParameter : NamedObject
     /// <param name="resourceViewArray">The resource view array.</param>
     public void SetResource<T>(params T[] resourceViewArray) where T : class
     {
-        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, ResourceType,
-            resourceViewArray);
+        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, resourceViewArray);
     }
 
     /// <summary>
@@ -457,7 +449,7 @@ public sealed class EffectParameter : NamedObject
     /// <param name="resourceView">The resource view.</param>
     public void SetResource<T>(int index, T resourceView) where T : class
     {
-        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, ResourceType, resourceView);
+        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, index, resourceView);
     }
 
     /// <summary>
@@ -468,20 +460,7 @@ public sealed class EffectParameter : NamedObject
     /// <param name="resourceViewArray">The resource view array.</param>
     public void SetResource<T>(int index, params T[] resourceViewArray) where T : class
     {
-        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, ResourceType,
-            resourceViewArray);
-    }
-
-    internal void SetDefaultValue()
-    {
-        if (IsValueType)
-        {
-            var defaultValue = ((EffectData.ValueTypeParameter)ParameterDescription).DefaultValue;
-            if (defaultValue != null)
-            {
-                SetRawValue(defaultValue);
-            }
-        }
+        resourceLinker.SetResource((EffectData.ResourceParameter) ParameterDescription, index, resourceViewArray);
     }
 
     /// <summary>
@@ -494,7 +473,7 @@ public sealed class EffectParameter : NamedObject
     public override string ToString()
     {
         return
-            $"[{Index}] {Name} Class: {ParameterClass}, Resource: {ResourceType}, Type: {ParameterType}, IsValue: {IsValueType}, RowCount: {RowCount}, ColumnCount: {ColumnCount}, ElementCount: {ElementCount} Offset: {Offset}";
+            $"[{Index}] {Name} Class: {ParameterClass}, Type: {ParameterType}, IsValue: {IsValueType}, RowCount: {RowCount}, ColumnCount: {ColumnCount}, ElementCount: {ElementCount} Offset: {Offset}";
     }
 
     private delegate void CopyMatrixDelegate(ref Matrix4x4F matrix, int offset);

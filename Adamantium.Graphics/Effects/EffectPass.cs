@@ -11,7 +11,6 @@ using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Vulkan.Core;
 using Serilog;
-using EffectTechnique = Adamantium.Graphics.Core.EffectsFramework.EffectTechnique;
 
 namespace Adamantium.Graphics.Effects;
 
@@ -22,12 +21,6 @@ namespace Adamantium.Graphics.Effects;
 /// </summary>
 public abstract class EffectPass : DisposableObject, IEffectPass
 {
-    /// <summary>
-    ///   Gets the attributes associated with this pass.
-    /// </summary>
-    /// <value> The attributes. </value>
-    public PropertyKeyCollection PropertiesKey { get; private set; }
-
     /// <summary>
     /// The parent effect of this pass.
     /// </summary>
@@ -49,6 +42,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     private protected DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
 
     private uint appliesCounter = 0;
+
+    private NotSupportedException unsupported;
     public ReadOnlyCollection<PipelineShaderStageCreateInfo> ShaderStages => shaderStages.AsReadOnly();
 
     /// <summary>
@@ -70,7 +65,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
         shaderStages = new List<PipelineShaderStageCreateInfo>();
         layoutBindings = new List<DescriptorSetLayoutBinding>();
-        PropertiesKey = PrepareProperties(logger, pass.Properties);
     }
 
     private void ClearLayoutBindings()
@@ -78,9 +72,17 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         layoutBindings.Clear();
     }
 
-    /// <summary>Applies this pass: binds each stage's shader, uploads dirty constant buffers and binds its resources.</summary>
+    /// <summary>Applies this pass: binds each stage's shader, uploads dirty constant buffers and binds its resources.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The pass runs a stage the device has not enabled, or ray tracing.
+    /// </exception>
     public void Apply()
     {
+        if (unsupported != null)
+        {
+            throw unsupported;
+        }
+
         Effect.CurrentTechnique = Technique;
         graphicsDevice.CurrentEffectPass = this;
         ResourcesBound = true;
@@ -124,16 +126,14 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private void BindAllStages()
     {
-        var graphics = false;
-        var fragment = false;
+        var present = (ShaderStageFlagBits)0;
         foreach (var stage in stages)
         {
-            graphics |= stage.Stage == ShaderStageFlagBits.VertexBit;
-            fragment |= stage.Stage == ShaderStageFlagBits.FragmentBit;
+            present |= stage.Stage;
         }
 
-        var noFragment = graphics && !fragment;
-        var count = stages.Count + (noFragment ? 1 : 0);
+        var empty = GetEmptyStages(present);
+        var count = stages.Count + BitOperations.PopCount((uint)empty);
         if (_bindStages == null || _bindStages.Length != count)
         {
             _bindStages = new ShaderStageFlagBits[count];
@@ -146,13 +146,48 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             _bindShaders[i] = stages[i].ShaderObject;
         }
 
-        if (noFragment)
+        var next = stages.Count;
+        for (var bit = 1u; bit != 0 && next < count; bit <<= 1)
         {
-            _bindStages[^1] = ShaderStageFlagBits.FragmentBit;
-            _bindShaders[^1] = null;
+            if (((uint)empty & bit) != 0)
+            {
+                _bindStages[next] = (ShaderStageFlagBits)bit;
+                _bindShaders[next] = null;
+                next++;
+            }
         }
 
         ((GraphicsDevice)graphicsDevice).BindShaders(_bindStages, _bindShaders);
+    }
+
+    /// <summary>The stages a pass of <paramref name="present"/> stages binds empty: a draw takes a shader, or none, at
+    /// every graphics stage the device has enabled - the pixel stage always, hull and domain with tessellation, task
+    /// and mesh with mesh shaders, the vertex stage under a mesh shader. A compute pass binds only its own.</summary>
+    private ShaderStageFlagBits GetEmptyStages(ShaderStageFlagBits present)
+    {
+        if ((present & ShaderStageFlagBits.ComputeBit) != 0)
+        {
+            return 0;
+        }
+
+        var device = graphicsDevice.MainDevice;
+        var empty = ShaderStageFlagBits.VertexBit | ShaderStageFlagBits.FragmentBit;
+        if (device.IsTessellationEnabled)
+        {
+            empty |= ShaderStageFlagBits.TessellationControlBit | ShaderStageFlagBits.TessellationEvaluationBit;
+        }
+
+        if (device.IsMeshShaderEnabled)
+        {
+            empty |= ShaderStageFlagBits.MeshBitExt;
+        }
+
+        if (device.IsTaskShaderEnabled)
+        {
+            empty |= ShaderStageFlagBits.TaskBitExt;
+        }
+
+        return empty & ~present;
     }
 
     /// <summary>
@@ -174,7 +209,6 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         ClearLayoutBindings();
         Technique = technique;
         this.pass = pass;
-        PropertiesKey = PrepareProperties(logger, pass.Properties);
         if (graphicsDevice.ShadersBoundFor(this))
         {
             graphicsDevice.ShadersBound(null);
@@ -182,30 +216,92 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     }
 
     /// <summary>
-    /// Initializes this pass.
+    /// Initializes this pass: its stages in pipeline order, whatever order the file names them in, and the parameters
+    /// they declare - those of a pass the device cannot run too, though it keeps no stage and <see cref="Apply"/> says
+    /// why.
     /// </summary>
     /// <param name="logger">The logger.</param>
-    /// <exception cref="System.InvalidOperationException"></exception>
     public void Initialize(Logger logger)
     {
-        foreach (var link in pass.Pipeline)
+        unsupported = pass.HitGroups.Count > 0 ? CreateRayTracingError() : null;
+        foreach (var link in pass.Stages.OrderBy(link => GetPipelineOrder(link.Stage)))
         {
-            if (link.IsImport)
-            {
-                throw new InvalidOperationException(
-                    $"Unable to resolve imported shader [{link.ImportName}] for stage [{link.ShaderType}]");
-            }
-
-            var stageBlock = new StageBlock(graphicsDevice, link.ShaderType);
+            unsupported ??= FindMissingFeature(link.Stage) ?? FindUnboundResource(Effect.Pool.RegisteredShaders[link.Index]);
+            var stageBlock = new StageBlock(graphicsDevice, link.Stage);
             pipelineStages.Add(stageBlock);
 
             stageBlock.Index = link.Index;
-            stageBlock.EntryPoint = link.EntryPoint;
-            stageBlock.CacheName = $"{Effect?.Name}.{Technique?.Name}.{Name}.{link.ShaderType}";
+            stageBlock.EntryPoint = Effect.Pool.RegisteredShaders[link.Index].EntryPoint;
+            stageBlock.CacheName = $"{Effect?.Name}.{Technique?.Name}.{Name}.{link.Stage}";
 
             InitStageBlock(stageBlock, logger);
         }
+
+        if (unsupported != null)
+        {
+            pipelineStages.Clear();
+        }
     }
+
+    private static int GetPipelineOrder(EffectStage stage) => stage switch
+    {
+        EffectStage.Vertex => 0,
+        EffectStage.Hull => 1,
+        EffectStage.Domain => 2,
+        EffectStage.Task => 3,
+        EffectStage.Mesh => 4,
+        EffectStage.Pixel => 5,
+        _ => 6
+    };
+
+    private NotSupportedException FindMissingFeature(EffectStage stage)
+    {
+        var device = graphicsDevice.MainDevice;
+        return stage switch
+        {
+            EffectStage.Hull or EffectStage.Domain when !device.IsTessellationEnabled =>
+                CreateMissingFeatureError($"{stage} shaders", "the tessellationShader feature"),
+            EffectStage.Mesh when !device.IsMeshShaderEnabled =>
+                CreateMissingFeatureError("mesh shaders", "VK_EXT_mesh_shader and its meshShader feature"),
+            EffectStage.Task when !device.IsTaskShaderEnabled =>
+                CreateMissingFeatureError("task shaders", "VK_EXT_mesh_shader and its taskShader feature"),
+            EffectStage.Hull or EffectStage.Domain => CreateUndrawnError("tessellated passes",
+                "the patch's control points and the domain's origin"),
+            EffectStage.Task or EffectStage.Mesh => CreateUndrawnError("mesh passes",
+                "a draw of mesh tasks, and mesh shaders without a task shader"),
+            EffectStage.RayGeneration or EffectStage.Miss or EffectStage.Callable or EffectStage.ClosestHit
+                or EffectStage.AnyHit or EffectStage.Intersection => CreateRayTracingError(),
+            _ => null
+        };
+    }
+
+    private NotSupportedException CreateUndrawnError(string passes, string missing) =>
+        new($"{Effect.Name}.{Name}: effects do not draw {passes} yet - they do not set {missing}.");
+
+    private NotSupportedException FindUnboundResource(EffectData.Shader shader)
+    {
+        foreach (var resource in shader.ResourceParameters)
+        {
+            if (!IsBoundByEffects(resource.Type))
+            {
+                return new NotSupportedException($"{Effect.Name}.{Name}: '{resource.Name}' is a {resource.Type}; " +
+                                                 "effects bind uniform and storage buffers, sampled images and samplers.");
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsBoundByEffects(EffectParameterType type) => type is EffectParameterType.UniformBuffer
+        or EffectParameterType.StorageBuffer or EffectParameterType.Sampler or EffectParameterType.SampledImage1D
+        or EffectParameterType.SampledImage2D or EffectParameterType.SampledImage3D or EffectParameterType.SampledImageCube;
+
+    private NotSupportedException CreateMissingFeatureError(string shaders, string feature) =>
+        new($"{Effect.Name}.{Name}: {shaders} need {feature}, which " +
+            $"{graphicsDevice.Adapter.AdapterProperties.DeviceName} does not have.");
+
+    private NotSupportedException CreateRayTracingError() =>
+        new($"{Effect.Name}.{Name}: ray-tracing shaders run in a ray-tracing pipeline, which effects do not create yet.");
 
     public void PrepareData()
     {
@@ -238,10 +334,10 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             return;
         }
 
-        stageBlock.ByteCode = Effect.Pool.GetShaderBytecode(stageBlock.Type, shaderIndex);
+        stageBlock.ByteCode = Effect.Pool.GetShaderBytecode(shaderIndex);
 
         var shaderStageInfo = new PipelineShaderStageCreateInfo();
-        shaderStageInfo.Stage = EffectShaderTypeToShaderStage(stageBlock.Type);
+        shaderStageInfo.Stage = stageBlock.Stage;
         shaderStageInfo.Module = stageBlock.ShaderModule;
         shaderStageInfo.PName = stageBlock.EntryPoint;
 
@@ -265,8 +361,8 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                 continue;
             }
 
-            CreateAndAddLayoutBinding(constantBuffer.Description.DescriptorSet, constantBuffer.Description.Slot, 1U,
-                DescriptorType.UniformBuffer, EffectShaderTypeToShaderStage(stageBlock.Type));
+            CreateAndAddLayoutBinding(constantBuffer.Description.Set, constantBuffer.Description.Binding, 1U,
+                DescriptorType.UniformBuffer, stageBlock.Stage);
 
             if (Effect.ConstantBuffers[constantBufferRaw.Name] == null)
             {
@@ -301,7 +397,7 @@ public abstract class EffectPass : DisposableObject, IEffectPass
             EffectParameter parameter;
             var previousParameter = Effect.Parameters[parameterRaw.Name];
 
-            if (parameterRaw.Type == EffectParameterType.ConstantBuffer &&
+            if (parameterRaw.Type == EffectParameterType.UniformBuffer &&
                 Effect.ConstantBuffers[parameterRaw.Name] == null)
             {
                 continue;
@@ -309,12 +405,11 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
             if (previousParameter == null)
             {
-                var paramType = EffectResourceTypeHelper.ConvertFromParameterType(parameterRaw.Type);
-                parameter = Effect.DeclareResourceParameter(parameterRaw, paramType);
+                parameter = Effect.DeclareResourceParameter(parameterRaw);
             }
             else
             {
-                if (CompareResourceParameter(
+                if (IsRedefined(
                         parameterRaw,
                         (EffectData.ResourceParameter)previousParameter.ParameterDescription))
                 {
@@ -327,17 +422,16 @@ public abstract class EffectPass : DisposableObject, IEffectPass
                 parameter = previousParameter;
             }
 
-            CreateAndAddLayoutBinding(parameterRaw.DescriptorSet, parameterRaw.Slot, parameterRaw.Count,
-                ConvertFromEffectParameterType(parameterRaw.Type),
-                EffectShaderTypeToShaderStage(stageBlock.Type));
+            CreateAndAddLayoutBinding(parameterRaw.Set, parameterRaw.Binding, parameterRaw.Count,
+                GetDescriptorType(parameterRaw.Type), stageBlock.Stage);
 
-            if (parameter.ResourceType == EffectResourceType.ConstantBuffer)
+            if (parameter.ParameterType == EffectParameterType.UniformBuffer)
             {
                 stageBlock.ConstantBufferLinks.Add(new ConstantBufferLink(Effect.ConstantBuffers[parameter.Name], parameter));
             }
 
             stageBlock.Parameters ??= new List<ParameterBinding>(shaderRaw.ResourceParameters.Count);
-            stageBlock.Parameters.Add(new ParameterBinding(parameter, parameterRaw.Slot, parameterRaw.DescriptorSet));
+            stageBlock.Parameters.Add(new ParameterBinding(parameter, parameterRaw.Binding, parameterRaw.Set));
         }
     }
 
@@ -365,64 +459,39 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         return binding;
     }
 
-    public static ShaderStageFlagBits EffectShaderTypeToShaderStage(EffectShaderType type)
+    /// <summary>The Vulkan stage an effect's <paramref name="stage"/> runs at.</summary>
+    public static ShaderStageFlagBits GetShaderStage(EffectStage stage) => stage switch
     {
-        switch (type)
-        {
-            case EffectShaderType.Vertex:
-                return ShaderStageFlagBits.VertexBit;
-            case EffectShaderType.Hull:
-                return ShaderStageFlagBits.TessellationControlBit;
-            case EffectShaderType.Domain:
-                return ShaderStageFlagBits.TessellationEvaluationBit;
-            case EffectShaderType.Fragment:
-                return ShaderStageFlagBits.FragmentBit;
-            case EffectShaderType.Compute:
-                return ShaderStageFlagBits.ComputeBit;
-            default:
-                throw new ArgumentOutOfRangeException(
-                    $"Effect type {type} currently has no equivalent for ShaderStageFlagBits");
-        }
-    }
+        EffectStage.Vertex => ShaderStageFlagBits.VertexBit,
+        EffectStage.Hull => ShaderStageFlagBits.TessellationControlBit,
+        EffectStage.Domain => ShaderStageFlagBits.TessellationEvaluationBit,
+        EffectStage.Pixel => ShaderStageFlagBits.FragmentBit,
+        EffectStage.Task => ShaderStageFlagBits.TaskBitExt,
+        EffectStage.Mesh => ShaderStageFlagBits.MeshBitExt,
+        EffectStage.Compute => ShaderStageFlagBits.ComputeBit,
+        EffectStage.RayGeneration => ShaderStageFlagBits.RaygenBitKhr,
+        EffectStage.Miss => ShaderStageFlagBits.MissBitKhr,
+        EffectStage.Callable => ShaderStageFlagBits.CallableBitKhr,
+        EffectStage.ClosestHit => ShaderStageFlagBits.ClosestHitBitKhr,
+        EffectStage.AnyHit => ShaderStageFlagBits.AnyHitBitKhr,
+        EffectStage.Intersection => ShaderStageFlagBits.IntersectionBitKhr,
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null)
+    };
 
-    private DescriptorType ConvertFromEffectParameterType(EffectParameterType type)
+    private static DescriptorType GetDescriptorType(EffectParameterType type) => type switch
     {
-        switch (type)
-        {
-            case EffectParameterType.ConstantBuffer:
-                return DescriptorType.UniformBuffer;
-            case EffectParameterType.Sampler:
-            case EffectParameterType.Sampler1D:
-            case EffectParameterType.Sampler2D:
-            case EffectParameterType.Sampler3D:
-            case EffectParameterType.SamplerCube:
-                return DescriptorType.Sampler;
-            case EffectParameterType.Texture:
-            case EffectParameterType.Texture1D:
-            case EffectParameterType.Texture1DArray:
-            case EffectParameterType.Texture2D:
-            case EffectParameterType.Texture2DArray:
-            case EffectParameterType.Texture2DMultisampled:
-            case EffectParameterType.Texture2DMultisampledArray:
-            case EffectParameterType.Texture3D:
-            case EffectParameterType.TextureCube:
-            case EffectParameterType.TextureCubeArray:
-                return DescriptorType.SampledImage;
-            case EffectParameterType.RWTexture1D:
-            case EffectParameterType.RWTexture1DArray:
-            case EffectParameterType.RWTexture2D:
-            case EffectParameterType.RWTexture2DArray:
-            case EffectParameterType.RWTexture3D:
-                return DescriptorType.StorageTexelBuffer;
-            case EffectParameterType.StorageBuffer:
-                return DescriptorType.StorageBuffer;
-            case EffectParameterType.StorageImage:
-                return DescriptorType.StorageImage;
-            default:
-                throw new ArgumentOutOfRangeException(
-                    $"Cannot convert parameter {type} to corresponding DescriptorType");
-        }
-    }
+        EffectParameterType.UniformBuffer => DescriptorType.UniformBuffer,
+        EffectParameterType.StorageBuffer => DescriptorType.StorageBuffer,
+        EffectParameterType.UniformTexelBuffer => DescriptorType.UniformTexelBuffer,
+        EffectParameterType.StorageTexelBuffer => DescriptorType.StorageTexelBuffer,
+        EffectParameterType.SampledImage1D or EffectParameterType.SampledImage2D or EffectParameterType.SampledImage3D
+            or EffectParameterType.SampledImageCube => DescriptorType.SampledImage,
+        EffectParameterType.StorageImage1D or EffectParameterType.StorageImage2D or EffectParameterType.StorageImage3D =>
+            DescriptorType.StorageImage,
+        EffectParameterType.Sampler => DescriptorType.Sampler,
+        EffectParameterType.AccelerationStructure => DescriptorType.AccelerationStructureKhr,
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "not a resource")
+    };
 
     internal void ComputeSlotLinks()
     {
@@ -439,52 +508,32 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private void PrepareSlotLinks(ref StageBlock stageBlock)
     {
-        foreach (var parameter in stageBlock.Parameters)
+        foreach (var binding in stageBlock.Parameters)
         {
-            SlotLink link;
-            var resourceType = parameter.Parameter.ResourceType;
-            switch (resourceType)
+            var parameter = binding.Parameter;
+            var link = new SlotLink(parameter.Binding, parameter.Set, parameter.ParameterDescription, parameter);
+            switch (parameter.ParameterType)
             {
-                case EffectResourceType.ShaderResourceView:
-                    link = new SlotLink((uint)parameter.Parameter.SlotIndex, (uint)parameter.Parameter.DescriptorSet,
-                        parameter.Parameter.ParameterDescription, parameter.Parameter,
-                        isStorageBuffer: parameter.Parameter.ParameterDescription.Type == EffectParameterType.StorageBuffer);
-                    stageBlock.ShaderResourceViewSlotLinks.Add(link);
+                case EffectParameterType.Sampler:
+                    stageBlock.SamplerLinks.Add(link);
                     break;
-                case EffectResourceType.SamplerState:
-                    link = new SlotLink((uint)parameter.Parameter.SlotIndex, (uint)parameter.Parameter.DescriptorSet,
-                        parameter.Parameter.ParameterDescription, parameter.Parameter);
-                    stageBlock.SamplerStateSlotLinks.Add(link);
+                case EffectParameterType.SampledImage1D:
+                case EffectParameterType.SampledImage2D:
+                case EffectParameterType.SampledImage3D:
+                case EffectParameterType.SampledImageCube:
+                    stageBlock.SampledImageLinks.Add(link);
                     break;
-                case EffectResourceType.UnorderedAccessView:
-                    link = new SlotLink((uint)parameter.Parameter.SlotIndex, (uint)parameter.Parameter.DescriptorSet,
-                        parameter.Parameter.ParameterDescription, parameter.Parameter);
-                    stageBlock.UnorderedAccessViewSlotLinks.Add(link);
+                case EffectParameterType.StorageBuffer:
+                    stageBlock.StorageBufferLinks.Add(link);
                     break;
             }
         }
     }
 
-    private bool CompareResourceParameter(EffectData.ResourceParameter left, EffectData.ResourceParameter right)
+    private bool IsRedefined(EffectData.ResourceParameter left, EffectData.ResourceParameter right)
     {
-        return left.Class != right.Class || left.Type != right.Type || left.Count != right.Count;
-    }
-
-    private PropertyKeyCollection PrepareProperties(Logger logger, EffectPropertyCollection properties)
-    {
-        var passProperties = new PropertyKeyCollection();
-
-        foreach (var property in properties)
-        {
-            switch (property.Key)
-            {
-                default:
-                    passProperties[new PropertyKey(property.Key)] = property.Value;
-                    break;
-            }
-        }
-
-        return passProperties;
+        return left.Class != right.Class || left.Type != right.Type || left.Count != right.Count
+               || left.Access != right.Access;
     }
 
     public override int GetHashCode()
@@ -506,18 +555,18 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private protected struct ParameterBinding
     {
-        public ParameterBinding(EffectParameter parameter, int slot, uint descriptorSet)
+        public ParameterBinding(EffectParameter parameter, uint binding, uint set)
         {
             Parameter = parameter;
-            Slot = slot;
-            DescriptorSet = descriptorSet;
+            Binding = binding;
+            Set = set;
         }
 
         public readonly EffectParameter Parameter;
 
-        public readonly int Slot;
+        public readonly uint Binding;
 
-        public readonly uint DescriptorSet;
+        public readonly uint Set;
     }
 
     protected override void Dispose(bool disposeManagedResources)
@@ -546,25 +595,21 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     [StructLayout(LayoutKind.Sequential)]
     private protected struct SlotLink
     {
-        public SlotLink(uint slotIndex, uint descriptorSet, EffectData.Parameter paramDescription, EffectParameter parameter,
-            bool isStorageBuffer = false)
+        public SlotLink(uint binding, uint set, EffectData.Parameter paramDescription, EffectParameter parameter)
         {
             ResourceParamDescription = paramDescription;
-            SlotIndex = slotIndex;
-            DescriptorSet = descriptorSet;
+            Binding = binding;
+            Set = set;
             Parameter = parameter;
-            IsStorageBuffer = isStorageBuffer;
         }
 
         public readonly EffectData.Parameter ResourceParamDescription;
 
         public readonly EffectParameter Parameter;
 
-        public readonly uint SlotIndex;
+        public readonly uint Binding;
 
-        public readonly uint DescriptorSet;
-
-        public readonly bool IsStorageBuffer;
+        public readonly uint Set;
     }
 
     #endregion
@@ -574,9 +619,9 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     private protected class StageBlock : DisposableObject
     {
         public List<ParameterBinding> Parameters;
-        public readonly List<SlotLink> SamplerStateSlotLinks;
-        public readonly List<SlotLink> ShaderResourceViewSlotLinks;
-        public readonly List<SlotLink> UnorderedAccessViewSlotLinks;
+        public readonly List<SlotLink> SamplerLinks = [];
+        public readonly List<SlotLink> SampledImageLinks = [];
+        public readonly List<SlotLink> StorageBufferLinks = [];
 
         public readonly ShaderStageFlagBits Stage;
         public ShaderStageFlagBits NextStage;
@@ -590,18 +635,14 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         public byte[] ByteCode;
         public string EntryPoint;
         public string CacheName;
-        public readonly EffectShaderType Type;
+        public readonly EffectStage Type;
         public readonly IGraphicsDevice GraphicsDevice;
 
-        public StageBlock(IGraphicsDevice device,
-            EffectShaderType type)
+        public StageBlock(IGraphicsDevice device, EffectStage type)
         {
             GraphicsDevice = device;
             Type = type;
-            Stage = EffectShaderTypeToShaderStage(type);
-            SamplerStateSlotLinks = new List<SlotLink>();
-            ShaderResourceViewSlotLinks = new List<SlotLink>();
-            UnorderedAccessViewSlotLinks = new List<SlotLink>();
+            Stage = GetShaderStage(type);
             ConstantBufferLinks = new List<ConstantBufferLink>();
         }
 
