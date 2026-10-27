@@ -1720,8 +1720,9 @@ All packages share one version.
   `BrushEffect` of the UI was made in about 11 ms, its 90 shaders read again from the binary cache, and is now made in
   0.2 ms - and effects of the same data drawn one after another bind their shaders once. The compiler places each
   pass's resources (`EffectData.Pass.Resources`, `PushDataSize`, `DescriptorCount`): where the descriptor heap reads
-  them in the push data, and how descriptor sets push them; and lists a pass's stages in pipeline order.
-  `IGraphicsDeviceFactory.CreateEffectPassShaderCache` makes the cache.
+  them in the push data, and how descriptor sets push them; and lists a pass's stages in pipeline order. Effect data
+  is format version 4: an effect compiled before is refused with "Rebuild the effects" and compiled again on the next
+  build. `IGraphicsDeviceFactory.CreateEffectPassShaderCache` makes the cache.
 - A buffer larger than a shared block of device memory gives its memory back to the driver once it is freed and no
   frame in flight can still read it; shared blocks stay for reuse until the device goes.
 - The engine's effects take typed pointers, `T* X;`, for what they read and write by address, and their parameters

@@ -120,6 +120,21 @@ public class PassResourcePlacementTests
         });
     }
 
+    // An effect compiled before passes carried their placement would load with none and take the process down as its
+    // shaders are made; its format version says so first.
+    [Test]
+    public void AnEffectOfTheFormatBeforeThePlacement_IsRefused()
+    {
+        var stream = new System.IO.MemoryStream();
+        CompileData(Source).Save(stream);
+        var bytes = stream.ToArray();
+        BitConverter.GetBytes(3).CopyTo(bytes, 4);
+
+        var refusal = Assert.Throws<System.IO.InvalidDataException>(() => EffectData.Load(bytes));
+
+        Assert.That(refusal.Message, Does.Contain("Rebuild the effects"));
+    }
+
     private static uint OffsetOf(EffectData.Pass pass, string name) =>
         pass.Resources.Single(resource => resource.Name == name).PushOffset;
 
