@@ -138,6 +138,8 @@ internal sealed class EffectCompilerInternal : IDisposable
                 CompilePass(passSource);
             }
         }
+
+        PassResourcePlacement.Place(effectData);
     }
 
     private string Preamble(string fileName, SourceLocation start)

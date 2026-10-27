@@ -11,4 +11,7 @@ public interface IGraphicsDeviceFactory
 
     // Same bridge for the shared device-memory allocator (one per logical device, owned by MainGraphicsDevice).
     IDeviceMemoryAllocator CreateMemoryAllocator(IGraphicsDevice device);
+
+    /// <summary>The shaders of effect passes for <paramref name="model"/>, which MainGraphicsDevice owns.</summary>
+    IEffectPassShaderCache CreateEffectPassShaderCache(IGraphicsDevice device, DescriptorModel model);
 }

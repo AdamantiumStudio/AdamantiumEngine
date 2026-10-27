@@ -170,6 +170,10 @@ public class MainGraphicsDevice : DisposableBase
     /// shared by every render-device wrapper.</summary>
     public IDescriptorManager DescriptorManager { get; private set; }
 
+    /// <summary>The shaders of effect passes, made once for a pass's data and shared by every effect of that data on
+    /// the render devices.</summary>
+    public IEffectPassShaderCache EffectPassShaders { get; private set; }
+
     // Shared like the heap, so no render device grabs its own BAR block. Created on first use.
     private IDeviceMemoryAllocator _memoryAllocator;
     public IDeviceMemoryAllocator MemoryAllocator => _memoryAllocator ??= _graphicsDeviceFactory.CreateMemoryAllocator(ResourceLoaderDevice);
@@ -247,6 +251,7 @@ public class MainGraphicsDevice : DisposableBase
 
         ResourceLoaderDevice = CreateResourceLoaderDevice();
         DescriptorManager = _graphicsDeviceFactory.CreateDescriptorManager(ResourceLoaderDevice, DescriptorModel);
+        EffectPassShaders = _graphicsDeviceFactory.CreateEffectPassShaderCache(ResourceLoaderDevice, DescriptorModel);
     }
 
     public void RemoveDevice(IGraphicsDevice device)
@@ -680,6 +685,10 @@ public class MainGraphicsDevice : DisposableBase
             graphicsDevices.Clear();
             deviceMap.Clear();
         }
+
+        // The pass layouts read the descriptor manager's set layouts, so they go before it.
+        EffectPassShaders?.Dispose();
+        EffectPassShaders = null;
 
         // The heap's buffers were allocated through the resource-loader device, so they go first.
         DescriptorManager?.Dispose();
