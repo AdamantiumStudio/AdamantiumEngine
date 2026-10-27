@@ -133,7 +133,7 @@ technique { pass { ComputeShader = CS; } }");
     [Test]
     public void AByteOrderMark_IsNotCode()
     {
-        var result = Compile("﻿" + Shaders + "technique T { pass { VertexShader = VS; } }");
+        var result = Compile((char)0xFEFF + Shaders + "technique T { pass { VertexShader = VS; } }");
 
         Assert.That(result.HasErrors, Is.False, Messages(result));
     }
@@ -163,6 +163,48 @@ technique { pass { ComputeShader = CS; } }");
         var messages = result.Logger.Messages.Select(message => message.ToString()).ToList();
         Assert.That(messages.Count(message => message.Contains("undefinedName")), Is.EqualTo(1), Messages(result));
         Assert.That(messages.Single(message => message.Contains("undefinedName")), Does.StartWith("Test.fx(6,37)"));
+    }
+
+    // Each of Slang's errors is said - those it numbers E39999 too - and its warnings are not errors.
+    [Test]
+    public void EverySlangError_IsSaid_AndAWarningIsNotAnError()
+    {
+        var result = Compile(Shaders + "float4 Bad() : SV_Position { int i = 1.5; float4 x = float3(1, 2, 3) * float2(1, 2); " +
+                             "return undefinedQ; }\ntechnique T { pass { VertexShader = VS; } }");
+
+        var messages = Messages(result);
+        Assert.Multiple(() =>
+        {
+            Assert.That(messages, Does.Contain("undefinedQ"));
+            Assert.That(messages, Does.Contain("[E39999]"), "the operator error");
+            Assert.That(messages, Does.Not.Contain("warning["));
+            Assert.That(messages, Does.Not.Contain("compilation ceased"));
+        });
+    }
+
+    // Words of the code Slang quotes are not its message: an error beside a comment about an entry point is still said
+    // where it stands.
+    [Test]
+    public void AnErrorBesideACommentOnEntryPoints_IsSaidWhereItStands()
+    {
+        var result = Compile(Shaders + "float4 Bad() : SV_Position { return undefinedP; } // the entry point of nothing\n" +
+                             "technique T { pass { VertexShader = VS; } }");
+
+        Assert.That(Messages(result), Does.Contain("Test.fx(6,37)"));
+    }
+
+    // The same missing entry point named by two stages is said at each.
+    [Test]
+    public void AMissingEntryPoint_IsSaidAtEveryStageThatNamesIt()
+    {
+        var result = Compile(Shaders + "technique T { pass { VertexShader = Nope; PixelShader = Nope; } }");
+
+        var messages = result.Logger.Messages.Select(message => message.ToString()).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(messages, Has.Some.Contains("Vertex shader 'Nope'"));
+            Assert.That(messages, Has.Some.Contains("Pixel shader 'Nope'"));
+        });
     }
 
     // A stage refused does not take the stages after it down with it: they compile, or say what is wrong with them.

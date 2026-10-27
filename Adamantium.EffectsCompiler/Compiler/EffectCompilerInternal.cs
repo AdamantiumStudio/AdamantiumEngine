@@ -15,7 +15,7 @@ internal sealed class EffectCompilerInternal : IDisposable
     private readonly List<string> resolvedIncludes = [];
     private readonly Dictionary<(EffectShaderType Type, string EntryPoint), int> compiledShaders = [];
     private readonly HashSet<(EffectShaderType Type, string EntryPoint)> failedShaders = [];
-    private readonly HashSet<string> reportedSlangErrors = [];
+    private readonly HashSet<(string Text, SourceLocation Location)> reportedSlangErrors = [];
     private readonly List<ResourceBindingKey> resourceKeys = [];
     private readonly SlangShaderCompiler slangCompiler = new();
     private EffectCompilerFlags compilerFlags;
@@ -89,7 +89,7 @@ internal sealed class EffectCompilerInternal : IDisposable
         failedShaders.Clear();
         reportedSlangErrors.Clear();
         logger = new EffectCompilerLogger();
-        if (sourceCode is { Length: > 0 } && sourceCode[0] == '﻿')
+        if (sourceCode is { Length: > 0 } && sourceCode[0] == (char)0xFEFF)
         {
             sourceCode = sourceCode.Substring(1);
         }
@@ -251,18 +251,25 @@ internal sealed class EffectCompilerInternal : IDisposable
 
     private void ReportSlangErrors(string errors, EffectStageSource stage)
     {
-        var blocks = SlangErrorBlocks(errors ?? string.Empty);
+        var errorsBefore = logger.Messages.Count;
+        var blocks = SlangErrorBlocks(errors ?? string.Empty).Where(block => !IsWarning(block)).ToList();
         var main = blocks.Where(block => !IsAftermath(block)).ToList();
         foreach (var block in main.Count > 0 ? main : blocks)
         {
-            if (!reportedSlangErrors.Add(block))
+            var header = block.Split('\n')[0];
+            var location = header.Contains("entry point") ? null : SlangLocation(block);
+            var at = location ?? stage.Location;
+            if (!reportedSlangErrors.Add((block, at)))
             {
                 continue;
             }
 
-            var location = block.Contains("entry point") ? null : SlangLocation(block);
-            logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {block}" : block,
-                location ?? stage.Location);
+            logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {block}" : block, at);
+        }
+
+        if (blocks.Count == 0 && logger.Messages.Count == errorsBefore)
+        {
+            logger.Error($"{stage.Stage} shader '{stage.EntryPoint}': Slang failed and said no more.", stage.Location);
         }
     }
 
@@ -272,9 +279,7 @@ internal sealed class EffectCompilerInternal : IDisposable
         var current = new StringBuilder();
         foreach (var line in errors.Replace("\r\n", "\n").Split('\n'))
         {
-            if (current.Length > 0 && (line.StartsWith("error", StringComparison.Ordinal)
-                                       || line.StartsWith("fatal error", StringComparison.Ordinal)
-                                       || line.StartsWith("abort compilation", StringComparison.Ordinal)))
+            if (current.Length > 0 && StartsADiagnostic(line))
             {
                 blocks.Add(current.ToString().TrimEnd());
                 current.Clear();
@@ -291,9 +296,19 @@ internal sealed class EffectCompilerInternal : IDisposable
         return blocks;
     }
 
+    private static bool StartsADiagnostic(string line) =>
+        line.StartsWith("error", StringComparison.Ordinal)
+        || line.StartsWith("warning", StringComparison.Ordinal)
+        || line.StartsWith("internal error", StringComparison.Ordinal)
+        || line.StartsWith("fatal error", StringComparison.Ordinal)
+        || line.StartsWith("abort compilation", StringComparison.Ordinal);
+
+    private static bool IsWarning(string block) => block.StartsWith("warning", StringComparison.Ordinal);
+
     private static bool IsAftermath(string block) =>
         block.StartsWith("fatal error", StringComparison.Ordinal)
-        || block.StartsWith("abort compilation", StringComparison.Ordinal) || block.Contains("[E39999]");
+        || block.StartsWith("abort compilation", StringComparison.Ordinal)
+        || block.Contains("import failed due to compilation error");
 
     private static SourceLocation? SlangLocation(string block)
     {
