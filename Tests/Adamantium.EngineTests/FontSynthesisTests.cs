@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using Adamantium.Core.Fonts;
 using Adamantium.Fonts;
 using Adamantium.Graphics.Fonts;
 using Adamantium.Mathematics;

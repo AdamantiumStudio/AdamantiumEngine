@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Adamantium.Fonts.Common
+namespace Adamantium.Core.Fonts
 {
     public class FeatureInfo
     {
@@ -14,12 +14,7 @@ namespace Adamantium.Fonts.Common
         public string[] EnableFeatures { get; private set; }
         
         public string[] DisableFeatures { get; private set; }
-        
-        /// <summary>On for a feature shaping applies to all text without being asked
-        /// (<see cref="Shaping.TextShaper.DefaultFeatures"/>), Off for one that applies only when asked for.</summary>
-        public FeatureState DefaultFeatureState =>
-            Shaping.ShapePlan.DefaultFeatures.Contains(Tag) ? FeatureState.On : FeatureState.Off;
-        
+
         public bool OverridesAllOtherFeatures { get; internal set; }
         
         public string[] AllowedFeatures { get; internal set; }

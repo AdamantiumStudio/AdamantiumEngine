@@ -1,10 +1,11 @@
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Text;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Extensions;
 using Adamantium.Fonts.Tables;
 using Adamantium.Fonts.Tables.WOFF;
-using ICSharpCode.SharpZipLib.Zip.Compression;
 
 namespace Adamantium.Fonts.Parsers
 {
@@ -137,9 +138,9 @@ namespace Adamantium.Fonts.Parsers
 
         private void DecompressWoff(byte[] compressed, byte[] decompressed)
         {
-            Inflater inflater = new Inflater();
-            inflater.SetInput(compressed);
-            inflater.Inflate(decompressed);
+            using var input = new MemoryStream(compressed);
+            using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+            zlib.ReadAtLeast(decompressed, decompressed.Length, throwOnEndOfStream: false);
         }
 
     }

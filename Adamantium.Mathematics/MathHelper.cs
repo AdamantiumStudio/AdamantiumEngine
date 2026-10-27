@@ -129,11 +129,7 @@ namespace Adamantium.Mathematics
         /// <param name="b">The right value to compare.</param>
         /// <param name="epsilon">Epsilon value</param>
         /// <returns><c>true</c> if a almost equal to b within a float epsilon, <c>false</c> otherwise</returns>
-        #if NET
         [MethodImpl(MethodImplOptions.AggressiveInlining|MethodImplOptions.AggressiveOptimization)]
-        #else
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        #endif
         public static bool WithinEpsilon(double a, double b, double epsilon)
         {
             double absA = Math.Abs(a);

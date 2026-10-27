@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace Adamantium.Fonts;
+namespace Adamantium.Core.Fonts;
 
 /// <summary>
 /// How heavy a typeface is: a number from 1 to 1000, 400 for regular text and 700 for bold, as OpenType (<c>OS/2</c>

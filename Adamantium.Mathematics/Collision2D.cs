@@ -8,11 +8,7 @@ namespace Adamantium.Mathematics
 {
     public static class Collision2D
     {
-        #if NET
         [MethodImpl(MethodImplOptions.AggressiveInlining|MethodImplOptions.AggressiveOptimization)]
-        #else
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        #endif
         public static bool IsPointOnSegment(ref LineSegment2D segment2D, ref Vector2 point)
         {
             var ab = segment2D.Direction.Length();

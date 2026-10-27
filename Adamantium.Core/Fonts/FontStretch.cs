@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace Adamantium.Fonts;
+namespace Adamantium.Core.Fonts;
 
 /// <summary>
 /// How wide a typeface is, as a percentage of its normal width: 50 for ultra-condensed up to 200 for ultra-expanded, as

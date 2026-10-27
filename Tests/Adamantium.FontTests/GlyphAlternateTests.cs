@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Adamantium.Core.Fonts;
+using Adamantium.Core.Fonts.Shaping;
 using Adamantium.Fonts;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Shaping;

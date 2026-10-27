@@ -10,7 +10,6 @@ using Adamantium.Fonts.Extensions;
 using Adamantium.Fonts.Tables;
 using Adamantium.Fonts.Tables.WOFF;
 using Adamantium.Mathematics;
-using BrotliSharpLib;
 
 namespace Adamantium.Fonts.Parsers
 {
@@ -227,7 +226,7 @@ namespace Adamantium.Fonts.Parsers
                 var decompressedStream = new FontStreamReader();
                 try
                 {
-                    using (var brotli = new BrotliSharpLib.BrotliStream(compressedStream, CompressionMode.Decompress))
+                    using (var brotli = new BrotliStream(compressedStream, CompressionMode.Decompress))
                     {
                         brotli.CopyTo(decompressedStream);
                         decompressedStream.Position = 0;

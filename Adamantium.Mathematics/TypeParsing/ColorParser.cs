@@ -1,6 +1,6 @@
-﻿using Adamantium.Mathematics;
+﻿using Adamantium.Core.TypeParsing;
 
-namespace Adamantium.Core.TypeParsing;
+namespace Adamantium.Mathematics.TypeParsing;
 
 public class ColorParser : ITypeParser<Color>
 {

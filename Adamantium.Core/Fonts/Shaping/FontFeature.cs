@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using Adamantium.Fonts.Common;
 
-namespace Adamantium.Fonts.Shaping;
+namespace Adamantium.Core.Fonts.Shaping;
 
 /// <summary>An OpenType feature set to a value over a range of text, in UTF-16 offsets with an exclusive end.</summary>
 public readonly partial struct FontFeature : IEquatable<FontFeature>

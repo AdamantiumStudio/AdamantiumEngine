@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Adamantium.Core.Fonts.Shaping;
 using Adamantium.Fonts;
 using Adamantium.Fonts.Shaping;
 using NUnit.Framework;

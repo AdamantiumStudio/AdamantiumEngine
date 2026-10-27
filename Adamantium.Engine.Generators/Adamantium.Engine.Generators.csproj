@@ -46,8 +46,6 @@
     <ItemGroup>
         <ProjectReference Include="..\Adamantium.EffectsCompiler\Adamantium.EffectsCompiler.csproj" GeneratePathProperty="true" PrivateAssets="all" />
         <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" GeneratePathProperty="true" PrivateAssets="all" />
-        <ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" GeneratePathProperty="true" PrivateAssets="all" />
-		<ProjectReference Include="..\Adamantium.Fonts\Adamantium.Fonts.csproj" GeneratePathProperty="true" PrivateAssets="all" />
     </ItemGroup>
 
 	<ItemGroup>

@@ -3,14 +3,13 @@ using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-#if NET
-using System.Runtime.Intrinsics;
-using System.Runtime.Intrinsics.X86;
-#endif
+using Adamantium.Core.TypeParsing;
+using Adamantium.Mathematics.TypeParsing;
 
 namespace Adamantium.Mathematics
 {
     [MessagePackObject]
+    [TypeParser(typeof(Vector2Parser))]
     public struct Vector2
     {
         /// <summary>

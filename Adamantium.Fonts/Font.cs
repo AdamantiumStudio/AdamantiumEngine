@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
+using Adamantium.Core.Fonts;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Parsers;
 using Adamantium.Fonts.Svg;

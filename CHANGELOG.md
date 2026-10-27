@@ -1004,6 +1004,9 @@ All packages share one version.
 
 ### Fixed
 
+- A character no family of a font fallback's list has - Hebrew or Arabic on a Linux whose fonts for them are not
+  among the families listed there - was drawn as the missing-glyph box though a font installed for it had it. The
+  fallback goes on to the collection's other families now, those sharing most words of the text's family name first.
 - An effect that could not be made - a pass whose resources a descriptor model or the device cannot take - kept the
   shaders of the passes made before it.
 - On the descriptor heap a storage buffer nobody bound wrote no heap index, so the shader read whatever buffer heap
@@ -1714,6 +1717,13 @@ All packages share one version.
 
 ### Changed
 
+- `Adamantium.Mathematics` and `Adamantium.Fonts` build for net10.0 alone; source generators load neither.
+  `FontWeight`, `FontStretch`, `FontFeature` and the registry of OpenType features (`FeatureInfos`, `FeatureInfo`,
+  `FeatureRegistration`), which markup is checked against at build, are in `Adamantium.Core` now
+  (`Adamantium.Core.Fonts`, `Adamantium.Core.Fonts.Shaping`). The parsers of `Color`, `Thickness` and `Vector2` are in
+  `Adamantium.Mathematics.TypeParsing`, named by `[TypeParser]` on their types as other types name theirs:
+  `Adamantium.Core` no longer references the mathematics, which references it instead. `Adamantium.Fonts` takes no
+  packages: WOFF and WOFF2 fonts are decompressed by the .NET runtime.
 - Effects of the same data share the shaders of each pass: they are made once on the main device
   (`MainGraphicsDevice.EffectPassShaders`), for every render device, and destroyed once the last effect holding them is
   disposed or reloaded and no frame in flight can still use them. A second effect of the data costs no shader work - a
@@ -2079,6 +2089,8 @@ All packages share one version.
 
 ### Removed
 
+- `FeatureInfo.DefaultFeatureState` and `FeatureState`: `TextShaper.DefaultFeatures` says which features shaping
+  applies unasked.
 - `EffectPool` and `EffectPoolEventArgs`, `Effect.Pool`, `IGraphicsDevice.DefaultEffectPool`, `AddEffectPool` and
   `RemoveEffectPool`, `GraphicsDevice.EffectPools`, `ShaderHotReload.Track` (an effect is held from its making), and
   `EffectPass.ShaderStages` with its unused shader modules.
