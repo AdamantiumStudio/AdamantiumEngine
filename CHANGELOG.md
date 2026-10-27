@@ -1006,10 +1006,9 @@ All packages share one version.
 
 - An effect that could not be made - a pass whose resources a descriptor model or the device cannot take - kept the
   shaders of the passes made before it.
-- On the descriptor heap a storage buffer, or a texture or sampler array, bound with more elements than the shader
-  declares wrote their heap indices over the next resource's in the push data.
-- A uniform buffer declared with values only by a later pass of an effect was not bound by an earlier pass that reads
-  it.
+- On the descriptor heap a storage buffer nobody bound wrote no heap index, so the shader read whatever buffer heap
+  slot 0 held, and the pass did not report it unbound. It reads a buffer of zeros now
+  (`IDescriptorHeapManager.FallbackBufferOffset`), as on descriptor sets, and the pass reports it.
 - A hot-reloaded version of an effect that could not be made left the effect half rebuilt, its old version gone and
   its resources unbound. The running version is now built again with its values, and the new one refused.
 - An effect's constant buffers never freed the native memory their bytes were in.

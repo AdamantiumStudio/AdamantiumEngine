@@ -17,7 +17,7 @@ internal sealed class HeapEffectPassShaders : EffectPassShaders
 
     private protected override void CreateShaders()
     {
-        for (var i = 0; i < Stages.Length; i++)
+        for (var i = 0; i < stages.Length; i++)
         {
             var createInfo = MappedCreateInfo(i, out var layout);
             CreateShader(i, createInfo, layout);
@@ -30,9 +30,9 @@ internal sealed class HeapEffectPassShaders : EffectPassShaders
         shaderCreateInfo.Flags |= ShaderCreateFlagBitsEXT.DescriptorHeapBitExt;
         layout = LayoutSeed;
 
-        var heapProperties = Device.Adapter.DeviceHeapProperties;
-        var mappings = new List<DescriptorSetAndBindingMappingEXT>();
-        foreach (var declared in Data.Shaders[Pass.Stages[stage].Index].ResourceParameters)
+        var heapProperties = graphicsDevice.Adapter.DeviceHeapProperties;
+        List<DescriptorSetAndBindingMappingEXT> mappings = [];
+        foreach (var declared in effectData.Shaders[Pass.Stages[stage].Index].ResourceParameters)
         {
             var resource = Pass.Resources.Find(placed => placed.Name == declared.Name);
             if (resource == null)

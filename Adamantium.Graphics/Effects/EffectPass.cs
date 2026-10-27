@@ -24,17 +24,14 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     /// </summary>
     public readonly Effect Effect;
 
-    private EffectData.Pass pass;
-    private protected readonly IGraphicsDevice graphicsDevice;
-
     internal EffectTechnique Technique;
 
-    private protected DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
-
-    private EffectPassShaders shaders;
-
-    /// <summary>The pass's resources, each with the parameter or constant buffer of this effect that holds it.</summary>
-    private protected BoundResource[] Resources = [];
+    private protected readonly IGraphicsDevice graphicsDevice;
+    private protected EffectData.Pass pass;
+    private protected EffectPassShaders shaders;
+    private protected BoundPassResource[] resources = [];
+    private EffectPassShaders previousShaders;
+    private HashSet<EffectParameter> _reportedUnbound;
 
     /// <summary>
     ///   Initializes a new instance of the <see cref="EffectPass" /> class.
@@ -53,21 +50,26 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         graphicsDevice = effect.GraphicsDevice;
     }
 
-    /// <summary>The data of the pass, which its shaders are made of.</summary>
-    private protected EffectData.Pass Data => pass;
+    /// <inheritdoc />
+    public bool ResourcesBound { get; private set; } = true;
 
-    /// <summary>The shaders of the pass: those of the data's <see cref="EffectPassShaders"/>.</summary>
-    private protected EffectPassShaders Shaders => shaders;
+    private protected DynamicBufferPool CurrentBufferPool => ((GraphicsDevice)graphicsDevice).CurrentBufferPool;
 
     /// <summary>Applies this pass: binds each stage's shader, uploads dirty constant buffers and binds its resources.
     /// </summary>
     /// <exception cref="NotSupportedException">The pass runs a stage the device has not enabled, or ray tracing.
     /// </exception>
+    /// <exception cref="InvalidOperationException">The pass has no shaders: its effect could not be made.</exception>
     public void Apply()
     {
-        if (shaders.Unsupported != null)
+        if (shaders == null)
         {
-            throw shaders.Unsupported;
+            throw new InvalidOperationException($"{Effect.Name}.{Name} has no shaders: its effect could not be made.");
+        }
+
+        if (shaders.UnsupportedReason != null)
+        {
+            throw new NotSupportedException(shaders.UnsupportedReason);
         }
 
         Effect.CurrentTechnique = Technique;
@@ -77,32 +79,18 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         ApplyResources();
     }
 
-    private protected abstract void ApplyResources();
-
-    /// <inheritdoc />
-    public bool ResourcesBound { get; private set; } = true;
-
-    private HashSet<EffectParameter> _reportedUnbound;
-
-    private protected void ReportUnbound(EffectParameter parameter)
-    {
-        ResourcesBound = false;
-        if ((_reportedUnbound ??= []).Add(parameter))
-            UnboundResource.ReportOnce(Effect.Name, parameter?.Name);
-    }
-
-    private protected void BindShaders()
-    {
-        if (graphicsDevice.ShadersBoundFor(shaders)) return;
-
-        ((GraphicsDevice)graphicsDevice).BindShaders(shaders.BindStages, shaders.BindShaders, shaders.InputPatchSize);
-        graphicsDevice.ShadersBound(shaders);
-    }
-
-    /// <inheritdoc />
+    /// <summary>Takes a recompiled declaration of this same pass. The shaders it has are held until it takes the new
+    /// ones, so a version that cannot be made goes back to them as they are.</summary>
     public void Reset(EffectTechnique technique, EffectData.Pass pass, Logger logger)
     {
-        ReleaseShaders();
+        if (shaders != null)
+        {
+            ReleasePrevious();
+            previousShaders = shaders;
+            shaders = null;
+        }
+
+        resources = [];
         Technique = technique;
         this.pass = pass;
     }
@@ -140,18 +128,40 @@ public abstract class EffectPass : DisposableObject, IEffectPass
     /// </summary>
     public void PrepareData()
     {
-        var cache = (EffectPassShaderCache)graphicsDevice.MainDevice.EffectPassShaders;
-        shaders = cache.Acquire(Effect.Data, pass, Effect.Name, Technique?.Name, Name);
+        shaders = GetShaderCache().Acquire(Effect.Data, pass, Effect.Name, Technique?.Name, Name);
+        ReleasePrevious();
 
-        var resources = new BoundResource[pass.Resources.Count];
-        for (var i = 0; i < resources.Length; i++)
+        var bound = new BoundPassResource[pass.Resources.Count];
+        for (var i = 0; i < bound.Length; i++)
         {
             var resource = pass.Resources[i];
-            resources[i] = new BoundResource(resource, Effect.Parameters[resource.Name],
+            bound[i] = new BoundPassResource(resource, Effect.Parameters[resource.Name],
                 resource.Type == EffectParameterType.UniformBuffer ? Effect.ConstantBuffers[resource.Name] : null);
         }
 
-        Resources = resources;
+        resources = bound;
+    }
+
+    private protected abstract void ApplyResources();
+
+    private protected void ReportUnbound(EffectParameter parameter)
+    {
+        ResourcesBound = false;
+        if ((_reportedUnbound ??= []).Add(parameter))
+        {
+            UnboundResource.ReportOnce(Effect.Name, parameter?.Name);
+        }
+    }
+
+    private protected void BindShaders()
+    {
+        if (graphicsDevice.ShadersBoundFor(shaders))
+        {
+            return;
+        }
+
+        ((GraphicsDevice)graphicsDevice).BindShaders(shaders.BindStages, shaders.BindShaders, shaders.InputPatchSize);
+        graphicsDevice.ShadersBound(shaders);
     }
 
     private void DeclareResource(EffectData.ResourceParameter declared, Logger logger)
@@ -199,21 +209,29 @@ public abstract class EffectPass : DisposableObject, IEffectPass
         base.Dispose(disposeManagedResources);
     }
 
+    private EffectPassShaderCache GetShaderCache() =>
+        (EffectPassShaderCache)graphicsDevice.MainDevice.EffectPassShaders;
+
     private void ReleaseShaders()
     {
+        ReleasePrevious();
         if (shaders != null)
         {
-            ((EffectPassShaderCache)graphicsDevice.MainDevice.EffectPassShaders).Release(shaders);
+            GetShaderCache().Release(shaders);
             shaders = null;
         }
 
-        Resources = [];
+        resources = [];
     }
 
-    /// <summary>A resource of the pass and what of this effect holds it: the parameter, and for a uniform buffer the
-    /// constant buffer.</summary>
-    private protected readonly record struct BoundResource(EffectData.PassResource Resource, EffectParameter Parameter,
-        EffectConstantBuffer ConstantBuffer);
+    private void ReleasePrevious()
+    {
+        if (previousShaders != null)
+        {
+            GetShaderCache().Release(previousShaders);
+            previousShaders = null;
+        }
+    }
 
     public class DynamicBufferPool : IDisposable
     {

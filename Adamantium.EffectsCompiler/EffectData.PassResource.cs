@@ -39,6 +39,9 @@ public sealed partial class EffectData
         [Key(6)]
         public int Descriptor;
 
+        /// <summary>A copy that can be changed without changing this one.</summary>
+        public PassResource Clone() => (PassResource)MemberwiseClone();
+
         public override string ToString() => $"{Type} {Name}: set {Set}, binding {Binding}, count {Count}";
     }
 }

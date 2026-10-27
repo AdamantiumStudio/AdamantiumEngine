@@ -41,7 +41,7 @@ public sealed partial class EffectData
             Name = Name,
             Stages = [.. Stages.Select(stage => stage.Clone())],
             HitGroups = [.. HitGroups.Select(group => group.Clone())],
-            Resources = [.. Resources],
+            Resources = [.. Resources.Select(resource => resource.Clone())],
             PushDataSize = PushDataSize,
             DescriptorCount = DescriptorCount
         };

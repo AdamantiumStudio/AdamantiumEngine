@@ -686,7 +686,6 @@ public class MainGraphicsDevice : DisposableBase
             deviceMap.Clear();
         }
 
-        // The pass layouts read the descriptor manager's set layouts, so they go before it.
         EffectPassShaders?.Dispose();
         EffectPassShaders = null;
 

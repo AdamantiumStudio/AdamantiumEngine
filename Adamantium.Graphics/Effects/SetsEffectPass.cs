@@ -20,21 +20,19 @@ internal sealed class SetsEffectPass : EffectPass
     {
     }
 
-    private DescriptorSetManager Manager => (DescriptorSetManager)((GraphicsDevice)graphicsDevice).DescriptorManager;
-
     private protected override unsafe void ApplyResources()
     {
         var device = (GraphicsDevice)graphicsDevice;
         var hashing = device.IsHashing;
         var swallowing = device.IsSwallowing;
         var linker = (EffectResourceLinker)Effect.ResourceLinker;
-        var manager = Manager;
-        var shaders = (SetsEffectPassShaders)Shaders;
+        var manager = (DescriptorSetManager)device.DescriptorManager;
+        var setsShaders = (SetsEffectPassShaders)shaders;
         var infoSize = SetsEffectPassShaders.InfoSize;
-        var descriptorCount = (int)Data.DescriptorCount;
+        var descriptorCount = (int)pass.DescriptorCount;
         byte* infos = stackalloc byte[descriptorCount * infoSize];
 
-        foreach (var bound in Resources)
+        foreach (var bound in resources)
         {
             var resource = bound.Resource;
             if (resource.Descriptor < 0)
@@ -55,7 +53,10 @@ internal sealed class SetsEffectPass : EffectPass
                         device.HashBytes(new ReadOnlySpan<byte>(backing.DataPointer.ToPointer(), (int)backing.Size));
                     }
 
-                    if (swallowing) break;
+                    if (swallowing)
+                    {
+                        break;
+                    }
 
                     var alignment = graphicsDevice.Adapter.AdapterProperties.Limits.MinUniformBufferOffsetAlignment;
                     var (page, offset) = CurrentBufferPool.UploadRange(bound.ConstantBuffer, alignment);
@@ -77,7 +78,11 @@ internal sealed class SetsEffectPass : EffectPass
                             sampler = manager.FallbackSampler;
                         }
 
-                        if (hashing) device.Hash((ulong)sampler.NativePointer);
+                        if (hashing)
+                        {
+                            device.Hash((ulong)sampler.NativePointer);
+                        }
+
                         ((VkDescriptorImageInfo*)(info + element * infoSize))[0] = new VkDescriptorImageInfo
                         {
                             sampler = sampler
@@ -99,7 +104,11 @@ internal sealed class SetsEffectPass : EffectPass
                         }
 
                         var handle = buffer.GetBuffer();
-                        if (hashing) device.Hash(manager.IdentityOf(buffer));
+                        if (hashing)
+                        {
+                            device.Hash(manager.IdentityOf(buffer));
+                        }
+
                         ((VkDescriptorBufferInfo*)(info + element * infoSize))[0] = new VkDescriptorBufferInfo
                         {
                             buffer = handle, offset = 0, range = WholeSize
@@ -121,7 +130,11 @@ internal sealed class SetsEffectPass : EffectPass
                         }
 
                         var view = texture.GetImageView();
-                        if (hashing) device.Hash(manager.IdentityOf(texture));
+                        if (hashing)
+                        {
+                            device.Hash(manager.IdentityOf(texture));
+                        }
+
                         ((VkDescriptorImageInfo*)(info + element * infoSize))[0] = new VkDescriptorImageInfo
                         {
                             imageView = view, imageLayout = texture.ImageLayout
@@ -133,7 +146,7 @@ internal sealed class SetsEffectPass : EffectPass
             }
         }
 
-        var textureArrays = shaders.TextureArrays;
+        var textureArrays = setsShaders.TextureArrays;
         if (hashing)
         {
             for (int i = 0; i < textureArrays.Length; i++)
@@ -143,17 +156,21 @@ internal sealed class SetsEffectPass : EffectPass
         }
 
         BindShaders();
-        if (swallowing) return;
+        if (swallowing)
+        {
+            return;
+        }
 
         var commands = graphicsDevice.CurrentCommandBuffer;
         if (descriptorCount > 0)
         {
-            commands.PushDescriptorSetWithTemplate(shaders.Template, shaders.Layout, shaders.PushSet, (nuint)infos);
+            commands.PushDescriptorSetWithTemplate(setsShaders.Template, setsShaders.Layout, setsShaders.PushSet,
+                (nuint)infos);
         }
 
         for (int i = 0; i < textureArrays.Length; i++)
         {
-            commands.BindDescriptorSets(shaders.BindPoint, shaders.Layout, textureArrays[i].Set, 1,
+            commands.BindDescriptorSets(setsShaders.BindPoint, setsShaders.Layout, textureArrays[i].Set, 1,
                 textureArrays[i].Array.Set, 0, ReadOnlySpan<uint>.Empty);
         }
     }

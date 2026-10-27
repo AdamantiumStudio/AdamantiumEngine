@@ -174,6 +174,59 @@ technique T { pass P { ComputeShader = CS; } }
             Assert.That(pass.ResourcesBound, Is.False, "the pass has to know it read the stand-in");
         }
 
+        // A storage buffer nobody bound reads a buffer of zeros. On the descriptor heap it wrote no index at all, so the
+        // shader read whatever buffer was in heap slot 0, and the pass did not know.
+        [Test]
+        public void AStorageBufferNobodyBound_ReadsZeros_AndThePassKnows()
+        {
+            const string source = @"
+StructuredBuffer<float4> Source;
+float4* Output;
+[shader(""compute"")]
+[numthreads(1, 1, 1)]
+void CS(uint3 tid : SV_DispatchThreadID) { Output[0] = Source[0] + 1; }
+technique T { pass P { ComputeShader = CS; } }
+";
+            var compiled = EffectCompiler.Compile(source, "UnboundBuffer.fx");
+            Assert.That(compiled.HasErrors, Is.False, string.Join("\n", compiled.Logger.Messages));
+            var device = GpuFixture.CreateRenderDevice();
+            var gd = (GraphicsDevice)device;
+            using var effect = new Effect(device, compiled.EffectData);
+            var pass = effect.Techniques[0].Passes[0];
+            using var output = Adamantium.Graphics.Buffer.New(gd, 16,
+                BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
+                MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+            output.SetData(new Vector4F[1]);
+            effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
+
+            var prms = new PresentationParameters(PresenterType.RenderTarget, 16, 16, System.IntPtr.Zero);
+            using var presenter = GraphicsPresenter.Create(device, prms, "unbound_buffer");
+            device.SetRenderTargets(presenter.RenderTarget);
+            device.SetDepthBuffer(presenter.DepthBuffer);
+            device.Presenter = presenter;
+
+            Assert.That(device.BeginDraw(beforeRenderPass: _ =>
+            {
+                pass.Apply();
+                gd.Dispatch(1);
+                gd.BufferBarrier(output,
+                    PipelineStageFlagBits2.ComputeShaderBit, AccessFlagBits2.ShaderWriteBit,
+                    PipelineStageFlagBits2.HostBit, AccessFlagBits2.HostReadBit);
+            }), Is.True);
+            device.EndDraw();
+            device.Submit();
+            device.FrameEnded();
+            device.DeviceWaitIdle();
+
+            var read = new Vector4F[1];
+            output.GetData(read);
+            Assert.Multiple(() =>
+            {
+                Assert.That(read[0], Is.EqualTo(new Vector4F(1, 1, 1, 1)), "zeros, plus one");
+                Assert.That(pass.ResourcesBound, Is.False, "the pass has to know it read the stand-in");
+            });
+        }
+
         // A clone was a copy of the object: its generated properties were the original's parameters, it shared the
         // original's dispose lock, disposing it took the original off the device's resources, and the resources bound
         // to the original never reached the clone's draws.

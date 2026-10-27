@@ -9,7 +9,8 @@ using EffectTechnique = Adamantium.Graphics.Core.EffectsFramework.EffectTechniqu
 namespace Adamantium.Graphics.Effects;
 
 /// <summary>A pass on the descriptor heap (VK_EXT_descriptor_heap): constant buffers by their address, textures, samplers
-/// and buffers by their heap slot - both written to push data on every Apply, where the pass's data placed them.</summary>
+/// and buffers by their heap slot - both written to push data on every Apply, where the pass's data placed them. A slot
+/// nobody bound reads the heap's stand-in of its kind.</summary>
 internal sealed class HeapEffectPass : EffectPass
 {
     private readonly HostAddressRangeConstEXT _pushRange = new();
@@ -23,16 +24,18 @@ internal sealed class HeapEffectPass : EffectPass
     private protected override unsafe void ApplyResources()
     {
         var resourceLinker = (EffectResourceLinker)Effect.ResourceLinker;
-        var size = Data.PushDataSize;
+        var size = pass.PushDataSize;
         byte* push = stackalloc byte[(int)size];
         var device = (GraphicsDevice)graphicsDevice;
+        var heap = (IDescriptorHeapManager)device.DescriptorManager;
         var hashing = device.IsHashing;
         var swallowing = device.IsSwallowing;
 
-        foreach (var bound in Resources)
+        foreach (var bound in resources)
         {
             var resource = bound.Resource;
             var offset = resource.PushOffset;
+            var description = bound.Parameter?.ParameterDescription;
             switch (resource.Type)
             {
                 case EffectParameterType.UniformBuffer:
@@ -49,13 +52,10 @@ internal sealed class HeapEffectPass : EffectPass
                     break;
                 }
                 case EffectParameterType.Sampler:
-                    WriteHeapIndices(bound.Parameter, resourceLinker.GetSamplers(bound.Parameter.ParameterDescription),
-                        offset, resource.Count, isBuffer: false, isSampler: true);
+                    WriteHeapSlots(bound.Parameter, resourceLinker.GetSamplers(description), resource);
                     break;
                 case EffectParameterType.StorageBuffer:
-                    WriteHeapIndices(bound.Parameter,
-                        resourceLinker.GetStorageBuffers(bound.Parameter.ParameterDescription), offset, resource.Count,
-                        isBuffer: true, isSampler: false);
+                    WriteHeapSlots(bound.Parameter, resourceLinker.GetStorageBuffers(description), resource);
                     break;
                 case var _ when resource.Count == 0:
                     *(uint*)(push + offset) = 0;
@@ -66,9 +66,7 @@ internal sealed class HeapEffectPass : EffectPass
 
                     break;
                 default:
-                    WriteHeapIndices(bound.Parameter,
-                        resourceLinker.GetSampledImages(bound.Parameter.ParameterDescription), offset, resource.Count,
-                        isBuffer: false, isSampler: false);
+                    WriteHeapSlots(bound.Parameter, resourceLinker.GetSampledImages(description), resource);
                     break;
             }
         }
@@ -85,26 +83,34 @@ internal sealed class HeapEffectPass : EffectPass
             device.PushData(_pushDataInfo);
         }
 
-        void WriteHeapIndices(EffectParameter parameter, IHeapResource[] resources, uint offset, uint count,
-            bool isBuffer, bool isSampler)
+        void WriteHeapSlots(EffectParameter parameter, IHeapResource[] bound, EffectData.PassResource placed)
         {
-            var room = (int)Math.Max(count, 1);
-            var elements = Math.Min(isBuffer ? resources.Length : Math.Max(resources.Length, (int)count), room);
+            var elements = Math.Max(placed.Count, 1);
             for (var element = 0; element < elements; element++)
             {
-                var resource = element < resources.Length ? resources[element] : null;
-                var slot = isBuffer ? resource?.GlobalHeapOffset ?? uint.MaxValue
-                    : resource is { HasLiveSlot: true } ? resource.GlobalHeapOffset : uint.MaxValue;
-                if (slot == uint.MaxValue)
+                var resource = element < bound.Length ? bound[element] : null;
+                uint slot;
+                if (resource is { HasLiveSlot: true })
+                {
+                    slot = resource.GlobalHeapOffset;
+                }
+                else
                 {
                     ReportUnbound(parameter);
-                    if (device.DescriptorManager is IDescriptorHeapManager heap)
-                        slot = isSampler ? heap.FallbackSamplerOffset : heap.FallbackTextureOffset;
+                    slot = placed.Type switch
+                    {
+                        EffectParameterType.Sampler => heap.FallbackSamplerOffset,
+                        EffectParameterType.StorageBuffer => heap.FallbackBufferOffset,
+                        _ => heap.FallbackTextureOffset
+                    };
                 }
 
-                var at = offset + (uint)(element * 4);
+                var at = placed.PushOffset + (uint)(element * 4);
                 *(uint*)(push + at) = slot;
-                if (hashing) device.Hash(((ulong)at << 32) | slot);
+                if (hashing)
+                {
+                    device.Hash(((ulong)at << 32) | slot);
+                }
             }
         }
     }

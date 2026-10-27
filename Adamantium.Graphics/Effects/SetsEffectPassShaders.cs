@@ -16,6 +16,8 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
     internal static readonly int InfoSize =
         Math.Max(Unsafe.SizeOf<VkDescriptorImageInfo>(), Unsafe.SizeOf<VkDescriptorBufferInfo>());
 
+    private DescriptorSetLayout pushLayout;
+
     internal SetsEffectPassShaders(GraphicsDevice device, EffectData data, EffectData.Pass pass, string effectName,
         string techniqueName, string passName)
         : base(device, data, pass, effectName, techniqueName, passName)
@@ -38,20 +40,41 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
     /// data numbered them; null when the pass pushes none.</summary>
     public DescriptorUpdateTemplate Template { get; private set; }
 
-    private DescriptorSetLayout pushLayout;
+    /// <inheritdoc />
+    public override void Dispose()
+    {
+        base.Dispose();
+        var device = graphicsDevice.LogicalDevice;
+        if (Template != null)
+        {
+            device.DestroyDescriptorUpdateTemplate(Template);
+        }
 
-    private DescriptorSetManager Manager => (DescriptorSetManager)Device.MainDevice.DescriptorManager;
+        if (Layout != null)
+        {
+            device.DestroyPipelineLayout(Layout);
+        }
+
+        if (pushLayout != null)
+        {
+            device.DestroyDescriptorSetLayout(pushLayout);
+        }
+
+        Template = null;
+        Layout = null;
+        pushLayout = null;
+    }
 
     private protected override void CreateShaders()
     {
-        var manager = Manager;
+        var manager = (DescriptorSetManager)graphicsDevice.MainDevice.DescriptorManager;
         var stageMask = (ShaderStageFlagBits)0;
-        foreach (var stage in Stages)
+        foreach (var stage in stages)
         {
             stageMask |= stage;
         }
 
-        var pushed = new List<(EffectData.PassResource Resource, DescriptorType Type)>();
+        List<(EffectData.PassResource Resource, DescriptorType Type)> pushed = [];
         var arrays = new SortedDictionary<uint, uint>();
         var pushSets = new SortedSet<uint>();
         foreach (var resource in Pass.Resources.OrderBy(resource => resource.Descriptor))
@@ -61,7 +84,7 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
                 if (arrays.TryGetValue(resource.Set, out var other))
                 {
                     throw new NotSupportedException(
-                        $"{Name}: on descriptor sets a texture array of no length needs a set of its own; set " +
+                        $"{passName}: on descriptor sets a texture array of no length needs a set of its own; set " +
                         $"{resource.Set} has two, at bindings {other} and {resource.Binding}");
                 }
 
@@ -76,7 +99,7 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
         if (pushSets.Count > 1)
         {
             throw new NotSupportedException(
-                $"{Name}: on descriptor sets a pass's resources must share one set; they use sets " +
+                $"{passName}: on descriptor sets a pass's resources must share one set; they use sets " +
                 string.Join(", ", pushSets));
         }
 
@@ -84,7 +107,7 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
         if (arrays.ContainsKey(PushSet) && pushed.Count > 0)
         {
             throw new NotSupportedException(
-                $"{Name}: on descriptor sets a texture array of no length needs a set of its own; it shares set " +
+                $"{passName}: on descriptor sets a texture array of no length needs a set of its own; it shares set " +
                 $"{PushSet} with the pass's other resources");
         }
 
@@ -120,8 +143,15 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
         }
 
         var setCount = 0u;
-        if (pushed.Count > 0) setCount = PushSet + 1;
-        if (arrays.Count > 0) setCount = Math.Max(setCount, arrays.Keys.Max() + 1);
+        if (pushed.Count > 0)
+        {
+            setCount = PushSet + 1;
+        }
+
+        if (arrays.Count > 0)
+        {
+            setCount = Math.Max(setCount, arrays.Keys.Max() + 1);
+        }
 
         var setLayouts = new DescriptorSetLayout[setCount];
         if (pushed.Count > 0)
@@ -132,7 +162,7 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
                 BindingCount = (uint)bindings.Length,
                 PBindings = bindings
             };
-            Check(Device.LogicalDevice.CreateDescriptorSetLayout(layoutInfo, null, out pushLayout),
+            Check(graphicsDevice.LogicalDevice.CreateDescriptorSetLayout(layoutInfo, null, out pushLayout),
                 "its descriptor set layout");
             setLayouts[PushSet] = pushLayout;
         }
@@ -152,7 +182,7 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
             setLayouts[set] ??= manager.EmptyLayout;
         }
 
-        Layout = Device.LogicalDevice.CreatePipelineLayout(new PipelineLayoutCreateInfo
+        Layout = graphicsDevice.LogicalDevice.CreatePipelineLayout(new PipelineLayoutCreateInfo
         {
             SetLayoutCount = setCount,
             PSetLayouts = setLayouts
@@ -169,12 +199,12 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
                 PipelineLayout = Layout,
                 Set = PushSet
             };
-            Check(Device.LogicalDevice.CreateDescriptorUpdateTemplate(templateInfo, null, out var template),
+            Check(graphicsDevice.LogicalDevice.CreateDescriptorUpdateTemplate(templateInfo, null, out var template),
                 "its descriptor update template");
             Template = template;
         }
 
-        for (var i = 0; i < Stages.Length; i++)
+        for (var i = 0; i < stages.Length; i++)
         {
             var createInfo = NewCreateInfo(i);
             createInfo.SetLayoutCount = setCount;
@@ -185,21 +215,22 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
 
     private void CheckLimits(List<(EffectData.PassResource Resource, DescriptorType Type)> pushed)
     {
-        if (Pass.DescriptorCount > Device.Adapter.MaxPushDescriptors)
+        var adapter = graphicsDevice.Adapter;
+        if (Pass.DescriptorCount > adapter.MaxPushDescriptors)
         {
             throw new NotSupportedException(
-                $"{Name}: {Pass.DescriptorCount} descriptors, and this GPU pushes at most " +
-                $"{Device.Adapter.MaxPushDescriptors} at once");
+                $"{passName}: {Pass.DescriptorCount} descriptors, and this GPU pushes at most " +
+                $"{adapter.MaxPushDescriptors} at once");
         }
 
-        var range = Device.Adapter.AdapterProperties.Limits.MaxUniformBufferRange;
+        var range = adapter.AdapterProperties.Limits.MaxUniformBufferRange;
         foreach (var (resource, type) in pushed)
         {
             var size = type == DescriptorType.UniformBuffer ? GetConstantBufferSize(resource.Name) : 0;
             if (size > range)
             {
                 throw new NotSupportedException(
-                    $"{Name}: constant buffer {resource.Name} is {size} bytes, and this GPU reads at most {range} " +
+                    $"{passName}: constant buffer {resource.Name} is {size} bytes, and this GPU reads at most {range} " +
                     "through one");
             }
         }
@@ -207,7 +238,7 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
 
     private ulong GetConstantBufferSize(string name)
     {
-        foreach (var shader in Data.Shaders)
+        foreach (var shader in effectData.Shaders)
         {
             foreach (var buffer in shader.ConstantBuffers)
             {
@@ -235,16 +266,5 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
         {
             throw new InvalidOperationException($"Could not create {what}: {result}");
         }
-    }
-
-    public override void Dispose()
-    {
-        base.Dispose();
-        if (Template != null) Device.LogicalDevice.DestroyDescriptorUpdateTemplate(Template);
-        if (Layout != null) Device.LogicalDevice.DestroyPipelineLayout(Layout);
-        if (pushLayout != null) Device.LogicalDevice.DestroyDescriptorSetLayout(pushLayout);
-        Template = null;
-        Layout = null;
-        pushLayout = null;
     }
 }

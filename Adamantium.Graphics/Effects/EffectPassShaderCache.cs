@@ -35,27 +35,39 @@ internal sealed class EffectPassShaderCache : IEffectPassShaderCache
         }
     }
 
-    /// <summary>The shaders of <paramref name="pass"/> of <paramref name="data"/>, made the first time they are asked for;
-    /// each call is answered by one <see cref="Release"/>.</summary>
+    /// <summary>The shaders of <paramref name="pass"/> of <paramref name="data"/>, made the first time they are asked for
+    /// - the cache is not held while they are, so the shaders of other passes are taken and let go of meanwhile; each
+    /// call is answered by one <see cref="Release"/>.</summary>
     /// <exception cref="System.NotSupportedException">The pass's resources do not fit the descriptor model or the
     /// device's limits.</exception>
     public EffectPassShaders Acquire(EffectData data, EffectData.Pass pass, string effectName, string techniqueName,
         string passName)
     {
+        EffectPassShaders shaders;
         lock (sync)
         {
-            if (!made.TryGetValue(pass, out var shaders))
+            if (!made.TryGetValue(pass, out shaders))
             {
                 shaders = model == DescriptorModel.Sets
                     ? new SetsEffectPassShaders(device, data, pass, effectName, techniqueName, passName)
                     : new HeapEffectPassShaders(device, data, pass, effectName, techniqueName, passName);
-                shaders.Create();
                 made.Add(pass, shaders);
             }
 
             shaders.References++;
-            return shaders;
         }
+
+        try
+        {
+            shaders.Create();
+        }
+        catch
+        {
+            Release(shaders);
+            throw;
+        }
+
+        return shaders;
     }
 
     /// <summary>Lets go of shaders <see cref="Acquire"/> gave; the last release retires them.</summary>
