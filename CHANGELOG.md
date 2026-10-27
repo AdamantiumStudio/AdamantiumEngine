@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `EffectSource`: the effect file reader is public, for tools that read effect files as the compiler does - its
+  techniques, passes and hit groups with each stage's entry point, place and the stage Slang compiles it for
+  (`EffectStageSource.SlangStage`), what breaks the rules (`Errors`, in file order) and the code with the techniques
+  blanked out. A technique that breaks the rules is blanked as far as it goes - its closing brace, a brace it did not
+  open or the next technique - and the file read on, so the code after it keeps its place and later techniques are
+  read; a lone CR ends a line, as for Slang. `EffectCompiler.SpirvProfile`: the SPIR-V version effects compile to.
 - `IGraphicsDevice.UploadFrameData`: copies data into the frame's upload pages and gives its device address, for a
   shader to read through a pointer while the frame lasts; Forward+ uploads its lights, instances and palettes so. Data
   larger than a page gets a buffer of its own in system memory, not in the small window of video memory the CPU can
@@ -1674,14 +1680,34 @@ All packages share one version.
 
 ### Changed
 
+- Effect data (format version 2, effects are compiled again on the next build) is cut to what Vulkan has. A pass holds
+  its stages as a list of `ShaderLink { Stage, Index }` - `EffectStage`, every stage the language describes - and
+  its hit groups; a shader its entry point, stage, level, SPIR-V, constant buffers and resources. A resource is bound
+  by `Set` and `Binding`, takes `Count` descriptors (0 for an array of no length, no limit of 255 any more) and has an
+  `Access`: read only, written only or both, from SPIR-V's `NonWritable`/`NonReadable`. `EffectParameterType` names
+  scalars and Vulkan's descriptor kinds - uniform, storage and texel buffers, sampled and storage images, samplers,
+  acceleration structures; `EffectParameterClass.Pointer` is a `T*` uniform. The compiler compiles every stage, mesh
+  and ray tracing included, and Slang's errors in them are said as in any other.
+- A pass's stages are the device's to run: hull and domain shaders need the `tessellationShader` feature, task and
+  mesh shaders `VK_EXT_mesh_shader`, each enabled when the device has it (`GraphicsAdapter.SupportsTessellationShaders`,
+  `SupportsMeshShaders`, `SupportsTaskShaders`; `MainGraphicsDevice.IsTessellationEnabled`, `IsMeshShaderEnabled`,
+  `IsTaskShaderEnabled`). A pass the device cannot run says so when it is applied, and so - until effects draw them -
+  do tessellated and mesh passes and ray-tracing passes; the effect's other passes run, and the refused pass's
+  parameters are there to set. Every graphics pass binds the stages the device enabled and it has none for empty, in
+  pipeline order whatever order the file names them in. `EffectParameter.SetResource(index, ...)` binds from that
+  index, not from the first element.
+- Uniform buffers, storage buffers, sampled images and samplers are bound by their kind: a read-only and a read-write
+  storage buffer are one kind, as in Vulkan; on the descriptor heap the read-only one maps as such. A resource of
+  another kind refuses its pass when applied.
+- The effect compiler's types are in `Adamantium.EffectsCompiler`, the files at the project's root.
 - An effect's `technique` and `pass` blocks are read by the effect compiler's own reader: comments and strings
   aware, errors at the line and column they stand on, the blocks blanked to spaces so Slang's messages keep the file's
   lines. A pass names its stages - `VertexShader`, `HullShader`, `DomainShader`, `PixelShader`; `TaskShader`,
   `MeshShader`, `PixelShader`; `ComputeShader`; `RayGenerationShader`, `MissShader`, `CallableShader` and `HitGroup`
   blocks of `ClosestHit`, `AnyHit`, `Intersection` - and nothing else: an unknown key, a stage of
   another kind of pass, a hull shader without a domain shader, two techniques or passes of one name or both without
-  one, a file with no technique is an error. The stages effects do not run yet - tessellation, mesh, ray tracing -
-  are described and refused with a message that says so. Slang's errors are said once each, where they stand in the
+  one, a file with no technique is an error. Every stage is compiled, and what Slang finds wrong in it is said. Slang's
+  errors are said once each, where they stand in the
   file or its includes; a missing entry point at the stage that names it. A macro given to the compiler is a name
   with a value of one line and no comment. Every shader is compiled to SPIR-V 1.6.
 - A skin bends with every joint it has, not the first 128: on the GPU, in picking and in its bounds, and a glTF skin
@@ -1990,6 +2016,13 @@ All packages share one version.
 
 ### Removed
 
+- From effect data, what Direct3D 11 had and Vulkan does not: input signatures (`Signature`, `Semantic`), stream
+  output, sub-passes, pass properties (`EffectPropertyCollection`, `PropertyKey`, `PropertyKeyCollection`,
+  `EffectPass.PropertiesKey`), shader import and export, default values, `Shader.Hashcode` and `CompilerFlags`,
+  `EffectShaderType`, the pipeline dictionary, interface parameter classes, the D3D parameter types and
+  `EffectResourceType` with its D3D table, `ShareConstantBuffers` with the pool's shared constant buffers, the pool's
+  unused shader-module cache (`GetOrCompileShader`), and the unused `EffectTechnique`, `ShaderLanguage` and
+  `ShaderModel` enumerations.
 - From the effect language: `EffectName` (an effect is named after its file), `Profile`, `GeometryShader`, the blend,
   rasterizer and depth state keys, and the rest of the FX syntax no effect used. The `sampler` spelling is no longer
   defined for Slang: write `SamplerState`. The device no longer asks for the geometry shader feature.

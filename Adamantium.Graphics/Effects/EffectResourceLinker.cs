@@ -1,10 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.EffectsCompiler;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Vulkan.Core;
-using VulkanBuffer = Adamantium.Vulkan.Core.Buffer;
 
 namespace Adamantium.Graphics.Effects;
 
@@ -25,7 +25,7 @@ internal class ResourceInfo<T> : IHeapResource where T : class
     public ResourceInfo()
     {
     }
-        
+
     public ResourceInfo(T resource)
     {
         Resource = resource;
@@ -40,17 +40,17 @@ internal class ResourceInfo<T> : IHeapResource where T : class
             {
                 IsDirty = true;
             }
-            
+
             resource = value;
         }
     }
 
     public int SlotIndex { get; set; }
-        
-    public int DescriptorSet { get; set; } 
-    
+
+    public int DescriptorSet { get; set; }
+
     public bool IsDirty { get; internal set; }
-    
+
     public uint GlobalHeapOffset { get; internal set; } = uint.MaxValue;
 
     public bool HasLiveSlot =>
@@ -68,35 +68,28 @@ internal class ResourceInfo<T> : IHeapResource where T : class
     }
 }
 
-/// <summary>What an effect's parameters are bound to. The heap and descriptor sets each prepare a bound resource for
-/// the draws that read it in their own way.</summary>
+/// <summary>What an effect's parameters are bound to, by the kind of descriptor each is: uniform buffers, samplers,
+/// sampled images and storage buffers - read only or read and written alike, as Vulkan binds them. The heap and
+/// descriptor sets each prepare a bound resource for the draws that read it in their own way.</summary>
 internal abstract class EffectResourceLinker : IEffectResourceLinker
 {
-    /// <summary>
-    /// Real object resources, as they were set on the parameter.
-    /// </summary>
+    private static readonly ResourceInfo<SamplerState>[] NoSamplers = [];
+    private static readonly ResourceInfo<Texture>[] NoSampledImages = [];
+    private static readonly ResourceInfo<Buffer>[] NoStorageBuffers = [];
+
+    /// <summary>The constant buffers bound to uniform-buffer parameters.</summary>
     public Dictionary<EffectData.Parameter, EffectConstantBuffer> ConstantBuffers;
 
-    /// <summary>
-    /// Total number of resources.
-    /// </summary>
+    /// <summary>Total number of resources.</summary>
     public int Count { get; set; }
 
-    // public Dictionary<EffectData.Parameter, Sampler[]> SamplerStates;
-    public Dictionary<EffectData.Parameter, ResourceInfo<SamplerState>[]> SamplerStates;
-    public Dictionary<EffectData.Parameter, ResourceInfo<Texture>[]> ShaderResourceViews;
-    // Read-only StructuredBuffers: they reflect as a ShaderResourceView (D3D_SVT_STRUCTURED_BUFFER), but their RESOURCE
-    // is a storage buffer, not a Texture - so they live here, separate from the texture SRVs. In Vulkan a read-only and a
-    // read-write structured buffer are the SAME DescriptorType.StorageBuffer (SRV vs UAV is a D3D-ism); the read-only-ness
-    // is a shader decoration, so binding is identical to a UAV buffer, just without shader writes.
-    public Dictionary<EffectData.Parameter, ResourceInfo<Buffer>[]> ShaderResourceBuffers;
-    public Dictionary<EffectData.Parameter, ResourceInfo<Buffer>[]> UnorderedAccessViews;
-    public Dictionary<EffectData.Parameter, object> BoundResources;
+    public Dictionary<EffectData.Parameter, ResourceInfo<SamplerState>[]> Samplers;
 
-    private static ResourceInfo<SamplerState>[] EmptySamplers = [];
-    private static ResourceInfo<Texture>[] EmptyResourceViews = [];
-    private static ResourceInfo<Buffer>[] EmptyShaderResourceBuffers = [];
-    private static ResourceInfo<Buffer>[] EmptyUAVs = [];
+    public Dictionary<EffectData.Parameter, ResourceInfo<Texture>[]> SampledImages;
+
+    public Dictionary<EffectData.Parameter, ResourceInfo<Buffer>[]> StorageBuffers;
+
+    public Dictionary<EffectData.Parameter, object> BoundResources;
 
     protected abstract void Bound(ResourceInfo<SamplerState> sampler);
 
@@ -110,11 +103,9 @@ internal abstract class EffectResourceLinker : IEffectResourceLinker
     public void Initialize()
     {
         ConstantBuffers = new Dictionary<EffectData.Parameter, EffectConstantBuffer>();
-
-        SamplerStates = new Dictionary<EffectData.Parameter, ResourceInfo<SamplerState>[]>();
-        ShaderResourceViews = new Dictionary<EffectData.Parameter, ResourceInfo<Texture>[]>();
-        ShaderResourceBuffers = new Dictionary<EffectData.Parameter, ResourceInfo<Buffer>[]>();
-        UnorderedAccessViews = new Dictionary<EffectData.Parameter, ResourceInfo<Buffer>[]>();
+        Samplers = new Dictionary<EffectData.Parameter, ResourceInfo<SamplerState>[]>();
+        SampledImages = new Dictionary<EffectData.Parameter, ResourceInfo<Texture>[]>();
+        StorageBuffers = new Dictionary<EffectData.Parameter, ResourceInfo<Buffer>[]>();
         BoundResources = new Dictionary<EffectData.Parameter, object>();
     }
 
@@ -130,42 +121,30 @@ internal abstract class EffectResourceLinker : IEffectResourceLinker
         return (T[])res;
     }
 
-    public ResourceInfo<Texture>[] GetShaderResources(EffectData.Parameter resourceName)
+    public ResourceInfo<Texture>[] GetSampledImages(EffectData.Parameter resourceName) =>
+        SampledImages.GetValueOrDefault(resourceName, NoSampledImages);
+
+    public ResourceInfo<SamplerState>[] GetSamplers(EffectData.Parameter resourceName) =>
+        Samplers.GetValueOrDefault(resourceName, NoSamplers);
+
+    public ResourceInfo<Buffer>[] GetStorageBuffers(EffectData.Parameter resourceName) =>
+        StorageBuffers.GetValueOrDefault(resourceName, NoStorageBuffers);
+
+    public void SetResource<T>(EffectData.ResourceParameter paramDescription, T value)
     {
-        return ShaderResourceViews.GetValueOrDefault(resourceName, EmptyResourceViews);
+        Resolve(paramDescription, value, 0);
     }
 
-    public ResourceInfo<SamplerState>[] GetSamplers(EffectData.Parameter resourceName)
+    public void SetResource<T>(EffectData.ResourceParameter resourceName, params T[] valueArray) where T : class
     {
-        return SamplerStates.GetValueOrDefault(resourceName, EmptySamplers);
+        SetResource(resourceName, 0, valueArray);
     }
 
-    public ResourceInfo<Buffer>[] GetUAVs(EffectData.Parameter resourceName)
+    public void SetResource<T>(EffectData.ResourceParameter parameter, int index, params T[] values) where T : class
     {
-        return UnorderedAccessViews.GetValueOrDefault(resourceName, EmptyUAVs);
-    }
-
-    public ResourceInfo<Buffer>[] GetShaderResourceBuffers(EffectData.Parameter resourceName)
-    {
-        return ShaderResourceBuffers.GetValueOrDefault(resourceName, EmptyShaderResourceBuffers);
-    }
-
-    public void SetResource(EffectData.ResourceParameter resourceName, EffectResourceType type, VulkanBuffer view)
-    {
-        ResolveResource(resourceName, type, view, 0);
-    }
-
-    public void SetResource<T>(EffectData.ResourceParameter paramDescription, EffectResourceType type, T value)
-    {
-        ResolveResource(paramDescription, type, value, 0);
-    }
-
-    public void SetResource<T>(EffectData.ResourceParameter resourceName, EffectResourceType type,
-        params T[] valueArray) where T : class
-    {
-        for (int i = 0; i < valueArray.Length; ++i)
+        for (var i = 0; i < values.Length; ++i)
         {
-            ResolveResource(resourceName, type, valueArray[i], i);
+            Resolve(parameter, values[i], index + i);
         }
     }
 
@@ -181,28 +160,23 @@ internal abstract class EffectResourceLinker : IEffectResourceLinker
 
     public object[] GetBoundValues(EffectData.Parameter resource)
     {
-        if (SamplerStates.TryGetValue(resource, out var samplers))
+        if (Samplers.TryGetValue(resource, out var samplers))
         {
-            return ResourcesOf(samplers);
+            return GetResourcesOf(samplers);
         }
 
-        if (ShaderResourceViews.TryGetValue(resource, out var textures))
+        if (SampledImages.TryGetValue(resource, out var images))
         {
-            return ResourcesOf(textures);
+            return GetResourcesOf(images);
         }
 
-        if (ShaderResourceBuffers.TryGetValue(resource, out var buffers))
-        {
-            return ResourcesOf(buffers);
-        }
-
-        return UnorderedAccessViews.TryGetValue(resource, out var views) ? ResourcesOf(views) : null;
+        return StorageBuffers.TryGetValue(resource, out var buffers) ? GetResourcesOf(buffers) : null;
     }
 
-    private static object[] ResourcesOf<T>(ResourceInfo<T>[] infos) where T : class
+    private static object[] GetResourcesOf<T>(ResourceInfo<T>[] infos) where T : class
     {
         var resources = new object[infos.Length];
-        for (int i = 0; i < infos.Length; i++)
+        for (var i = 0; i < infos.Length; i++)
         {
             resources[i] = infos[i]?.Resource;
         }
@@ -210,157 +184,61 @@ internal abstract class EffectResourceLinker : IEffectResourceLinker
         return resources;
     }
 
-    public void SetResource(EffectData.ResourceParameter resourceName, EffectResourceType type,
-        VulkanBuffer[] valueArray, int[] uavInitialCount)
+    private void Resolve(EffectData.ResourceParameter parameter, object value, int index)
     {
-        for (int i = 0; i < valueArray.Length; ++i)
+        switch (parameter.Type)
         {
-            ResolveResource(resourceName, type, valueArray[i], i);
+            case EffectParameterType.UniformBuffer:
+                BindConstantBuffer(parameter, value);
+                break;
+            case EffectParameterType.Sampler:
+                Bind(parameter, Samplers, value as SamplerState, index, Bound);
+                break;
+            case EffectParameterType.SampledImage1D:
+            case EffectParameterType.SampledImage2D:
+            case EffectParameterType.SampledImage3D:
+            case EffectParameterType.SampledImageCube:
+                Bind(parameter, SampledImages, value as Texture, index, Bound);
+                break;
+            case EffectParameterType.StorageBuffer:
+                Bind(parameter, StorageBuffers, value as Buffer, index, Bound);
+                break;
+            default:
+                throw new NotSupportedException(
+                    $"'{parameter.Name}' is a {parameter.Type}; effects bind uniform buffers, samplers, sampled images and storage buffers.");
         }
     }
 
-    private void ResolveResource(EffectData.Parameter resourceName, EffectResourceType type, object value, int index)
-    {
-        switch (type)
-        {
-            case EffectResourceType.ConstantBuffer:
-                ProcessConstantBuffer(resourceName, value);
-                break;
-            case EffectResourceType.SamplerState:
-            case EffectResourceType.ShaderResourceView:
-            case EffectResourceType.UnorderedAccessView:
-                ProcessReferenceResources((EffectData.ResourceParameter)resourceName, type, value, index);
-                break;
-        }
-    }
-
-    private void ProcessConstantBuffer(EffectData.Parameter resourceName, object value)
+    private void BindConstantBuffer(EffectData.Parameter parameter, object value)
     {
         var constantBuffer = value as EffectConstantBuffer;
-        if (ConstantBuffers.ContainsKey(resourceName))
-        {
-            ConstantBuffers[resourceName] = constantBuffer;
-            BoundResources[resourceName] = constantBuffer;
-        }
-        else
-        {
-            ConstantBuffers.Add(resourceName, constantBuffer);
-            BoundResources.Add(resourceName, constantBuffer);
-        }
+        ConstantBuffers[parameter] = constantBuffer;
+        BoundResources[parameter] = constantBuffer;
     }
 
-    private void ProcessReferenceResources(EffectData.ResourceParameter parameter, EffectResourceType type,
-        object value, int index)
+    private void Bind<T>(EffectData.ResourceParameter parameter, Dictionary<EffectData.Parameter, ResourceInfo<T>[]> bound,
+        T value, int index, Action<ResourceInfo<T>> prepare) where T : class
     {
         if (index >= parameter.Count)
         {
             return;
         }
 
-        switch (type)
+        if (!bound.TryGetValue(parameter, out var infos))
         {
-            case EffectResourceType.SamplerState:
-            {
-                if (!SamplerStates.TryGetValue(parameter, out var states))
-                {
-                    states = new ResourceInfo<SamplerState>[parameter.Count];
-                    SamplerStates.Add(parameter, states);
-                    BoundResources.Add(parameter, states);
-                }
-
-                SamplerState state = null;
-                if (value is SamplerState samplerState)
-                {
-                    state = samplerState;
-                }
-
-                if (states[index] == null)
-                {
-                    states[index] = new ResourceInfo<SamplerState>();
-                }
-
-                if (state != null)
-                {
-                    states[index].Resource = state;
-                    Bound(states[index]);
-                }
-                else
-                {
-                    states[index].Clear();
-                }
-            }
-                break;
-            case EffectResourceType.ShaderResourceView:
-            {
-                if (value is Buffer srvBuffer)
-                {
-                    if (!ShaderResourceBuffers.TryGetValue(parameter, out var srvBufs))
-                    {
-                        srvBufs = new ResourceInfo<Buffer>[parameter.Count];
-                        ShaderResourceBuffers.Add(parameter, srvBufs);
-                        BoundResources[parameter] = srvBufs;
-                    }
-
-                    srvBufs[index] ??= new ResourceInfo<Buffer>();
-                    srvBufs[index].Resource = srvBuffer;
-                    Bound(srvBufs[index]);
-                    break;
-                }
-
-                if (value == null && ShaderResourceBuffers.TryGetValue(parameter, out var bound))
-                {
-                    bound[index]?.Clear();
-                    break;
-                }
-
-                if (!ShaderResourceViews.TryGetValue(parameter, out var views))
-                {
-                    views = new ResourceInfo<Texture>[parameter.Count];
-                    ShaderResourceViews.Add(parameter, views);
-                    BoundResources.Add(parameter, views);
-                }
-
-                if (views[index] == null)
-                {
-                    views[index] = new ResourceInfo<Texture>();
-                }
-
-                if (value is Texture texture)
-                {
-                    views[index].Resource = texture;
-                    Bound(views[index]);
-                }
-                else
-                {
-                    views[index].Clear();
-                }
-            }
-                break;
-            case EffectResourceType.UnorderedAccessView:
-            {
-                if (!UnorderedAccessViews.TryGetValue(parameter, out var uavs))
-                {
-                    uavs = new ResourceInfo<Buffer>[parameter.Count];
-                    UnorderedAccessViews.Add(parameter, uavs);
-                    BoundResources.Add(parameter, uavs);
-                }
-
-                if (value is Buffer buffer)
-                {
-                    if (uavs[index] == null)
-                    {
-                        uavs[index] = new ResourceInfo<Buffer>();
-                    }
-                    
-                    uavs[index].Resource = buffer;
-                    Bound(uavs[index]);
-                }
-                else
-                {
-                    uavs[index]?.Clear();
-                }
-            }
-                break;
+            infos = new ResourceInfo<T>[parameter.Count];
+            bound.Add(parameter, infos);
+            BoundResources[parameter] = infos;
         }
+
+        infos[index] ??= new ResourceInfo<T>();
+        if (value == null)
+        {
+            infos[index].Clear();
+            return;
+        }
+
+        infos[index].Resource = value;
+        prepare(infos[index]);
     }
 }

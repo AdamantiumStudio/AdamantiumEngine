@@ -39,7 +39,8 @@ public unsafe class GraphicsAdapter
         Vulkan12Properties = vulkan12Properties;
         MaxMemoryAllocationSize = vulkan11Properties.MaxMemoryAllocationSize;
 
-        var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR();
+        var meshShader = new PhysicalDeviceMeshShaderFeaturesEXT();
+        var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR { PNext = meshShader };
         var maintenance = new PhysicalDeviceSwapchainMaintenance1FeaturesKHR { PNext = maintenance7 };
         var hostCopy = new PhysicalDeviceVulkan14Features { PNext = maintenance };
         var heapFeatures = new PhysicalDeviceDescriptorHeapFeaturesEXT { PNext = hostCopy };
@@ -51,6 +52,10 @@ public unsafe class GraphicsAdapter
         _physicalDevice.GetPhysicalDeviceFeatures2(ref features2);
 
         SupportsImageCubeArray = features2.Features != null && (bool)features2.Features.ImageCubeArray;
+        SupportsTessellationShaders = features2.Features != null && (bool)features2.Features.TessellationShader;
+        var hasMeshShaderExtension = HasExtension(Constants.VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        SupportsMeshShaders = hasMeshShaderExtension && meshShader.MeshShader;
+        SupportsTaskShaders = SupportsMeshShaders && meshShader.TaskShader;
         SupportsHostImageCopy = hostCopy.HostImageCopy;
         SupportsSwapchainMaintenance1 = maintenance.SwapchainMaintenance1;
         SupportsMaintenance7 = maintenance7.Maintenance7;
@@ -90,6 +95,16 @@ public unsafe class GraphicsAdapter
 
     /// <summary>Whether the device views an array of cubes as one - a DDS of several cubes needs it.</summary>
     public bool SupportsImageCubeArray { get; private set; }
+
+    /// <summary>Whether the device runs hull and domain shaders: the tessellationShader feature.</summary>
+    public bool SupportsTessellationShaders { get; private set; }
+
+    /// <summary>Whether the device runs mesh shaders: VK_EXT_mesh_shader and its meshShader feature.</summary>
+    public bool SupportsMeshShaders { get; private set; }
+
+    /// <summary>Whether the device runs task shaders before mesh shaders: the taskShader feature of VK_EXT_mesh_shader.
+    /// </summary>
+    public bool SupportsTaskShaders { get; private set; }
 
     /// <summary>Whether a storage buffer may hold 8-bit members and a shader may compute with them - the pair the
     /// instance records need to carry color as four BYTES rather than as a packed word.</summary>

@@ -78,7 +78,7 @@ internal sealed class SetsEffectPass : EffectPass
                 }
                 case Kind.Texture:
                 {
-                    var bound = linker.GetShaderResources(pushed.Description);
+                    var bound = linker.GetSampledImages(pushed.Description);
                     for (int element = 0; element < pushed.Count; element++)
                     {
                         ITexture texture = element < bound.Length ? bound[element]?.Resource : null;
@@ -121,9 +121,7 @@ internal sealed class SetsEffectPass : EffectPass
                 }
                 case Kind.Buffer:
                 {
-                    var bound = pushed.Parameter.ResourceType == EffectResourceType.UnorderedAccessView
-                        ? linker.GetUAVs(pushed.Description)
-                        : linker.GetShaderResourceBuffers(pushed.Description);
+                    var bound = linker.GetStorageBuffers(pushed.Description);
                     for (int element = 0; element < pushed.Count; element++)
                     {
                         var buffer = element < bound.Length ? bound[element]?.Resource : null;
@@ -185,41 +183,37 @@ internal sealed class SetsEffectPass : EffectPass
             stageMask |= stage.Stage;
             foreach (var link in stage.ConstantBufferLinks)
             {
-                Push(link.Parameter.DescriptorSet, (uint)link.Parameter.SlotIndex, DescriptorType.UniformBuffer,
+                Push(link.Parameter.Set, link.Parameter.Binding, DescriptorType.UniformBuffer,
                     new Pushed(Kind.ConstantBuffer, link.Parameter, link.ConstantBuffer, null, 1, 0));
             }
 
-            foreach (var link in stage.ShaderResourceViewSlotLinks)
+            foreach (var link in stage.SampledImageLinks)
             {
-                if (link.IsStorageBuffer)
+                if (link.Parameter.ElementCount == 0)
                 {
-                    Push(link.DescriptorSet, link.SlotIndex, DescriptorType.StorageBuffer, Of(Kind.Buffer, link));
-                }
-                else if (link.Parameter.ElementCount == 0)
-                {
-                    if (arrays.TryGetValue(link.DescriptorSet, out var other) && other != link.SlotIndex)
+                    if (arrays.TryGetValue(link.Set, out var other) && other != link.Binding)
                     {
                         throw new NotSupportedException(
                             $"{Effect.Name}.{Name}: on descriptor sets a texture array of no length needs a set of its " +
-                            $"own; set {link.DescriptorSet} has two, at bindings {other} and {link.SlotIndex}");
+                            $"own; set {link.Set} has two, at bindings {other} and {link.Binding}");
                     }
 
-                    arrays[link.DescriptorSet] = link.SlotIndex;
+                    arrays[link.Set] = link.Binding;
                 }
                 else
                 {
-                    Push(link.DescriptorSet, link.SlotIndex, DescriptorType.SampledImage, Of(Kind.Texture, link));
+                    Push(link.Set, link.Binding, DescriptorType.SampledImage, Of(Kind.Texture, link));
                 }
             }
 
-            foreach (var link in stage.SamplerStateSlotLinks)
+            foreach (var link in stage.SamplerLinks)
             {
-                Push(link.DescriptorSet, link.SlotIndex, DescriptorType.Sampler, Of(Kind.Sampler, link));
+                Push(link.Set, link.Binding, DescriptorType.Sampler, Of(Kind.Sampler, link));
             }
 
-            foreach (var link in stage.UnorderedAccessViewSlotLinks)
+            foreach (var link in stage.StorageBufferLinks)
             {
-                Push(link.DescriptorSet, link.SlotIndex, DescriptorType.StorageBuffer, Of(Kind.Buffer, link));
+                Push(link.Set, link.Binding, DescriptorType.StorageBuffer, Of(Kind.Buffer, link));
             }
         }
 

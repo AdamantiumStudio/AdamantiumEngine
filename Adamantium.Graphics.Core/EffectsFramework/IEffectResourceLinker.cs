@@ -12,8 +12,12 @@ public interface IEffectResourceLinker
 
     T GetResource<T>(EffectData.Parameter resourceName) where T : class;
     T[] GetResources<T>(EffectData.Parameter resourceName) where T : class;
-    void SetResource<T>(EffectData.ResourceParameter paramDescription, EffectResourceType type, T value);
-    void SetResource<T>(EffectData.ResourceParameter resourceName, EffectResourceType type, params T[] valueArray) where T : class;
+    void SetResource<T>(EffectData.ResourceParameter paramDescription, T value);
+    void SetResource<T>(EffectData.ResourceParameter resourceName, params T[] valueArray) where T : class;
+
+    /// <summary>Binds <paramref name="values"/> to the elements of <paramref name="parameter"/> from
+    /// <paramref name="index"/> on.</summary>
+    void SetResource<T>(EffectData.ResourceParameter parameter, int index, params T[] values) where T : class;
 
     Dictionary<EffectData.Parameter, object> GetBoundResources();
 

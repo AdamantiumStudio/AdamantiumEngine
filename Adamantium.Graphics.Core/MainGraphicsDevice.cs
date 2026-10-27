@@ -37,6 +37,18 @@ public class MainGraphicsDevice : DisposableBase
     /// triangle it lies.</summary>
     public bool FragmentBarycentricSupported { get; private set; }
 
+    /// <summary>True when the tessellationShader feature was enabled: passes may run hull and domain shaders, and every
+    /// graphics pass binds those stages, empty when it has none.</summary>
+    public bool IsTessellationEnabled { get; private set; }
+
+    /// <summary>True when VK_EXT_mesh_shader's meshShader feature was enabled: passes may run mesh shaders, and every
+    /// graphics pass binds the mesh stage, empty when it has none.</summary>
+    public bool IsMeshShaderEnabled { get; private set; }
+
+    /// <summary>True when VK_EXT_mesh_shader's taskShader feature was enabled, as <see cref="IsMeshShaderEnabled"/> is for
+    /// the task stage.</summary>
+    public bool IsTaskShaderEnabled { get; private set; }
+
     public VulkanInstance VulkanInstance { get; private set; }
 
     public GraphicsAdapter GraphicsAdapter { get; private set; }
@@ -365,6 +377,11 @@ public class MainGraphicsDevice : DisposableBase
             }
         }
 
+        if (GraphicsAdapter.SupportsMeshShaders && !finalDeviceExtensions.Contains(Constants.VK_EXT_MESH_SHADER_EXTENSION_NAME))
+        {
+            finalDeviceExtensions.Add(Constants.VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        }
+
         if (DescriptorModel == DescriptorModel.Sets)
         {
             finalDeviceExtensions.Remove(Constants.VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
@@ -445,6 +462,13 @@ public class MainGraphicsDevice : DisposableBase
             tail.Add(new PhysicalDeviceDescriptorHeapFeaturesEXT { DescriptorHeap = true });
         }
 
+        IsMeshShaderEnabled = GraphicsAdapter.SupportsMeshShaders;
+        IsTaskShaderEnabled = GraphicsAdapter.SupportsTaskShaders;
+        if (IsMeshShaderEnabled)
+        {
+            tail.Add(new PhysicalDeviceMeshShaderFeaturesEXT { MeshShader = true, TaskShader = IsTaskShaderEnabled });
+        }
+
         if (finalDeviceExtensions.Contains(Constants.VK_EXT_DEVICE_FAULT_EXTENSION_NAME))
         {
             tail.Add(new PhysicalDeviceFaultFeaturesEXT { DeviceFault = true });
@@ -465,6 +489,8 @@ public class MainGraphicsDevice : DisposableBase
 
         deviceFeatures2.Features.SamplerAnisotropy = true;
         deviceFeatures2.Features.ImageCubeArray = GraphicsAdapter.SupportsImageCubeArray;
+        IsTessellationEnabled = GraphicsAdapter.SupportsTessellationShaders;
+        deviceFeatures2.Features.TessellationShader = IsTessellationEnabled;
         // The stroke expander's compute shader dereferences BDA pointers (uint64_t).
         deviceFeatures2.Features.ShaderInt64 = true;
 
@@ -496,6 +522,9 @@ public class MainGraphicsDevice : DisposableBase
                 break;
             case PhysicalDeviceFaultFeaturesEXT fault:
                 fault.PNext = next;
+                break;
+            case PhysicalDeviceMeshShaderFeaturesEXT meshShader:
+                meshShader.PNext = next;
                 break;
             default:
                 throw new InvalidOperationException($"{feature.GetType().Name} is not chained before another feature.");

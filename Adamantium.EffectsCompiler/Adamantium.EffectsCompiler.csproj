@@ -10,7 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Adamantium.Vulkan.Spirv" Version="1.1.0" />
+      <PackageReference Include="Adamantium.Vulkan.Spirv" Version="1.2.0" />
       <PackageReference Include="Adamantium.Vulkan.Slang" Version="1.1.0" />
       <PackageReference Include="MessagePack" Version="3.1.12" />
       <PackageReference Include="MessagePack.Annotations" Version="3.1.12" />

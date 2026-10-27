@@ -24,7 +24,7 @@ internal sealed class HeapEffectPass : EffectPass
     {
     }
 
-    private enum HeapResourceKind { ShaderResource, Sampler, Uav }
+    private enum HeapResourceKind { SampledImage, Sampler, StorageBuffer }
 
     private protected override unsafe void ApplyResources()
     {
@@ -54,9 +54,9 @@ internal sealed class HeapEffectPass : EffectPass
                 *(ulong*)(pushDataBytes + pushOffset) = swallowing ? 0 : dynamicPool.Upload(link.ConstantBuffer, alignment);
             }
 
-            WriteHeapOffsets(pushDataBytes, stageBlock.ShaderResourceViewSlotLinks, HeapResourceKind.ShaderResource);
-            WriteHeapOffsets(pushDataBytes, stageBlock.SamplerStateSlotLinks, HeapResourceKind.Sampler);
-            WriteHeapOffsets(pushDataBytes, stageBlock.UnorderedAccessViewSlotLinks, HeapResourceKind.Uav);
+            WriteHeapOffsets(pushDataBytes, stageBlock.SampledImageLinks, HeapResourceKind.SampledImage);
+            WriteHeapOffsets(pushDataBytes, stageBlock.SamplerLinks, HeapResourceKind.Sampler);
+            WriteHeapOffsets(pushDataBytes, stageBlock.StorageBufferLinks, HeapResourceKind.StorageBuffer);
         }
 
         BindShaders();
@@ -78,16 +78,14 @@ internal sealed class HeapEffectPass : EffectPass
                 var link = links[i];
                 IHeapResource[] resources = kind switch
                 {
-                    HeapResourceKind.ShaderResource => link.IsStorageBuffer
-                        ? (IHeapResource[])resourceLinker.GetShaderResourceBuffers(link.ResourceParamDescription)
-                        : resourceLinker.GetShaderResources(link.ResourceParamDescription),
+                    HeapResourceKind.SampledImage => resourceLinker.GetSampledImages(link.ResourceParamDescription),
                     HeapResourceKind.Sampler => resourceLinker.GetSamplers(link.ResourceParamDescription),
-                    _ => resourceLinker.GetUAVs(link.ResourceParamDescription),
+                    _ => resourceLinker.GetStorageBuffers(link.ResourceParamDescription),
                 };
                 uint basePushOffset = parameterPushOffsets[link.Parameter];
 
-                var isBuffer = kind == HeapResourceKind.Uav || link.IsStorageBuffer;
-                var wholeHeap = kind == HeapResourceKind.ShaderResource && !isBuffer && link.Parameter.ElementCount == 0;
+                var isBuffer = kind == HeapResourceKind.StorageBuffer;
+                var wholeHeap = kind == HeapResourceKind.SampledImage && link.Parameter.ElementCount == 0;
                 if (wholeHeap)
                 {
                     *(uint*)(push + basePushOffset) = 0;
@@ -148,7 +146,7 @@ internal sealed class HeapEffectPass : EffectPass
             {
                 foreach (var param in stageBlock.Parameters)
                 {
-                    if (param.Parameter.ResourceType == EffectResourceType.ConstantBuffer)
+                    if (param.Parameter.ParameterType == EffectParameterType.UniformBuffer)
                         continue;
 
                     if (!parameterPushOffsets.ContainsKey(param.Parameter))
@@ -183,9 +181,9 @@ internal sealed class HeapEffectPass : EffectPass
         layout = LayoutSeed;
 
         int mappingCount = stage.ConstantBufferLinks.Count +
-                           stage.ShaderResourceViewSlotLinks.Count +
-                           stage.SamplerStateSlotLinks.Count +
-                           stage.UnorderedAccessViewSlotLinks.Count;
+                           stage.SampledImageLinks.Count +
+                           stage.SamplerLinks.Count +
+                           stage.StorageBufferLinks.Count;
 
         if (mappingCount == 0)
         {
@@ -200,8 +198,8 @@ internal sealed class HeapEffectPass : EffectPass
         {
             mappings[mapIdx] = new DescriptorSetAndBindingMappingEXT
             {
-                DescriptorSet = link.Parameter.DescriptorSet,
-                FirstBinding = (uint)link.Parameter.SlotIndex,
+                DescriptorSet = link.Parameter.Set,
+                FirstBinding = link.Parameter.Binding,
                 BindingCount = 1,
                 ResourceMask = SpirvResourceTypeFlagBitsEXT.UniformBufferBitExt,
                 Source = DescriptorMappingSourceEXT.PushAddressExt
@@ -211,27 +209,27 @@ internal sealed class HeapEffectPass : EffectPass
             mapIdx++;
         }
 
-        foreach (var link in stage.ShaderResourceViewSlotLinks)
+        foreach (var link in stage.SampledImageLinks)
         {
             mappings[mapIdx] = PushIndexed(link,
-                link.IsStorageBuffer
-                    ? SpirvResourceTypeFlagBitsEXT.ReadOnlyStorageBufferBitExt
-                    : SpirvResourceTypeFlagBitsEXT.SampledImageBitExt | SpirvResourceTypeFlagBitsEXT.ReadOnlyImageBitExt,
-                (uint)(link.IsStorageBuffer ? heapProperties.BufferDescriptorSize : heapProperties.ImageDescriptorSize));
+                SpirvResourceTypeFlagBitsEXT.SampledImageBitExt | SpirvResourceTypeFlagBitsEXT.ReadOnlyImageBitExt,
+                (uint)heapProperties.ImageDescriptorSize);
             mapIdx++;
         }
 
-        foreach (var link in stage.SamplerStateSlotLinks)
+        foreach (var link in stage.SamplerLinks)
         {
             mappings[mapIdx] = PushIndexed(link, SpirvResourceTypeFlagBitsEXT.SamplerBitExt,
                 (uint)heapProperties.SamplerDescriptorSize);
             mapIdx++;
         }
 
-        foreach (var link in stage.UnorderedAccessViewSlotLinks)
+        foreach (var link in stage.StorageBufferLinks)
         {
             mappings[mapIdx] = PushIndexed(link,
-                SpirvResourceTypeFlagBitsEXT.ReadWriteImageBitExt | SpirvResourceTypeFlagBitsEXT.ReadWriteStorageBufferBitExt,
+                link.Parameter.Access == EffectResourceAccess.ReadOnly
+                    ? SpirvResourceTypeFlagBitsEXT.ReadOnlyStorageBufferBitExt
+                    : SpirvResourceTypeFlagBitsEXT.ReadWriteStorageBufferBitExt,
                 (uint)heapProperties.BufferDescriptorSize);
             mapIdx++;
         }
@@ -266,8 +264,8 @@ internal sealed class HeapEffectPass : EffectPass
     {
         var mapping = new DescriptorSetAndBindingMappingEXT
         {
-            DescriptorSet = link.DescriptorSet,
-            FirstBinding = link.SlotIndex,
+            DescriptorSet = link.Set,
+            FirstBinding = link.Binding,
             BindingCount = 1,
             ResourceMask = resourceMask,
             Source = DescriptorMappingSourceEXT.HeapWithPushIndexExt
