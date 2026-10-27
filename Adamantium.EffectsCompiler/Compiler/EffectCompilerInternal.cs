@@ -14,7 +14,7 @@ internal sealed class EffectCompilerInternal : IDisposable
 {
     private readonly List<string> resolvedIncludes = [];
     private readonly Dictionary<(EffectShaderType Type, string EntryPoint), int> compiledShaders = [];
-    private readonly HashSet<(EffectShaderType Type, string EntryPoint)> failedShaders = [];
+    private readonly Dictionary<(EffectShaderType Type, string EntryPoint), string> failedShaders = [];
     private readonly HashSet<(string Text, SourceLocation Location)> reportedSlangErrors = [];
     private readonly List<ResourceBindingKey> resourceKeys = [];
     private readonly SlangShaderCompiler slangCompiler = new();
@@ -216,8 +216,13 @@ internal sealed class EffectCompilerInternal : IDisposable
             return;
         }
 
-        if (failedShaders.Contains(key))
+        if (failedShaders.TryGetValue(key, out var slangErrors))
         {
+            if (slangErrors != null)
+            {
+                ReportSlangErrors(slangErrors, stage);
+            }
+
             return;
         }
 
@@ -227,7 +232,7 @@ internal sealed class EffectCompilerInternal : IDisposable
             var result = slangCompiler.Compile(slangSource, entryPoint, type, ResolveSlangInclude);
             if (result.HasErrors || result.Bytecode == null)
             {
-                failedShaders.Add(key);
+                failedShaders[key] = result.Errors ?? string.Empty;
                 ReportSlangErrors(result.Errors, stage);
                 return;
             }
@@ -235,7 +240,7 @@ internal sealed class EffectCompilerInternal : IDisposable
             var shader = CreateEffectShader(type, entryPoint, result, stage.Location);
             if (logger.Messages.Count > errorsBefore)
             {
-                failedShaders.Add(key);
+                failedShaders[key] = null;
                 return;
             }
 
@@ -244,34 +249,45 @@ internal sealed class EffectCompilerInternal : IDisposable
         }
         catch (Exception ex)
         {
-            failedShaders.Add(key);
+            failedShaders[key] = null;
             logger.Error($"{stage.Stage} shader '{entryPoint}': {ex.Message}", stage.Location);
         }
     }
 
     private void ReportSlangErrors(string errors, EffectStageSource stage)
     {
-        var errorsBefore = logger.Messages.Count;
-        var blocks = SlangErrorBlocks(errors ?? string.Empty).Where(block => !IsWarning(block)).ToList();
-        var main = blocks.Where(block => !IsAftermath(block)).ToList();
+        var all = SlangErrorBlocks(errors ?? string.Empty);
+        var blocks = all.Where(block => !IsWarning(block)).ToList();
+        if (blocks.Count == 0)
+        {
+            logger.Error($"{stage.Stage} shader '{stage.EntryPoint}': Slang failed" +
+                         (all.Count == 0 ? " and said no more." : $", warning only:\n{string.Join("\n", all)}"),
+                stage.Location);
+            return;
+        }
+
+        var missingEntryPoint = blocks.Any(IsMissingEntryPoint);
+        var main = blocks.Where(block => !IsAftermath(block)
+                                         && !(missingEntryPoint && Header(block).Contains("[E30015]") && !block.Contains("--> ")))
+            .ToList();
         foreach (var block in main.Count > 0 ? main : blocks)
         {
-            var header = block.Split('\n')[0];
-            var location = header.Contains("entry point") ? null : SlangLocation(block);
+            var location = IsMissingEntryPoint(block) ? null : SlangLocation(block);
             var at = location ?? stage.Location;
-            if (!reportedSlangErrors.Add((block, at)))
+            if (reportedSlangErrors.Add((block, at)))
             {
-                continue;
+                logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {block}" : block, at);
             }
-
-            logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {block}" : block, at);
-        }
-
-        if (blocks.Count == 0 && logger.Messages.Count == errorsBefore)
-        {
-            logger.Error($"{stage.Stage} shader '{stage.EntryPoint}': Slang failed and said no more.", stage.Location);
         }
     }
+
+    private static string Header(string block)
+    {
+        var end = block.IndexOf('\n');
+        return end < 0 ? block : block.Substring(0, end);
+    }
+
+    private static bool IsMissingEntryPoint(string block) => Header(block).Contains("[E38000]");
 
     private static List<string> SlangErrorBlocks(string errors)
     {
@@ -308,7 +324,7 @@ internal sealed class EffectCompilerInternal : IDisposable
     private static bool IsAftermath(string block) =>
         block.StartsWith("fatal error", StringComparison.Ordinal)
         || block.StartsWith("abort compilation", StringComparison.Ordinal)
-        || block.Contains("import failed due to compilation error");
+        || Header(block).Contains("import failed due to compilation error");
 
     private static SourceLocation? SlangLocation(string block)
     {

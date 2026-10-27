@@ -193,18 +193,33 @@ technique { pass { ComputeShader = CS; } }");
         Assert.That(Messages(result), Does.Contain("Test.fx(6,37)"));
     }
 
-    // The same missing entry point named by two stages is said at each.
+    // The same missing entry point named by two stages, or by one stage in two passes, is said at each - and only the
+    // error that says so, not Slang's nameless "undefined identifier" beside it.
     [Test]
     public void AMissingEntryPoint_IsSaidAtEveryStageThatNamesIt()
     {
-        var result = Compile(Shaders + "technique T { pass { VertexShader = Nope; PixelShader = Nope; } }");
+        var result = Compile(Shaders + "technique T\n{\n" +
+                             "    pass A { VertexShader = Nope; PixelShader = Nope; }\n" +
+                             "    pass B { VertexShader = VS; PixelShader = Nope; }\n}");
 
         var messages = result.Logger.Messages.Select(message => message.ToString()).ToList();
         Assert.Multiple(() =>
         {
-            Assert.That(messages, Has.Some.Contains("Vertex shader 'Nope'"));
-            Assert.That(messages, Has.Some.Contains("Pixel shader 'Nope'"));
+            Assert.That(messages.Count(message => message.Contains("Vertex shader 'Nope'")), Is.EqualTo(1));
+            Assert.That(messages.Count(message => message.Contains("Pixel shader 'Nope'")), Is.EqualTo(2));
+            Assert.That(messages, Has.None.Contains("[E30015]"), string.Join("\n", messages));
         });
+    }
+
+    // Words of the quoted code are not Slang's message: a comment about failed imports does not hide its error.
+    [Test]
+    public void AnErrorBesideACommentOnFailedImports_IsSaid()
+    {
+        var result = Compile(Shaders + "float4 A() : SV_Target { return undefinedA; } // import failed due to compilation error\n" +
+                             "float4 B() : SV_Target { return undefinedB; }\n" +
+                             "technique T { pass { VertexShader = VS; } }");
+
+        Assert.That(Messages(result), Does.Contain("undefinedA").And.Contain("undefinedB"));
     }
 
     // A stage refused does not take the stages after it down with it: they compile, or say what is wrong with them.
