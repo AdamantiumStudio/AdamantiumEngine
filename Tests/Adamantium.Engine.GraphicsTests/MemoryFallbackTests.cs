@@ -68,6 +68,50 @@ public class MemoryFallbackTests
         }
     }
 
+    /// <summary>A block made for one allocation larger than a shared block goes back to the driver once that allocation
+    /// is freed and the frames in flight are done with it; a shared block stays for the next.</summary>
+    [Test]
+    public void ABlockMadeForOneLargeAllocation_GoesBackToTheDriver_ASharedOneStays()
+    {
+        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        using var allocator = new DeviceMemoryAllocator(device);
+        var type = FindSystemType(device);
+        Assume.That(type, Is.Not.Null, "the GPU has no host-visible memory");
+
+        var small = allocator.Allocate(Chunk, 256, type.Value, 1u << (int)type.Value, false);
+        var withShared = allocator.BytesInBlocks;
+        allocator.Free(small);
+        var afterShared = allocator.BytesInBlocks;
+        var large = allocator.Allocate(80 * Chunk, 256, type.Value, 1u << (int)type.Value, false);
+        var withLarge = allocator.BytesInBlocks;
+        allocator.Free(large);
+        var whileFramesMayReadIt = allocator.BytesInBlocks;
+        GpuFixture.Main.OnFrameStarted();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterShared, Is.EqualTo(withShared), "the shared block stays");
+            Assert.That(withLarge - withShared, Is.GreaterThanOrEqualTo(80 * Chunk));
+            Assert.That(whileFramesMayReadIt, Is.EqualTo(withLarge), "kept until the frames in flight are done");
+            Assert.That(allocator.BytesInBlocks, Is.EqualTo(withShared), "the large one's block went back");
+        });
+    }
+
+    private static uint? FindSystemType(GraphicsDevice device)
+    {
+        var properties = device.Adapter.Adapter.GetPhysicalDeviceMemoryProperties();
+        for (var t = 0; t < properties.MemoryTypeCount; t++)
+        {
+            var flags = (MemoryPropertyFlags)properties.MemoryTypes.Span[t].PropertyFlags;
+            if (flags.HasFlag(MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent))
+            {
+                return (uint)t;
+            }
+        }
+
+        return null;
+    }
+
     private static uint? FindWindowType(GraphicsDevice device, out ulong heapSize)
     {
         var properties = device.Adapter.Adapter.GetPhysicalDeviceMemoryProperties();

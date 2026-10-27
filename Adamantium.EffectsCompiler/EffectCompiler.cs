@@ -19,14 +19,13 @@ namespace Adamantium.EffectsCompiler
       /// Compiles an effect from file.
       /// </summary>
       /// <param name="filePath">The file path.</param>
-      /// <param name="flags">The flags.</param>
       /// <param name="macros">The macrosArgs.</param>
       /// <param name="includeDirectoryList">The include directory list.</param>
       /// <param name="allowDynamicCompiling">Whether or not to allow dynamic compilation.</param>
       /// <returns>The result of compilation.</returns>
-      public static EffectCompilerResult CompileFromFile(string filePath, EffectCompilerFlags flags = EffectCompilerFlags.None, List<EffectData.ShaderMacro> macros = null, List<string> includeDirectoryList = null, bool allowDynamicCompiling = false)
+      public static EffectCompilerResult CompileFromFile(string filePath, List<EffectData.ShaderMacro> macros = null, List<string> includeDirectoryList = null, bool allowDynamicCompiling = false)
       {
-         return Compile(File.ReadAllText(filePath, Encoding.UTF8), filePath, flags, macros, includeDirectoryList, allowDynamicCompiling);
+         return Compile(File.ReadAllText(filePath, Encoding.UTF8), filePath, macros, includeDirectoryList, allowDynamicCompiling);
       }
 
       /// <summary>
@@ -34,15 +33,14 @@ namespace Adamantium.EffectsCompiler
       /// </summary>
       /// <param name="sourceCode">The source code.</param>
       /// <param name="filePath">The file path.</param>
-      /// <param name="flags">The flags.</param>
       /// <param name="macrosArgs">The macrosArgs.</param>
       /// <param name="includeDirectoryList">The include directory list.</param>
       /// <param name="allowDynamicCompiling">Whether or not to allow dynamic compilation.</param>
       /// <returns>The result of compilation.</returns>
-      public static EffectCompilerResult Compile(string sourceCode, string filePath, EffectCompilerFlags flags = EffectCompilerFlags.None, List<EffectData.ShaderMacro> macrosArgs = null, List<string> includeDirectoryList = null, bool allowDynamicCompiling = false)
+      public static EffectCompilerResult Compile(string sourceCode, string filePath, List<EffectData.ShaderMacro> macrosArgs = null, List<string> includeDirectoryList = null, bool allowDynamicCompiling = false)
       {
          using var compiler = new EffectCompilerInternal();
-         return compiler.Compile(sourceCode, filePath, flags, macrosArgs, includeDirectoryList, allowDynamicCompiling);
+         return compiler.Compile(sourceCode, filePath, macrosArgs, includeDirectoryList, allowDynamicCompiling);
       }
 
       public static EffectCompilerResult Compile(string sourceCode, string filePath, ImmutableArray<ShaderFileInfo> includes, List<EffectData.ShaderMacro> macrosArgs = null, List<string> includeDirectoryList = null)

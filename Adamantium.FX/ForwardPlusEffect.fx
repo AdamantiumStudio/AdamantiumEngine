@@ -32,23 +32,20 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
     float3 boxMin = float3(min(min(a * wNear, a * wFar), min(b * wNear, b * wFar)), zNear);
     float3 boxMax = float3(max(max(a * wNear, a * wFar), max(b * wNear, b * wFar)), zFar);
 
-    ClusterLight* lights = (ClusterLight*)LightsAddress;
-    uint* list = (uint*)ClusterLightsAddress;
     uint first = cluster * MaxLightsPerCluster;
     uint count = 0;
     for (uint i = DirectionalCount; i < LightCount; i++)
     {
-        float4 sphere = lights[i].positionRange;
+        float4 sphere = Lights[i].positionRange;
         float3 gap = clamp(sphere.xyz, boxMin, boxMax) - sphere.xyz;
         if (dot(gap, gap) <= sphere.w * sphere.w && count < MaxLightsPerCluster)
         {
-            list[first + count] = i;
+            ClusterLights[first + count] = i;
             count++;
         }
     }
 
-    uint* counts = (uint*)ClusterCountsAddress;
-    counts[cluster] = count;
+    ClusterCounts[cluster] = count;
 }
 
 [shader("fragment")]

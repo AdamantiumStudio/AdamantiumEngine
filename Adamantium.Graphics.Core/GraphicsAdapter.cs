@@ -25,13 +25,18 @@ public unsafe class GraphicsAdapter
         var vulkan12Properties = new PhysicalDeviceVulkan12Properties { PNext = vulkan11Properties };
         var vulkan14Properties = new PhysicalDeviceVulkan14Properties { PNext = vulkan12Properties };
         var heapProperties = new PhysicalDeviceDescriptorHeapPropertiesEXT { PNext = vulkan14Properties };
+        var hasMeshShaderExtension = HasExtension(Constants.VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        var meshProperties = hasMeshShaderExtension
+            ? new PhysicalDeviceMeshShaderPropertiesEXT { PNext = heapProperties }
+            : null;
         var properties2 = new PhysicalDeviceProperties2
         {
             Properties = new PhysicalDeviceProperties(),
-            PNext = heapProperties
+            PNext = (object)meshProperties ?? heapProperties
         };
 
         _physicalDevice.GetPhysicalDeviceProperties2(ref properties2);
+        MeshShaderProperties = meshProperties;
 
         AdapterProperties = properties2.Properties;
         DeviceHeapProperties = heapProperties;
@@ -53,7 +58,6 @@ public unsafe class GraphicsAdapter
 
         SupportsImageCubeArray = features2.Features != null && (bool)features2.Features.ImageCubeArray;
         SupportsTessellationShaders = features2.Features != null && (bool)features2.Features.TessellationShader;
-        var hasMeshShaderExtension = HasExtension(Constants.VK_EXT_MESH_SHADER_EXTENSION_NAME);
         SupportsMeshShaders = hasMeshShaderExtension && meshShader.MeshShader;
         SupportsTaskShaders = SupportsMeshShaders && meshShader.TaskShader;
         SupportsHostImageCopy = hostCopy.HostImageCopy;
@@ -67,6 +71,19 @@ public unsafe class GraphicsAdapter
         Console.WriteLine($"SwapchainMaintenance1 supported={SupportsSwapchainMaintenance1}");
         Console.WriteLine($"8-bit storage supported={Supports8BitStorage} " +
                           $"(storageBuffer8BitAccess={(bool)layout12.StorageBuffer8BitAccess}, shaderInt8={(bool)layout12.ShaderInt8})");
+    }
+
+    /// <summary>Whether the device exports its timeline semaphores as handles of this type, imports them from such
+    /// handles, both or neither: what a shared surface hands its frames over with.</summary>
+    public ExternalSemaphoreFeatureFlagBits GetTimelineSemaphoreFeatures(ExternalSemaphoreHandleTypeFlagBits handleType)
+    {
+        _physicalDevice.GetPhysicalDeviceExternalSemaphoreProperties(new PhysicalDeviceExternalSemaphoreInfo
+        {
+            HandleType = handleType,
+            PNext = new SemaphoreTypeCreateInfo { SemaphoreType = SemaphoreType.Timeline }
+        }, out var properties);
+
+        return (properties.CompatibleHandleTypes & handleType) == handleType ? properties.ExternalSemaphoreFeatures : 0;
     }
 
     private bool HasExtension(string name)
@@ -87,6 +104,10 @@ public unsafe class GraphicsAdapter
 
     /// <summary>The device's Vulkan 1.2 properties: among them the limits of update-after-bind descriptor sets.</summary>
     public PhysicalDeviceVulkan12Properties Vulkan12Properties { get; private set; }
+
+    /// <summary>The limits of mesh and task shaders - among them how many workgroups one draw of mesh tasks may launch -
+    /// or null when the device has no VK_EXT_mesh_shader.</summary>
+    public PhysicalDeviceMeshShaderPropertiesEXT MeshShaderProperties { get; private set; }
 
     /// <summary>The most bytes one memory allocation may hold.</summary>
     public ulong MaxMemoryAllocationSize { get; private set; }

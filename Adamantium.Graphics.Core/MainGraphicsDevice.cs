@@ -665,6 +665,7 @@ public class MainGraphicsDevice : DisposableBase
         Log.Logger.Debug("Start disposing main device");
         ShaderHotReload.Dispose();
         DeviceWaitIdle();
+        ShaderHotReload.DisposeEffects();
         FlushRetiredAfterIdle();
         // A copy: a device takes itself off this list as it is disposed.
         foreach (var device in graphicsDevices.ToArray())

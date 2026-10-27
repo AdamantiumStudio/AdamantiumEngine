@@ -23,6 +23,73 @@ namespace Adamantium.Engine.GraphicsTests
         [TearDown]
         public void ReleaseDevices() => GpuFixture.ReleaseRenderDevices();
 
+        // Storage buffers bound as descriptors - one read only, one written - before the render pass begins: the
+        // descriptor heap is bound from the start of the command buffer, not only inside the render pass.
+        [Test]
+        public void StorageBuffersBoundAsDescriptors_AreReadAndWritten_BeforeTheRenderPass()
+        {
+            const int count = 64;
+            var device = GpuFixture.CreateRenderDevice();
+            var gd = (GraphicsDevice)device;
+            var compiled = Adamantium.EffectsCompiler.EffectCompiler.Compile("""
+                StructuredBuffer<uint> In;
+                RWStructuredBuffer<uint> Out;
+                uint Bias;
+                [numthreads(64, 1, 1)]
+                void CS(uint3 id : SV_DispatchThreadID) { Out[id.x] = In[id.x] * 2 + Bias; }
+                technique T { pass { ComputeShader = CS; } }
+                """, "StorageBuffers.fx");
+            Assert.That(compiled.HasErrors, Is.False, string.Join("\n", compiled.Logger.Messages));
+            using var effect = new Effect(device, compiled.EffectData);
+            using var input = Storage(gd, count);
+            using var output = Storage(gd, count);
+            var values = new uint[count];
+            for (var i = 0; i < count; i++)
+            {
+                values[i] = (uint)i;
+            }
+
+            input.SetData(values);
+            effect.Parameters["In"].SetResource(input);
+            effect.Parameters["Out"].SetResource(output);
+            effect.Parameters["Bias"].SetValue(7u);
+
+            var prms = new PresentationParameters(PresenterType.RenderTarget, 16, 16, IntPtr.Zero);
+            using var presenter = GraphicsPresenter.Create(device, prms, "storage_buffers");
+            device.SetRenderTargets(presenter.RenderTarget);
+            device.SetDepthBuffer(presenter.DepthBuffer);
+            device.MSAALevel = presenter.MSAALevel;
+            device.Presenter = presenter;
+
+            Assert.That(device.BeginDraw(beforeRenderPass: _ =>
+            {
+                effect.Techniques[0].Passes[0].Apply();
+                gd.Dispatch(1);
+                gd.BufferBarrier(output,
+                    PipelineStageFlagBits2.ComputeShaderBit, AccessFlagBits2.ShaderWriteBit,
+                    PipelineStageFlagBits2.HostBit, AccessFlagBits2.HostReadBit);
+            }), Is.True);
+            device.EndDraw();
+            device.Submit();
+            presenter.Present();
+            device.FrameEnded();
+            device.DeviceWaitIdle();
+
+            var written = new uint[count];
+            output.GetData(written);
+            Assert.Multiple(() =>
+            {
+                Assert.That(written[5], Is.EqualTo(17u));
+                Assert.That(written[63], Is.EqualTo(133u));
+                Assert.That(effect.Parameters["In"].Access, Is.EqualTo(Adamantium.EffectsCompiler.EffectResourceAccess.ReadOnly));
+                Assert.That(effect.Parameters["Out"].Access, Is.EqualTo(Adamantium.EffectsCompiler.EffectResourceAccess.ReadWrite));
+            });
+        }
+
+        private static Adamantium.Graphics.Buffer Storage(GraphicsDevice device, int count) =>
+            Adamantium.Graphics.Buffer.New(device, (ulong)(count * sizeof(uint)), BufferUsageFlags.StorageBuffer,
+                MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+
         [Test]
         public void ComputeDispatch_WritesPatternViaBda()
         {
@@ -41,7 +108,7 @@ namespace Adamantium.Engine.GraphicsTests
                 BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.DeviceLocal);
 
-            effect.Parameters["OutputAddress"].SetValue(output.GetDeviceAddress());
+            effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
             effect.Parameters["Count"].SetValue((uint)count);
 
             var prms = new PresentationParameters(PresenterType.RenderTarget, 16, 16, IntPtr.Zero);
@@ -105,8 +172,8 @@ namespace Adamantium.Engine.GraphicsTests
                 BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.DeviceLocal);
 
-            effect.Parameters["PointsAddress"].SetValue(pointsBuf.GetDeviceAddress());
-            effect.Parameters["OutputAddress"].SetValue(outBuf.GetDeviceAddress());
+            effect.Parameters["Points"].SetValue(pointsBuf.GetDeviceAddress());
+            effect.Parameters["Output"].SetValue(outBuf.GetDeviceAddress());
             effect.Parameters["PointCount"].SetValue((uint)pointCount);
             effect.Parameters["HalfThickness"].SetValue(half);
 
@@ -227,8 +294,8 @@ namespace Adamantium.Engine.GraphicsTests
                 BufferUsageFlags.VertexBuffer | BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.DeviceLocal);
 
-            expand.Parameters["PointsAddress"].SetValue(pointsBuf.GetDeviceAddress());
-            expand.Parameters["OutputAddress"].SetValue(vertsBuf.GetDeviceAddress());
+            expand.Parameters["Points"].SetValue(pointsBuf.GetDeviceAddress());
+            expand.Parameters["Output"].SetValue(vertsBuf.GetDeviceAddress());
             expand.Parameters["PointCount"].SetValue((uint)pointCount);
             expand.Parameters["HalfThickness"].SetValue(half);
 
@@ -301,8 +368,8 @@ namespace Adamantium.Engine.GraphicsTests
                 BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.DeviceLocal);
 
-            effect.Parameters["CounterAddress"].SetValue(counter.GetDeviceAddress());
-            effect.Parameters["OutputAddress"].SetValue(output.GetDeviceAddress());
+            effect.Parameters["Counter"].SetValue(counter.GetDeviceAddress());
+            effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
             effect.Parameters["Count"].SetValue((uint)count);
 
             var prms = new PresentationParameters(PresenterType.RenderTarget, 16, 16, IntPtr.Zero);
@@ -369,8 +436,8 @@ namespace Adamantium.Engine.GraphicsTests
                 BufferUsageFlags.VertexBuffer | BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.DeviceLocal);
 
-            fill.Parameters["IndirectAddress"].SetValue(indirect.GetDeviceAddress());
-            fill.Parameters["OutputAddress"].SetValue(verts.GetDeviceAddress());
+            fill.Parameters["Indirect"].SetValue(indirect.GetDeviceAddress());
+            fill.Parameters["Output"].SetValue(verts.GetDeviceAddress());
 
             var proj = Matrix4x4F.OrthoOffCenter(0, 64, 0, 64, 0, 100000);
             draw.Parameters["Projection"].SetValue(proj);
@@ -438,10 +505,10 @@ namespace Adamantium.Engine.GraphicsTests
                 BufferUsageFlags.VertexBuffer | BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.DeviceLocal);
 
-            effect.Parameters["PointsAddress"].SetValue(pointsBuf.GetDeviceAddress());
-            effect.Parameters["PatternAddress"].SetValue(patternBuf.GetDeviceAddress());
-            effect.Parameters["OutputAddress"].SetValue(output.GetDeviceAddress());
-            effect.Parameters["IndirectAddress"].SetValue(indirect.GetDeviceAddress());
+            effect.Parameters["Points"].SetValue(pointsBuf.GetDeviceAddress());
+            effect.Parameters["Pattern"].SetValue(patternBuf.GetDeviceAddress());
+            effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
+            effect.Parameters["Indirect"].SetValue(indirect.GetDeviceAddress());
             effect.Parameters["PointCount"].SetValue(2u);
             effect.Parameters["IsClosed"].SetValue(0u);
             effect.Parameters["PatternCount"].SetValue((uint)pattern.Length);

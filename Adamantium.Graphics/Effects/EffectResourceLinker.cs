@@ -148,16 +148,6 @@ internal abstract class EffectResourceLinker : IEffectResourceLinker
         }
     }
 
-    public Dictionary<EffectData.Parameter, object> GetBoundResources()
-    {
-        return BoundResources;
-    }
-
-    public void AddBoundResource(EffectData.Parameter resourceName, object value)
-    {
-        BoundResources[resourceName] = value;
-    }
-
     public object[] GetBoundValues(EffectData.Parameter resource)
     {
         if (Samplers.TryGetValue(resource, out var samplers))

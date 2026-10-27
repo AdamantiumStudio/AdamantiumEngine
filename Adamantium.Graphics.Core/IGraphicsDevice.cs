@@ -40,6 +40,11 @@ public interface IDrawableDevice
     void Draw(ulong vertexCount, uint instanceCount, uint firstVertex = 0, uint firstInstance = 0);
     
     void DrawIndexed(IBuffer vertexBuffer, IBuffer indexBuffer, uint instanceCount = 1, uint indexCount = 0);
+
+    /// <summary>Draws with the applied mesh pass: launches this many workgroups of its task shader, or of its mesh
+    /// shader when it has no task shader.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">More workgroups than the device's limits for that stage.</exception>
+    void DrawMeshTasks(uint groupCountX, uint groupCountY = 1, uint groupCountZ = 1);
 }
 
 public interface IDestroyableDevice
@@ -77,7 +82,15 @@ public interface IDynamicStateDevice
     Single LineWidth { get; set; }
 
     FrontFace FrontFace { get; set; }
-    
+
+    /// <summary>How many control points make one patch of a <see cref="Vulkan.Core.PrimitiveTopology.PatchList"/>: what
+    /// a tessellated pass draws. From 1 to the device's maxTessellationPatchSize, and the size of the input patch of
+    /// the pass's hull shader.</summary>
+    uint PatchControlPoints { get; set; }
+
+    /// <summary>Where the domain shader's tessellation coordinates start: the corner of the domain at (0, 0).</summary>
+    TessellationDomainOrigin TessellationDomainOrigin { get; set; }
+
     ColorBlendEquationEXT ColorBlendEquation { get; set; }
     
     bool DepthWriteEnable { get; set; }
@@ -231,8 +244,6 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// <summary>Register a semaphore the next <see cref="Submit"/> must signal (timelineValue=0 for binary).</summary>
     void AddSignalSemaphore(Semaphore semaphore, ulong timelineValue = 0);
 
-    EffectPool DefaultEffectPool { get; }
-
     nuint MapMemory(DeviceMemory memory, ulong offset, ulong size, MemoryMapFlagBits flags);
 
     public void UnmapMemory(DeviceMemory memory);
@@ -247,10 +258,6 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     CommandBuffer BeginSingleTimeCommand();
 
     void EndSingleTimeCommand(CommandBuffer commandBuffer);
-
-    void AddEffectPool(EffectPool pool);
-    
-    void RemoveEffectPool(EffectPool pool);
 
     Color ClearColor { get; set; }
     

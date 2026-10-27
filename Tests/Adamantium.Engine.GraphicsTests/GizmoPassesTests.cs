@@ -136,8 +136,8 @@ public class GizmoPassesTests
         Assert.That(device.BeginDraw(), Is.True);
         device.SetViewports(new Viewport { Width = Size, Height = Size, MinDepth = 0, MaxDepth = 1 });
         device.SetScissors(new Rect2D { Extent = new Extent2D { Width = Size, Height = Size } });
-        parameters["JointsAddress"].SetValue(device.UploadFrameData<Matrix4x4F>(palette));
-        parameters["InstancesAddress"].SetValue(device.UploadFrameData<float>(instances));
+        parameters["Joints"].SetValue(device.UploadFrameData<Matrix4x4F>(palette));
+        parameters["Instances"].SetValue(device.UploadFrameData<float>(instances));
         device.VertexType = typeof(TVertex);
         device.PrimitiveTopology = PrimitiveTopology.TriangleList;
         effect.Techniques["Basic"].Passes[pass].Apply();

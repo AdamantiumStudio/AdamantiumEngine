@@ -146,11 +146,9 @@ public static class ShaderPrecompiler
 
             try
             {
-                // Generated effects all take (IGraphicsDevice, EffectPool = null) and compile their shaders in the ctor.
-                // A pool EACH: one pool refuses to hold two effects sharing a global shader name, and which effects
-                // collide is none of this pass's business.
+                // Generated effects all take an IGraphicsDevice and compile their shaders in the ctor.
                 clock.Restart();
-                (Activator.CreateInstance(type, target, EffectPool.New(target)) as IDisposable)?.Dispose();
+                (Activator.CreateInstance(type, target) as IDisposable)?.Dispose();
                 created++;
                 stats.RecordSuccess(name, (int)clock.ElapsedMilliseconds);
             }

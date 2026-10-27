@@ -127,8 +127,8 @@ float2 TargetOrigin;
 
 // Instanced glyph batch: per-instance GlyphData, and the transform table indexed by slot (0 = identity), so node-local
 // glyphs move with one matrix write instead of a CPU re-bake.
-uint64_t GlyphInstancesAddress;
-uint64_t TransformsAddress;
+GlyphData* GlyphInstances;
+NodeSlot* Transforms;
 
 // The paint programs of 'COLR' version 1 glyphs (Adamantium.Graphics/Fonts/ColorPaintStore.cs), in float4s: a header
 // - the glyph's box in font units with y up (xy = its lower left corner, zw = its size), then the number of float4s of
@@ -145,8 +145,8 @@ uint64_t TransformsAddress;
 //               (m11 m12 m21 m22), (m31 m32, deepest level, -), the image's cell (u0 v0 u1 v1)
 // Kinds: 0 solid, 1 linear (start, end), 2 radial (the two centers), 3 sweep (center, start and end angle in radians).
 // Extends: 0 pad, 1 repeat, 2 reflect.
-uint64_t PaintProgramsAddress;
-uint64_t PaintStopsAddress;
+float4* PaintPrograms;
+PaintStop* PaintStops;
 
 static const uint PaintGroupDepth = 8;
 static const uint PaintClipDepth = 8;
@@ -196,7 +196,7 @@ void ClipFromSlot(float slotIndex, out float4 box, out float4 radii)
     box = float4(0.0, 0.0, 0.0, 0.0);
     radii = float4(0.0, 0.0, 0.0, 0.0);
     if (slotIndex < 0.0) return;
-    NodeSlot clip = ((NodeSlot*)TransformsAddress)[(uint)slotIndex];
+    NodeSlot clip = Transforms[(uint)slotIndex];
     if (clip.Params.x < 0.5) return;
     box = clip.World[0];
     radii = clip.World[1];
@@ -252,7 +252,7 @@ float3 GlyphEffectsAt(float2 p, float4 cell, float2 place, float head, inout flo
         return h;
     }
 
-    NodeSlot* slots = (NodeSlot*)TransformsAddress;
+    NodeSlot* slots = Transforms;
     float3 laid = h;
     float clipSlot = -1.0;
     float next = head;
@@ -307,7 +307,7 @@ float3 GlyphEffectsAt(float2 p, float4 cell, float2 place, float head, inout flo
 
 float2 PaintCorner(float paint, float2 corner, float4 origin, out float2 glyphPoint)
 {
-    float4 box = ((float4*)PaintProgramsAddress)[(uint)(paint - 1.0)];
+    float4 box = PaintPrograms[(uint)(paint - 1.0)];
     glyphPoint = float2(box.x + corner.x * box.z, box.y + (1.0 - corner.y) * box.w);
     return origin.xy + float2(glyphPoint.x, -glyphPoint.y) * origin.zw;
 }
@@ -336,7 +336,7 @@ float ExtendPosition(float t, float extend)
 float4 ColorLine(uint firstStop, uint count, float extend, float t, float4 foreground, float foregroundAlpha,
     float fade, out float lineFade)
 {
-    PaintStop* stops = ((PaintStop*)PaintStopsAddress) + firstStop;
+    PaintStop* stops = PaintStops + firstStop;
     lineFade = 0.0;
     if (count == 0) return float4(0.0, 0.0, 0.0, 0.0);
     float first = stops[0].Params.x;
@@ -774,7 +774,7 @@ float4 ImageColor(float4* steps, uint at, float2 p, float2 dx, float2 dy)
 // one under it, and a stack of clips whose coverage multiplies. Premultiplied, its alpha linear.
 float4 RunPaint(float paint, float2 p, float2 dx, float2 dy, float4 foreground, float foregroundAlpha, float fade)
 {
-    float4* steps = (float4*)PaintProgramsAddress;
+    float4* steps = PaintPrograms;
     uint at = (uint)(paint - 1.0);
     uint end = at + 2 + (uint)steps[at + 1].x;
     at += 2;
@@ -946,7 +946,7 @@ struct GlyphData
 [shader("vertex")]
 PSInput FontBatchInstancedVS(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
 {
-    GlyphData* items = (GlyphData*)GlyphInstancesAddress;
+    GlyphData* items = GlyphInstances;
     GlyphData g = items[instanceId];
 
     PSInput o;
@@ -980,7 +980,7 @@ PSInput FontBatchInstancedVS(uint vertexId : SV_VertexID, uint instanceId : SV_I
         effectW = moved.z;
     }
     // Node-local -> world via the instance's transform-table matrix (slot 0 = identity for legacy world bakes).
-    NodeSlot* nodes = (NodeSlot*)TransformsAddress;
+    NodeSlot* nodes = Transforms;
     float4x4 nodeWorld = nodes[(uint)g.Params.x].World;
     float4 worldPos = mul(float4(localPos, g.Params.z * effectW, effectW), nodeWorld);
     o.Position = mul(worldPos, MatrixTransform);   // MatrixTransform = the (transposed-on-upload) projection

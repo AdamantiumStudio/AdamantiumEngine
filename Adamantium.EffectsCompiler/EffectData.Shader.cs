@@ -38,6 +38,11 @@ public sealed partial class EffectData
         [Key(6)]
         public List<ResourceParameter> ResourceParameters = [];
 
+        /// <summary>How many control points a hull shader reads a patch of, built-in inputs included; 0 for another
+        /// stage, or a hull shader with no input per control point.</summary>
+        [Key(7)]
+        public uint InputPatchSize;
+
         public override string ToString() => $"{Stage} shader '{EntryPoint}' {Level}";
     }
 }

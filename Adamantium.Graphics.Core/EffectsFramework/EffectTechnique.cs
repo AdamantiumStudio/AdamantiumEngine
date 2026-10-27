@@ -2,19 +2,13 @@
 
 namespace Adamantium.Graphics.Core.EffectsFramework;
 
-/// <summary>
-/// Represents an effect technique. 
-/// </summary>
-public sealed class EffectTechnique:NamedObject
+/// <summary>A technique of an effect: its passes, in the order it declares them.</summary>
+public sealed class EffectTechnique : NamedObject
 {
-   internal EffectTechnique(string name)
-   {
-      Name = name;
-      Passes = new EffectPassCollection();
-   }
+    internal EffectTechnique(string name) : base(name)
+    {
+    }
 
-   /// <summary>
-   /// Gets the collection of EffectPass objects this rendering technique requires.
-   /// </summary>
-   public EffectPassCollection Passes { get; private set; }
+    /// <summary>The passes of this technique.</summary>
+    public EffectCollection<IEffectPass> Passes { get; } = new();
 }

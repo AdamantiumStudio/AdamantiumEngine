@@ -19,12 +19,9 @@ public interface IEffectResourceLinker
     /// <paramref name="index"/> on.</summary>
     void SetResource<T>(EffectData.ResourceParameter parameter, int index, params T[] values) where T : class;
 
-    Dictionary<EffectData.Parameter, object> GetBoundResources();
-
     /// <summary>The resources bound to <paramref name="resource"/>, one per element (null where none is); null when
     /// nothing was ever bound to it.</summary>
     object[] GetBoundValues(EffectData.Parameter resource);
 
-    void AddBoundResource(EffectData.Parameter resourceName, object value);
     int Count { get; set; }
 }

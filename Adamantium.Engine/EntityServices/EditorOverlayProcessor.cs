@@ -448,13 +448,13 @@ public class EditorOverlayProcessor : RenderingProcessor
         var filled = skin.FillPalette(palette, ActiveCamera);
         paletteSkeleton = skin.Skeleton;
         paletteMesh = mesh;
-        effect.JointsAddress.SetValue(GraphicsDevice.UploadFrameData<Matrix4x4F>(palette.AsSpan(0, filled)));
+        effect.Joints.SetValue(GraphicsDevice.UploadFrameData<Matrix4x4F>(palette.AsSpan(0, filled)));
         effect.JointCount.SetValue((uint)filled);
     }
 
     private void UploadInstances(ReadOnlySpan<GizmoInstance> batch)
     {
-        effect.InstancesAddress.SetValue(GraphicsDevice.UploadFrameData(batch));
+        effect.Instances.SetValue(GraphicsDevice.UploadFrameData(batch));
     }
 
     private void DrawRibbon(MeshData data, bool inFront, uint instances)

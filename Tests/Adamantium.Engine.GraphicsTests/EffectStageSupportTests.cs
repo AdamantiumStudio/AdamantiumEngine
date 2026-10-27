@@ -13,8 +13,7 @@ namespace Adamantium.Engine.GraphicsTests;
 /// <summary>Whether a pass runs is the device's to say: hull and domain shaders need the tessellationShader feature,
 /// task and mesh shaders VK_EXT_mesh_shader - each enabled when the device has it - and ray-tracing shaders a
 /// ray-tracing pipeline, which effects do not create yet. A pass the device cannot run refuses when it is applied,
-/// saying what it needs, and so do tessellated and mesh passes until effects draw them; the effect's other passes
-/// run.</summary>
+/// saying what it needs; the effect's other passes run.</summary>
 [TestFixture]
 public class EffectStageSupportTests
 {
@@ -139,10 +138,10 @@ public class EffectStageSupportTests
             Assert.That(effect.Parameters["MeshScale"], Is.Not.Null, "a refused pass still declares its parameters");
             Assert.That(effect.Parameters["MeshTexture"], Is.Not.Null);
             Assert.That(applied["Tessellated"], main.IsTessellationEnabled
-                ? Does.Contain("do not draw tessellated passes yet")
+                ? Is.EqualTo("applied")
                 : Does.Contain("tessellationShader"));
             Assert.That(applied["Meshed"], main.IsMeshShaderEnabled && main.IsTaskShaderEnabled
-                ? Does.Contain("do not draw mesh passes yet")
+                ? Is.EqualTo("applied")
                 : Does.Contain("VK_EXT_mesh_shader"));
             Assert.That(applied["Traced"], Does.Contain("ray-tracing pipeline"));
             Assert.That(applied.Keys.Order(), Is.EqualTo(new[] { "Meshed", "Plain", "Reversed", "Tessellated", "Traced" }));

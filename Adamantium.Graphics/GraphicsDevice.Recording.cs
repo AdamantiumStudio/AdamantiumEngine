@@ -112,6 +112,7 @@ public partial class GraphicsDevice
              | (AlphaToCoverageEnable ? 256UL : 0) | (PrimitiveRestartEnable ? 512UL : 0)
              | ((bool)ColorBlendEnabled ? 1024UL : 0));
         HashFloats(LineWidth, DepthBiasConstantFactor, DepthBiasSlopeFactor, 0);
+        Hash(((ulong)PatchControlPoints << 32) | (uint)TessellationDomainOrigin);
         Hash(((ulong)(uint)StencilPassOp << 32) | (uint)StencilCompareOp);
         Hash(((ulong)StencilWriteMask << 32) | StencilReference);
         Hash((ulong)(SampleMask?.GetHashCode() ?? 0));
@@ -240,6 +241,7 @@ public partial class GraphicsDevice
     {
         _stateInitialized = false;
         _depthBiasKnown = false;
+        _isTessellationKnown = false;
         _boundShaderPass = null;
     }
 

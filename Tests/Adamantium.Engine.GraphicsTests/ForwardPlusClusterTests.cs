@@ -85,9 +85,9 @@ public class ForwardPlusClusterTests
             readable);
         Marshal.Copy(packed, 0, (IntPtr)(nint)lightBuffer.MapMemory(), packed.Length);
 
-        effect.Parameters["LightsAddress"].SetValue(lightBuffer.GetDeviceAddress());
-        effect.Parameters["ClusterCountsAddress"].SetValue(countBuffer.GetDeviceAddress());
-        effect.Parameters["ClusterLightsAddress"].SetValue(listBuffer.GetDeviceAddress());
+        effect.Parameters["Lights"].SetValue(lightBuffer.GetDeviceAddress());
+        effect.Parameters["ClusterCounts"].SetValue(countBuffer.GetDeviceAddress());
+        effect.Parameters["ClusterLights"].SetValue(listBuffer.GetDeviceAddress());
         effect.Parameters["LightCount"].SetValue((uint)(packed.Length / FloatsPerLight));
         effect.Parameters["DirectionalCount"].SetValue((uint)directional);
         effect.Parameters["ClusterDepth"].SetValue(

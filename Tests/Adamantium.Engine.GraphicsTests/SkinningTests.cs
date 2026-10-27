@@ -50,8 +50,8 @@ public class SkinningTests
         using var indicesBuffer = Storage(gd, indices);
         using var output = Storage(gd, new Vector4F[indices.Length]);
         effect.Parameters["JointCount"].SetValue((uint)palette.Length);
-        effect.Parameters["IndicesAddress"].SetValue(indicesBuffer.GetDeviceAddress());
-        effect.Parameters["OutputAddress"].SetValue(output.GetDeviceAddress());
+        effect.Parameters["Indices"].SetValue(indicesBuffer.GetDeviceAddress());
+        effect.Parameters["Output"].SetValue(output.GetDeviceAddress());
         effect.Parameters["Point"].SetValue(new Vector3F(1, 2, 3));
 
         var prms = new PresentationParameters(PresenterType.RenderTarget, 16, 16, IntPtr.Zero);
@@ -63,7 +63,7 @@ public class SkinningTests
 
         Assert.That(device.BeginDraw(beforeRenderPass: _ =>
         {
-            effect.Parameters["PaletteAddress"].SetValue(device.UploadFrameData<Matrix4x4F>(palette));
+            effect.Parameters["Palette"].SetValue(device.UploadFrameData<Matrix4x4F>(palette));
             pass.Apply();
             gd.Dispatch((uint)indices.Length);
             gd.BufferBarrier(output,

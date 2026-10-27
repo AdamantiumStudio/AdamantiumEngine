@@ -178,8 +178,6 @@ internal sealed class SetsEffectPass : EffectPass
 
         foreach (var stage in pipelineStages)
         {
-            if (stage.Index < 0) continue;
-
             stageMask |= stage.Stage;
             foreach (var link in stage.ConstantBufferLinks)
             {
@@ -187,33 +185,33 @@ internal sealed class SetsEffectPass : EffectPass
                     new Pushed(Kind.ConstantBuffer, link.Parameter, link.ConstantBuffer, null, 1, 0));
             }
 
-            foreach (var link in stage.SampledImageLinks)
+            foreach (var parameter in stage.SampledImages)
             {
-                if (link.Parameter.ElementCount == 0)
+                if (parameter.ElementCount == 0)
                 {
-                    if (arrays.TryGetValue(link.Set, out var other) && other != link.Binding)
+                    if (arrays.TryGetValue(parameter.Set, out var other) && other != parameter.Binding)
                     {
                         throw new NotSupportedException(
                             $"{Effect.Name}.{Name}: on descriptor sets a texture array of no length needs a set of its " +
-                            $"own; set {link.Set} has two, at bindings {other} and {link.Binding}");
+                            $"own; set {parameter.Set} has two, at bindings {other} and {parameter.Binding}");
                     }
 
-                    arrays[link.Set] = link.Binding;
+                    arrays[parameter.Set] = parameter.Binding;
                 }
                 else
                 {
-                    Push(link.Set, link.Binding, DescriptorType.SampledImage, Of(Kind.Texture, link));
+                    Push(parameter.Set, parameter.Binding, DescriptorType.SampledImage, Of(Kind.Texture, parameter));
                 }
             }
 
-            foreach (var link in stage.SamplerLinks)
+            foreach (var parameter in stage.Samplers)
             {
-                Push(link.Set, link.Binding, DescriptorType.Sampler, Of(Kind.Sampler, link));
+                Push(parameter.Set, parameter.Binding, DescriptorType.Sampler, Of(Kind.Sampler, parameter));
             }
 
-            foreach (var link in stage.StorageBufferLinks)
+            foreach (var parameter in stage.StorageBuffers)
             {
-                Push(link.Set, link.Binding, DescriptorType.StorageBuffer, Of(Kind.Buffer, link));
+                Push(parameter.Set, parameter.Binding, DescriptorType.StorageBuffer, Of(Kind.Buffer, parameter));
             }
         }
 
@@ -368,8 +366,8 @@ internal sealed class SetsEffectPass : EffectPass
             pushedBindings.Add(binding, (type, value));
         }
 
-        Pushed Of(Kind kind, SlotLink link) =>
-            new(kind, link.Parameter, null, link.ResourceParamDescription, Math.Max(link.Parameter.ElementCount, 1), 0);
+        Pushed Of(Kind kind, EffectParameter parameter) =>
+            new(kind, parameter, null, parameter.ParameterDescription, Math.Max(parameter.ElementCount, 1), 0);
     }
 
     private static void Check(Result result, string what)

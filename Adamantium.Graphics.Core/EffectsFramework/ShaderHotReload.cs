@@ -11,21 +11,22 @@ using Serilog;
 
 namespace Adamantium.Graphics.Core.EffectsFramework;
 
-/// <summary>Recompiles an effect when its .fx or an included .fxh changes and swaps it in at its device's next frame; a
-/// version that fails is reported and the running one stays. Only effects built with AdamantiumShaderHotReload take part.</summary>
+/// <summary>The live effects of a main device's devices. Recompiles an effect when its .fx or an included .fxh changes and
+/// swaps it in at its device's next frame; a version that fails is reported and the running one stays. Only effects built
+/// with AdamantiumShaderHotReload carry their source, so only they are recompiled.</summary>
 public sealed class ShaderHotReload : IDisposable
 {
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(150);
     private const int SaveAttempts = 20;
 
     private readonly object sync = new();
-    private readonly List<WeakReference<Effect>> tracked = [];
+    private readonly List<Effect> effects = [];
     private readonly Dictionary<string, FileSystemWatcher> watchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> changed = new(StringComparer.OrdinalIgnoreCase);
     // The hash of each file's content as last taken to compile. A save is told apart by what it says, not by when: two
     // saves within one tick of the file clock share a write time, and the second was lost.
     private readonly Dictionary<string, string> taken = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<(WeakReference<Effect> Effect, EffectData Data)> pending = [];
+    private readonly List<(Effect Effect, EffectData Data)> pending = [];
     private readonly HashSet<string> compiling = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> compileAgain = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<TaskCompletionSource<ShaderCompileReport>>> awaiting = new(StringComparer.OrdinalIgnoreCase);
@@ -74,23 +75,63 @@ public sealed class ShaderHotReload : IDisposable
         }
     }
 
-    /// <summary>Starts following <paramref name="effect"/>'s source; ignored for an effect that does not carry it.</summary>
-    public void Track(Effect effect)
+    /// <summary>Holds a new live effect, and follows its source when it carries one.</summary>
+    public void Add(Effect effect)
     {
-        var arguments = effect.RawEffectData?.Arguments;
-        if (arguments?.FilePath == null)
-        {
-            return;
-        }
-
         lock (sync)
         {
-            tracked.Add(new WeakReference<Effect>(effect));
+            effects.Add(effect);
+            var arguments = effect.Data.Description.Arguments;
+            if (arguments?.FilePath == null)
+            {
+                return;
+            }
+
             Watch(Path.GetDirectoryName(Path.GetFullPath(arguments.FilePath)));
             foreach (var directory in arguments.IncludeDirectoryList ?? [])
             {
                 Watch(Path.GetFullPath(directory));
             }
+        }
+    }
+
+    /// <summary>Lets go of a disposed effect.</summary>
+    public void Remove(Effect effect)
+    {
+        lock (sync)
+        {
+            effects.Remove(effect);
+        }
+    }
+
+    /// <summary>The live effects made on <paramref name="device"/>.</summary>
+    public IReadOnlyList<Effect> GetEffects(IGraphicsDevice device)
+    {
+        lock (sync)
+        {
+            return effects.FindAll(effect => ReferenceEquals(effect.GraphicsDevice, device));
+        }
+    }
+
+    /// <summary>Disposes every live effect left: the main device whose devices made them is going.</summary>
+    public void DisposeEffects()
+    {
+        while (true)
+        {
+            Effect effect;
+            lock (sync)
+            {
+                if (effects.Count == 0)
+                {
+                    return;
+                }
+
+                effect = effects[^1];
+                effects.RemoveAt(effects.Count - 1);
+            }
+
+            // Takes itself off the list.
+            effect.Dispose();
         }
     }
 
@@ -155,7 +196,8 @@ public sealed class ShaderHotReload : IDisposable
         {
             for (var i = pending.Count - 1; i >= 0; i--)
             {
-                if (!pending[i].Effect.TryGetTarget(out var effect) || effect.IsDisposed)
+                var effect = pending[i].Effect;
+                if (effect.IsDisposed)
                 {
                     pending.RemoveAt(i);
                     continue;
@@ -354,15 +396,14 @@ public sealed class ShaderHotReload : IDisposable
         var names = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
         lock (sync)
         {
-            tracked.RemoveAll(reference => !reference.TryGetTarget(out var effect) || effect.IsDisposed);
-            foreach (var reference in tracked)
+            foreach (var effect in effects)
             {
-                if (!reference.TryGetTarget(out var effect))
+                var arguments = effect.Data.Description.Arguments;
+                if (arguments?.FilePath == null)
                 {
                     continue;
                 }
 
-                var arguments = effect.RawEffectData.Arguments;
                 var source = Path.GetFullPath(arguments.FilePath);
                 if (touched.ContainsKey(source))
                 {
@@ -406,7 +447,6 @@ public sealed class ShaderHotReload : IDisposable
         result.EffectData.Description.Arguments = new EffectData.CompilerArguments
         {
             FilePath = arguments.FilePath,
-            CompilerFlags = arguments.CompilerFlags,
             Macros = arguments.Macros,
             IncludeDirectoryList = arguments.IncludeDirectoryList,
             Includes = result.Includes.ToList()
@@ -416,13 +456,12 @@ public sealed class ShaderHotReload : IDisposable
         {
             pending.RemoveAll(waiting => string.Equals(Path.GetFullPath(waiting.Data.Description.Arguments.FilePath), source,
                 StringComparison.OrdinalIgnoreCase));
-            foreach (var reference in tracked)
+            foreach (var effect in effects)
             {
-                if (reference.TryGetTarget(out var effect)
-                    && string.Equals(Path.GetFullPath(effect.RawEffectData.Arguments.FilePath), source,
-                        StringComparison.OrdinalIgnoreCase))
+                var path = effect.Data.Description.Arguments?.FilePath;
+                if (path != null && string.Equals(Path.GetFullPath(path), source, StringComparison.OrdinalIgnoreCase))
                 {
-                    pending.Add((reference, result.EffectData));
+                    pending.Add((effect, result.EffectData));
                 }
             }
 
