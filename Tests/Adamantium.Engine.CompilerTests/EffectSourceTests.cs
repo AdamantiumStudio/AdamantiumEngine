@@ -64,6 +64,12 @@ technique { pass { ComputeShader = CS; } }");
             "#define OPENED 1 /* opened on the directive's line",
             "technique InTheComment { pass { NotAStage = X; } }",
             "*/",
+            "/* before */ #define AFTER_A_COMMENT \\",
+            "technique AfterAComment { pass { NotAStage = X; } }",
+            "#define APOSTROPHE '\"' /* a quote in quotes, then a comment",
+            "technique Quoted2 { pass { NotAStage = X; } }",
+            "*/",
+            "#define STRING \"/* // not comments\"",
             "static const int technique_count = 1;",
             Shaders,
             "technique Real { pass { VertexShader = VS; } }");
@@ -113,12 +119,73 @@ technique { pass { ComputeShader = CS; } }");
         Assert.That(Messages(result), Does.Contain("Test.fx" + where).And.Contain(what));
     }
 
-    [Test]
-    public void TwoTechniquesOfOneName_AreAnError()
+    [TestCase("T", "two techniques named 'T'")]
+    [TestCase("", "two techniques without a name")]
+    public void TwoTechniquesOfOneName_AreAnError(string name, string what)
     {
-        var result = Compile(Shaders + "technique T { pass { VertexShader = VS; } }\ntechnique T { pass { VertexShader = VS; } }");
+        var result = Compile(Shaders + $"technique {name} {{ pass {{ VertexShader = VS; }} }}\n" +
+                             $"technique {name} {{ pass {{ VertexShader = VS; }} }}");
 
-        Assert.That(Messages(result), Does.Contain("two techniques named 'T'"));
+        Assert.That(Messages(result), Does.Contain(what));
+    }
+
+    // A file read as bytes may keep its byte order mark; it is not code.
+    [Test]
+    public void AByteOrderMark_IsNotCode()
+    {
+        var result = Compile("﻿" + Shaders + "technique T { pass { VertexShader = VS; } }");
+
+        Assert.That(result.HasErrors, Is.False, Messages(result));
+    }
+
+    [TestCase("1A", "1")]
+    [TestCase("A-B", "1")]
+    [TestCase("A\\", "1")]
+    [TestCase("A", "1 \\")]
+    [TestCase("A", "1 /* comment")]
+    [TestCase("A", "1 // comment")]
+    [TestCase("A", "1\n2")]
+    public void AMacroNotANameWithAValueOfOneLine_IsAnError(string name, string value)
+    {
+        var result = Compile(Shaders + "technique T { pass { VertexShader = VS; } }", [new EffectData.ShaderMacro(name, value)]);
+
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(Messages(result), Does.Contain("The macro"));
+    }
+
+    // An error in the code is said once, where it stands, however many entry points Slang compiled the code for.
+    [Test]
+    public void AnErrorInTheCode_IsSaidOnce_WhereItStands()
+    {
+        var result = Compile(Shaders + "float4 Bad() : SV_Position { return undefinedName; }\n" +
+                             "technique T { pass A { VertexShader = VS; PixelShader = PS; } pass B { ComputeShader = CS; } }");
+
+        var messages = result.Logger.Messages.Select(message => message.ToString()).ToList();
+        Assert.That(messages.Count(message => message.Contains("undefinedName")), Is.EqualTo(1), Messages(result));
+        Assert.That(messages.Single(message => message.Contains("undefinedName")), Does.StartWith("Test.fx(6,37)"));
+    }
+
+    // A stage refused does not take the stages after it down with it: they compile, or say what is wrong with them.
+    [Test]
+    public void ARefusedStage_LeavesTheOthersOfItsPassCompiled()
+    {
+        var result = Compile(Shaders + "technique T { pass { VertexShader = VS; HullShader = VS; DomainShader = VS; PixelShader = PS; } }");
+
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.EffectData.Description.Techniques[0].Passes[0].Pipeline[EffectShaderType.Fragment]?.EntryPoint,
+            Is.EqualTo("PS"));
+    }
+
+    [TestCase("/no/such/folder/Test.fx")]
+    [TestCase("folder with \"quotes\"/Test.fx")]
+    public void AnyPath_IsTheFilesName_AndNoReasonToFail(string path)
+    {
+        var good = EffectCompiler.Compile(Shaders + "technique T { pass { VertexShader = VS; } }", path);
+        var bad = EffectCompiler.Compile(Shaders + "float4 Bad() : SV_Position { return undefinedName; }\n" +
+                                         "technique T { pass { VertexShader = VS; } }", path);
+
+        Assert.That(good.HasErrors, Is.False, Messages(good));
+        Assert.That(Messages(bad), Does.Contain("undefinedName").And.Contain("Test.fx(6,37)"));
     }
 
     [TestCase("technique T { pass { VertexShader = VS; }", "(6,1)", "The technique is not closed")]

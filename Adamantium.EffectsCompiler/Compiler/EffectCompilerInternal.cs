@@ -15,6 +15,7 @@ internal sealed class EffectCompilerInternal : IDisposable
     private readonly List<string> resolvedIncludes = [];
     private readonly Dictionary<(EffectShaderType Type, string EntryPoint), int> compiledShaders = [];
     private readonly HashSet<(EffectShaderType Type, string EntryPoint)> failedShaders = [];
+    private readonly HashSet<string> reportedSlangErrors = [];
     private readonly List<ResourceBindingKey> resourceKeys = [];
     private readonly SlangShaderCompiler slangCompiler = new();
     private EffectCompilerFlags compilerFlags;
@@ -86,7 +87,13 @@ internal sealed class EffectCompilerInternal : IDisposable
         resolvedIncludes.Clear();
         compiledShaders.Clear();
         failedShaders.Clear();
+        reportedSlangErrors.Clear();
         logger = new EffectCompilerLogger();
+        if (sourceCode is { Length: > 0 } && sourceCode[0] == '﻿')
+        {
+            sourceCode = sourceCode.Substring(1);
+        }
+
         sourceDirectory = null;
         if (includes.IsDefault)
         {
@@ -138,17 +145,29 @@ internal sealed class EffectCompilerInternal : IDisposable
         var preamble = new StringBuilder();
         foreach (var macro in macros)
         {
-            if (string.IsNullOrWhiteSpace(macro.Name) || macro.Name.Any(char.IsWhiteSpace)
-                || (macro.Value ?? string.Empty).IndexOfAny(['\r', '\n']) >= 0)
+            var value = macro.Value ?? string.Empty;
+            if (!IsIdentifier(macro.Name) || value.IndexOfAny(['\r', '\n']) >= 0 || value.TrimEnd().EndsWith("\\")
+                || value.Contains("/*") || value.Contains("//"))
             {
-                logger.Error($"The macro '{macro.Name}' is not a name with a value of one line.", start);
+                logger.Error($"The macro '{macro.Name}' is not a name with a value of one line and no comment.", start);
                 continue;
             }
 
-            preamble.Append("#define ").Append(macro.Name).Append(' ').Append(macro.Value).Append('\n');
+            preamble.Append("#define ").Append(macro.Name).Append(' ').Append(value).Append('\n');
         }
 
-        return preamble.Append("#line 1 \"").Append(fileName.Replace('\\', '/')).Append("\"\n").ToString();
+        var path = fileName.Replace('\\', '/').Replace("\"", "\\\"");
+        return preamble.Append("#line 1 \"").Append(path).Append("\"\n").ToString();
+    }
+
+    private static bool IsIdentifier(string name)
+    {
+        if (string.IsNullOrEmpty(name) || !(char.IsLetter(name[0]) || name[0] == '_'))
+        {
+            return false;
+        }
+
+        return name.All(c => c < 128 && (char.IsLetterOrDigit(c) || c == '_'));
     }
 
     private void CompilePass(EffectPassSource passSource)
@@ -202,18 +221,19 @@ internal sealed class EffectCompilerInternal : IDisposable
             return;
         }
 
+        var errorsBefore = logger.Messages.Count;
         try
         {
-            var result = CompileStage(type, entryPoint);
+            var result = slangCompiler.Compile(slangSource, entryPoint, type, ResolveSlangInclude);
             if (result.HasErrors || result.Bytecode == null)
             {
                 failedShaders.Add(key);
-                logger.Error($"{stage.Stage} shader '{entryPoint}': {result.Errors}", stage.Location);
+                ReportSlangErrors(result.Errors, stage);
                 return;
             }
 
             var shader = CreateEffectShader(type, entryPoint, result, stage.Location);
-            if (logger.HasErrors)
+            if (logger.Messages.Count > errorsBefore)
             {
                 failedShaders.Add(key);
                 return;
@@ -229,20 +249,71 @@ internal sealed class EffectCompilerInternal : IDisposable
         }
     }
 
-    private ShaderCompilationResult CompileStage(EffectShaderType type, string entryPoint)
+    private void ReportSlangErrors(string errors, EffectStageSource stage)
     {
-        try
+        var blocks = SlangErrorBlocks(errors ?? string.Empty);
+        var main = blocks.Where(block => !IsAftermath(block)).ToList();
+        foreach (var block in main.Count > 0 ? main : blocks)
         {
-            return slangCompiler.Compile(slangSource, entryPoint, type, ResolveSlangInclude);
-        }
-        catch (Exception ex)
-        {
-            return new ShaderCompilationResult
+            if (!reportedSlangErrors.Add(block))
             {
-                HasErrors = true,
-                Errors = $"Slang backend threw for {type} '{entryPoint}': {ex.Message}"
-            };
+                continue;
+            }
+
+            var location = block.Contains("entry point") ? null : SlangLocation(block);
+            logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {block}" : block,
+                location ?? stage.Location);
         }
+    }
+
+    private static List<string> SlangErrorBlocks(string errors)
+    {
+        List<string> blocks = [];
+        var current = new StringBuilder();
+        foreach (var line in errors.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (current.Length > 0 && (line.StartsWith("error", StringComparison.Ordinal)
+                                       || line.StartsWith("fatal error", StringComparison.Ordinal)
+                                       || line.StartsWith("abort compilation", StringComparison.Ordinal)))
+            {
+                blocks.Add(current.ToString().TrimEnd());
+                current.Clear();
+            }
+
+            current.Append(line).Append('\n');
+        }
+
+        if (current.ToString().Trim().Length > 0)
+        {
+            blocks.Add(current.ToString().TrimEnd());
+        }
+
+        return blocks;
+    }
+
+    private static bool IsAftermath(string block) =>
+        block.StartsWith("fatal error", StringComparison.Ordinal)
+        || block.StartsWith("abort compilation", StringComparison.Ordinal) || block.Contains("[E39999]");
+
+    private static SourceLocation? SlangLocation(string block)
+    {
+        var arrow = block.IndexOf("--> ", StringComparison.Ordinal);
+        if (arrow < 0)
+        {
+            return null;
+        }
+
+        var end = block.IndexOf('\n', arrow);
+        var place = block.Substring(arrow + 4, (end < 0 ? block.Length : end) - arrow - 4).Trim();
+        var columnAt = place.LastIndexOf(':');
+        var lineAt = columnAt > 0 ? place.LastIndexOf(':', columnAt - 1) : -1;
+        if (lineAt <= 0 || !int.TryParse(place.Substring(lineAt + 1, columnAt - lineAt - 1), out var line)
+            || !int.TryParse(place.Substring(columnAt + 1), out var column))
+        {
+            return null;
+        }
+
+        return new SourceLocation(place.Substring(0, lineAt), line, column);
     }
 
     private string ResolveSlangInclude(string requestedPath)

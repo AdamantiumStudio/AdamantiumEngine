@@ -50,8 +50,6 @@ internal sealed class SlangShaderCompiler : IDisposable
         switch (type)
         {
             case EffectShaderType.Vertex: return SlangcStage.Vertex;
-            case EffectShaderType.Hull: return SlangcStage.Hull;
-            case EffectShaderType.Domain: return SlangcStage.Domain;
             case EffectShaderType.Fragment: return SlangcStage.Fragment;
             case EffectShaderType.Compute: return SlangcStage.Compute;
             default: throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported shader stage for Slang.");

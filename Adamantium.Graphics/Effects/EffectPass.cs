@@ -124,16 +124,32 @@ public abstract class EffectPass : DisposableObject, IEffectPass
 
     private void BindAllStages()
     {
-        if (_bindStages == null || _bindStages.Length != stages.Count)
+        var graphics = false;
+        var fragment = false;
+        foreach (var stage in stages)
         {
-            _bindStages = new ShaderStageFlagBits[stages.Count];
-            _bindShaders = new ShaderEXT[stages.Count];
+            graphics |= stage.Stage == ShaderStageFlagBits.VertexBit;
+            fragment |= stage.Stage == ShaderStageFlagBits.FragmentBit;
+        }
+
+        var noFragment = graphics && !fragment;
+        var count = stages.Count + (noFragment ? 1 : 0);
+        if (_bindStages == null || _bindStages.Length != count)
+        {
+            _bindStages = new ShaderStageFlagBits[count];
+            _bindShaders = new ShaderEXT[count];
         }
 
         for (var i = 0; i < stages.Count; i++)
         {
             _bindStages[i] = stages[i].Stage;
             _bindShaders[i] = stages[i].ShaderObject;
+        }
+
+        if (noFragment)
+        {
+            _bindStages[^1] = ShaderStageFlagBits.FragmentBit;
+            _bindShaders[^1] = null;
         }
 
         ((GraphicsDevice)graphicsDevice).BindShaders(_bindStages, _bindShaders);

@@ -76,6 +76,7 @@ internal sealed class EffectSource
 
     private void ReadFile()
     {
+        var lineStart = true;
         while (_at < _text.Length)
         {
             var c = _text[_at];
@@ -84,13 +85,13 @@ internal sealed class EffectSource
                 continue;
             }
 
-            if (c is '"' or '\'')
-            {
-                SkipQuoted(c);
-            }
-            else if (c == '#' && StartsALine(_at))
+            if (c == '#' && lineStart)
             {
                 SkipDirective();
+            }
+            else if (c is '"' or '\'')
+            {
+                SkipQuoted(c);
             }
             else if (IsWordStart(c) && (_at == 0 || !IsWordPart(_text[_at - 1])))
             {
@@ -104,6 +105,8 @@ internal sealed class EffectSource
             {
                 _at++;
             }
+
+            lineStart = c == '\n' || (lineStart && char.IsWhiteSpace(c));
         }
     }
 
@@ -491,9 +494,9 @@ internal sealed class EffectSource
         {
             if (!SkipComment())
             {
-                if (_text[_at] == '"')
+                if (_text[_at] is '"' or '\'')
                 {
-                    SkipQuoted('"');
+                    SkipQuoted(_text[_at]);
                 }
                 else
                 {
@@ -512,19 +515,6 @@ internal sealed class EffectSource
         }
 
         return before >= 0 && _text[before] == '\\';
-    }
-
-    private bool StartsALine(int index)
-    {
-        for (var i = index - 1; i >= 0 && _text[i] != '\n'; i--)
-        {
-            if (!char.IsWhiteSpace(_text[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private void Blank(int start, int end)
