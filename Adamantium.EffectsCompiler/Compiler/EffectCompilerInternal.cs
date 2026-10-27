@@ -267,16 +267,22 @@ internal sealed class EffectCompilerInternal : IDisposable
         }
 
         var missingEntryPoint = blocks.Any(IsMissingEntryPoint);
-        var main = blocks.Where(block => !IsAftermath(block)
-                                         && !(missingEntryPoint && Header(block).Contains("[E30015]") && !block.Contains("--> ")))
+        bool IsLookup(string block) =>
+            missingEntryPoint && Header(block).Contains("[E30015]") && !block.Contains("--> ");
+        var hints = blocks.Where(IsLookup)
+            .SelectMany(block => block.Split('\n'))
+            .Where(line => line.TrimStart().StartsWith("note: did you mean", StringComparison.Ordinal))
+            .Select(line => line.Trim())
             .ToList();
+        var main = blocks.Where(block => !IsAftermath(block) && !IsLookup(block)).ToList();
         foreach (var block in main.Count > 0 ? main : blocks)
         {
             var location = IsMissingEntryPoint(block) ? null : SlangLocation(block);
             var at = location ?? stage.Location;
-            if (reportedSlangErrors.Add((block, at)))
+            var text = IsMissingEntryPoint(block) && hints.Count > 0 ? $"{block}\n{string.Join("\n", hints)}" : block;
+            if (reportedSlangErrors.Add((text, at)))
             {
-                logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {block}" : block, at);
+                logger.Error(location == null ? $"{stage.Stage} shader '{stage.EntryPoint}': {text}" : text, at);
             }
         }
     }

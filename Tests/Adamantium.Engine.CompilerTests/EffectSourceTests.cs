@@ -211,6 +211,15 @@ technique { pass { ComputeShader = CS; } }");
         });
     }
 
+    // A misspelt entry point keeps Slang's guess at what was meant.
+    [Test]
+    public void AMisspeltEntryPoint_IsSaidWithWhatItMayHaveMeant()
+    {
+        var result = Compile(Shaders + "technique T { pass { VertexShader = VSS; } }");
+
+        Assert.That(Messages(result), Does.Contain("Vertex shader 'VSS'").And.Contain("did you mean 'VS'"));
+    }
+
     // Words of the quoted code are not Slang's message: a comment about failed imports does not hide its error.
     [Test]
     public void AnErrorBesideACommentOnFailedImports_IsSaid()
