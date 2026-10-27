@@ -15,7 +15,7 @@ public sealed partial class EffectData
         [Key(0)]
         public string Name;
 
-        /// <summary>The shaders of the pass's stages, in the order the file names them.</summary>
+        /// <summary>The shaders of the pass's stages, in pipeline order whatever order the file names them in.</summary>
         [Key(1)]
         public List<ShaderLink> Stages = [];
 
@@ -23,12 +23,27 @@ public sealed partial class EffectData
         [Key(2)]
         public List<HitGroup> HitGroups = [];
 
+        /// <summary>The resources the pass's stages read or write, each once.</summary>
+        [Key(3)]
+        public List<PassResource> Resources = [];
+
+        /// <summary>On the descriptor heap: the bytes of push data the pass's resources take.</summary>
+        [Key(4)]
+        public uint PushDataSize;
+
+        /// <summary>On descriptor sets: the number of descriptors the pass pushes.</summary>
+        [Key(5)]
+        public uint DescriptorCount;
+
         /// <summary>A copy whose links can be changed without changing these.</summary>
         public Pass Clone() => new()
         {
             Name = Name,
             Stages = [.. Stages.Select(stage => stage.Clone())],
-            HitGroups = [.. HitGroups.Select(group => group.Clone())]
+            HitGroups = [.. HitGroups.Select(group => group.Clone())],
+            Resources = [.. Resources.Select(resource => resource.Clone())],
+            PushDataSize = PushDataSize,
+            DescriptorCount = DescriptorCount
         };
 
         public override string ToString() => $"Pass: [{Name}], Stages({Stages.Count}), HitGroups({HitGroups.Count})";

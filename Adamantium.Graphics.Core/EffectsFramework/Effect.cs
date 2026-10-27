@@ -30,7 +30,16 @@ public class Effect : GraphicsResource
     public Effect(IGraphicsDevice device, EffectData data) : base(device)
     {
         Name = data.Description.Name;
-        Build(data);
+        try
+        {
+            Build(data);
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+
         device.MainDevice?.ShaderHotReload.Add(this);
     }
 

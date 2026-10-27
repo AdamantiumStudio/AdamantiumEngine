@@ -1004,6 +1004,11 @@ All packages share one version.
 
 ### Fixed
 
+- An effect that could not be made - a pass whose resources a descriptor model or the device cannot take - kept the
+  shaders of the passes made before it.
+- On the descriptor heap a storage buffer nobody bound wrote no heap index, so the shader read whatever buffer heap
+  slot 0 held, and the pass did not report it unbound. It reads a buffer of zeros now
+  (`IDescriptorHeapManager.FallbackBufferOffset`), as on descriptor sets, and the pass reports it.
 - A hot-reloaded version of an effect that could not be made left the effect half rebuilt, its old version gone and
   its resources unbound. The running version is now built again with its values, and the new one refused.
 - An effect's constant buffers never freed the native memory their bytes were in.
@@ -1709,6 +1714,15 @@ All packages share one version.
 
 ### Changed
 
+- Effects of the same data share the shaders of each pass: they are made once on the main device
+  (`MainGraphicsDevice.EffectPassShaders`), for every render device, and destroyed once the last effect holding them is
+  disposed or reloaded and no frame in flight can still use them. A second effect of the data costs no shader work - a
+  `BrushEffect` of the UI was made in about 11 ms, its 90 shaders read again from the binary cache, and is now made in
+  0.2 ms - and effects of the same data drawn one after another bind their shaders once. The compiler places each
+  pass's resources (`EffectData.Pass.Resources`, `PushDataSize`, `DescriptorCount`): where the descriptor heap reads
+  them in the push data, and how descriptor sets push them; and lists a pass's stages in pipeline order. Effect data
+  is format version 4: an effect compiled before is refused with "Rebuild the effects" and compiled again on the next
+  build. `IGraphicsDeviceFactory.CreateEffectPassShaderCache` makes the cache.
 - A buffer larger than a shared block of device memory gives its memory back to the driver once it is freed and no
   frame in flight can still read it; shared blocks stay for reuse until the device goes.
 - The engine's effects take typed pointers, `T* X;`, for what they read and write by address, and their parameters

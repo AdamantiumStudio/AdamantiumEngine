@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using Adamantium.EffectsCompiler;
 using Adamantium.FX;
@@ -80,17 +79,23 @@ technique Bumped { pass Run { ComputeShader = BumpCS; } }
     {
         var folder = NewFolder();
         var device = GpuFixture.CreateRenderDevice();
-        var (slowEffect, slowPass, slowOutput, _) = Following(device, folder, "Slow.fx", Slow(60));
+        var (slowEffect, slowPass, slowOutput, slowPath) = Following(device, folder, "Slow.fx", Bumped);
         var (fastEffect, fastPass, fastOutput, _) = Following(device, folder, "Fast.fx", Bumped);
         using (slowEffect)
         using (slowOutput)
         using (fastEffect)
         using (fastOutput)
         {
-            File.WriteAllText(Path.Combine(folder, "Bump.fxh"), "uint Bump() { return 5; }\n");
+            int[] slowWhileHeld;
+            using (new FileStream(slowPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                File.WriteAllText(Path.Combine(folder, "Bump.fxh"), "uint Bump() { return 5; }\n");
 
-            Assert.That(RunUntil(device, fastPass, fastOutput, written => written[0] == 5)[0], Is.EqualTo(5));
-            Assert.That(Run(device, slowPass, slowOutput)[0], Is.EqualTo(1), "the fast effect waited for the slow one");
+                Assert.That(RunUntil(device, fastPass, fastOutput, written => written[0] == 5)[0], Is.EqualTo(5));
+                slowWhileHeld = Run(device, slowPass, slowOutput);
+            }
+
+            Assert.That(slowWhileHeld[0], Is.EqualTo(1), "the slow effect was not held back");
             Assert.That(RunUntil(device, slowPass, slowOutput, written => written[0] == 5)[0], Is.EqualTo(5));
         }
     }
@@ -408,24 +413,6 @@ technique Sampling { pass Run { ComputeShader = SampleCS; } }
         var pass = effect.Techniques[0].Passes[0];
         Assert.That(Run(device, pass, output)[0], Is.EqualTo(1));
         return (effect, pass, output, source);
-    }
-
-    private static string Slow(int passes)
-    {
-        var text = new StringBuilder(Bumped[..Bumped.IndexOf("technique", StringComparison.Ordinal)]);
-        for (var i = 0; i < passes; i++)
-        {
-            text.Append($"[shader(\"compute\")] [numthreads(64, 1, 1)] void Extra{i}CS(uint3 tid : SV_DispatchThreadID) ");
-            text.Append($"{{ Output[tid.x] = Bump() + {i}; }}\n");
-        }
-
-        text.Append("technique Bumped { pass Run { ComputeShader = BumpCS; }");
-        for (var i = 0; i < passes; i++)
-        {
-            text.Append($" pass Extra{i} {{ ComputeShader = Extra{i}CS; }}");
-        }
-
-        return text.Append(" }\n").ToString();
     }
 
     private static int[] RunUntil(IGraphicsDevice device, IEffectPass pass, Adamantium.Graphics.Buffer output, Func<int[], bool> done)

@@ -585,17 +585,17 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             : new SetsEffectPass(logger, effect, technique, pass, name);
     }
 
-    // Which pass's shader objects the CURRENT command buffer already has bound. A pass applied again for the next draw of
-    // the same material rebound the same handles, stage by stage, through a marshaled call each - and a frame is mostly
-    // runs of the same material. Cleared with the rest of the dynamic state at BeginDraw, because a fresh command buffer
-    // has none of it.
+    // Which pass shaders the CURRENT command buffer already has bound. A pass applied again for the next draw of the same
+    // material rebound the same handles, stage by stage, through a marshaled call each - and a frame is mostly runs of
+    // the same material. Cleared with the rest of the dynamic state at BeginDraw, because a fresh command buffer has none
+    // of it.
     private object _boundShaderPass;
 
-    /// <summary>Are this pass's shaders already bound to the current command buffer?</summary>
-    public bool ShadersBoundFor(object pass) => _stateInitialized && ReferenceEquals(_boundShaderPass, pass);
+    /// <summary>Are these shaders of a pass already bound to the current command buffer?</summary>
+    public bool ShadersBoundFor(object shaders) => _stateInitialized && ReferenceEquals(_boundShaderPass, shaders);
 
-    /// <summary>Remember that this pass's shaders are now bound.</summary>
-    public void ShadersBound(object pass) => _boundShaderPass = pass;
+    /// <summary>Remember that these shaders of a pass are now bound.</summary>
+    public void ShadersBound(object shaders) => _boundShaderPass = shaders;
 
     public void BindShader(CommandBuffer cmd, ShaderStageFlagBits stage, ShaderEXT shader)
     {

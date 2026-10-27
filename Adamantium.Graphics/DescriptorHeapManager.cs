@@ -21,6 +21,7 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
     private uint _fallbackTextureOffset = uint.MaxValue;
     private uint _fallbackSamplerOffset = uint.MaxValue;
     private ITexture _fallbackTexture;
+    private Buffer _fallbackBuffer;
 
     public IBuffer ResourceHeapBuffer { get; private set; }
     public IBuffer SamplerHeapBuffer { get; private set; }
@@ -100,6 +101,8 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
     protected override void Dispose(bool disposeManagedResources)
     {
+        _fallbackBuffer?.Dispose();
+        _fallbackBuffer = null;
         ResourceHeapBuffer?.Dispose();
         ResourceHeapBuffer = null;
         SamplerHeapBuffer?.Dispose();
@@ -274,6 +277,24 @@ public class DescriptorHeapManager : DisposableObject, IDescriptorHeapManager
 
                 _fallbackSamplerOffset = GetOrAllocateSamplerOffset(SamplerStates.LinearClampToEdge);
                 return _fallbackSamplerOffset;
+            }
+        }
+    }
+
+    public uint FallbackBufferOffset
+    {
+        get
+        {
+            lock (_heapSync)
+            {
+                if (_fallbackBuffer == null)
+                {
+                    _fallbackBuffer = Buffer.New(graphicsDevice, 16,
+                        BufferUsageFlags.StorageBuffer | BufferUsageFlags.TransferDst | BufferUsageFlags.ShaderDeviceAddress);
+                    _fallbackBuffer.SetData(new byte[16]);
+                }
+
+                return GetOrAllocateBufferOffset(_fallbackBuffer, DescriptorType.StorageBuffer);
             }
         }
     }

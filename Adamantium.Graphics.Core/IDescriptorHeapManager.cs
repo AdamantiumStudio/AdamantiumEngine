@@ -39,4 +39,8 @@ public interface IDescriptorHeapManager : IDescriptorManager
     uint FallbackTextureOffset { get; }
 
     uint FallbackSamplerOffset { get; }
+
+    /// <summary>The slot of a buffer of zeros a shader reads for a buffer parameter nobody bound - never a buffer in use.
+    /// </summary>
+    uint FallbackBufferOffset { get; }
 }
