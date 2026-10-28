@@ -99,7 +99,7 @@ public class TypedFrustumTests
         }
 
         Assert.That(frustum.Support(Vector3.Create(1.0, 1, 1)), Is.EqualTo(corners[5]));
-        Assert.Throws<ArgumentException>(() => frustum.GetCorners(new Vector3D[BoundingFrustum<double>.CornerCount - 1]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => frustum.GetCorners(new Vector3D[BoundingFrustum<double>.CornerCount - 1]));
     }
 
     [Test]

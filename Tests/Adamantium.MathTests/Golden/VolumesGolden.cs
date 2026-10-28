@@ -23,8 +23,8 @@ public static class VolumesGolden
         RegisterBox(map);
         RegisterSphere(map);
         RegisterCollision(map);
-        map.NotMapped(key => key.Contains("OrientedBoundingBox") || key.Contains("BoundingCapsule"),
-            "takes an oriented box or a capsule: checked with those types");
+        map.NotMapped(key => key.Contains("BoundingCapsule") || key.Contains("ConvexHull"),
+            "takes a capsule or a convex hull, own code without a pair: moves to the new vectors in Ф6, with its own tests");
         map.Tolerance(key => key.StartsWith("Ray.GetPickRay("), 1e-3,
             "the direction is the difference of two points unprojected through a random, badly conditioned matrix: old " +
             "and new each miss a double reference in float, by up to 3.5e-4 on the recorded cases and wholly on nearly " +

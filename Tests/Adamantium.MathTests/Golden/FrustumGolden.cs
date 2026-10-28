@@ -51,6 +51,16 @@ public static class FrustumGolden
             var sphere = i.BoundingSphere<float>();
             return [sphere, x.Intersects(sphere)];
         });
+        Instance(map, $"{F}.Contains(this OrientedBoundingBox&)", (x, i) =>
+        {
+            var box = OrientedBoxGolden.Read(i);
+            return [x.Contains(box.Box), .. box.Echo];
+        });
+        Instance(map, $"{F}.Intersects(this OrientedBoundingBox&)", (x, i) =>
+        {
+            var box = OrientedBoxGolden.Read(i);
+            return [x.Intersects(box.Box), .. box.Echo];
+        });
         Instance(map, $"{F}.Contains(this BoundingFrustum)", (x, i) => [x.Contains(i.BoundingFrustum<float>())]);
         Instance(map, $"{F}.Intersects(this BoundingFrustum)", (x, i) => [x.Intersects(i.BoundingFrustum<float>())]);
         Instance(map, $"{F}.Intersects(this Plane)", (x, i) => [x.Intersects(i.Plane<float>())]);

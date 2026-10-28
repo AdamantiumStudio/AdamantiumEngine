@@ -59,6 +59,9 @@ public struct Plane<T> : IEquatable<Plane<T>>, IFormattable where T : unmanaged,
     /// <summary>Which side <paramref name="sphere"/> is on, or whether it crosses the plane.</summary>
     public readonly PlaneIntersectionType Intersects(BoundingSphere<T> sphere) => Collision.PlaneIntersectsSphere(this, sphere);
 
+    /// <summary>Which side <paramref name="box"/> is on, or whether it crosses the plane.</summary>
+    public readonly PlaneIntersectionType Intersects(OrientedBoundingBox<T> box) => box.Intersects(this);
+
     /// <summary>The plane in another number type, each value converted as a cast would.</summary>
     public readonly Plane<TOther> As<TOther>() where TOther : unmanaged, IFloatingPointIeee754<TOther> =>
         new(Normal.As<TOther>(), TOther.CreateTruncating(D));

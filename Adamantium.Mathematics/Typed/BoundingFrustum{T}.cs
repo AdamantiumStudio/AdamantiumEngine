@@ -90,15 +90,11 @@ public readonly struct BoundingFrustum<T> : IEquatable<BoundingFrustum<T>>, IFor
     /// <summary>Copies the corners to <paramref name="destination"/>: near left top, near right top, near right bottom,
     /// near left bottom, then the far ones in the same order. A corner at infinity is the other end of its edge with
     /// the coordinates the edge runs along made infinite.</summary>
-    /// <exception cref="ArgumentException"><paramref name="destination"/> holds fewer than
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="destination"/> holds fewer than
     /// <see cref="CornerCount"/>.</exception>
     public void GetCorners(Span<Vector3<T>> destination)
     {
-        if (destination.Length < CornerCount)
-        {
-            throw new ArgumentException($"The corners need room for {CornerCount} points.", nameof(destination));
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThan(destination.Length, CornerCount, nameof(destination));
         for (var i = 0; i < CornerCount; i++)
         {
             destination[i] = Corner(i);
@@ -244,13 +240,14 @@ public readonly struct BoundingFrustum<T> : IEquatable<BoundingFrustum<T>>, IFor
         return result;
     }
 
-    /// <summary>Whether <paramref name="frustum"/> is inside, crosses the surface, or is outside, by its corners - those
-    /// at infinity too.</summary>
-    public ContainmentType Contains(BoundingFrustum<T> frustum)
+    /// <summary>Whether <paramref name="box"/> is inside, crosses the surface, or is outside.</summary>
+    public ContainmentType Contains(OrientedBoundingBox<T> box)
     {
-        if (frustum.ViewProjection == ViewProjection)
+        var axes = Matrix3x3.CreateFromQuaternion(box.Orientation);
+        if (box.IsEmpty || T.IsNaN(Collision.Largest(box.Center) + Collision.Largest(box.HalfExtent) + Collision.Largest(axes.Row1)
+                    + Collision.Largest(axes.Row2) + Collision.Largest(axes.Row3)))
         {
-            return ContainmentType.Contains;
+            return ContainmentType.Disjoint;
         }
 
         var result = ContainmentType.Contains;
@@ -261,10 +258,57 @@ public readonly struct BoundingFrustum<T> : IEquatable<BoundingFrustum<T>>, IFor
                 continue;
             }
 
+            var normal = planes[i].Normal;
+            var reach = box.HalfExtent.X * T.Abs(Vector3<T>.Dot(normal, axes.Row1)) + box.HalfExtent.Y * T.Abs(Vector3<T>.Dot(normal, axes.Row2))
+                        + box.HalfExtent.Z * T.Abs(Vector3<T>.Dot(normal, axes.Row3));
+            var distance = Distance(planes[i], box.Center);
+            if (!(distance >= -reach))
+            {
+                return ContainmentType.Disjoint;
+            }
+
+            if (distance < reach)
+            {
+                result = ContainmentType.Intersects;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Whether <paramref name="frustum"/> is inside, crosses the surface, or is outside, by its corners - those
+    /// at infinity too.</summary>
+    public ContainmentType Contains(BoundingFrustum<T> frustum)
+    {
+        if (frustum.ViewProjection == ViewProjection)
+        {
+            return ContainmentType.Contains;
+        }
+
+        Span<Plane<T>> active = stackalloc Plane<T>[PlaneCount];
+        var count = 0;
+        for (var i = 0; i < PlaneCount; i++)
+        {
+            if (!Skips(i))
+            {
+                active[count++] = planes[i];
+            }
+        }
+
+        return frustum.CornersInside(active[..count]);
+    }
+
+    /// <summary>Whether every corner of the frustum - those at infinity too - is in front of or on every one of
+    /// <paramref name="inward"/>, or all are behind one of them, or neither.</summary>
+    internal ContainmentType CornersInside(ReadOnlySpan<Plane<T>> inward)
+    {
+        var result = ContainmentType.Contains;
+        foreach (var plane in inward)
+        {
             var inside = 0;
             for (var corner = 0; corner < CornerCount; corner++)
             {
-                if (frustum.Side(planes[i], corner) >= T.Zero)
+                if (Side(plane, corner) >= T.Zero)
                 {
                     inside++;
                 }
@@ -286,6 +330,9 @@ public readonly struct BoundingFrustum<T> : IEquatable<BoundingFrustum<T>>, IFor
 
     /// <summary>Whether <paramref name="box"/> and the frustum share a point.</summary>
     public bool Intersects(BoundingBox<T> box) => Contains(box) != ContainmentType.Disjoint;
+
+    /// <summary>Whether <paramref name="box"/> and the frustum share a point.</summary>
+    public bool Intersects(OrientedBoundingBox<T> box) => Contains(box) != ContainmentType.Disjoint;
 
     /// <summary>Whether <paramref name="sphere"/> and the frustum share a point.</summary>
     public bool Intersects(BoundingSphere<T> sphere) => Contains(sphere) != ContainmentType.Disjoint;

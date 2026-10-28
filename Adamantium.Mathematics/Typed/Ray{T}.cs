@@ -63,6 +63,15 @@ public struct Ray<T> : IEquatable<Ray<T>>, IFormattable where T : unmanaged, IFl
     /// <summary>Whether the ray meets <paramref name="box"/>, and where.</summary>
     public readonly bool Intersects(BoundingBox<T> box, out Vector3<T> point) => Collision.RayIntersectsBox(this, box, out point);
 
+    /// <summary>Whether the ray meets <paramref name="box"/>.</summary>
+    public readonly bool Intersects(OrientedBoundingBox<T> box) => box.Intersects(this);
+
+    /// <summary>Whether the ray meets <paramref name="box"/>, and how far along - zero from inside.</summary>
+    public readonly bool Intersects(OrientedBoundingBox<T> box, out T distance) => box.Intersects(this, out distance);
+
+    /// <summary>Whether the ray meets <paramref name="box"/>, and where.</summary>
+    public readonly bool Intersects(OrientedBoundingBox<T> box, out Vector3<T> point) => box.Intersects(this, out point);
+
     /// <summary>Whether the ray meets <paramref name="sphere"/>.</summary>
     public readonly bool Intersects(BoundingSphere<T> sphere) => Collision.RayIntersectsSphere(this, sphere, out T _);
 

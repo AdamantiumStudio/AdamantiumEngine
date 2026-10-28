@@ -113,4 +113,20 @@ public class TypedGeometryTests
         Assert.That(size.Constrain(Size.Create(50.0, 1000.0)), Is.EqualTo(Size.Create(50.0, 40.0)));
         Assert.That(Size<double>.Infinity.Width, Is.EqualTo(double.PositiveInfinity));
     }
+
+    [Test]
+    public void Ray2_ReachesItsPoints_ComparesExactly_AndConvertsAsACast()
+    {
+        var ray = Ray2.Create(Vector2.Create(1.0, 2.0), Vector2.Create(3.0, -4.0));
+        var nudged = Ray2.Create(Vector2.Create(1.0, 2.0 + 1e-14), Vector2.Create(3.0, -4.0));
+        var nan = Ray2.Create(Vector2.Create(double.NaN, 0.0), Vector2.Create(1.0, 0.0));
+
+        Assert.That(ray.PointAt(0.5), Is.EqualTo(Vector2.Create(2.5, 0.0)));
+        Assert.That(ray == nudged, Is.False);
+        Assert.That(Ray2<double>.NearEqual(ray, nudged), Is.True);
+        var same = nan;
+        Assert.That(nan == same, Is.False);
+        Assert.That(nan.Equals(same), Is.True);
+        Assert.That(ray.As<float>(), Is.EqualTo(Ray2.Create(Vector2.Create(1f, 2f), Vector2.Create(3f, -4f))));
+    }
 }

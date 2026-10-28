@@ -107,6 +107,9 @@ public struct BoundingSphere<T> : IEquatable<BoundingSphere<T>>, IFormattable wh
     /// <summary>Whether the two spheres touch or overlap.</summary>
     public readonly bool Intersects(BoundingSphere<T> sphere) => Collision.SphereIntersectsSphere(this, sphere);
 
+    /// <summary>Whether <paramref name="box"/> and the sphere touch or overlap.</summary>
+    public readonly bool Intersects(OrientedBoundingBox<T> box) => box.Intersects(this);
+
     /// <summary>Whether the sphere holds <paramref name="point"/>, its surface included.</summary>
     public readonly ContainmentType Contains(Vector3<T> point) => Collision.SphereContainsPoint(this, point);
 
@@ -119,6 +122,10 @@ public struct BoundingSphere<T> : IEquatable<BoundingSphere<T>>, IFormattable wh
 
     /// <summary>Whether the sphere holds <paramref name="sphere"/> wholly, in part or not at all.</summary>
     public readonly ContainmentType Contains(BoundingSphere<T> sphere) => Collision.SphereContainsSphere(this, sphere);
+
+    /// <summary>Whether this sphere holds <paramref name="box"/> wholly, in part or not at all.</summary>
+    public readonly ContainmentType Contains(OrientedBoundingBox<T> box) =>
+        box.IsEmpty ? ContainmentType.Disjoint : Collision.SphereContainsBox(box.ToLocal(this), box.LocalBox());
 
     /// <summary>The sphere in another number type, each value converted as a cast would.</summary>
     public readonly BoundingSphere<TOther> As<TOther>() where TOther : unmanaged, IFloatingPointIeee754<TOther> =>

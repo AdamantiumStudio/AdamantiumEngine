@@ -20,7 +20,7 @@ All packages share one version.
   rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
   one or far apart - a far translation in float, a small 2D scale.
 - `Adamantium.Mathematics.Typed` geometry, generic in the same way: `Size<T>`, `Rectangle<T>` (X, Y, Width, Height),
-  `Viewport<T>`, `Ray<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
+  `Viewport<T>`, `Ray<T>`, `Ray2<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
   `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
   `CreateShadow` (and the 3x3 ones) for a plane. Double boxes and spheres far from the origin keep what float loses.
   A whole-number rectangle takes a point as a cell, as a pixel is: the cells on its right and bottom edges are
@@ -30,11 +30,15 @@ All packages share one version.
   arcs, appended to a list the caller keeps and sampled at their parameter's exact steps, the NURBS to its end.
   `BoundingFrustum<T>` is a value now, its planes and corners kept inline; an endless far plane keeps everything ahead
   inside, its corners at infinity along the edges, and the tests by corners - support point, plane, frustum - take them
-  as such.
+  as such. `OrientedBoundingBox<T>` answers in its own axes as an axis-aligned box does - touching is meeting, a NaN
+  is outside, a box turned inside out holds nothing - and meets other boxes, segments and frustums by their separating
+  axes and planes.
   Mistakes of the old types are set right: a ray's distances to spheres and
   points with a direction not of length one, segments and planes at a small angle taken as parallel, short directions
   and normals taken as none, crossing rays missed in float, a sheared sphere's radius, the nearest point of a sphere to
-  its center, a NaN counted as a hit or as inside a frustum, a frustum's planes lost to overflow on large matrices,
+  its center, a NaN counted as a hit or as inside a frustum, a frustum's planes lost to overflow on large matrices, an
+  oriented box's turn composed the wrong way round and its scale laid along its own axes, a sheared box no longer
+  holding what it held, a box and frustum apart by the frustum's plane taken as crossing,
   and equality, exact now - a frustum's taking in whether it checks its far plane.
 
 - Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
