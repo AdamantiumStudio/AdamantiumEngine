@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -17,6 +18,24 @@ public static class VertexUtils
 {
     private static readonly ConcurrentDictionary<Type, VertexInputBindingDescription2EXT> Bindings = new();
     private static readonly ConcurrentDictionary<Type, VertexInputAttributeDescription2EXT[]> Inputs = new();
+
+    private static readonly Dictionary<Type, Format> FormatsOfTypes = new()
+    {
+        [typeof(Vector4F)] = Format.R32G32B32A32_SFLOAT,
+        [typeof(Color4F)] = Format.R32G32B32A32_SFLOAT,
+        [typeof(RectangleF)] = Format.R32G32B32A32_SFLOAT,
+        [typeof(Vector3F)] = Format.R32G32B32_SFLOAT,
+        [typeof(Color3F)] = Format.R32G32B32_SFLOAT,
+        [typeof(Vector2F)] = Format.R32G32_SFLOAT,
+        [typeof(float)] = Format.R32_SFLOAT,
+        [typeof(Color)] = Format.R8G8B8A8_UNORM,
+        [typeof(ColorBGRA)] = Format.B8G8R8A8_UNORM,
+        [typeof(Vector4<int>)] = Format.R32G32B32A32_SINT,
+        [typeof(Vector3<int>)] = Format.R32G32B32_SINT,
+        [typeof(int)] = Format.R32_SINT,
+        [typeof(uint)] = Format.R32_UINT,
+        [typeof(Bool4)] = Format.R32G32B32A32_UINT
+    };
 
     /// <summary>The binding: the structure's size apart, per instance when it is marked
     /// <see cref="PerInstanceDataAttribute"/>, per vertex otherwise.</summary>
@@ -44,34 +63,24 @@ public static class VertexUtils
             {
                 Binding = 0,
                 Location = (uint)location,
-                Format = FormatOf(field),
+                Format = GetFormat(field),
                 Offset = (uint)Marshal.OffsetOf(type, field.Name).ToInt32()
             })
             .ToArray());
 
-    private static Format FormatOf(FieldInfo field)
+    private static Format GetFormat(FieldInfo field)
     {
         var input = field.GetCustomAttribute<VertexInputElementAttribute>()
                     ?? throw new AttributeNotFoundException(
                         $"{field.DeclaringType?.Name}.{field.Name} has no {nameof(VertexInputElementAttribute)}");
 
-        return input.Format != Format.UNDEFINED ? input.Format : FormatOf(field.FieldType);
-    }
+        if (input.Format != Format.UNDEFINED)
+        {
+            return input.Format;
+        }
 
-    private static Format FormatOf(Type type)
-    {
-        if (type == typeof(Vector4F) || type == typeof(Color4F) || type == typeof(RectangleF)) return Format.R32G32B32A32_SFLOAT;
-        if (type == typeof(Vector3F) || type == typeof(Color3F)) return Format.R32G32B32_SFLOAT;
-        if (type == typeof(Vector2F)) return Format.R32G32_SFLOAT;
-        if (type == typeof(float)) return Format.R32_SFLOAT;
-        if (type == typeof(Color)) return Format.R8G8B8A8_UNORM;
-        if (type == typeof(ColorBGRA)) return Format.B8G8R8A8_UNORM;
-        if (type == typeof(Vector4<int>)) return Format.R32G32B32A32_SINT;
-        if (type == typeof(Vector3<int>)) return Format.R32G32B32_SINT;
-        if (type == typeof(int)) return Format.R32_SINT;
-        if (type == typeof(uint)) return Format.R32_UINT;
-        if (type == typeof(Bool4)) return Format.R32G32B32A32_UINT;
-
-        throw new NotSupportedException($"A vertex field of {type.Name} needs its format given in its attribute");
+        return FormatsOfTypes.TryGetValue(field.FieldType, out var format)
+            ? format
+            : throw new NotSupportedException($"A vertex field of {field.FieldType.Name} needs its format given in its attribute");
     }
 }

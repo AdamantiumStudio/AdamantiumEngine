@@ -168,9 +168,20 @@ public class ContentManagerTests
         {
             var count = Interlocked.Increment(ref reads);
             LastOptions = parameters.Options;
-            if (Blocking > TimeSpan.Zero) Thread.Sleep(Blocking);
-            if (Delay > TimeSpan.Zero) await Task.Delay(Delay);
-            if (FailFirst && count == 1) throw new InvalidOperationException("the first read fails");
+            if (Blocking > TimeSpan.Zero)
+            {
+                Thread.Sleep(Blocking);
+            }
+
+            if (Delay > TimeSpan.Zero)
+            {
+                await Task.Delay(Delay);
+            }
+
+            if (FailFirst && count == 1)
+            {
+                throw new InvalidOperationException("the first read fails");
+            }
             return new Asset();
         }
     }

@@ -18,16 +18,18 @@ public class VertexInputTests
     public void TheInputs_AreTheFieldsInOrder_AtTheirPlaces_InTheirFormats()
     {
         var inputs = typeof(MeshVertex).GetVertexAttributeDescription2();
+        string[] fields =
+        [
+            nameof(MeshVertex.Position), nameof(MeshVertex.Color), nameof(MeshVertex.Normal), nameof(MeshVertex.UV0),
+            nameof(MeshVertex.UV1), nameof(MeshVertex.UV2), nameof(MeshVertex.UV3), nameof(MeshVertex.Tangent),
+            nameof(MeshVertex.BiTangent)
+        ];
 
         Assert.Multiple(() =>
         {
             Assert.That(inputs.Select(input => input.Location), Is.EqualTo(Enumerable.Range(0, 9).Select(i => (uint)i)));
-            Assert.That(inputs.Select(input => input.Offset), Is.EqualTo(new[]
-            {
-                nameof(MeshVertex.Position), nameof(MeshVertex.Color), nameof(MeshVertex.Normal), nameof(MeshVertex.UV0),
-                nameof(MeshVertex.UV1), nameof(MeshVertex.UV2), nameof(MeshVertex.UV3), nameof(MeshVertex.Tangent),
-                nameof(MeshVertex.BiTangent)
-            }.Select(field => (uint)Marshal.OffsetOf<MeshVertex>(field))));
+            Assert.That(inputs.Select(input => input.Offset),
+                Is.EqualTo(fields.Select(field => (uint)Marshal.OffsetOf<MeshVertex>(field))));
             Assert.That(inputs[0].Format, Is.EqualTo(Format.R32G32B32_SFLOAT));
             Assert.That(inputs[1].Format, Is.EqualTo(Format.R32G32B32A32_SFLOAT));
             Assert.That(inputs[3].Format, Is.EqualTo(Format.R32G32_SFLOAT));

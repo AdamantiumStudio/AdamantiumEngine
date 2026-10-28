@@ -55,7 +55,10 @@ public class ContentManager : DisposableObject, IContentManager
 
         lock (sync)
         {
-            if (embedded.ContainsKey(assetName)) return true;
+            if (embedded.ContainsKey(assetName))
+            {
+                return true;
+            }
         }
 
         return Find(PathOf(assetName, null)) != null;
@@ -96,7 +99,10 @@ public class ContentManager : DisposableObject, IContentManager
         Task<object> load;
         lock (sync)
         {
-            if (!kept.Remove(new AssetKey(assetType, assetName), out load)) return false;
+            if (!kept.Remove(new AssetKey(assetType, assetName), out load))
+            {
+                return false;
+            }
         }
 
         DisposeOnceRead(load);
