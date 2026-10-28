@@ -303,7 +303,7 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
 
     /// <summary>Splits a transform into scale, rotation and translation; a mirror - a negative determinant of the upper
     /// 3x3 - comes out as a negative X scale. False, with no rotation, when a scale is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public readonly bool Decompose(out Vector3<T> scale, out Quaternion<T> rotation, out Vector3<T> translation)
     {
         translation = TranslationVector;
@@ -312,7 +312,7 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
 
     /// <summary>Splits a transform of one scale on every axis into that scale, rotation and translation; a mirror comes
     /// out as a negative scale. False, with no rotation, when the scale is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public readonly bool DecomposeUniformScale(out T scale, out Quaternion<T> rotation, out Vector3<T> translation)
     {
         translation = TranslationVector;
@@ -415,9 +415,9 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
             Vector4<T>.Lerp(start.Row3, end.Row3, amount), Vector4<T>.Lerp(start.Row4, end.Row4, amount));
 
     /// <summary>The element-wise blend of <paramref name="start"/> and <paramref name="end"/> at
-    /// <paramref name="amount"/> eased in and out by <see cref="Scalar.SmoothStep{T}"/>.</summary>
+    /// <paramref name="amount"/> eased in and out by <see cref="MathHelper.Scalar.SmoothStep{T}"/>.</summary>
     public static Matrix4x4<T> SmoothStep(Matrix4x4<T> start, Matrix4x4<T> end, T amount) =>
-        Lerp(start, end, Scalar.SmoothStep(amount));
+        Lerp(start, end, MathHelper.Scalar.SmoothStep(amount));
 
     /// <summary>Rows and columns swapped.</summary>
     public static Matrix4x4<T> Transpose(Matrix4x4<T> value) =>
@@ -530,7 +530,7 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
     /// <summary>Whether any element differs; NaN differs from everything.</summary>
     public static bool operator !=(Matrix4x4<T> left, Matrix4x4<T> right) => !(left == right);
 
-    /// <summary>Whether each element of the two is within <see cref="Scalar.NearEqual{T}"/>.</summary>
+    /// <summary>Whether each element of the two is within <see cref="MathHelper.Scalar.NearEqual{T}"/>.</summary>
     public static bool NearEqual(Matrix4x4<T> left, Matrix4x4<T> right) =>
         Vector4<T>.NearEqual(left.Row1, right.Row1) && Vector4<T>.NearEqual(left.Row2, right.Row2)
                                                     && Vector4<T>.NearEqual(left.Row3, right.Row3)

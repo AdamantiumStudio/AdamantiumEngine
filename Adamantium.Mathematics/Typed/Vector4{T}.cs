@@ -204,16 +204,16 @@ public struct Vector4<T> : IEquatable<Vector4<T>>, IFormattable where T : unmana
     public static Vector4<T> Abs(Vector4<T> value) => new(T.Abs(value.X), T.Abs(value.Y), T.Abs(value.Z), T.Abs(value.W));
 
     /// <summary>Whether each component of the two is within the same component of <paramref name="epsilon"/>, as
-    /// <see cref="Scalar.WithinEpsilon{T}"/> measures it.</summary>
+    /// <see cref="MathHelper.Scalar.WithinEpsilon{T}"/> measures it.</summary>
     public static bool NearEqual(Vector4<T> left, Vector4<T> right, Vector4<T> epsilon) =>
-        Scalar.WithinEpsilon(left.X, right.X, epsilon.X) && Scalar.WithinEpsilon(left.Y, right.Y, epsilon.Y)
-                                                         && Scalar.WithinEpsilon(left.Z, right.Z, epsilon.Z)
-                                                         && Scalar.WithinEpsilon(left.W, right.W, epsilon.W);
+        MathHelper.Scalar.WithinEpsilon(left.X, right.X, epsilon.X) && MathHelper.Scalar.WithinEpsilon(left.Y, right.Y, epsilon.Y)
+                                                         && MathHelper.Scalar.WithinEpsilon(left.Z, right.Z, epsilon.Z)
+                                                         && MathHelper.Scalar.WithinEpsilon(left.W, right.W, epsilon.W);
 
-    /// <summary>Whether each component of the two is within <see cref="Scalar.NearEqual{T}"/>.</summary>
+    /// <summary>Whether each component of the two is within <see cref="MathHelper.Scalar.NearEqual{T}"/>.</summary>
     public static bool NearEqual(Vector4<T> left, Vector4<T> right) =>
-        Scalar.NearEqual(left.X, right.X) && Scalar.NearEqual(left.Y, right.Y) && Scalar.NearEqual(left.Z, right.Z)
-        && Scalar.NearEqual(left.W, right.W);
+        MathHelper.Scalar.NearEqual(left.X, right.X) && MathHelper.Scalar.NearEqual(left.Y, right.Y) && MathHelper.Scalar.NearEqual(left.Z, right.Z)
+        && MathHelper.Scalar.NearEqual(left.W, right.W);
 
     /// <summary>The sum of two vectors.</summary>
     public static Vector4<T> operator +(Vector4<T> left, Vector4<T> right) =>

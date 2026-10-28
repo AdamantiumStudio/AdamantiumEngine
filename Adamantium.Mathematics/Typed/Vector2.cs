@@ -15,14 +15,14 @@ public static class Vector2
 
     extension<T>(Vector2<T> vector) where T : unmanaged, IFloatingPointIeee754<T>
     {
-        /// <summary>Whether the length is one within <see cref="Scalar.ZeroTolerance{T}"/>.</summary>
-        public bool IsNormalized => Scalar.IsZero(vector.LengthSquared() - T.One);
+        /// <summary>Whether the length is one within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/>.</summary>
+        public bool IsNormalized => MathHelper.Scalar.IsZero(vector.LengthSquared() - T.One);
 
         /// <summary>The length.</summary>
         public T Length() => T.Sqrt(vector.LengthSquared());
 
         /// <summary>Whether the two lie along one line, either way: the sine of the angle between them is within
-        /// <see cref="Scalar.ZeroTolerance{T}"/>. A zero vector lies along every line.</summary>
+        /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/>. A zero vector lies along every line.</summary>
         public bool IsCollinear(Vector2<T> other)
         {
             var (scale, otherScale) = (T.Max(T.Abs(vector.X), T.Abs(vector.Y)), T.Max(T.Abs(other.X), T.Abs(other.Y)));
@@ -33,7 +33,7 @@ public static class Vector2
 
             var (a, b) = (DividedByLargest(vector, scale), DividedByLargest(other, otherScale));
             var determinant = Vector2<T>.Determinant(a, b);
-            var tolerance = Scalar.ZeroTolerance<T>();
+            var tolerance = MathHelper.Scalar.ZeroTolerance<T>();
             return determinant * determinant <= tolerance * tolerance * a.LengthSquared() * b.LengthSquared();
         }
     }
@@ -41,11 +41,11 @@ public static class Vector2
     extension<T>(ref Vector2<T> vector) where T : unmanaged, IFloatingPointIeee754<T>
     {
         /// <summary>Scales the vector to a length of one; leaves it as it is when its length is within
-        /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+        /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
         public void Normalize()
         {
             var length = vector.Length();
-            if (!Scalar.IsZero(length))
+            if (!MathHelper.Scalar.IsZero(length))
             {
                 var inverse = T.One / length;
                 vector.X *= inverse;
@@ -57,7 +57,7 @@ public static class Vector2
     extension<T>(Vector2<T>) where T : unmanaged, IFloatingPointIeee754<T>
     {
         /// <summary><paramref name="value"/> scaled to a length of one, or as it is when its length is within
-        /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+        /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
         public static Vector2<T> Normalize(Vector2<T> value)
         {
             value.Normalize();
@@ -77,18 +77,18 @@ public static class Vector2
         /// <summary>The blend of <paramref name="start"/> and <paramref name="end"/> at <paramref name="amount"/>:
         /// start at 0, end at 1.</summary>
         public static Vector2<T> Lerp(Vector2<T> start, Vector2<T> end, T amount) =>
-            new(Scalar.Lerp(start.X, end.X, amount), Scalar.Lerp(start.Y, end.Y, amount));
+            new(MathHelper.Scalar.Lerp(start.X, end.X, amount), MathHelper.Scalar.Lerp(start.Y, end.Y, amount));
 
         /// <summary>The blend of <paramref name="start"/> and <paramref name="end"/> at <paramref name="amount"/> eased
-        /// in and out by <see cref="Scalar.SmoothStep{T}"/>.</summary>
+        /// in and out by <see cref="MathHelper.Scalar.SmoothStep{T}"/>.</summary>
         public static Vector2<T> SmoothStep(Vector2<T> start, Vector2<T> end, T amount) =>
-            Lerp(start, end, Scalar.SmoothStep(amount));
+            Lerp(start, end, MathHelper.Scalar.SmoothStep(amount));
 
         /// <summary>The point at <paramref name="amount"/> on the Hermite spline from <paramref name="value1"/> leaving
         /// along <paramref name="tangent1"/> to <paramref name="value2"/> arriving along <paramref name="tangent2"/>.</summary>
         public static Vector2<T> Hermite(Vector2<T> value1, Vector2<T> tangent1, Vector2<T> value2, Vector2<T> tangent2, T amount)
         {
-            var weights = Scalar.HermiteWeights(amount);
+            var weights = MathHelper.Scalar.HermiteWeights(amount);
             return value1 * weights.Start + value2 * weights.End + tangent1 * weights.StartTangent
                    + tangent2 * weights.EndTangent;
         }

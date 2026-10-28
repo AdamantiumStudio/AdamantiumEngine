@@ -178,13 +178,13 @@ public struct Vector2<T> : IEquatable<Vector2<T>>, IFormattable where T : unmana
     public static Vector2<T> Abs(Vector2<T> value) => new(T.Abs(value.X), T.Abs(value.Y));
 
     /// <summary>Whether each component of the two is within the same component of <paramref name="epsilon"/>, as
-    /// <see cref="Scalar.WithinEpsilon{T}"/> measures it.</summary>
+    /// <see cref="MathHelper.Scalar.WithinEpsilon{T}"/> measures it.</summary>
     public static bool NearEqual(Vector2<T> left, Vector2<T> right, Vector2<T> epsilon) =>
-        Scalar.WithinEpsilon(left.X, right.X, epsilon.X) && Scalar.WithinEpsilon(left.Y, right.Y, epsilon.Y);
+        MathHelper.Scalar.WithinEpsilon(left.X, right.X, epsilon.X) && MathHelper.Scalar.WithinEpsilon(left.Y, right.Y, epsilon.Y);
 
-    /// <summary>Whether each component of the two is within <see cref="Scalar.NearEqual{T}"/>.</summary>
+    /// <summary>Whether each component of the two is within <see cref="MathHelper.Scalar.NearEqual{T}"/>.</summary>
     public static bool NearEqual(Vector2<T> left, Vector2<T> right) =>
-        Scalar.NearEqual(left.X, right.X) && Scalar.NearEqual(left.Y, right.Y);
+        MathHelper.Scalar.NearEqual(left.X, right.X) && MathHelper.Scalar.NearEqual(left.Y, right.Y);
 
     /// <summary>The sum of two vectors.</summary>
     public static Vector2<T> operator +(Vector2<T> left, Vector2<T> right) => new(left.X + right.X, left.Y + right.Y);

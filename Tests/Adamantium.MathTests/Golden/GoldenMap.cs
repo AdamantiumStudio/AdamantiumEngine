@@ -17,6 +17,7 @@ public sealed class GoldenMap
     private readonly List<(Func<string, bool> Applies, string Reason)> reasonRules = [];
     private readonly List<(Func<string, bool> Applies, string Reason)> answersWhereThrew = [];
     private readonly List<(Func<string, bool> Applies, Func<double[], bool> Changed, string Reason)> changedCases = [];
+    private readonly List<(Func<string, bool> Applies, double Tolerance, string Reason)> tolerances = [];
 
     /// <summary>Answers <paramref name="key"/> with what <paramref name="call"/> returns; a static operation.</summary>
     public void Returns(string key, Func<GoldenInputs, object> call) => Calls(key, inputs => [call(inputs)]);
@@ -52,6 +53,14 @@ public sealed class GoldenMap
     /// <summary>Whether the answer to <paramref name="key"/> on <paramref name="inputs"/> is known to differ from the old
     /// one.</summary>
     public bool IsChanged(string key, double[] inputs) => changedCases.Exists(rule => rule.Applies(key) && rule.Changed(inputs));
+
+    /// <summary>Records that every key <paramref name="applies"/> to is checked within <paramref name="tolerance"/> of the
+    /// answer's size instead of the usual, and why: an operation whose float answer neither the old nor the new can give
+    /// closer.</summary>
+    public void Tolerance(Func<string, bool> applies, double tolerance, string reason) => tolerances.Add((applies, tolerance, reason));
+
+    /// <summary>The tolerance recorded for <paramref name="key"/>, or null for the usual one.</summary>
+    public double? ToleranceFor(string key) => tolerances.Find(rule => rule.Applies(key)) is { Reason: not null } rule ? rule.Tolerance : null;
 
     /// <summary>Whether <paramref name="key"/> may answer where the old one threw.</summary>
     public bool MayAnswerWhereOldThrew(string key) => answersWhereThrew.Exists(rule => rule.Applies(key));
@@ -151,7 +160,7 @@ public sealed class GoldenMap
                 return;
         }
 
-        foreach (var field in value.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var field in value.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
         {
             Flatten(field.GetValue(value), into);
         }

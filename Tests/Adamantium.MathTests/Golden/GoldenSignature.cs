@@ -13,7 +13,9 @@ public sealed record GoldenSignature(string Type, string Method, bool IsInstance
         ["Boolean"] = 1, ["Single"] = 1, ["Double"] = 1, ["Int32"] = 1,
         ["Vector2"] = 2, ["Vector2F"] = 2, ["Vector3"] = 3, ["Vector3F"] = 3, ["Vector4"] = 4, ["Vector4F"] = 4,
         ["Quaternion"] = 4, ["QuaternionF"] = 4, ["Matrix3x2"] = 6, ["Matrix3x2F"] = 6, ["Matrix3x3"] = 9,
-        ["Matrix3x3F"] = 9, ["Matrix4x4"] = 16, ["Matrix4x4F"] = 16
+        ["Matrix3x3F"] = 9, ["Matrix4x4"] = 16, ["Matrix4x4F"] = 16, ["Size"] = 2, ["SizeF"] = 2, ["Rectangle"] = 4,
+        ["RectangleF"] = 4, ["Thickness"] = 4, ["Ray"] = 6, ["Plane"] = 4, ["BoundingBox"] = 6, ["BoundingSphere"] = 4,
+        ["ViewportF"] = 6
     };
 
     /// <summary>Whether every parameter's type has a known count of numbers.</summary>

@@ -85,16 +85,16 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     /// <summary>Whether this is exactly <see cref="Identity"/>.</summary>
     public readonly bool IsIdentity => this == Identity;
 
-    /// <summary>Whether the length is one within <see cref="Scalar.ZeroTolerance{T}"/>.</summary>
-    public readonly bool IsNormalized => Scalar.IsZero(LengthSquared() - T.One);
+    /// <summary>Whether the length is one within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/>.</summary>
+    public readonly bool IsNormalized => MathHelper.Scalar.IsZero(LengthSquared() - T.One);
 
-    /// <summary>The rotation angle in radians; zero when the axis part is within <see cref="Scalar.ZeroTolerance{T}"/>
+    /// <summary>The rotation angle in radians; zero when the axis part is within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/>
     /// of zero.</summary>
     public readonly T Angle
     {
         get
         {
-            if (Scalar.IsZero(X * X + Y * Y + Z * Z))
+            if (MathHelper.Scalar.IsZero(X * X + Y * Y + Z * Z))
             {
                 return T.Zero;
             }
@@ -104,13 +104,13 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     }
 
     /// <summary>The rotation axis, of length one; the X axis when the axis part is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public readonly Vector3<T> Axis
     {
         get
         {
             var lengthSquared = X * X + Y * Y + Z * Z;
-            if (Scalar.IsZero(lengthSquared))
+            if (MathHelper.Scalar.IsZero(lengthSquared))
             {
                 return Vector3<T>.UnitX;
             }
@@ -169,11 +169,11 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     }
 
     /// <summary>Makes this its inverse; leaves it as it is when its length is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public void Invert()
     {
         var lengthSquared = LengthSquared();
-        if (!Scalar.IsZero(lengthSquared))
+        if (!MathHelper.Scalar.IsZero(lengthSquared))
         {
             var inverse = T.One / lengthSquared;
             X = -X * inverse;
@@ -184,11 +184,11 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     }
 
     /// <summary>Scales this to a length of one; leaves it as it is when its length is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public void Normalize()
     {
         var length = Length();
-        if (!Scalar.IsZero(length))
+        if (!MathHelper.Scalar.IsZero(length))
         {
             var inverse = T.One / length;
             X *= inverse;
@@ -263,7 +263,7 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     }
 
     /// <summary>The inverse of <paramref name="value"/>, or it as it is when its length is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public static Quaternion<T> Invert(Quaternion<T> value)
     {
         value.Invert();
@@ -271,7 +271,7 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     }
 
     /// <summary><paramref name="value"/> scaled to a length of one, or as it is when its length is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public static Quaternion<T> Normalize(Quaternion<T> value)
     {
         value.Normalize();
@@ -345,7 +345,7 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
         T opposite;
         var dot = Dot(start, end);
         var sign = dot < T.Zero ? -T.One : T.One;
-        if (T.Abs(dot) > T.One - Scalar.ZeroTolerance<T>())
+        if (T.Abs(dot) > T.One - MathHelper.Scalar.ZeroTolerance<T>())
         {
             inverse = T.One - amount;
             opposite = amount * sign;
@@ -442,10 +442,10 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     /// <summary>Whether any component differs; NaN differs from everything.</summary>
     public static bool operator !=(Quaternion<T> left, Quaternion<T> right) => !(left == right);
 
-    /// <summary>Whether each component of the two is within <see cref="Scalar.NearEqual{T}"/>.</summary>
+    /// <summary>Whether each component of the two is within <see cref="MathHelper.Scalar.NearEqual{T}"/>.</summary>
     public static bool NearEqual(Quaternion<T> left, Quaternion<T> right) =>
-        Scalar.NearEqual(left.X, right.X) && Scalar.NearEqual(left.Y, right.Y) && Scalar.NearEqual(left.Z, right.Z)
-        && Scalar.NearEqual(left.W, right.W);
+        MathHelper.Scalar.NearEqual(left.X, right.X) && MathHelper.Scalar.NearEqual(left.Y, right.Y) && MathHelper.Scalar.NearEqual(left.Z, right.Z)
+        && MathHelper.Scalar.NearEqual(left.W, right.W);
 
     /// <summary>Whether the components are equal, a NaN to a NaN too - as a dictionary key needs.</summary>
     public readonly bool Equals(Quaternion<T> other) =>

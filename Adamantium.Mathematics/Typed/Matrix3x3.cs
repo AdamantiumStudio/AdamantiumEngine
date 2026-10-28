@@ -90,6 +90,24 @@ public static class Matrix3x3
         Vector3<T> cameraUpVector, Vector3<T> cameraForwardVector) where T : unmanaged, IFloatingPointIeee754<T> =>
         CreateBillboard(objectPosition - cameraPosition, cameraUpVector, cameraForwardVector);
 
+    /// <summary>The mirror image in the plane through the origin parallel to <paramref name="plane"/>, whose normal is
+    /// taken to be of length one.</summary>
+    public static Matrix3x3<T> CreateReflection<T>(Plane<T> plane) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var twice = plane.Normal * T.CreateTruncating(-2);
+        return new Matrix3x3<T>(plane.Normal.X * twice + Vector3<T>.UnitX, plane.Normal.Y * twice + Vector3<T>.UnitY,
+            plane.Normal.Z * twice + Vector3<T>.UnitZ);
+    }
+
+    /// <summary>The turn-and-scale part of <see cref="Matrix4x4.CreateShadow{T}"/>: X, Y and Z of the light only.</summary>
+    public static Matrix3x3<T> CreateShadow<T>(Vector4<T> light, Plane<T> plane) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var dot = Vector4<T>.Dot(new Vector4<T>(plane.Normal, plane.D), light);
+        var direction = (Vector3<T>)light;
+        return new Matrix3x3<T>(-plane.Normal.X * direction + dot * Vector3<T>.UnitX, -plane.Normal.Y * direction + dot * Vector3<T>.UnitY,
+            -plane.Normal.Z * direction + dot * Vector3<T>.UnitZ);
+    }
+
     /// <summary>The turn of a view whose depth axis is <paramref name="zAxis"/>, of length one: the view's axes as
     /// columns, so a world direction times it is the direction seen from the view.</summary>
     internal static Matrix3x3<T> CreateView<T>(Vector3<T> zAxis, Vector3<T> up) where T : unmanaged, IFloatingPointIeee754<T>
@@ -105,7 +123,7 @@ public static class Matrix3x3
         where T : unmanaged, IFloatingPointIeee754<T>
     {
         var lengthSquared = toCamera.LengthSquared();
-        var zAxis = Scalar.IsZero(lengthSquared) ? -cameraForward : toCamera * (T.One / T.Sqrt(lengthSquared));
+        var zAxis = MathHelper.Scalar.IsZero(lengthSquared) ? -cameraForward : toCamera * (T.One / T.Sqrt(lengthSquared));
         var xAxis = Vector3<T>.Normalize(Vector3<T>.Cross(cameraUp, zAxis));
         return new Matrix3x3<T>(xAxis, Vector3<T>.Cross(zAxis, xAxis), zAxis);
     }

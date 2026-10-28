@@ -40,6 +40,36 @@ public sealed class GoldenInputs
     public Matrix4x4<T> Matrix4x4<T>() where T : unmanaged, IFloatingPointIeee754<T> =>
         new(Vector4<T>(), Vector4<T>(), Vector4<T>(), Vector4<T>());
 
+    /// <summary>The next two numbers as a width and a height.</summary>
+    public Size<T> Size<T>() where T : unmanaged, INumber<T> => new(Number<T>(), Number<T>());
+
+    /// <summary>The next four numbers as a rectangle's X, Y, Width and Height, as the integer rectangle held them.</summary>
+    public Rectangle<T> Rectangle<T>() where T : unmanaged, INumber<T> => new(Number<T>(), Number<T>(), Number<T>(), Number<T>());
+
+    /// <summary>The next four numbers as a rectangle's left, top, right and bottom, as the float rectangle held them.</summary>
+    public Rectangle<T> RectangleByCorners<T>() where T : unmanaged, INumber<T> =>
+        Adamantium.Mathematics.Typed.Rectangle.CreateFromCorners(Number<T>(), Number<T>(), Number<T>(), Number<T>());
+
+    /// <summary>The next four numbers as a thickness: left, top, right, bottom.</summary>
+    public Adamantium.Mathematics.Thickness Thickness() =>
+        new(Number<double>(), Number<double>(), Number<double>(), Number<double>());
+
+    /// <summary>The next six numbers as a ray: its start, then its direction.</summary>
+    public Ray<T> Ray<T>() where T : unmanaged, IFloatingPointIeee754<T> => new(Vector3<T>(), Vector3<T>());
+
+    /// <summary>The next four numbers as a plane: its normal, then D.</summary>
+    public Plane<T> Plane<T>() where T : unmanaged, IFloatingPointIeee754<T> => new(Vector3<T>(), Number<T>());
+
+    /// <summary>The next six numbers as a box: its minimum, then its maximum.</summary>
+    public BoundingBox<T> BoundingBox<T>() where T : unmanaged, IFloatingPointIeee754<T> => new(Vector3<T>(), Vector3<T>());
+
+    /// <summary>The next four numbers as a sphere: its center, then its radius.</summary>
+    public BoundingSphere<T> BoundingSphere<T>() where T : unmanaged, IFloatingPointIeee754<T> => new(Vector3<T>(), Number<T>());
+
+    /// <summary>The next six numbers as a viewport: X, Y, width, height, then the depth range.</summary>
+    public Viewport<T> Viewport<T>() where T : unmanaged, IFloatingPointIeee754<T> =>
+        new(Number<T>(), Number<T>(), Number<T>(), Number<T>(), Number<T>(), Number<T>());
+
     /// <summary>The next four numbers as a quaternion.</summary>
     public Quaternion<T> Quaternion<T>() where T : unmanaged, IFloatingPointIeee754<T> =>
         new(Number<T>(), Number<T>(), Number<T>(), Number<T>());

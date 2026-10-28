@@ -190,9 +190,9 @@ public struct Matrix3x2<T> : IEquatable<Matrix3x2<T>>, IFormattable where T : un
             Vector2<T>.Lerp(start.Row3, end.Row3, amount));
 
     /// <summary>The element-wise blend of <paramref name="start"/> and <paramref name="end"/> at
-    /// <paramref name="amount"/> eased in and out by <see cref="Scalar.SmoothStep{T}"/>.</summary>
+    /// <paramref name="amount"/> eased in and out by <see cref="MathHelper.Scalar.SmoothStep{T}"/>.</summary>
     public static Matrix3x2<T> SmoothStep(Matrix3x2<T> start, Matrix3x2<T> end, T amount) =>
-        Lerp(start, end, Scalar.SmoothStep(amount));
+        Lerp(start, end, MathHelper.Scalar.SmoothStep(amount));
 
     /// <summary>The inverse; <see cref="Identity"/> when the turn and scale are singular, so a transform squashed flat
     /// undoes to nothing rather than to infinities. Where the determinant leaves the normal range - elements far from one
@@ -257,7 +257,7 @@ public struct Matrix3x2<T> : IEquatable<Matrix3x2<T>>, IFormattable where T : un
     public static explicit operator Matrix3x2<T>(Matrix4x4<T> value) =>
         new(value.M11, value.M12, value.M21, value.M22, value.M41, value.M42);
 
-    /// <summary>Whether each element of the two is within <see cref="Scalar.NearEqual{T}"/>.</summary>
+    /// <summary>Whether each element of the two is within <see cref="MathHelper.Scalar.NearEqual{T}"/>.</summary>
     public static bool NearEqual(Matrix3x2<T> left, Matrix3x2<T> right) =>
         Vector2<T>.NearEqual(left.Row1, right.Row1) && Vector2<T>.NearEqual(left.Row2, right.Row2)
                                                     && Vector2<T>.NearEqual(left.Row3, right.Row3);

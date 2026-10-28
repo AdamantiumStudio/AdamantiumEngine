@@ -19,6 +19,11 @@ All packages share one version.
   projection, a field of view in degrees, collinearity, spherical blends of perpendicular rotations, the angles of a
   rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
   one or far apart - a far translation in float, a small 2D scale.
+- `Adamantium.Mathematics.Typed` geometry, generic in the same way: `Size<T>`, `Rectangle<T>` (X, Y, Width, Height),
+  `Viewport<T>`, `Ray<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
+  `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
+  `CreateShadow` (and the 3x3 ones) for a plane. Double boxes and spheres far from the origin keep what float loses.
+  The scalar helpers are `MathHelper.Scalar`.
 
 - Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
   `PatchList`, set by the caller; `IGraphicsDevice.TessellationDomainOrigin`: the corner of the domain at (0, 0), upper
@@ -1017,6 +1022,8 @@ All packages share one version.
 
 ### Fixed
 
+- `MSDFGenerator.GenerateMSDFForExistingTextureData` filled the space away from a glyph with a distance that changed
+  with where the glyph sat in its em square; it is half the em now, for every glyph.
 - A character no family of a font fallback's list has - Hebrew or Arabic on a Linux whose fonts for them are not
   among the families listed there - was drawn as the missing-glyph box though a font installed for it had it. The
   fallback goes on to the collection's other families now, those sharing most words of the text's family name first.

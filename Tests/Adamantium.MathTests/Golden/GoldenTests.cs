@@ -19,7 +19,7 @@ public class GoldenTests
     private static readonly string[] Checked =
     [
         "Vector2", "Vector2F", "Vector3", "Vector3F", "Vector4", "Vector4F", "Quaternion", "QuaternionF", "Matrix3x2",
-        "Matrix3x2F", "Matrix3x3", "Matrix3x3F", "Matrix4x4", "Matrix4x4F"
+        "Matrix3x2F", "Matrix3x3", "Matrix3x3F", "Matrix4x4", "Matrix4x4F", "Size", "SizeF", "Rectangle", "RectangleF", "Ray", "Plane", "BoundingBox", "BoundingSphere", "Collision"
     ];
 
     private static readonly Lazy<GoldenMap> Map = new(() =>
@@ -27,6 +27,8 @@ public class GoldenTests
         var map = new GoldenMap();
         VectorsGolden.Register(map);
         MatricesGolden.Register(map);
+        GeometryGolden.Register(map);
+        VolumesGolden.Register(map);
         return map;
     });
 
@@ -48,7 +50,7 @@ public class GoldenTests
     public void Answers_AsTheOldTypesDid(GoldenOperation operation)
     {
         var calls = Map.Value.Resolve(operation.Key);
-        var tolerance = GoldenSignature.Parse(operation.Key).IsSinglePrecision ? 1e-5 : 1e-12;
+        var tolerance = Map.Value.ToleranceFor(operation.Key) ?? (GoldenSignature.Parse(operation.Key).IsSinglePrecision ? 1e-5 : 1e-12);
         var failures = new List<string>();
         var checkedCases = 0;
         foreach (var recorded in operation.Cases)

@@ -202,11 +202,11 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
     }
 
     /// <summary>Splits a rotation and scale into the two; a mirror - a negative determinant - comes out as a negative X
-    /// scale. False, with no rotation, when a scale is within <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// scale. False, with no rotation, when a scale is within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public readonly bool Decompose(out Vector3<T> scale, out Quaternion<T> rotation)
     {
         scale = new Vector3<T>(Row1.Length(), Row2.Length(), Row3.Length());
-        if (Scalar.IsZero(scale.X) || Scalar.IsZero(scale.Y) || Scalar.IsZero(scale.Z))
+        if (MathHelper.Scalar.IsZero(scale.X) || MathHelper.Scalar.IsZero(scale.Y) || MathHelper.Scalar.IsZero(scale.Z))
         {
             rotation = Quaternion<T>.Identity;
             return false;
@@ -223,11 +223,11 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
 
     /// <summary>Splits a rotation and one scale on every axis into the two; a mirror - a negative determinant - comes
     /// out as a negative scale. False, with no rotation, when the scale is within
-    /// <see cref="Scalar.ZeroTolerance{T}"/> of zero.</summary>
+    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero.</summary>
     public readonly bool DecomposeUniformScale(out T scale, out Quaternion<T> rotation)
     {
         scale = Row1.Length();
-        if (T.Abs(scale) < Scalar.ZeroTolerance<T>())
+        if (T.Abs(scale) < MathHelper.Scalar.ZeroTolerance<T>())
         {
             rotation = Quaternion<T>.Identity;
             return false;
@@ -337,9 +337,9 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
             Vector3<T>.Lerp(start.Row3, end.Row3, amount));
 
     /// <summary>The element-wise blend of <paramref name="start"/> and <paramref name="end"/> at
-    /// <paramref name="amount"/> eased in and out by <see cref="Scalar.SmoothStep{T}"/>.</summary>
+    /// <paramref name="amount"/> eased in and out by <see cref="MathHelper.Scalar.SmoothStep{T}"/>.</summary>
     public static Matrix3x3<T> SmoothStep(Matrix3x3<T> start, Matrix3x3<T> end, T amount) =>
-        Lerp(start, end, Scalar.SmoothStep(amount));
+        Lerp(start, end, MathHelper.Scalar.SmoothStep(amount));
 
     /// <summary>Rows and columns swapped.</summary>
     public static Matrix3x3<T> Transpose(Matrix3x3<T> value) => new(value.Column1, value.Column2, value.Column3);
@@ -439,7 +439,7 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
     public static explicit operator Matrix3x3<T>(Matrix4x4<T> value) =>
         new((Vector3<T>)value.Row1, (Vector3<T>)value.Row2, (Vector3<T>)value.Row3);
 
-    /// <summary>Whether each element of the two is within <see cref="Scalar.NearEqual{T}"/>.</summary>
+    /// <summary>Whether each element of the two is within <see cref="MathHelper.Scalar.NearEqual{T}"/>.</summary>
     public static bool NearEqual(Matrix3x3<T> left, Matrix3x3<T> right) =>
         Vector3<T>.NearEqual(left.Row1, right.Row1) && Vector3<T>.NearEqual(left.Row2, right.Row2)
                                                     && Vector3<T>.NearEqual(left.Row3, right.Row3);

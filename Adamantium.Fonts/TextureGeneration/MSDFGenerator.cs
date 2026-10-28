@@ -425,24 +425,11 @@ namespace Adamantium.Fonts.TextureGeneration
             // 1. Color all segments
             ColorEdges(segments);
 
-            // 2. Calculate boundaries for original glyph (the position of the EM square)
-            var emSquare = new Rectangle(0, 0, unitsPerEm, unitsPerEm);
-
             var glyphBoundingRectangle = glyph.BoundingRectangle;
-
-            // 3. Place EM square so that its center matches glyph center
-            var glyphCenter = glyphBoundingRectangle.Center;
-            var emSquareCenter = emSquare.Center;
-            var diff = glyphCenter - emSquareCenter;
-            diff.X = Math.Floor(diff.X);
-            diff.Y = Math.Floor(diff.Y);
-
-            emSquare.X += (int)diff.X;
-            emSquare.Y += (int)diff.Y;
 
             var size = textureData.BoundingRect.Size;
 
-            // 4. Generate colored pseudo-distance field
+            // 2. Generate colored pseudo-distance field
             var coloredDistances = new ColoredDistance[(int)size.Width, (int)size.Height];
 
             var scaleX = size.Width / glyphBoundingRectangle.Width;
@@ -454,7 +441,7 @@ namespace Adamantium.Fonts.TextureGeneration
 
             ColoredDistance minColoredDistance;
 
-            var value = -(emSquare.Width / 2) / range + 0.5;
+            var value = -(unitsPerEm / 2) / range + 0.5;
             minColoredDistance.RedDistance = value;
             minColoredDistance.GreenDistance = value;
             minColoredDistance.BlueDistance = value;
@@ -497,10 +484,10 @@ namespace Adamantium.Fonts.TextureGeneration
                 }
             }
 
-            // 5. Fix artifacts, as GenerateDirectMSDF does.
+            // 3. Fix artifacts, as GenerateDirectMSDF does.
             UseTrueDistanceAwayFromOutline(coloredDistances, (int)size.Width, (int)size.Height, pxRange);
 
-            // 6. Normalize MSDF and SDF to [0 .. 255] range
+            // 4. Normalize MSDF and SDF to [0 .. 255] range
             var margin = (int)textureData.Margin;
             var rowStride = (size.Width + (margin * 2)) * 4;
             for (var y = 0; y < size.Height; y++)

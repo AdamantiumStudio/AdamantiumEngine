@@ -82,7 +82,7 @@ public static class Matrix4x4
         var rv1 = Vector3<T>.Dot(direction, e1);
         var e0 = Vector3<T>.Normalize(direction - rv1 * e1);
         var rv0 = Vector3<T>.Dot(direction, e0);
-        if (Scalar.IsZero(rv0))
+        if (MathHelper.Scalar.IsZero(rv0))
         {
             throw new ArgumentException("The rotation vector is parallel to the translation vector.", nameof(rotationVector));
         }
@@ -387,6 +387,24 @@ public static class Matrix4x4
         var result = CreatePerspectiveOffCenterLH(left, right, bottom, top, znear, zfar);
         result.Row3 = -result.Row3;
         return result;
+    }
+
+    /// <summary>The mirror image in <paramref name="plane"/>, whose normal is taken to be of length one.</summary>
+    public static Matrix4x4<T> CreateReflection<T>(Plane<T> plane) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var result = (Matrix4x4<T>)Matrix3x3.CreateReflection(plane);
+        result.TranslationVector = plane.Normal * (T.CreateTruncating(-2) * plane.D);
+        return result;
+    }
+
+    /// <summary>The flattening of points onto <paramref name="plane"/> along the light: towards the point
+    /// <paramref name="light"/> with a W of one, along the direction with a W of zero.</summary>
+    public static Matrix4x4<T> CreateShadow<T>(Vector4<T> light, Plane<T> plane) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var coefficients = new Vector4<T>(plane.Normal, plane.D);
+        var dot = Vector4<T>.Dot(coefficients, light);
+        return new Matrix4x4<T>(-coefficients.X * light + dot * Vector4<T>.UnitX, -coefficients.Y * light + dot * Vector4<T>.UnitY,
+            -coefficients.Z * light + dot * Vector4<T>.UnitZ, -coefficients.W * light + dot * Vector4<T>.UnitW);
     }
 
     /// <summary>A 2:1 isometric projection showing <paramref name="isometricScale"/> units each way from the center: a

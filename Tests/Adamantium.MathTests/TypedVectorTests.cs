@@ -187,7 +187,7 @@ public class TypedVectorTests
         var v = Vector3<Half>.Normalize(Vector3.Create((Half)3, (Half)0, (Half)4));
 
         Assert.That(v.IsNormalized, Is.True);
-        Assert.That(Scalar.NearEqual((Half)1, (Half)1.001), Is.True);
+        Assert.That(MathHelper.Scalar.NearEqual((Half)1, (Half)1.001), Is.True);
     }
 
     [TestCase(1, 0, 0, 2, 0, 0, true)]
@@ -217,10 +217,10 @@ public class TypedVectorTests
     [Test]
     public void LongNearEqual_IsExact()
     {
-        Assert.That(Scalar.NearEqual(9007199254740993L, 9007199254740992L), Is.False);
-        Assert.That(Scalar.NearEqual(long.MaxValue, long.MaxValue - 100), Is.False);
-        Assert.That(Scalar.WithinEpsilon(long.MaxValue, long.MinValue, 5L), Is.False);
-        Assert.That(Scalar.WithinEpsilon(long.MinValue + 3, long.MinValue, 5L), Is.True);
+        Assert.That(MathHelper.Scalar.NearEqual(9007199254740993L, 9007199254740992L), Is.False);
+        Assert.That(MathHelper.Scalar.NearEqual(long.MaxValue, long.MaxValue - 100), Is.False);
+        Assert.That(MathHelper.Scalar.WithinEpsilon(long.MaxValue, long.MinValue, 5L), Is.False);
+        Assert.That(MathHelper.Scalar.WithinEpsilon(long.MinValue + 3, long.MinValue, 5L), Is.True);
     }
 
     [TestCase(1, 0, 2, 0, true)]
