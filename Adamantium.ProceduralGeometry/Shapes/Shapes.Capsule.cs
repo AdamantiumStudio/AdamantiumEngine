@@ -69,10 +69,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double depth,
                 int tessellation)
             {
-                var vertices = new List<Vector3<double>>();
-                var normals = new List<Vector3F>();
-                var uvs = new List<Vector2F>();
-                var indices = new List<int>();
+                List<Vector3<double>> vertices = [];
+                List<Vector3F> normals = [];
+                List<Vector2F> uvs = [];
+                List<int> indices = [];
 
                 int ringsPerEnd = tessellation;
                 int around = 4 * tessellation;

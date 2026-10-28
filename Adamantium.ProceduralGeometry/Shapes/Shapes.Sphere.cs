@@ -203,13 +203,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var top = new Vector3<double>(0, 1, 0);
                     var bottom = new Vector3<double>(0, -1, 0);
                     Vector3<double>[] equator = [new(0, 0, -1), new(1, 0, 0), new(0, 0, 1), new(-1, 0, 0)];
-                    var points = new List<Vector3<double>> { top };
-                    points.AddRange(equator);
-                    points.Add(bottom);
+                    List<Vector3<double>> points = [top, .. equator, bottom];
 
                     const int TopIndex = 0;
                     const int BottomIndex = 5;
-                    var indices = new List<int>();
+                    List<int> indices = [];
                     for (int k = 0; k < 4; k++)
                     {
                         indices.AddRange([TopIndex, 1 + (k + 1) % 4, 1 + k]);

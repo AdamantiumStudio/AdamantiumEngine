@@ -34,17 +34,17 @@ public class ProceduralShapeTests
     [Test]
     public void ARoundSolid_HasNoSliversAtItsSeam()
     {
-        var meshes = new[]
-        {
+        Mesh[] meshes =
+        [
             Shapes.Capsule.GenerateGeometry(GeometryType.Solid, 2.0, 1.0, 12),
             Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.UVSphere, 1.0, 12)
-        };
+        ];
 
         foreach (var mesh in meshes)
         {
             for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
             {
-                var corners = new[] { mesh.Points[mesh.Indices[i]], mesh.Points[mesh.Indices[i + 1]], mesh.Points[mesh.Indices[i + 2]] };
+                Vector3<double>[] corners = [mesh.Points[mesh.Indices[i]], mesh.Points[mesh.Indices[i + 1]], mesh.Points[mesh.Indices[i + 2]]];
                 for (int k = 0; k < 3; k++)
                 {
                     var a = corners[k];

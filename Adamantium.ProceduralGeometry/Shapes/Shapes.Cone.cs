@@ -152,8 +152,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     indices.AddRange([upper, upper + 2, lower, lower, upper + 2, lower + 2]);
                 }
 
-                if (topRadius > 0) AddEnd(positions, normals, uvs, indices, tessellation, height, topRadius, depth, true);
-                if (bottomRadius > 0) AddEnd(positions, normals, uvs, indices, tessellation, height, bottomRadius, depth, false);
+                if (topRadius > 0)
+                {
+                    AddEnd(positions, normals, uvs, indices, tessellation, height, topRadius, depth, true);
+                }
+
+                if (bottomRadius > 0)
+                {
+                    AddEnd(positions, normals, uvs, indices, tessellation, height, bottomRadius, depth, false);
+                }
 
                 var mesh = new Mesh();
                 mesh.SetTopology(primitiveType).
