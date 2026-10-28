@@ -15,47 +15,9 @@ public static class Collision
     public static T RayIntersectsLineSegment<T>(Ray<T> ray, Vector3<T> lineStart, Vector3<T> lineEnd, out Vector3<T> point)
         where T : unmanaged, IFloatingPointIeee754<T>
     {
-        var segment = lineEnd - lineStart;
-        var (directionScale, scale) = (Largest(ray.Direction), T.Max(Largest(segment), Largest(ray.Position - lineStart)));
-        if (directionScale == T.Zero || scale == T.Zero)
-        {
-            point = ClosestPointSegmentPoint(lineStart, lineEnd, ray.Position);
-            return LengthScaled(ray.Position - point);
-        }
-
-        var u = ray.Direction / directionScale;
-        var v = segment / scale;
-        var w = (ray.Position - lineStart) / scale;
-        var a = Vector3<T>.Dot(u, u);
-        var b = Vector3<T>.Dot(u, v);
-        var c = Vector3<T>.Dot(v, v);
-        var d = Vector3<T>.Dot(u, w);
-        var e = Vector3<T>.Dot(v, w);
-        T s;
-        T t;
-        if (c == T.Zero)
-        {
-            t = T.Zero;
-            s = T.Max(-d / a, T.Zero);
-        }
-        else
-        {
-            s = NotParallel(u, v) ? T.Max((b * e - c * d) / Vector3<T>.Cross(u, v).LengthSquared(), T.Zero) : T.Zero;
-            t = (b * s + e) / c;
-            if (t < T.Zero)
-            {
-                t = T.Zero;
-                s = T.Max(-d / a, T.Zero);
-            }
-            else if (t > T.One)
-            {
-                t = T.One;
-                s = T.Max((b - d) / a, T.Zero);
-            }
-        }
-
-        point = lineStart + segment * t;
-        return LengthScaled(ray.Position + ray.Direction * (s * scale / directionScale) - point);
+        var (rayPoint, segmentPoint) = ClosestPoints(ray.Position, ray.Direction, T.PositiveInfinity, lineStart, lineEnd - lineStart);
+        point = segmentPoint;
+        return LengthScaled(rayPoint - segmentPoint);
     }
 
     /// <summary>The point of the triangle <paramref name="vertex1"/>, <paramref name="vertex2"/>,
@@ -146,9 +108,14 @@ public static class Collision
     public static Vector3<T> ClosestPointSegmentPoint<T>(Vector3<T> start, Vector3<T> end, Vector3<T> point)
         where T : unmanaged, IFloatingPointIeee754<T>
     {
-        var segment = end - start;
-        var length = Vector3<T>.Dot(segment, segment);
-        return length <= T.Epsilon ? start : start + segment * T.Clamp(Vector3<T>.Dot(point - start, segment) / length, T.Zero, T.One);
+        var largest = Largest(end - start);
+        if (largest == T.Zero)
+        {
+            return start;
+        }
+
+        var along = (end - start) / largest;
+        return start + along * T.Clamp(Vector3<T>.Dot(point - start, along) / along.LengthSquared(), T.Zero, largest);
     }
 
     /// <summary>How far <paramref name="point"/> lies in front of <paramref name="plane"/>, negative behind it; the
@@ -182,59 +149,8 @@ public static class Collision
     public static T DistanceSquaredSegmentSegment<T>(Vector3<T> start1, Vector3<T> end1, Vector3<T> start2, Vector3<T> end2)
         where T : unmanaged, IFloatingPointIeee754<T>
     {
-        var (segment1, segment2) = (end1 - start1, end2 - start2);
-        var scale = T.Max(T.Max(Largest(segment1), Largest(segment2)), Largest(start1 - start2));
-        if (scale == T.Zero)
-        {
-            return T.Zero;
-        }
-
-        var d1 = segment1 / scale;
-        var d2 = segment2 / scale;
-        var r = (start1 - start2) / scale;
-        var a = Vector3<T>.Dot(d1, d1);
-        var e = Vector3<T>.Dot(d2, d2);
-        var f = Vector3<T>.Dot(d2, r);
-        if (a <= T.Epsilon && e <= T.Epsilon)
-        {
-            return Vector3<T>.DistanceSquared(start1, start2);
-        }
-
-        T s;
-        T t;
-        if (a <= T.Epsilon)
-        {
-            s = T.Zero;
-            t = T.Clamp(f / e, T.Zero, T.One);
-        }
-        else
-        {
-            var c = Vector3<T>.Dot(d1, r);
-            if (e <= T.Epsilon)
-            {
-                t = T.Zero;
-                s = T.Clamp(-c / a, T.Zero, T.One);
-            }
-            else
-            {
-                var b = Vector3<T>.Dot(d1, d2);
-                s = NotParallel(d1, d2) ? T.Clamp((b * f - c * e) / Vector3<T>.Cross(d1, d2).LengthSquared(), T.Zero, T.One) : T.Zero;
-                t = (b * s + f) / e;
-                if (t < T.Zero)
-                {
-                    t = T.Zero;
-                    s = T.Clamp(-c / a, T.Zero, T.One);
-                }
-                else if (t > T.One)
-                {
-                    t = T.One;
-                    s = T.Clamp((b - c) / a, T.Zero, T.One);
-                }
-            }
-        }
-
-        var between = start1 + segment1 * s - (start2 + segment2 * t);
-        return Vector3<T>.Dot(between, between);
+        var (point1, point2) = ClosestPoints(start1, end1 - start1, T.One, start2, end2 - start2);
+        return Vector3<T>.DistanceSquared(point1, point2);
     }
 
     /// <summary>Whether <paramref name="ray"/> passes within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of
@@ -259,7 +175,7 @@ public static class Collision
         var tolerance = MathHelper.Scalar.ZeroTolerance<T>() * T.Max(Largest(ray1.Position), Largest(ray2.Position));
         if (!NotParallel(direction1, direction2))
         {
-            if (!(CrossRounded(offset, direction1).Length() / direction1.Length() <= tolerance))
+            if (!(LengthScaled(CrossRounded(offset, direction1)) / direction1.Length() <= tolerance))
             {
                 return false;
             }
@@ -331,25 +247,31 @@ public static class Collision
         where T : unmanaged, IFloatingPointIeee754<T>
     {
         distance = T.Zero;
-        var scale = T.Max(T.Max(Largest(vertex2 - vertex1), Largest(vertex3 - vertex1)), Largest(ray.Position - vertex1));
+        var size = T.Max(Largest(vertex2 - vertex1), Largest(vertex3 - vertex1));
         var length = Largest(ray.Direction);
-        if (!(scale > T.Zero && length > T.Zero))
+        var away = Largest(ray.Position - vertex1);
+        if (!(size > T.Zero && length > T.Zero))
         {
             return false;
         }
 
-        var edge1 = (vertex2 - vertex1) / scale;
-        var edge2 = (vertex3 - vertex1) / scale;
-        var fromVertex = (ray.Position - vertex1) / scale;
+        if (away == T.Zero)
+        {
+            away = size;
+        }
+
+        var edge1 = (vertex2 - vertex1) / size;
+        var edge2 = (vertex3 - vertex1) / size;
+        var fromVertex = (ray.Position - vertex1) / away;
         var direction = ray.Direction / length;
         var directionCrossEdge2 = Vector3<T>.Cross(direction, edge2);
         var determinant = Vector3<T>.Dot(edge1, directionCrossEdge2);
-        if (!(determinant * determinant > T.CreateTruncating(1e-14) * edge1.LengthSquared() * edge2.LengthSquared() * direction.LengthSquared()))
+        if (!(T.Abs(determinant) > T.CreateTruncating(1e-7) * edge1.Length() * edge2.Length() * direction.Length()))
         {
             return false;
         }
 
-        var inverse = T.One / determinant;
+        var inverse = away / size / determinant;
         var u = Vector3<T>.Dot(fromVertex, directionCrossEdge2) * inverse;
         if (!(u >= T.Zero && u <= T.One))
         {
@@ -369,7 +291,7 @@ public static class Collision
             return false;
         }
 
-        distance = along * scale / length;
+        distance = along * size / length;
         return true;
     }
 
@@ -649,7 +571,13 @@ public static class Collision
             return false;
         }
 
-        distance = c / (T.Sqrt(discriminant) - b) * scale / length;
+        var along = c / (T.Sqrt(discriminant) - b) * scale / length;
+        if (!T.IsFinite(along))
+        {
+            return false;
+        }
+
+        distance = along;
         return true;
     }
 
@@ -664,14 +592,68 @@ public static class Collision
     private static bool NotParallel<T>(Vector3<T> direction1, Vector3<T> direction2) where T : unmanaged, IFloatingPointIeee754<T>
     {
         var (unit1, unit2) = (direction1 / Largest(direction1), direction2 / Largest(direction2));
-        return Vector3<T>.Cross(unit1, unit2).LengthSquared() > Parallel<T>() * Parallel<T>() * unit1.LengthSquared() * unit2.LengthSquared();
+        return Vector3<T>.Cross(unit1, unit2).Length() > Parallel<T>() * unit1.Length() * unit2.Length();
     }
 
     private static bool NotPerpendicular<T>(Vector3<T> direction1, Vector3<T> direction2) where T : unmanaged, IFloatingPointIeee754<T>
     {
         var (unit1, unit2) = (direction1 / Largest(direction1), direction2 / Largest(direction2));
-        var cosine = Vector3<T>.Dot(unit1, unit2);
-        return cosine * cosine > Parallel<T>() * Parallel<T>() * unit1.LengthSquared() * unit2.LengthSquared();
+        return T.Abs(Vector3<T>.Dot(unit1, unit2)) > Parallel<T>() * unit1.Length() * unit2.Length();
+    }
+
+    private static (Vector3<T> First, Vector3<T> Second) ClosestPoints<T>(Vector3<T> start1, Vector3<T> direction1, T limit1,
+        Vector3<T> start2, Vector3<T> segment2) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var offset = start1 - start2;
+        var (scale1, scale2) = (Largest(direction1), Largest(segment2));
+        var scale = Largest(offset) is var apart && apart != T.Zero ? apart : T.Max(scale1, scale2);
+        if (scale == T.Zero)
+        {
+            return (start1, start2);
+        }
+
+        var along1 = scale1 == T.Zero ? Vector3<T>.Zero : direction1 / scale1;
+        var along2 = scale2 == T.Zero ? Vector3<T>.Zero : segment2 / scale2;
+        var between = offset / scale;
+        var range1 = scale1 == T.Zero ? T.Zero : limit1 * (scale1 / scale);
+        var range2 = scale2 / scale;
+        var (a, e, f) = (along1.LengthSquared(), along2.LengthSquared(), Vector3<T>.Dot(along2, between));
+        T s;
+        T t;
+        if (a == T.Zero)
+        {
+            s = T.Zero;
+            t = e == T.Zero ? T.Zero : T.Clamp(f / e, T.Zero, range2);
+        }
+        else
+        {
+            var c = Vector3<T>.Dot(along1, between);
+            if (e == T.Zero)
+            {
+                t = T.Zero;
+                s = T.Clamp(-c / a, T.Zero, range1);
+            }
+            else
+            {
+                var b = Vector3<T>.Dot(along1, along2);
+                s = NotParallel(along1, along2)
+                    ? T.Clamp((b * f - c * e) / Vector3<T>.Cross(along1, along2).LengthSquared(), T.Zero, range1)
+                    : T.Zero;
+                t = (b * s + f) / e;
+                if (t < T.Zero)
+                {
+                    t = T.Zero;
+                    s = T.Clamp(-c / a, T.Zero, range1);
+                }
+                else if (t > range2)
+                {
+                    t = range2;
+                    s = T.Clamp((b * range2 - c) / a, T.Zero, range1);
+                }
+            }
+        }
+
+        return (start1 + along1 * (s * scale), start2 + along2 * (t * scale));
     }
 
     private static (Vector3<T> Normal, T D) OfUnitNormal<T>(Plane<T> plane) where T : unmanaged, IFloatingPointIeee754<T>

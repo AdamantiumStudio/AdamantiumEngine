@@ -38,10 +38,10 @@ public static class VolumesGolden
             "arithmetic");
         map.ChangedWhere(RayOrPlaneHit, inputs => Array.Exists(inputs, double.IsNaN),
             "old bug: a NaN anywhere made a hit at distance NaN, or planes that meet; now it is no hit");
-        map.ChangedWhere(key => RayOrPlaneHit(key) && !key.Contains("BoundingBox"),
+        map.ChangedWhere(key => (RayOrPlaneHit(key) && !key.Contains("BoundingBox")) || key.StartsWith("Collision.ClosestPointSegmentPoint("),
             inputs => Array.TrueForAll(inputs, double.IsFinite) && Array.Exists(inputs, value => Math.Abs(value) > 1e15),
-            "old bug: products of 4e30 overflowed float into NaN, which counted as a hit at distance NaN; the new scales " +
-            "its vectors first - every such recorded case checked against double arithmetic");
+            "old bug: products of 4e30 overflowed float into NaN, which counted as a hit at distance NaN or gave a NaN " +
+            "point; the new scales its vectors first - every such recorded case checked against double arithmetic");
         map.ChangedWhere(key => key.StartsWith("Collision.RayIntersectsRay(") || key.StartsWith("Ray.Intersects(this Ray"),
             inputs => IsZero(inputs, 3) || IsZero(inputs, 9),
             "old bug: a ray without a direction met every ray its start lay behind, one way round and not the other; now " +

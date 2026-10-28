@@ -336,6 +336,59 @@ public class TypedVolumeTests
     }
 
     [Test]
+    public void SmallShapesFarAway_AnswerAsNearBy()
+    {
+        static Vector3<float> V(float x, float y, float z) => new(x, y, z);
+        static Vector3<Half> H(float x, float y, float z) => new((Half)x, (Half)y, (Half)z);
+
+        Assert.That(Collision.DistanceSquaredSegmentSegment(V(-0.5f, 0, 0), V(0.5f, 0, 0), V(0, -0.5f, 1e12f), V(0, 0.5f, 1e12f)),
+            Is.EqualTo(1e24f).Within(1e18f));
+        Assert.That(Collision.DistanceSquaredSegmentSegment(V(-1e-5f, 0, 0), V(1e-5f, 0, 0), V(0, -1e-5f, 1e7f), V(0, 1e-5f, 1e7f)),
+            Is.EqualTo(1e14f).Within(1e8f));
+        Assert.That((float)Collision.DistanceSquaredSegmentSegment(H(-0.1f, 0, 0), H(0.1f, 0, 0), H(0, -0.1f, 100), H(0, 0.1f, 100)),
+            Is.EqualTo(1e4f).Within(20f));
+
+        var unit = (V(0, 0, 0), V(1, 0, 0), V(0, 1, 0));
+        Assert.That(Ray.Create(V(0.2f, 0.2f, -1e12f), Vector3<float>.UnitZ).Intersects(unit.Item1, unit.Item2, unit.Item3, out float far), Is.True);
+        Assert.That(far, Is.EqualTo(1e12f).Within(1e6f));
+        Assert.That(Ray.Create(V(2e-4f, 2e-4f, -1e9f), Vector3<float>.UnitZ).Intersects(V(0, 0, 0), V(1e-3f, 0, 0), V(0, 1e-3f, 0), out float _),
+            Is.True);
+        Assert.That(Ray.Create(V(2e9f, 2e9f, -1e10f), Vector3<float>.UnitZ).Intersects(V(0, 0, 0), V(1e10f, 0, 0), V(0, 1e10f, 0), out float _),
+            Is.True);
+        Assert.That(Ray.Create(H(0.2f, 0.2f, -1000), Vector3<Half>.UnitZ).Intersects(H(0, 0, 0), H(1, 0, 0), H(0, 1, 0), out Half _), Is.True);
+
+        Assert.That(Collision.RayIntersectsLineSegment(Ray.Create(V(0, 1, 0), Vector3<float>.Zero), V(-1e20f, 0, 0), V(1e20f, 0, 0), out var under),
+            Is.EqualTo(1f));
+        Assert.That(under, Is.EqualTo(Vector3<float>.Zero));
+        Assert.That(Collision.RayIntersectsLineSegment(Ray.Create(Vector3<float>.Zero, V(1e-10f, 0, 0)), V(1e30f, -1, 0), V(1e30f, 1, 0), out _),
+            Is.EqualTo(0f));
+        Assert.That((float)Collision.RayIntersectsLineSegment(Ray.Create(Vector3<Half>.Zero, Vector3<Half>.UnitX), H(1000, -1, 0), H(1000, 1, 0), out _),
+            Is.EqualTo(0f));
+    }
+
+    [Test]
+    public void FarAndNearParallelRays_MeetOnlyOnOneLine()
+    {
+        var right = Ray.Create(new Vector3<float>(-1e30f, 0, 0), Vector3<float>.UnitX);
+        var left = Ray.Create(new Vector3<float>(1e30f, 1e22f, 0), -Vector3<float>.UnitX);
+        var near = Ray.Create(new Vector3<float>(1e-25f, 1e-25f, 0), Vector3<float>.UnitX);
+
+        Assert.That(Collision.RayIntersectsRay(right, left, out _), Is.True);
+        Assert.That(Collision.RayIntersectsRay(Ray.Create(Vector3<float>.Zero, Vector3<float>.UnitX), near, out _), Is.False);
+    }
+
+    [Test]
+    public void HugeNormalsAndShortDirections_KeepTheirAnswer()
+    {
+        var plane = new Plane<float>(new Vector3<float>(0, 0, 1e30f), -1e30f);
+        var sphere = BoundingSphere.Create(new Vector3<float>(1e10f, 0, 0), 1f);
+
+        Assert.That(Ray.Create(Vector3<float>.Zero, new Vector3<float>(0, 0, 1e30f)).Intersects(plane, out float distance), Is.True);
+        Assert.That(distance, Is.EqualTo(1e-30f).Within(1e-36f));
+        Assert.That(Ray.Create(Vector3<float>.Zero, new Vector3<float>(1e-30f, 0, 0)).Intersects(sphere, out Vector3<float> _), Is.False);
+    }
+
+    [Test]
     public void ClosestPointOfASphere_LiesOnItsSurface_EvenNextToTheCenter()
     {
         var sphere = BoundingSphere.Create(Vector3D.Zero, 10.0);

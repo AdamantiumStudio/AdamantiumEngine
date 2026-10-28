@@ -62,7 +62,7 @@ public struct BoundingSphere<T> : IEquatable<BoundingSphere<T>>, IFormattable wh
     private static bool Orthogonalize(ref Vector3<T> row1, ref Vector3<T> row2)
     {
         var (length1, length2, dot) = (row1.LengthSquared(), row2.LengthSquared(), Vector3<T>.Dot(row1, row2));
-        if (!(T.Abs(dot) > (T.BitIncrement(T.One) - T.One) * T.Sqrt(length1 * length2)))
+        if (!(T.Abs(dot) > T.CreateTruncating(4) * (T.BitIncrement(T.One) - T.One) * T.Sqrt(length1 * length2)))
         {
             return false;
         }
