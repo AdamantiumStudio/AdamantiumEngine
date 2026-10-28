@@ -36,7 +36,7 @@ public class TypedVolumeTests
         var sphere = BoundingSphere.Create(Vector3.Create(0.0, 0.0, 10.0), 2.0);
 
         Assert.That(Ray.Create(Vector3D.Zero, Vector3D.UnitZ).Intersects(sphere, out Vector3D point), Is.True);
-        Assert.That(point, Is.EqualTo(Vector3.Create(0.0, 0.0, 8.0)));
+        Assert.That(Vector3D.NearEqual(point, Vector3.Create(0.0, 0.0, 8.0)), Is.True);
         Assert.That(Ray.Create(Vector3D.Zero, -Vector3D.UnitZ).Intersects(sphere), Is.False);
     }
 
@@ -228,6 +228,114 @@ public class TypedVolumeTests
     }
 
     [Test]
+    public void SphereRadius_GrowsByTheLargestStretch_HoweverClose_AndAtAnyScale()
+    {
+        var random = new Random(5);
+        for (var i = 0; i < 2000; i++)
+        {
+            var largest = Math.Pow(10, random.NextDouble() * 4 - 2);
+            var close = largest * (1 - Math.Pow(10, -3 - random.NextDouble() * 9));
+            var matrix = RandomRotation(random) * Matrix4x4.CreateScale(largest, close, largest * random.NextDouble()) * RandomRotation(random);
+
+            Assert.That(BoundingSphere.Create(Vector3D.Zero, 1.0).Transform(matrix).Radius, Is.EqualTo(largest).Within(1e-14 * largest), $"case {i}");
+        }
+
+        foreach (var scale in new[] { 4e6f, 1e7f, 1e-8f, 6.378e6f, 1e-10f })
+        {
+            var shear = Matrix4x4<float>.Identity * scale;
+            shear.M21 = scale;
+            shear.M44 = 1;
+            var stretched = Matrix4x4.CreateRotationZ(0.3f) * Matrix4x4.CreateScale(scale, scale / 3, scale / 7);
+
+            Assert.That(BoundingSphere.Create(Vector3<float>.Zero, 1f).Transform(shear).Radius, Is.EqualTo(scale * 1.618034f).Within(1e-6f * scale));
+            Assert.That(BoundingSphere.Create(Vector3<float>.Zero, 1f).Transform(stretched).Radius, Is.EqualTo(scale).Within(1e-6f * scale));
+        }
+
+        var unsheared = Matrix4x4.CreateScale(2f, 2f, 0.5f) * Matrix4x4.CreateFromYawPitchRoll(0.4f, 1.1f, -0.7f);
+        Assert.That(BoundingSphere.Create(Vector3<float>.Zero, 1f).Transform(unsheared).Radius, Is.EqualTo(2f).Within(4e-7f));
+    }
+
+    [Test]
+    public void ParallelRays_MeetOnlyOnOneLine_AndARayWithoutDirectionMeetsNothing()
+    {
+        var along = Ray.Create(Vector3D.Zero, Vector3D.UnitX);
+
+        Assert.That(along.Intersects(Ray.Create(Vector3.Create(1e6, 0.5, 0.0), Vector3D.UnitX), out _), Is.False);
+        Assert.That(along.Intersects(Ray.Create(Vector3.Create(100.0, 1e-4, 0.0), Vector3D.UnitX), out _), Is.False);
+        Assert.That(along.Intersects(Ray.Create(Vector3.Create(100.0, 0.0, 0.0), -Vector3D.UnitX), out Vector3D met), Is.True);
+        Assert.That(met, Is.EqualTo(Vector3.Create(100.0, 0.0, 0.0)));
+        Assert.That(Ray.Create(Vector3D.Zero, Vector3D.Zero).Intersects(Ray.Create(Vector3.Create(5.0, 5.0, 5.0), Vector3D.UnitX), out _), Is.False);
+        Assert.That(Ray.Create(Vector3.Create(5.0, 5.0, 5.0), Vector3D.UnitX).Intersects(Ray.Create(Vector3D.Zero, Vector3D.Zero), out _), Is.False);
+    }
+
+    [Test]
+    public void SkewRays_Apart_DoNotMeet()
+    {
+        var random = new Random(3);
+        for (var i = 0; i < 10000; i++)
+        {
+            var crossing = new Vector3<float>(Next(random, 4), Next(random, 4), Next(random, 4));
+            var (start1, start2) = (new Vector3<float>(Next(random, 4), Next(random, 4), Next(random, 4)),
+                new Vector3<float>(Next(random, 4), Next(random, 4), Next(random, 4)));
+            var direction2 = crossing - start2;
+            var normal = Vector3<float>.Normalize(Vector3<float>.Cross(crossing - start1, direction2));
+            var ray2 = Ray.Create(start2 + normal * 0.01f, direction2);
+
+            Assert.That(Collision.RayIntersectsRay(Ray.Create(start1, crossing - start1), ray2, out _), Is.False, $"case {i}");
+        }
+    }
+
+    [Test]
+    public void LineOfTwoPlanes_LiesOnBoth_WithADirectionOfLengthOne_WhateverTheirNormalsLength()
+    {
+        foreach (var length in new[] { 1e-12f, 1e-20f, 5e-4f, 1e10f, 1e20f })
+        {
+            var floor = new Plane<float>(new Vector3<float>(0, length, 0), -2 * length);
+            var wall = new Plane<float>(new Vector3<float>(length, 0, length), -length);
+
+            Assert.That(floor.Intersects(wall, out Ray<float> line), Is.True, $"normals of {length}");
+            Assert.That(line.Direction.Length(), Is.EqualTo(1f).Within(1e-6f));
+            Assert.That(line.Position.Y, Is.EqualTo(2f).Within(1e-5f));
+            Assert.That(line.Position.X + line.Position.Z, Is.EqualTo(1f).Within(1e-5f));
+        }
+    }
+
+    [Test]
+    public void ANaN_IsNoHit()
+    {
+        var ray = Ray.Create(Vector3.Create(0.0, 0.0, -5.0), Vector3D.UnitZ);
+        var floor = Plane.CreateFromPointNormal(Vector3D.Zero, Vector3D.UnitZ);
+
+        Assert.That(ray.Intersects(new Plane<double>(Vector3D.UnitZ, double.NaN), out double _), Is.False);
+        Assert.That(Ray.Create(Vector3.Create(double.NaN, 0.0, -5.0), Vector3D.UnitZ).Intersects(floor, out double _), Is.False);
+        Assert.That(floor.Intersects(new Plane<double>(Vector3D.UnitX, double.NaN)), Is.False);
+        Assert.That(floor.Intersects(new Plane<double>(Vector3D.UnitX, double.NaN), out Ray<double> _), Is.False);
+        Assert.That(Ray.Create(Vector3D.Zero, Vector3.Create(double.NaN, double.NaN, double.NaN)).Intersects(UnitBox), Is.False);
+        Assert.That(Ray.Create(Vector3.Create(double.NaN, 0.0, -5.0), Vector3D.UnitZ).Intersects(UnitBox), Is.False);
+        Assert.That(Ray.Create(Vector3.Create(double.NaN, 0.0, -5.0), Vector3D.UnitZ)
+            .Intersects(Vector3.Create(-1.0, -1.0, 0.0), Vector3.Create(1.0, -1.0, 0.0), Vector3.Create(0.0, 1.0, 0.0), out double _), Is.False);
+    }
+
+    [Test]
+    public void TinyAndHugeLengths_AnswerAsAtOne()
+    {
+        var gap = Collision.DistanceSquaredSegmentSegment(new Vector3<float>(-1e-12f, 0, 0), new Vector3<float>(1e-12f, 0, 0),
+            new Vector3<float>(0, -1e-12f, 1e-12f), new Vector3<float>(0, 1e-12f, 1e-12f));
+        var toSegment = Collision.RayIntersectsLineSegment(Ray.Create(new Vector3<float>(0, -5, 1), new Vector3<float>(0, 1e20f, 0)),
+            new Vector3<float>(-1, 0, 0), new Vector3<float>(1, 0, 0), out _);
+        var still = Collision.RayIntersectsLineSegment(Ray.Create(Vector3.Create(5.0, 1.0, 0.0), Vector3D.Zero), Vector3D.Zero, Vector3D.UnitX, out _);
+        var sphere = BoundingSphere.Create(new Vector3<float>(0, 0, 10), 1f);
+
+        Assert.That(gap, Is.EqualTo(1e-24f).Within(1e-30f));
+        Assert.That(toSegment, Is.EqualTo(1f).Within(1e-6f));
+        Assert.That(still, Is.EqualTo(Math.Sqrt(17)).Within(1e-12));
+        Assert.That(Ray.Create(Vector3<float>.Zero, new Vector3<float>(0, 0, 1e-25f)).Intersects(sphere, out float distance), Is.True);
+        Assert.That(distance, Is.EqualTo(9e25f).Within(1e20f));
+        Assert.That(Ray.Create(new Vector3<float>(0, 0, -3e19f), Vector3<float>.UnitZ).Intersects(sphere), Is.True);
+        Assert.That(Ray.Create(Vector3<float>.Zero, new Vector3<float>(1e-25f, 0, 0)).Intersects(new Vector3<float>(5, 0, 0)), Is.True);
+    }
+
+    [Test]
     public void ClosestPointOfASphere_LiesOnItsSurface_EvenNextToTheCenter()
     {
         var sphere = BoundingSphere.Create(Vector3D.Zero, 10.0);
@@ -269,6 +377,9 @@ public class TypedVolumeTests
     }
 
     private static float Next(Random random, float spread) => (float)(random.NextDouble() * 2 - 1) * spread;
+
+    private static Matrix4x4<double> RandomRotation(Random random) =>
+        Matrix4x4.CreateFromYawPitchRoll(random.NextDouble() * 7, random.NextDouble() * 7, random.NextDouble() * 7);
 
     private static Vector3D NextPoint(Random random) =>
         Vector3.Create(random.NextDouble() * 8 - 4, random.NextDouble() * 8 - 4, random.NextDouble() * 8 - 4);

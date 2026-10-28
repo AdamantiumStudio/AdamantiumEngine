@@ -33,30 +33,49 @@ public struct BoundingSphere<T> : IEquatable<BoundingSphere<T>>, IFormattable wh
     public readonly BoundingSphere<T> Transform(T scale, Vector3<T> translation) => new(Center * scale + translation, Radius * scale);
 
     /// <summary>A sphere holding this one carried by <paramref name="matrix"/>: its center carried, its radius scaled by
-    /// the most the matrix stretches any direction - for a matrix without shear, the longest of its axes.</summary>
+    /// the most the matrix stretches any direction - its largest singular value; for a matrix without shear, the longest
+    /// of its axes.</summary>
     public readonly BoundingSphere<T> Transform(Matrix4x4<T> matrix) =>
         new(Vector3<T>.TransformCoordinate(Center, matrix), Radius * LargestStretch(matrix.Right, matrix.Up, matrix.Forward));
 
     private static T LargestStretch(Vector3<T> row1, Vector3<T> row2, Vector3<T> row3)
     {
-        var (g11, g22, g33) = (row1.LengthSquared(), row2.LengthSquared(), row3.LengthSquared());
-        var (g12, g13, g23) = (Vector3<T>.Dot(row1, row2), Vector3<T>.Dot(row1, row3), Vector3<T>.Dot(row2, row3));
-        var longest = T.Max(g11, T.Max(g22, g33));
-        var offDiagonal = g12 * g12 + g13 * g13 + g23 * g23;
-        if (offDiagonal == T.Zero)
+        var scale = T.Max(MaxMagnitude(row1), T.Max(MaxMagnitude(row2), MaxMagnitude(row3)));
+        if (!(scale > T.Zero && T.IsFinite(scale)))
         {
-            return T.Sqrt(longest);
+            return scale;
         }
 
-        var three = T.CreateTruncating(3);
-        var mean = (g11 + g22 + g33) / three;
-        var (b11, b22, b33) = (g11 - mean, g22 - mean, g33 - mean);
-        var p = T.Sqrt((b11 * b11 + b22 * b22 + b33 * b33 + (offDiagonal + offDiagonal)) / T.CreateTruncating(6));
-        var determinant = b11 * (b22 * b33 - g23 * g23) - g12 * (g12 * b33 - g23 * g13) + g13 * (g12 * g23 - b22 * g13);
-        var half = T.Clamp(determinant / (p * p * p) / (T.One + T.One), -T.One, T.One);
-        var largest = mean + (p + p) * T.Cos(T.Acos(half) / three);
-        return T.Sqrt(T.Max(largest, longest));
+        (row1, row2, row3) = (row1 / scale, row2 / scale, row3 / scale);
+        for (var sweep = 0; sweep < 32; sweep++)
+        {
+            var rotated = Orthogonalize(ref row1, ref row2) | Orthogonalize(ref row1, ref row3) | Orthogonalize(ref row2, ref row3);
+            if (!rotated)
+            {
+                break;
+            }
+        }
+
+        return scale * T.Max(row1.Length(), T.Max(row2.Length(), row3.Length()));
     }
+
+    private static bool Orthogonalize(ref Vector3<T> row1, ref Vector3<T> row2)
+    {
+        var (length1, length2, dot) = (row1.LengthSquared(), row2.LengthSquared(), Vector3<T>.Dot(row1, row2));
+        if (!(T.Abs(dot) > (T.BitIncrement(T.One) - T.One) * T.Sqrt(length1 * length2)))
+        {
+            return false;
+        }
+
+        var zeta = (length2 - length1) / (dot + dot);
+        var tangent = T.CopySign(T.One, zeta) / (T.Abs(zeta) + T.Hypot(T.One, zeta));
+        var cosine = T.One / T.Hypot(T.One, tangent);
+        var sine = cosine * tangent;
+        (row1, row2) = (cosine * row1 - sine * row2, sine * row1 + cosine * row2);
+        return true;
+    }
+
+    private static T MaxMagnitude(Vector3<T> value) => T.Max(T.Abs(value.X), T.Max(T.Abs(value.Y), T.Abs(value.Z)));
 
     /// <summary>The point of the surface farthest along <paramref name="direction"/>; for no direction, the one along
     /// X.</summary>

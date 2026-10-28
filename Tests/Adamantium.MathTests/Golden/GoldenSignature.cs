@@ -18,12 +18,15 @@ public sealed record GoldenSignature(string Type, string Method, bool IsInstance
         ["ViewportF"] = 6
     };
 
+    private static readonly string[] SingleOnly = ["Ray", "Plane", "BoundingBox", "BoundingSphere", "Collision"];
+
     /// <summary>Whether every parameter's type has a known count of numbers.</summary>
     public bool IsSized => Parameters.All(p => SizeOf(p) > 0) && (!IsInstance || SizeOf(Type) > 0);
 
-    /// <summary>Whether the type or a parameter is of single precision: Single, Vector3F, QuaternionF...</summary>
+    /// <summary>Whether the type or a parameter is of single precision: Single, Vector3F, QuaternionF... - or one of the
+    /// types that were single precision alone, without an F: Ray, Plane, BoundingBox, BoundingSphere, Collision.</summary>
     public bool IsSinglePrecision =>
-        Type.EndsWith('F') || Parameters.Any(p => p.TrimEnd('&') == "Single" || p.TrimEnd('&').EndsWith('F'));
+        IsSingle(Type) || Parameters.Any(p => p.TrimEnd('&') == "Single" || IsSingle(p.TrimEnd('&')));
 
     /// <summary>The count of numbers the instance takes, zero for a static method.</summary>
     public int InstanceSize => IsInstance ? SizeOf(Type) : 0;
@@ -71,6 +74,8 @@ public sealed record GoldenSignature(string Type, string Method, bool IsInstance
     /// <inheritdoc />
     public override string ToString() =>
         $"{Type}.{Method}({(IsInstance ? "this " : string.Empty)}{string.Join(",", Parameters)})";
+
+    private static bool IsSingle(string type) => type.EndsWith('F') || SingleOnly.Contains(type);
 
     private static int SizeOf(string type) => Sizes.TryGetValue(type.TrimEnd('&'), out var size) ? size : 0;
 }

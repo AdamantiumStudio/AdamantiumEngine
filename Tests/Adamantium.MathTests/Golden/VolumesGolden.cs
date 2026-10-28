@@ -36,17 +36,30 @@ public static class VolumesGolden
             "old bug: the ray's direction was taken to be of length one, so a longer one - every recorded ray - hit " +
             "spheres and points it passes by and gave wrong distances; TypedVolumeTests checks the new against exact " +
             "arithmetic");
-        map.ChangedWhere(RayOrPlaneWithPlane, inputs => Array.Exists(inputs, double.IsNaN),
+        map.ChangedWhere(RayOrPlaneHit, inputs => Array.Exists(inputs, double.IsNaN),
             "old bug: a NaN anywhere made a hit at distance NaN, or planes that meet; now it is no hit");
+        map.ChangedWhere(key => RayOrPlaneHit(key) && !key.Contains("BoundingBox"),
+            inputs => Array.TrueForAll(inputs, double.IsFinite) && Array.Exists(inputs, value => Math.Abs(value) > 1e15),
+            "old bug: products of 4e30 overflowed float into NaN, which counted as a hit at distance NaN; the new scales " +
+            "its vectors first - every such recorded case checked against double arithmetic");
+        map.ChangedWhere(key => key.StartsWith("Collision.RayIntersectsRay(") || key.StartsWith("Ray.Intersects(this Ray"),
+            inputs => IsZero(inputs, 3) || IsZero(inputs, 9),
+            "old bug: a ray without a direction met every ray its start lay behind, one way round and not the other; now " +
+            "it meets nothing");
+        map.ChangedWhere(key => key.StartsWith("Collision.RayIntersectsLineSegment(") || key.StartsWith("Ray.Intersects(this Vector3F&,Vector3F&,Single"),
+            inputs => IsZero(inputs, 3),
+            "old bug: a ray without a direction gave a NaN distance, so no hit within any limit; now its start's distance");
         map.ChangedWhere(key => key.StartsWith("BoundingSphere.Transform(this Matrix4x4"), inputs => Sheared(inputs, 4),
             "old bug: the radius grew by the longest axis, too little for a matrix that shears - the carried sphere " +
-            "stuck out; it grows by the most the matrix stretches any direction now");
+            "stuck out; it grows by the most the matrix stretches any direction now - every recorded matrix shears, so " +
+            "TypedVolumeTests checks the new against matrices of known singular values");
         map.ChangedWhere(key => key.StartsWith("Collision.ClosestPointSphere"),
             inputs => Array.Exists(inputs, value => Math.Abs(value) > 1e15) || (inputs[0] == inputs[4] && inputs[1] == inputs[5] && inputs[2] == inputs[6]),
             "old bug: for the center itself it gave the center, not a point of the surface, and far from the origin the " +
             "offset's square overflowed into NaN; now a point of the surface, the offset scaled first");
         map.ChangedWhere(key => key.StartsWith("Collision.BoxContainsSphere(") || key.StartsWith("BoundingBox.Contains(this BoundingSphere"),
-            inputs => inputs[3] - inputs[0] <= inputs[9] || inputs[4] - inputs[1] <= inputs[9] || inputs[5] - inputs[2] <= inputs[9],
+            inputs => inputs[9] <= 0
+                      && (inputs[3] - inputs[0] <= inputs[9] || inputs[4] - inputs[1] <= inputs[9] || inputs[5] - inputs[2] <= inputs[9]),
             "old bug: a sphere held whole had also to be wider than its radius each way, so a point - radius 0 - in a " +
             "flat box was only intersecting; now one held whole is contained");
         map.ChangedWhere(key => key.StartsWith("Collision.BoxContainsSphere(") || key.StartsWith("BoundingBox.Contains(this BoundingSphere"),
@@ -476,10 +489,12 @@ public static class VolumesGolden
         || key.StartsWith("Ray.Intersects(this BoundingSphere") || key == "Ray.Intersects(this Vector3F&)"
         || key.StartsWith("BoundingSphere.Intersects(this Ray");
 
-    private static bool RayOrPlaneWithPlane(string key) =>
-        key.StartsWith("Collision.RayIntersectsPlane(") || key.StartsWith("Collision.PlaneIntersectsPlane(")
-        || key.StartsWith("Ray.Intersects(this Plane") || key.StartsWith("Plane.Intersects(this Ray")
-        || key.StartsWith("Plane.Intersects(this Plane");
+    private static bool RayOrPlaneHit(string key) =>
+        key.StartsWith("Collision.RayIntersects") || key.StartsWith("Collision.PlaneIntersectsPlane(")
+        || key.StartsWith("Ray.Intersects(") || key.StartsWith("Plane.Intersects(this Ray")
+        || key.StartsWith("Plane.Intersects(this Plane") || key.StartsWith("BoundingBox.Intersects(this Ray");
+
+    private static bool IsZero(double[] inputs, int at) => inputs.Length > at + 2 && inputs[at] == 0 && inputs[at + 1] == 0 && inputs[at + 2] == 0;
 
     private static bool Sheared(double[] inputs, int at)
     {
