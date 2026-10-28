@@ -252,8 +252,8 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
                + M13 * (M21 * temp2 - M22 * temp4 + M24 * temp6) - M14 * (M21 * temp3 - M22 * temp5 + M23 * temp6);
     }
 
-    /// <summary>Makes this its inverse, or <see cref="Zero"/> when the determinant is zero; a nearly singular matrix
-    /// gives large elements.</summary>
+    /// <summary>Makes this its inverse, or <see cref="Zero"/> when it is singular, as <see cref="Invert(Matrix4x4{T})"/>
+    /// finds it.</summary>
     public void Invert() => this = Invert(this);
 
     /// <summary>Swaps rows and columns.</summary>
@@ -423,53 +423,14 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
     public static Matrix4x4<T> Transpose(Matrix4x4<T> value) =>
         new(value.Column1, value.Column2, value.Column3, value.Column4);
 
-    /// <summary>The inverse, or <see cref="Zero"/> when the determinant is zero; a nearly singular matrix gives large
-    /// elements.</summary>
+    /// <summary>The inverse, or <see cref="Zero"/> when the matrix is singular; a nearly singular matrix gives large
+    /// elements. Where the cofactor formula's determinant leaves the normal range - elements far from one or far apart -
+    /// the rows and columns are first scaled near one by powers of two, which is exact, and the scale taken back out.</summary>
     public static Matrix4x4<T> Invert(Matrix4x4<T> value)
     {
-        Span<int> exponents = stackalloc int[4];
-        PowerOfTwoScaling.ScaleRowsNearOne(Elements(ref value), 4, 4, exponents);
-        var b0 = value.M31 * value.M42 - value.M32 * value.M41;
-        var b1 = value.M31 * value.M43 - value.M33 * value.M41;
-        var b2 = value.M34 * value.M41 - value.M31 * value.M44;
-        var b3 = value.M32 * value.M43 - value.M33 * value.M42;
-        var b4 = value.M34 * value.M42 - value.M32 * value.M44;
-        var b5 = value.M33 * value.M44 - value.M34 * value.M43;
-        var d11 = value.M22 * b5 + value.M23 * b4 + value.M24 * b3;
-        var d12 = value.M21 * b5 + value.M23 * b2 + value.M24 * b1;
-        var d13 = value.M21 * -b4 + value.M22 * b2 + value.M24 * b0;
-        var d14 = value.M21 * b3 + value.M22 * -b1 + value.M23 * b0;
-        var determinant = value.M11 * d11 - value.M12 * d12 + value.M13 * d13 - value.M14 * d14;
-        if (determinant == T.Zero)
-        {
-            return Zero;
-        }
-
-        var inverse = T.One / determinant;
-        var a0 = value.M11 * value.M22 - value.M12 * value.M21;
-        var a1 = value.M11 * value.M23 - value.M13 * value.M21;
-        var a2 = value.M14 * value.M21 - value.M11 * value.M24;
-        var a3 = value.M12 * value.M23 - value.M13 * value.M22;
-        var a4 = value.M14 * value.M22 - value.M12 * value.M24;
-        var a5 = value.M13 * value.M24 - value.M14 * value.M23;
-        var d21 = value.M12 * b5 + value.M13 * b4 + value.M14 * b3;
-        var d22 = value.M11 * b5 + value.M13 * b2 + value.M14 * b1;
-        var d23 = value.M11 * -b4 + value.M12 * b2 + value.M14 * b0;
-        var d24 = value.M11 * b3 + value.M12 * -b1 + value.M13 * b0;
-        var d31 = value.M42 * a5 + value.M43 * a4 + value.M44 * a3;
-        var d32 = value.M41 * a5 + value.M43 * a2 + value.M44 * a1;
-        var d33 = value.M41 * -a4 + value.M42 * a2 + value.M44 * a0;
-        var d34 = value.M41 * a3 + value.M42 * -a1 + value.M43 * a0;
-        var d41 = value.M32 * a5 + value.M33 * a4 + value.M34 * a3;
-        var d42 = value.M31 * a5 + value.M33 * a2 + value.M34 * a1;
-        var d43 = value.M31 * -a4 + value.M32 * a2 + value.M34 * a0;
-        var d44 = value.M31 * a3 + value.M32 * -a1 + value.M33 * a0;
-        var result = new Matrix4x4<T>(d11 * inverse, -d21 * inverse, d31 * inverse, -d41 * inverse,
-            -d12 * inverse, d22 * inverse, -d32 * inverse, d42 * inverse,
-            d13 * inverse, -d23 * inverse, d33 * inverse, -d43 * inverse,
-            -d14 * inverse, d24 * inverse, -d34 * inverse, d44 * inverse);
-        PowerOfTwoScaling.UnscaleInverseColumns(Elements(ref result), 4, 4, exponents);
-        return result;
+        var result = InvertByCofactors(value, out var determinant);
+        var sum = result.Row1 + result.Row2 + result.Row3 + result.Row4;
+        return T.IsNormal(determinant) && T.IsFinite(sum.X + sum.Y + sum.Z + sum.W) ? result : InvertScaled(value);
     }
 
     /// <summary>The rows made perpendicular to one another (modified Gram-Schmidt), the first kept.</summary>
@@ -604,6 +565,61 @@ public struct Matrix4x4<T> : IEquatable<Matrix4x4<T>>, IFormattable where T : un
             M32.ToString(format, formatProvider), M33.ToString(format, formatProvider), M34.ToString(format, formatProvider),
             M41.ToString(format, formatProvider), M42.ToString(format, formatProvider), M43.ToString(format, formatProvider),
             M44.ToString(format, formatProvider));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Matrix4x4<T> InvertScaled(Matrix4x4<T> value)
+    {
+        Span<int> rowExponents = stackalloc int[4];
+        Span<int> columnExponents = stackalloc int[4];
+        PowerOfTwoScaling.Equilibrate(Elements(ref value), 4, rowExponents, columnExponents);
+        var result = InvertByCofactors(value, out _);
+        PowerOfTwoScaling.UnscaleInverse(Elements(ref result), 4, rowExponents, columnExponents);
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Matrix4x4<T> InvertByCofactors(Matrix4x4<T> value, out T determinant)
+    {
+        var b0 = value.M31 * value.M42 - value.M32 * value.M41;
+        var b1 = value.M31 * value.M43 - value.M33 * value.M41;
+        var b2 = value.M34 * value.M41 - value.M31 * value.M44;
+        var b3 = value.M32 * value.M43 - value.M33 * value.M42;
+        var b4 = value.M34 * value.M42 - value.M32 * value.M44;
+        var b5 = value.M33 * value.M44 - value.M34 * value.M43;
+        var d11 = value.M22 * b5 + value.M23 * b4 + value.M24 * b3;
+        var d12 = value.M21 * b5 + value.M23 * b2 + value.M24 * b1;
+        var d13 = value.M21 * -b4 + value.M22 * b2 + value.M24 * b0;
+        var d14 = value.M21 * b3 + value.M22 * -b1 + value.M23 * b0;
+        determinant = value.M11 * d11 - value.M12 * d12 + value.M13 * d13 - value.M14 * d14;
+        if (determinant == T.Zero)
+        {
+            return Zero;
+        }
+
+        var inverse = T.One / determinant;
+        var a0 = value.M11 * value.M22 - value.M12 * value.M21;
+        var a1 = value.M11 * value.M23 - value.M13 * value.M21;
+        var a2 = value.M14 * value.M21 - value.M11 * value.M24;
+        var a3 = value.M12 * value.M23 - value.M13 * value.M22;
+        var a4 = value.M14 * value.M22 - value.M12 * value.M24;
+        var a5 = value.M13 * value.M24 - value.M14 * value.M23;
+        var d21 = value.M12 * b5 + value.M13 * b4 + value.M14 * b3;
+        var d22 = value.M11 * b5 + value.M13 * b2 + value.M14 * b1;
+        var d23 = value.M11 * -b4 + value.M12 * b2 + value.M14 * b0;
+        var d24 = value.M11 * b3 + value.M12 * -b1 + value.M13 * b0;
+        var d31 = value.M42 * a5 + value.M43 * a4 + value.M44 * a3;
+        var d32 = value.M41 * a5 + value.M43 * a2 + value.M44 * a1;
+        var d33 = value.M41 * -a4 + value.M42 * a2 + value.M44 * a0;
+        var d34 = value.M41 * a3 + value.M42 * -a1 + value.M43 * a0;
+        var d41 = value.M32 * a5 + value.M33 * a4 + value.M34 * a3;
+        var d42 = value.M31 * a5 + value.M33 * a2 + value.M34 * a1;
+        var d43 = value.M31 * -a4 + value.M32 * a2 + value.M34 * a0;
+        var d44 = value.M31 * a3 + value.M32 * -a1 + value.M33 * a0;
+        return new Matrix4x4<T>(d11 * inverse, -d21 * inverse, d31 * inverse, -d41 * inverse,
+            -d12 * inverse, d22 * inverse, -d32 * inverse, d42 * inverse,
+            d13 * inverse, -d23 * inverse, d33 * inverse, -d43 * inverse,
+            -d14 * inverse, d24 * inverse, -d34 * inverse, d44 * inverse);
+    }
 
     private static void Eliminate(ref Matrix4x4<T> result, bool unitLeads) =>
         GaussianElimination.Eliminate(Elements(ref result), 4, 4, unitLeads, false);

@@ -152,7 +152,7 @@ public struct Matrix3x2<T> : IEquatable<Matrix3x2<T>>, IFormattable where T : un
     /// <summary>The determinant of the turn and scale: how the transform scales areas.</summary>
     public readonly T Determinant() => M11 * M22 - M12 * M21;
 
-    /// <summary>Makes this its inverse, or <see cref="Identity"/> when the determinant is zero.</summary>
+    /// <summary>Makes this its inverse, or <see cref="Identity"/> when the turn and scale are singular.</summary>
     public void Invert() => this = Invert(this);
 
     /// <summary>The elements as an array, row by row.</summary>
@@ -194,23 +194,22 @@ public struct Matrix3x2<T> : IEquatable<Matrix3x2<T>>, IFormattable where T : un
     public static Matrix3x2<T> SmoothStep(Matrix3x2<T> start, Matrix3x2<T> end, T amount) =>
         Lerp(start, end, Scalar.SmoothStep(amount));
 
-    /// <summary>The inverse; <see cref="Identity"/> when the determinant is zero, so a transform squashed flat undoes to
-    /// nothing rather than to infinities.</summary>
+    /// <summary>The inverse; <see cref="Identity"/> when the turn and scale are singular, so a transform squashed flat
+    /// undoes to nothing rather than to infinities. Where the determinant leaves the normal range - elements far from one
+    /// or far apart - the turn and scale are first scaled near one by powers of two, which is exact, and the scale taken
+    /// back out.</summary>
     public static Matrix3x2<T> Invert(Matrix3x2<T> value)
     {
-        var turn = value;
-        Span<int> exponents = stackalloc int[2];
-        PowerOfTwoScaling.ScaleRowsNearOne(Elements(ref turn)[..4], 2, 2, exponents);
-        var determinant = turn.Determinant();
-        if (determinant == T.Zero)
+        var result = InvertTurn(value, out var determinant);
+        var sum = result.Row1 + result.Row2;
+        if (!T.IsNormal(determinant) || !T.IsFinite(sum.X + sum.Y))
         {
-            return Identity;
+            if (!InvertTurnScaled(value, out result))
+            {
+                return Identity;
+            }
         }
 
-        var inverse = T.One / determinant;
-        var result = new Matrix3x2<T>(turn.M22 * inverse, -turn.M12 * inverse, -turn.M21 * inverse, turn.M11 * inverse,
-            T.Zero, T.Zero);
-        PowerOfTwoScaling.UnscaleInverseColumns(Elements(ref result)[..4], 2, 2, exponents);
         result.Row3 = -(value.M31 * result.Row1 + value.M32 * result.Row2);
         return result;
     }
@@ -286,6 +285,30 @@ public struct Matrix3x2<T> : IEquatable<Matrix3x2<T>>, IFormattable where T : un
         string.Format(formatProvider, "[M11:{0} M12:{1}] [M21:{2} M22:{3}] [M31:{4} M32:{5}]",
             M11.ToString(format, formatProvider), M12.ToString(format, formatProvider), M21.ToString(format, formatProvider),
             M22.ToString(format, formatProvider), M31.ToString(format, formatProvider), M32.ToString(format, formatProvider));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool InvertTurnScaled(Matrix3x2<T> value, out Matrix3x2<T> result)
+    {
+        Span<int> rowExponents = stackalloc int[2];
+        Span<int> columnExponents = stackalloc int[2];
+        PowerOfTwoScaling.Equilibrate(Elements(ref value)[..4], 2, rowExponents, columnExponents);
+        result = InvertTurn(value, out var determinant);
+        PowerOfTwoScaling.UnscaleInverse(Elements(ref result)[..4], 2, rowExponents, columnExponents);
+        return determinant != T.Zero;
+    }
+
+    private static Matrix3x2<T> InvertTurn(Matrix3x2<T> value, out T determinant)
+    {
+        determinant = value.Determinant();
+        if (determinant == T.Zero)
+        {
+            return Zero;
+        }
+
+        var inverse = T.One / determinant;
+        return new Matrix3x2<T>(value.M22 * inverse, -value.M12 * inverse, -value.M21 * inverse, value.M11 * inverse, T.Zero,
+            T.Zero);
+    }
 
     private static Span<T> Elements(ref Matrix3x2<T> value) =>
         MemoryMarshal.CreateSpan(ref Unsafe.As<Vector2<T>, T>(ref value.Row1), 6);

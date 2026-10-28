@@ -54,6 +54,18 @@ public class TypedMatrix3x2Tests
     }
 
     [Test]
+    public void Inverse_OfATurnedLopsidedScale_UndoesIt()
+    {
+        var single = Matrix3x2.CreateRotation(0.5f) * Matrix3x2.CreateScale(1e20f, 1e-20f);
+        var half = (Matrix3x2.CreateRotation(0.5) * Matrix3x2.CreateScale(1000.0, 0.001)).As<Half>();
+        var tiny = new Matrix3x2<float>(MathF.Pow(2, 65), MathF.Pow(2, -86), MathF.Pow(2, 65), MathF.Pow(2, -85), 3, 4);
+
+        Assert.That(IsNearEachRow(Matrix3x2<float>.Invert(single).As<double>(), Matrix3x2D.Invert(single.As<double>()), 1e-6), Is.True);
+        Assert.That(IsNearEachRow(Matrix3x2<Half>.Invert(half).As<double>(), Matrix3x2D.Invert(half.As<double>()), 4e-3), Is.True);
+        Assert.That(IsNearEachRow(Matrix3x2<float>.Invert(tiny).As<double>(), Matrix3x2D.Invert(tiny.As<double>()), 1e-6), Is.True);
+    }
+
+    [Test]
     public void RotationAroundACenter_LeavesTheCenterInPlace()
     {
         var center = Vector2.Create(3.0, -1.0);
@@ -95,6 +107,21 @@ public class TypedMatrix3x2Tests
         Assert.That(m.M32, Is.EqualTo(9.0));
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = m[6]);
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = m[0, 2]);
+    }
+
+    private static bool IsNearEachRow(Matrix3x2D actual, Matrix3x2D expected, double tolerance)
+    {
+        for (var r = 0; r < 3; r++)
+        {
+            var size = Math.Max(Math.Abs(expected[r, 0]), Math.Abs(expected[r, 1]));
+            if (!(Math.Abs(actual[r, 0] - expected[r, 0]) <= tolerance * size) ||
+                !(Math.Abs(actual[r, 1] - expected[r, 1]) <= tolerance * size))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     [Test]

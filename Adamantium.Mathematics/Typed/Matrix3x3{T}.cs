@@ -160,8 +160,8 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
     public readonly T Determinant() =>
         M11 * (M22 * M33 - M23 * M32) - M12 * (M21 * M33 - M23 * M31) + M13 * (M21 * M32 - M22 * M31);
 
-    /// <summary>Makes this its inverse, or <see cref="Zero"/> when the determinant is zero; a nearly singular matrix
-    /// gives large elements.</summary>
+    /// <summary>Makes this its inverse, or <see cref="Zero"/> when it is singular, as <see cref="Invert(Matrix3x3{T})"/>
+    /// finds it.</summary>
     public void Invert() => this = Invert(this);
 
     /// <summary>Swaps rows and columns.</summary>
@@ -344,30 +344,14 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
     /// <summary>Rows and columns swapped.</summary>
     public static Matrix3x3<T> Transpose(Matrix3x3<T> value) => new(value.Column1, value.Column2, value.Column3);
 
-    /// <summary>The inverse, or <see cref="Zero"/> when the determinant is zero; a nearly singular matrix gives large
-    /// elements.</summary>
+    /// <summary>The inverse, or <see cref="Zero"/> when the matrix is singular; a nearly singular matrix gives large
+    /// elements. Where the cofactor formula's determinant leaves the normal range - elements far from one or far apart -
+    /// the rows and columns are first scaled near one by powers of two, which is exact, and the scale taken back out.</summary>
     public static Matrix3x3<T> Invert(Matrix3x3<T> value)
     {
-        Span<int> exponents = stackalloc int[3];
-        PowerOfTwoScaling.ScaleRowsNearOne(Elements(ref value), 3, 3, exponents);
-        var c11 = value.M22 * value.M33 - value.M23 * value.M32;
-        var c12 = value.M23 * value.M31 - value.M21 * value.M33;
-        var c13 = value.M21 * value.M32 - value.M22 * value.M31;
-        var determinant = value.M11 * c11 + value.M12 * c12 + value.M13 * c13;
-        if (determinant == T.Zero)
-        {
-            return Zero;
-        }
-
-        var inverse = T.One / determinant;
-        var result = new Matrix3x3<T>(c11 * inverse, (value.M13 * value.M32 - value.M12 * value.M33) * inverse,
-            (value.M12 * value.M23 - value.M13 * value.M22) * inverse,
-            c12 * inverse, (value.M11 * value.M33 - value.M13 * value.M31) * inverse,
-            (value.M13 * value.M21 - value.M11 * value.M23) * inverse,
-            c13 * inverse, (value.M12 * value.M31 - value.M11 * value.M32) * inverse,
-            (value.M11 * value.M22 - value.M12 * value.M21) * inverse);
-        PowerOfTwoScaling.UnscaleInverseColumns(Elements(ref result), 3, 3, exponents);
-        return result;
+        var result = InvertByCofactors(value, out var determinant);
+        var sum = result.Row1 + result.Row2 + result.Row3;
+        return T.IsNormal(determinant) && T.IsFinite(sum.X + sum.Y + sum.Z) ? result : InvertScaled(value);
     }
 
     /// <summary>The rows made perpendicular to one another (modified Gram-Schmidt), the first kept.</summary>
@@ -484,6 +468,38 @@ public struct Matrix3x3<T> : IEquatable<Matrix3x3<T>>, IFormattable where T : un
             M11.ToString(format, formatProvider), M12.ToString(format, formatProvider), M13.ToString(format, formatProvider),
             M21.ToString(format, formatProvider), M22.ToString(format, formatProvider), M23.ToString(format, formatProvider),
             M31.ToString(format, formatProvider), M32.ToString(format, formatProvider), M33.ToString(format, formatProvider));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Matrix3x3<T> InvertScaled(Matrix3x3<T> value)
+    {
+        Span<int> rowExponents = stackalloc int[3];
+        Span<int> columnExponents = stackalloc int[3];
+        PowerOfTwoScaling.Equilibrate(Elements(ref value), 3, rowExponents, columnExponents);
+        var result = InvertByCofactors(value, out _);
+        PowerOfTwoScaling.UnscaleInverse(Elements(ref result), 3, rowExponents, columnExponents);
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Matrix3x3<T> InvertByCofactors(Matrix3x3<T> value, out T determinant)
+    {
+        var c11 = value.M22 * value.M33 - value.M23 * value.M32;
+        var c12 = value.M23 * value.M31 - value.M21 * value.M33;
+        var c13 = value.M21 * value.M32 - value.M22 * value.M31;
+        determinant = value.M11 * c11 + value.M12 * c12 + value.M13 * c13;
+        if (determinant == T.Zero)
+        {
+            return Zero;
+        }
+
+        var inverse = T.One / determinant;
+        return new Matrix3x3<T>(c11 * inverse, (value.M13 * value.M32 - value.M12 * value.M33) * inverse,
+            (value.M12 * value.M23 - value.M13 * value.M22) * inverse,
+            c12 * inverse, (value.M11 * value.M33 - value.M13 * value.M31) * inverse,
+            (value.M13 * value.M21 - value.M11 * value.M23) * inverse,
+            c13 * inverse, (value.M12 * value.M31 - value.M11 * value.M32) * inverse,
+            (value.M11 * value.M22 - value.M12 * value.M21) * inverse);
+    }
 
     private static void Eliminate(ref Matrix3x3<T> result, bool unitLeads) =>
         GaussianElimination.Eliminate(Elements(ref result), 3, 3, unitLeads, false);

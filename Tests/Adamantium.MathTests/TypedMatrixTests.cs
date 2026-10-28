@@ -338,6 +338,37 @@ public class TypedMatrixTests
         }
     }
 
+    [Test]
+    public void Inverse_OfColumnsOfDifferentSizes_UndoesTheMatrix()
+    {
+        foreach (var move in new[] { 64.0, 100.0, 256.0, 1000.0, 4000.0 })
+        {
+            var m = Matrix4x4D.Transpose(Matrix4x4.CreateFromYawPitchRoll(0.4, 0.3, 0.2) *
+                                         Matrix4x4.CreateTranslation(move, -move / 2, move / 3)).As<Half>();
+
+            Assert.That(IsNearEachRow(Matrix4x4<Half>.Invert(m).As<double>(), Matrix4x4D.Invert(m.As<double>()), 4e-3), Is.True,
+                $"Half {move}");
+        }
+
+        foreach (var move in new[] { 1e13, 1e14 })
+        {
+            var m = Matrix4x4D.Transpose(Matrix4x4.CreateFromYawPitchRoll(0.4, 0.3, 0.2) *
+                                         Matrix4x4.CreateTranslation(move, -move / 2, move / 3)).As<float>();
+
+            Assert.That(IsNearEachRow(Matrix4x4<float>.Invert(m).As<double>(), Matrix4x4D.Invert(m.As<double>()), 1e-5), Is.True,
+                $"float {move}");
+        }
+
+        var turnAndMove = new Matrix3x3<Half>((Half)0.8, (Half)(-0.6), (Half)1000, (Half)0.6, (Half)0.8, (Half)(-500), (Half)0,
+            (Half)0, (Half)1);
+        Assert.That(IsNearEachRow(Matrix3x3<Half>.Invert(turnAndMove).As<double>(),
+            Matrix3x3<double>.Invert(turnAndMove.As<double>()), 4e-3), Is.True);
+
+        var lopsided = new Matrix3x3<float>(MathF.Pow(2, 65), MathF.Pow(2, -86), 0, MathF.Pow(2, 65), MathF.Pow(2, -85), 0, 0, 0, 1);
+        Assert.That(IsNearEachRow(Matrix3x3<float>.Invert(lopsided).As<double>(), Matrix3x3<double>.Invert(lopsided.As<double>()),
+            1e-6), Is.True);
+    }
+
     private static bool IsNearEachRow(Matrix4x4D actual, Matrix4x4D expected, double tolerance)
     {
         for (var r = 0; r < 4; r++)
