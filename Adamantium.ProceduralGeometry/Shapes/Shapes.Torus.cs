@@ -68,51 +68,45 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
 
-                int stride = tessellation + 1;
+                var ringRadius = diameter / 2;
+                var tubeRadius = thickness / 2;
+                int columns = tessellation + 1;
 
-                // First we loop around the main ring of the torus.
-                for (int i = 0; i <= tessellation; i++)
+                var section = new (double Out, double Up)[columns];
+                for (int j = 0; j < columns; j++)
                 {
-                    float u = 1 - (float)i / tessellation;
+                    var angle = j * MathF.Tau / tessellation + MathF.PI;
+                    section[j] = (tubeRadius * Math.Cos(angle), tubeRadius * Math.Sin(angle));
+                }
 
-                    float outerAngle = i * MathF.Tau / tessellation - (MathF.PI / 2);
+                for (int i = 0; i < columns; i++)
+                {
+                    var angle = i * MathF.Tau / tessellation - MathF.PI / 2;
+                    var outward = new Vector3<double>(Math.Cos(angle), 0, -Math.Sin(angle));
+                    var u = 1 - (float)i / tessellation;
 
-                    //Create a transform matrix that will align geometry to
-                    //slice perpendicularly though the current ring position
-                    var transformMatrix = Matrix4x4.CreateTranslation<double>(diameter / 2, 0, 0) * Matrix4x4.CreateRotationY<double>(outerAngle);
-
-                    // Now we loop along the other axis, around the side of the tube.
-                    for (int j = 0; j <= tessellation; j++)
+                    for (int j = 0; j < columns; j++)
                     {
-                        float v = (float) j / tessellation;
+                        var point = outward * (ringRadius + section[j].Out) + new Vector3<double>(0, section[j].Up, 0);
+                        vertices.Add(point * stretch);
+                        uvs.Add(new Vector2F(u, (float)j / tessellation));
+                    }
+                }
 
-                        float innerAngle = j * MathF.Tau / tessellation + MathF.PI;
-                        float dx = (float) Math.Cos(innerAngle);
-                        float dy = (float) Math.Sin(innerAngle);
+                for (int i = 0; i < tessellation; i++)
+                {
+                    for (int j = 0; j < tessellation; j++)
+                    {
+                        var here = i * columns + j;
+                        var next = here + columns;
 
-                        //Create a vertex
-                        var normal = new Vector3<double>(dx, dy, 0);
-                        var position = normal * thickness / 2;
-                        var uv = new Vector2F(u, v);
+                        indices.Add(here);
+                        indices.Add(here + 1);
+                        indices.Add(next);
 
-                        position = Vector3<double>.TransformCoordinate(position, transformMatrix);
-
-                        vertices.Add(position * stretch);
-                        uvs.Add(uv);
-
-                        if (i == tessellation || j == tessellation) continue;
-
-                        //Create indices for 2 triangles
-                        int nextI = i + 1;
-                        int nextJ = j + 1;
-
-                        indices.Add(i * stride + j);
-                        indices.Add(i * stride + nextJ);
-                        indices.Add(nextI * stride + j);
-                        
-                        indices.Add(i * stride + nextJ);
-                        indices.Add(nextI * stride + nextJ);
-                        indices.Add(nextI * stride + j);
+                        indices.Add(here + 1);
+                        indices.Add(next + 1);
+                        indices.Add(next);
                     }
                 }
 
@@ -166,7 +160,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            // Helper computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
             private static Vector3<double> GetCircleVector(
                 int i,
                 int tessellation)

@@ -9,7 +9,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
     {
         public class Tube
         {
-            // Helper computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
             private static Vector3<double> GetCircleVector(
                 int i,
                 int tessellation)
@@ -23,7 +22,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             private static Vector3<double> Stretch(Vector3<double> point, double depth) => new(point.X, point.Y, point.Z * depth);
 
-            private static void CreateCylinder(
+            private static void AddWall(
                 List<Vector3<double>> vertices,
                 List<Vector2F> uvs,
                 List<int> indices,
@@ -31,63 +30,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height,
                 double depth,
                 int tessellation,
-                bool isInnerCylinder
-            )
+                bool inner)
             {
-                height /= 2;
-                var topOffset = Vector3<double>.UnitY * height;
-                int stride = tessellation + 1;
-                int vbase = vertices.Count;
-                // Create a ring of triangles around the outside of the cylinder.
-                for (int i = 0; i <= tessellation; i++)
+                var top = Vector3<double>.UnitY * height / 2;
+                AddBand(vertices, uvs, indices, tessellation, inner, i =>
                 {
-                    var normal = GetCircleVector(i, tessellation);
-
-                    var sideOffset = normal * radius;
-
+                    var side = GetCircleVector(i, tessellation) * radius;
                     var across = (float)i / tessellation;
-                    var uv = new Vector2F(isInnerCylinder ? across : 1 - across, 0);
-
-                    vertices.Add(Stretch(sideOffset + topOffset, depth));
-                    uvs.Add(uv + Vector2F.UnitY);
-                    vertices.Add(Stretch(sideOffset - topOffset, depth));
-                    uvs.Add(uv);
-
-                    if (i == tessellation) continue;
-
-                    int index = 0;
-                    if (isInnerCylinder)
-                    {
-                        indices.Add(i * 2 + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(i * 2 + 1 + vbase);
-                        indices.Add(index + vbase);
-
-                        indices.Add(i * 2 + 1 + vbase);
-                        index = (i * 2 + 3) % (stride * 2);
-                        indices.Add(index + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(index + vbase);
-                    }
-                    else
-                    {
-                        indices.Add(i * 2 + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(index + vbase);
-                        indices.Add(i * 2 + 1 + vbase);
-
-                        indices.Add(i * 2 + 1 + vbase);
-                        
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(index + vbase);
-                        
-                        index = (i * 2 + 3) % (stride * 2);
-                        indices.Add(index + vbase);
-                    }
-                }
+                    var uv = new Vector2F(inner ? across : 1 - across, 0);
+                    return (Stretch(side + top, depth), uv + Vector2F.UnitY, Stretch(side - top, depth), uv);
+                });
             }
 
-            private static void CreateTubeCap(
+            private static void AddEnd(
                 List<Vector3<double>> vertices,
                 List<Vector2F> uvs,
                 List<int> indices,
@@ -96,64 +51,55 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double thickness,
                 double depth,
                 int tessellation,
-                bool isTop
-            )
+                bool top)
             {
-                height /= 2;
-                int vbase = vertices.Count;
-                var stride = tessellation + 1;
-
-                // Which end of the cylinder is this?
-                var normal = Vector3<double>.UnitY;
-                if (!isTop)
-                {
-                    normal = -normal;
-                }
-
+                var up = top ? 1.0 : -1.0;
+                var level = Vector3<double>.UnitY * (up * height / 2);
                 var diameter = (radius + thickness) * 2;
-                var downTheTexture = normal.Y;
+                Vector2F MapOnto(Vector3<double> point) =>
+                    new(0.5f + (float)(point.X / diameter), 0.5f + (float)(up * point.Z / diameter));
 
-                // Create cap vertices.
+                AddBand(vertices, uvs, indices, tessellation, top, i =>
+                {
+                    var round = GetCircleVector(i, tessellation);
+                    var outer = round * (radius + thickness) + level;
+                    var inner = round * radius + level;
+                    return (Stretch(outer, depth), MapOnto(outer), Stretch(inner, depth), MapOnto(inner));
+                });
+            }
+
+            private static void AddBand(
+                List<Vector3<double>> vertices,
+                List<Vector2F> uvs,
+                List<int> indices,
+                int tessellation,
+                bool reversed,
+                Func<int, (Vector3<double> First, Vector2F FirstUV, Vector3<double> Second, Vector2F SecondUV)> column)
+            {
+                var start = vertices.Count;
                 for (int i = 0; i <= tessellation; i++)
                 {
-                    var circleVector = GetCircleVector(i, tessellation);
+                    var (first, firstUV, second, secondUV) = column(i);
+                    vertices.Add(first);
+                    uvs.Add(firstUV);
+                    vertices.Add(second);
+                    uvs.Add(secondUV);
+                }
 
-                    var position = (circleVector * (radius + thickness)) + (normal * height);
-                    vertices.Add(Stretch(position, depth));
-                    uvs.Add(new Vector2F(0.5f + (float)(position.X / diameter), 0.5f + (float)(downTheTexture * position.Z / diameter)));
+                for (int i = 0; i < tessellation; i++)
+                {
+                    var first = start + 2 * i;
+                    var second = first + 1;
+                    var nextFirst = first + 2;
+                    var nextSecond = first + 3;
 
-                    position = (circleVector * radius) + (normal * height);
-                    vertices.Add(Stretch(position, depth));
-                    uvs.Add(new Vector2F(0.5f + (float)(position.X / diameter), 0.5f + (float)(downTheTexture * position.Z / diameter)));
-
-                    if (i == tessellation) continue;
-
-                    int index = 0;
-                    if (isTop)
+                    if (reversed)
                     {
-                        indices.Add(i * 2 + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(i * 2 + 1 + vbase);
-                        indices.Add(index + vbase);
-
-                        indices.Add(i * 2 + 1 + vbase);
-                        index = (i * 2 + 3) % (stride * 2);
-                        indices.Add(index + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(index + vbase);
+                        indices.AddRange([first, second, nextFirst, second, nextSecond, nextFirst]);
                     }
                     else
                     {
-                        indices.Add(i * 2 + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(index + vbase);
-                        indices.Add(i * 2 + 1 + vbase);
-
-                        indices.Add(i * 2 + 1 + vbase);
-                        index = (i * 2 + 2) % (stride * 2);
-                        indices.Add(index + vbase);
-                        index = (i * 2 + 3) % (stride * 2);
-                        indices.Add(index + vbase);
+                        indices.AddRange([first, nextFirst, second, second, nextFirst, nextSecond]);
                     }
                 }
             }
@@ -216,12 +162,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var vertices = new List<Vector3<double>>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
-                CreateCylinder(vertices, uvs, indices, radius, height, depth, tessellation, true);
-                CreateCylinder(vertices, uvs, indices, radius + thickness, height, depth, tessellation, false);
-
-                // Create flat triangle fan caps to seal the top and bottom.
-                CreateTubeCap(vertices, uvs, indices, radius, height, thickness, depth, tessellation, true);
-                CreateTubeCap(vertices, uvs, indices, radius, height, thickness, depth, tessellation, false);
+                AddWall(vertices, uvs, indices, radius, height, depth, tessellation, true);
+                AddWall(vertices, uvs, indices, radius + thickness, height, depth, tessellation, false);
+                AddEnd(vertices, uvs, indices, radius, height, thickness, depth, tessellation, true);
+                AddEnd(vertices, uvs, indices, radius, height, thickness, depth, tessellation, false);
 
                 var mesh = new Mesh();
                 mesh.MeshTopology = primitiveType;

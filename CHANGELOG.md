@@ -1057,6 +1057,12 @@ All packages share one version.
 
 ### Fixed
 
+- A capsule's seam no longer shows: its normals are those of its shape, the same on both sides of the seam, rather
+  than averaged from the triangles on each side apart; and its bands no longer stitch the seam's column to the first,
+  which made a ring of slivers.
+- The teapot's normals where a patch closes to a point - the top of the lid's knob, the middle of the bottom - no
+  longer lie flat at some sizes and tessellations: whether the surface's tangents vanish there is judged by the
+  patch's size.
 - A Collada skin bends. Its joints are nodes of the model, which the skin names by their IDs, found by their sids
   under the controller's `skeleton`; the bind shape, read in the order the file writes it, is taken into each inverse
   bind matrix; the clip moves the joints' nodes. It went through `AnimationController`, whose matrices nothing read,

@@ -16,68 +16,46 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     int tessellation = 40)
                 {
 
-                    int verticalSegments = tessellation;
-                    int horizontalSegments = tessellation * 2;
+                    int rings = tessellation;
+                    int around = tessellation * 2;
+                    int columns = around + 1;
 
-                    var vertices = new Vector3<double>[(verticalSegments + 1) * (horizontalSegments + 1)];
-                    var normals = new Vector3F[vertices.Length];
-                    var uvs = new Vector2F[vertices.Length];
-                    var indices = new int[verticalSegments * horizontalSegments * 6];
+                    var vertices = new List<Vector3<double>>(columns * (rings + 1));
+                    var normals = new List<Vector3F>(vertices.Capacity);
+                    var uvs = new List<Vector2F>(vertices.Capacity);
+                    var indices = new List<int>(rings * around * 6);
 
                     var radius = size / 2;
 
-                    int vertexCount = 0;
-                    // Create rings of vertices at progressively higher latitudes.
-                    for (int i = 0; i <= verticalSegments; i++)
+                    for (int ring = 0; ring <= rings; ring++)
                     {
-                        float v = 1.0f - (float) i / verticalSegments;
+                        var latitude = ring * Math.PI / rings - Math.PI / 2;
+                        var y = Math.Sin(latitude);
+                        var across = Math.Cos(latitude);
 
-                        var latitude = (float) ((i * Math.PI / verticalSegments) - Math.PI / 2.0);
-                        var dy = (float) Math.Sin(latitude);
-                        var dxz = (float) Math.Cos(latitude);
-
-                        // Create a single ring of vertices at this latitude.
-                        for (int j = 0; j <= horizontalSegments; j++)
+                        for (int column = 0; column < columns; column++)
                         {
-                            float u = (float) j / horizontalSegments;
-
-                            var longitude = (float) (j * 2.0 * Math.PI / horizontalSegments);
-                            var dx = (float) Math.Sin(longitude);
-                            var dz = (float) Math.Cos(longitude);
-
-                            dx *= dxz;
-                            dz *= dxz;
-
-                            var normal = new Vector3<double>(dx, dy, dz);
+                            var longitude = column * 2 * Math.PI / around;
+                            var direction = new Vector3<double>(across * Math.Sin(longitude), y, across * Math.Cos(longitude));
 
                             // Stretched by axis, an ellipsoid's normal leans the other way: its direction over the radii.
-                            vertices[vertexCount] = normal * radius;
-                            normals[vertexCount] = Vector3<double>.Normalize(normal / radius).As<float>();
-                            uvs[vertexCount++] = new Vector2F(1.0f - u, 1.0f - v);
+                            vertices.Add(direction * radius);
+                            normals.Add(Vector3<double>.Normalize(direction / radius).As<float>());
+                            uvs.Add(new Vector2F(1 - (float)column / around, (float)ring / rings));
                         }
                     }
 
-                    // Fill the index buffer with triangles joining each pair of latitude rings.
-                    int stride = horizontalSegments + 1;
-
-                    int indexCount = 0;
-                    for (int i = 0; i < verticalSegments; i++)
+                    // STOPS ONE SHORT: the last column is the seam, a duplicate of the first. Wrapping it round
+                    // with a modulo stitched that column to itself - a whole ring of zero-area triangles whose
+                    // normals averaged into the seam and left a dark stripe down the sphere.
+                    for (int ring = 0; ring < rings; ring++)
                     {
-                        // STOPS ONE SHORT: the last column is the seam, a duplicate of the first. Wrapping it round
-                        // with a modulo stitched that column to itself - a whole ring of zero-area triangles whose
-                        // normals averaged into the seam and left a dark stripe down the sphere.
-                        for (int j = 0; j < horizontalSegments; j++)
+                        for (int column = 0; column < around; column++)
                         {
-                            int nextI = i + 1;
-                            int nextJ = j + 1;
+                            var here = ring * columns + column;
+                            var above = here + columns;
 
-                            indices[indexCount++] = (i * stride + j);
-                            indices[indexCount++] = (nextI * stride + j);
-                            indices[indexCount++] = (i * stride + nextJ);
-
-                            indices[indexCount++] = (i * stride + nextJ);
-                            indices[indexCount++] = (nextI * stride + j);
-                            indices[indexCount++] = (nextI * stride + nextJ);
+                            indices.AddRange([here, above, here + 1, here + 1, above, above + 1]);
                         }
                     }
 
@@ -98,139 +76,45 @@ namespace Adamantium.ProceduralGeometry.Shapes
             {
                 public static readonly PrimitiveType PrimitiveType = PrimitiveType.TriangleList;
 
-                //--------------------------------------------------------------------------------------
-                // Geodesic sphere
-                //--------------------------------------------------------------------------------------
-
-                private static readonly Vector3<double>[] OctahedronVertices =
-                {
-                    // when looking down the negative z-axis (into the screen)
-                    new Vector3<double>(0, 1, 0), // 0 top
-                    new Vector3<double>(0, 0, -1), // 1 front
-                    new Vector3<double>(1, 0, 0), // 2 right
-                    new Vector3<double>(0, 0, 1), // 3 back
-                    new Vector3<double>(-1, 0, 0), // 4 left
-                    new Vector3<double>(0, -1, 0), // 5 bottom
-                };
-
-                private static readonly int[] OctahedronIndices = new int[]
-                {
-                    0, 2, 1,// top front-right face
-                    0, 3, 2, // top back-right face
-                    0, 4, 3, // top back-left face
-                    0, 1, 4, // top front-left face
-                    5, 4, 1, // bottom front-left face
-                    5, 3, 4, // bottom back-left face
-                    5, 2, 3, // bottom back-right face
-                    5, 1, 2, // bottom front-right face
-                };
-
-                private List<Vector3<double>> vertexPositions;
-
-                private List<int> indexList;
-
-                // Key: an edge
-                // Value: the index of the vertex which lies midway between the two vertices pointed to by the key value
-                // This map is used to avoid duplicating vertices when subdividing triangles along edges.
-                Dictionary<UndirectedEdge, int> subdividedEdges;
-
-                /// <summary>
-                /// Creates a Geodesic sphere
-                /// </summary>
-                /// <param name="diameter">The diameter.</param>
-                /// <param name="tessellation">The tessellation.</param>
-                /// <returns>A <see cref="Mesh"/> containing all necesseray info in raw format.</returns>
+                /// <summary>An octahedron - its corners on the axes - whose every triangle is split into four
+                /// <paramref name="tessellation"/> times, the new corners pushed out onto the sphere.</summary>
                 public static Mesh GenerateGeometry(
                     Vector3<double> size,
                     int tessellation = 3)
                 {
-                    var sphere = new GeoSphere();
-                    return sphere.GenerateSphere(size, tessellation);
-                }
-
-                /// <summary>
-                /// Creates a Geodesic sphere.
-                /// </summary>
-                /// <param name="size">The size along each axis.</param>
-                /// <param name="tessellation">The tessellation.</param>
-                /// <returns>A Geodesic sphere.</returns>
-                private Mesh GenerateSphere(
-                    Vector3<double> size,
-                    int tessellation = 3)
-                {
-                    subdividedEdges = new Dictionary<UndirectedEdge, int>();
-
                     var radius = size / 2.0;
+                    var (vertexPositions, indexList) = Octahedron();
 
-                    // Start with an octahedron; copy the data into the vertex/index collection.
-                    vertexPositions = new List<Vector3<double>>(OctahedronVertices);
-                    indexList = new List<int>(OctahedronIndices);
-
-                    for (int iSubdivision = 0; iSubdivision < tessellation; ++iSubdivision)
+                    for (int split = 0; split < tessellation; split++)
                     {
-                        // The new index collection after subdivision.
-                        var newIndices = new List<int>();
-                        subdividedEdges.Clear();
-
-                        int triangleCount = indexList.Count / 3;
-                        for (int iTriangle = 0; iTriangle < triangleCount; ++iTriangle)
+                        var midpoints = new Dictionary<(int, int), int>();
+                        int Midpoint(int a, int b)
                         {
-                            // For each edge on this triangle, create a new vertex in the middle of that edge.
-                            // The winding order of the triangles we output are the same as the winding order of the inputs.
+                            var edge = (Math.Min(a, b), Math.Max(a, b));
+                            if (!midpoints.TryGetValue(edge, out var middle))
+                            {
+                                middle = vertexPositions.Count;
+                                vertexPositions.Add((vertexPositions[a] + vertexPositions[b]) * 0.5);
+                                midpoints[edge] = middle;
+                            }
 
-                            // Indices of the vertices making up this triangle
-                            int iv0 = indexList[iTriangle * 3 + 0];
-                            int iv1 = indexList[iTriangle * 3 + 1];
-                            int iv2 = indexList[iTriangle * 3 + 2];
-
-                            // Get the new vertices
-                            Vector3<double> v01; // vertex on the midpoint of v0 and v1
-                            Vector3<double> v12; // ditto v1 and v2
-                            Vector3<double> v20; // ditto v2 and v0
-                            int iv01; // index of v01
-                            int iv12; // index of v12
-                            int iv20; // index of v20
-
-                            // Add/get new vertices and their indices
-                            DivideEdge(iv0, iv1, out v01, out iv01);
-                            DivideEdge(iv1, iv2, out v12, out iv12);
-                            DivideEdge(iv0, iv2, out v20, out iv20);
-
-                            // Add the new indices. We have four new triangles from our original one:
-                            //        v0
-                            //        o
-                            //       /a\
-                            //  v20 o---o v01
-                            //     /b\c/d\
-                            // v2 o---o---o v1
-                            //       v12
-
-                            // a
-                            newIndices.Add(iv0);
-                            newIndices.Add(iv01);
-                            newIndices.Add(iv20);
-
-                            // b
-                            newIndices.Add(iv20);
-                            newIndices.Add(iv12);
-                            newIndices.Add(iv2);
-
-                            // d
-                            newIndices.Add(iv20);
-                            newIndices.Add(iv01);
-                            newIndices.Add(iv12);
-
-                            // d
-                            newIndices.Add(iv01);
-                            newIndices.Add(iv1);
-                            newIndices.Add(iv12);
+                            return middle;
                         }
 
-                        indexList.Clear();
-                        indexList.AddRange(newIndices);
+                        var finer = new List<int>(indexList.Count * 4);
+                        for (int t = 0; t < indexList.Count; t += 3)
+                        {
+                            int a = indexList[t], b = indexList[t + 1], c = indexList[t + 2];
+                            var ab = Midpoint(a, b);
+                            var bc = Midpoint(b, c);
+                            var ca = Midpoint(a, c);
+
+                            finer.AddRange([a, ab, ca, ca, bc, c, ca, ab, bc, ab, b, bc]);
+                        }
+
+                        indexList = finer;
                     }
 
-                    // Now that we've completed subdivision, fill in the final vertex collection
                     var directions = new List<Vector3<double>>(vertexPositions.Count);
                     var points = new List<Vector3<double>>(vertexPositions.Count);
                     var normals = new List<Vector3F>(vertexPositions.Count);
@@ -314,86 +198,29 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 private static bool OnSeam(Vector3<double> direction) => Math.Abs(direction.X) < 1e-9 && direction.Z > 0;
 
-                // Function that, when given the index of two vertices, creates a new vertex at the midpoint of those vertices.
-                private void DivideEdge(
-                    int i0,
-                    int i1,
-                    out Vector3<double> outVertex,
-                    out int outIndex)
+                private static (List<Vector3<double>> Points, List<int> Indices) Octahedron()
                 {
-                    var edge = new UndirectedEdge(i0, i1);
+                    var top = new Vector3<double>(0, 1, 0);
+                    var bottom = new Vector3<double>(0, -1, 0);
+                    Vector3<double>[] equator = [new(0, 0, -1), new(1, 0, 0), new(0, 0, 1), new(-1, 0, 0)];
+                    var points = new List<Vector3<double>> { top };
+                    points.AddRange(equator);
+                    points.Add(bottom);
 
-                    // Check to see if we've already generated this vertex
-                    if (subdividedEdges.TryGetValue(edge, out outIndex))
+                    const int TopIndex = 0;
+                    const int BottomIndex = 5;
+                    var indices = new List<int>();
+                    for (int k = 0; k < 4; k++)
                     {
-                        // We've already generated this vertex before
-                        outVertex = vertexPositions[outIndex]; // and the vertex itself
-                    }
-                    else
-                    {
-                        // Haven't generated this vertex before: so add it now
-                        outVertex = (vertexPositions[i0] + vertexPositions[i1]) * 0.5f;
-                        outIndex = vertexPositions.Count;
-                        vertexPositions.Add(outVertex);
-
-                        // Now add it to the map.
-                        subdividedEdges[edge] = outIndex;
-                    }
-                }
-
-                // An undirected edge between two vertices, represented by a pair of indexes into a vertex array.
-                // Because this edge is undirected, (a,b) is the same as (b,a).
-                private struct UndirectedEdge : IEquatable<UndirectedEdge>
-                {
-                    public UndirectedEdge(
-                        int item1,
-                        int item2)
-                    {
-                        // Makes an undirected edge. Rather than overloading comparison operators to give us the (a,b)==(b,a) property,
-                        // we'll just ensure that the larger of the two goes first. This'll simplify things greatly.
-                        Item1 = Math.Max(item1, item2);
-                        Item2 = Math.Min(item1, item2);
+                        indices.AddRange([TopIndex, 1 + (k + 1) % 4, 1 + k]);
                     }
 
-                    public readonly int Item1;
-
-                    public readonly int Item2;
-
-                    public bool Equals(
-                        UndirectedEdge other)
+                    for (int k = 3; k >= 0; k--)
                     {
-                        return Item1 == other.Item1 && Item2 == other.Item2;
+                        indices.AddRange([BottomIndex, 1 + k, 1 + (k + 1) % 4]);
                     }
 
-                    public override bool Equals(
-                        object obj)
-                    {
-                        if (ReferenceEquals(null, obj))
-                            return false;
-                        return obj is UndirectedEdge && Equals((UndirectedEdge) obj);
-                    }
-
-                    public override int GetHashCode()
-                    {
-                        unchecked
-                        {
-                            return (Item1.GetHashCode() * 397) ^ Item2.GetHashCode();
-                        }
-                    }
-
-                    public static bool operator ==(
-                        UndirectedEdge left,
-                        UndirectedEdge right)
-                    {
-                        return left.Equals(right);
-                    }
-
-                    public static bool operator !=(
-                        UndirectedEdge left,
-                        UndirectedEdge right)
-                    {
-                        return !left.Equals(right);
-                    }
+                    return (points, indices);
                 }
             }
 
