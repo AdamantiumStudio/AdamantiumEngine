@@ -21,7 +21,7 @@ public class WrappedTrimmingTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Hyphens = Hyphens.None };
-        layout.ProcessText(text, FontSize, new Size(Width, height), TextWrapping.WrapByWords, trimming,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, height), TextWrapping.WrapByWords, trimming,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -54,7 +54,7 @@ public class WrappedTrimmingTests
         attributed.Apply(text.IndexOf("BIG", StringComparison.Ordinal), 3, new TextAttributes { FontSize = 50 });
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, FontSize, new Size(Width, height), TextWrapping.WrapByWords, trimming,
+        layout.ProcessText(attributed, FontSize, new Size<double>(Width, height), TextWrapping.WrapByWords, trimming,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.EqualTo(lines));
@@ -72,7 +72,7 @@ public class WrappedTrimmingTests
         attributed.Apply(text.IndexOf("BIG", StringComparison.Ordinal), 3, new TextAttributes { FontSize = 50 });
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, FontSize, new Size(Width, height), TextWrapping.WrapBySymbols,
+        layout.ProcessText(attributed, FontSize, new Size<double>(Width, height), TextWrapping.WrapBySymbols,
             TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.EqualTo(1));
@@ -96,7 +96,7 @@ public class WrappedTrimmingTests
         {
             Fallback = null, BaselineGrid = onTheGrid ? new BaselineGrid(line, line * 0.4) : null,
         };
-        layout.ProcessText(attributed, FontSize, new Size(Width, height), TextWrapping.WrapByWords,
+        layout.ProcessText(attributed, FontSize, new Size<double>(Width, height), TextWrapping.WrapByWords,
             TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var last = layout.GetLine(layout.LineCount - 1);
 
@@ -114,7 +114,7 @@ public class WrappedTrimmingTests
         attributed.Apply(6, text.Length - 6, new TextAttributes { FontSize = 30, Foreground = red, BaselineShift = 4 });
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, FontSize, new Size(Width, double.NaN), TextWrapping.NoWrap,
+        layout.ProcessText(attributed, FontSize, new Size<double>(Width, double.NaN), TextWrapping.NoWrap,
             TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var dots = Dots(layout);
         var before = layout.GetTextData().Last(g => g.PositionInString >= 0 && g.Symbol != ' ');
@@ -138,7 +138,7 @@ public class WrappedTrimmingTests
         attributed.Apply(5, 3, new TextAttributes { FontSize = 80 });
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, FontSize, new Size(Width, height), TextWrapping.WrapByWords,
+        layout.ProcessText(attributed, FontSize, new Size<double>(Width, height), TextWrapping.WrapByWords,
             TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var line = layout.GetLine(layout.LineCount - 1);
 
@@ -156,7 +156,7 @@ public class WrappedTrimmingTests
         var height = Layout("one", TextTrimming.None).GetLine(0).Height * 2.4;
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, FontSize, new Size(300, height), wrapping, TextTrimming.WordEllipses,
+        layout.ProcessText(text, FontSize, new Size<double>(300, height), wrapping, TextTrimming.WordEllipses,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.EqualTo(3));
@@ -175,7 +175,7 @@ public class WrappedTrimmingTests
         attributed.Apply(3, text.Length - 3, new TextAttributes { Font = emoji });
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, FontSize, new Size(Width, double.NaN), TextWrapping.NoWrap,
+        layout.ProcessText(attributed, FontSize, new Size<double>(Width, double.NaN), TextWrapping.NoWrap,
             TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var dots = Dots(layout);
 
@@ -184,7 +184,7 @@ public class WrappedTrimmingTests
         Assert.That(dots.Select(g => g.Rect.Width), Is.All.GreaterThan(0), "a drawn full stop");
 
         var whole = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        whole.ProcessText(attributed, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+        whole.ProcessText(attributed, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         Assert.That(layout.GetLine(0).Height, Is.EqualTo(whole.GetLine(0).Height).Within(1e-3),
             "the dots do not raise the line");

@@ -24,7 +24,7 @@ internal static class ClusterLightExtensions
             };
         }
 
-        var relative = (Vector3F)(light.Owner.Transform.WorldPosition - camera.WorldPosition);
+        var relative = (light.Owner.Transform.WorldPosition - camera.WorldPosition).As<float>();
         var outer = light.OuterSpotAngle;
         var inner = light.InnerSpotAngle > 0 ? Math.Min(light.InnerSpotAngle, outer) : outer * InnerConeShare;
         return new ClusterLight

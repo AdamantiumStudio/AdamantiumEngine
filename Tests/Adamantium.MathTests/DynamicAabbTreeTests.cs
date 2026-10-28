@@ -41,7 +41,7 @@ public class DynamicAabbTreeTests
 
         for (int r = 0; r < 200; r++)
         {
-            var ray = new Ray(RandomPoint(random) * 1.5f, Vector3F.Normalize(RandomPoint(random)));
+            var ray = new Ray<float>(RandomPoint(random) * 1.5f, Vector3F.Normalize(RandomPoint(random)));
             var found = new List<(int Item, float Entry)>();
             tree.RayCast(ray, found);
 
@@ -49,7 +49,7 @@ public class DynamicAabbTreeTests
             foreach (var (item, handle) in handles)
             {
                 var box = tree.BoxOf(handle);
-                if (Collision.RayIntersectsBox(ref ray, ref box, out float entry))
+                if (Collision.RayIntersectsBox(ray, box, out float entry))
                 {
                     expected.Add((item, entry));
                 }
@@ -69,7 +69,7 @@ public class DynamicAabbTreeTests
         var tree = new DynamicAabbTree<int>();
         for (int i = 0; i < 1024; i++)
         {
-            tree.Add(new BoundingBox(new Vector3F(i, 0, 0), new Vector3F(i + 0.5f, 0.5f, 0.5f)), i);
+            tree.Add(new BoundingBox<float>(new Vector3F(i, 0, 0), new Vector3F(i + 0.5f, 0.5f, 0.5f)), i);
         }
 
         Assert.That(tree.Height, Is.LessThanOrEqualTo(2 * (int)Math.Ceiling(Math.Log2(1024)) + 1));
@@ -81,20 +81,20 @@ public class DynamicAabbTreeTests
     public void ALeaf_MovesOnlyOnceItsItemLeavesItsBox()
     {
         var tree = new DynamicAabbTree<string>();
-        var handle = tree.Add(new BoundingBox(Vector3F.Zero, Vector3F.One), "a");
+        var handle = tree.Add(new BoundingBox<float>(Vector3F.Zero, Vector3F.One), "a");
 
-        Assert.That(tree.Move(handle, new BoundingBox(new Vector3F(0.05f), new Vector3F(1.05f))), Is.False);
+        Assert.That(tree.Move(handle, new BoundingBox<float>(new Vector3F(0.05f), new Vector3F(1.05f))), Is.False);
 
-        var far = new BoundingBox(new Vector3F(5), new Vector3F(6));
+        var far = new BoundingBox<float>(new Vector3F(5), new Vector3F(6));
         Assert.That(tree.Move(handle, far), Is.True);
         Assert.That(tree.BoxOf(handle).Contains(far), Is.EqualTo(ContainmentType.Contains));
     }
 
-    private static BoundingBox RandomBox(Random random)
+    private static BoundingBox<float> RandomBox(Random random)
     {
         var center = RandomPoint(random) * 10;
         var half = new Vector3F((float)random.NextDouble(), (float)random.NextDouble(), (float)random.NextDouble()) * 0.5f;
-        return new BoundingBox(center - half, center + half);
+        return new BoundingBox<float>(center - half, center + half);
     }
 
     private static Vector3F RandomPoint(Random random) =>

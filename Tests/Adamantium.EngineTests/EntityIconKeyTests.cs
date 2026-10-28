@@ -27,7 +27,7 @@ public class EntityIconKeyTests
     [Test]
     public void ACamera_HasTheCameraIcon()
     {
-        var camera = new CameraTemplate().BuildEntity(null, "Camera", Vector3.Zero, Vector3.ForwardLH, -Vector3.Up,
+        var camera = new CameraTemplate().BuildEntity(null, "Camera", Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             800, 600, 0.1f, 1000f);
 
         Assert.That(camera.IconKey, Is.EqualTo(EntityIconKeys.Camera));

@@ -26,7 +26,7 @@ public static class MeshExtension
 
         for (int i = 0; i < length; i++)
         {
-            var vertex = new MeshVertex() { Position = mesh.Points[i] };
+            var vertex = new MeshVertex() { Position = mesh.Points[i].As<float>() };
             if (normals > 0)
             {
                 vertex.Normal = mesh.Normals[i];
@@ -88,7 +88,7 @@ public static class MeshExtension
 
         for (int i = 0; i < length; ++i)
         {
-            var vertex = new SkinnedMeshVertex() { Position = mesh.Points[i] };
+            var vertex = new SkinnedMeshVertex() { Position = mesh.Points[i].As<float>() };
             if (normals)
             {
                 vertex.Normal = mesh.Normals[i];
@@ -144,7 +144,7 @@ public static class MeshExtension
 
         for (int i = 0; i < length; i++)
         {
-            var vertex = new UIVertex() { Position = mesh.Points[i] };
+            var vertex = new UIVertex() { Position = mesh.Points[i].As<float>() };
             if (normals > 0)
             {
                 vertex.Normal = mesh.Normals[i];

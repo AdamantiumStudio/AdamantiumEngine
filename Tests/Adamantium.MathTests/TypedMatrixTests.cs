@@ -1,9 +1,8 @@
 using System;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using Matrix4x4 = Adamantium.Mathematics.Typed.Matrix4x4;
-using Matrix4x4D = Adamantium.Mathematics.Typed.Matrix4x4<double>;
-using Vector4D = Adamantium.Mathematics.Typed.Vector4<double>;
+using Matrix4x4D = Adamantium.Mathematics.Matrix4x4<double>;
+using Vector4D = Adamantium.Mathematics.Vector4<double>;
 
 namespace Adamantium.MathTests;
 

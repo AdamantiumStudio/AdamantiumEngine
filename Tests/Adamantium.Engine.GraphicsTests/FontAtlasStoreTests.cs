@@ -22,7 +22,7 @@ public class FontAtlasStoreTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", file));
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText(text, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -178,7 +178,7 @@ public class FontAtlasStoreTests
             "RobotoFlex-Variable.ttf"));
         var moving = typeface.Fonts[0].GetInstance([new FontVariation("wght", 400)], [new FontVariation("wght", 700)], 0.42f);
         var layout = new TextLayout(moving.Typeface, moving);
-        layout.ProcessText("m", 40, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("m", 40, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         layout.Update(device);
@@ -216,7 +216,7 @@ public class FontAtlasStoreTests
             .ToArray();
         var layout = new TextLayout(typeface, font);
         layout.ProcessText(string.Concat(codepoints.Select(c => char.ConvertFromUtf32((int)c))), 20,
-            new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
+            new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
 
         layout.Update(device);
@@ -240,7 +240,7 @@ public class FontAtlasStoreTests
         {
             var layout = new TextLayout(typeface, typeface.Fonts[0]);
             layout.ProcessText(new AttributedText(text, new TextAttributes { ColorPalette = palette }), 20,
-                new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
+                new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
                 VerticalTextAlignment.Top);
             layout.Update(device);
             return layout.SnapshotGlyphs().Glyphs[0].Paint.X;

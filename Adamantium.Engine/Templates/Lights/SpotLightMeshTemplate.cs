@@ -11,7 +11,7 @@ public class SpotLightMeshTemplate
 {
     public Entity BuildEntity()
     {
-        var transform = Matrix4x4.Translation(0, -0.5f, 0);
+        var transform = Matrix4x4.CreateTranslation<double>(0, -0.5f, 0);
         var cone = Shapes.Cone.GenerateGeometry(GeometryType.Solid, 1, 1, 0, 40, transform);
 
         var root = new Entity(null, "Spot light mesh");

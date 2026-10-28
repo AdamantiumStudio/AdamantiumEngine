@@ -24,7 +24,7 @@ public class EditorOverlayProcessor : RenderingProcessor
     private const int OutlineDirections = 8;
 
     private static readonly Mesh RingSquare = new Mesh(PrimitiveType.TriangleList)
-        .SetPoints(new[] { new Vector3(-1, -1, 0), new Vector3(1, -1, 0), new Vector3(-1, 1, 0), new Vector3(1, 1, 0) })
+        .SetPoints(new[] { new Vector3<double>(-1, -1, 0), new Vector3<double>(1, -1, 0), new Vector3<double>(-1, 1, 0), new Vector3<double>(1, 1, 0) })
         .SetIndices(new[] { 0, 1, 2, 2, 1, 3 });
 
     private readonly ToolsService tools;
@@ -151,24 +151,24 @@ public class EditorOverlayProcessor : RenderingProcessor
         }
 
         var world = transformation.WorldMatrixF;
-        var extent = (Vector3F)mesh.Bounds.HalfExtent;
+        var extent = mesh.Bounds.HalfExtent.As<float>();
         var axis = extent.X <= extent.Y && extent.X <= extent.Z ? Vector3F.UnitX
             : extent.Y <= extent.Z ? Vector3F.UnitY
             : Vector3F.UnitZ;
         var inPlane = axis == Vector3F.UnitX ? Vector3F.UnitY : Vector3F.UnitX;
         var pixels = LinePixels;
         var center = ScreenSpace.OnPixelGrid(
-            Vector3F.TransformCoordinate((Vector3F)mesh.Bounds.Center, world), ActiveCamera, pixels % 2 == 0 ? 0 : 0.5f);
-        var unitsPerPixel = ScreenSpace.UnitsPerPixel(ActiveCamera, (Vector3)center + ActiveCamera.WorldPosition);
+            Vector3F.TransformCoordinate(mesh.Bounds.Center.As<float>(), world), ActiveCamera, pixels % 2 == 0 ? 0 : 0.5f);
+        var unitsPerPixel = ScreenSpace.UnitsPerPixel(ActiveCamera, center.As<double>() + ActiveCamera.WorldPosition);
         var normal = Vector3F.Normalize(Vector3F.TransformNormal(axis, world));
         var radius = Math.Max(extent.X, Math.Max(extent.Y, extent.Z)) * Vector3F.TransformNormal(inPlane, world).Length();
         radius = MathF.Round(radius / unitsPerPixel) * unitsPerPixel;
 
         var near = Math.Min(radius / center.Length(), 0.9f);
         var reach = radius / MathF.Sqrt(1 - near * near) + (pixels + 4) * unitsPerPixel;
-        var placement = Matrix4x4F.Scaling(reach)
-                        * Matrix4x4F.RotationQuaternion(ScreenSpace.Facing(ActiveCamera))
-                        * Matrix4x4F.Translation(center);
+        var placement = Matrix4x4.CreateScale<float>(reach)
+                        * Matrix4x4.CreateFromQuaternion<float>(ScreenSpace.Facing(ActiveCamera))
+                        * Matrix4x4.CreateTranslation<float>(center);
         effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         effect.LineWidth.SetValue(pixels);
         effect.Ring.SetValue(new Vector4F(normal, radius));
@@ -514,5 +514,5 @@ public class EditorOverlayProcessor : RenderingProcessor
 
     private readonly record struct Part(MeshData Data, Matrix4x4F World, Vector4F Color, bool Flat, bool Line, Skin Skin);
 
-    private readonly record struct Ribbon(Vector3[] Points, int[] Indices, Mesh Mesh);
+    private readonly record struct Ribbon(Vector3<double>[] Points, int[] Indices, Mesh Mesh);
 }

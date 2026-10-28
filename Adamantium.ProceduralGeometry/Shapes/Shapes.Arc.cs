@@ -12,13 +12,13 @@ namespace Adamantium.ProceduralGeometry.Shapes
             
         public static Mesh GenerateGeometry(
                GeometryType shapeType,
-               Vector2 diameter,
+               Vector2<double> diameter,
                double thickness,
                float startAngle = 0,
                float stopAngle = 360,
                bool isClockWise = true,
                int tessellation = 36,
-               Matrix4x4? transform = null)
+               Matrix4x4<double>? transform = null)
             {
                 if (Math.Abs(stopAngle - startAngle) > 360)
                 {
@@ -32,9 +32,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
 
                 var uvs = new List<Vector2F>();
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
-                var center = Vector2.Zero;
+                var center = Vector2<double>.Zero;
                 double radiusX = diameter.X / 2;
                 double radiusY = diameter.Y / 2;
 
@@ -52,11 +52,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     sign = -1;
                 }
 
-                float angleItem = MathHelper.DegreesToRadians(angle) * sign;
-                startAngle = MathHelper.DegreesToRadians(startAngle);
+                float angleItem = float.DegreesToRadians(angle) * sign;
+                startAngle = float.DegreesToRadians(startAngle);
                 angle = startAngle * sign;
 
-                var vertex = Vector3.Zero;
+                var vertex = Vector3<double>.Zero;
 
                 var mesh = new Mesh();
                 mesh.MeshTopology = primitiveType;
@@ -85,10 +85,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     for (int i = 0; i < mesh.Points.Length; ++i)
                     {
                         var position = mesh.Points[i];
-                        var uv = new Vector2(
+                        var uv = new Vector2<double>(
                            0.5f + (position.X - center.X) / (2 * radiusX),
                            0.5f + (position.Y - center.Y) / (2 * radiusY));
-                        uvs.Add(uv);
+                        uvs.Add(uv.As<float>());
                     }
 
                     mesh.SetUVs(0, uvs);
@@ -142,7 +142,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            private static Vector3 CreatePoint(Vector2 center, double radiusX, double radiusY, double thickness, float angle)
+            private static Vector3<double> CreatePoint(Vector2<double> center, double radiusX, double radiusY, double thickness, float angle)
             {
                 var x = center.X + ((radiusX - thickness) * (float)Math.Cos(angle));
                 var y = center.Y + ((radiusY - thickness) * (float)Math.Sin(angle));
@@ -154,7 +154,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 {
                     y = 0;
                 }
-                var vertex = new Vector3(x, y, 0);
+                var vertex = new Vector3<double>(x, y, 0);
                 return vertex;
             }
         }

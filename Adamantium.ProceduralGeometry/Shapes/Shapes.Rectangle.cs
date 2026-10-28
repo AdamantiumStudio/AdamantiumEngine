@@ -18,7 +18,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height,
                 CornerRadius corners,
                 int tessellation = 20,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return GenerateGeometry(type,
                     0,
@@ -38,7 +38,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height,
                 CornerRadius corners,
                 int tessellation = 20,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 var primitiveType = PrimitiveType.TriangleList;
                 if (type == GeometryType.Outlined)
@@ -54,63 +54,63 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var min = Math.Min(width, height);
                 ValidateCorners(ref corners, min);
 
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
 
                 var halfWidth = width / 2;
                 var halfHeight = height / 2;
 
                 if (corners.TopLeft > 0)
                 {
-                    var radius = new Vector2(corners.TopLeft);
+                    var radius = new Vector2<double>(corners.TopLeft);
                     var centerX = -halfWidth + radius.X;
                     var centerY = -halfHeight + radius.Y;
-                    GenerateRoundCorner(tessellation, -180, new Vector2(centerX, centerY), radius, vertices);
+                    GenerateRoundCorner(tessellation, -180, new Vector2<double>(centerX, centerY), radius, vertices);
                 }
                 else
                 {
-                    vertices.Add(new Vector3(-halfWidth, -halfHeight));
+                    vertices.Add(new Vector3<double>(-halfWidth, -halfHeight));
                 }
 
                 if (corners.TopRight > 0)
                 {
-                    var radius = new Vector2(corners.TopRight);
+                    var radius = new Vector2<double>(corners.TopRight);
                     var centerX = halfWidth - radius.X;
                     var centerY = -halfHeight + radius.Y;
-                    GenerateRoundCorner(tessellation, 90, new Vector2(centerX, centerY), radius, vertices);
+                    GenerateRoundCorner(tessellation, 90, new Vector2<double>(centerX, centerY), radius, vertices);
                 }
                 else
                 {
-                    vertices.Add(new Vector3(halfWidth, -halfHeight));
+                    vertices.Add(new Vector3<double>(halfWidth, -halfHeight));
                 }
 
                 if (corners.BottomRight > 0)
                 {
-                    var radius = new Vector2(corners.BottomRight);
+                    var radius = new Vector2<double>(corners.BottomRight);
                     var centerX = halfWidth - radius.X;
                     var centerY = halfHeight - radius.Y;
-                    GenerateRoundCorner(tessellation, 0, new Vector2(centerX, centerY), radius, vertices);
+                    GenerateRoundCorner(tessellation, 0, new Vector2<double>(centerX, centerY), radius, vertices);
                 }
                 else
                 {
-                    vertices.Add(new Vector3(halfWidth, halfHeight));
+                    vertices.Add(new Vector3<double>(halfWidth, halfHeight));
                 }
 
                 if (corners.BottomLeft > 0)
                 {
-                    var radius = new Vector2(corners.BottomLeft);
+                    var radius = new Vector2<double>(corners.BottomLeft);
                     var centerX = -halfWidth + radius.X;
                     var centerY = halfHeight - radius.Y;
-                    GenerateRoundCorner(tessellation, -90, new Vector2(centerX, centerY), radius, vertices);
+                    GenerateRoundCorner(tessellation, -90, new Vector2<double>(centerX, centerY), radius, vertices);
                 }
                 else
                 {
-                    vertices.Add(new Vector3(-halfWidth, halfHeight));
+                    vertices.Add(new Vector3<double>(-halfWidth, halfHeight));
                 }
 
                 var placed = transform is { IsIdentity: false };
                 if (!placed)
                 {
-                    vertices = vertices.Round().ToList();
+                    vertices = vertices.Select(vertex => Vector3<double>.Round(vertex, 3)).ToList();
                 }
 
                 var mesh = new Mesh(primitiveType);
@@ -146,18 +146,18 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private static void GenerateRoundCorner(
                 int tessellation,
                 float startAngle,
-                Vector2 center,
-                Vector2 radius,
-                List<Vector3> vertices)
+                Vector2<double> center,
+                Vector2<double> radius,
+                List<Vector3<double>> vertices)
             {
-                var angleItem = -MathHelper.DegreesToRadians(rectangleSector / tessellation);
-                var angle = MathHelper.DegreesToRadians(startAngle);
+                var angleItem = -float.DegreesToRadians(rectangleSector / tessellation);
+                var angle = float.DegreesToRadians(startAngle);
                 for (int i = 0; i <= tessellation; ++i)
                 {
                     var x = center.X + (radius.X * Math.Cos(angle));
                     var y = center.Y - (radius.Y * Math.Sin(angle));
                     angle += angleItem;
-                    vertices.Add( (Vector3)Vector2.Round(x, y, 3));
+                    vertices.Add(new Vector3<double>(Vector2<double>.Round(new Vector2<double>(x, y), 3), 0));
                 }
             }
             
@@ -203,7 +203,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
             }
 
-            private static List<Vector3> Triangulate(List<Vector3> vertices)
+            private static List<Vector3<double>> Triangulate(List<Vector3<double>> vertices)
             {
                 var polygon = new Mathematics.Triangulation.Polygon();
                 polygon.AddContour(new MeshContour(vertices));

@@ -46,7 +46,7 @@ public class MsdfFieldLeakTests
         {
             for (var x = 0; x < width - 1; x++)
             {
-                var point = new Vector2(texelX * (x + 1 - Margin) + bounds.X,
+                var point = new Vector2<double>(texelX * (x + 1 - Margin) + bounds.X,
                     bounds.Height - (texelY * (y + 1 - Margin) - bounds.Y));
                 if (Inside(segments, point) || Distance(segments, point) < 1.5 * Math.Max(texelX, texelY))
                 {
@@ -106,7 +106,7 @@ public class MsdfFieldLeakTests
 
     private static double Median(double r, double g, double b) => Math.Max(Math.Min(r, g), Math.Min(Math.Max(r, g), b));
 
-    private static bool Inside(List<LineSegment2D> segments, Vector2 p)
+    private static bool Inside(List<LineSegment2D> segments, Vector2<double> p)
     {
         var winding = 0;
         foreach (var segment in segments)
@@ -127,7 +127,7 @@ public class MsdfFieldLeakTests
         return winding != 0;
     }
 
-    private static double Distance(List<LineSegment2D> segments, Vector2 p)
+    private static double Distance(List<LineSegment2D> segments, Vector2<double> p)
     {
         var nearest = double.MaxValue;
         foreach (var segment in segments)

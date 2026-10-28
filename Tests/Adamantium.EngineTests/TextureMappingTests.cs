@@ -23,8 +23,8 @@ public class TextureMappingTests
     {
         yield return Case("Rectangle", Shapes.Rectangle.GenerateGeometry(GeometryType.Solid, 2, 1, new CornerRadius(0)), Outside.TowardTheEye);
         yield return Case("RoundedRectangle", Shapes.Rectangle.GenerateGeometry(GeometryType.Solid, 2, 1, new CornerRadius(0.2)), Outside.TowardTheEye);
-        yield return Case("Ellipse", Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.EdgeToEdge, new Vector2(2, 1)), Outside.TowardTheEye);
-        yield return Case("Polygon", Shapes.Polygon.GenerateGeometry(GeometryType.Solid, new Vector2(2), 6), Outside.TowardTheEye);
+        yield return Case("Ellipse", Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.EdgeToEdge, new Vector2<double>(2, 1)), Outside.TowardTheEye);
+        yield return Case("Polygon", Shapes.Polygon.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 6), Outside.TowardTheEye);
         yield return Case("Plane", Shapes.Plane.GenerateGeometry(GeometryType.Solid, 2, 1, 2), Outside.Up, true);
         yield return Case("Cube", Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2, 1, 3, 2), Outside.FromTheCenter, true);
         yield return Case("Cylinder", Shapes.Cylinder.GenerateGeometry(GeometryType.Solid, 2, 1, 16), Outside.FromTheCenter, true);
@@ -36,20 +36,20 @@ public class TextureMappingTests
             yield return Case($"GeoSphere{level}", Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.GeoSphere, 2, level), Outside.FromTheCenter);
         }
 
-        var stretched = new Vector3(2, 3, 1.5);
+        var stretched = new Vector3<double>(2, 3, 1.5);
         yield return Case("StretchedUVSphere", Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.UVSphere, stretched, 16), Outside.FromTheCenter);
         yield return Case("StretchedGeoSphere", Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.GeoSphere, stretched, 3), Outside.FromTheCenter);
         yield return Case("StretchedCylinder", Shapes.Cylinder.GenerateGeometry(GeometryType.Solid, stretched, 16), Outside.FromTheCenter, true);
         yield return Case("StretchedCone", Shapes.Cone.GenerateGeometry(GeometryType.Solid, stretched, 0.5, 16), Outside.FromTheCenter, true);
         yield return Case("StretchedCapsule", Shapes.Capsule.GenerateGeometry(GeometryType.Solid, stretched, 16), Outside.FromTheCenter);
-        yield return Case("Arc", Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2(2), 0.3, 0, 270), Outside.TowardTheEye);
-        yield return Case("ArcCounterClockwise", Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2(2), 0.3, 0, 270, false), Outside.TowardTheEye);
-        yield return Case("Line", Shapes.Line.GenerateGeometry(GeometryType.Solid, new Vector3(-1, 0, 0), new Vector3(1, 0.5, 0), 0.2), Outside.TowardTheEye);
-        yield return Case("Polyline", Shapes.Polyline.GenerateGeometry([new Vector2(-1, 0), new Vector2(0, 0.5), new Vector2(1, 0.2)], 0.2f), Outside.TowardTheEye);
+        yield return Case("Arc", Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 0.3, 0, 270), Outside.TowardTheEye);
+        yield return Case("ArcCounterClockwise", Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 0.3, 0, 270, false), Outside.TowardTheEye);
+        yield return Case("Line", Shapes.Line.GenerateGeometry(GeometryType.Solid, new Vector3<double>(-1, 0, 0), new Vector3<double>(1, 0.5, 0), 0.2), Outside.TowardTheEye);
+        yield return Case("Polyline", Shapes.Polyline.GenerateGeometry([new Vector2<double>(-1, 0), new Vector2<double>(0, 0.5), new Vector2<double>(1, 0.2)], 0.2f), Outside.TowardTheEye);
         yield return Case("Teapot", Shapes.Teapot.GenerateGeometry(GeometryType.Solid, 2, 8), Outside.AlongItsNormals);
         yield return Case("CoarseTeapot", Shapes.Teapot.GenerateGeometry(GeometryType.Solid, 2, 4), Outside.AlongItsNormals);
-        yield return Case("TallTeapot", Shapes.Teapot.GenerateGeometry(GeometryType.Solid, new Vector3(1, 3, 1), 8), Outside.AlongItsNormals);
-        yield return Case("FlatTeapot", Shapes.Teapot.GenerateGeometry(GeometryType.Solid, new Vector3(3, 0.5, 3), 8), Outside.AlongItsNormals);
+        yield return Case("TallTeapot", Shapes.Teapot.GenerateGeometry(GeometryType.Solid, new Vector3<double>(1, 3, 1), 8), Outside.AlongItsNormals);
+        yield return Case("FlatTeapot", Shapes.Teapot.GenerateGeometry(GeometryType.Solid, new Vector3<double>(3, 0.5, 3), 8), Outside.AlongItsNormals);
         yield return Case("CubeSphere", Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.CubeSphere, 2, 8), Outside.FromTheCenter);
         yield return Case("Capsule", Shapes.Capsule.GenerateGeometry(GeometryType.Solid, 1, 1, 16), Outside.FromTheCenter);
         yield return Case("Torus", Shapes.Torus.GenerateGeometry(GeometryType.Solid, 2, 0.5, 16), Outside.FromTheRing);
@@ -81,7 +81,7 @@ public class TextureMappingTests
             var du2 = uvs[c].X - uvs[a].X;
             var dv2 = uvs[c].Y - uvs[a].Y;
             var det = du1 * dv2 - du2 * dv1;
-            var face = Vector3.Cross(e1, e2);
+            var face = Vector3<double>.Cross(e1, e2);
             var longest = Math.Max(Math.Max(e1.LengthSquared(), e2.LengthSquared()), (e2 - e1).LengthSquared());
             // A sliver - a pole's points a rounding apart - has no way of its own to face.
             if (face.Length() < 1e-4 * longest) continue;
@@ -93,20 +93,20 @@ public class TextureMappingTests
                 continue;
             }
 
-            var normal = Vector3.Normalize(face);
+            var normal = Vector3<double>.Normalize(face);
             var center = (points[a] + points[b] + points[c]) / 3;
-            if (Vector3.Dot(normal, OutsideAt(center, normal, MeshNormal(mesh, a, b, c), outside, midRadius)) < 0) normal = -normal;
+            if (Vector3<double>.Dot(normal, OutsideAt(center, normal, MeshNormal(mesh, a, b, c), outside, midRadius)) < 0) normal = -normal;
 
             var alongU = (e1 * dv2 - e2 * dv1) / det;
             var alongV = (e2 * du1 - e1 * du2) / det;
-            var down = Vector3.Normalize(alongV);
+            var down = Vector3<double>.Normalize(alongV);
 
-            if (Vector3.Dot(Vector3.Cross(alongU, alongV), normal) >= 0) mirrored++;
+            if (Vector3<double>.Dot(Vector3<double>.Cross(alongU, alongV), normal) >= 0) mirrored++;
 
             // Round a ring's tube the picture runs down its outer wall and so, coming back, up its inner one - and over
             // a teapot's rim into its opening.
             var innerWall = outside is Outside.FromTheRing or Outside.AlongItsNormals
-                            && Vector3.Dot(normal, new Vector3(center.X, 0, center.Z)) < 0;
+                            && Vector3<double>.Dot(normal, new Vector3<double>(center.X, 0, center.Z)) < 0;
             if (Math.Abs(normal.Y) < 0.5 && !innerWall)
             {
                 sides++;
@@ -115,8 +115,8 @@ public class TextureMappingTests
             else if (flatCaps && Math.Abs(normal.Y) > 0.99)
             {
                 // Seen from above its top runs away from the default camera (+Z); seen from below, toward it.
-                var wanted = normal.Y < 0 ? -Vector3.UnitZ : Vector3.UnitZ;
-                if (Vector3.Dot(down, wanted) <= 0.5) capTurned++;
+                var wanted = normal.Y < 0 ? -Vector3<double>.UnitZ : Vector3<double>.UnitZ;
+                if (Vector3<double>.Dot(down, wanted) <= 0.5) capTurned++;
             }
         }
 
@@ -139,17 +139,17 @@ public class TextureMappingTests
     private static IEnumerable<TestCaseData> Facing()
     {
         foreach (var shaped in Shaped()) yield return shaped;
-        var mirror = Matrix4x4.Scaling(-1, 1, 1);
+        var mirror = Matrix4x4.CreateScale<double>(-1, 1, 1);
         yield return Case("MirroredCube", Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2, 1, 3, 2, mirror), Outside.FromTheCenter);
         yield return Case("MirroredRectangle",
             Shapes.Rectangle.GenerateGeometry(GeometryType.Solid, 2, 1, new CornerRadius(0), 20, mirror), Outside.TowardTheEye);
         yield return Case("MirroredArc",
-            Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2(2), 0.3, 0, 270, true, 36, mirror), Outside.TowardTheEye);
+            Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 0.3, 0, 270, true, 36, mirror), Outside.TowardTheEye);
         var merged = new Mesh(PrimitiveType.TriangleList)
             .Merge([new MergeInstance(Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2, 1, 3, 2), mirror, true)]);
         yield return Case("MergedMirroredCube", merged, Outside.FromTheCenter);
         var mergedArc = new Mesh(PrimitiveType.TriangleStrip)
-            .Merge([new MergeInstance(Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2(2), 0.3, 0, 270), mirror, true)]);
+            .Merge([new MergeInstance(Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 0.3, 0, 270), mirror, true)]);
         yield return Case("MergedMirroredArc", mergedArc, Outside.TowardTheEye);
     }
 
@@ -166,17 +166,17 @@ public class TextureMappingTests
         {
             var e1 = points[b] - points[a];
             var e2 = points[c] - points[a];
-            var face = Vector3.Cross(e1, e2);
+            var face = Vector3<double>.Cross(e1, e2);
             var longest = Math.Max(Math.Max(e1.LengthSquared(), e2.LengthSquared()), (e2 - e1).LengthSquared());
             if (face.Length() < 1e-4 * longest) continue;
 
             var center = (points[a] + points[b] + points[c]) / 3;
-            var sides = Vector3.Normalize(face);
+            var sides = Vector3<double>.Normalize(face);
             var out_ = OutsideAt(center, sides, MeshNormal(mesh, a, b, c), outside, midRadius);
             triangles++;
-            if (Vector3.Dot(face, out_) > 0) inward++;
+            if (Vector3<double>.Dot(face, out_) > 0) inward++;
             if (outside != Outside.AlongItsNormals && normals.Length == points.Length
-                && Vector3.Dot((Vector3)(normals[a] + normals[b] + normals[c]), out_) < 0)
+                && Vector3<double>.Dot((normals[a] + normals[b] + normals[c]).As<double>(), out_) < 0)
             {
                 normalsIn++;
             }
@@ -202,7 +202,7 @@ public class TextureMappingTests
         var points = mesh.Points;
         var uvs = mesh.UV0;
         var welded = new Dictionary<(long, long, long), int>();
-        int Weld(Vector3 p)
+        int Weld(Vector3<double> p)
         {
             var key = ((long)Math.Round(p.X * 1e4), (long)Math.Round(p.Y * 1e4), (long)Math.Round(p.Z * 1e4));
             if (!welded.TryGetValue(key, out var id)) welded[key] = id = welded.Count;
@@ -211,12 +211,12 @@ public class TextureMappingTests
 
         var edges = new HashSet<(int, int)>();
         int sameWay = 0, upsideDown = 0, body = 0;
-        var widest = (X: double.MinValue, Face: Vector3.Zero);
+        var widest = (X: double.MinValue, Face: Vector3<double>.Zero);
         foreach (var (a, b, c) in Triangles(mesh))
         {
             var e1 = points[b] - points[a];
             var e2 = points[c] - points[a];
-            var face = Vector3.Cross(e1, e2);
+            var face = Vector3<double>.Cross(e1, e2);
             var longest = Math.Max(Math.Max(e1.LengthSquared(), e2.LengthSquared()), (e2 - e1).LengthSquared());
             // A sliver at a pole, where a patch's control points meet, runs its edges any way.
             if (face.Length() < 1e-4 * longest) continue;
@@ -231,9 +231,9 @@ public class TextureMappingTests
             var center = (points[a] + points[b] + points[c]) / 3;
             if (Math.Abs(center.Z) < 0.05 && center.X > widest.X) widest = (center.X, face);
 
-            var outward = -Vector3.Normalize(face);
-            var radial = new Vector3(center.X, 0, center.Z);
-            if (Math.Abs(center.Z) > Math.Abs(center.X) || Math.Abs(outward.Y) >= 0.5 || Vector3.Dot(outward, radial) <= 0) continue;
+            var outward = -Vector3<double>.Normalize(face);
+            var radial = new Vector3<double>(center.X, 0, center.Z);
+            if (Math.Abs(center.Z) > Math.Abs(center.X) || Math.Abs(outward.Y) >= 0.5 || Vector3<double>.Dot(outward, radial) <= 0) continue;
 
             var du1 = uvs[b].X - uvs[a].X;
             var dv1 = uvs[b].Y - uvs[a].Y;
@@ -243,7 +243,7 @@ public class TextureMappingTests
             if (Math.Abs(det) < 1e-9) continue;
 
             body++;
-            if (Vector3.Normalize((e2 * du1 - e1 * du2) / det).Y <= 0.5) upsideDown++;
+            if (Vector3<double>.Normalize((e2 * du1 - e1 * du2) / det).Y <= 0.5) upsideDown++;
         }
 
         Assert.Multiple(() =>
@@ -308,36 +308,36 @@ public class TextureMappingTests
     // Which way is out at a point of the surface, roughly: only its side of the surface matters.
     // Of a triangle's vertex normals, the one most in line with it: where the surface folds - a teapot's knob - the
     // vertices on either side of the fold point either way, and their sum says nothing.
-    private static Vector3 MeshNormal(Mesh mesh, int a, int b, int c)
+    private static Vector3<double> MeshNormal(Mesh mesh, int a, int b, int c)
     {
-        if (mesh.Normals.Length != mesh.Points.Length) return Vector3.Zero;
+        if (mesh.Normals.Length != mesh.Points.Length) return Vector3<double>.Zero;
 
-        var face = Vector3.Normalize(Vector3.Cross(mesh.Points[b] - mesh.Points[a], mesh.Points[c] - mesh.Points[a]));
-        var best = Vector3.Zero;
+        var face = Vector3<double>.Normalize(Vector3<double>.Cross(mesh.Points[b] - mesh.Points[a], mesh.Points[c] - mesh.Points[a]));
+        var best = Vector3<double>.Zero;
         foreach (var index in new[] { a, b, c })
         {
-            var normal = (Vector3)mesh.Normals[index];
-            if (Math.Abs(Vector3.Dot(normal, face)) > Math.Abs(Vector3.Dot(best, face))) best = normal;
+            var normal = mesh.Normals[index].As<double>();
+            if (Math.Abs(Vector3<double>.Dot(normal, face)) > Math.Abs(Vector3<double>.Dot(best, face))) best = normal;
         }
 
         return best;
     }
 
-    private static Vector3 OutsideAt(Vector3 point, Vector3 normal, Vector3 meshNormal, Outside outside, double midRadius)
+    private static Vector3<double> OutsideAt(Vector3<double> point, Vector3<double> normal, Vector3<double> meshNormal, Outside outside, double midRadius)
     {
-        var radial = new Vector3(point.X, 0, point.Z);
+        var radial = new Vector3<double>(point.X, 0, point.Z);
         switch (outside)
         {
             case Outside.AlongItsNormals:
                 return meshNormal;
             case Outside.TowardTheEye:
-                return -Vector3.UnitZ;
+                return -Vector3<double>.UnitZ;
             case Outside.Up:
-                return -Vector3.UnitY;
+                return -Vector3<double>.UnitY;
             case Outside.FromTheRing:
-                return point - Vector3.Normalize(radial) * midRadius;
+                return point - Vector3<double>.Normalize(radial) * midRadius;
             case Outside.OffTheWall:
-                if (Math.Abs(normal.Y) > 0.9) return new Vector3(0, point.Y, 0);
+                if (Math.Abs(normal.Y) > 0.9) return new Vector3<double>(0, point.Y, 0);
                 return radial.Length() > midRadius ? radial : -radial;
             default:
                 return point;

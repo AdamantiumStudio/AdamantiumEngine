@@ -4,11 +4,11 @@ namespace Adamantium.Multiverse.Payloads
 {
     public class UniverseOutputSizeChangedPayload
     {
-        public Size Size { get; }
+        public Size<double> Size { get; }
 
         public UniverseOutput Output { get; }
 
-        public UniverseOutputSizeChangedPayload(UniverseOutput output, Size size)
+        public UniverseOutputSizeChangedPayload(UniverseOutput output, Size<double> size)
         {
             Output = output;
             Size = size;

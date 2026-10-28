@@ -31,8 +31,8 @@ public class SceneIndexPickingTests
         universe.Satellites.Add<IUniverse>(universe);
         output = new TestOutput();
         universe.Add(output);
-        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", new Vector3(40, 3, -30), Vector3.ForwardLH,
-            -Vector3.Up, 800, 600, 0.1f, 1000f);
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", new Vector3<double>(40, 3, -30), Vector3<double>.ForwardLH,
+            -Vector3<double>.Up, 800, 600, 0.1f, 1000f);
         camera = cameraEntity.GetComponent<Camera>();
         output.Camera = camera;
         universe.EntityWorld.EntityManager.AddEntity(cameraEntity);
@@ -44,7 +44,7 @@ public class SceneIndexPickingTests
             for (int y = 0; y < 6; y++)
             {
                 var size = 0.5 + random.NextDouble() * 2;
-                var cube = Cube($"Cube {x},{y}", new Vector3(30 + x * 3, y * 2.5 - 6, -10 + random.NextDouble() * 20), size);
+                var cube = Cube($"Cube {x},{y}", new Vector3<double>(30 + x * 3, y * 2.5 - 6, -10 + random.NextDouble() * 20), size);
                 cube.Visible = random.Next(8) != 0;
                 cube.IsEnabled = random.Next(8) != 0;
                 universe.EntityWorld.EntityManager.AddEntity(cube);
@@ -53,8 +53,8 @@ public class SceneIndexPickingTests
         }
 
         // One under another, so the index places a child by its parent's world.
-        var parent = Cube("Parent", new Vector3(36, 0, -5), 1);
-        var child = Cube("Child", new Vector3(0, 0, 4), 1.5, parent);
+        var parent = Cube("Parent", new Vector3<double>(36, 0, -5), 1);
+        var child = Cube("Child", new Vector3<double>(0, 0, 4), 1.5, parent);
         universe.EntityWorld.EntityManager.AddEntity(parent);
         cubes.Add(parent);
         cubes.Add(child);
@@ -94,7 +94,7 @@ public class SceneIndexPickingTests
     {
         var index = universe.EntityWorld.Satellites.Get<SceneIndex>();
         var cube = cubes.Find(c => c.Visible && c.IsEnabled && c.Owner == null);
-        var target = new Vector3(40, 3, 10);
+        var target = new Vector3<double>(40, 3, 10);
         var ray = PickRay.FromCamera(camera, PixelOf(target));
         var before = Picking.PickMeshes(index, ray);
 
@@ -114,7 +114,7 @@ public class SceneIndexPickingTests
         });
     }
 
-    private static Entity Cube(string name, Vector3 at, double size, Entity owner = null)
+    private static Entity Cube(string name, Vector3<double> at, double size, Entity owner = null)
     {
         var cube = new Entity(owner, name);
         cube.Transform.Position = at;
@@ -131,9 +131,9 @@ public class SceneIndexPickingTests
         transforms.Update(new AppTime());
     }
 
-    private Vector2F PixelOf(Vector3 world)
+    private Vector2F PixelOf(Vector3<double> world)
     {
-        var inRender = (Vector3F)(world - camera.WorldPosition);
+        var inRender = (world - camera.WorldPosition).As<float>();
         var pixel = Vector3F.Project(inRender, 0, 0, camera.Width, camera.Height, 0, 1, camera.ViewMatrix * camera.ProjectionMatrix);
         return new Vector2F(pixel.X, pixel.Y);
     }

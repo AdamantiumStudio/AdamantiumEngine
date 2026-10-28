@@ -1,6 +1,5 @@
 using System;
-using Adamantium.Mathematics.Typed;
-using Color = Adamantium.Mathematics.Typed.Color;
+using Adamantium.Mathematics;
 
 namespace Adamantium.MathTests.Golden;
 

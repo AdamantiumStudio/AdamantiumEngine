@@ -10,7 +10,7 @@ public readonly struct PickRay
     private readonly float pixelAtOrigin;
     private readonly float pixelPerDepth;
 
-    public PickRay(Ray ray, CameraBase camera, float pixelAtOrigin, float pixelPerDepth)
+    public PickRay(Ray<float> ray, CameraBase camera, float pixelAtOrigin, float pixelPerDepth)
     {
         Ray = ray;
         Camera = camera;
@@ -18,7 +18,7 @@ public readonly struct PickRay
         this.pixelPerDepth = pixelPerDepth;
     }
 
-    public Ray Ray { get; }
+    public Ray<float> Ray { get; }
 
     public CameraBase Camera { get; }
 
@@ -32,7 +32,7 @@ public readonly struct PickRay
     /// would cast.</summary>
     public PickRay Moved(Vector3F offset)
     {
-        return new PickRay(new Ray(Ray.Position + offset, Ray.Direction), Camera, pixelAtOrigin, pixelPerDepth);
+        return new PickRay(new Ray<float>(Ray.Position + offset, Ray.Direction), Camera, pixelAtOrigin, pixelPerDepth);
     }
 
     /// <summary>Through the camera's own view and projection.</summary>
@@ -51,10 +51,10 @@ public readonly struct PickRay
         return new PickRay(ray, camera, atOrigin, perDepth);
     }
 
-    private static Ray Through(CameraBase camera, Vector2F pixel, Matrix4x4F viewProjection)
+    private static Ray<float> Through(CameraBase camera, Vector2F pixel, Matrix4x4F viewProjection)
     {
         var near = Vector3F.Unproject(new Vector3F(pixel.X, pixel.Y, 0), 0, 0, camera.Width, camera.Height, 0, 1, viewProjection);
         var far = Vector3F.Unproject(new Vector3F(pixel.X, pixel.Y, 1), 0, 0, camera.Width, camera.Height, 0, 1, viewProjection);
-        return new Ray(near, Vector3F.Normalize(far - near));
+        return new Ray<float>(near, Vector3F.Normalize(far - near));
     }
 }

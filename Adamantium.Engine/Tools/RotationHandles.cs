@@ -23,7 +23,7 @@ public class RotationHandles : Handles
     private readonly Entity viewCircle;
     private readonly Entity ball;
     private readonly RingDrag ringDrag = new();
-    private Vector3 anchor;
+    private Vector3<double> anchor;
     private QuaternionF startRotation;
     private Vector3F axis;
     private Vector3F startVector;
@@ -48,9 +48,9 @@ public class RotationHandles : Handles
         var scale = Pixels * UnitsPerPoint(camera, at) / Radius;
         PlaceShape(camera, at, QuaternionF.Identity, scale);
 
-        var facing = Matrix4x4F.Scaling(scale)
-                     * Matrix4x4F.RotationQuaternion(FacingCamera(camera))
-                     * Matrix4x4F.Translation(InRender(at, camera));
+        var facing = Matrix4x4.CreateScale<float>(scale)
+                     * Matrix4x4.CreateFromQuaternion<float>(FacingCamera(camera))
+                     * Matrix4x4.CreateTranslation<float>(InRender(at, camera));
         PlacePart(viewOrbit, facing, camera);
         PlacePart(viewCircle, facing, camera);
     }
@@ -81,7 +81,7 @@ public class RotationHandles : Handles
     {
         anchor = PivotInWorld(target);
         startRotation = target.Transform.Rotation;
-        viewForward = Vector3F.Normalize((Vector3F)ray.Camera.Forward);
+        viewForward = Vector3F.Normalize(ray.Camera.Forward.As<float>());
         var origin = InRender(anchor, ray.Camera);
 
         free = handle == ball;
@@ -124,7 +124,7 @@ public class RotationHandles : Handles
         }
 
         var inParent = Vector3F.Normalize(ToParent(target, turnAxis));
-        target.Transform.Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(inParent, angle), startRotation);
+        target.Transform.Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(inParent, angle), startRotation);
     }
 
     public override void Draw(EditorOverlayProcessor overlay)
@@ -155,7 +155,7 @@ public class RotationHandles : Handles
         return new PickHit(ball, hit, Vector3F.Dot(hit - pick.Ray.Position, pick.Ray.Direction));
     }
 
-    private Vector3F OnBall(in Ray ray, Vector3F center)
+    private Vector3F OnBall(in Ray<float> ray, Vector3F center)
     {
         if (!OnPlane(ray, center, viewForward, out var hit))
         {

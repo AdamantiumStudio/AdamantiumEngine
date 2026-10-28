@@ -11,17 +11,17 @@ namespace Adamantium.ECS.Components;
 [ViewModel]
 public partial class TubeShape : ProceduralShape
 {
-    [Bindable] private Vector3 size;
+    [Bindable] private Vector3<double> size;
     [Bindable] private double thickness;
 
     public TubeShape()
     {
-        Size = new Vector3(1);
+        Size = new Vector3<double>(1);
         Thickness = 0.3;
         Tessellation = 32;
     }
 
-    partial void OnSizeChanged(Vector3 value) => Changed();
+    partial void OnSizeChanged(Vector3<double> value) => Changed();
 
     partial void OnThicknessChanged(double value) => Changed();
 

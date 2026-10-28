@@ -24,7 +24,7 @@ public class HyphenationLayoutTests
     {
         var typeface = LoadTypeface();
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Hyphens = hyphens, Language = language };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -33,7 +33,7 @@ public class HyphenationLayoutTests
     {
         var typeface = LoadTypeface();
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Hyphens = Hyphens.Auto };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -190,7 +190,7 @@ public class HyphenationLayoutTests
         {
             Fallback = null, Hyphens = hyphens, Language = language, LineBreaking = breaking,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }

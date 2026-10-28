@@ -75,7 +75,7 @@ public class SpriteBatch : DisposableObject
     /// sprite effect for null. A custom effect draws as the sprite effect does: its pass "Render" takes
     /// <c>MatrixTransform</c>, <c>TextureSampler</c> and <c>TextureCornerCoords</c>, and reads its textures from an
     /// array of no length by the index each sprite carries.</summary>
-    public void Begin(Vector2 screenSize, SpriteSortMode sortMode = SpriteSortMode.NoSort, Effect effect = null)
+    public void Begin(Vector2<double> screenSize, SpriteSortMode sortMode = SpriteSortMode.NoSort, Effect effect = null)
     {
         SaveState(screenSize, sortMode, null, effect, Matrix4x4F.Identity);
     }
@@ -83,7 +83,7 @@ public class SpriteBatch : DisposableObject
     /// <summary>Begins a batch as <see cref="Begin(Vector2, SpriteSortMode, Effect)"/> does, sampled with
     /// <paramref name="samplerState"/> - anisotropic and repeated for null.</summary>
     public void Begin(
-        Vector2 screenSize,
+        Vector2<double> screenSize,
         SpriteSortMode sortMode,
         SamplerState samplerState,
         Effect effect = null)
@@ -94,7 +94,7 @@ public class SpriteBatch : DisposableObject
     /// <summary>Begins a batch as <see cref="Begin(Vector2, SpriteSortMode, SamplerState, Effect)"/> does, every
     /// sprite moved by <paramref name="transformationMatrix"/> before it is drawn.</summary>
     public void Begin(
-        Vector2 screenSize,
+        Vector2<double> screenSize,
         SpriteSortMode sortMode,
         SamplerState samplerState,
         Effect effect,
@@ -317,7 +317,7 @@ public class SpriteBatch : DisposableObject
         fixed (SpriteBatchItem* item = &spriteItems[spriteItemsCount])
         {
             item->Color = color;
-            item->TextureInfo = new Int4((int)width, (int)height, textured ? 0 : -1, 0);
+            item->TextureInfo = new Vector4<int>((int)width, (int)height, textured ? 0 : -1, 0);
             item->Depth = layerDepth;
 
             if (sourceRectangle.HasValue)
@@ -371,7 +371,7 @@ public class SpriteBatch : DisposableObject
     }
 
     private void SaveState(
-        Vector2 screenSize,
+        Vector2<double> screenSize,
         SpriteSortMode sortMode,
         SamplerState samplerState,
         Effect effect,
@@ -382,7 +382,7 @@ public class SpriteBatch : DisposableObject
             throw new InvalidOperationException("You need to call End() before you can call Begin() again");
         }
 
-        currentScreenSize = screenSize;
+        currentScreenSize = screenSize.As<float>();
         spriteSortMode = sortMode;
         transformMatrix = transformationMatrix;
         assignedSamplerState = samplerState ?? SamplerStates.AnisotropicRepeat;
@@ -468,7 +468,7 @@ public class SpriteBatch : DisposableObject
         SetTextureSlots();
         SortSprites();
         var transform = transformMatrix *
-                        Matrix4x4F.OrthoOffCenter(0, currentScreenSize.X, 0, currentScreenSize.Y, 0.0f, 1.0f);
+                        Matrix4x4.CreateOrthoOffCenter<float>(0, currentScreenSize.X, 0, currentScreenSize.Y, 0.0f, 1.0f);
         var (vertexBuffer, first) = RoomThisFrame(spriteItemsCount);
         vertexBuffer.SetData(spriteItems, 0, spriteItemsCount, first * (uint)Utilities.SizeOf<SpriteBatchItem>());
 

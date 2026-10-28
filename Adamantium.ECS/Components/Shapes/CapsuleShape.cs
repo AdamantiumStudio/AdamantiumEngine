@@ -10,15 +10,15 @@ namespace Adamantium.ECS.Components;
 [ViewModel]
 public partial class CapsuleShape : ProceduralShape
 {
-    [Bindable] private Vector3 size;
+    [Bindable] private Vector3<double> size;
 
     public CapsuleShape()
     {
-        Size = new Vector3(1, 2, 1);
+        Size = new Vector3<double>(1, 2, 1);
         Tessellation = 16;
     }
 
-    partial void OnSizeChanged(Vector3 value) => Changed();
+    partial void OnSizeChanged(Vector3<double> value) => Changed();
 
     public override Collider CreateCollider() => new CapsuleCollider();
 

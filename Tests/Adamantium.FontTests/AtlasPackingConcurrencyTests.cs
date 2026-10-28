@@ -17,7 +17,7 @@ public class AtlasPackingConcurrencyTests
     [Test]
     public void BatchesPackedAtOnce_NeverShareACell()
     {
-        var atlasData = new FontAtlasData(16, new Size(1024, 1024), 8);
+        var atlasData = new FontAtlasData(16, new Size<double>(1024, 1024), 8);
         var generator = new TextureAtlasGenerator(null, null, atlasData, FontParameters.Default(16));
         var cells = Enumerable.Range(0, Threads)
             .Select(t => Enumerable.Range(0, CellsPerThread)

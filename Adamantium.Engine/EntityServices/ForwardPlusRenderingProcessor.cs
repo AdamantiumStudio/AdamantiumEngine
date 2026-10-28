@@ -197,7 +197,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         trianglesCounted = 0;
         trianglesInScene = 0;
         sceneIndex = EntityWorld.Satellites.TryGet<SceneIndex>(out var index) ? index : null;
-        cameraPosition = (Vector3F)ActiveCamera.WorldPosition;
+        cameraPosition = ActiveCamera.WorldPosition.As<float>();
         try
         {
             foreach (var entity in Entities)
@@ -370,14 +370,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private bool InView(Entity entity, Collider collider)
     {
         var frustum = ActiveCamera.Frustum;
-        if (frustum == null)
+        if (frustum == default)
         {
             return true;
         }
 
         if (sceneIndex != null && sceneIndex.TryGetBox(entity, out var box))
         {
-            return frustum.Contains(new BoundingBox(box.Minimum - cameraPosition, box.Maximum - cameraPosition))
+            return frustum.Contains(new BoundingBox<float>(box.Minimum - cameraPosition, box.Maximum - cameraPosition))
                    != ContainmentType.Disjoint;
         }
 

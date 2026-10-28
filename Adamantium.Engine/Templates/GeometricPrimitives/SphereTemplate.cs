@@ -18,7 +18,7 @@ public class SphereTemplate : PrimitiveTemplate
         SphereType sphereType,
         double diameter,
         int tessellation = 3,
-        Matrix4x4? transform = null) : base(geometryType, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, tessellation, transform)
     {
         this.diameter = diameter;
         this.sphereType = sphereType;

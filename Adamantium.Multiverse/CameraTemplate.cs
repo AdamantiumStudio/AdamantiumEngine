@@ -5,7 +5,7 @@ namespace Adamantium.Multiverse;
 
 public class CameraTemplate
 {
-    public Entity BuildEntity(Entity owner, string name, Vector3 position, Vector3 lookAt, Vector3 up, uint width, uint height, float znear, float zfar)
+    public Entity BuildEntity(Entity owner, string name, Vector3<double> position, Vector3<double> lookAt, Vector3<double> up, uint width, uint height, float znear, float zfar)
     {
         Entity root = new Entity(owner, name) { IconKey = EntityIconKeys.Camera };
         root.Transform.Position = position;

@@ -134,7 +134,7 @@ namespace Adamantium.Fonts.TextureGeneration
                 yOffset += maxHeight;
                 heights.Clear();
             }
-            var atlasSize = new Size(resultWidth, yOffset);
+            var atlasSize = new Size<double>(resultWidth, yOffset);
             atlasData.ImageData = new byte[(int)atlasSize.Width * (int)atlasSize.Height * 4];
             atlasData.AtlasSize = atlasSize;
             

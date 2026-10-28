@@ -11,7 +11,7 @@ public partial class SceneData
    {
       public GeometryData()
       {
-         Positions = new List<Vector3>();
+         Positions = new List<Vector3<double>>();
          UV0 = new List<Vector2F>();
          UV1 = new List<Vector2F>();
          UV2 = new List<Vector2F>();
@@ -29,7 +29,7 @@ public partial class SceneData
 
       public List<Int32> IndexBuffer { get; set; }
 
-      public List<Vector3> Positions { get; set; }
+      public List<Vector3<double>> Positions { get; set; }
 
       public List<Vector2F> UV0 { get; set; }
       public List<Vector2F> UV1 { get; set; }
@@ -48,7 +48,7 @@ public partial class SceneData
 
       public List<Vector4F> JointWeights { get; set; } 
 
-      public OrientedBoundingBox OrientedBoundingBox { get; set; }
+      public OrientedBoundingBox<float> OrientedBoundingBox { get; set; }
 
       public String MaterialId { get; set; }
 

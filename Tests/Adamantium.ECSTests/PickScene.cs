@@ -48,12 +48,12 @@ internal sealed class PickScene
         });
     }
 
-    public static Entity Box(Entity owner, string name, Vector3 center, double half)
+    public static Entity Box(Entity owner, string name, Vector3<double> center, double half)
     {
         return Solid(owner, name, center, half, new BoxCollider());
     }
 
-    public static Entity Ball(Entity owner, string name, Vector3 center, double radius)
+    public static Entity Ball(Entity owner, string name, Vector3<double> center, double radius)
     {
         return Solid(owner, name, center, radius, new SphereCollider());
     }
@@ -65,17 +65,17 @@ internal sealed class PickScene
         collider.CalculateFromPoints([minimum, maximum]);
     }
 
-    public static Entity Shape(Entity owner, string name, PrimitiveType topology, Vector3[] points, int[] indices = null)
+    public static Entity Shape(Entity owner, string name, PrimitiveType topology, Vector3<double>[] points, int[] indices = null)
     {
         var mesh = new Mesh(topology).SetPoints(points).SetIndices(indices);
         return WithMesh(owner, name, mesh);
     }
 
-    private static Entity Solid(Entity owner, string name, Vector3 center, double half, Collider collider)
+    private static Entity Solid(Entity owner, string name, Vector3<double> center, double half, Collider collider)
     {
         var mesh = new Mesh(PrimitiveType.TriangleList).SetPoints(
         [
-            new Vector3(-half, -half, -half), new Vector3(half, half, half)
+            new Vector3<double>(-half, -half, -half), new Vector3<double>(half, half, half)
         ]);
         var entity = WithMesh(owner, name, mesh);
         entity.Transform.Position = center;

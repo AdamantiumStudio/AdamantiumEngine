@@ -13,7 +13,7 @@ public class ConvexHullTests
     public void BoxCorners_WithPointsInside_GiveTheBox()
     {
         var random = new Random(21);
-        List<Vector3F> points = [.. new BoundingBox(new Vector3F(-1, -2, -3), new Vector3F(1, 2, 3)).GetCorners()];
+        List<Vector3F> points = [.. Corners(new BoundingBox<float>(new Vector3F(-1, -2, -3), new Vector3F(1, 2, 3)))];
         for (int i = 0; i < 200; i++)
         {
             points.Add(new Vector3F(Next(random), Next(random) * 2, Next(random) * 3) * 0.9f);
@@ -41,7 +41,7 @@ public class ConvexHullTests
         {
             foreach (var vertex in hull.Vertices)
             {
-                Assert.That(Plane.DotCoordinate(plane, vertex), Is.LessThan(1e-3f), "no corner stands outside a face");
+                Assert.That(Plane<float>.DotCoordinate(plane, vertex), Is.LessThan(1e-3f), "no corner stands outside a face");
             }
         }
 
@@ -65,16 +65,16 @@ public class ConvexHullTests
     public void ARay_MeetsTheHullWhereItMeetsTheSameBox()
     {
         var random = new Random(23);
-        var box = new OrientedBoundingBox(new Vector3F(1, 2, 3), new Vector3F(1, 0.5f, 2), QuaternionF.RotationAxis(Vector3F.Normalize(new Vector3F(1, 1, 0)), 0.7f));
-        var hull = ConvexHull.FromPoints(box.GetCorners());
+        var box = new OrientedBoundingBox<float>(new Vector3F(1, 2, 3), new Vector3F(1, 0.5f, 2), Quaternion.CreateFromAxisAngle<float>(Vector3F.Normalize(new Vector3F(1, 1, 0)), 0.7f));
+        var hull = ConvexHull.FromPoints(Corners(box));
 
         for (int i = 0; i < 500; i++)
         {
             var from = new Vector3F(Next(random), Next(random), Next(random)) * 8;
-            var ray = new Ray(from, Vector3F.Normalize(box.Center + new Vector3F(Next(random), Next(random), Next(random)) * 2 - from));
+            var ray = new Ray<float>(from, Vector3F.Normalize(box.Center + new Vector3F(Next(random), Next(random), Next(random)) * 2 - from));
 
-            var expected = box.Intersects(ref ray, out float boxDistance);
-            Assert.That(hull.Intersects(ref ray, out float hullDistance), Is.EqualTo(expected), $"ray {i}");
+            var expected = box.Intersects(ray, out float boxDistance);
+            Assert.That(hull.Intersects(ray, out float hullDistance), Is.EqualTo(expected), $"ray {i}");
             if (expected)
             {
                 Assert.That(hullDistance, Is.EqualTo(boxDistance).Within(1e-3f), $"ray {i}");
@@ -91,13 +91,13 @@ public class ConvexHullTests
 
         Assert.That(hull.IsFlat, Is.True);
         Assert.That(hull.Vertices.Count, Is.EqualTo(4));
-        var through = new Ray(new Vector3F(0.3f, 0.4f, 0), Vector3F.UnitZ);
-        var beside = new Ray(new Vector3F(1.5f, 0, 0), Vector3F.UnitZ);
-        var along = new Ray(new Vector3F(-5, 0, 5), Vector3F.UnitX);
-        Assert.That(hull.Intersects(ref through, out float distance), Is.True);
+        var through = new Ray<float>(new Vector3F(0.3f, 0.4f, 0), Vector3F.UnitZ);
+        var beside = new Ray<float>(new Vector3F(1.5f, 0, 0), Vector3F.UnitZ);
+        var along = new Ray<float>(new Vector3F(-5, 0, 5), Vector3F.UnitX);
+        Assert.That(hull.Intersects(through, out float distance), Is.True);
         Assert.That(distance, Is.EqualTo(5f).Within(1e-4f));
-        Assert.That(hull.Intersects(ref beside, out float _), Is.False);
-        Assert.That(hull.Intersects(ref along, out float edge), Is.True);
+        Assert.That(hull.Intersects(beside, out float _), Is.False);
+        Assert.That(hull.Intersects(along, out float edge), Is.True);
         Assert.That(edge, Is.EqualTo(4f).Within(1e-4f));
     }
 
@@ -105,19 +105,19 @@ public class ConvexHullTests
     public void PointsOnALine_GiveCornersARayNeverMeets()
     {
         var hull = ConvexHull.FromPoints([new Vector3F(0, 0, 0), new Vector3F(1, 0, 0), new Vector3F(3, 0, 0)]);
-        var ray = new Ray(new Vector3F(1, -5, 0), Vector3F.UnitY);
+        var ray = new Ray<float>(new Vector3F(1, -5, 0), Vector3F.UnitY);
 
         Assert.That(hull.Vertices.Count, Is.EqualTo(2));
-        Assert.That(hull.Intersects(ref ray, out float _), Is.False);
+        Assert.That(hull.Intersects(ray, out float _), Is.False);
         Assert.That(hull.Support(Vector3F.UnitX).X, Is.EqualTo(3f));
     }
 
     [Test]
     public void AMirroringTransform_KeepsTheFacesTurnedOut()
     {
-        var hull = ConvexHull.FromPoints(new BoundingBox(Vector3F.Zero, Vector3F.One).GetCorners());
+        var hull = ConvexHull.FromPoints(Corners(new BoundingBox<float>(Vector3F.Zero, Vector3F.One)));
 
-        var mirrored = hull.Transform(Matrix4x4F.Scaling(-1, 1, 1) * Matrix4x4F.Translation(5, 0, 0));
+        var mirrored = hull.Transform(Matrix4x4.CreateScale<float>(-1, 1, 1) * Matrix4x4.CreateTranslation<float>(5, 0, 0));
 
         Assert.That(mirrored.Contains(new Vector3F(4.5f, 0.5f, 0.5f)), Is.True);
         Assert.That(mirrored.Contains(new Vector3F(5.5f, 0.5f, 0.5f)), Is.False);
@@ -127,22 +127,22 @@ public class ConvexHullTests
     public void AHull_BehavesLikeItsBox_UnderGjk()
     {
         var random = new Random(24);
-        var box = new OrientedBoundingBox(Vector3F.Zero, new Vector3F(1, 0.5f, 2), QuaternionF.RotationAxis(Vector3F.UnitY, 0.4f));
-        var hull = ConvexHull.FromPoints(box.GetCorners());
+        var box = new OrientedBoundingBox<float>(Vector3F.Zero, new Vector3F(1, 0.5f, 2), Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.4f));
+        var hull = ConvexHull.FromPoints(Corners(box));
 
         for (int i = 0; i < 1000; i++)
         {
             var center = new Vector3F(Next(random), Next(random), Next(random)) * 4;
             var radius = 0.2f + (float)random.NextDouble();
-            var shrunk = new BoundingSphere(center, radius - 1e-3f);
-            var grown = new BoundingSphere(center, radius + 1e-3f);
-            var expected = Collision.BoxIntersectsSphere(ref box, ref shrunk);
-            if (expected != Collision.BoxIntersectsSphere(ref box, ref grown))
+            var shrunk = new BoundingSphere<float>(center, radius - 1e-3f);
+            var grown = new BoundingSphere<float>(center, radius + 1e-3f);
+            var expected = box.Intersects(shrunk);
+            if (expected != box.Intersects(grown))
             {
                 continue;
             }
 
-            Assert.That(Gjk.Intersects(hull, new BoundingSphere(center, radius)), Is.EqualTo(expected), $"sphere {i}");
+            Assert.That(Gjk.Intersects(hull, new BoundingSphere<float>(center, radius)), Is.EqualTo(expected), $"sphere {i}");
         }
     }
 
@@ -150,4 +150,13 @@ public class ConvexHullTests
     {
         return (float)(random.NextDouble() * 2 - 1);
     }
+
+    private static Vector3F[] Corners(OrientedBoundingBox<float> box)
+    {
+        var corners = new Vector3F[OrientedBoundingBox<float>.CornerCount];
+        box.GetCorners(corners);
+        return corners;
+    }
+
+    private static Vector3F[] Corners(BoundingBox<float> box) => Corners(OrientedBoundingBox.CreateFromBox(box));
 }

@@ -21,7 +21,7 @@ public class BidiLayoutTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Direction = direction };
-        layout.ProcessText(text, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -36,7 +36,7 @@ public class BidiLayoutTests
             Fallback = null, Direction = TextDirection.RightToLeft, TabStops = stops,
         };
         layout.ProcessText(new AttributedText(text, null).SetParagraph(0, text.Length, paragraph), 20,
-            new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
         return layout;
     }
@@ -80,7 +80,7 @@ public class BidiLayoutTests
             Fallback = null, Direction = TextDirection.RightToLeft, TabStops = [new TabStop(100)],
             Exclusions = [new RectangleF(350, 0, 50, 1000)],
         };
-        layout.ProcessText("א\tב", 20, new Size(400, 200), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("א\tב", 20, new Size<double>(400, 200), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(400 - layout.GetCaretPoint(new CaretPosition(2)).X, Is.EqualTo(100).Within(1));
@@ -147,7 +147,7 @@ public class BidiLayoutTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText($"{Hebrew}\nabc", 20, new Size(300, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText($"{Hebrew}\nabc", 20, new Size<double>(300, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
 
@@ -224,7 +224,7 @@ public class BidiLayoutTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Direction = TextDirection.RightToLeft };
-        layout.ProcessText("  " + string.Join(" ", Enumerable.Repeat(Hebrew, 10)), 20, new Size(200, double.NaN),
+        layout.ProcessText("  " + string.Join(" ", Enumerable.Repeat(Hebrew, 10)), 20, new Size<double>(200, double.NaN),
             TextWrapping.NoWrap, TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetCaretPoint(new CaretPosition(0)).X, Is.EqualTo(200).Within(0.5));
@@ -238,7 +238,7 @@ public class BidiLayoutTests
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Direction = TextDirection.RightToLeft };
         var text = $"{Hebrew}\n   \n{Hebrew}";
-        layout.ProcessText(text, 20, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetCaretPoint(new CaretPosition(Hebrew.Length + 1)).X, Is.EqualTo(400).Within(0.5));
@@ -262,7 +262,7 @@ public class BidiLayoutTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, 20, new Size(120, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(120, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var stops = layout.GetCaretStops();
 
@@ -516,7 +516,7 @@ public class BidiLayoutTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "NotoSansHebrew-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, 20, new Size(100, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(100, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         Assume.That(layout.LineCount, Is.GreaterThan(1));
         var position = new CaretPosition(0);

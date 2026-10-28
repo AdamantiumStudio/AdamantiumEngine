@@ -5,9 +5,9 @@ namespace Adamantium.Mathematics.Triangulation;
 public class GeometryIntersection
 {
     public List<GeometrySegment> ConnectedSegments { get; set; }
-    public Vector2 Coordinates { get; set; }
+    public Vector2<double> Coordinates { get; set; }
 
-    public GeometryIntersection(Vector2 coordinates)
+    public GeometryIntersection(Vector2<double> coordinates)
     {
         ConnectedSegments = new List<GeometrySegment>();
         Coordinates = coordinates;

@@ -29,7 +29,7 @@ public class LineHeightTests
         var typeface = Typeface.LoadFont(FontPath("SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
         setUp?.Invoke(layout);
-        var size = new Size(width, double.NaN);
+        var size = new Size<double>(width, double.NaN);
         if (attributed != null)
         {
             layout.ProcessText(attributed, FontSize, size, wrapping, trimming, HorizontalTextAlignment.Left,
@@ -161,7 +161,7 @@ public class LineHeightTests
         var layout = Lay("one\ntwo");
         var before = layout.GetLine(1).Top;
         layout.LineHeight = 50;
-        layout.ProcessText("one\ntwo", FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText("one\ntwo", FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetLine(1).Top, Is.EqualTo(50).Within(1e-6));

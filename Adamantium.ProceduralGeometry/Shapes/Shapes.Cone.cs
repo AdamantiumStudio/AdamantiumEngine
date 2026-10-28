@@ -9,9 +9,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
     {
         public class Cone
         {
-            private static readonly Vector3 Up = -Vector3.UnitY;
+            private static readonly Vector3<double> Up = -Vector3<double>.UnitY;
 
-            private static Vector3 GetCircleVector(
+            private static Vector3<double> GetCircleVector(
                 int i,
                 int tessellation)
             {
@@ -19,16 +19,16 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var dx = (float) Math.Sin(angle);
                 var dz = (float) Math.Cos(angle);
 
-                return new Vector3(-dx, 0, dz);
+                return new Vector3<double>(-dx, 0, dz);
             }
 
-            private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
+            private static Vector3<double> Stretch(Vector3<double> point, double depth) => new(point.X, point.Y, point.Z * depth);
 
-            private static Vector3F StretchNormal(Vector3 normal, double depth) =>
-                (Vector3F)Vector3.Normalize(new Vector3(normal.X, normal.Y, normal.Z / depth));
+            private static Vector3F StretchNormal(Vector3<double> normal, double depth) =>
+                Vector3<double>.Normalize(new Vector3<double>(normal.X, normal.Y, normal.Z / depth)).As<float>();
 
             private static void CreateConeCap(
-                List<Vector3> positions,
+                List<Vector3<double>> positions,
                 List<Vector3F> normals,
                 List<Vector2F> uvs,
                 List<int> indices,
@@ -73,7 +73,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         0.5f + (float)(downTheTexture * position.Z / diameter.Y));
 
                     positions.Add(Stretch(position, depth));
-                    normals.Add((Vector3F)normal);
+                    normals.Add(normal.As<float>());
                     uvs.Add(uv);
                 }
             }
@@ -84,7 +84,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double topDiameter = 0.0,
                 double bottomDiameter = 1,
                 int tessellation = 40,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return Generate(geometryType, height, topDiameter, bottomDiameter, 1, tessellation, transform);
             }
@@ -96,10 +96,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
             /// </summary>
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
-                Vector3 size,
+                Vector3<double> size,
                 double topRatio,
                 int tessellation = 40,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return Generate(geometryType, size.Y, size.X * topRatio, size.X, size.Z / size.X, tessellation, transform);
             }
@@ -111,7 +111,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double bottomDiameter,
                 double depth,
                 int tessellation,
-                Matrix4x4? transform)
+                Matrix4x4<double>? transform)
             {
                 if (tessellation < 3)
                 {
@@ -142,7 +142,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             {
                 PrimitiveType primitiveType = PrimitiveType.TriangleList;
 
-                var positions = new List<Vector3>();
+                var positions = new List<Vector3<double>>();
                 var normals = new List<Vector3F>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
@@ -207,9 +207,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
             {
                 var primitiveType = PrimitiveType.LineStrip;
 
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
-                var center = Vector3.Zero;
+                var center = Vector3<double>.Zero;
                 int lastIndex = 0;
                 var rimAtTop = bottomDiameter <= 0;
                 var rimRadius = (rimAtTop ? topDiameter : bottomDiameter) / 2;
@@ -221,7 +221,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     double x = center.X + rimRadius * (float) Math.Cos(angle);
                     double y = center.Y + rimRadius * (float) Math.Sin(angle);
-                    var position = new Vector3(x, rimY, -y * depth);
+                    var position = new Vector3<double>(x, rimY, -y * depth);
                     vertices.Add(position);
                     indices.Add(lastIndex++);
                 }

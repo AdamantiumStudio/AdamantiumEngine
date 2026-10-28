@@ -35,7 +35,7 @@ public class GizmoPassesTests
         var instances = new float[Grid * Grid * FloatsPerInstance];
         for (var i = 0; i < Grid * Grid; i++)
         {
-            var world = Matrix4x4F.Scaling(0.06f) * Matrix4x4F.Translation(CellCenter(i % Grid), CellCenter(i / Grid), 0.5f);
+            var world = Matrix4x4.CreateScale<float>(0.06f) * Matrix4x4.CreateTranslation<float>(CellCenter(i % Grid), CellCenter(i / Grid), 0.5f);
             Write(instances, i, world, ColorOf(i));
         }
 
@@ -57,9 +57,9 @@ public class GizmoPassesTests
     {
         var palette = new Matrix4x4F[200];
         Array.Fill(palette, Matrix4x4F.Identity);
-        palette[150] = Matrix4x4F.Translation(5, 0, 0);
+        palette[150] = Matrix4x4.CreateTranslation<float>(5, 0, 0);
         var instances = new float[FloatsPerInstance];
-        Write(instances, 0, Matrix4x4F.Scaling(0.1f) * Matrix4x4F.Translation(0, 0, 0.5f), new Vector4F(0, 1, 0, 1));
+        Write(instances, 0, Matrix4x4.CreateScale<float>(0.1f) * Matrix4x4.CreateTranslation<float>(0, 0, 0.5f), new Vector4F(0, 1, 0, 1));
 
         var pixels = Draw("SkinnedFlatInstanced", SkinnedQuad(150), instances, 1, palette, palette.Length);
 

@@ -35,7 +35,7 @@ public class SpriteBatchTests
     {
         var pixels = Render((batch, red, blue, _) =>
         {
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(red, new RectangleF(0, 0, Size / 2, Size / 2), Colors.White);
             batch.Draw(blue, new RectangleF(Size / 2, 0, Size / 2, Size / 2), Colors.White);
             batch.Draw(new RectangleF(0, Size / 2, Size, Size / 2), Green, 0, Vector2F.Zero);
@@ -58,7 +58,7 @@ public class SpriteBatchTests
     {
         var pixels = Render((batch, _, _, _) =>
         {
-            batch.Begin(new Vector2(Size, Size), mode);
+            batch.Begin(new Vector2<double>(Size, Size), mode);
             batch.Draw(new RectangleF(0, 0, Size, Size), Green, 0, Vector2F.Zero, layerDepth: 0);
             batch.Draw(new RectangleF(0, 0, Size, Size), Red, 0, Vector2F.Zero, layerDepth: 1);
             batch.End();
@@ -72,7 +72,7 @@ public class SpriteBatchTests
     {
         var pixels = Render((batch, _, _, _) =>
         {
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(new RectangleF(0, 0, Size, Size), Green, 0, Vector2F.Zero, layerDepth: 0);
             batch.Draw(new RectangleF(0, 0, Size, Size), Red, 0, Vector2F.Zero, layerDepth: 1);
             batch.End();
@@ -86,7 +86,7 @@ public class SpriteBatchTests
     {
         var pixels = Render((batch, _, _, _) =>
         {
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(new RectangleF(0, 0, Size / 2, Size), Red, 0, Vector2F.Zero);
             for (var i = 0; i < 1023; i++)
             {
@@ -109,10 +109,10 @@ public class SpriteBatchTests
     {
         var pixels = Render((batch, _, _, _) =>
         {
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(new RectangleF(0, 0, Size / 2, Size), Red, 0, Vector2F.Zero);
             batch.End();
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(new RectangleF(Size / 2, 0, Size / 2, Size), Blue, 0, Vector2F.Zero);
             batch.End();
         });
@@ -132,13 +132,13 @@ public class SpriteBatchTests
         var before = VulkanInstance.RecentValidationMessages;
         var pixels = Render((batch, red, _, _) =>
         {
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(red, new RectangleF(0, 0, Size, Size), Colors.White);
             red.Dispose();
             batch.End();
         }, next: (batch, _, blue, _) =>
         {
-            batch.Begin(new Vector2(Size, Size));
+            batch.Begin(new Vector2<double>(Size, Size));
             batch.Draw(blue, new RectangleF(0, 0, Size, Size), Colors.White);
             batch.End();
         });
@@ -157,7 +157,7 @@ public class SpriteBatchTests
         {
             using var effect = new SpriteEffect(device);
             effect.CurrentTechnique = effect.Techniques[0];
-            batch.Begin(new Vector2(Size, Size), SpriteSortMode.NoSort, effect);
+            batch.Begin(new Vector2<double>(Size, Size), SpriteSortMode.NoSort, effect);
             batch.Draw(red, new RectangleF(0, 0, Size / 2, Size), Colors.White);
             batch.Draw(blue, new RectangleF(Size / 2, 0, Size / 2, Size), Colors.White);
             batch.End();

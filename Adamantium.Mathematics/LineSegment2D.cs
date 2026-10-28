@@ -15,28 +15,28 @@ namespace Adamantium.Mathematics
             return HashCode.Combine(Start, End);
         }
 
-        public Vector2 Start { get; }
+        public Vector2<double> Start { get; }
 
-        public Vector2 End { get; }
+        public Vector2<double> End { get; }
 
-        public Vector2 Direction { get; }
+        public Vector2<double> Direction { get; }
 
-        public Vector2 DirectionNormalized { get; }
+        public Vector2<double> DirectionNormalized { get; }
 
-        public LineSegment2D(Vector2 start, Vector2 end)
+        public LineSegment2D(Vector2<double> start, Vector2<double> end)
         {
             Start = start;
             End = end;
             Direction = end - start;
-            DirectionNormalized = Vector2.Normalize(Direction);
+            DirectionNormalized = Vector2<double>.Normalize(Direction);
         }
         
-        public LineSegment2D(Vector3 start, Vector3 end)
+        public LineSegment2D(Vector3<double> start, Vector3<double> end)
         {
-            Start = (Vector2)start;
-            End = (Vector2)end;
+            Start = (Vector2<double>)start;
+            End = (Vector2<double>)end;
             Direction = End - Start;
-            DirectionNormalized = Vector2.Normalize(Direction);
+            DirectionNormalized = Vector2<double>.Normalize(Direction);
         }
 
         public LineSegment2D(GeometrySegment segment)
@@ -44,12 +44,13 @@ namespace Adamantium.Mathematics
             Start = segment.Start;
             End = segment.End;
             Direction = End - Start;
-            DirectionNormalized = Vector2.Normalize(Direction);
+            DirectionNormalized = Vector2<double>.Normalize(Direction);
         }
         
         public bool Equals(LineSegment2D other)
         {
-            return MathHelper.WithinEpsilon(Start, other.Start, Polygon.Epsilon) && MathHelper.WithinEpsilon(End, other.End, Polygon.Epsilon);
+            var epsilon = new Vector2<double>(Polygon.Epsilon);
+            return Vector2<double>.NearEqual(Start, other.Start, epsilon) && Vector2<double>.NearEqual(End, other.End, epsilon);
         }
 
         public bool EqualsInvariant(ref LineSegment2D other)

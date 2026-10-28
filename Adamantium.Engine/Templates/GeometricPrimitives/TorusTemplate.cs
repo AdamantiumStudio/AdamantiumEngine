@@ -18,7 +18,7 @@ public class TorusTemplate : PrimitiveTemplate
         double diameter,
         double thickness,
         int tessellation = 3,
-        Matrix4x4? transform = null) : base(geometryType, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, tessellation, transform)
     {
         this.diameter = diameter;
         this.thickness = thickness;

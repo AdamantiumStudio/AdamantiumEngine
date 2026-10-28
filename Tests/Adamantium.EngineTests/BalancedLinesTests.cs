@@ -30,12 +30,12 @@ public class BalancedLinesTests
         setUp?.Invoke(layout);
         if (attributed != null)
         {
-            layout.ProcessText(attributed, fontSize, new Size(width, height), TextWrapping.WrapByWords, trimming,
+            layout.ProcessText(attributed, fontSize, new Size<double>(width, height), TextWrapping.WrapByWords, trimming,
                 alignment, VerticalTextAlignment.Top);
         }
         else
         {
-            layout.ProcessText(text, fontSize, new Size(width, height), TextWrapping.WrapByWords, trimming,
+            layout.ProcessText(text, fontSize, new Size<double>(width, height), TextWrapping.WrapByWords, trimming,
                 alignment, VerticalTextAlignment.Top);
         }
 

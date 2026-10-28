@@ -71,8 +71,8 @@ public class GroundGrid : EditorProcessor
     public GroundGrid()
     {
         lines = LineEntity("Lines", UnitGrid());
-        axisX = LineEntity("X axis", Segment(Vector3.UnitX));
-        axisZ = LineEntity("Z axis", Segment(Vector3.UnitZ));
+        axisX = LineEntity("X axis", Segment(Vector3<double>.UnitX));
+        axisZ = LineEntity("Z axis", Segment(Vector3<double>.UnitZ));
     }
 
     // The lines take their place as they are drawn, from the camera drawing them: placed in Update, they kept the eye of
@@ -90,13 +90,13 @@ public class GroundGrid : EditorProcessor
         var eye = camera.WorldPosition;
         var offX = layout.Center.X;
         var offZ = layout.Center.Y;
-        var center = new Vector3(eye.X + offX, eye.Y, eye.Z + offZ);
+        var center = new Vector3<double>(eye.X + offX, eye.Y, eye.Z + offZ);
         var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
         var reach = layout.Reach;
         Place(axisX, camera, Math.Abs(center.Z) < reach,
-            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation(offX, below, (float)-eye.Z), AxisXColor, 1);
+            Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateTranslation<float>(offX, below, (float)-eye.Z), AxisXColor, 1);
         Place(axisZ, camera, Math.Abs(center.X) < reach,
-            Matrix4x4F.Scaling(reach) * Matrix4x4F.Translation((float)-eye.X, below, offZ), AxisZColor, 1);
+            Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateTranslation<float>((float)-eye.X, below, offZ), AxisZColor, 1);
 
         var cell = layout.Cell;
         while (cell * EdgeLines < reach)
@@ -108,7 +108,7 @@ public class GroundGrid : EditorProcessor
         var phaseX = (float)Modulo(center.X, cell);
         var phaseZ = (float)Modulo(center.Z, cell);
         Place(lines, camera, edgeOn > 0.01f,
-            Matrix4x4F.Scaling(cell, 1, cell) * Matrix4x4F.Translation(offX - phaseX, below, offZ - phaseZ), MajorColor, edgeOn);
+            Matrix4x4.CreateScale<float>(cell, 1, cell) * Matrix4x4.CreateTranslation<float>(offX - phaseX, below, offZ - phaseZ), MajorColor, edgeOn);
     }
 
     /// <summary>
@@ -118,7 +118,7 @@ public class GroundGrid : EditorProcessor
     /// that the grid shows whole down to that edge and fades only far off, as toward a horizon; looking straight down,
     /// under the point the camera looks at.
     /// </summary>
-    public Vector3 CenterFor(CameraBase camera)
+    public Vector3<double> CenterFor(CameraBase camera)
     {
         var eye = camera.WorldPosition;
         if (camera.ProjectionMatrix.M44 < 0.5f)
@@ -127,7 +127,7 @@ public class GroundGrid : EditorProcessor
         }
 
         var forward = camera.Forward;
-        var focused = new Vector3(eye.X + forward.X * camera.FocusDistance, eye.Y, eye.Z + forward.Z * camera.FocusDistance);
+        var focused = new Vector3<double>(eye.X + forward.X * camera.FocusDistance, eye.Y, eye.Z + forward.Z * camera.FocusDistance);
         var heading = new Vector3F((float)forward.X, 0, (float)forward.Z);
         if (heading.Length() < 1e-3f)
         {
@@ -165,7 +165,7 @@ public class GroundGrid : EditorProcessor
         }
 
         var center = near + heading * (WholeShare * FlatReach(camera));
-        return new Vector3(eye.X + center.X, eye.Y, eye.Z + center.Z);
+        return new Vector3<double>(eye.X + center.X, eye.Y, eye.Z + center.Z);
     }
 
     private float FlatReach(CameraBase camera)
@@ -178,7 +178,7 @@ public class GroundGrid : EditorProcessor
 
     private static float EdgeOn(CameraBase camera, float below, float cell)
     {
-        var forward = (Vector3F)camera.Forward;
+        var forward = camera.Forward.As<float>();
         if (camera.ProjectionMatrix.M44 > 0.5f)
         {
             return 0;
@@ -227,28 +227,28 @@ public class GroundGrid : EditorProcessor
         return entity;
     }
 
-    private static Mesh Segment(Vector3 along)
+    private static Mesh Segment(Vector3<double> along)
     {
         var mesh = new Mesh(PrimitiveType.LineList);
-        mesh.SetPoints(new List<Vector3> { -along, along });
+        mesh.SetPoints(new List<Vector3<double>> { -along, along });
         mesh.SetIndices(new List<int> { 0, 1 });
         return mesh;
     }
 
     private static Mesh UnitGrid()
     {
-        var points = new List<Vector3>();
+        var points = new List<Vector3<double>>();
         var indices = new List<int>();
         for (int i = -EdgeLines; i <= EdgeLines; i++)
         {
             indices.Add(points.Count);
-            points.Add(new Vector3(i, 0, -EdgeLines));
+            points.Add(new Vector3<double>(i, 0, -EdgeLines));
             indices.Add(points.Count);
-            points.Add(new Vector3(i, 0, EdgeLines));
+            points.Add(new Vector3<double>(i, 0, EdgeLines));
             indices.Add(points.Count);
-            points.Add(new Vector3(-EdgeLines, 0, i));
+            points.Add(new Vector3<double>(-EdgeLines, 0, i));
             indices.Add(points.Count);
-            points.Add(new Vector3(EdgeLines, 0, i));
+            points.Add(new Vector3<double>(EdgeLines, 0, i));
         }
 
         var mesh = new Mesh(PrimitiveType.LineList);
@@ -272,8 +272,8 @@ public class GroundGrid : EditorProcessor
             ? FlatReach(camera)
             : Math.Min(Math.Max(Math.Abs(below) * ReachPerHeight, cell * LeastReachInCells), camera.ZFar * 0.9f);
         var offset = new Vector2F((float)(center.X - eye.X), (float)(center.Z - eye.Z));
-        var placement = Matrix4x4F.Scaling(reach) * Matrix4x4F.RotationX(MathF.PI / 2)
-                        * Matrix4x4F.Translation(offset.X, below, offset.Y);
+        var placement = Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateRotationX<float>(MathF.PI / 2)
+                        * Matrix4x4.CreateTranslation<float>(offset.X, below, offset.Y);
         var axes = new Vector2F(Math.Clamp((float)-eye.X, offset.X - 2 * reach, offset.X + 2 * reach),
             Math.Clamp((float)-eye.Z, offset.Y - 2 * reach, offset.Y + 2 * reach));
         return new GroundGridLayout(placement, axes, reach, cell) { Center = offset };

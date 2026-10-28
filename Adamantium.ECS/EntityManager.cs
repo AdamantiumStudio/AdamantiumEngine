@@ -177,6 +177,7 @@ public sealed class EntityManager
     {
         if (!availableEntities.Remove(entity.Uid)) return;
 
+        entity.SetWorld(null);
         rootEntities.Remove(entity);
         entity.TraverseInDepth(leaveCameras);
         OnEntityRemoved(entity);
@@ -237,7 +238,10 @@ public sealed class EntityManager
 
             SetCameraProjectionType(root, projectionType);
             entitiesToAdd.Add(root);
+            root.SetWorld(World);
         }
+
+        root.NotifyUpdated();
     }
 
     public void SetCameraProjectionType(Entity rootEntity, CameraProjectionType projectionType)
@@ -292,6 +296,8 @@ public sealed class EntityManager
                 branchesToRemove.Add(entity);
             }
         }
+
+        entity.NotifyUpdated();
     }
 
     /// <summary>Takes every root out of the world, and with each its tree.</summary>
@@ -574,6 +580,11 @@ public sealed class EntityManager
         {
             entitiesReowned.Clear();
             rootEntities.Clear();
+            foreach (var entity in availableEntities.Values)
+            {
+                entity.SetWorld(null);
+            }
+
             availableEntities.Clear();
             entitiesByGroup.Clear();
             Cameras.Clear();

@@ -13,7 +13,7 @@ public class DirectionalLightIconTemplate:LightIconTemplate
     public override Entity BuildEntity(Entity owner, string name)
     {
         int tessellation = 20;
-        var diameter = new Vector2(0.4);
+        var diameter = new Vector2<double>(0.4);
 
         float height = 0.1f;
         float raySize = 0.3f;
@@ -29,17 +29,17 @@ public class DirectionalLightIconTemplate:LightIconTemplate
             height,
             new CornerRadius(height / 2), 
             tessellation,
-            Matrix4x4.Translation(new Vector3((raySize / 2) + 0.3f, 0, 0)));
+            Matrix4x4.CreateTranslation<double>(new Vector3<double>((raySize / 2) + 0.3f, 0, 0)));
         for (int i = 0; i < 8; i++)
         {
-            meshes.Add(ray.Clone(Matrix4x4.RotationZ(MathHelper.DegreesToRadians(angle))));
+            meshes.Add(ray.Clone(Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(angle))));
             angle += angleItem;
         }
 
         MergeInstance[] instances = new MergeInstance[meshes.Count];
         for (int i = 0; i < instances.Length; i++)
         {
-            var inst = new MergeInstance(meshes[i], Matrix4x4.Identity, false);
+            var inst = new MergeInstance(meshes[i], Matrix4x4<double>.Identity, false);
             instances[i] = inst;
         }
 

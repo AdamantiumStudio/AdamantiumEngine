@@ -13,7 +13,7 @@ namespace Adamantium.EngineTests;
 [TestFixture]
 public class ProceduralShapeTests
 {
-    private static readonly Vector3 Size3 = new(2, 3, 4);
+    private static readonly Vector3<double> Size3 = new(2, 3, 4);
 
     private static IEnumerable<TestCaseData> SolidsFillingTheirSize()
     {
@@ -43,9 +43,9 @@ public class ProceduralShapeTests
 
     private static IEnumerable<TestCaseData> FlatShapes()
     {
-        yield return new TestCaseData(new RectangleShape { Size = new Vector2(2, 3) }).SetName("Rectangle");
-        yield return new TestCaseData(new EllipseShape { Size = new Vector2(2, 3) }).SetName("Ellipse");
-        yield return new TestCaseData(new ArcShape { Size = new Vector2(2, 3), StopAngle = 360 }).SetName("Arc");
+        yield return new TestCaseData(new RectangleShape { Size = new Vector2<double>(2, 3) }).SetName("Rectangle");
+        yield return new TestCaseData(new EllipseShape { Size = new Vector2<double>(2, 3) }).SetName("Ellipse");
+        yield return new TestCaseData(new ArcShape { Size = new Vector2<double>(2, 3), StopAngle = 360 }).SetName("Arc");
     }
 
     [TestCaseSource(nameof(FlatShapes))]
@@ -64,7 +64,7 @@ public class ProceduralShapeTests
     [Test]
     public void APlane_LiesOnTheGround_ItsSizeAlongXAndZ()
     {
-        var size = new PlaneShape { Size = new Vector2(2, 3) }.Build().Bounds.Size;
+        var size = new PlaneShape { Size = new Vector2<double>(2, 3) }.Build().Bounds.Size;
 
         Assert.Multiple(() =>
         {
@@ -83,9 +83,9 @@ public class ProceduralShapeTests
         for (int i = 0; i < mesh.Points.Length; i++)
         {
             var p = mesh.Points[i];
-            var expected = Vector3.Normalize(new Vector3(p.X / (radius.X * radius.X), p.Y / (radius.Y * radius.Y), p.Z / (radius.Z * radius.Z)));
-            var normal = (Vector3)mesh.Normals[i];
-            Assert.That(Vector3.Dot(expected, normal), Is.EqualTo(1).Within(1e-4), $"vertex {i} at {p}");
+            var expected = Vector3<double>.Normalize(new Vector3<double>(p.X / (radius.X * radius.X), p.Y / (radius.Y * radius.Y), p.Z / (radius.Z * radius.Z)));
+            var normal = mesh.Normals[i].As<double>();
+            Assert.That(Vector3<double>.Dot(expected, normal), Is.EqualTo(1).Within(1e-4), $"vertex {i} at {p}");
         }
     }
 
@@ -98,8 +98,8 @@ public class ProceduralShapeTests
         for (int i = 0; i + 1 < 2 * 17; i += 2)
         {
             var along = mesh.Points[i + 1] - mesh.Points[i];
-            var normal = (Vector3)mesh.Normals[i];
-            Assert.That(Math.Abs(Vector3.Dot(Vector3.Normalize(along), normal)), Is.LessThan(1e-4), $"pair {i / 2}");
+            var normal = mesh.Normals[i].As<double>();
+            Assert.That(Math.Abs(Vector3<double>.Dot(Vector3<double>.Normalize(along), normal)), Is.LessThan(1e-4), $"pair {i / 2}");
         }
     }
 
@@ -136,7 +136,7 @@ public class ProceduralShapeTests
     [Test]
     public void APolygon_StaysInItsSize()
     {
-        var size = new PolygonShape { Size = new Vector2(2, 3), Tessellation = 6 }.Build().Bounds.Size;
+        var size = new PolygonShape { Size = new Vector2<double>(2, 3), Tessellation = 6 }.Build().Bounds.Size;
 
         Assert.Multiple(() =>
         {

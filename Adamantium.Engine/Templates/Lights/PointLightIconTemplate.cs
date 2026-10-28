@@ -20,25 +20,25 @@ public class PointLightIconTemplate : LightIconTemplate
         var tessellation = 60;
         float angle = range / tessellation;
 
-        var bulbPoints = new List<Vector2>();
+        var bulbPoints = new List<Vector2<double>>();
 
-        var angleItem = MathHelper.DegreesToRadians(angle);
-        var startAngle = MathHelper.DegreesToRadians(0.0f);
+        var angleItem = float.DegreesToRadians(angle);
+        var startAngle = float.DegreesToRadians(0.0f);
         angle = startAngle;
-        var center = new Vector3(0, 0.0f, 0);
+        var center = new Vector3<double>(0, 0.0f, 0);
         var radiusX = 0.2;
         var radiusY = 0.21;
-        var triggerAngle1 = MathHelper.DegreesToRadians(315);
-        var triggerAngle2 = MathHelper.DegreesToRadians(225);
-        Vector2 leftLineStart = Vector2.Zero;
-        Vector2 rightLineStart = Vector2.Zero;
+        var triggerAngle1 = float.DegreesToRadians(315);
+        var triggerAngle2 = float.DegreesToRadians(225);
+        Vector2<double> leftLineStart = Vector2<double>.Zero;
+        Vector2<double> rightLineStart = Vector2<double>.Zero;
 
         for (int i = 0; i <= tessellation; ++i)
         {
             var x = center.X + (radiusX * Math.Cos(angle));
             var y = center.Y + (radiusY * Math.Sin(angle));
 
-            var vertex = new Vector2(x, y);
+            var vertex = new Vector2<double>(x, y);
 
             bulbPoints.Add(vertex);
 
@@ -54,36 +54,36 @@ public class PointLightIconTemplate : LightIconTemplate
         var basePartSize = 0.05;
         var smallSize = 0.025;
         var bottomPartStartCoords = 0.25;
-        var bulbBasePoints1 = new List<Vector2>();
+        var bulbBasePoints1 = new List<Vector2<double>>();
         bulbBasePoints1.Add(leftLineStart);
-        bulbBasePoints1.Add(new Vector2(-basePartSize, -bottomPartStartCoords));
-        bulbBasePoints1.Add(new Vector2(basePartSize, -bottomPartStartCoords));
+        bulbBasePoints1.Add(new Vector2<double>(-basePartSize, -bottomPartStartCoords));
+        bulbBasePoints1.Add(new Vector2<double>(basePartSize, -bottomPartStartCoords));
         bulbBasePoints1.Add(rightLineStart);
 
         bottomPartStartCoords = 0.29;
-        var bulbBasePoints2 = new List<Vector2>();
-        bulbBasePoints2.Add(new Vector2(basePartSize, -bottomPartStartCoords));
-        bulbBasePoints2.Add(new Vector2(basePartSize, -bottomPartStartCoords + smallSize));
-        bulbBasePoints2.Add(new Vector2(-basePartSize, -bottomPartStartCoords + smallSize));
-        bulbBasePoints2.Add(new Vector2(-basePartSize, -bottomPartStartCoords));
+        var bulbBasePoints2 = new List<Vector2<double>>();
+        bulbBasePoints2.Add(new Vector2<double>(basePartSize, -bottomPartStartCoords));
+        bulbBasePoints2.Add(new Vector2<double>(basePartSize, -bottomPartStartCoords + smallSize));
+        bulbBasePoints2.Add(new Vector2<double>(-basePartSize, -bottomPartStartCoords + smallSize));
+        bulbBasePoints2.Add(new Vector2<double>(-basePartSize, -bottomPartStartCoords));
 
         bottomPartStartCoords = 0.33;
-        var bulbBasePoints3 = new List<Vector2>();
-        bulbBasePoints3.Add(new Vector2(basePartSize, -bottomPartStartCoords));
-        bulbBasePoints3.Add(new Vector2(basePartSize, -bottomPartStartCoords + smallSize));
-        bulbBasePoints3.Add(new Vector2(-basePartSize, -bottomPartStartCoords + smallSize));
-        bulbBasePoints3.Add(new Vector2(-basePartSize, -bottomPartStartCoords));
+        var bulbBasePoints3 = new List<Vector2<double>>();
+        bulbBasePoints3.Add(new Vector2<double>(basePartSize, -bottomPartStartCoords));
+        bulbBasePoints3.Add(new Vector2<double>(basePartSize, -bottomPartStartCoords + smallSize));
+        bulbBasePoints3.Add(new Vector2<double>(-basePartSize, -bottomPartStartCoords + smallSize));
+        bulbBasePoints3.Add(new Vector2<double>(-basePartSize, -bottomPartStartCoords));
 
-        var bulbBasePoints4 = new List<Vector2>();
+        var bulbBasePoints4 = new List<Vector2<double>>();
         var baseStartCoords = 0.35;
         range = 180;
         tessellation = 40;
         angle = range / tessellation;
 
-        angleItem = MathHelper.DegreesToRadians(angle);
-        startAngle = MathHelper.DegreesToRadians(-180);
+        angleItem = float.DegreesToRadians(angle);
+        startAngle = float.DegreesToRadians(-180);
         angle = startAngle;
-        center = new Vector3(0, -baseStartCoords, 0);
+        center = new Vector3<double>(0, -baseStartCoords, 0);
         radiusX = basePartSize;
         radiusY = basePartSize / 2;
 
@@ -92,7 +92,7 @@ public class PointLightIconTemplate : LightIconTemplate
             var x = center.X + (radiusX * Math.Cos(angle));
             var y = center.Y + (radiusY * Math.Sin(angle));
 
-            var vertex = new Vector2(x, y);
+            var vertex = new Vector2<double>(x, y);
 
             bulbBasePoints4.Add(vertex);
 
@@ -134,17 +134,17 @@ public class PointLightIconTemplate : LightIconTemplate
             height, 
             new CornerRadius(height / 2),
             tessellation, 
-            Matrix4x4.Translation(new Vector3((raySize / 2) + 0.3f, 0, 0)));
+            Matrix4x4.CreateTranslation<double>(new Vector3<double>((raySize / 2) + 0.3f, 0, 0)));
         for (int i = 0; i < 7; i++)
         {
-            meshes.Add(ray.Clone(Matrix4x4.RotationZ(MathHelper.DegreesToRadians(angle))));
+            meshes.Add(ray.Clone(Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(angle))));
             angle += angleItem;
         }
 
         MergeInstance[] instances = new MergeInstance[meshes.Count];
         for (int i = 0; i < instances.Length; i++)
         {
-            var inst = new MergeInstance(meshes[i], Matrix4x4.Identity, false);
+            var inst = new MergeInstance(meshes[i], Matrix4x4<double>.Identity, false);
             instances[i] = inst;
         }
 

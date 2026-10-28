@@ -34,7 +34,7 @@ public class SelectTool : ToolProcessor
     private readonly Entity fill;
     private readonly Entity border;
     private readonly Mesh borderMesh = new(PrimitiveType.LineList);
-    private readonly List<Vector3> borderPoints = [];
+    private readonly List<Vector3<double>> borderPoints = [];
     private readonly List<int> borderIndices = [];
     private bool pressed;
     private bool framing;
@@ -151,10 +151,10 @@ public class SelectTool : ToolProcessor
         var shown = new ScreenFrame(frameFrom, frameTo);
         var color = shown.Crossing ? CrossingColor : WindowColor;
         var size = shown.Max - shown.Min;
-        Show(fill, Matrix4x4F.Scaling(size.X, size.Y, 1) * Matrix4x4F.Translation(shown.Min.X, shown.Min.Y, Depth), color,
+        Show(fill, Matrix4x4.CreateScale<float>(size.X, size.Y, 1) * Matrix4x4.CreateTranslation<float>(shown.Min.X, shown.Min.Y, Depth), color,
             FillStrength);
         Outline(shown);
-        Show(border, Matrix4x4F.Translation(0, 0, Depth), color, 1);
+        Show(border, Matrix4x4.CreateTranslation<float>(0, 0, Depth), color, 1);
         overlay.DrawOnScreen(frame);
     }
 
@@ -202,9 +202,9 @@ public class SelectTool : ToolProcessor
             var start = from + (to - from) * (length > 0 ? at / length : 0);
             var stop = from + (to - from) * (length > 0 ? end / length : 0);
             borderIndices.Add(borderPoints.Count);
-            borderPoints.Add(new Vector3(start.X, start.Y, 0));
+            borderPoints.Add(new Vector3<double>(start.X, start.Y, 0));
             borderIndices.Add(borderPoints.Count);
-            borderPoints.Add(new Vector3(stop.X, stop.Y, 0));
+            borderPoints.Add(new Vector3<double>(stop.X, stop.Y, 0));
             if (!dashed)
             {
                 break;
@@ -223,7 +223,7 @@ public class SelectTool : ToolProcessor
     private static Mesh UnitSquare()
     {
         var mesh = new Mesh(PrimitiveType.TriangleList);
-        mesh.SetPoints(new List<Vector3> { new(0, 0, 0), new(1, 0, 0), new(1, 1, 0), new(0, 1, 0) });
+        mesh.SetPoints(new List<Vector3<double>> { new(0, 0, 0), new(1, 0, 0), new(1, 1, 0), new(0, 1, 0) });
         mesh.SetIndices(new List<int> { 0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2 });
         return mesh;
     }

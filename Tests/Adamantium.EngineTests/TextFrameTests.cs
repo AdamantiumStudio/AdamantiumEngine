@@ -40,7 +40,7 @@ public class TextFrameTests
             DropCap = dropCap,
             Direction = direction,
         };
-        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -186,7 +186,7 @@ public class TextFrameTests
                 Frames = [new RectangleF(0, 0, 400, (float)(10 * LineHeight))],
                 Exclusions = [new RectangleF(160, 0, 80, (float)(3 * LineHeight))],
             };
-            layout.ProcessText(Two(spaceBefore), FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+            layout.ProcessText(Two(spaceBefore), FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -328,7 +328,7 @@ public class TextFrameTests
             Language = "en-US",
         };
         layout.ProcessText("Internationalization of extraordinarily sophisticated applications", FontSize,
-            new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Where(g => g.Symbol != ' ').Max(g => g.Rect.Right), Is.LessThanOrEqualTo(150.5));
@@ -352,10 +352,10 @@ public class TextFrameTests
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Frames = Columns(1, 300, 0, 10) };
-        layout.ProcessText(Prose, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         layout.Frames = [new RectangleF(0, 0, 20, 100)];
-        layout.ProcessText("short", FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("short", FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.OversetIndex, Is.Zero);
@@ -400,7 +400,7 @@ public class TextFrameTests
         var frames = Columns(2, 220, 20, 4);
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Frames = frames, LineBreaking = breaking };
-        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         for (var i = 0; i < layout.LineCount; i++)
@@ -436,7 +436,7 @@ public class TextFrameTests
         {
             Fallback = null, Frames = [new RectangleF(0, 0, 300, 600)], Exclusions = [exclusion], LineBreaking = breaking,
         };
-        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.Multiple(() =>

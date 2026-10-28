@@ -15,7 +15,7 @@ namespace Adamantium.Fonts.Common
             IsControl = control;
         }
 
-        public OutlinePoint(Vector2 point, bool control = false)
+        public OutlinePoint(Vector2<double> point, bool control = false)
         {
             X = point.X;
             Y = point.Y;
@@ -27,7 +27,7 @@ namespace Adamantium.Fonts.Common
             return $"X: {X}, Y: {Y}, IsControl: {IsControl}";
         }
 
-        public static implicit  operator Vector2(OutlinePoint point)
+        public static implicit  operator Vector2<double>(OutlinePoint point)
         {
             return new(point.X, point.Y);
         }

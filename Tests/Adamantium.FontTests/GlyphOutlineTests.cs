@@ -35,7 +35,7 @@ public class GlyphOutlineTests
             var maxX = Math.Max(bounds.Left, bounds.Right) + 1;
             var minY = Math.Min(bounds.Top, bounds.Bottom) - 1;
             var maxY = Math.Max(bounds.Top, bounds.Bottom) + 1;
-            foreach (var point in glyph.TransformBasicOutlines(Matrix3x2.Identity).SelectMany(x => x.Points))
+            foreach (var point in glyph.TransformBasicOutlines(Matrix3x2<double>.Identity).SelectMany(x => x.Points))
             {
                 if (!point.IsControl && (point.X < minX || point.X > maxX || point.Y < minY || point.Y > maxY))
                 {
@@ -56,8 +56,8 @@ public class GlyphOutlineTests
         foreach (var glyph in glyphs.Where(x => x.IsComposite))
         {
             var expected = glyph.CompositeGlyphComponents
-                .Sum(x => glyphs[x.SimpleGlyphIndex].TransformBasicOutlines(Matrix3x2.Identity).Count);
-            var actual = glyph.TransformBasicOutlines(Matrix3x2.Identity).Count;
+                .Sum(x => glyphs[x.SimpleGlyphIndex].TransformBasicOutlines(Matrix3x2<double>.Identity).Count);
+            var actual = glyph.TransformBasicOutlines(Matrix3x2<double>.Identity).Count;
             if (actual != expected)
             {
                 Assert.Fail($"composite glyph {glyph.Index} ({glyph.Name}) has {actual} outlines, its components {expected}");
@@ -177,7 +177,7 @@ public class GlyphOutlineTests
             Assert.That(worst, Is.LessThanOrEqualTo(bound), $"'{character}'");
         }
 
-        static Vector2 Point(System.Collections.Generic.List<Vector2> p, double t) => p.Count == 3
+        static Vector2<double> Point(System.Collections.Generic.List<Vector2<double>> p, double t) => p.Count == 3
             ? (1 - t) * (1 - t) * p[0] + 2 * t * (1 - t) * p[1] + t * t * p[2]
             : Math.Pow(1 - t, 3) * p[0] + 3 * t * (1 - t) * (1 - t) * p[1] + 3 * t * t * (1 - t) * p[2] +
               Math.Pow(t, 3) * p[3];
@@ -209,7 +209,7 @@ public class GlyphOutlineTests
             {
                 for (var column = 0; column < grid; column++)
                 {
-                    var point = new Vector2(minX + (maxX - minX) * (column + 0.5) / grid,
+                    var point = new Vector2<double>(minX + (maxX - minX) * (column + 0.5) / grid,
                         minY + (maxY - minY) * (row + 0.5) / grid);
                     if (contours.Any(x => GlyphSegmentsMath.GetDistanceToSegment(x, point) < 1))
                     {
@@ -227,7 +227,7 @@ public class GlyphOutlineTests
         }
     }
 
-    private static bool IsFilled(LineSegment2D[] segments, Vector2 point)
+    private static bool IsFilled(LineSegment2D[] segments, Vector2<double> point)
     {
         var winding = 0;
         foreach (var segment in segments)
@@ -249,7 +249,7 @@ public class GlyphOutlineTests
 
     private static string Describe(Glyph glyph)
     {
-        var outlines = glyph.TransformBasicOutlines(Matrix3x2.Identity);
+        var outlines = glyph.TransformBasicOutlines(Matrix3x2<double>.Identity);
         return $"{outlines.Count} outlines, {outlines.Sum(x => x.Points.Count)} points";
     }
 }

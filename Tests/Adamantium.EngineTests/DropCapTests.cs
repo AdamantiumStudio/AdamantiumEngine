@@ -39,7 +39,7 @@ public class DropCapTests
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = dropCap, LineBreaking = breaking };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -53,7 +53,7 @@ public class DropCapTests
         {
             Fallback = null, DropCap = dropCap, LineBreaking = breaking, Direction = TextDirection.RightToLeft,
         };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -135,7 +135,7 @@ public class DropCapTests
             {
                 Fallback = null, DropCap = new DropCap(3), Direction = TextDirection.RightToLeft,
             };
-            layout.ProcessText(letter + " " + text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords,
+            layout.ProcessText(letter + " " + text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             tall = Body(layout).Where(g => g.LineIndex == 0 && tallLetter[0] == g.Symbol).Min(g => g.Rect.Top);
             return layout.GetTextData().Where(g => g.PositionInString == 0).ToArray();
@@ -187,7 +187,7 @@ public class DropCapTests
         {
             var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
             layout.ProcessText(cap + string.Concat(Enumerable.Repeat("漢字仮名交じり文", 10)), FontSize,
-                new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+                new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
                 VerticalTextAlignment.Top);
             return layout.GetTextData().Single(g => g.PositionInString == 0).FontSize;
         }
@@ -313,10 +313,10 @@ public class DropCapTests
         const string text = "find official waffles in a fine field of fireflies";
         var playfair = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "PlayfairDisplay-Regular.ttf"));
         var layout = new TextLayout(playfair, playfair.Fonts[0]) { Fallback = null, DropCap = new DropCap(2) };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var plain = new TextLayout(playfair, playfair.Fonts[0]) { Fallback = null };
-        plain.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        plain.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var clusters = layout.GetTextData().Where(g => g.PositionInString >= 0).Select(g => g.PositionInString).ToHashSet();
 
@@ -377,7 +377,7 @@ public class DropCapTests
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
-        layout.ProcessText("Ab cd", FontSize, new Size(Width, 200), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("Ab cd", FontSize, new Size<double>(Width, 200), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Bottom);
 
         Assert.That(layout.GetTextData().Single(g => g.PositionInString == 0).Rect.Bottom, Is.LessThanOrEqualTo(200.5));
@@ -390,7 +390,7 @@ public class DropCapTests
         var text = new AttributedText(Prose).Apply(Prose.IndexOf("beautiful", StringComparison.Ordinal), 9,
             new TextAttributes { FontSize = 40 });
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Single(g => g.PositionInString == 0).Rect.Bottom,
@@ -440,7 +440,7 @@ public class DropCapTests
             .Apply(0, 6, new TextAttributes { Decorations = TextDecorations.Squiggle })
             .Apply(0, 1, new TextAttributes { Background = Colors.Gold });
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
         var adornments = layout.GetAdornments();
@@ -526,7 +526,7 @@ public class DropCapTests
         {
             Fallback = null, DropCap = new DropCap(2), Direction = TextDirection.RightToLeft,
         };
-        layout.ProcessText("שלום עולם\nטוב", FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText("שלום עולם\nטוב", FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
         var body = Body(layout).Where(g => g.Symbol != ' ').ToArray();
@@ -564,7 +564,7 @@ public class DropCapTests
             {
                 Fallback = null, DropCap = dropCap, Direction = TextDirection.RightToLeft,
             };
-            layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -649,7 +649,7 @@ public class DropCapTests
             Fallback = null, DropCap = new DropCap(2, 2), Direction = TextDirection.LeftToRight,
             WritingMode = WritingMode.VerticalRightToLeft,
         };
-        layout.ProcessText("אב " + Prose, FontSize, new Size(Width, Width), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("אב " + Prose, FontSize, new Size<double>(Width, Width), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var stops = layout.GetCaretStops();
 
@@ -686,7 +686,7 @@ public class DropCapTests
             {
                 Fallback = null, DropCap = new DropCap(3), Direction = direction,
             };
-            layout.ProcessText(HebrewProse, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords,
+            layout.ProcessText(HebrewProse, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }

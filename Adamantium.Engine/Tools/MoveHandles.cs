@@ -21,8 +21,8 @@ public class MoveHandles : Handles
     private readonly Entity rightForward;
     private readonly Entity upForward;
     private readonly Entity[] parts;
-    private Vector3 anchor;
-    private Vector3 startPosition;
+    private Vector3<double> anchor;
+    private Vector3<double> startPosition;
     private Vector3F direction;
     private bool alongAxis;
     private float startAlong;
@@ -65,7 +65,7 @@ public class MoveHandles : Handles
         direction = IsPartOf(handle, rightUp) ? Vector3F.UnitZ
             : IsPartOf(handle, rightForward) ? Vector3F.UnitY
             : IsPartOf(handle, upForward) ? Vector3F.UnitX
-            : Vector3F.Normalize((Vector3F)ray.Camera.Forward);
+            : Vector3F.Normalize(ray.Camera.Forward.As<float>());
         OnPlane(ray.Ray, origin, direction, out var hit);
         startOffset = hit - origin;
     }
@@ -93,7 +93,7 @@ public class MoveHandles : Handles
             moved = hit - origin - startOffset;
         }
 
-        target.Transform.Position = startPosition + (Vector3)ToParent(target, moved);
+        target.Transform.Position = startPosition + ToParent(target, moved).As<double>();
     }
 
     public override void Highlight(Entity handle)

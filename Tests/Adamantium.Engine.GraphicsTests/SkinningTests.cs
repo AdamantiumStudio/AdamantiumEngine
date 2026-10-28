@@ -29,7 +29,7 @@ public class SkinningTests
     {
         var palette = new Matrix4x4F[Joints];
         Array.Fill(palette, Matrix4x4F.Identity);
-        palette[200] = Matrix4x4F.Translation(7, 0, 0);
+        palette[200] = Matrix4x4.CreateTranslation<float>(7, 0, 0);
 
         var bent = Bend(palette, [new Vector4F(200, 0, 0, 0), new Vector4F(Joints + 44, 0, 0, 0)]);
 

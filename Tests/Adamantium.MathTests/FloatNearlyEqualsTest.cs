@@ -24,12 +24,12 @@ namespace Adamantium.MathTests
     {
         public static bool NearlyEqual(float a, float b, float epsilon)
         {
-            return MathHelper.WithinEpsilon(a, b, epsilon);
+            return MathHelper.Scalar.WithinEpsilon(a, b, epsilon);
         }
 
         public static bool NearlyEqual(float a, float b)
         {
-            return MathHelper.WithinEpsilon(a, b, 1e-6f);
+            return MathHelper.Scalar.WithinEpsilon(a, b, 1e-6f);
         }
 
 

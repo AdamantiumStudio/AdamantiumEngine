@@ -35,12 +35,12 @@ public class OrientationCube : EditorProcessor
 
     public OrientationCube()
     {
-        var template = new OrientationToolTemplate(100, new Vector3F(1), QuaternionF.RotationAxis(Vector3F.Right, MathHelper.DegreesToRadians(180)));
+        var template = new OrientationToolTemplate(100, new Vector3F(1), Quaternion.CreateFromAxisAngle<float>(Vector3F.Right, float.DegreesToRadians(180)));
         cube = template.BuildEntity(null, nameof(OrientationCube));
 
         for (var i = 0; i < OrientationToolTemplate.TileDirections.Length; ++i)
         {
-            tiles[cube.Get(OrientationToolTemplate.TileName(i))] = (Vector3F)OrientationToolTemplate.TileDirections[i];
+            tiles[cube.Get(OrientationToolTemplate.TileName(i))] = OrientationToolTemplate.TileDirections[i].As<float>();
         }
 
         home = cube.Get(OrientationToolTemplate.HomeName);
@@ -153,14 +153,14 @@ public class OrientationCube : EditorProcessor
         var relativePosition = new Vector3F(camera.Width - 120 * scale, 120 * scale, 150f);
         var orientation = IsStepArrow(current) ? QuaternionF.Identity : QuaternionF.Conjugate(camera.Rotation);
 
-        var world = Matrix4x4F.RotationQuaternion(current.Transform.Rotation) *
-                    Matrix4x4F.Translation((Vector3F)current.Transform.Position) *
-                    Matrix4x4F.Scaling(current.Transform.Scale) *
-                    Matrix4x4F.RotationQuaternion(orientation) *
-                    Matrix4x4F.Scaling(scale);
+        var world = Matrix4x4.CreateFromQuaternion<float>(current.Transform.Rotation) *
+                    Matrix4x4.CreateTranslation<float>(current.Transform.Position.As<float>()) *
+                    Matrix4x4.CreateScale<float>(current.Transform.Scale) *
+                    Matrix4x4.CreateFromQuaternion<float>(orientation) *
+                    Matrix4x4.CreateScale<float>(scale);
 
         var metadata = current.Transform.GetMetadata(camera);
-        metadata.WorldMatrixF = world * Matrix4x4F.Translation(relativePosition);
+        metadata.WorldMatrixF = world * Matrix4x4.CreateTranslation<float>(relativePosition);
         metadata.RelativePosition = relativePosition;
         // Shown only to a camera the user steers: another one is only looked through, and nothing would turn it.
         metadata.Enabled = Tools.Observatory.Controls(camera);
@@ -178,26 +178,26 @@ public class OrientationCube : EditorProcessor
 
     private QuaternionF StepOf(Entity arrow)
     {
-        var quarter = MathHelper.DegreesToRadians(StepDegrees);
+        var quarter = float.DegreesToRadians(StepDegrees);
 
         if (arrow == stepRight)
         {
-            return QuaternionF.RotationAxis(Vector3F.Up, quarter);
+            return Quaternion.CreateFromAxisAngle<float>(Vector3F.Up, quarter);
         }
 
         if (arrow == stepLeft)
         {
-            return QuaternionF.RotationAxis(Vector3F.Up, -quarter);
+            return Quaternion.CreateFromAxisAngle<float>(Vector3F.Up, -quarter);
         }
 
         if (arrow == stepUp)
         {
-            return QuaternionF.RotationAxis(Vector3F.Right, quarter);
+            return Quaternion.CreateFromAxisAngle<float>(Vector3F.Right, quarter);
         }
 
         if (arrow == stepDown)
         {
-            return QuaternionF.RotationAxis(Vector3F.Right, -quarter);
+            return Quaternion.CreateFromAxisAngle<float>(Vector3F.Right, -quarter);
         }
 
         return QuaternionF.Identity;
@@ -217,6 +217,6 @@ public class OrientationCube : EditorProcessor
         }
 
         var forward = -Vector3F.Normalize(ball);
-        camera.RotateAroundSelectedObject(QuaternionF.RotationLookAtLH(forward, UpOf(forward)), RotationMilliseconds);
+        camera.RotateAroundSelectedObject(Quaternion.CreateLookToLH<float>(forward, UpOf(forward)), RotationMilliseconds);
     }
 }

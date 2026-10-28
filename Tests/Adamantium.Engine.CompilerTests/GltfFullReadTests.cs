@@ -247,7 +247,7 @@ public class GltfFullReadTests
             Assert.That(mesh.Attributes["TEXCOORD_4"].Components, Is.EqualTo(2));
             Assert.That(mesh.Attributes["COLOR_1"].Components, Is.EqualTo(4));
             Assert.That(id.Values.OrderBy(v => v), Is.EqualTo(new[] { 10f, 11, 12, 13 }));
-            var engineOrigin = Vector3.Zero;
+            var engineOrigin = Vector3<double>.Zero;
             var atOrigin = Enumerable.Range(0, 4).Where(i => mesh.Points[i] == engineOrigin).Select(i => id.Values[i]);
             Assert.That(atOrigin, Is.EquivalentTo(new[] { 10f, 13 }), "each _ID with its own vertex");
         });
@@ -456,7 +456,7 @@ public class GltfFullReadTests
         var toEngine = AxisConversion.Between(UpAxis.Y_UP_RH_FRONT_Z, UpAxis.Y_DOWN_RH);
         Assert.Multiple(() =>
         {
-            Assert.That(mesh.Points.Select(p => (Vector3F)p), Is.EquivalentTo(new[]
+            Assert.That(mesh.Points.Select(p => p.As<float>()), Is.EquivalentTo(new[]
             {
                 Vector3F.Zero, Vector3F.TransformCoordinate(new Vector3F(2, 0, 0), toEngine),
                 Vector3F.TransformCoordinate(new Vector3F(0, 3, 0), toEngine)
@@ -567,12 +567,12 @@ public class GltfFullReadTests
     public void JoiningVertices_WithAMorphTarget_TakesLittleTime()
     {
         const int count = 60000;
-        var points = new Vector3[count];
+        var points = new Vector3<double>[count];
         var indices = new int[count];
         var moves = new Vector3F[count];
         for (int i = 0; i < count; i++)
         {
-            points[i] = new Vector3(i % 300, i / 300, 0);
+            points[i] = new Vector3<double>(i % 300, i / 300, 0);
             indices[i] = i;
             moves[i] = new Vector3F(0, 0, i % 7);
         }
@@ -589,10 +589,10 @@ public class GltfFullReadTests
     [Test]
     public void MergedMeshes_DropWhatOnlySomeHad()
     {
-        var withData = new Mesh().SetPoints([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)]).SetIndices([0, 1, 2])
+        var withData = new Mesh().SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0)]).SetIndices([0, 1, 2])
             .SetAttribute("_ID", new VertexAttribute { Components = 1, Values = [1, 2, 3] })
             .SetMorphTargets([new MorphTarget { Positions = [Vector3F.UnitX, Vector3F.UnitX, Vector3F.UnitX] }]);
-        var plain = new Mesh().SetPoints([new Vector3(5, 0, 0), new Vector3(6, 0, 0), new Vector3(5, 1, 0)]).SetIndices([0, 1, 2]);
+        var plain = new Mesh().SetPoints([new Vector3<double>(5, 0, 0), new Vector3<double>(6, 0, 0), new Vector3<double>(5, 1, 0)]).SetIndices([0, 1, 2]);
 
         var merged = withData.Merge(plain);
         merged.Optimize();

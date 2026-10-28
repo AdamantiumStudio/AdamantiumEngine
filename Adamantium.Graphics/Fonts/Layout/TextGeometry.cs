@@ -124,10 +124,10 @@ internal static class TextGeometry
     public static bool AlignsToLine(TextAttributes attributes) =>
         attributes?.BaselineAlignment is BaselineAlignment.Top or BaselineAlignment.Center or BaselineAlignment.Bottom;
 
-    public static Size? ObjectSizeOf(char symbol, TextAttributes attributes) =>
+    public static Size<double>? ObjectSizeOf(char symbol, TextAttributes attributes) =>
         symbol == ObjectReplacement ? attributes?.ObjectSize : null;
 
-    public static RectangleF ObjectRect(double pen, double baseline, Size size) =>
+    public static RectangleF ObjectRect(double pen, double baseline, Size<double> size) =>
         new((float)pen, (float)(Math.Round(baseline) - size.Height), (float)size.Width, (float)size.Height);
 
     public static RectangleF CellRect(IFont font, double fontSize, double pen, double advance, double glyphBase)

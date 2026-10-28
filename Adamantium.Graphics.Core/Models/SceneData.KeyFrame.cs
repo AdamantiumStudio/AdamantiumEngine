@@ -28,7 +28,7 @@ public partial class SceneData
 
       public Matrix4x4F ComposeMatrix()
       {
-         return Matrix4x4F.Scaling(Scale)*Matrix4x4F.RotationQuaternion(Rotation)*Matrix4x4F.Translation(Position);
+         return Matrix4x4.CreateScale<float>(Scale)*Matrix4x4.CreateFromQuaternion<float>(Rotation)*Matrix4x4.CreateTranslation<float>(Position);
       }
    }
 }

@@ -97,9 +97,9 @@ namespace Adamantium.Engine.CompilerTests
 
             for (var t = 0; t + 2 < mesh.Indices.Length; t += 3)
             {
-                var a = (Vector3F)mesh.Points[mesh.Indices[t]];
-                var b = (Vector3F)mesh.Points[mesh.Indices[t + 1]];
-                var c = (Vector3F)mesh.Points[mesh.Indices[t + 2]];
+                var a = mesh.Points[mesh.Indices[t]].As<float>();
+                var b = mesh.Points[mesh.Indices[t + 1]].As<float>();
+                var c = mesh.Points[mesh.Indices[t + 2]].As<float>();
                 var face = Vector3F.Cross(b - a, c - a);
                 if (face.LengthSquared() < 1e-10f) continue;
                 face.Normalize();

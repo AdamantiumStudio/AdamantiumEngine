@@ -49,8 +49,8 @@ public class FrontFaceTests
         var device = GpuFixture.CreateRenderDevice();
         var gd = (GraphicsDevice)device;
         var effect = Effect.CompileFromFile(Path.Combine("EffectsData", "StrokeDraw.fx"), device);
-        var view = Matrix4x4F.LookAtLH(new Vector3F(0, 0, -5), Vector3F.Zero, Vector3F.Up);
-        var projection = Matrix4x4F.PerspectiveFovY(MathHelper.DegreesToRadians(60), 1, 0.1f, 100);
+        var view = Matrix4x4.CreateLookAtLH<float>(new Vector3F(0, 0, -5), Vector3F.Zero, Vector3F.Up);
+        var projection = Matrix4x4.CreatePerspectiveFovY<float>(float.DegreesToRadians(60), 1, 0.1f, 100);
         effect.Parameters["Projection"].SetValue(view * projection);
         effect.Parameters["StrokeColor"].SetValue(new Vector4F(0, 1, 0, 1));
 

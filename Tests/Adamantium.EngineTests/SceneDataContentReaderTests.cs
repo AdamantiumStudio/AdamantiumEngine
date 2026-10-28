@@ -45,7 +45,7 @@ public class SceneDataContentReaderTests
         var scene = new SceneData { Name = "box.obj", Source = "Models/Box/box.obj" };
         scene.Models = scene.CreateMesh(null, "", "Model");
 
-        var model = new EntityImportTemplate(scene, null, Vector3.Zero).BuildEntity(new Entity()).Result;
+        var model = new EntityImportTemplate(scene, null, Vector3<double>.Zero).BuildEntity(new Entity()).Result;
 
         Assert.Multiple(() =>
         {

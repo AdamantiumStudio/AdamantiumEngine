@@ -33,7 +33,7 @@ namespace Adamantium.Fonts.Common
             return (int)Math.Min(Math.Max(Math.Max(rate, needed), 1), MostChords);
         }
 
-        private static double SecondDifference(Vector2 a, Vector2 b, Vector2 c) => (a - 2 * b + c).Length();
+        private static double SecondDifference(Vector2<double> a, Vector2<double> b, Vector2<double> c) => (a - 2 * b + c).Length();
 
         // Cubic Bezier generator
         private static SampledOutline[] GenerateCubicBezierOutlines(IEnumerable<Outline> outlines, byte rate,
@@ -61,16 +61,16 @@ namespace Adamantium.Fonts.Common
             return sampledOutlines.ToArray();
         }
 
-        private static List<Vector2> GenerateCubicOutlineFromSegment(OutlineSegment segment, byte rate, double tolerance)
+        private static List<Vector2<double>> GenerateCubicOutlineFromSegment(OutlineSegment segment, byte rate, double tolerance)
         {
-            var sampledPoints = new List<Vector2>();
+            var sampledPoints = new List<Vector2<double>>();
 
             // If this is a line, then just return these points without modification
             if (segment.Points.Count == 2)
             {
                 foreach (var point in segment.Points)
                 {
-                    sampledPoints.Add(new Vector2(Math.Round(point.X, 4), Math.Round(point.Y, 4)));
+                    sampledPoints.Add(new Vector2<double>(Math.Round(point.X, 4), Math.Round(point.Y, 4)));
                 }
 
                 return sampledPoints;
@@ -86,7 +86,7 @@ namespace Adamantium.Fonts.Common
                               3 * Math.Pow(d, 2) * (1 - d) * p[2].X + Math.Pow(d, 3) * p[3].X;
                 var bezierY = Math.Pow(1 - d, 3) * p[0].Y + 3 * d * Math.Pow(1 - d, 2) * p[1].Y +
                               3 * Math.Pow(d, 2) * (1 - d) * p[2].Y + Math.Pow(d, 3) * p[3].Y;
-                sampledPoints.Add(new Vector2(Math.Round(bezierX, 4), Math.Round(bezierY, 4)));
+                sampledPoints.Add(new Vector2<double>(Math.Round(bezierX, 4), Math.Round(bezierY, 4)));
             }
 
             return sampledPoints;
@@ -110,7 +110,7 @@ namespace Adamantium.Fonts.Common
         
         private static SampledOutline GenerateQuadraticBezierCurves(Outline outline, byte rate, double tolerance)
         {
-            var points = new List<Vector2>();
+            var points = new List<Vector2<double>>();
 
             foreach (var segment in outline.Segments)
             {
@@ -152,14 +152,14 @@ namespace Adamantium.Fonts.Common
             return new SampledOutline(segments.ToArray());
         }
 
-        private static Vector2 GetQuadraticCurvePoint(Vector2 begin, Vector2 control, Vector2 end, double t)
+        private static Vector2<double> GetQuadraticCurvePoint(Vector2<double> begin, Vector2<double> control, Vector2<double> end, double t)
         {
             var x = QuadraticEquation(begin.X, control.X, end.X, t);
             var y = QuadraticEquation(begin.Y, control.Y, end.Y, t);
             
             // Round results because if its double, we will get a lot of digits after point and this will negatively influence on triangulation results
             // 4 digits after point will be enough
-            return new Vector2(Math.Round(x, 0, MidpointRounding.AwayFromZero), Math.Round(y, 0, MidpointRounding.AwayFromZero));
+            return new Vector2<double>(Math.Round(x, 0, MidpointRounding.AwayFromZero), Math.Round(y, 0, MidpointRounding.AwayFromZero));
         }
         
         private static double QuadraticEquation(double begin, double control, double end, double t)

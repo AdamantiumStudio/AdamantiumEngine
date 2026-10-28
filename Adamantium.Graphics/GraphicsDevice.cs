@@ -1220,7 +1220,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         {
             Color = new ClearColorValue
             {
-                Float32 = ClearColor.ToFloatArray()
+                Float32 = ClearColor.ToVector4().ToArray()
             }
         };
 

@@ -54,7 +54,7 @@ public class GltfImportTests
         {
             Assert.That(mesh.Points.Length, Is.EqualTo(3));
             Assert.That(mesh.Indices.Length, Is.EqualTo(3));
-            Assert.That(mesh.Points.Select(p => (Vector3F)p), Is.EquivalentTo(new[]
+            Assert.That(mesh.Points.Select(p => p.As<float>()), Is.EquivalentTo(new[]
             {
                 InEngine(0, 0, 0), InEngine(1, 0, 0), InEngine(0, 1, 0)
             }).Using<Vector3F>((a, b) => (a - b).Length() < 1e-4f ? 0 : 1));
@@ -68,9 +68,9 @@ public class GltfImportTests
     {
         var mesh = SingleMesh(Import(Triangle().WriteGltf(folder)));
 
-        var a = (Vector3F)mesh.Points[mesh.Indices[0]];
-        var b = (Vector3F)mesh.Points[mesh.Indices[1]];
-        var c = (Vector3F)mesh.Points[mesh.Indices[2]];
+        var a = mesh.Points[mesh.Indices[0]].As<float>();
+        var b = mesh.Points[mesh.Indices[1]].As<float>();
+        var c = mesh.Points[mesh.Indices[2]].As<float>();
         var engineFront = Vector3F.Normalize(Vector3F.Cross(c - a, b - a));
         var fileFront = Vector3F.Normalize(Vector3F.TransformNormal(Vector3F.UnitZ, ToEngine));
 
@@ -87,9 +87,9 @@ public class GltfImportTests
     {
         var mesh = SingleMesh(Import(Triangle().WriteGltf(folder)));
 
-        var a = (Vector3F)mesh.Points[mesh.Indices[0]];
-        var b = (Vector3F)mesh.Points[mesh.Indices[1]];
-        var c = (Vector3F)mesh.Points[mesh.Indices[2]];
+        var a = mesh.Points[mesh.Indices[0]].As<float>();
+        var b = mesh.Points[mesh.Indices[1]].As<float>();
+        var c = mesh.Points[mesh.Indices[2]].As<float>();
         var front = Vector3F.Normalize(Vector3F.Cross(c - a, b - a));
 
         Assert.That(Vector3F.Dot(front, Matrix4x4F.Identity.Forward), Is.GreaterThan(0.99f));
@@ -112,8 +112,8 @@ public class GltfImportTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(mesh.Points.Select(p => (Vector3F)p), Does.Contain(InEngine(2, 0, 0)).Using<Vector3F>(Near));
-            Assert.That(mesh.Points.Select(p => (Vector3F)p), Does.Contain(InEngine(0, 3, 0)).Using<Vector3F>(Near));
+            Assert.That(mesh.Points.Select(p => p.As<float>()), Does.Contain(InEngine(2, 0, 0)).Using<Vector3F>(Near));
+            Assert.That(mesh.Points.Select(p => p.As<float>()), Does.Contain(InEngine(0, 3, 0)).Using<Vector3F>(Near));
             Assert.That(mesh.Normals.Select(n => Vector3F.Normalize(n)),
                 Is.All.EqualTo(Vector3F.Normalize(Vector3F.TransformNormal(Vector3F.UnitZ, ToEngine))).Using<Vector3F>(Near));
         });
@@ -137,7 +137,7 @@ public class GltfImportTests
 
         var mesh = SingleMesh(Import(asset.WriteGltf(folder)));
 
-        Assert.That(mesh.Points.Select(p => (Vector3F)p), Does.Contain(InEngine(0, 5, 0)).Using<Vector3F>(Near));
+        Assert.That(mesh.Points.Select(p => p.As<float>()), Does.Contain(InEngine(0, 5, 0)).Using<Vector3F>(Near));
     }
 
     [Test]
@@ -171,8 +171,8 @@ public class GltfImportTests
             var fileFront = Vector3F.TransformNormal(Vector3F.UnitZ, ToEngine);
             for (int i = 0; i < mesh.Indices.Length; i += 3)
             {
-                var a = (Vector3F)mesh.Points[mesh.Indices[i]];
-                var front = Vector3F.Cross((Vector3F)mesh.Points[mesh.Indices[i + 2]] - a, (Vector3F)mesh.Points[mesh.Indices[i + 1]] - a);
+                var a = mesh.Points[mesh.Indices[i]].As<float>();
+                var front = Vector3F.Cross(mesh.Points[mesh.Indices[i + 2]].As<float>() - a, mesh.Points[mesh.Indices[i + 1]].As<float>() - a);
                 Assert.That(Vector3F.Dot(front, fileFront), Is.GreaterThan(0), $"triangle {i / 3} faces as the file meant");
             }
         });
@@ -323,7 +323,7 @@ public class GltfImportTests
 
         var skin = scene.Controllers[GltfConverter.NodeId(meshNode)];
         var mesh = SingleMesh(scene);
-        var inverseBindOfKnee = AxisConversion.Convert(Matrix4x4F.Translation(0, -1, 0), ToEngine);
+        var inverseBindOfKnee = AxisConversion.Convert(Matrix4x4.CreateTranslation<float>(0, -1, 0), ToEngine);
         Assert.Multiple(() =>
         {
             Assert.That(skin.JointsAreNodes, Is.True);
@@ -589,7 +589,7 @@ public class GltfImportTests
             Assert.That(camera.Fov, Is.EqualTo(60).Within(1e-3), "degrees, as Collada's");
             Assert.That(camera.FovType, Is.EqualTo(FovType.YFov));
             Assert.That(camera.Translation, Is.EqualTo(InEngine(0, 0, 5)).Using<Vector3F>(Near));
-            Assert.That(Vector3F.Dot(Vector3F.TransformNormal(Vector3F.UnitZ, Matrix4x4F.RotationQuaternion(camera.Rotation)),
+            Assert.That(Vector3F.Dot(Vector3F.TransformNormal(Vector3F.UnitZ, Matrix4x4.CreateFromQuaternion<float>(camera.Rotation)),
                 Vector3F.Normalize(-camera.Translation)), Is.GreaterThan(0.99f), "an engine camera looks along its +Z: at the model, as in the file");
             Assert.That(light.LightType, Is.EqualTo(LightType.Spot));
             Assert.That(light.Color, Is.EqualTo(new Vector3F(1, 0.5f, 0)));

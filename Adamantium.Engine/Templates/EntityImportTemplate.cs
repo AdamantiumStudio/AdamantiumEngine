@@ -22,7 +22,7 @@ public class EntityImportTemplate : IEntityTemplate
     private SceneData sceneData;
     private IContentManager contentManager;
 
-    private Vector3 initialPosition;
+    private Vector3<double> initialPosition;
     //private EntityFramework.Components.Camera camera;
 
     public EntityImportTemplate(SceneData sceneData, IContentManager manager, Camera camera)
@@ -35,7 +35,7 @@ public class EntityImportTemplate : IEntityTemplate
     /// <param name="initialPosition">Where the model's own origin is placed, as the file has it: the root's position is
     /// its position in the file plus this, the model is not moved to put its center there, and it scales and turns about
     /// that origin. Each part below it turns about its own center.</param>
-    public EntityImportTemplate(SceneData sceneData, IContentManager manager, Vector3 initialPosition)
+    public EntityImportTemplate(SceneData sceneData, IContentManager manager, Vector3<double> initialPosition)
     {
         this.sceneData = sceneData;
         contentManager = manager;
@@ -118,7 +118,7 @@ public class EntityImportTemplate : IEntityTemplate
                 var scale = currentMesh.Parent == null
                     ? currentMesh.Scale * new Vector3F(sceneData.Units.Value)
                     : currentMesh.Scale;
-                SetTransformation(entity, (Vector3)currentMesh.Position, scale, currentMesh.Rotation);
+                SetTransformation(entity, currentMesh.Position.As<double>(), scale, currentMesh.Rotation);
                 if (!string.IsNullOrEmpty(currentMesh.ID))
                 {
                     restPoses[currentMesh.ID] = new SceneData.KeyFrame(scale, currentMesh.Position, currentMesh.Rotation);
@@ -200,7 +200,7 @@ public class EntityImportTemplate : IEntityTemplate
                 }
 
                 var transform = entity.Transform;
-                transform.Pivot = (Vector3)Vector3F.TransformCoordinate(entity.GetLocalCenter(), transform.GetLocalMatrixF());
+                transform.Pivot = Vector3F.TransformCoordinate(entity.GetLocalCenter(), transform.GetLocalMatrixF()).As<double>();
             });
             owner.Transform.Position += initialPosition;
             return Task.FromResult(owner);
@@ -254,7 +254,7 @@ public class EntityImportTemplate : IEntityTemplate
         }
     }
 
-    private static void SetTransformation(Entity entity, Vector3 pos, Vector3F scale, QuaternionF rot)
+    private static void SetTransformation(Entity entity, Vector3<double> pos, Vector3F scale, QuaternionF rot)
     {
         entity.Transform.Position = pos;
         entity.Transform.Rotation = rot;

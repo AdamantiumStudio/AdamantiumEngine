@@ -25,14 +25,14 @@ public abstract class ToolProcessor : EditorProcessor
     private Handles dragged;
     private Entity dragTarget;
     private Camera dragCamera;
-    private Vector3 dragEye;
+    private Vector3<double> dragEye;
     private bool dragBegun;
     private PickRay pressRay;
     private Vector2F pressedAt;
     private readonly Entity group = new(null, "Selection");
     private readonly List<Held> held = [];
     private IReadOnlyList<Entity> groupItems;
-    private Vector3 groupStart;
+    private Vector3<double> groupStart;
 
     protected ToolProcessor(params Handles[] own)
     {
@@ -86,7 +86,7 @@ public abstract class ToolProcessor : EditorProcessor
                 && (target != group || ReferenceEquals(Tools.Selection.Items, groupItems))
                 && (active.Contains(dragged) || dragged == DragsClicked(target)))
             {
-                var fromEye = (Vector3F)(dragEye - camera.WorldPosition);
+                var fromEye = (dragEye - camera.WorldPosition).As<float>();
                 if (!dragBegun)
                 {
                     // A press on the entity is a click until the pointer moves away from where it went down.
@@ -189,7 +189,7 @@ public abstract class ToolProcessor : EditorProcessor
 
         if (dragged == null || dragTarget != group)
         {
-            var center = Vector3.Zero;
+            var center = Vector3<double>.Zero;
             for (int i = 0; i < items.Count; i++)
             {
                 center += Handles.PivotOf(items[i]);
@@ -234,7 +234,7 @@ public abstract class ToolProcessor : EditorProcessor
             {
                 var transform = entity.Transform;
                 held.Add(new Held(entity, Handles.PivotOf(entity), transform.Position, transform.Rotation, transform.ScaleFactor,
-                    Matrix4x4F.RotationQuaternion(Handles.WorldRotationOf(entity, transform.Rotation))));
+                    Matrix4x4.CreateFromQuaternion<float>(Handles.WorldRotationOf(entity, transform.Rotation))));
             }
         }
     }
@@ -248,12 +248,12 @@ public abstract class ToolProcessor : EditorProcessor
         for (int i = 0; i < held.Count; i++)
         {
             var item = held[i];
-            var fromCenter = (Vector3F)(item.Pivot - groupStart) * scale;
-            var pivot = groupStart + (Vector3)Vector3F.Transform(fromCenter, turn) + moved;
+            var fromCenter = (item.Pivot - groupStart).As<float>() * scale;
+            var pivot = groupStart + Vector3F.Transform(fromCenter, turn).As<double>() + moved;
             var entity = item.Entity;
-            entity.Transform.Position = item.Position + (Vector3)Handles.ParentVector(entity, (Vector3F)(pivot - item.Pivot));
+            entity.Transform.Position = item.Position + Handles.ParentVector(entity, (pivot - item.Pivot).As<float>()).As<double>();
             entity.Transform.Rotation = turn.Angle > 1e-6f
-                ? QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.Normalize(Handles.ParentVector(entity, turn.Axis)), turn.Angle), item.Rotation)
+                ? QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.Normalize(Handles.ParentVector(entity, turn.Axis)), turn.Angle), item.Rotation)
                 : item.Rotation;
             entity.Transform.ScaleFactor = item.Scale * AlongOwnAxes(item.Axes, scale);
         }
@@ -272,7 +272,7 @@ public abstract class ToolProcessor : EditorProcessor
         return false;
     }
 
-    private readonly record struct Held(Entity Entity, Vector3 Pivot, Vector3 Position, QuaternionF Rotation, Vector3F Scale,
+    private readonly record struct Held(Entity Entity, Vector3<double> Pivot, Vector3<double> Position, QuaternionF Rotation, Vector3F Scale,
         Matrix4x4F Axes);
 
     private static Vector3F AlongOwnAxes(in Matrix4x4F axes, Vector3F worldScale) => new(

@@ -27,7 +27,7 @@ public class ParagraphTests
         var typeface = Typeface.LoadFont(FontPath("SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
         setUp?.Invoke(layout);
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -94,7 +94,7 @@ public class ParagraphTests
         text.SetParagraph(0, hebrew.Length, new ParagraphAttributes { TextIndent = 25, MarginLeft = 10 });
         var typeface = Typeface.LoadFont(FontPath("NotoSansHebrew-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, FontSize, new Size(200, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(200, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var ends = LineEnds(layout);
 
@@ -313,7 +313,7 @@ public class ParagraphTests
             new ParagraphAttributes { LineHeight = lineHeight });
         var typeface = Typeface.LoadFont(FontPath("SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, FontSize, new Size(300, 50), TextWrapping.WrapByWords, TextTrimming.CharEllipses,
+        layout.ProcessText(text, FontSize, new Size<double>(300, 50), TextWrapping.WrapByWords, TextTrimming.CharEllipses,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Where(glyph => glyph.Symbol is not (' ' or '\n')).Max(glyph => glyph.Rect.Bottom),
@@ -357,7 +357,7 @@ public class ParagraphTests
         text.SetParagraph(0, Prose.Length, new ParagraphAttributes { MarginLeft = 40, MarginRight = 40 });
         var typeface = Typeface.LoadFont(FontPath("SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, FontSize, new Size(200, double.NaN), TextWrapping.WrapBySymbols, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(200, double.NaN), TextWrapping.WrapBySymbols, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assume.That(layout.LineCount, Is.GreaterThan(2));

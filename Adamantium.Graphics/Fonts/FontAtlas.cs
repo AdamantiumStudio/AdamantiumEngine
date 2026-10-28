@@ -155,7 +155,7 @@ namespace Adamantium.Graphics.Fonts
             _layers = ToDispose(new GrowingTextureArray(GraphicsDevice, description, name: "Dynamic Font Atlas"));
             _paints = ToDispose(new ColorPaintStore());
             _bitmaps = ToDispose(new ColorBitmapAtlas(device));
-            AtlasData = new FontAtlasData(MSDFTextureSize, new Size(atlasSize, atlasSize), _layers.MaxCapacity);
+            AtlasData = new FontAtlasData(MSDFTextureSize, new Size<double>(atlasSize, atlasSize), _layers.MaxCapacity);
             atlasGenerator = new TextureAtlasGenerator(null, null, AtlasData, parameters);
         }
 

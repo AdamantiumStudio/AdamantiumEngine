@@ -60,13 +60,13 @@ public abstract class Handles
         handle?.TraverseInDepth(part => part.IsSelected = true);
     }
 
-    internal static Vector3 PivotOf(Entity target) => PivotInWorld(target);
+    internal static Vector3<double> PivotOf(Entity target) => PivotInWorld(target);
 
     internal static Vector3F ParentVector(Entity target, Vector3F worldVector) => ToParent(target, worldVector);
 
     internal static QuaternionF WorldRotationOf(Entity target, QuaternionF local) => RotationInWorld(target, local);
 
-    protected static Vector3 PivotInWorld(Entity target)
+    protected static Vector3<double> PivotInWorld(Entity target)
     {
         var pivot = target.Transform.Pivot;
         if (target.Owner == null)
@@ -74,7 +74,7 @@ public abstract class Handles
             return pivot;
         }
 
-        return (Vector3)Vector3F.TransformCoordinate((Vector3F)pivot, target.Owner.Transform.GetWorldMatrixF());
+        return Vector3F.TransformCoordinate(pivot.As<float>(), target.Owner.Transform.GetWorldMatrixF()).As<double>();
     }
 
     protected static QuaternionF RotationInWorld(Entity target, QuaternionF local)
@@ -89,7 +89,7 @@ public abstract class Handles
         basis.Right = Vector3F.Normalize(parent.Right);
         basis.Up = Vector3F.Normalize(parent.Up);
         basis.Forward = Vector3F.Normalize(parent.Forward);
-        return QuaternionF.RotationMatrix(Matrix4x4F.RotationQuaternion(local) * basis);
+        return Quaternion.CreateFromRotationMatrix<float>(Matrix4x4.CreateFromQuaternion<float>(local) * basis);
     }
 
     protected static Vector3F ToParent(Entity target, Vector3F worldVector)
@@ -99,22 +99,21 @@ public abstract class Handles
             return worldVector;
         }
 
-        var parent = target.Owner.Transform.GetWorldMatrixF();
-        Matrix4x4F.Invert(ref parent, out var inverse);
+        var inverse = Matrix4x4F.Invert(target.Owner.Transform.GetWorldMatrixF());
         return Vector3F.TransformNormal(worldVector, inverse);
     }
 
-    protected static float UnitsPerPixel(CameraBase camera, Vector3 worldPoint)
+    protected static float UnitsPerPixel(CameraBase camera, Vector3<double> worldPoint)
     {
         return ScreenSpace.UnitsPerPixel(camera, worldPoint);
     }
 
-    protected static float UnitsPerPoint(CameraBase camera, Vector3 worldPoint)
+    protected static float UnitsPerPoint(CameraBase camera, Vector3<double> worldPoint)
     {
         return ScreenSpace.UnitsPerPoint(camera, worldPoint);
     }
 
-    protected static Vector3F InRender(Vector3 worldPoint, CameraBase camera)
+    protected static Vector3F InRender(Vector3<double> worldPoint, CameraBase camera)
     {
         return ScreenSpace.InRender(worldPoint, camera);
     }
@@ -143,22 +142,22 @@ public abstract class Handles
             axis = Math.Abs(from.X) < 0.9f ? Vector3F.Cross(from, Vector3F.UnitX) : Vector3F.Cross(from, Vector3F.UnitY);
         }
 
-        return QuaternionF.RotationAxis(Vector3F.Normalize(axis), (float)Math.Acos(Math.Clamp(cosine, -1f, 1f)));
+        return Quaternion.CreateFromAxisAngle<float>(Vector3F.Normalize(axis), (float)Math.Acos(Math.Clamp(cosine, -1f, 1f)));
     }
 
-    protected static void PlaceAt(Entity part, Vector3 worldPoint, float points, CameraBase camera)
+    protected static void PlaceAt(Entity part, Vector3<double> worldPoint, float points, CameraBase camera)
     {
         var metadata = part.Transform.GetMetadata(camera);
-        metadata.WorldMatrixF = Matrix4x4F.Scaling(points * UnitsPerPoint(camera, worldPoint))
-                                * Matrix4x4F.Translation(InRender(worldPoint, camera));
+        metadata.WorldMatrixF = Matrix4x4.CreateScale<float>(points * UnitsPerPoint(camera, worldPoint))
+                                * Matrix4x4.CreateTranslation<float>(InRender(worldPoint, camera));
         metadata.Enabled = true;
     }
 
-    protected void PlaceShape(Camera camera, Vector3 worldPoint, QuaternionF axes, float scale)
+    protected void PlaceShape(Camera camera, Vector3<double> worldPoint, QuaternionF axes, float scale)
     {
-        var placement = Matrix4x4F.Scaling(scale)
-                        * Matrix4x4F.RotationQuaternion(axes)
-                        * Matrix4x4F.Translation(InRender(worldPoint, camera));
+        var placement = Matrix4x4.CreateScale<float>(scale)
+                        * Matrix4x4.CreateFromQuaternion<float>(axes)
+                        * Matrix4x4.CreateTranslation<float>(InRender(worldPoint, camera));
         Shape.TraverseInDepth(part => PlacePart(part, placement, camera));
     }
 
@@ -169,7 +168,7 @@ public abstract class Handles
         metadata.Enabled = true;
     }
 
-    protected static void HideArmsFacingEye(Entity right, Entity up, Entity forward, QuaternionF axes, Vector3 at, CameraBase camera)
+    protected static void HideArmsFacingEye(Entity right, Entity up, Entity forward, QuaternionF axes, Vector3<double> at, CameraBase camera)
     {
         var sight = Vector3F.Normalize(InRender(at, camera));
         HideIf(right, Math.Abs(Vector3F.Dot(Axis(axes, Vector3F.UnitX), sight)) >= FacingEye, camera);
@@ -217,8 +216,8 @@ public abstract class Handles
 
         for (int i = 0; i + 1 < count; i += 2)
         {
-            var start = Vector3F.TransformCoordinate((Vector3F)points[mesh.HasIndices ? indices[i] : i], world);
-            var end = Vector3F.TransformCoordinate((Vector3F)points[mesh.HasIndices ? indices[i + 1] : i + 1], world);
+            var start = Vector3F.TransformCoordinate(points[mesh.HasIndices ? indices[i] : i].As<float>(), world);
+            var end = Vector3F.TransformCoordinate(points[mesh.HasIndices ? indices[i + 1] : i + 1].As<float>(), world);
             if (!whole)
             {
                 var startBehind = Vector3F.Dot(start - center, center);
@@ -242,7 +241,7 @@ public abstract class Handles
                 }
             }
 
-            var distance = Collision.RayIntersectsLineSegment(ref ray, start, end, out var point);
+            var distance = Collision.RayIntersectsLineSegment(ray, start, end, out var point);
             var depth = Vector3F.Dot(point - ray.Position, ray.Direction);
             if (depth < 0)
             {
@@ -302,7 +301,7 @@ public abstract class Handles
             }
 
             var radial = grab.Point - origin;
-            var unitsPerPixel = UnitsPerPixel(ray.Camera, (Vector3)origin + ray.Camera.WorldPosition);
+            var unitsPerPixel = UnitsPerPixel(ray.Camera, origin.As<double>() + ray.Camera.WorldPosition);
             radiusInPixels = radial.Length() / unitsPerPixel;
             var tangent = Vector3F.Normalize(Vector3F.Cross(axis, radial)) * unitsPerPixel;
             var onScreen = ScreenSpace.ToPixel(grab.Point + tangent, ray.Camera) - ScreenSpace.ToPixel(grab.Point, ray.Camera);
@@ -312,7 +311,7 @@ public abstract class Handles
             }
 
             var flat = ray.Camera.ProjectionMatrix.M44 > 0.5f;
-            var sight = flat ? Vector3F.Normalize((Vector3F)ray.Camera.Forward) : Vector3F.Normalize(origin);
+            var sight = flat ? Vector3F.Normalize(ray.Camera.Forward.As<float>()) : Vector3F.Normalize(origin);
             axisUnit = Vector3F.Normalize(axis);
             round = Math.Abs(Vector3F.Dot(axisUnit, sight)) >= EdgeOn && radial.LengthSquared() > 1e-12f;
             if (!round)
@@ -370,7 +369,7 @@ public abstract class Handles
             return swept;
         }
 
-        private float? TurnOf(in Ray ray, Vector3F origin, out float away)
+        private float? TurnOf(in Ray<float> ray, Vector3F origin, out float away)
         {
             away = float.MaxValue;
             if (!OnPlane(ray, origin, axisUnit, out var hit))
@@ -399,7 +398,7 @@ public abstract class Handles
         }
     }
 
-    protected static void HideSquaresEdgeOn(Entity rightUp, Entity rightForward, Entity upForward, QuaternionF axes, Vector3 at, CameraBase camera)
+    protected static void HideSquaresEdgeOn(Entity rightUp, Entity rightForward, Entity upForward, QuaternionF axes, Vector3<double> at, CameraBase camera)
     {
         var sight = Vector3F.Normalize(InRender(at, camera));
         HideIf(rightUp, Math.Abs(Vector3F.Dot(Axis(axes, Vector3F.UnitZ), sight)) < SquareEdgeOn, camera);
@@ -420,7 +419,7 @@ public abstract class Handles
         return false;
     }
 
-    protected static bool AlongLine(in Ray ray, Vector3F origin, Vector3F direction, out float along)
+    protected static bool AlongLine(in Ray<float> ray, Vector3F origin, Vector3F direction, out float along)
     {
         var offset = ray.Position - origin;
         var b = Vector3F.Dot(ray.Direction, direction);
@@ -435,7 +434,7 @@ public abstract class Handles
         return true;
     }
 
-    protected static bool OnPlane(in Ray ray, Vector3F point, Vector3F normal, out Vector3F hit)
+    protected static bool OnPlane(in Ray<float> ray, Vector3F point, Vector3F normal, out Vector3F hit)
     {
         var facing = Vector3F.Dot(normal, ray.Direction);
         if (Math.Abs(facing) < 1e-6f)

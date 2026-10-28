@@ -38,13 +38,13 @@ namespace Adamantium.Mathematics.Triangulation
         /// <param name="inPoints"></param>
         /// <param name="isContourClosed"></param>
         /// <returns>Collection of segments if at least 2 points present in collection, otherwise null</returns>
-        public static List<GeometrySegment> SplitOnSegments(MeshContour parent, IEnumerable<Vector2> inPoints, bool isContourClosed = true)
+        public static List<GeometrySegment> SplitOnSegments(MeshContour parent, IEnumerable<Vector2<double>> inPoints, bool isContourClosed = true)
         {
-            var points = inPoints as Vector2[] ?? inPoints.ToArray();
+            var points = inPoints as Vector2<double>[] ?? inPoints.ToArray();
 
             if (points.Length <= 1) return new List<GeometrySegment>();
 
-            var intersectionsList = new Dictionary<Vector2, GeometryIntersection>();
+            var intersectionsList = new Dictionary<Vector2<double>, GeometryIntersection>();
             var segmentHashSet = new HashSet<GeometrySegment>();
             var segments = new List<GeometrySegment>();
 
@@ -96,13 +96,13 @@ namespace Adamantium.Mathematics.Triangulation
         /// <param name="inPoints"></param>
         /// <param name="isContourClosed"></param>
         /// <returns>Collection of segments if at least 2 points present in collection, otherwise null</returns>
-        public static List<GeometrySegment> SplitOnSegments(MeshContour parent, IEnumerable<Vector3> inPoints, bool isContourClosed = true)
+        public static List<GeometrySegment> SplitOnSegments(MeshContour parent, IEnumerable<Vector3<double>> inPoints, bool isContourClosed = true)
         {
-            var points = new List<Vector2>();
+            var points = new List<Vector2<double>>();
 
             foreach (var inPoint in inPoints)
             {
-                points.Add((Vector2)inPoint);
+                points.Add(new Vector2<double>(inPoint.X, inPoint.Y));
             }
             
             return SplitOnSegments(parent, points, isContourClosed);
@@ -115,7 +115,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// <param name="end">End segment point</param>
         /// <param name="segments">Collection of segments</param>
         /// <returns>True is points connected, otherwise false</returns>
-        public static bool IsConnected(Vector2 start, Vector2 end, List<LineSegment2D> segments)
+        public static bool IsConnected(Vector2<double> start, Vector2<double> end, List<LineSegment2D> segments)
         {
             return IsConnectedInvariant(start, end, segments, out var segment2D);
         }
@@ -143,7 +143,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// This method will also check for such cases and will check for segments very close to each other (less then <see cref="Polygon.Epsilon"/>) 
         /// to 100% find correct segment
         /// </remarks>
-        public static bool IsConnectedInvariant(Vector2 start, Vector2 end, List<LineSegment2D> segments, out LineSegment2D correctSegment2D)
+        public static bool IsConnectedInvariant(Vector2<double> start, Vector2<double> end, List<LineSegment2D> segments, out LineSegment2D correctSegment2D)
         {
             correctSegment2D = new LineSegment2D(start, end);
             for (var i = 0; i < segments.Count; ++i)
@@ -158,7 +158,7 @@ namespace Adamantium.Mathematics.Triangulation
             return false;
         }
         
-        public static bool IsConnected(Vector2 start, Vector2 end, List<LineSegment2D> segments, out LineSegment2D correctSegment2D)
+        public static bool IsConnected(Vector2<double> start, Vector2<double> end, List<LineSegment2D> segments, out LineSegment2D correctSegment2D)
         {
             correctSegment2D = new LineSegment2D(start, end);
             for (var i = 0; i < segments.Count; ++i)
@@ -189,7 +189,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// <param name="point">point in 2D</param>
         /// <param name="foundSegments">Collection of found segments</param>
         /// <returns>True if at least one segment was found, otherwise false</returns>
-        public static bool GetSegmentsFromPoint(IEnumerable<LineSegment2D> segments, Vector2 point, out List<LineSegment2D> foundSegments)
+        public static bool GetSegmentsFromPoint(IEnumerable<LineSegment2D> segments, Vector2<double> point, out List<LineSegment2D> foundSegments)
         {
             foundSegments = new List<LineSegment2D>();
             foreach (var segment in segments)
@@ -208,7 +208,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// </summary>
         /// <param name="points">Collection of points to check</param>
         /// <returns>True if polygon is concave, otherwise false</returns>
-        public static bool IsPolygonConcave(List<Vector3> points)
+        public static bool IsPolygonConcave(List<Vector3<double>> points)
         {
             for (var i = 0; i < points.Count - 2; i++)
             {
@@ -221,7 +221,7 @@ namespace Adamantium.Mathematics.Triangulation
                 vec0.Normalize();
                 vec1.Normalize();
 
-                var angle = MathHelper.AngleBetween(vec0, vec1);
+                var angle = double.RadiansToDegrees(MathHelper.Angle.Turn(new Vector2<double>(vec0.X, vec0.Y), new Vector2<double>(vec1.X, vec1.Y)));
                 if (angle > 180)
                 {
                     return true;
@@ -243,7 +243,7 @@ namespace Adamantium.Mathematics.Triangulation
                 var vec0 = segments[i].DirectionNormalized;
                 var vec1 = segments[i + 1].DirectionNormalized;
 
-                var angle = MathHelper.AngleBetween((Vector3F)vec0, (Vector3F)vec1);
+                var angle = double.RadiansToDegrees(MathHelper.Angle.Turn(vec0, vec1));
                 if (angle > 180)
                 {
                     return true;
@@ -260,7 +260,7 @@ namespace Adamantium.Mathematics.Triangulation
                 var vec0 = segments[i].DirectionNormalized;
                 var vec1 = segments[i + 1].DirectionNormalized;
 
-                var angle = MathHelper.AngleBetween((Vector3F)vec0, (Vector3F)vec1);
+                var angle = double.RadiansToDegrees(MathHelper.Angle.Turn(vec0, vec1));
                 if (angle > 180)
                 {
                     return true;

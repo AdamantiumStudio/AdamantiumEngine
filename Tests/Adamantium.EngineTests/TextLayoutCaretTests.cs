@@ -17,7 +17,7 @@ public class TextLayoutCaretTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { EmitNewlineCarets = true };
-        layout.ProcessText(text, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -86,7 +86,7 @@ public class TextLayoutCaretTests
         var space = Layout(" ").GetCaretStops()[1].X;
         var layout = Layout("\tx");
         layout.TabSize = 2;
-        layout.ProcessText("\tx", 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("\tx", 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetCaretStops()[1].X, Is.EqualTo(space * 2).Within(Tolerance));

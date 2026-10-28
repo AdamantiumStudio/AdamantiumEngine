@@ -40,7 +40,7 @@ public sealed class DynamicAabbTree<T>
 
     /// <summary>Puts <paramref name="item"/> in the tree with <paramref name="box"/>; gives the handle that moves and
     /// removes it.</summary>
-    public int Add(in BoundingBox box, T item)
+    public int Add(in BoundingBox<float>box, T item)
     {
         var leaf = Allocate();
         nodes[leaf].Box = Grown(box);
@@ -61,7 +61,7 @@ public sealed class DynamicAabbTree<T>
 
     /// <summary>Gives the item of <paramref name="handle"/> its new box; gives whether its leaf had to move, which it does
     /// only once the box leaves the leaf's.</summary>
-    public bool Move(int handle, in BoundingBox box)
+    public bool Move(int handle, in BoundingBox<float>box)
     {
         if (nodes[handle].Box.Contains(box) == ContainmentType.Contains)
         {
@@ -78,24 +78,23 @@ public sealed class DynamicAabbTree<T>
     public T ItemOf(int handle) => nodes[handle].Item;
 
     /// <summary>The box the leaf of <paramref name="handle"/> has: its item's grown by the margin.</summary>
-    public BoundingBox BoxOf(int handle) => nodes[handle].Box;
+    public BoundingBox<float>BoxOf(int handle) => nodes[handle].Box;
 
     /// <summary>Adds to <paramref name="into"/> every item whose leaf <paramref name="ray"/> passes through, with how far
     /// along the ray, in lengths of its direction, it enters the leaf's box; 0 when it starts inside.</summary>
-    public void RayCast(in Ray ray, List<(T Item, float Entry)> into)
+    public void RayCast(in Ray<float> ray, List<(T Item, float Entry)> into)
     {
         if (root == None)
         {
             return;
         }
 
-        var local = ray;
         var count = 0;
         stack[count++] = root;
         while (count > 0)
         {
             var index = stack[--count];
-            if (!Collision.RayIntersectsBox(ref local, ref nodes[index].Box, out float entry))
+            if (!Collision.RayIntersectsBox(ray, nodes[index].Box, out float entry))
             {
                 continue;
             }
@@ -116,11 +115,11 @@ public sealed class DynamicAabbTree<T>
         }
     }
 
-    private BoundingBox Grown(in BoundingBox box)
+    private BoundingBox<float>Grown(in BoundingBox<float>box)
     {
         var size = box.Maximum - box.Minimum;
         var reach = Vector3F.Max(size * Margin, new Vector3F(MinimumMargin));
-        return new BoundingBox(box.Minimum - reach, box.Maximum + reach);
+        return new BoundingBox<float>(box.Minimum - reach, box.Maximum + reach);
     }
 
     private int Allocate()
@@ -161,7 +160,7 @@ public sealed class DynamicAabbTree<T>
         var oldParent = nodes[sibling].Parent;
         var parent = Allocate();
         nodes[parent].Parent = oldParent;
-        nodes[parent].Box = BoundingBox.Merge(nodes[leaf].Box, nodes[sibling].Box);
+        nodes[parent].Box = BoundingBox.CreateMerged(nodes[leaf].Box, nodes[sibling].Box);
         nodes[parent].Height = nodes[sibling].Height + 1;
         nodes[parent].Child1 = sibling;
         nodes[parent].Child2 = leaf;
@@ -185,7 +184,7 @@ public sealed class DynamicAabbTree<T>
     }
 
     // Down from the root, each step to the child whose box grows the least by the leaf, until stopping here is cheaper.
-    private int BestSibling(in BoundingBox box)
+    private int BestSibling(in BoundingBox<float>box)
     {
         var index = root;
         while (!nodes[index].IsLeaf)
@@ -193,7 +192,7 @@ public sealed class DynamicAabbTree<T>
             var child1 = nodes[index].Child1;
             var child2 = nodes[index].Child2;
             var area = Area(nodes[index].Box);
-            var combinedArea = Area(BoundingBox.Merge(nodes[index].Box, box));
+            var combinedArea = Area(BoundingBox.CreateMerged(nodes[index].Box, box));
             var cost = 2 * combinedArea;
             var inheritance = 2 * (combinedArea - area);
             var cost1 = DescentCost(child1, box) + inheritance;
@@ -209,9 +208,9 @@ public sealed class DynamicAabbTree<T>
         return index;
     }
 
-    private float DescentCost(int child, in BoundingBox box)
+    private float DescentCost(int child, in BoundingBox<float>box)
     {
-        var merged = Area(BoundingBox.Merge(nodes[child].Box, box));
+        var merged = Area(BoundingBox.CreateMerged(nodes[child].Box, box));
         return nodes[child].IsLeaf ? merged : merged - Area(nodes[child].Box);
     }
 
@@ -258,7 +257,7 @@ public sealed class DynamicAabbTree<T>
             var child1 = nodes[index].Child1;
             var child2 = nodes[index].Child2;
             nodes[index].Height = 1 + Math.Max(nodes[child1].Height, nodes[child2].Height);
-            nodes[index].Box = BoundingBox.Merge(nodes[child1].Box, nodes[child2].Box);
+            nodes[index].Box = BoundingBox.CreateMerged(nodes[child1].Box, nodes[child2].Box);
             index = nodes[index].Parent;
         }
     }
@@ -324,14 +323,14 @@ public sealed class DynamicAabbTree<T>
         }
 
         nodes[shorter].Parent = a;
-        nodes[a].Box = BoundingBox.Merge(nodes[other].Box, nodes[shorter].Box);
+        nodes[a].Box = BoundingBox.CreateMerged(nodes[other].Box, nodes[shorter].Box);
         nodes[a].Height = 1 + Math.Max(nodes[other].Height, nodes[shorter].Height);
-        nodes[up].Box = BoundingBox.Merge(nodes[a].Box, nodes[taller].Box);
+        nodes[up].Box = BoundingBox.CreateMerged(nodes[a].Box, nodes[taller].Box);
         nodes[up].Height = 1 + Math.Max(nodes[a].Height, nodes[taller].Height);
         return up;
     }
 
-    private static float Area(in BoundingBox box)
+    private static float Area(in BoundingBox<float>box)
     {
         var size = box.Maximum - box.Minimum;
         return 2 * (size.X * size.Y + size.Y * size.Z + size.Z * size.X);
@@ -339,7 +338,7 @@ public sealed class DynamicAabbTree<T>
 
     private struct Node
     {
-        public BoundingBox Box;
+        public BoundingBox<float>Box;
         public T Item;
         public int Parent;
         public int Child1;

@@ -20,7 +20,7 @@ public class ConeTemplate : PrimitiveTemplate
         float bottomDiameter,
         float height,
         int tessellation = 3,
-        Matrix4x4? transform = null) : base(geometryType, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, tessellation, transform)
     {
         this.topDiameter = topDiameter;
         this.bottomDiameter = bottomDiameter;

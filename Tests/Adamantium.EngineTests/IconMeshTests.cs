@@ -44,10 +44,10 @@ public class IconMeshTests
         for (int i = 0; i < rays.Points.Length; i += 4)
         {
             var tip = rays.Points[i + 1];
-            var along = Vector3F.Normalize((Vector3F)(tip - rays.Points[i]));
+            var along = Vector3F.Normalize((tip - rays.Points[i]).As<float>());
             Assert.That(Vector3F.Dot(along, direction), Is.GreaterThan(0.9999f), $"ray {i / 4}");
-            Assert.That(Vector3F.Dot((Vector3F)(rays.Points[i + 2] - tip), direction), Is.LessThan(0), $"ray {i / 4}, left barb");
-            Assert.That(Vector3F.Dot((Vector3F)(rays.Points[i + 3] - tip), direction), Is.LessThan(0), $"ray {i / 4}, right barb");
+            Assert.That(Vector3F.Dot((rays.Points[i + 2] - tip).As<float>(), direction), Is.LessThan(0), $"ray {i / 4}, left barb");
+            Assert.That(Vector3F.Dot((rays.Points[i + 3] - tip).As<float>(), direction), Is.LessThan(0), $"ray {i / 4}, right barb");
         }
     }
 }

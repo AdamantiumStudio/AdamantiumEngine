@@ -1,15 +1,7 @@
 using System;
 using Adamantium.Mathematics;
-using Adamantium.Mathematics.Typed;
 using NUnit.Framework;
-using BoundingBox = Adamantium.Mathematics.Typed.BoundingBox;
-using BoundingSphere = Adamantium.Mathematics.Typed.BoundingSphere;
-using Collision = Adamantium.Mathematics.Typed.Collision;
-using Matrix4x4 = Adamantium.Mathematics.Typed.Matrix4x4;
-using Plane = Adamantium.Mathematics.Typed.Plane;
-using Ray = Adamantium.Mathematics.Typed.Ray;
-using Vector3 = Adamantium.Mathematics.Typed.Vector3;
-using Vector3D = Adamantium.Mathematics.Typed.Vector3<double>;
+using Vector3D = Adamantium.Mathematics.Vector3<double>;
 
 namespace Adamantium.MathTests;
 

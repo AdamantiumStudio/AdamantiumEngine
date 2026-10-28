@@ -13,21 +13,21 @@ public class GeometrySegment
     // used for combined geometry contour forming (only for one-point joint case) 
     public bool IsAlreadyInTriangulatorContour { get; set; }
 
-    public Vector2 Start => SegmentEnds[0].Coordinates;
-    public Vector2 End => SegmentEnds[1].Coordinates;
+    public Vector2<double> Start => SegmentEnds[0].Coordinates;
+    public Vector2<double> End => SegmentEnds[1].Coordinates;
     
-    public Vector2 Direction { get; }
-    public Vector2 DirectionNormalized { get; }
+    public Vector2<double> Direction { get; }
+    public Vector2<double> DirectionNormalized { get; }
 
     public GeometrySegment(MeshContour parent, GeometryIntersection start, GeometryIntersection end)
     {
         Parent = parent;
 
-        // start.Coordinates = Vector2.Round(start.Coordinates, 3);
-        // end.Coordinates = Vector2.Round(end.Coordinates, 3);
+        // start.Coordinates = Vector2<double>.Round(start.Coordinates, 3);
+        // end.Coordinates = Vector2<double>.Round(end.Coordinates, 3);
         
         Direction = end.Coordinates - start.Coordinates;
-        DirectionNormalized = Vector2.Normalize(Direction);
+        DirectionNormalized = Vector2<double>.Normalize(Direction);
         
         SegmentEnds = new List<GeometryIntersection>
         {
@@ -38,12 +38,12 @@ public class GeometrySegment
         AddSelfToConnectedSegments();
     }
     
-    public GeometrySegment(MeshContour parent, Vector2 point1, Vector2 point2)
+    public GeometrySegment(MeshContour parent, Vector2<double> point1, Vector2<double> point2)
     {
         Parent = parent;
         
         Direction = point2 - point1;
-        DirectionNormalized = Vector2.Normalize(Direction);
+        DirectionNormalized = Vector2<double>.Normalize(Direction);
         
         var intersection1 = new GeometryIntersection(point1);
         var intersection2 = new GeometryIntersection(point2);

@@ -13,12 +13,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
             public static Mesh GenerateGeometry(
                GeometryType geometryType,
                EllipseType ellipseType,
-               Vector2 diameter,
+               Vector2<double> diameter,
                double startAngle = 0,
                double sweepAngle = 360,
                bool isClockWise = true,
                int tessellation = 36,
-               Matrix4x4? transform = null)
+               Matrix4x4<double>? transform = null)
             {
                 if (sweepAngle is > 360 or < -360)
                 {
@@ -64,16 +64,16 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             private static Mesh GenerateSolidGeometry(
                 EllipseType ellipseType,
-                Vector2 diameter,
+                Vector2<double> diameter,
                 double startAngle = 0,
                 double sweepAngle = 360,
                 bool isClockWise = true,
                 int tessellation = 36,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
-                var vertices = new List<Vector2>();
+                var vertices = new List<Vector2<double>>();
                 List<Vector2F> uvs = new List<Vector2F>();
-                var center = Vector3.Zero;
+                var center = Vector3<double>.Zero;
                 var radiusX = diameter.X / 2;
                 var radiusY = diameter.Y / 2;
 
@@ -87,21 +87,21 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 if (ellipseType == EllipseType.Sector && range < 360)
                 {
-                    vertices.Add(Vector2.Zero);
+                    vertices.Add(Vector2<double>.Zero);
                 }
 
                 // Degrees from the start to the start plus the sweep, turned to radians once.
                 for (int i = 0; i < tessellation; ++i)
                 {
                     var currentAngle = startAngle + range * i / (tessellation - 1);
-                    var angleItem = MathHelper.DegreesToRadians(currentAngle * sign);
+                    var angleItem = (float)double.DegreesToRadians(currentAngle * sign);
                     var x = center.X + (radiusX * Math.Cos(angleItem));
                     var y = center.Y + (radiusY * Math.Sin(angleItem));
 
                     x = Math.Round(x, 4);
                     y = Math.Round(y, 4);
 
-                    var vertex = new Vector2(x, y);
+                    var vertex = new Vector2<double>(x, y);
 
                     vertices.Add(vertex);
                 }
@@ -130,16 +130,16 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            private static List<Vector3> GenerateOutlinedGeometry(
+            private static List<Vector3<double>> GenerateOutlinedGeometry(
                 EllipseType ellipseType,
-                Vector2 diameter,
+                Vector2<double> diameter,
                 double startAngle = 0,
                 double sweepAngle = 360,
                 bool isClockWise = true,
                 int tessellation = 36,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var radiusX = diameter.X / 2;
                 var radiusY = diameter.Y / 2;
 
@@ -155,22 +155,22 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 // against every other shape's outline (the rectangle emits TL->TR->BR->BL = clockwise on screen). The
                 // stroke expander walks the contour in order, so dashes, caps and arrow heads ran backwards on ellipses.
                 float sign = isClockWise ? 1f : -1f;
-                double startRad = MathHelper.DegreesToRadians(startAngle) * sign;
-                double stepRad = MathHelper.DegreesToRadians(sweepAngle / tessellation) * sign;
+                double startRad = (float)double.DegreesToRadians(startAngle) * sign;
+                double stepRad = (float)double.DegreesToRadians(sweepAngle / tessellation) * sign;
 
                 for (int i = 0; i < count; ++i)
                 {
                     double a = startRad + stepRad * i;
                     double x = Math.Round(radiusX * Math.Cos(a), 4, MidpointRounding.AwayFromZero);
                     double y = Math.Round(radiusY * Math.Sin(a), 4, MidpointRounding.AwayFromZero);
-                    vertices.Add(new Vector3(x, y, 0));
+                    vertices.Add(new Vector3<double>(x, y, 0));
                 }
 
                 // A pie sector's outline runs arc -> center -> back to the first radius (closed loop); an edge-to-edge
                 // arc stops at the rim.
                 if (!isFull && ellipseType == EllipseType.Sector)
                 {
-                    vertices.Add(Vector3.Zero);
+                    vertices.Add(Vector3<double>.Zero);
                 }
 
                 if (transform is { IsIdentity: false })
@@ -181,7 +181,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return vertices;
             }
             
-            private static List<Vector3> Triangulate(List<Vector3> vertices)
+            private static List<Vector3<double>> Triangulate(List<Vector3<double>> vertices)
             {
                 var polygon = new Mathematics.Triangulation.Polygon();
                 polygon.AddContour(new MeshContour(vertices));

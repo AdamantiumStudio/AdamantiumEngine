@@ -26,7 +26,7 @@ public class TextQuadWindowTests
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
         var text = string.Join("\n", Enumerable.Range(0, Lines).Select(i => $"line number {i}"));
-        layout.ProcessText(text, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }

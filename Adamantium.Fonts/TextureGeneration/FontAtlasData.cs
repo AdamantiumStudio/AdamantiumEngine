@@ -9,7 +9,7 @@ namespace Adamantium.Fonts.TextureGeneration
     {
         private object lockObject = new Object();
         
-        public Size AtlasSize { get; set; }
+        public Size<double> AtlasSize { get; set; }
         private List<GlyphTextureData> glyphData { get; }
 
         public IReadOnlyList<GlyphTextureData> GlyphData => glyphData.AsReadOnly();
@@ -57,7 +57,7 @@ namespace Adamantium.Fonts.TextureGeneration
             CurrentDepthLayer = 0;
         }
 
-        public FontAtlasData(uint glyphTextureSize, Size atlasSize, uint layerCount = 1) : this(glyphTextureSize, layerCount)
+        public FontAtlasData(uint glyphTextureSize, Size<double> atlasSize, uint layerCount = 1) : this(glyphTextureSize, layerCount)
         {
             AtlasSize = atlasSize;
         }

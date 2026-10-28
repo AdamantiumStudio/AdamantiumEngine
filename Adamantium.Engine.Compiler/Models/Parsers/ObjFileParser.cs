@@ -60,10 +60,10 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
 
         private void ParseGeometry()
         {
-            var positions = new List<Vector3>();
+            var positions = new List<Vector3<double>>();
             var normals = new List<Vector3F>();
             var uvs = new List<Vector2F>();
-            positions.Add(Vector3.Zero);
+            positions.Add(Vector3<double>.Zero);
             normals.Add(Vector3F.Zero);
             uvs.Add(Vector2F.Zero);
             ObjMeshData geometryData = null;
@@ -115,7 +115,7 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
                     }
                     String values = line.Substring(POSITION.Length).Trim(' ');
                     var v = ParseNumericString(values);
-                    positions.Add(new Vector3(v));
+                    positions.Add(new Vector3<double>(v));
                 }
 
                 else if (line.StartsWith(NORMAL))

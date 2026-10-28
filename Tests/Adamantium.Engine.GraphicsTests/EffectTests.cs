@@ -236,7 +236,7 @@ technique T { pass P { ComputeShader = CS; } }
             var device = GpuFixture.CreateRenderDevice();
             var registry = device.MainDevice.ShaderHotReload;
             using var original = new Adamantium.FX.SpriteEffect(device);
-            var transform = Matrix4x4F.Translation(1, 2, 3);
+            var transform = Matrix4x4.CreateTranslation<float>(1, 2, 3);
             original.MatrixTransform.SetValue(transform);
             original.TextureSampler.SetResource(SamplerStates.LinearClampToEdge);
 

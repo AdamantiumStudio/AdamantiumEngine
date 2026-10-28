@@ -11,15 +11,15 @@ namespace Adamantium.ECS.Components;
 [ViewModel]
 public partial class TeapotShape : ProceduralShape
 {
-    [Bindable] private Vector3 size;
+    [Bindable] private Vector3<double> size;
 
     public TeapotShape()
     {
-        Size = new Vector3(1);
+        Size = new Vector3<double>(1);
         Tessellation = 8;
     }
 
-    partial void OnSizeChanged(Vector3 value) => Changed();
+    partial void OnSizeChanged(Vector3<double> value) => Changed();
 
     protected override Mesh Generate() =>
         Shapes.Teapot.GenerateGeometry(GeometryType.Solid, Positive(Size), TessellationFrom(1));

@@ -10,7 +10,7 @@ namespace Adamantium.Mathematics.Triangulation
     /// </summary>
     public class Polygon
     {
-        private readonly HashSet<Vector2> mergedPointsHash;
+        private readonly HashSet<Vector2<double>> mergedPointsHash;
         private readonly List<ContoursContainer> contourContainers;
 
         public List<MeshContour> ProcessedContours { get; private set; }
@@ -19,10 +19,10 @@ namespace Adamantium.Mathematics.Triangulation
         /// Precision level for polygon triangulation
         /// </summary>
         /// <remarks>
-        /// Seems Epsilon must be less than <see cref="MathHelper.ZeroToleranceD"/> on 1 magnitude to avoid floating point errors, but not less than 1e-8. 
+        /// Seems Epsilon must be less than <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> on 1 magnitude to avoid floating point errors, but not less than 1e-8. 
         /// Current ZeroTolerance value = 1e-9
         /// </remarks>
-        public static double Epsilon = MathHelper.ZeroToleranceD;
+        public static double Epsilon = MathHelper.Scalar.ZeroTolerance<double>();
 
         /// <summary>
         /// Polygon name
@@ -59,7 +59,7 @@ namespace Adamantium.Mathematics.Triangulation
         {
             contourContainers = new List<ContoursContainer>();
             MergedPoints = new List<GeometryIntersection>();
-            mergedPointsHash = new HashSet<Vector2>();
+            mergedPointsHash = new HashSet<Vector2<double>>();
             MergedSegments = new List<GeometrySegment>();
             checkedContours = new List<ContourPair>();
             ProcessedContours = new List<MeshContour>();
@@ -85,7 +85,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// Triangulate current <see cref="Polygon"/>
         /// </summary>
         /// <returns></returns>
-        public List<Vector3> FillIndirect(bool triangulate = true)
+        public List<Vector3<double>> FillIndirect(bool triangulate = true)
         {
             // Fast-path: when every contour is a simple, closed ring and no two edges cross (pure nesting), resolve
             // holes by containment + fill rule and earcut. O(n log n) detection + ~O(n) triangulation, bypassing
@@ -110,7 +110,7 @@ namespace Adamantium.Mathematics.Triangulation
             // such container is removed from list
             var nonIntersectedContours = GetNonIntersectingContours(localContourContainers);
             
-            var vertices = new List<Vector3>();
+            var vertices = new List<Vector3<double>>();
             
             if (triangulate)
             {
@@ -163,11 +163,11 @@ namespace Adamantium.Mathematics.Triangulation
         /// the O(n^2) self-intersection scan and the O(n^2) MergeContours. Returns false (caller uses the full
         /// pipeline) for anything with crossings or self-intersections.
         /// </summary>
-        private bool TryFastTriangulate(bool triangulate, out List<Vector3> result)
+        private bool TryFastTriangulate(bool triangulate, out List<Vector3<double>> result)
         {
             result = null;
 
-            var rings = new List<Vector2[]>();
+            var rings = new List<Vector2<double>[]>();
             var processedContours = new List<MeshContour>();
             foreach (var container in contourContainers)
                 foreach (var contour in container.Contours)
@@ -185,10 +185,10 @@ namespace Adamantium.Mathematics.Triangulation
 
             // A single convex contour is provably simple with no holes -> fan directly, skipping the broad-phase
             // intersection scan entirely (convexity already guarantees no self-intersection).
-            if (rings.Count == 1 && MathHelper.IsConvex(rings[0]))
+            if (rings.Count == 1 && MathHelper.Polyline.IsConvex<double>(rings[0]))
             {
                 ProcessedContours.AddRange(processedContours);
-                result = triangulate ? Triangulator.FanTriangulate(rings[0]) : new List<Vector3>();
+                result = triangulate ? Triangulator.FanTriangulate(rings[0]) : new List<Vector3<double>>();
                 return true;
             }
 
@@ -196,21 +196,21 @@ namespace Adamantium.Mathematics.Triangulation
             if (HasProperIntersections(rings))
             {
                 ProcessedContours.AddRange(processedContours);
-                result = triangulate ? PlanarFill.Fill(rings, FillRule) : new List<Vector3>();
+                result = triangulate ? PlanarFill.Fill(rings, FillRule) : new List<Vector3<double>>();
 
                 return true;
             }
 
             ProcessedContours.AddRange(processedContours);
-            result = triangulate ? FillRings(rings, FillRule) : new List<Vector3>();
+            result = triangulate ? FillRings(rings, FillRule) : new List<Vector3<double>>();
             return true;
         }
 
         /// <summary>Triangulates rings that do not cross, by the fill rule: which ring is solid and which is a hole is
         /// decided here, and earcut is handed the answer.</summary>
-        private List<Vector3> FillRings(List<Vector2[]> rings, FillRule rule)
+        private List<Vector3<double>> FillRings(List<Vector2<double>[]> rings, FillRule rule)
         {
-            var result = new List<Vector3>();
+            var result = new List<Vector3<double>>();
 
             // Nesting depth of each ring (number of other rings that contain it).
             var depth = new int[rings.Count];
@@ -249,17 +249,17 @@ namespace Adamantium.Mathematics.Triangulation
                 // triangulating it again is two more triangles drawn over themselves.
                 if (nonZero && depth[i] > 0 && Within(rings, winding, i)) continue;
 
-                List<IReadOnlyList<Vector2>> holes = null;
+                List<IReadOnlyList<Vector2<double>>> holes = null;
 
                 for (var j = 0; j < rings.Count; j++)
                 {
                     if (i == j || depth[j] != depth[i] + 1) continue;
                     if (nonZero && winding[j] != 0) continue;   // it fills too, so it is not a hole in this one
-                    if (PointInPolygon(rings[j][0], rings[i])) (holes ??= new List<IReadOnlyList<Vector2>>()).Add(rings[j]);
+                    if (PointInPolygon(rings[j][0], rings[i])) (holes ??= new List<IReadOnlyList<Vector2<double>>>()).Add(rings[j]);
                 }
 
                 if (holes == null)
-                    result.AddRange(MathHelper.IsConvex(rings[i]) ? Triangulator.FanTriangulate(rings[i]) : Triangulator.EarcutTriangulate(rings[i]));
+                    result.AddRange(MathHelper.Polyline.IsConvex<double>(rings[i]) ? Triangulator.FanTriangulate(rings[i]) : Triangulator.EarcutTriangulate(rings[i]));
                 else
                     result.AddRange(Triangulator.EarcutWithHoles(rings[i], holes));
 
@@ -270,9 +270,9 @@ namespace Adamantium.Mathematics.Triangulation
 
         /// <summary>True if any two non-adjacent edges of the given rings cross or touch (T-junction). X-sweep
         /// broad-phase, so ~O(n log n) for clean input instead of O(n^2).</summary>
-        private static bool HasProperIntersections(List<Vector2[]> rings)
+        private static bool HasProperIntersections(List<Vector2<double>[]> rings)
         {
-            var edges = new List<(Vector2 a, Vector2 b)>();
+            var edges = new List<(Vector2<double> a, Vector2<double> b)>();
             foreach (var ring in rings)
             {
                 var n = ring.Length;
@@ -280,7 +280,7 @@ namespace Adamantium.Mathematics.Triangulation
             }
             edges.Sort((e, f) => Math.Min(e.a.X, e.b.X).CompareTo(Math.Min(f.a.X, f.b.X)));
 
-            var active = new List<(Vector2 a, Vector2 b)>();
+            var active = new List<(Vector2<double> a, Vector2<double> b)>();
             foreach (var e in edges)
             {
                 var minX = Math.Min(e.a.X, e.b.X);
@@ -299,20 +299,20 @@ namespace Adamantium.Mathematics.Triangulation
 
         /// <summary>Whether two segments cross properly, each through the other's inside; touching is not crossing, so rings
         /// sharing a vertex still nest.</summary>
-        private static bool SegmentsIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4)
+        private static bool SegmentsIntersect(Vector2<double> p1, Vector2<double> p2, Vector2<double> p3, Vector2<double> p4)
         {
             int o1 = Orient(p1, p2, p3), o2 = Orient(p1, p2, p4), o3 = Orient(p3, p4, p1), o4 = Orient(p3, p4, p2);
 
             return o1 != o2 && o3 != o4 && o1 != 0 && o2 != 0 && o3 != 0 && o4 != 0;
         }
 
-        private static int Orient(Vector2 a, Vector2 b, Vector2 c)
+        private static int Orient(Vector2<double> a, Vector2<double> b, Vector2<double> c)
         {
             var v = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
             return v > 1e-9 ? 1 : (v < -1e-9 ? -1 : 0);
         }
 
-        private static bool OnSegment(Vector2 a, Vector2 b, Vector2 p)
+        private static bool OnSegment(Vector2<double> a, Vector2<double> b, Vector2<double> p)
         {
             return Math.Min(a.X, b.X) - 1e-9 <= p.X && p.X <= Math.Max(a.X, b.X) + 1e-9 &&
                    Math.Min(a.Y, b.Y) - 1e-9 <= p.Y && p.Y <= Math.Max(a.Y, b.Y) + 1e-9;
@@ -320,7 +320,7 @@ namespace Adamantium.Mathematics.Triangulation
 
 
 
-        private static bool Within(List<Vector2[]> rings, int[] winding, int i)
+        private static bool Within(List<Vector2<double>[]> rings, int[] winding, int i)
         {
             for (var k = 0; k < rings.Count; k++)
             {
@@ -332,7 +332,7 @@ namespace Adamantium.Mathematics.Triangulation
 
         /// <summary>Twice the signed area of a ring - positive one way round, negative the other. Which way a ring
         /// runs is the whole of the non-zero rule.</summary>
-        private static double Area(IReadOnlyList<Vector2> ring)
+        private static double Area(IReadOnlyList<Vector2<double>> ring)
         {
             double sum = 0;
 
@@ -347,7 +347,7 @@ namespace Adamantium.Mathematics.Triangulation
             return sum;
         }
 
-        private static bool PointInPolygon(Vector2 p, IReadOnlyList<Vector2> polygon)
+        private static bool PointInPolygon(Vector2<double> p, IReadOnlyList<Vector2<double>> polygon)
         {
             bool inside = false;
             for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
@@ -361,18 +361,18 @@ namespace Adamantium.Mathematics.Triangulation
             return inside;
         }
 
-        public List<Vector3> FillDirect(List<GeometryIntersection> points, List<GeometrySegment> segments)
+        public List<Vector3<double>> FillDirect(List<GeometryIntersection> points, List<GeometrySegment> segments)
         {
             foreach (var point in points)
             {
-                point.Coordinates = Vector2.Round(point.Coordinates, 3);
+                point.Coordinates = Vector2<double>.Round(point.Coordinates, 3);
             }
             
             for (int i = 0; i < segments.Count; i++)
             {
                 var segment = segments[i];
-                segment.SegmentEnds[0].Coordinates = Vector2.Round(segment.Start, 3);
-                segment.SegmentEnds[1].Coordinates = Vector2.Round(segment.End, 3);
+                segment.SegmentEnds[0].Coordinates = Vector2<double>.Round(segment.Start, 3);
+                segment.SegmentEnds[1].Coordinates = Vector2<double>.Round(segment.End, 3);
             }
             
             MergedPoints.AddRange(points);
@@ -383,7 +383,7 @@ namespace Adamantium.Mathematics.Triangulation
             return result;
         }
 
-        private List<Vector3> TriangulateContour(MeshContour item)
+        private List<Vector3<double>> TriangulateContour(MeshContour item)
         {
             // A simple (non-self-intersecting) contour triangulates with earcut in ~O(n), ~n-2 triangles (no
             // slivers). Self-intersecting contours fall back to the scanline, which resolves the crossings per
@@ -616,14 +616,14 @@ namespace Adamantium.Mathematics.Triangulation
         {
             if (MergedPoints.Count <= 0) return;
 
-            var minimum = new Vector2(double.MaxValue);
-            var maximum = new Vector2(double.MinValue);
+            var minimum = new Vector2<double>(double.MaxValue);
+            var maximum = new Vector2<double>(double.MinValue);
 
             for (var i = 0; i < MergedPoints.Count; ++i)
             {
                 var point = MergedPoints[i].Coordinates;
-                Vector2.Min(ref minimum, ref point, out minimum);
-                Vector2.Max(ref maximum, ref point, out maximum);
+                minimum = Vector2<double>.Min(minimum, point);
+                maximum = Vector2<double>.Max(maximum, point);
             }
 
             LeftmostXCoord = minimum.X;
@@ -697,7 +697,7 @@ namespace Adamantium.Mathematics.Triangulation
 
             public int Compare(GeometryIntersection x, GeometryIntersection y)
             {
-                if (MathHelper.WithinEpsilon(x.Coordinates.Y, y.Coordinates.Y, Epsilon))
+                if (MathHelper.Scalar.WithinEpsilon(x.Coordinates.Y, y.Coordinates.Y, Epsilon))
                 {
                     return 0;
                 }

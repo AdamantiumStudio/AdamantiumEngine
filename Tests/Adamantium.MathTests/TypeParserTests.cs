@@ -24,7 +24,7 @@ public class TypeParserTests
     [TestCase("3,4")]
     public void AVector2_IsReadFromItsComponents(string text)
     {
-        Assert.That(TypeParser.Parse<Vector2>(text), Is.EqualTo(new Vector2(3, 4)));
+        Assert.That(TypeParser.Parse<Vector2<double>>(text), Is.EqualTo(new Vector2<double>(3, 4)));
     }
 
     [Test]

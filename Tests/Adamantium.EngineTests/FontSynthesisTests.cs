@@ -91,7 +91,7 @@ public class FontSynthesisTests
     {
         var font = Load("SourceSans3-Regular.ttf");
         var layout = new TextLayout(font.Typeface, font);
-        layout.ProcessText(text, Size, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, Size, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }

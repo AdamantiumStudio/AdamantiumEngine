@@ -12,7 +12,7 @@ public class BoxColliderMergeTests
     public void Merge_PlacesAPartWhereItStands()
     {
         var model = new Entity(null, "Model");
-        var part = PickScene.Box(model, "Part", new Vector3(10, 0, 0), 1);
+        var part = PickScene.Box(model, "Part", new Vector3<double>(10, 0, 0), 1);
 
         var bounds = MergeParts(model, part);
 
@@ -23,8 +23,8 @@ public class BoxColliderMergeTests
     public void Merge_SpansEveryPart()
     {
         var model = new Entity(null, "Model");
-        var left = PickScene.Box(model, "Left", new Vector3(-4, 0, 0), 1);
-        var right = PickScene.Box(model, "Right", new Vector3(4, 0, 0), 1);
+        var left = PickScene.Box(model, "Left", new Vector3<double>(-4, 0, 0), 1);
+        var right = PickScene.Box(model, "Right", new Vector3<double>(4, 0, 0), 1);
 
         var bounds = MergeParts(model, left, right);
 
@@ -35,9 +35,9 @@ public class BoxColliderMergeTests
     public void Merge_TurnsAndScalesAPartAsItIsPlaced()
     {
         var model = new Entity(null, "Model");
-        var part = PickScene.Box(model, "Part", new Vector3(0, 0, 5), 1);
+        var part = PickScene.Box(model, "Part", new Vector3<double>(0, 0, 5), 1);
         part.Transform.BaseScale = new Vector3F(2, 1, 1);
-        part.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(90));
+        part.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90));
 
         var bounds = MergeParts(model, part);
 
@@ -49,8 +49,8 @@ public class BoxColliderMergeTests
     {
         var model = new Entity(null, "Model");
         var node = new Entity(model, "Node");
-        node.Transform.Position = new Vector3(10, 0, 0);
-        var part = PickScene.Box(node, "Part", new Vector3(1, 0, 0), 1);
+        node.Transform.Position = new Vector3<double>(10, 0, 0);
+        var part = PickScene.Box(node, "Part", new Vector3<double>(1, 0, 0), 1);
 
         MergeParts(node, part);
         var bounds = MergeParts(model, node);
@@ -71,7 +71,7 @@ public class BoxColliderMergeTests
 
     private static void AssertBox(Bounds bounds, Vector3F center, Vector3F halfExtent)
     {
-        Assert.That(((Vector3F)bounds.Center - center).Length(), Is.LessThan(1e-4f), $"center {bounds.Center}");
-        Assert.That(((Vector3F)bounds.HalfExtent - halfExtent).Length(), Is.LessThan(1e-4f), $"half extent {bounds.HalfExtent}");
+        Assert.That((bounds.Center.As<float>() - center).Length(), Is.LessThan(1e-4f), $"center {bounds.Center}");
+        Assert.That((bounds.HalfExtent.As<float>() - halfExtent).Length(), Is.LessThan(1e-4f), $"half extent {bounds.HalfExtent}");
     }
 }

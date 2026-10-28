@@ -23,18 +23,18 @@ public class DirectionalLightVisualTemplate : LightVisualTemplate
 
     public override Entity BuildEntity(Entity owner, string name)
     {
-        List<Vector3> points = [];
+        List<Vector3<double>> points = [];
         List<int> indices = [];
         for (int i = 0; i < Rays; i++)
         {
-            var start = new Vector3((i - (Rays - 1) / 2f) * Spacing, 0, 0) + Vector3.Down * Gap;
-            var tip = start + Vector3.Down * Length;
-            var back = tip - Vector3.Down * HeadLength;
+            var start = new Vector3<double>((i - (Rays - 1) / 2f) * Spacing, 0, 0) + Vector3<double>.Down * Gap;
+            var tip = start + Vector3<double>.Down * Length;
+            var back = tip - Vector3<double>.Down * HeadLength;
             var first = points.Count;
             points.Add(start);
             points.Add(tip);
-            points.Add(back - Vector3.UnitX * HeadHalfWidth);
-            points.Add(back + Vector3.UnitX * HeadHalfWidth);
+            points.Add(back - Vector3<double>.UnitX * HeadHalfWidth);
+            points.Add(back + Vector3<double>.UnitX * HeadHalfWidth);
             indices.AddRange([first, first + 1, -1, first + 2, first + 1, first + 3, -1]);
         }
 

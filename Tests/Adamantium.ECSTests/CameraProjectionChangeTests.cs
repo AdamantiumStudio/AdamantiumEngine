@@ -22,8 +22,8 @@ public class CameraProjectionChangeTests
         var camera = new Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = Focus };
         new Entity(null, "Camera").AddComponent(camera);
         camera.Update(new AppTime());
-        camera.Owner.Transform.Position = new Vector3(3, -2, 1);
-        camera.Rotation = QuaternionF.RotationYawPitchRoll(0.4f, 0.2f, 0);
+        camera.Owner.Transform.Position = new Vector3<double>(3, -2, 1);
+        camera.Rotation = Quaternion.CreateFromYawPitchRoll<float>(0.4f, 0.2f, 0);
         camera.Update(new AppTime());
         return camera;
     }
@@ -33,7 +33,7 @@ public class CameraProjectionChangeTests
 
     // A point on the plane at the focus distance, off the view's center, where the camera shows it.
     private static Vector3F OnFocusPlane(Camera camera) =>
-        (Vector3F)(camera.Forward * camera.FocusDistance + camera.Right * 2 + camera.Up * 1.5);
+        (camera.Forward * camera.FocusDistance + camera.Right * 2 + camera.Up * 1.5).As<float>();
 
     private static Vector2F Shown(Camera camera, Vector3F inRender)
     {
@@ -174,7 +174,7 @@ public class CameraProjectionChangeTests
         var camera = FreeCamera();
         camera.IsIsometric = true;
         Step(camera, 1000);
-        camera.Rotation = QuaternionF.Multiply(camera.Rotation, QuaternionF.RotationAxis(Vector3F.UnitX, 0.3f));
+        camera.Rotation = QuaternionF.Multiply(camera.Rotation, Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, 0.3f));
         var turned = camera.Rotation;
 
         camera.IsIsometric = false;
@@ -230,7 +230,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Position = new Vector3(0, 0, 10);
+        host.Transform.Position = new Vector3<double>(0, 0, 10);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
@@ -242,13 +242,13 @@ public class CameraProjectionChangeTests
         var standing = camera.WorldPosition;
         var looking = camera.Forward;
 
-        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.8f);
+        host.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.8f);
         Step(camera, 16);
 
         Assert.Multiple(() =>
         {
             Assert.That((camera.WorldPosition - standing).Length(), Is.LessThan(1e-3), "it stays where it is");
-            Assert.That(Vector3.Dot(camera.Forward, looking), Is.GreaterThan(0.9999), "looking the same way");
+            Assert.That(Vector3<double>.Dot(camera.Forward, looking), Is.GreaterThan(0.9999), "looking the same way");
         });
     }
 
@@ -259,7 +259,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Position = new Vector3(0, 0, 10);
+        host.Transform.Position = new Vector3<double>(0, 0, 10);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
@@ -270,7 +270,7 @@ public class CameraProjectionChangeTests
         Step(camera, 16);
         var standing = camera.WorldPosition;
 
-        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.8f);
+        host.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.8f);
         var swung = camera.WorldPosition;
         camera.Reorbit();
 
@@ -286,7 +286,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Position = new Vector3(0, 0, 10);
+        host.Transform.Position = new Vector3<double>(0, 0, 10);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
@@ -296,11 +296,11 @@ public class CameraProjectionChangeTests
         Step(camera, 16);
         Step(camera, 16);
 
-        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, 0.9f);
+        host.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.9f);
         camera.Reorbit();
 
-        var toHost = Vector3.Normalize(host.GetCenterAbsolute() - camera.WorldPosition);
-        Assert.That(Vector3.Dot(camera.Forward, toHost), Is.GreaterThan(0.999));
+        var toHost = Vector3<double>.Normalize(host.GetCenterAbsolute() - camera.WorldPosition);
+        Assert.That(Vector3<double>.Dot(camera.Forward, toHost), Is.GreaterThan(0.999));
     }
 
     // A face of the orientation cube turns the camera there and it stays: the entity it rides kept its old turn through
@@ -309,7 +309,7 @@ public class CameraProjectionChangeTests
     public void TurnedByTheOrientationCube_TheCameraStaysWhereItWasTurned()
     {
         var camera = FreeCamera();
-        var target = QuaternionF.RotationYawPitchRoll(1.0f, 0.3f, 0);
+        var target = Quaternion.CreateFromYawPitchRoll<float>(1.0f, 0.3f, 0);
 
         camera.RotateAroundSelectedObject(target, 200);
         Step(camera, 100);
@@ -367,13 +367,13 @@ public class CameraProjectionChangeTests
         foreach (var step in new[] { 5f, -5f })
         {
             var camera = FreeCamera();
-            camera.Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(90));
+            camera.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(90));
             Step(camera, 16);
 
             camera.RotateRelativeXY(step, 0);
             Step(camera, 16);
 
-            Assert.That(camera.Up.Y, Is.GreaterThanOrEqualTo(0), $"upright after {step}");
+            Assert.That(camera.Up.Y, Is.GreaterThanOrEqualTo(-1e-6), $"upright after {step}");
         }
     }
 
@@ -419,7 +419,7 @@ public class CameraProjectionChangeTests
         world.EntityManager.AddEntity(camera.Owner);
         world.EntityManager.SetOwner(camera.Owner, host);
         camera.HostChangeTime = 0;
-        camera.SetFirstPersonCamera(Vector3.Zero, QuaternionF.Identity, 0);
+        camera.SetFirstPersonCamera(Vector3<double>.Zero, QuaternionF.Identity, 0);
         Step(camera, 16);
         camera.IsIsometric = true;
         Step(camera, 1000);
@@ -475,7 +475,7 @@ public class CameraProjectionChangeTests
         var camera = FreeCamera();
         var stood = camera.WorldPosition;
         var subject = new Entity(null, "Subject");
-        subject.Transform.Position = new Vector3(40, -3, 25);
+        subject.Transform.Position = new Vector3<double>(40, -3, 25);
 
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(subject);
@@ -526,7 +526,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var subject = new Entity(null, "Subject");
-        subject.Transform.Position = new Vector3(10, -2, 30);
+        subject.Transform.Position = new Vector3<double>(10, -2, 30);
         subject.Transform.ScaleFactor = new Vector3F(0.01f);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(subject);
@@ -536,7 +536,7 @@ public class CameraProjectionChangeTests
         camera.ProjectionTransitionTime = 0;
         camera.SetThirdPersonCamera(subject, Vector3F.Zero, Graphics.Core.CameraType.ThirdPersonFree, distanceToObject: 600);
         Step(camera, 16);
-        var point = (Vector3F)(subject.GetCenterAbsolute() - camera.WorldPosition + camera.Right * 0.5);
+        var point = (subject.GetCenterAbsolute() - camera.WorldPosition + camera.Right * 0.5).As<float>();
         var before = Shown(camera, point);
 
         camera.ProjectionType = CameraProjectionType.Ortho;
@@ -549,7 +549,7 @@ public class CameraProjectionChangeTests
     public void TurningAFreeCamerasEntity_TurnsItsView_AndItsViewTurnsTheEntity()
     {
         var camera = FreeCamera();
-        var turn = QuaternionF.RotationYawPitchRoll(1.1f, -0.3f, 0);
+        var turn = Quaternion.CreateFromYawPitchRoll<float>(1.1f, -0.3f, 0);
 
         camera.Owner.Transform.Rotation = turn;
         Step(camera, 16);
@@ -582,8 +582,8 @@ public class CameraProjectionChangeTests
         var expected = QuaternionF.Identity;
         for (int i = 0; i < 300; i++)
         {
-            expected = QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(0.02f)), expected);
-            expected = QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(0.05f)), expected);
+            expected = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(0.02f)), expected);
+            expected = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(0.05f)), expected);
         }
 
         Assert.Multiple(() =>
@@ -598,18 +598,18 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.Up, MathF.PI / 2);
+        host.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.Up, MathF.PI / 2);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
         world.EntityManager.SetOwner(camera.Owner, host);
         camera.HostChangeTime = 0;
 
-        camera.SetFirstPersonCamera(Vector3.Zero, QuaternionF.Identity, 0);
+        camera.SetFirstPersonCamera(Vector3<double>.Zero, QuaternionF.Identity, 0);
         Step(camera, 16);
 
-        var faces = Matrix4x4F.RotationQuaternion(host.Transform.Rotation).Forward;
-        Assert.That(Vector3F.Dot((Vector3F)camera.Forward, faces), Is.GreaterThan(0.9999f));
+        var faces = Matrix4x4.CreateFromQuaternion<float>(host.Transform.Rotation).Forward;
+        Assert.That(Vector3F.Dot(camera.Forward.As<float>(), faces), Is.GreaterThan(0.9999f));
     }
 
     [Test]

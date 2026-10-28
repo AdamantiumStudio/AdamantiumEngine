@@ -33,7 +33,7 @@ public class BaselineAlignmentTests
         }
 
         attributed.Apply(start, length, attributes);
-        layout.ProcessText(attributed, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -105,9 +105,9 @@ public class BaselineAlignmentTests
         attributed.Apply(3, 1, new TextAttributes { FontSize = 40 });
         attributed.Apply(2, 1, new TextAttributes
         {
-            ObjectSize = new Size(10, 12), BaselineAlignment = BaselineAlignment.Top,
+            ObjectSize = new Size<double>(10, 12), BaselineAlignment = BaselineAlignment.Top,
         });
-        layout.ProcessText(attributed, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetInlineObjects().Single().Rect.Y, Is.EqualTo(layout.GetLine(0).Top).Within(1));
@@ -126,7 +126,7 @@ public class BaselineAlignmentTests
             };
             var attributed = new AttributedText("漢字");
             attributed.Apply(1, 1, new TextAttributes { FontSize = Small, BaselineAlignment = alignment });
-            layout.ProcessText(attributed, FontSize, new Size(double.NaN, 200), TextWrapping.WrapByWords,
+            layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, 200), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -152,7 +152,7 @@ public class BaselineAlignmentTests
             var attributed = new AttributedText("a\tbW");
             attributed.Apply(3, 1, new TextAttributes { FontSize = 40 });
             attributed.Apply(1, 1, new TextAttributes { BaselineAlignment = alignment });
-            layout.ProcessText(attributed, FontSize, new Size(double.NaN, double.NaN), TextWrapping.WrapByWords,
+            layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }

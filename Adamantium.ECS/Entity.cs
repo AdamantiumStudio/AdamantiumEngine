@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Adamantium.Core;
 using Adamantium.Core.Collections;
 using Adamantium.ECS.Components;
@@ -47,6 +48,7 @@ namespace Adamantium.ECS
         }
 
         private Entity owner;
+        private EntityWorld world;
         private readonly UInt128 uid;
         private UInt128 rootUid;
         private readonly TrackingCollection<Entity> dependencies;
@@ -101,10 +103,38 @@ namespace Adamantium.ECS
             internal set
             {
                 if (owner == value) return;
+                var before = World;
                 OnOwnerChanged(owner, value);
                 owner = value;
                 rootUid = GetRoot().rootUid;
+                before?.Changed(UniverseChangedEventArgs.OneFrame);
+                if (World != before)
+                {
+                    NotifyUpdated();
+                }
             }
+        }
+
+        /// <summary>The world this entity is part of: its root's, once the root is added to one; null outside any.
+        /// </summary>
+        public EntityWorld World => owner != null ? owner.World : world;
+
+        internal void SetWorld(EntityWorld value) => world = value;
+
+        /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>
+        public void NotifyUpdated() => World?.Changed(UniverseChangedEventArgs.OneFrame);
+
+        /// <summary>Tells <see cref="World"/> that what it shows has changed, for the next <paramref name="frames"/>
+        /// frames.</summary>
+        public void NotifyUpdated(int frames) => World?.Changed(new UniverseChangedEventArgs(frames));
+
+        /// <summary>Tells <see cref="World"/> that what it shows keeps changing for <paramref name="duration"/>.</summary>
+        public void NotifyUpdated(TimeSpan duration) => World?.Changed(new UniverseChangedEventArgs(duration));
+
+        protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
+        {
+            base.RaisePropertyChanged(propertyName);
+            NotifyUpdated();
         }
 
         private void OnOwnerChanged(Entity oldOwner, Entity newOwner)
@@ -294,6 +324,7 @@ namespace Adamantium.ECS
         internal void OnComponentChanged(IComponent oldComponent, IComponent newComponent, ComponentChangedAction action)
         {
             ComponentsChanged?.Invoke(this, new EntityComponentEventArgs(this, oldComponent, newComponent, action));
+            NotifyUpdated();
         }
 
         public event EventHandler<EntityComponentEventArgs> ComponentsChanged;

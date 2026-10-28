@@ -22,7 +22,7 @@ public class TabStopLayoutTests
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, TabStops = stops };
-        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -109,7 +109,7 @@ public class TabStopLayoutTests
             LineBreaking = breaking,
             OpticalMarginAlignment = optical,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), wrapping, trimming, alignment, VerticalTextAlignment.Top);
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), wrapping, trimming, alignment, VerticalTextAlignment.Top);
         return layout;
     }
 
@@ -248,10 +248,10 @@ public class TabStopLayoutTests
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, TabStops = [new TabStop(100)] };
-        layout.ProcessText("a\tb", FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("a\tb", FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         layout.TabStops = [new TabStop(150)];
-        layout.ProcessText("a\tb", FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("a\tb", FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(At(layout, 2).PenX, Is.EqualTo(150).Within(1e-3));
@@ -268,7 +268,7 @@ public class TabStopLayoutTests
         {
             Fallback = null, TabStops = [new TabStop(300)], LineBreaking = LineBreaking.Paragraph,
         };
-        layout.ProcessText(text, FontSize, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         var space = typeface.Fonts[0].GetAdvanceWidth(typeface.Fonts[0].GetGlyphByCharacter(' ').Index) * FontSize
                     / typeface.Fonts[0].UnitsPerEm;

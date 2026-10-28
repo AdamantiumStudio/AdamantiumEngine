@@ -54,7 +54,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
 
             // Static array defines the control point positions that make up the teapot.
-            private static readonly Vector3[] TeapotControlPoints = {
+            private static readonly Vector3<double>[] TeapotControlPoints = {
                     new (0, 0.345f, -0.05f),
                     new (-0.028f, 0.345f, -0.05f),
                     new (-0.05f, 0.345f, -0.028f),
@@ -188,17 +188,17 @@ namespace Adamantium.ProceduralGeometry.Shapes
             // Tessellates the specified bezier patch.
             private static void TessellatePatch(
                 GeometryType geometryType,
-                List<Vector3> vertices,
+                List<Vector3<double>> vertices,
                 List<Vector3F> normals,
                 List<Vector2F> uvs,
                 List<int> indices,
                 ref TeapotPatch patch,
                 int tessellation, 
-                Vector3 scale, 
+                Vector3<double> scale, 
                 bool isMirrored)
             {
                 // Look up the 16 control points for this patch.
-                var controlPoints = new Vector3[16];
+                var controlPoints = new Vector3<double>[16];
 
                 for (int i = 0; i < 16; i++)
                 {
@@ -223,19 +223,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 GeometryType geometryType,
                 double size = 1.0,
                 int tessellation = 8,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
-                return GenerateGeometry(geometryType, new Vector3(size), tessellation, transform);
+                return GenerateGeometry(geometryType, new Vector3<double>(size), tessellation, transform);
             }
 
             /// <summary>The teapot scaled by <paramref name="size"/> along each axis.</summary>
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
-                Vector3 size,
+                Vector3<double> size,
                 int tessellation = 8,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var normals = new List<Vector3F>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
@@ -245,12 +245,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 // The control points stand along +Y; up is -Y, so y turns over, and z with it to keep the patches'
                 // winding.
-                var scaleVector = new Vector3(size.X, -size.Y, -size.Z);
+                var scaleVector = new Vector3<double>(size.X, -size.Y, -size.Z);
                 var scaleNegateX = scaleVector;
                 scaleNegateX.X = -scaleNegateX.X;
                 var scaleNegateZ = scaleVector;
                 scaleNegateZ.Z = -scaleNegateZ.Z;
-                var scaleNegateXZ = new Vector3(-size.X, -size.Y, size.Z);
+                var scaleNegateXZ = new Vector3<double>(-size.X, -size.Y, size.Z);
 
                 for (int i = 0; i < TeapotPatches.Length; i++)
                 {
@@ -294,7 +294,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             // returning the value at the specified time (t ranges 0 to 1).
             // This template implementation can be used to interpolate Vector3F,
             // float, or any other types that define suitable * and + operators.
-            public static Vector3 CubicInterpolate(ref Vector3 p1, ref Vector3 p2, ref Vector3 p3, ref Vector3 p4, float t)
+            public static Vector3<double> CubicInterpolate(ref Vector3<double> p1, ref Vector3<double> p2, ref Vector3<double> p3, ref Vector3<double> p4, float t)
             {
                 var t2 = t * t;
                 var onet2 = (1 - t) * (1 - t);
@@ -307,7 +307,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             // Computes the tangent of a cubic bezier curve at the specified time.
             // Template supports Vector3F, float, or any other types with * and + operators.
-            private static Vector3 CubicTangent(ref Vector3 p1, ref Vector3 p2, ref Vector3 p3, ref Vector3 p4, float t)
+            private static Vector3<double> CubicTangent(ref Vector3<double> p1, ref Vector3<double> p2, ref Vector3<double> p3, ref Vector3<double> p4, float t)
             {
                 var t2 = t * t;
                 return p1 * (-1 + 2 * t - t2) +
@@ -319,7 +319,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             // Creates vertices for a patch that is tessellated at the specified level.
             // Calls the specified outputVertex function for each generated vertex,
             // passing the position, normal, and texture coordinate as parameters.
-            private static void CreatePatchVertices(Vector3[] patch, int tessellation, bool isMirrored, List<Vector3> positions,
+            private static void CreatePatchVertices(Vector3<double>[] patch, int tessellation, bool isMirrored, List<Vector3<double>> positions,
                 List<Vector3F> normals, List<Vector2F> uvs)
             {
                 var first = positions.Count;
@@ -345,7 +345,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         // The classic teapot is not tidy: at its top and bottom a patch has several control points
                         // in one place, where the tangents vanish. The normal is taken a step inside the patch there.
                         var normal = SurfaceNormal(patch, u, v);
-                        if (Vector3.NearEqual(normal, Vector3.Zero, new Vector3(1e-7f)))
+                        if (Vector3<double>.NearEqual(normal, Vector3<double>.Zero, new Vector3<double>(1e-7f)))
                         {
                             normal = SurfaceNormal(patch, u < 0.5f ? u + 0.01f : u - 0.01f, v < 0.5f ? v + 0.01f : v - 0.01f);
                         }
@@ -363,7 +363,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                         // Output this vertex.
                         positions.Add(position);
-                        normals.Add((Vector3F)normal);
+                        normals.Add(normal.As<float>());
                         uvs.Add(new Vector2F(mirroredU, v));
                     }
                 }
@@ -377,7 +377,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 }
             }
 
-            private static Vector3 SurfaceNormal(Vector3[] patch, float u, float v)
+            private static Vector3<double> SurfaceNormal(Vector3<double>[] patch, float u, float v)
             {
                 var p1 = CubicInterpolate(ref patch[0], ref patch[1], ref patch[2], ref patch[3], u);
                 var p2 = CubicInterpolate(ref patch[4], ref patch[5], ref patch[6], ref patch[7], u);
@@ -387,10 +387,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var q2 = CubicInterpolate(ref patch[1], ref patch[5], ref patch[9], ref patch[13], v);
                 var q3 = CubicInterpolate(ref patch[2], ref patch[6], ref patch[10], ref patch[14], v);
                 var q4 = CubicInterpolate(ref patch[3], ref patch[7], ref patch[11], ref patch[15], v);
-                return Vector3.Cross(CubicTangent(ref p1, ref p2, ref p3, ref p4, v), CubicTangent(ref q1, ref q2, ref q3, ref q4, u));
+                return Vector3<double>.Cross(CubicTangent(ref p1, ref p2, ref p3, ref p4, v), CubicTangent(ref q1, ref q2, ref q3, ref q4, u));
             }
 
-            private static Vector3 PatchPoint(Vector3[] patch, float u, float v)
+            private static Vector3<double> PatchPoint(Vector3<double>[] patch, float u, float v)
             {
                 var p1 = CubicInterpolate(ref patch[0], ref patch[1], ref patch[2], ref patch[3], u);
                 var p2 = CubicInterpolate(ref patch[4], ref patch[5], ref patch[6], ref patch[7], u);
@@ -401,7 +401,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             private const int ReadingSamples = 16;
 
-            private static bool ReadsUp(Vector3[] patch, bool isMirrored)
+            private static bool ReadsUp(Vector3<double>[] patch, bool isMirrored)
             {
                 var rise = 0.0;
                 for (var i = 0; i <= ReadingSamples; i++)
@@ -412,12 +412,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         var v = (j + 0.5f) / ReadingSamples;
                         var along = PatchPoint(patch, u, v + 0.5f / ReadingSamples) - PatchPoint(patch, u, v - 0.5f / ReadingSamples);
                         var at = PatchPoint(patch, u, v);
-                        var radial = new Vector3(at.X, 0, at.Z);
+                        var radial = new Vector3<double>(at.X, 0, at.Z);
                         var normal = SurfaceNormal(patch, u, v);
                         if (along.LengthSquared() < 1e-12 || radial.LengthSquared() < 1e-12 || normal.LengthSquared() < 1e-12) continue;
 
                         if (isMirrored) normal = -normal;
-                        var facing = Math.Max(0, Vector3.Dot(Vector3.Normalize(normal), Vector3.Normalize(radial)));
+                        var facing = Math.Max(0, Vector3<double>.Dot(Vector3<double>.Normalize(normal), Vector3<double>.Normalize(radial)));
                         rise += facing * along.Y / along.Length();
                     }
                 }

@@ -1,17 +1,7 @@
 using System;
 using Adamantium.Mathematics;
-using Adamantium.Mathematics.Typed;
 using NUnit.Framework;
-using BoundingBox = Adamantium.Mathematics.Typed.BoundingBox;
-using BoundingFrustum = Adamantium.Mathematics.Typed.BoundingFrustum;
-using BoundingSphere = Adamantium.Mathematics.Typed.BoundingSphere;
-using Matrix4x4 = Adamantium.Mathematics.Typed.Matrix4x4;
-using OrientedBoundingBox = Adamantium.Mathematics.Typed.OrientedBoundingBox;
-using Plane = Adamantium.Mathematics.Typed.Plane;
-using Quaternion = Adamantium.Mathematics.Typed.Quaternion;
-using Ray = Adamantium.Mathematics.Typed.Ray;
-using Vector3 = Adamantium.Mathematics.Typed.Vector3;
-using Vector3D = Adamantium.Mathematics.Typed.Vector3<double>;
+using Vector3D = Adamantium.Mathematics.Vector3<double>;
 
 namespace Adamantium.MathTests;
 
@@ -103,8 +93,8 @@ public class TypedOrientedBoxTests
         {
             var (first, second) = (RandomBox(random, 0.4), RandomBox(random, 0.4));
             var verdict = first.Contains(second);
-            var grown = Gjk.Intersects(new Shape(Scaled(first, 1 + 1e-3)), new Shape(Scaled(second, 1 + 1e-3)));
-            var shrunk = Gjk.Intersects(new Shape(Scaled(first, 1 - 1e-3)), new Shape(Scaled(second, 1 - 1e-3)));
+            var grown = Gjk.Intersects(Scaled(first, 1 + 1e-3).As<float>(), Scaled(second, 1 + 1e-3).As<float>());
+            var shrunk = Gjk.Intersects(Scaled(first, 1 - 1e-3).As<float>(), Scaled(second, 1 - 1e-3).As<float>());
             if (grown == shrunk)
             {
                 compared++;
@@ -393,13 +383,4 @@ public class TypedOrientedBoxTests
 
     private static Vector4<double> Row(Random random) =>
         new(random.NextDouble() * 4 - 2, random.NextDouble() * 4 - 2, random.NextDouble() * 4 - 2, 0);
-
-    private sealed class Shape(OrientedBoundingBox<double> box) : IConvexShape
-    {
-        public Vector3F Support(Vector3F direction)
-        {
-            var point = box.Support(Vector3.Create(direction.X, direction.Y, direction.Z).As<double>());
-            return new Vector3F((float)point.X, (float)point.Y, (float)point.Z);
-        }
-    }
 }

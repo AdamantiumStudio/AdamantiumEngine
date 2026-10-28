@@ -1,6 +1,5 @@
 using System;
-using Adamantium.Mathematics.Typed;
-using OrientedBoundingBox = Adamantium.Mathematics.Typed.OrientedBoundingBox;
+using Adamantium.Mathematics;
 
 namespace Adamantium.MathTests.Golden;
 

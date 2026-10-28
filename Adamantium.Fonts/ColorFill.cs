@@ -9,7 +9,7 @@ namespace Adamantium.Fonts;
 /// </summary>
 public sealed class ColorFill
 {
-    public ColorFill(ColorFillKind kind, IReadOnlyList<ColorStop> stops, ColorExtend extend, Matrix3x2 transform)
+    public ColorFill(ColorFillKind kind, IReadOnlyList<ColorStop> stops, ColorExtend extend, Matrix3x2<double> transform)
     {
         Kind = kind;
         Stops = stops;
@@ -25,17 +25,17 @@ public sealed class ColorFill
     public ColorExtend Extend { get; }
 
     /// <summary>From the gradient's space into the glyph's.</summary>
-    public Matrix3x2 Transform { get; }
+    public Matrix3x2<double> Transform { get; }
 
     /// <summary>A linear gradient's start; a radial gradient's first circle's center; a sweep's center.</summary>
-    public Vector2 Point0 { get; internal set; }
+    public Vector2<double> Point0 { get; internal set; }
 
     /// <summary>A linear gradient's end; a radial gradient's second circle's center.</summary>
-    public Vector2 Point1 { get; internal set; }
+    public Vector2<double> Point1 { get; internal set; }
 
     /// <summary>A linear gradient's rotation point: the gradient runs along Point0 - Point1, perpendicular to
     /// Point0 - Point2.</summary>
-    public Vector2 Point2 { get; internal set; }
+    public Vector2<double> Point2 { get; internal set; }
 
     /// <summary>A radial gradient's first circle's radius.</summary>
     public double Radius0 { get; internal set; }

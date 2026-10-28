@@ -29,7 +29,7 @@ public class SegmentGridTests
             {
                 for (var x = bounds.X - 100.0; x <= bounds.Right + 100; x += 7.3)
                 {
-                    var point = new Vector2(x, y);
+                    var point = new Vector2<double>(x, y);
                     search.FindNearest(point, found);
 
                     for (var channel = 0; channel < SegmentGrid.ChannelCount; channel++)
@@ -43,7 +43,7 @@ public class SegmentGridTests
         }
     }
 
-    private static List<LineSegment2D> Nearest(List<LineSegment2D> segments, Vector2 point)
+    private static List<LineSegment2D> Nearest(List<LineSegment2D> segments, Vector2<double> point)
     {
         var best = double.MaxValue;
         var nearest = new List<LineSegment2D>();
@@ -77,7 +77,7 @@ public class SegmentGridTests
             Segment(1200, 710, 600, 110),
             Segment(600, 110, 0, 710),
         ];
-        var point = new Vector2(1342.1052631578946, 852.1052631578948);
+        var point = new Vector2<double>(1342.1052631578946, 852.1052631578948);
         List<LineSegment2D>[] found = [[], [], [], []];
 
         new SegmentSearch(new SegmentGrid(diamond, [15, 15, 15, 15])).FindNearest(point, found);
@@ -88,5 +88,5 @@ public class SegmentGridTests
     }
 
     private static LineSegment2D Segment(double x0, double y0, double x1, double y1) =>
-        new(new Vector2(x0, y0), new Vector2(x1, y1));
+        new(new Vector2<double>(x0, y0), new Vector2<double>(x1, y1));
 }

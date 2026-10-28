@@ -15,21 +15,21 @@ namespace Adamantium.Fonts.Common
         {
             var newSeg = new LineSegment2D(current.End, current.Start);
 
-            return MathHelper.DetermineAngleInDegrees(newSeg.Start, newSeg.End, next.Start, next.End);
+            return double.RadiansToDegrees(Math.Abs(MathHelper.Angle.Between(newSeg.End - newSeg.Start, next.End - next.Start)));
         }
         
-        public static double GetDistanceToSegment(LineSegment2D segment, Vector2 point)
+        public static double GetDistanceToSegment(LineSegment2D segment, Vector2<double> point)
         {
             return point.DistanceToPoint(segment.Start, segment.End);
         }
 
-        public static double GetSignedDistanceToSegment(LineSegment2D segment, Vector2 point)
+        public static double GetSignedDistanceToSegment(LineSegment2D segment, Vector2<double> point)
         {
             var distance = GetDistanceToSegment(segment, point);
 
             var startToPointVector = new LineSegment2D(segment.Start, point);
 
-            var cross = MathHelper.Cross2D(segment.DirectionNormalized, startToPointVector.DirectionNormalized);
+            var cross = Vector2<double>.Determinant(segment.DirectionNormalized, startToPointVector.DirectionNormalized);
 
             if (cross < 0)
             {
@@ -39,13 +39,13 @@ namespace Adamantium.Fonts.Common
             return distance;
         }
 
-        public static double GetSignedPseudoDistanceToSegment(LineSegment2D segment, Vector2 point)
+        public static double GetSignedPseudoDistanceToSegment(LineSegment2D segment, Vector2<double> point)
         {
-            var distance = MathHelper.PointToLineDistance(segment.Start, segment.End, point);
+            var distance = MathHelper.Polyline.DistanceToLine(segment.Start, segment.End, point);
 
             var startToPointVector = new LineSegment2D(segment.Start, point);
 
-            var cross = MathHelper.Cross2D(segment.DirectionNormalized, startToPointVector.DirectionNormalized);
+            var cross = Vector2<double>.Determinant(segment.DirectionNormalized, startToPointVector.DirectionNormalized);
 
             if (cross < 0)
             {
@@ -55,9 +55,9 @@ namespace Adamantium.Fonts.Common
             return distance;
         }
         
-        public static double GetSignedDistanceToSegmentsJoint(List<LineSegment2D> closestSegments, Vector2 point, bool pseudo)
+        public static double GetSignedDistanceToSegmentsJoint(List<LineSegment2D> closestSegments, Vector2<double> point, bool pseudo)
         {
-            Func<LineSegment2D, Vector2, double> SignedDistanceFunc = null;
+            Func<LineSegment2D, Vector2<double>, double> SignedDistanceFunc = null;
 
             if (pseudo)
             {
@@ -106,10 +106,10 @@ namespace Adamantium.Fonts.Common
             bisectionNormalized.Normalize();
 
             var jointToPoint = new LineSegment2D(first.End, point);
-            var bisectionCross = MathHelper.Cross2D(bisectionNormalized, jointToPoint.DirectionNormalized);
+            var bisectionCross = Vector2<double>.Determinant(bisectionNormalized, jointToPoint.DirectionNormalized);
 
             var firstToBisection = new LineSegment2D(revertedFirst.DirectionNormalized, bisectionNormalized);
-            var firstCross = MathHelper.Cross2D(first.DirectionNormalized, firstToBisection.DirectionNormalized);
+            var firstCross = Vector2<double>.Determinant(first.DirectionNormalized, firstToBisection.DirectionNormalized);
 
             var isBisectionCrossNegative = (bisectionCross < 0);
             var isFirstCrossNegative = (firstCross < 0);

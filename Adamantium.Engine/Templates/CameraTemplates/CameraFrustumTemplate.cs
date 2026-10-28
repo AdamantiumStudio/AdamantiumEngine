@@ -21,7 +21,7 @@ public class CameraFrustumTemplate
     public Entity BuildEntity(Entity owner, string name, bool flat)
     {
         var start = flat ? 1f : 0f;
-        List<Vector3> points =
+        List<Vector3<double>> points =
         [
             new(-start, -start, 0), new(start, -start, 0), new(start, start, 0), new(-start, start, 0),
             new(-1, -1, 1), new(1, -1, 1), new(1, 1, 1), new(-1, 1, 1),

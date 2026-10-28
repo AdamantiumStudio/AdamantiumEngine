@@ -1,5 +1,5 @@
 using System.Numerics;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 
 namespace Adamantium.MathTests.Golden;
 
@@ -48,7 +48,7 @@ public sealed class GoldenInputs
 
     /// <summary>The next four numbers as a rectangle's left, top, right and bottom, as the float rectangle held them.</summary>
     public Rectangle<T> RectangleByCorners<T>() where T : unmanaged, INumber<T> =>
-        Adamantium.Mathematics.Typed.Rectangle.CreateFromCorners(Number<T>(), Number<T>(), Number<T>(), Number<T>());
+        Adamantium.Mathematics.Rectangle.CreateFromCorners(Number<T>(), Number<T>(), Number<T>(), Number<T>());
 
     /// <summary>The next four numbers as a thickness: left, top, right, bottom.</summary>
     public Adamantium.Mathematics.Thickness Thickness() =>

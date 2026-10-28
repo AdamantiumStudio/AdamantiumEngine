@@ -22,7 +22,7 @@ public class ScaleHandles : Handles
     private readonly Entity rightForward;
     private readonly Entity upForward;
     private readonly Entity central;
-    private Vector3 anchor;
+    private Vector3<double> anchor;
     private Vector3F startScale;
     private Vector3F direction;
     private Vector3F scaled;

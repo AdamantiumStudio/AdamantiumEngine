@@ -25,7 +25,7 @@ public class WindowedGlyphRunTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, LineHeight = 20 };
-        layout.ProcessText("gyp\nHlk\njqy", 40, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("gyp\nHlk\njqy", 40, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var middle = layout.GetLine(1);
         var inks = layout.GetTextData();
@@ -48,7 +48,7 @@ public class WindowedGlyphRunTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
-        layout.ProcessText("In short", 20, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("In short", 20, new Size<double>(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var below = layout.GetLine(0).Top + layout.GetLine(0).Height + 2;
         var cap = layout.GetTextData().Single(g => g.PositionInString == 0);
@@ -68,7 +68,7 @@ public class WindowedGlyphRunTests
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, DropCap = new DropCap(3) };
         layout.ProcessText("In olden times when wishing still helped one, there lived a king whose daughters were all beautiful",
-            20, new Size(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            20, new Size<double>(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
         var top = layout.GetLine(1).Top;
         var bottom = layout.GetLine(2).Top + layout.GetLine(2).Height;

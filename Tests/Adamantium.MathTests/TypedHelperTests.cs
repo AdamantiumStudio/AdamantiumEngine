@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using MathHelper = Adamantium.Mathematics.Typed.MathHelper;
-using OldHelper = Adamantium.Mathematics.MathHelper;
-using OldVector2 = Adamantium.Mathematics.Vector2;
-using Vector2D = Adamantium.Mathematics.Typed.Vector2<double>;
-using Vector3D = Adamantium.Mathematics.Typed.Vector3<double>;
+using Vector2D = Adamantium.Mathematics.Vector2<double>;
+using Vector3D = Adamantium.Mathematics.Vector3<double>;
 
 namespace Adamantium.MathTests;
 
@@ -34,23 +31,23 @@ public class TypedHelperTests
     }
 
     [Test]
-    public void PolylineLengthAndResample_AnswerAsTheOld()
+    public void PolylineLength_IsItsLegs_AndResampleStepsEvenlyAlongIt()
     {
         var random = new Random(9);
         for (var i = 0; i < 200; i++)
         {
             var points = Enumerable.Range(0, random.Next(2, 30)).Select(_ => new Vector2D(random.NextDouble() * 100, random.NextDouble() * 100)).ToArray();
-            var old = points.Select(p => new OldVector2(p.X, p.Y)).ToArray();
             var count = random.Next(2, 50);
             var resampled = new Vector2D[count];
+            var legs = points.Zip(points.Skip(1)).Sum(p => Vector2D.Distance(p.First, p.Second));
 
             MathHelper.Polyline.Resample(points, resampled);
-            var oldResampled = OldHelper.ResampleByArcLength(old, count);
 
-            Assert.That(MathHelper.Polyline.Length<double>(points), Is.EqualTo(OldHelper.PolylineLength(old)));
+            Assert.That(MathHelper.Polyline.Length<double>(points), Is.EqualTo(legs).Within(1e-12 * legs));
             for (var k = 0; k < count; k++)
             {
-                Assert.That(Vector2D.Distance(resampled[k], new Vector2D(oldResampled[k].X, oldResampled[k].Y)), Is.LessThan(1e-9), $"case {i}, point {k}");
+                var along = PointAlong(points, legs * k / (count - 1));
+                Assert.That(Vector2D.Distance(resampled[k], along), Is.LessThan(1e-9), $"case {i}, point {k}");
             }
         }
     }
@@ -124,42 +121,57 @@ public class TypedHelperTests
     }
 
     [Test]
-    public void QuadraticBSpline_AnswersAsTheOld_WhereTheOldStepIsExact()
+    public void QuadraticBSpline_IsTheUniformBSplineOfItsControls()
     {
         var random = new Random(4);
         foreach (var segments in new[] { 2, 4, 8, 256 })
         {
             var controls = Enumerable.Range(0, 7).Select(_ => new Vector2D(random.NextDouble() * 100, random.NextDouble() * 100)).ToArray();
+            var knots = Enumerable.Range(0, controls.Length + 3).Select(i => (double)i).ToArray();
             var curve = new List<Vector2D>();
 
             MathHelper.Curves.AppendQuadraticBSpline<double>(controls, segments, curve);
-            var old = OldHelper.GetBSpline2(controls.Select(p => new OldVector2(p.X, p.Y)), (uint)segments);
 
-            Assert.That(curve, Has.Count.EqualTo(old.Count).And.Count.EqualTo(5 * segments + 1));
-            Assert.That(curve.Zip(old).All(p => Vector2D.Distance(p.First, new Vector2D(p.Second.X, p.Second.Y)) < 1e-12), Is.True);
+            Assert.That(curve, Has.Count.EqualTo(5 * segments + 1));
+            for (var k = 0; k < curve.Count; k++)
+            {
+                var expected = RationalPoint(controls, [], 2, knots, 2 + (double)k / segments);
+                Assert.That(Vector2D.Distance(curve[k], expected), Is.LessThan(1e-12), $"{segments} segments, point {k}");
+            }
         }
     }
 
     [Test]
-    public void Nurbs_AnswersAsTheOld_AndReachesItsEnd([Values(true, false)] bool uniform)
+    public void Nurbs_FollowsCoxDeBoor_AndReachesItsEnd([Values(true, false)] bool uniform)
     {
         var random = new Random(uniform ? 1 : 2);
         for (var degree = 1; degree <= 4; degree++)
         {
             var controls = Enumerable.Range(0, 8).Select(_ => new Vector2D(random.NextDouble() * 100, random.NextDouble() * 100)).ToArray();
             var weights = Enumerable.Range(0, 8).Select(_ => 0.5 + random.NextDouble() * 2).ToArray();
+            var last = controls.Length + degree;
+            var knots = Enumerable.Range(0, last + 1).Select(i =>
+                uniform ? (double)i / last : i <= degree ? 0 : i >= last - degree ? 1 : (double)(i - degree) / (last - 2 * degree)).ToArray();
             var curve = new List<Vector2D>();
 
             MathHelper.Curves.AppendNurbs<double>(controls, weights, degree, uniform, 256, curve);
-            var old = OldHelper.GetNurbsCurve(controls.Select(p => new OldVector2(p.X, p.Y)), weights, degree, uniform, 1.0 / 256);
 
-            Assert.That(curve.Count - old.Length, Is.InRange(0, 1), "the old stopped short of the parameter's end");
-            Assert.That(curve.Zip(old).All(p => Vector2D.Distance(p.First, new Vector2D(p.Second.X, p.Second.Y)) < 1e-9), Is.True);
+            var expected = 0;
+            foreach (var point in curve)
+            {
+                while (expected <= 256 && Vector2D.Distance(point, RationalPoint(controls, weights, degree, knots, expected / 256.0)) >= 1e-9)
+                {
+                    expected++;
+                }
+
+                Assert.That(expected, Is.LessThanOrEqualTo(256), $"degree {degree}: {point} is not on the curve in order");
+            }
+
+            Assert.That(curve[0], Is.EqualTo(controls[0]));
             Assert.That(curve[^1], Is.EqualTo(controls[^1]));
             if (!uniform)
             {
-                Assert.That(curve[0], Is.EqualTo(controls[0]));
-                Assert.That(curve, Has.Count.EqualTo(old.Length + 1));
+                Assert.That(curve, Has.Count.EqualTo(257));
             }
         }
     }
@@ -190,5 +202,58 @@ public class TypedHelperTests
         var half = new List<Vector2D>();
         MathHelper.Curves.AppendArc(start, end, 1.0, clockwise, 0.05, half);
         Assert.That(half.All(p => Math.Abs(Vector2D.Distance(p, new Vector2D(5, 0)) - 5) < 1e-12), Is.True, "a radius too short is half the chord");
+    }
+
+    private static Vector2D PointAlong(Vector2D[] points, double distance)
+    {
+        for (var i = 1; i < points.Length; i++)
+        {
+            var leg = Vector2D.Distance(points[i - 1], points[i]);
+            if (distance <= leg && leg > 0)
+            {
+                return Vector2D.Lerp(points[i - 1], points[i], distance / leg);
+            }
+
+            distance -= leg;
+        }
+
+        return points[^1];
+    }
+
+    private static Vector2D RationalPoint(Vector2D[] controls, double[] weights, int degree, double[] knots, double t)
+    {
+        if (t == knots[0])
+        {
+            return controls[0];
+        }
+
+        if (t == knots[^1])
+        {
+            return controls[^1];
+        }
+
+        var (sum, total) = (Vector2D.Zero, 0.0);
+        for (var i = 0; i < controls.Length; i++)
+        {
+            var pull = CoxDeBoor(i, degree, knots, t) * (i < weights.Length ? weights[i] : 1);
+            sum += pull * controls[i];
+            total += pull;
+        }
+
+        return sum / total;
+    }
+
+    private static double CoxDeBoor(int i, int degree, double[] knots, double t)
+    {
+        if (degree == 0)
+        {
+            return knots[i] <= t && t < knots[i + 1] ? 1 : 0;
+        }
+
+        var left = knots[i + degree] > knots[i] ? (t - knots[i]) / (knots[i + degree] - knots[i]) * CoxDeBoor(i, degree - 1, knots, t) : 0;
+        var right = knots[i + degree + 1] > knots[i + 1]
+            ? (knots[i + degree + 1] - t) / (knots[i + degree + 1] - knots[i + 1]) * CoxDeBoor(i + 1, degree - 1, knots, t)
+            : 0;
+        return left + right;
     }
 }

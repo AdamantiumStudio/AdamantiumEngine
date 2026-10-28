@@ -15,7 +15,7 @@ public class InlineObjectTests
 {
     private const char Object = (char)0xFFFC;
 
-    private static TextLayout Lay(string text, Size? size, double shift = 0, double width = double.NaN,
+    private static TextLayout Lay(string text, Size<double>? size, double shift = 0, double width = double.NaN,
         HorizontalTextAlignment alignment = HorizontalTextAlignment.Left, double height = double.NaN,
         VerticalTextAlignment vertical = VerticalTextAlignment.Top, Action<TextLayout> setUp = null)
     {
@@ -30,7 +30,7 @@ public class InlineObjectTests
             attributed.Apply(index, 1, new TextAttributes { ObjectSize = size, BaselineShift = shift });
         }
 
-        layout.ProcessText(attributed, 20, new Size(width, height), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, 20, new Size<double>(width, height), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, vertical);
         return layout;
     }
@@ -41,8 +41,8 @@ public class InlineObjectTests
     [Test]
     public void ItAdvancesTheLine_ByItsWidth()
     {
-        var narrow = Lay("ab" + Object + "cd", new Size(10, 10));
-        var wide = Lay("ab" + Object + "cd", new Size(40, 10));
+        var narrow = Lay("ab" + Object + "cd", new Size<double>(10, 10));
+        var wide = Lay("ab" + Object + "cd", new Size<double>(40, 10));
 
         Assert.That(LeftOf(wide, 3) - LeftOf(narrow, 3), Is.EqualTo(30).Within(1e-3));
         Assert.That(wide.GetInlineObjects().Single().Rect.Width, Is.EqualTo(40).Within(1e-3));
@@ -52,7 +52,7 @@ public class InlineObjectTests
     public void ItStandsOnTheBaseline_ASmallOneLeavesTheLineAsItIs()
     {
         var plain = Lay("ab cd", null);
-        var layout = Lay("ab" + Object + "cd", new Size(12, 8));
+        var layout = Lay("ab" + Object + "cd", new Size<double>(12, 8));
         var placed = layout.GetInlineObjects().Single();
 
         Assert.That(placed.Index, Is.EqualTo(2));
@@ -65,7 +65,7 @@ public class InlineObjectTests
     public void ATallOne_RaisesItsLine()
     {
         var plain = Lay("ab cd\nef", null);
-        var layout = Lay("ab" + Object + "cd\nef", new Size(12, 60));
+        var layout = Lay("ab" + Object + "cd\nef", new Size<double>(12, 60));
         var placed = layout.GetInlineObjects().Single();
 
         Assert.That(layout.GetLine(0).Height, Is.GreaterThan(60));
@@ -80,8 +80,8 @@ public class InlineObjectTests
     [Test]
     public void ABaselineShift_RaisesIt()
     {
-        var plain = Lay("ab" + Object + "cd", new Size(12, 8));
-        var raised = Lay("ab" + Object + "cd", new Size(12, 8), 5);
+        var plain = Lay("ab" + Object + "cd", new Size<double>(12, 8));
+        var raised = Lay("ab" + Object + "cd", new Size<double>(12, 8), 5);
 
         Assert.That(raised.GetInlineObjects().Single().Rect.Y,
             Is.EqualTo(plain.GetInlineObjects().Single().Rect.Y - 5).Within(1));
@@ -90,7 +90,7 @@ public class InlineObjectTests
     [Test]
     public void ItWraps_AsAWord()
     {
-        var layout = Lay("word " + Object + " word", new Size(50, 10), width: 70);
+        var layout = Lay("word " + Object + " word", new Size<double>(50, 10), width: 70);
         var placed = layout.GetInlineObjects().Single();
 
         Assert.That(placed.Rect.Y, Is.GreaterThanOrEqualTo(layout.GetLine(1).Top - 1e-3));
@@ -100,7 +100,7 @@ public class InlineObjectTests
     [Test]
     public void AlignedRight_ItsRightEdgeIsTheLines()
     {
-        var layout = Lay("ab" + Object, new Size(30, 10), width: 300, alignment: HorizontalTextAlignment.Right);
+        var layout = Lay("ab" + Object, new Size<double>(30, 10), width: 300, alignment: HorizontalTextAlignment.Right);
 
         Assert.That(layout.GetInlineObjects().Single().Rect.Right, Is.EqualTo(300).Within(0.5));
     }
@@ -108,7 +108,7 @@ public class InlineObjectTests
     [Test]
     public void CenteredDown_ATallOneIsCenteredWhole()
     {
-        var layout = Lay("ab" + Object, new Size(12, 60), height: 100, vertical: VerticalTextAlignment.Center);
+        var layout = Lay("ab" + Object, new Size<double>(12, 60), height: 100, vertical: VerticalTextAlignment.Center);
         var placed = layout.GetInlineObjects().Single();
 
         Assert.That(placed.Rect.Y, Is.GreaterThan(0), "not cut off at the top");
@@ -119,7 +119,7 @@ public class InlineObjectTests
     [TestCase(VerticalTextAlignment.Bottom)]
     public void ItsBottom_IsTheTextsBaseline_WhereverTheBlockStands(VerticalTextAlignment vertical)
     {
-        var layout = Lay("ab" + Object + "cd", new Size(12, 8), height: 101.3, vertical: vertical);
+        var layout = Lay("ab" + Object + "cd", new Size<double>(12, 8), height: 101.3, vertical: vertical);
 
         Assert.That(layout.GetInlineObjects().Single().Rect.Bottom, Is.EqualTo(layout.GetLine(0).Baseline).Within(1e-3));
     }
@@ -128,7 +128,7 @@ public class InlineObjectTests
     public void ADropCap_StopsBeforeIt()
     {
         const string text = "A￼ upon a time there lived a king whose daughters were all beautiful, but the youngest";
-        var layout = Lay(text, new Size(20, 10), width: 300, setUp: set => set.DropCap = new DropCap(3, 2));
+        var layout = Lay(text, new Size<double>(20, 10), width: 300, setUp: set => set.DropCap = new DropCap(3, 2));
 
         Assert.That(layout.GetInlineObjects().Select(placed => placed.Index), Is.EqualTo(new[] { 1 }));
     }
@@ -137,7 +137,7 @@ public class InlineObjectTests
     public void JustifiedWithGlyphScaling_ItKeepsItsWidthAndTheTextDoesNotRunIntoIt()
     {
         const string text = "aaa bbb ￼ ccc ddd eee fff ggg hhh iii jjj kkk lll mmm nnn ooo";
-        var layout = Lay(text, new Size(30, 10), width: 200, alignment: HorizontalTextAlignment.Justify,
+        var layout = Lay(text, new Size<double>(30, 10), width: 200, alignment: HorizontalTextAlignment.Justify,
             setUp: set => set.GlyphScaling = new SpacingRange(0.9, 1, 1.1));
         var placed = layout.GetInlineObjects().Single();
         var after = layout.GetTextData().Where(glyph => glyph.PositionInString > placed.Index
@@ -154,7 +154,7 @@ public class InlineObjectTests
     {
         var text = "ab" + Object + "cd";
         var plain = Lay("abcd", null, height: 200, setUp: set => set.WritingMode = WritingMode.VerticalRightToLeft);
-        var layout = Lay(text, new Size(60, 30), height: 200,
+        var layout = Lay(text, new Size<double>(60, 30), height: 200,
             setUp: set => set.WritingMode = WritingMode.VerticalRightToLeft);
         var placed = layout.GetInlineObjects().Single();
         var line = layout.GetRangeRects(0, text.Length).Single();
@@ -178,7 +178,7 @@ public class InlineObjectTests
     public void NoGlyphIsDrawnForIt()
     {
         var plain = Lay("ab", null);
-        var layout = Lay("ab" + Object, new Size(30, 10));
+        var layout = Lay("ab" + Object, new Size<double>(30, 10));
 
         Assert.That(layout.GetGlyphs().Count(), Is.EqualTo(plain.GetGlyphs().Count()));
     }

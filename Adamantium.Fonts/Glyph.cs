@@ -8,8 +8,8 @@ using Adamantium.Fonts.Parsers.CFF;
 using Adamantium.Fonts.Tables.CFF;
 using Adamantium.Fonts.TextureGeneration;
 using Adamantium.Mathematics;
-using Matrix3x2 = Adamantium.Mathematics.Matrix3x2;
-using Vector2 = Adamantium.Mathematics.Vector2;
+using Matrix3x2 = Adamantium.Mathematics.Matrix3x2<double>;
+using Vector2 = Adamantium.Mathematics.Vector2<double>;
 
 namespace Adamantium.Fonts
 {
@@ -30,7 +30,7 @@ namespace Adamantium.Fonts
         private bool isLoadingOutlines;
         private bool isInvalid;
         private bool isComposite;
-        private Rectangle boundingRectangle;
+        private Rectangle<int> boundingRectangle;
         private byte[] instructions;
 
         internal IReadOnlyCollection<Outline> Outlines
@@ -48,7 +48,7 @@ namespace Adamantium.Fonts
         public double TopSideBearingMultiplier { get; private set; }
         public double AdvanceWidthMultiplier { get; private set; }
         
-        public Vector2 CenterToBaseLineMultiplier { get; private set; }
+        public Vector2<double> CenterToBaseLineMultiplier { get; private set; }
         public bool IsEmpty { get; }
         public uint Unicode => unicodes.FirstOrDefault();
         public IReadOnlyCollection<UInt32> Unicodes => unicodes.AsReadOnly();
@@ -81,7 +81,7 @@ namespace Adamantium.Fonts
             internal set => isComposite = value;
         }
 
-        public Rectangle BoundingRectangle
+        public Rectangle<int> BoundingRectangle
         {
             get
             {
@@ -148,9 +148,9 @@ namespace Adamantium.Fonts
                 AdvanceWidthMultiplier = (double)AdvanceWidth / unitsPerEm;
             }
             
-            var emSquare = new Rectangle(0, 0, unitsPerEm, unitsPerEm);
+            var emSquare = new Rectangle<int>(0, 0, unitsPerEm, unitsPerEm);
             var diff = emSquare.Center - BoundingRectangle.Center;
-            CenterToBaseLineMultiplier = new Vector2(diff.X / unitsPerEm, diff.Y / unitsPerEm);
+            CenterToBaseLineMultiplier = new Vector2<double>(diff.X / unitsPerEm, diff.Y / unitsPerEm);
         }
 
         public Vector3F[] Sample(byte rate)
@@ -240,7 +240,7 @@ namespace Adamantium.Fonts
                             var prevPoint = segment.Points[1];
                             var halfPointX = (prevPoint.X + point.X) / 2;
                             var halfPointY = (prevPoint.Y + point.Y) / 2;
-                            var lastPoint = new Vector2(halfPointX, halfPointY);
+                            var lastPoint = new Vector2<double>(halfPointX, halfPointY);
                             segment.AddPoint(lastPoint);
                             segment = new OutlineSegment();
                             segment.AddPoint(lastPoint);
@@ -273,7 +273,7 @@ namespace Adamantium.Fonts
                     throw new OutlineException("First point of outline should not be control point");
                 }
                 
-                var segment = new List<Vector2>();
+                var segment = new List<Vector2<double>>();
                 
                 for (var index = 0; index < outline.Points.Count; index++)
                 {
@@ -283,7 +283,7 @@ namespace Adamantium.Fonts
                     if (!point.IsControl && segment.Count > 1) // segment is closed
                     {
                         outline.Segments.Add(new OutlineSegment(segment));
-                        segment = new List<Vector2>();
+                        segment = new List<Vector2<double>>();
                         segment.Add(point); // add the same non-control point as start of new segment
                     }
                 }
@@ -347,7 +347,7 @@ namespace Adamantium.Fonts
             }
         }
 
-        public SampledOutline[] TransformOutlines(Matrix3x2 matrix, byte rate)
+        public SampledOutline[] TransformOutlines(Matrix3x2<double> matrix, byte rate)
         {
             var transformedOutlines = new List<SampledOutline>();
             if (sampledOutlinesCache.TryGetValue(rate, out var outlines))
@@ -364,7 +364,7 @@ namespace Adamantium.Fonts
             return transformedOutlines.ToArray();
         }
 
-        public List<Outline> TransformBasicOutlines(Matrix3x2 matrix)
+        public List<Outline> TransformBasicOutlines(Matrix3x2<double> matrix)
         {
             List<Outline> transformedOutlines = new List<Outline>();
             foreach (var outline in Outlines)
@@ -400,24 +400,24 @@ namespace Adamantium.Fonts
             sampledOutlinesCache[rate] = outlines;
         }
         
-        private Vector2[] TransformPoints(IEnumerable<Vector2> points, Matrix3x2 matrix)
+        private Vector2<double>[] TransformPoints(IEnumerable<Vector2<double>> points, Matrix3x2<double> matrix)
         {
-            var transformedPoints = new List<Vector2>();
+            var transformedPoints = new List<Vector2<double>>();
             foreach (var point in points)
             {
-                var transformed = Matrix3x2.TransformPoint(matrix, point);
+                var transformed = Vector2<double>.Transform(point, matrix);
                 transformedPoints.Add(transformed);
             }
 
             return transformedPoints.ToArray();
         }
         
-        private Outline TransformOutline(IEnumerable<OutlinePoint> points, Matrix3x2 matrix)
+        private Outline TransformOutline(IEnumerable<OutlinePoint> points, Matrix3x2<double> matrix)
         {
             var transformedOutline = new Outline();
             foreach (var point in points)
             {
-                var transformed = Matrix3x2.TransformPoint(matrix, point);
+                var transformed = Vector2<double>.Transform((Vector2<double>)point, matrix);
                 transformedOutline.Points.Add(new OutlinePoint(transformed, point.IsControl));
             }
 
@@ -444,14 +444,14 @@ namespace Adamantium.Fonts
                 allPoints = Outlines.SelectMany(x => x.Points).ToArray();
             if (allPoints.Length == 0)
             {
-                BoundingRectangle = Rectangle.FromCorners(0, 0, 0, 0);
+                BoundingRectangle = Rectangle.CreateFromCorners<int>(0, 0, 0, 0);
                 return this;
             }
             var minX = (int)Math.Floor(allPoints.Min(x => x.X));
             var minY = (int)Math.Floor(allPoints.Min(x => x.Y));
             var maxX = (int)Math.Ceiling(allPoints.Max(x => x.X));
             var maxY = (int)Math.Ceiling(allPoints.Max(x => x.Y));
-            BoundingRectangle = Rectangle.FromCorners(minX, minY, maxX, maxY);
+            BoundingRectangle = Rectangle.CreateFromCorners<int>(minX, minY, maxX, maxY);
 
             return this;
         }
@@ -537,7 +537,7 @@ namespace Adamantium.Fonts
             var contours = outlines.Where(x => x.Segments is { Length: > 0 }).Select(x => x.Segments).ToArray();
             var segments = contours.SelectMany(x => x).ToArray();
             var contourOf = contours.SelectMany((x, index) => Enumerable.Repeat(index, x.Length)).ToArray();
-            var cuts = new List<(double At, Vector2 Point)>[segments.Length];
+            var cuts = new List<(double At, Vector2<double> Point)>[segments.Length];
             var crossed = new bool[contours.Length];
 
             for (var i = 0; i < segments.Length; i++)
@@ -585,12 +585,12 @@ namespace Adamantium.Fonts
                 }
             }
 
-            var kept = new HashSet<(Vector2 Start, Vector2 End)>();
-            var pieces = new List<(double At, Vector2 Point)>();
+            var kept = new HashSet<(Vector2<double> Start, Vector2<double> End)>();
+            var pieces = new List<(double At, Vector2<double> Point)>();
             for (var i = 0; i < segments.Length; i++)
             {
                 var segment = segments[i];
-                if (segment.Start == segment.End)
+                if (Vector2<double>.NearEqual(segment.Start, segment.End))
                 {
                     continue;
                 }
@@ -639,8 +639,8 @@ namespace Adamantium.Fonts
             return points.ToArray();
         }
 
-        private static bool AddCut(List<(double At, Vector2 Point)>[] cuts, LineSegment2D[] segments, int index,
-            Vector2 point)
+        private static bool AddCut(List<(double At, Vector2<double> Point)>[] cuts, LineSegment2D[] segments, int index,
+            Vector2<double> point)
         {
             var at = At(segments[index], point);
             if (at <= 0 || at >= 1 || IsNear(point, segments[index].Start) || IsNear(point, segments[index].End))
@@ -652,10 +652,10 @@ namespace Adamantium.Fonts
             return true;
         }
 
-        private static bool IsNear(Vector2 point, Vector2 vertex) =>
+        private static bool IsNear(Vector2<double> point, Vector2<double> vertex) =>
             Math.Abs(point.X - vertex.X) < VertexTolerance && Math.Abs(point.Y - vertex.Y) < VertexTolerance;
 
-        private static double At(LineSegment2D segment, Vector2 point)
+        private static double At(LineSegment2D segment, Vector2<double> point)
         {
             var direction = segment.Direction;
             var squared = direction.X * direction.X + direction.Y * direction.Y;
@@ -670,8 +670,8 @@ namespace Adamantium.Fonts
 
         private static bool Overlap(LineSegment2D first, LineSegment2D second)
         {
-            if (Vector2.Determinant(first.Direction, second.Direction) != 0
-                || Vector2.Determinant(first.Direction, second.Start - first.Start) != 0)
+            if (Vector2<double>.Determinant(first.Direction, second.Direction) != 0
+                || Vector2<double>.Determinant(first.Direction, second.Start - first.Start) != 0)
             {
                 return false;
             }
@@ -681,21 +681,21 @@ namespace Adamantium.Fonts
             return Math.Max(Math.Min(start, end), 0) < Math.Min(Math.Max(start, end), 1);
         }
 
-        private static bool IsBoundary(LineSegment2D[] segments, Vector2 start, Vector2 end, out bool filledOnLeft)
+        private static bool IsBoundary(LineSegment2D[] segments, Vector2<double> start, Vector2<double> end, out bool filledOnLeft)
         {
             var direction = end - start;
-            var side = new Vector2(-direction.Y, direction.X) * (SideProbe / direction.Length());
+            var side = new Vector2<double>(-direction.Y, direction.X) * (SideProbe / direction.Length());
             var middle = (start + end) * 0.5;
             filledOnLeft = IsFilled(segments, middle + side);
             return filledOnLeft != IsFilled(segments, middle - side);
         }
 
-        private static bool IsFilled(LineSegment2D[] segments, Vector2 point)
+        private static bool IsFilled(LineSegment2D[] segments, Vector2<double> point)
         {
             var winding = 0;
             foreach (var segment in segments)
             {
-                var side = Vector2.Determinant(segment.End - segment.Start, point - segment.Start);
+                var side = Vector2<double>.Determinant(segment.End - segment.Start, point - segment.Start);
                 if (segment.Start.Y <= point.Y && segment.End.Y > point.Y && side > 0)
                 {
                     winding++;
@@ -732,24 +732,24 @@ namespace Adamantium.Fonts
                 var currentSegment = mergedOutlinesSegments[currentIndex];
                 var nextSegment = mergedOutlinesSegments[nextIndex];
 
-                var hintedCurrentStart = new Vector2();
-                var hintedCurrentEnd = new Vector2();
+                var hintedCurrentStart = new Vector2<double>();
+                var hintedCurrentEnd = new Vector2<double>();
                 var hintedValue = 0.0;
                 
                 // vertical stem
                 if (currentSegment.Start.X == currentSegment.End.X)
                 {
                     hintedValue = Math.Round(currentSegment.Start.X);
-                    hintedCurrentStart = new Vector2(hintedValue, currentSegment.Start.Y);
-                    hintedCurrentEnd = new Vector2(hintedValue, currentSegment.End.Y);
+                    hintedCurrentStart = new Vector2<double>(hintedValue, currentSegment.Start.Y);
+                    hintedCurrentEnd = new Vector2<double>(hintedValue, currentSegment.End.Y);
                 }
                 
                 // horizontal stem
                 if (currentSegment.Start.Y == currentSegment.End.Y)
                 {
                     hintedValue = Math.Round(currentSegment.Start.Y);
-                    hintedCurrentStart = new Vector2(currentSegment.Start.X, hintedValue);
-                    hintedCurrentEnd = new Vector2(currentSegment.End.X, hintedValue);
+                    hintedCurrentStart = new Vector2<double>(currentSegment.Start.X, hintedValue);
+                    hintedCurrentEnd = new Vector2<double>(currentSegment.End.X, hintedValue);
                 }
                 
                 var hintedCurrentSegment = new LineSegment2D(hintedCurrentStart, hintedCurrentEnd);

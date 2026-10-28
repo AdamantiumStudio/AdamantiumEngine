@@ -10,7 +10,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
         public class Tube
         {
             // Helper computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
-            private static Vector3 GetCircleVector(
+            private static Vector3<double> GetCircleVector(
                 int i,
                 int tessellation)
             {
@@ -18,13 +18,13 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var dx = (float)Math.Sin(angle);
                 var dz = (float)Math.Cos(angle);
 
-                return new Vector3(dx, 0, dz);
+                return new Vector3<double>(dx, 0, dz);
             }
 
-            private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
+            private static Vector3<double> Stretch(Vector3<double> point, double depth) => new(point.X, point.Y, point.Z * depth);
 
             private static void CreateCylinder(
-                List<Vector3> vertices,
+                List<Vector3<double>> vertices,
                 List<Vector2F> uvs,
                 List<int> indices,
                 double radius,
@@ -35,7 +35,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             )
             {
                 height /= 2;
-                var topOffset = Vector3.UnitY * height;
+                var topOffset = Vector3<double>.UnitY * height;
                 int stride = tessellation + 1;
                 int vbase = vertices.Count;
                 // Create a ring of triangles around the outside of the cylinder.
@@ -88,7 +88,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             }
 
             private static void CreateTubeCap(
-                List<Vector3> vertices,
+                List<Vector3<double>> vertices,
                 List<Vector2F> uvs,
                 List<int> indices,
                 double radius,
@@ -104,7 +104,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var stride = tessellation + 1;
 
                 // Which end of the cylinder is this?
-                var normal = Vector3.UnitY;
+                var normal = Vector3<double>.UnitY;
                 if (!isTop)
                 {
                     normal = -normal;
@@ -164,7 +164,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height,
                 double thickness,
                 int tessellation = 36,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (tessellation < 3)
                 {
@@ -191,10 +191,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
             /// <paramref name="thicknessRatio"/> of its outer radius thick: 1 closes the hole.
             /// </summary>
             public static Mesh GenerateGeometry(
-                Vector3 size,
+                Vector3<double> size,
                 double thicknessRatio,
                 int tessellation = 36,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 var wall = size.X / 2 * thicknessRatio;
                 var mesh = GenerateSolidGeometry(size.X - wall * 2, size.Y, wall, size.Z / size.X, Math.Max(tessellation, 3));
@@ -213,7 +213,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 var radius = diameter / 2;
 
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
                 CreateCylinder(vertices, uvs, indices, radius, height, depth, tessellation, true);
@@ -241,7 +241,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             {
                 var radius = diameter / 2;
 
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
 
                 GenerateOutlinedCylinder(vertices, indices, radius, height, tessellation);
@@ -258,14 +258,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
             }
 
             private static void GenerateOutlinedCylinder(
-                List<Vector3> vertices,
+                List<Vector3<double>> vertices,
                 List<int> indices,
                 double radius,
                 double height,
                 int tessellation = 40)
             {
                 int lastIndex = vertices.Count;
-                var topOffset = Vector3.UnitY * height / 2;
+                var topOffset = Vector3<double>.UnitY * height / 2;
 
                 for (int i = 0; i <= tessellation; ++i)
                 {
@@ -301,7 +301,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             }
 
             private static void GenerateOutlinedCaps(
-                List<Vector3> vertices,
+                List<Vector3<double>> vertices,
                 List<int> indices,
                 double radius,
                 double height,
@@ -311,7 +311,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             {
                 height /= 2;
                 int lastIndex = vertices.Count;
-                var normal = Vector3.UnitY;
+                var normal = Vector3<double>.UnitY;
 
                 if (!isTop)
                 {

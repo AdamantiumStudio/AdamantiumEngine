@@ -12,7 +12,7 @@ public class MeshGeometry
     public UpAxis UpAxis { get; set; }
     public string MaterialID { get; set; }
 
-    public Vector3[] Points { get; set; }
+    public Vector3<double>[] Points { get; set; }
     public int[] Indices { get; set; }
     public Vector3F[] Normals { get; set; }
     public Vector2F[] UV0 { get; set; }

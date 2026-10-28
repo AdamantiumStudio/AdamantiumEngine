@@ -24,8 +24,8 @@ public class PivotHandles : Handles
     private readonly Entity point;
     private readonly Entity central;
     private readonly RingDrag ringDrag = new();
-    private Vector3 anchor;
-    private Vector3 startPivot;
+    private Vector3<double> anchor;
+    private Vector3<double> startPivot;
     private QuaternionF startPivotRotation;
     private Vector3F direction;
     private Vector3F startVector;
@@ -63,9 +63,9 @@ public class PivotHandles : Handles
         PlaceShape(camera, at, axes, scale);
         HideArmsFacingEye(moveRight, moveUp, moveForward, axes, at, camera);
 
-        var facing = Matrix4x4F.Scaling(scale)
-                     * Matrix4x4F.RotationQuaternion(FacingCamera(camera))
-                     * Matrix4x4F.Translation(InRender(at, camera));
+        var facing = Matrix4x4.CreateScale<float>(scale)
+                     * Matrix4x4.CreateFromQuaternion<float>(FacingCamera(camera))
+                     * Matrix4x4.CreateTranslation<float>(InRender(at, camera));
         PlacePart(point, facing, camera);
         PlacePart(central, facing, camera);
     }
@@ -111,7 +111,7 @@ public class PivotHandles : Handles
         }
 
         kind = Kind.Plane;
-        direction = Vector3F.Normalize((Vector3F)ray.Camera.Forward);
+        direction = Vector3F.Normalize(ray.Camera.Forward.As<float>());
         OnPlane(ray.Ray, origin, direction, out var hit);
         startVector = hit - origin;
     }
@@ -125,7 +125,7 @@ public class PivotHandles : Handles
             {
                 if (AlongLine(ray.Ray, origin, direction, out var along))
                 {
-                    target.Transform.Pivot = startPivot + (Vector3)ToParent(target, direction * (along - startAlong));
+                    target.Transform.Pivot = startPivot + ToParent(target, direction * (along - startAlong)).As<double>();
                 }
 
                 break;
@@ -134,7 +134,7 @@ public class PivotHandles : Handles
             {
                 if (OnPlane(ray.Ray, origin, direction, out var hit))
                 {
-                    target.Transform.Pivot = startPivot + (Vector3)ToParent(target, hit - origin - startVector);
+                    target.Transform.Pivot = startPivot + ToParent(target, hit - origin - startVector).As<double>();
                 }
 
                 break;
@@ -142,7 +142,7 @@ public class PivotHandles : Handles
             default:
             {
                 var inParent = Vector3F.Normalize(ToParent(target, direction));
-                var turn = QuaternionF.RotationAxis(inParent, ringDrag.Angle(ray, origin));
+                var turn = Quaternion.CreateFromAxisAngle<float>(inParent, ringDrag.Angle(ray, origin));
                 target.Transform.PivotRotation = QuaternionF.Multiply(turn, startPivotRotation);
                 break;
             }

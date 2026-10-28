@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Fonts;
 using Adamantium.Graphics.Core;
@@ -262,10 +263,10 @@ internal sealed class ColorPaintStore : IDisposable
         var marginY = bounds.Height > 0 && cell.BoundingRect.Height > 0 ? margin * bounds.Height / cell.BoundingRect.Height : uniform;
 
         var transform = operation.Transform;
-        var origin = Matrix3x2.TransformPoint(transform, new Vector2(mask.Bearing - marginX, bounds.Y + bounds.Height + marginY));
-        var axisU = Linear(transform, new Vector2(bounds.Width + 2 * marginX, 0));
-        var axisV = Linear(transform, new Vector2(0, -(bounds.Height + 2 * marginY)));
-        var quad = new Matrix3x2(axisU.X, axisU.Y, axisV.X, axisV.Y, origin.X, origin.Y);
+        var origin = Vector2<double>.Transform(new Vector2<double>(mask.Bearing - marginX, bounds.Y + bounds.Height + marginY), transform);
+        var axisU = Linear(transform, new Vector2<double>(bounds.Width + 2 * marginX, 0));
+        var axisV = Linear(transform, new Vector2<double>(0, -(bounds.Height + 2 * marginY)));
+        var quad = new Matrix3x2<double>(axisU.X, axisU.Y, axisV.X, axisV.Y, origin.X, origin.Y);
         var source = GlyphQuadBuilder.CellSource(cell);
         if (Math.Abs(quad.Determinant()) < 1e-12)
         {
@@ -278,8 +279,8 @@ internal sealed class ColorPaintStore : IDisposable
         extent.Add(origin + axisU);
         extent.Add(origin + axisV);
         extent.Add(origin + axisU + axisV);
-        var toCell = Matrix3x2.Multiply(Matrix3x2.Multiply(Matrix3x2.Invert(quad),
-            Matrix3x2.Scaling(source.Width, source.Height)), Matrix3x2.Translation(source.Left, source.Top));
+        var toCell = Matrix3x2<double>.Multiply(Matrix3x2<double>.Multiply(Matrix3x2<double>.Invert(quad),
+            Matrix3x2.CreateScale<double>(source.Width, source.Height)), Matrix3x2.CreateTranslation<double>(source.Left, source.Top));
         steps.Add(new Vector4F(ClipCode, 5, cell.DepthLayer, 0));
         steps.Add(new Vector4F((float)extent.MinX, (float)extent.MinY, (float)extent.MaxX, (float)extent.MaxY));
         steps.Add(new Vector4F((float)toCell.M11, (float)toCell.M12, (float)toCell.M21, (float)toCell.M22));
@@ -307,7 +308,7 @@ internal sealed class ColorPaintStore : IDisposable
             return;
         }
 
-        var toGradient = Matrix3x2.Invert(fill.Transform);
+        var toGradient = Matrix3x2<double>.Invert(fill.Transform);
         var firstStop = _stopData.Count / 2;
         foreach (var stop in fill.Stops)
         {
@@ -345,9 +346,9 @@ internal sealed class ColorPaintStore : IDisposable
         }
     }
 
-    private static Vector2 LinearEnd(Vector2 p0, Vector2 p1, Vector2 p2)
+    private static Vector2<double> LinearEnd(Vector2<double> p0, Vector2<double> p1, Vector2<double> p2)
     {
-        var normal = new Vector2(p2.Y - p0.Y, -(p2.X - p0.X));
+        var normal = new Vector2<double>(p2.Y - p0.Y, -(p2.X - p0.X));
         var length = normal.X * normal.X + normal.Y * normal.Y;
         if (length < 1e-12)
         {
@@ -355,10 +356,10 @@ internal sealed class ColorPaintStore : IDisposable
         }
 
         var along = ((p1.X - p0.X) * normal.X + (p1.Y - p0.Y) * normal.Y) / length;
-        return new Vector2(p0.X + normal.X * along, p0.Y + normal.Y * along);
+        return new Vector2<double>(p0.X + normal.X * along, p0.Y + normal.Y * along);
     }
 
-    private static Vector2 Linear(Matrix3x2 m, Vector2 v) =>
+    private static Vector2<double> Linear(Matrix3x2<double> m, Vector2<double> v) =>
         new(v.X * m.M11 + v.Y * m.M21, v.X * m.M12 + v.Y * m.M22);
 
     private int Send(IGraphicsDevice device, ref Buffer<Vector4F> buffer, List<Vector4F> data, int uploaded)
@@ -381,7 +382,7 @@ internal sealed class ColorPaintStore : IDisposable
         if (uploaded < data.Count)
         {
             var span = CollectionsMarshal.AsSpan(data).Slice(uploaded);
-            buffer.SetData((ReadOnlySpan<Vector4F>)span, (uint)(uploaded * Marshal.SizeOf<Vector4F>()));
+            buffer.SetData((ReadOnlySpan<Vector4F>)span, (uint)(uploaded * Unsafe.SizeOf<Vector4F>()));
         }
 
         return data.Count;
@@ -413,7 +414,7 @@ internal sealed class ColorPaintStore : IDisposable
             MaxY = Math.Min(MaxY, maxY);
         }
 
-        public void Add(Vector2 point)
+        public void Add(Vector2<double> point)
         {
             if (!_any)
             {

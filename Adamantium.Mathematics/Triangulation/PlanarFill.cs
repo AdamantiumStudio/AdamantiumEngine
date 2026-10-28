@@ -11,9 +11,9 @@ namespace Adamantium.Mathematics.Triangulation
     {
         private const double Tolerance = 1e-7;
 
-        public static List<Vector3> Fill(IReadOnlyList<Vector2[]> rings, FillRule rule)
+        public static List<Vector3<double>> Fill(IReadOnlyList<Vector2<double>[]> rings, FillRule rule)
         {
-            var result = new List<Vector3>();
+            var result = new List<Vector3<double>>();
 
             if (rings == null || rings.Count == 0) return result;
 
@@ -37,7 +37,7 @@ namespace Adamantium.Mathematics.Triangulation
                 // A filled region inside another filled one is already covered; an unfilled one directly inside this
                 // region is a hole in it.
                 var inside = false;
-                List<IReadOnlyList<Vector2>> holes = null;
+                List<IReadOnlyList<Vector2<double>>> holes = null;
 
                 for (var j = 0; j < faces.Count; j++)
                 {
@@ -55,12 +55,12 @@ namespace Adamantium.Mathematics.Triangulation
                     if (!Contains(faces[i], Inside(faces[j]))) continue;
                     if (Nested(faces, filled, i, j)) continue;
 
-                    (holes ??= new List<IReadOnlyList<Vector2>>()).Add(faces[j]);
+                    (holes ??= new List<IReadOnlyList<Vector2<double>>>()).Add(faces[j]);
                 }
 
                 if (holes == null)
                 {
-                    result.AddRange(MathHelper.IsConvex(faces[i])
+                    result.AddRange(MathHelper.Polyline.IsConvex<double>(faces[i])
                         ? Triangulator.FanTriangulate(faces[i])
                         : Triangulator.EarcutTriangulate(faces[i]));
                 }
@@ -74,7 +74,7 @@ namespace Adamantium.Mathematics.Triangulation
         }
 
         // Whether some OTHER region sits between i and the hole j - then j is that one's hole, not this one's.
-        private static bool Nested(List<Vector2[]> faces, bool[] filled, int i, int j)
+        private static bool Nested(List<Vector2<double>[]> faces, bool[] filled, int i, int j)
         {
             var point = Inside(faces[j]);
 
@@ -89,21 +89,21 @@ namespace Adamantium.Mathematics.Triangulation
         }
 
         /// <summary>The regions the contours bound: every contour cut at every crossing, then walked round.</summary>
-        public static List<Vector2[]> Faces(IReadOnlyList<Vector2[]> rings)
+        public static List<Vector2<double>[]> Faces(IReadOnlyList<Vector2<double>[]> rings)
         {
             var edges = Cut(rings);
-            var faces = new List<Vector2[]>();
+            var faces = new List<Vector2<double>[]>();
 
             if (edges.Count < 3) return faces;
 
             // Out of each point, the edges leaving it - a walk chooses its next edge from here.
-            var leaving = new Dictionary<Vector2, List<(Vector2 To, int Id)>>();
+            var leaving = new Dictionary<Vector2<double>, List<(Vector2<double> To, int Id)>>();
 
             for (var i = 0; i < edges.Count; i++)
             {
                 var (from, to) = edges[i];
 
-                if (!leaving.TryGetValue(from, out var outgoing)) leaving[from] = outgoing = new List<(Vector2, int)>();
+                if (!leaving.TryGetValue(from, out var outgoing)) leaving[from] = outgoing = new List<(Vector2<double>, int)>();
                 outgoing.Add((to, i));
             }
 
@@ -113,7 +113,7 @@ namespace Adamantium.Mathematics.Triangulation
             {
                 if (walked[i]) continue;
 
-                var ring = new List<Vector2>();
+                var ring = new List<Vector2<double>>();
                 var at = i;
 
                 while (!walked[at])
@@ -139,7 +139,7 @@ namespace Adamantium.Mathematics.Triangulation
 
         // The next edge round a junction: the FIRST one clockwise from the way back, which is what keeps a walk
         // hugging one region's border instead of cutting across into another.
-        private static int Next((Vector2 From, Vector2 To) came, Dictionary<Vector2, List<(Vector2 To, int Id)>> leaving)
+        private static int Next((Vector2<double> From, Vector2<double> To) came, Dictionary<Vector2<double>, List<(Vector2<double> To, int Id)>> leaving)
         {
             if (!leaving.TryGetValue(came.To, out var outgoing)) return -1;
 
@@ -177,10 +177,10 @@ namespace Adamantium.Mathematics.Triangulation
 
         // Every ring's edges, cut at every point where they meet another - and each edge laid down BOTH ways, since a
         // region can be bordered from either side.
-        private static List<(Vector2 From, Vector2 To)> Cut(IReadOnlyList<Vector2[]> rings)
+        private static List<(Vector2<double> From, Vector2<double> To)> Cut(IReadOnlyList<Vector2<double>[]> rings)
         {
-            var pieces = new List<(Vector2 From, Vector2 To)>();
-            var whole = new List<(Vector2 From, Vector2 To)>();
+            var pieces = new List<(Vector2<double> From, Vector2<double> To)>();
+            var whole = new List<(Vector2<double> From, Vector2<double> To)>();
 
             foreach (var ring in rings)
             {
@@ -198,7 +198,7 @@ namespace Adamantium.Mathematics.Triangulation
             for (var i = 0; i < whole.Count; i++)
             {
                 var (from, to) = whole[i];
-                var along = new List<(double At, Vector2 Point)> { (0, from), (1, to) };
+                var along = new List<(double At, Vector2<double> Point)> { (0, from), (1, to) };
 
                 for (var j = 0; j < whole.Count; j++)
                 {
@@ -231,8 +231,8 @@ namespace Adamantium.Mathematics.Triangulation
             }
 
             // The same piece can arrive from two contours that share an edge; one copy of each direction is enough.
-            var once = new HashSet<(Vector2, Vector2)>();
-            var result = new List<(Vector2 From, Vector2 To)>();
+            var once = new HashSet<(Vector2<double>, Vector2<double>)>();
+            var result = new List<(Vector2<double> From, Vector2<double> To)>();
 
             foreach (var piece in pieces)
             {
@@ -244,7 +244,7 @@ namespace Adamantium.Mathematics.Triangulation
 
         // Where two segments meet, INCLUDING a touch at an end - a contour cut only at proper crossings leaves a
         // junction the walk cannot turn at.
-        private static bool Crossing(Vector2 a1, Vector2 a2, Vector2 b1, Vector2 b2, out Vector2 point)
+        private static bool Crossing(Vector2<double> a1, Vector2<double> a2, Vector2<double> b1, Vector2<double> b2, out Vector2<double> point)
         {
             point = default;
 
@@ -259,14 +259,14 @@ namespace Adamantium.Mathematics.Triangulation
 
             if (t < -Tolerance || t > 1 + Tolerance || u < -Tolerance || u > 1 + Tolerance) return false;
 
-            point = new Vector2(a1.X + t * r.X, a1.Y + t * r.Y);
+            point = new Vector2<double>(a1.X + t * r.X, a1.Y + t * r.Y);
             return true;
         }
 
         // How many times the ORIGINAL contours wind round a point: a horizontal ray to the right, +1 for a contour
         // crossing it upwards and -1 downwards. Asked of the originals, not of the pieces - the pieces no longer say
         // which way anything ran.
-        private static int Winding(Vector2 point, IReadOnlyList<Vector2[]> rings)
+        private static int Winding(Vector2<double> point, IReadOnlyList<Vector2<double>[]> rings)
         {
             var winding = 0;
 
@@ -296,7 +296,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// <para>Not the middle of the ring: a region with a hole in it is still bounded by its outer ring alone, and
         /// the middle of that ring is in the hole. Asked there, a body with a hole reads as unfilled and disappears.
         /// </para></summary>
-        private static Vector2 Inside(IReadOnlyList<Vector2> ring)
+        private static Vector2<double> Inside(IReadOnlyList<Vector2<double>> ring)
         {
             for (var i = 0; i < ring.Count; i++)
             {
@@ -308,8 +308,8 @@ namespace Adamantium.Mathematics.Triangulation
                 if (length <= Tolerance) continue;
 
                 // The left of the way round is the inside, the ring being wound positively.
-                var into = new Vector2(-along.Y / length, along.X / length) * (length * 1e-4);
-                var point = new Vector2((a.X + b.X) / 2 + into.X, (a.Y + b.Y) / 2 + into.Y);
+                var into = new Vector2<double>(-along.Y / length, along.X / length) * (length * 1e-4);
+                var point = new Vector2<double>((a.X + b.X) / 2 + into.X, (a.Y + b.Y) / 2 + into.Y);
 
                 if (Contains(ring, point)) return point;
             }
@@ -318,10 +318,10 @@ namespace Adamantium.Mathematics.Triangulation
 
             foreach (var point in ring) { x += point.X; y += point.Y; }
 
-            return new Vector2(x / ring.Count, y / ring.Count);
+            return new Vector2<double>(x / ring.Count, y / ring.Count);
         }
 
-        private static bool Contains(IReadOnlyList<Vector2> ring, Vector2 point)
+        private static bool Contains(IReadOnlyList<Vector2<double>> ring, Vector2<double> point)
         {
             var inside = false;
 
@@ -337,7 +337,7 @@ namespace Adamantium.Mathematics.Triangulation
             return inside;
         }
 
-        private static double Area(IReadOnlyList<Vector2> ring)
+        private static double Area(IReadOnlyList<Vector2<double>> ring)
         {
             double sum = 0;
 
@@ -352,10 +352,10 @@ namespace Adamantium.Mathematics.Triangulation
             return sum / 2;
         }
 
-        private static Vector2 Snap(Vector2 point) =>
+        private static Vector2<double> Snap(Vector2<double> point) =>
             new(Math.Round(point.X, 6), Math.Round(point.Y, 6));
 
-        private static bool Same(Vector2 a, Vector2 b) =>
+        private static bool Same(Vector2<double> a, Vector2<double> b) =>
             Math.Abs(a.X - b.X) <= Tolerance && Math.Abs(a.Y - b.Y) <= Tolerance;
     }
 }

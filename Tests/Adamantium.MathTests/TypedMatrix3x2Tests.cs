@@ -1,9 +1,8 @@
 using System;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using Matrix3x2 = Adamantium.Mathematics.Typed.Matrix3x2;
-using Matrix3x2D = Adamantium.Mathematics.Typed.Matrix3x2<double>;
-using Vector2D = Adamantium.Mathematics.Typed.Vector2<double>;
+using Matrix3x2D = Adamantium.Mathematics.Matrix3x2<double>;
+using Vector2D = Adamantium.Mathematics.Vector2<double>;
 
 namespace Adamantium.MathTests;
 
@@ -88,8 +87,7 @@ public class TypedMatrix3x2Tests
     [Test]
     public void FromFourByFour_KeepsThe2DPart()
     {
-        var full = Adamantium.Mathematics.Typed.Matrix4x4.CreateRotationZ(0.7) *
-                   Adamantium.Mathematics.Typed.Matrix4x4.CreateTranslation(3.0, -2.0, 5.0);
+        var full = Matrix4x4.CreateRotationZ(0.7) * Matrix4x4.CreateTranslation(3.0, -2.0, 5.0);
 
         var flat = (Matrix3x2D)full;
 

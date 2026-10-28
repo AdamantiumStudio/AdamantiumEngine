@@ -134,7 +134,7 @@ public class VerticalLayoutTests
     {
         var layout = new TextLayout(NotoSansCjk.Value, Font) { Fallback = null, WritingMode = WritingMode.VerticalRightToLeft };
         var attributes = new TextAttributes { Decorations = TextDecorations.Underline | TextDecorations.Strikethrough };
-        layout.ProcessText(new AttributedText("漢字", attributes), FontSize, new Size(200, 400), TextWrapping.WrapByWords,
+        layout.ProcessText(new AttributedText("漢字", attributes), FontSize, new Size<double>(200, 400), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var adornments = layout.GetAdornments();
         var underline = adornments.Single(adornment => adornment.Kind == TextAdornmentKind.Underline).Rect;
@@ -201,7 +201,7 @@ public class VerticalLayoutTests
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, Tracking = 200,
             LetterSpacing = new SpacingRange(0, 0, 1), HangingPunctuation = HangingPunctuation.None,
         };
-        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな、", 12)), FontSize, new Size(400, 301),
+        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな、", 12)), FontSize, new Size<double>(400, 301),
             TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
         var tail = 200 * FontSize / 1000;
@@ -236,7 +236,7 @@ public class VerticalLayoutTests
         {
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, Frames = frames,
         };
-        layout.ProcessText(text, FontSize, new Size(200, 100), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(200, 100), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var linesAFrame = (int)(100 / LineHeight);
 
@@ -313,7 +313,7 @@ public class VerticalLayoutTests
         {
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, DropCap = new DropCap(3),
         };
-        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな", 20)), FontSize, new Size(1000, 200),
+        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな", 20)), FontSize, new Size<double>(1000, 200),
             TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var cap = layout.GetTextData().Single(glyph => glyph.PositionInString == 0);
 
@@ -329,7 +329,7 @@ public class VerticalLayoutTests
     public void HorizontalText_HasNoTurnedOrUprightGlyphs()
     {
         var layout = new TextLayout(NotoSansCjk.Value, Font) { Fallback = null };
-        layout.ProcessText("漢字Abc12", FontSize, new Size(400, 200), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("漢字Abc12", FontSize, new Size<double>(400, 200), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Any(glyph => glyph.Upright || glyph.Sideways), Is.False);
@@ -343,7 +343,7 @@ public class VerticalLayoutTests
         {
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, DropCap = new DropCap(lines),
         };
-        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな", 20)), FontSize, new Size(1000, 200),
+        layout.ProcessText(string.Concat(Enumerable.Repeat("漢字かな", 20)), FontSize, new Size<double>(1000, 200),
             TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
         var cap = glyphs.Single(glyph => glyph.PositionInString == 0);
@@ -369,7 +369,7 @@ public class VerticalLayoutTests
         TextTrimming trimming = TextTrimming.None)
     {
         var layout = new TextLayout(NotoSansCjk.Value, Font) { Fallback = null, WritingMode = WritingMode.VerticalRightToLeft };
-        layout.ProcessText(text, FontSize, new Size(width, height), wrapping, trimming, alignment, across);
+        layout.ProcessText(text, FontSize, new Size<double>(width, height), wrapping, trimming, alignment, across);
         return layout;
     }
 

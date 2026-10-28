@@ -11,15 +11,15 @@ namespace Adamantium.Engine.Templates.GeometricPrimitives;
 public class LineTemplate : PrimitiveTemplate
 {
     private float thickness;
-    private Vector3 startPoint;
-    private Vector3 endPoint;
+    private Vector3<double> startPoint;
+    private Vector3<double> endPoint;
 
     public LineTemplate(
         GeometryType geometryType,
-        Vector3 startPoint,
-        Vector3 endPoint,
+        Vector3<double> startPoint,
+        Vector3<double> endPoint,
         float thickness,
-        Matrix4x4? transform = null) : base(geometryType, 1, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, 1, transform)
     {
         this. startPoint = startPoint;
         this. endPoint = endPoint;

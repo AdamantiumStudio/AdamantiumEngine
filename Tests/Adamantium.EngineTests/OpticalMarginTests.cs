@@ -28,7 +28,7 @@ public class OpticalMarginTests
             OpticalMarginAlignment = optical,
             Direction = direction,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -77,7 +77,7 @@ public class OpticalMarginTests
     {
         var typeface = SourceSans.Value;
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, OpticalMarginAlignment = true };
-        layout.ProcessText("A line much too long for the width it is given here", FontSize, new Size(150, double.NaN),
+        layout.ProcessText("A line much too long for the width it is given here", FontSize, new Size<double>(150, double.NaN),
             TextWrapping.NoWrap, TextTrimming.CharEllipses, HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Max(g => g.Rect.Right), Is.LessThanOrEqualTo(150.5));

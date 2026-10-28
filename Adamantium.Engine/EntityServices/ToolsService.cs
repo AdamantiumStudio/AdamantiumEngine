@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.ECS;
@@ -11,12 +12,13 @@ namespace Adamantium.Engine.EntityServices;
 
 /// <summary>
 /// Runs the editor's processors once per frame: what sits over the scene first, then the one tool in use. Only an editor
-/// creates it; a universe without the editor has no tools.
+/// creates it; a universe without the editor has no tools. Its universe watches it: changing the tool draws a frame.
 /// </summary>
-public class ToolsService : EntityService
+public class ToolsService : EntityService, INotifyUniverse
 {
     private ToolProcessor tool;
     private volatile ToolProcessor requested;
+    private IUniverseWatcher watcher;
 
     public ToolsService(EntityWorld world)
         : base(world)
@@ -36,8 +38,14 @@ public class ToolsService : EntityService
     public ToolProcessor Tool
     {
         get => requested;
-        set => requested = value;
+        set
+        {
+            requested = value;
+            UniverseChanged?.Invoke(this, UniverseChangedEventArgs.OneFrame);
+        }
     }
+
+    public event EventHandler<UniverseChangedEventArgs> UniverseChanged;
 
     /// <summary>Whether something over the scene has taken the pointer this frame; the tool then leaves it alone.</summary>
     public bool IsPointerTaken { get; private set; }
@@ -129,7 +137,7 @@ public class ToolsService : EntityService
         shown.Clear();
         for (int i = 0; i < points.Length; i++)
         {
-            var point = posed != null ? posed[i] : (Vector3F)points[i];
+            var point = posed != null ? posed[i] : points[i].As<float>();
             var w = point.X * toClip.M14 + point.Y * toClip.M24 + point.Z * toClip.M34 + toClip.M44;
             var pixel = Vector3F.Project(point, 0, 0, camera.Width, camera.Height, 0, 1, toClip);
             var inFront = w > 1e-6f;
@@ -223,6 +231,17 @@ public class ToolsService : EntityService
     {
         Observatory = EntityWorld.Satellites.Get<Observatory>();
         Selection = EntityWorld.Satellites.Get<Selection>();
+        if (EntityWorld.Satellites.TryGet(out watcher))
+        {
+            watcher.Watch(this);
+        }
+    }
+
+    public override void UnloadContent()
+    {
+        watcher?.ReleaseWatch(this);
+        watcher = null;
+        base.UnloadContent();
     }
 
     public override void Update(AppTime appTime)

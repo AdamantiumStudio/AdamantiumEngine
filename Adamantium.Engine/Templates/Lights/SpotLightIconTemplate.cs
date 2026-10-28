@@ -16,18 +16,18 @@ public class SpotLightIconTemplate: LightIconTemplate
     public override Entity BuildEntity(Entity owner, string name)
     {
         float size = 0.2f;
-        var points = new List<Vector2>();
-        points.Add(new Vector2(-size, size));
-        points.Add(new Vector2(-size, 0));
-        points.Add(new Vector2(size, 0));
-        points.Add(new Vector2(size, 0));
+        var points = new List<Vector2<double>>();
+        points.Add(new Vector2<double>(-size, size));
+        points.Add(new Vector2<double>(-size, 0));
+        points.Add(new Vector2<double>(size, 0));
+        points.Add(new Vector2<double>(size, 0));
 
         float range = 180;
         int tessellation = 20;
         float angle = range / tessellation;
 
-        float angleItem = MathHelper.DegreesToRadians(angle);
-        var startAngle = MathHelper.DegreesToRadians(0);
+        float angleItem = float.DegreesToRadians(angle);
+        var startAngle = float.DegreesToRadians(0);
         angle = startAngle;
         var center = new Vector3F(0, size, 0);
         float radiusX = size;
@@ -37,7 +37,7 @@ public class SpotLightIconTemplate: LightIconTemplate
         {
             float x = center.X + (radiusX * (float)Math.Cos(angle));
             float y = center.Y + (radiusY * (float)Math.Sin(angle));
-            var vertex = new Vector2(x, y);
+            var vertex = new Vector2<double>(x, y);
 
             points.Add(vertex);
 
@@ -61,16 +61,16 @@ public class SpotLightIconTemplate: LightIconTemplate
             height, 
             new CornerRadius(height/2),
             tessellation, 
-            Matrix4x4.RotationZ(MathHelper.DegreesToRadians(90)) * Matrix4x4.Translation(new Vector3(0, (-raySize / 2)-0.2f, 0)));
-        var leftRay = centralRay.Clone(Matrix4x4.RotationZ(MathHelper.DegreesToRadians(-45)) * Matrix4x4.Translation(-size/2, 0, 0));
-        var rightRay = centralRay.Clone(Matrix4x4.RotationZ(MathHelper.DegreesToRadians(45)) * Matrix4x4.Translation(size/2, 0, 0));
+            Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(90)) * Matrix4x4.CreateTranslation<double>(new Vector3<double>(0, (-raySize / 2)-0.2f, 0)));
+        var leftRay = centralRay.Clone(Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(-45)) * Matrix4x4.CreateTranslation<double>(-size/2, 0, 0));
+        var rightRay = centralRay.Clone(Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(45)) * Matrix4x4.CreateTranslation<double>(size/2, 0, 0));
 
         MergeInstance[] instances = new MergeInstance[3];
-        var instance1 = new MergeInstance(leftRay, Matrix4x4.Identity, false);
+        var instance1 = new MergeInstance(leftRay, Matrix4x4<double>.Identity, false);
         instances[0] = instance1;
-        var instance2 = new MergeInstance(centralRay, Matrix4x4.Identity, false);
+        var instance2 = new MergeInstance(centralRay, Matrix4x4<double>.Identity, false);
         instances[1] = instance2;
-        var instance3 = new MergeInstance(rightRay, Matrix4x4.Identity, false);
+        var instance3 = new MergeInstance(rightRay, Matrix4x4<double>.Identity, false);
         instances[2] = instance3;
 
         spotLightIcon.Merge(instances);

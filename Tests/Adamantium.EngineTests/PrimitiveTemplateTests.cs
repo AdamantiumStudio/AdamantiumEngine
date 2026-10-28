@@ -18,7 +18,7 @@ public class PrimitiveTemplateTests
     [Test]
     public void Ellipse_RunsFromItsStartAngleToItsStopAngle()
     {
-        var template = new EllipseTemplate(GeometryType.Outlined, EllipseType.EdgeToEdge, new Vector2(2), 90, 180);
+        var template = new EllipseTemplate(GeometryType.Outlined, EllipseType.EdgeToEdge, new Vector2<double>(2), 90, 180);
 
         var entity = template.BuildEntity(new Entity(null, "Arc")).GetAwaiter().GetResult();
 
@@ -33,7 +33,7 @@ public class PrimitiveTemplateTests
     [Test]
     public void ASolidArcShortOfACircle_EndsWhereItsAngleDoes_WithoutATriangleAcrossTheGap()
     {
-        var mesh = Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2(2), 0.2, 0, 270, true, 36);
+        var mesh = Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 0.2, 0, 270, true, 36);
 
         Assert.Multiple(() =>
         {
@@ -109,7 +109,7 @@ public class PrimitiveTemplateTests
     [Test]
     public void AnEllipseSector_FillsFromItsStart_NotFromZero()
     {
-        var mesh = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.Sector, new Vector2(2), 270, 90);
+        var mesh = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.Sector, new Vector2<double>(2), 270, 90);
 
         Assert.Multiple(() =>
         {
@@ -132,10 +132,10 @@ public class PrimitiveTemplateTests
         var mesh = shape switch
         {
             "Rectangle" => Shapes.Rectangle.GenerateGeometry(GeometryType.Solid, 2, 1, new CornerRadius(0)),
-            "Ellipse" => Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.EdgeToEdge, new Vector2(2)),
-            "Polygon" => Shapes.Polygon.GenerateGeometry(GeometryType.Solid, new Vector2(2), 6),
-            "Arc" => Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2(2), 0.2, 0, 270),
-            _ => Shapes.Line.GenerateGeometry(GeometryType.Solid, new Vector3(-1, 0, 0), new Vector3(1, 0, 0), 0.1)
+            "Ellipse" => Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.EdgeToEdge, new Vector2<double>(2)),
+            "Polygon" => Shapes.Polygon.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 6),
+            "Arc" => Shapes.Arc.GenerateGeometry(GeometryType.Solid, new Vector2<double>(2), 0.2, 0, 270),
+            _ => Shapes.Line.GenerateGeometry(GeometryType.Solid, new Vector3<double>(-1, 0, 0), new Vector3<double>(1, 0, 0), 0.1)
         };
 
         var strip = mesh.MeshTopology == PrimitiveType.TriangleStrip;
@@ -147,7 +147,7 @@ public class PrimitiveTemplateTests
                 // A strip's every other triangle runs its first two points the other way round.
                 var (b, c) = strip && i % 2 == 1 ? (i + 2, i + 1) : (i + 1, i + 2);
                 var a = mesh.Points[mesh.Indices[i]];
-                var facing = Vector3.Cross(mesh.Points[mesh.Indices[b]] - a, mesh.Points[mesh.Indices[c]] - a);
+                var facing = Vector3<double>.Cross(mesh.Points[mesh.Indices[b]] - a, mesh.Points[mesh.Indices[c]] - a);
                 Assert.That(facing.Z, Is.GreaterThanOrEqualTo(-1e-9), $"triangle {i}");
             }
 

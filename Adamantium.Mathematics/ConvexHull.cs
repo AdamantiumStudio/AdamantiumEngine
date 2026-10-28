@@ -8,14 +8,14 @@ namespace Adamantium.Mathematics;
 /// outside, and the outward planes that bound it. A flat set gives a hull of no thickness, closed at the sides by planes
 /// through its outline; a set on one line or at one point gives corners only, which a ray never meets.
 /// </summary>
-public sealed class ConvexHull : IConvexShape
+public sealed class ConvexHull : IConvexShape<float>
 {
     private const float Tolerance = 1e-5f;
 
     private readonly Vector3F[] vertices;
     private readonly int[] triangles;
     private readonly int[] outline;
-    private readonly Plane[] planes;
+    private readonly Plane<float>[] planes;
     private readonly float scale;
     private readonly float tolerance;
 
@@ -35,7 +35,7 @@ public sealed class ConvexHull : IConvexShape
     public IReadOnlyList<int> Triangles => triangles;
 
     /// <summary>Planes whose normals point out of the hull: a point is inside when it is behind all of them.</summary>
-    public IReadOnlyList<Plane> Planes => planes;
+    public IReadOnlyList<Plane<float>> Planes => planes;
 
     public bool IsFlat => outline != null;
 
@@ -110,7 +110,7 @@ public sealed class ConvexHull : IConvexShape
 
         foreach (var plane in planes)
         {
-            if (Plane.DotCoordinate(plane, point) > tolerance)
+            if (Plane<float>.DotCoordinate(plane, point) > tolerance)
             {
                 return false;
             }
@@ -120,7 +120,7 @@ public sealed class ConvexHull : IConvexShape
     }
 
     /// <summary>Where a ray first meets the hull, in lengths of its direction; a ray starting inside meets it at 0.</summary>
-    public bool Intersects(ref Ray ray, out float distance)
+    public bool Intersects(Ray<float> ray, out float distance)
     {
         distance = 0;
         if (planes.Length == 0)
@@ -133,7 +133,7 @@ public sealed class ConvexHull : IConvexShape
         foreach (var plane in planes)
         {
             var toward = Vector3F.Dot(plane.Normal, ray.Direction);
-            var outside = Plane.DotCoordinate(plane, ray.Position);
+            var outside = Plane<float>.DotCoordinate(plane, ray.Position);
             if (Math.Abs(toward) < 1e-12f)
             {
                 if (outside > tolerance)
@@ -164,9 +164,9 @@ public sealed class ConvexHull : IConvexShape
         return true;
     }
 
-    public bool Intersects(ref Ray ray, out Vector3F point)
+    public bool Intersects(Ray<float> ray, out Vector3F point)
     {
-        if (!Intersects(ref ray, out float distance))
+        if (!Intersects(ray, out float distance))
         {
             point = Vector3F.Zero;
             return false;
@@ -176,22 +176,22 @@ public sealed class ConvexHull : IConvexShape
         return true;
     }
 
-    public bool Intersects(ref BoundingBox box)
+    public bool Intersects(BoundingBox<float> box)
     {
         return Gjk.Intersects(this, box);
     }
 
-    public bool Intersects(ref BoundingSphere sphere)
+    public bool Intersects(BoundingSphere<float> sphere)
     {
         return Gjk.Intersects(this, sphere);
     }
 
-    public bool Intersects(ref OrientedBoundingBox box)
+    public bool Intersects(OrientedBoundingBox<float> box)
     {
         return Gjk.Intersects(this, box);
     }
 
-    public bool Intersects(ref BoundingCapsule capsule)
+    public bool Intersects(BoundingCapsule capsule)
     {
         return Gjk.Intersects(this, capsule);
     }
@@ -202,13 +202,13 @@ public sealed class ConvexHull : IConvexShape
     }
 
     /// <summary>On which side of a plane the hull lies, or whether the plane cuts it.</summary>
-    public PlaneIntersectionType Intersects(ref Plane plane)
+    public PlaneIntersectionType Intersects(Plane<float> plane)
     {
         var front = false;
         var back = false;
         foreach (var vertex in vertices)
         {
-            var side = Plane.DotCoordinate(plane, vertex);
+            var side = Plane<float>.DotCoordinate(plane, vertex);
             front |= side > 0;
             back |= side < 0;
         }
@@ -218,34 +218,34 @@ public sealed class ConvexHull : IConvexShape
             : PlaneIntersectionType.Intersecting;
     }
 
-    public BoundingBox GetBoundingBox()
+    public BoundingBox<float> GetBoundingBox()
     {
-        return BoundingBox.FromPoints(vertices);
+        return BoundingBox.CreateFromPoints<float>(vertices);
     }
 
-    private Plane[] BuildPlanes()
+    private Plane<float>[] BuildPlanes()
     {
         if (outline != null)
         {
-            var origin = (Vector3)vertices[outline[0]];
-            var normal = Vector3.Normalize(Vector3.Cross((Vector3)vertices[outline[1]] - origin, (Vector3)vertices[outline[2]] - origin));
-            List<Plane> sides = [Through(origin, normal), Through(origin, -normal)];
+            var origin = vertices[outline[0]].As<double>();
+            var normal = Vector3<double>.Normalize(Vector3<double>.Cross(vertices[outline[1]].As<double>() - origin, vertices[outline[2]].As<double>() - origin));
+            List<Plane<float>> sides = [Through(origin, normal), Through(origin, -normal)];
             for (int i = 0; i < outline.Length; i++)
             {
-                var from = (Vector3)vertices[outline[i]];
-                var to = (Vector3)vertices[outline[(i + 1) % outline.Length]];
-                sides.Add(Through(from, Vector3.Normalize(Vector3.Cross(to - from, normal))));
+                var from = vertices[outline[i]].As<double>();
+                var to = vertices[outline[(i + 1) % outline.Length]].As<double>();
+                sides.Add(Through(from, Vector3<double>.Normalize(Vector3<double>.Cross(to - from, normal))));
             }
 
             return sides.ToArray();
         }
 
         double smallest = tolerance * scale;
-        List<Plane> faces = [];
+        List<Plane<float>> faces = [];
         for (int i = 0; i < triangles.Length; i += 3)
         {
-            var a = (Vector3)vertices[triangles[i]];
-            var cross = Vector3.Cross((Vector3)vertices[triangles[i + 1]] - a, (Vector3)vertices[triangles[i + 2]] - a);
+            var a = vertices[triangles[i]].As<double>();
+            var cross = Vector3<double>.Cross(vertices[triangles[i + 1]].As<double>() - a, vertices[triangles[i + 2]].As<double>() - a);
             var length = cross.Length();
             if (length > smallest)
             {
@@ -256,9 +256,9 @@ public sealed class ConvexHull : IConvexShape
         return faces.ToArray();
     }
 
-    private static Plane Through(Vector3 point, Vector3 normal)
+    private static Plane<float> Through(Vector3<double> point, Vector3<double> normal)
     {
-        return new Plane((Vector3F)normal, (float)-Vector3.Dot(normal, point));
+        return new Plane<float>(normal.As<float>(), (float)-Vector3<double>.Dot(normal, point));
     }
 
     private static Vector3F Normal(Vector3F a, Vector3F b, Vector3F c)
@@ -456,7 +456,7 @@ public sealed class ConvexHull : IConvexShape
         private static readonly Predicate<Face> Dead = face => !face.Alive;
 
         private readonly IReadOnlyList<Vector3F> input;
-        private readonly Vector3[] points;
+        private readonly Vector3<double>[] points;
         private readonly double tolerance;
         private readonly List<Face> faces = [];
         private readonly List<HalfEdge> horizon = [];
@@ -468,10 +468,10 @@ public sealed class ConvexHull : IConvexShape
         {
             this.input = input;
             this.tolerance = tolerance;
-            points = new Vector3[input.Count];
+            points = new Vector3<double>[input.Count];
             for (int i = 0; i < points.Length; i++)
             {
-                points[i] = (Vector3)input[i];
+                points[i] = input[i].As<double>();
             }
         }
 
@@ -520,7 +520,7 @@ public sealed class ConvexHull : IConvexShape
             }
         }
 
-        private Face Outward(int a, int b, int c, Vector3 inside)
+        private Face Outward(int a, int b, int c, Vector3<double>inside)
         {
             var face = new Face(points, a, b, c, null);
             return face.Distance(inside) > 0 ? new Face(points, a, c, b, null) : face;
@@ -600,7 +600,7 @@ public sealed class ConvexHull : IConvexShape
             }
         }
 
-        private void Visit(Face face, HalfEdge entry, Vector3 eye)
+        private void Visit(Face face, HalfEdge entry, Vector3<double>eye)
         {
             face.Visible = true;
             visible.Add(face);
@@ -706,11 +706,11 @@ public sealed class ConvexHull : IConvexShape
 
     private sealed class Face
     {
-        private readonly Vector3 normal;
+        private readonly Vector3<double>normal;
         private readonly double offset;
         private double farthestDistance;
 
-        public Face(Vector3[] points, int a, int b, int c, Face fallback)
+        public Face(Vector3<double>[] points, int a, int b, int c, Face fallback)
         {
             var first = new HalfEdge(a, this);
             var second = new HalfEdge(b, this);
@@ -722,12 +722,12 @@ public sealed class ConvexHull : IConvexShape
 
             var ab = points[b] - points[a];
             var ac = points[c] - points[a];
-            var cross = Vector3.Cross(ab, ac);
+            var cross = Vector3<double>.Cross(ab, ac);
             var length = cross.Length();
             normal = length > 1e-9 * (ab.LengthSquared() + ac.LengthSquared()) || fallback == null
                 ? cross / Math.Max(length, double.Epsilon)
                 : fallback.normal;
-            offset = Vector3.Dot(normal, points[a]);
+            offset = Vector3<double>.Dot(normal, points[a]);
         }
 
         public HalfEdge Edge { get; }
@@ -740,9 +740,9 @@ public sealed class ConvexHull : IConvexShape
 
         public bool Alive { get; set; } = true;
 
-        public double Distance(Vector3 point)
+        public double Distance(Vector3<double>point)
         {
-            return Vector3.Dot(normal, point) - offset;
+            return Vector3<double>.Dot(normal, point) - offset;
         }
 
         public void Claim(int index, double distance)

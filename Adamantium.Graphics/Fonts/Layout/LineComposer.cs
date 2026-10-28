@@ -116,7 +116,7 @@ internal sealed class LineComposer
         // Tried untrimmed and unbounded below, so what does not fit shows as a word past its room or a line too many.
         var tried = new TextRenderingParameters
         {
-            TextArea = new Rectangle(area.X, area.Y, area.Width, Int32.MaxValue),
+            TextArea = new Rectangle<int>(area.X, area.Y, area.Width, Int32.MaxValue),
             TextWrapping = renderingParameters.TextWrapping,
             HorizontalTextAlignment = renderingParameters.HorizontalTextAlignment,
             VerticalTextAlignment = VerticalTextAlignment.Top,
@@ -272,7 +272,7 @@ internal sealed class LineComposer
             exclusions = options.Exclusions?.Select(AlongColumns).ToArray();
             renderingParameters = new TextRenderingParameters
             {
-                TextArea = new Rectangle(0, 0, screenArea.Height, screenArea.Width),
+                TextArea = new Rectangle<int>(0, 0, screenArea.Height, screenArea.Width),
                 TextWrapping = renderingParameters.TextWrapping,
                 TextTrimming = renderingParameters.TextTrimming,
                 HorizontalTextAlignment = renderingParameters.HorizontalTextAlignment,
@@ -334,7 +334,7 @@ internal sealed class LineComposer
         var lineStates = new List<(ParagraphAttributes Paragraph, bool Opens, bool RightToLeft, double Gap)>();
         HashSet<int> linesAfterBreaks = null;
         double verticalShift = 0;
-        Size? realTextDimensions = null;
+        Size<double>? realTextDimensions = null;
         int[] laidOutLineFrames = null;
         (double Left, double Right)[] laidOutLineSpans = null;
         var lineBreaks = renderingParameters.TextWrapping == TextWrapping.WrapByWords
@@ -370,7 +370,7 @@ internal sealed class LineComposer
                 ColumnsRight = columnsRight,
                 FrameRects = frameRects,
                 OversetIndex = 0,
-                RealTextDimensions = Size.Zero,
+                RealTextDimensions = Size<double>.Zero,
                 HasPendingFonts = hasPendingFonts,
                 NoRoom = true,
                 DotGlyph = _dotGlyph,
@@ -593,7 +593,7 @@ internal sealed class LineComposer
         }
 
         var maxX = Math.Max(reservedRight, dropIndent);
-        var finalRect = new Size(Math.Ceiling(maxX), Math.Ceiling(height));
+        var finalRect = new Size<double>(Math.Ceiling(maxX), Math.Ceiling(height));
         if (renderingParameters.TextArea.Width != Int32.MaxValue)
         {
             finalRect.Width = renderingParameters.TextArea.Width;
@@ -606,7 +606,7 @@ internal sealed class LineComposer
 
         if (slots != null)
         {
-            finalRect = new Size(Math.Ceiling(frames.Max(frame => frame.Right)), Math.Ceiling(frames.Max(frame => frame.Bottom)));
+            finalRect = new Size<double>(Math.Ceiling(frames.Max(frame => frame.Right)), Math.Ceiling(frames.Max(frame => frame.Bottom)));
         }
 
         if (glyphsData.Count > 0)
@@ -743,7 +743,7 @@ internal sealed class LineComposer
                 }
             }
 
-            realTextDimensions = new Size(maxInk - minX, maxY - minY);
+            realTextDimensions = new Size<double>(maxInk - minX, maxY - minY);
             return maxInk;
         }
 
@@ -2720,7 +2720,7 @@ internal sealed class LineComposer
                 glyph.Sideways = true;
             }
 
-            finalRect = new Size(Math.Ceiling(slots != null ? options.Frames.Max(frame => frame.Right) : right),
+            finalRect = new Size<double>(Math.Ceiling(slots != null ? options.Frames.Max(frame => frame.Right) : right),
                 finalRect.Width);
             if (glyphsData.Count > 0)
             {

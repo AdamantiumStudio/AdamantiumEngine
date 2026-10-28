@@ -8,7 +8,7 @@ namespace Adamantium.Graphics.Fonts
         /// <summary>
         /// Defines text area inside render target
         /// </summary>
-        public Rectangle TextArea { get; set; }
+        public Rectangle<int> TextArea { get; set; }
 
         public TextWrapping TextWrapping { get; set; }
 

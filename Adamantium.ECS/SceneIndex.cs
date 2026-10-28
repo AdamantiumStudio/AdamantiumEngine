@@ -48,7 +48,7 @@ public sealed class SceneIndex
 
     /// <summary>Gives <paramref name="entity"/>, drawn with <paramref name="mesh"/>, <paramref name="box"/> in the world;
     /// <paramref name="bent"/> when the mesh is bent by joints, whose box is placed afresh every frame.</summary>
-    public void Place(Entity entity, Mesh mesh, in BoundingBox box, bool bent = false)
+    public void Place(Entity entity, Mesh mesh, in BoundingBox<float> box, bool bent = false)
     {
         if (entries.TryGetValue(entity, out var entry))
         {
@@ -62,7 +62,7 @@ public sealed class SceneIndex
 
     /// <summary>The box <paramref name="entity"/> stands in, grown a little past its mesh's; false when the index does not
     /// hold it.</summary>
-    public bool TryGetBox(Entity entity, out BoundingBox box)
+    public bool TryGetBox(Entity entity, out BoundingBox<float> box)
     {
         if (entries.TryGetValue(entity, out var entry))
         {
@@ -96,7 +96,7 @@ public sealed class SceneIndex
 
     /// <summary>Every entity whose box, grown a little, <paramref name="ray"/> passes through - the ray in the world - with
     /// how far along it, in lengths of its direction, it enters. Good until the next ray cast.</summary>
-    public ReadOnlySpan<(Entity Entity, float Entry)> RayCast(in Ray ray)
+    public ReadOnlySpan<(Entity Entity, float Entry)> RayCast(in Ray<float> ray)
     {
         found.Clear();
         tree.RayCast(ray, found);

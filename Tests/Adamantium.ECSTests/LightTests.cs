@@ -13,9 +13,9 @@ public class LightTests
     public void Direction_IsTheEntitysDownAxis_AsTheEntityIsTurned()
     {
         var parent = new Entity(null, "Rig");
-        parent.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians(90));
+        parent.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians(90));
         var entity = new Entity(parent, "Light");
-        entity.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(90));
+        entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(90));
         entity.AddComponent(new Light(LightType.Spot));
 
         var expected = Vector3F.Normalize(Vector3F.TransformNormal(Vector3F.Down, entity.Transform.GetWorldMatrixF()));

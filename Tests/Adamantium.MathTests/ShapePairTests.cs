@@ -21,8 +21,8 @@ public class ShapePairTests
         {
             var a = Make(first, random);
             var b = Make(second, random);
-            var expected = Gjk.Intersects((IConvexShape)Scaled(a, 1 - Margin), (IConvexShape)b);
-            if (expected != Gjk.Intersects((IConvexShape)Scaled(a, 1 + Margin), (IConvexShape)b))
+            var expected = Gjk.Intersects((IConvexShape<float>)Scaled(a, 1 - Margin), (IConvexShape<float>)b);
+            if (expected != Gjk.Intersects((IConvexShape<float>)Scaled(a, 1 + Margin), (IConvexShape<float>)b))
             {
                 continue;
             }
@@ -39,12 +39,12 @@ public class ShapePairTests
     public void AFrustum_NeverLosesAShapeThatReachesIntoIt([ValueSource(nameof(Kinds))] string kind)
     {
         var random = new Random(100 + Array.IndexOf(Kinds, kind));
-        var frustum = new BoundingFrustum(Matrix4x4F.PerspectiveFovY(MathHelper.PiOverTwo, 1, 1, 6), true);
+        var frustum = new BoundingFrustum<float>(Matrix4x4.CreatePerspectiveFovY<float>((MathF.PI / 2), 1, 1, 6), true);
         for (int i = 0; i < 400; i++)
         {
             var shape = Make(kind, random);
             var moved = Moved(shape, new Vector3F(0, 0, 3));
-            if (Gjk.Intersects(frustum, (IConvexShape)Scaled(moved, 1 - Margin)))
+            if (Gjk.Intersects(frustum, (IConvexShape<float>)Scaled(moved, 1 - Margin)))
             {
                 Assert.That(Reaches(frustum, moved), Is.True, $"{kind} {i}");
             }
@@ -55,53 +55,53 @@ public class ShapePairTests
     {
         switch (first)
         {
-            case BoundingBox box:
+            case BoundingBox<float> box:
                 return second switch
                 {
-                    BoundingBox other => box.Intersects(ref other),
-                    BoundingSphere sphere => box.Intersects(ref sphere),
-                    OrientedBoundingBox oriented => box.Intersects(ref oriented),
-                    BoundingCapsule capsule => box.Intersects(ref capsule),
-                    ConvexHull hull => box.Intersects(hull),
+                    BoundingBox<float> other => box.Intersects(other),
+                    BoundingSphere<float> sphere => box.Intersects(sphere),
+                    OrientedBoundingBox<float> oriented => box.Intersects(oriented),
+                    BoundingCapsule capsule => capsule.Intersects(box),
+                    ConvexHull hull => hull.Intersects(box),
                     _ => throw new ArgumentException(nameof(second))
                 };
-            case BoundingSphere sphere:
+            case BoundingSphere<float> sphere:
                 return second switch
                 {
-                    BoundingBox box => sphere.Intersects(ref box),
-                    BoundingSphere other => sphere.Intersects(ref other),
-                    OrientedBoundingBox oriented => sphere.Intersects(ref oriented),
-                    BoundingCapsule capsule => sphere.Intersects(ref capsule),
-                    ConvexHull hull => sphere.Intersects(hull),
+                    BoundingBox<float> box => sphere.Intersects(box),
+                    BoundingSphere<float> other => sphere.Intersects(other),
+                    OrientedBoundingBox<float> oriented => sphere.Intersects(oriented),
+                    BoundingCapsule capsule => capsule.Intersects(sphere),
+                    ConvexHull hull => hull.Intersects(sphere),
                     _ => throw new ArgumentException(nameof(second))
                 };
-            case OrientedBoundingBox oriented:
+            case OrientedBoundingBox<float> oriented:
                 return second switch
                 {
-                    BoundingBox box => oriented.Intersects(ref box),
-                    BoundingSphere sphere => oriented.Intersects(ref sphere),
-                    OrientedBoundingBox other => oriented.Intersects(ref other),
-                    BoundingCapsule capsule => oriented.Intersects(ref capsule),
-                    ConvexHull hull => oriented.Intersects(hull),
+                    BoundingBox<float> box => oriented.Intersects(box),
+                    BoundingSphere<float> sphere => oriented.Intersects(sphere),
+                    OrientedBoundingBox<float> other => oriented.Intersects(other),
+                    BoundingCapsule capsule => capsule.Intersects(oriented),
+                    ConvexHull hull => hull.Intersects(oriented),
                     _ => throw new ArgumentException(nameof(second))
                 };
             case BoundingCapsule capsule:
                 return second switch
                 {
-                    BoundingBox box => capsule.Intersects(ref box),
-                    BoundingSphere sphere => capsule.Intersects(ref sphere),
-                    OrientedBoundingBox oriented => capsule.Intersects(ref oriented),
-                    BoundingCapsule other => capsule.Intersects(ref other),
+                    BoundingBox<float> box => capsule.Intersects(box),
+                    BoundingSphere<float> sphere => capsule.Intersects(sphere),
+                    OrientedBoundingBox<float> oriented => capsule.Intersects(oriented),
+                    BoundingCapsule other => capsule.Intersects(other),
                     ConvexHull hull => capsule.Intersects(hull),
                     _ => throw new ArgumentException(nameof(second))
                 };
             case ConvexHull hull:
                 return second switch
                 {
-                    BoundingBox box => hull.Intersects(ref box),
-                    BoundingSphere sphere => hull.Intersects(ref sphere),
-                    OrientedBoundingBox oriented => hull.Intersects(ref oriented),
-                    BoundingCapsule capsule => hull.Intersects(ref capsule),
+                    BoundingBox<float> box => hull.Intersects(box),
+                    BoundingSphere<float> sphere => hull.Intersects(sphere),
+                    OrientedBoundingBox<float> oriented => hull.Intersects(oriented),
+                    BoundingCapsule capsule => hull.Intersects(capsule),
                     ConvexHull other => hull.Intersects(other),
                     _ => throw new ArgumentException(nameof(second))
                 };
@@ -110,20 +110,20 @@ public class ShapePairTests
         }
     }
 
-    private static bool Reaches(BoundingFrustum frustum, object shape)
+    private static bool Reaches(BoundingFrustum<float> frustum, object shape)
     {
         switch (shape)
         {
-            case BoundingBox box:
+            case BoundingBox<float> box:
                 return frustum.Intersects(box);
-            case BoundingSphere sphere:
+            case BoundingSphere<float> sphere:
                 return frustum.Intersects(sphere);
-            case OrientedBoundingBox oriented:
-                return frustum.Intersects(ref oriented);
+            case OrientedBoundingBox<float> oriented:
+                return frustum.Intersects(oriented);
             case BoundingCapsule capsule:
-                return frustum.Intersects(ref capsule);
+                return capsule.Within(frustum) != ContainmentType.Disjoint;
             case ConvexHull hull:
-                return frustum.Intersects(hull);
+                return frustum.Contains([.. hull.Vertices]) != ContainmentType.Disjoint;
             default:
                 throw new ArgumentException(nameof(shape));
         }
@@ -136,12 +136,12 @@ public class ShapePairTests
         {
             case "box":
                 var half = Size(random);
-                return new BoundingBox(center - half, center + half);
+                return new BoundingBox<float>(center - half, center + half);
             case "sphere":
-                return new BoundingSphere(center, 0.2f + (float)random.NextDouble());
+                return new BoundingSphere<float>(center, 0.2f + (float)random.NextDouble());
             case "oriented":
                 var axis = Vector3F.Normalize(Point(random, 1) + new Vector3F(1e-3f));
-                return new OrientedBoundingBox(center, Size(random), QuaternionF.RotationAxis(axis, Next(random) * (float)Math.PI));
+                return new OrientedBoundingBox<float>(center, Size(random), Quaternion.CreateFromAxisAngle<float>(axis, Next(random) * (float)Math.PI));
             case "capsule":
                 var along = Point(random, 1);
                 return new BoundingCapsule(center - along, center + along, 0.1f + (float)random.NextDouble() * 0.6f);
@@ -155,21 +155,21 @@ public class ShapePairTests
     {
         switch (shape)
         {
-            case BoundingBox box:
+            case BoundingBox<float> box:
                 var center = (box.Minimum + box.Maximum) * 0.5f;
                 var half = (box.Maximum - box.Minimum) * 0.5f * factor;
-                return new BoundingBox(center - half, center + half);
-            case BoundingSphere sphere:
-                return new BoundingSphere(sphere.Center, sphere.Radius * factor);
-            case OrientedBoundingBox oriented:
-                return new OrientedBoundingBox(oriented.Center, oriented.HalfExtent * factor, oriented.Orientation);
+                return new BoundingBox<float>(center - half, center + half);
+            case BoundingSphere<float> sphere:
+                return new BoundingSphere<float>(sphere.Center, sphere.Radius * factor);
+            case OrientedBoundingBox<float> oriented:
+                return new OrientedBoundingBox<float>(oriented.Center, oriented.HalfExtent * factor, oriented.Orientation);
             case BoundingCapsule capsule:
                 var middle = capsule.Center;
                 return new BoundingCapsule(middle + (capsule.Start - middle) * factor, middle + (capsule.End - middle) * factor, capsule.Radius * factor);
             default:
                 var hull = (ConvexHull)shape;
                 var centroid = hull.Vertices.Aggregate(Vector3F.Zero, (sum, vertex) => sum + vertex) / hull.Vertices.Count;
-                return hull.Transform(Matrix4x4F.Translation(-centroid) * Matrix4x4F.Scaling(factor) * Matrix4x4F.Translation(centroid));
+                return hull.Transform(Matrix4x4.CreateTranslation<float>(-centroid) * Matrix4x4.CreateScale<float>(factor) * Matrix4x4.CreateTranslation<float>(centroid));
         }
     }
 
@@ -177,16 +177,16 @@ public class ShapePairTests
     {
         switch (shape)
         {
-            case BoundingBox box:
-                return new BoundingBox(box.Minimum + offset, box.Maximum + offset);
-            case BoundingSphere sphere:
-                return new BoundingSphere(sphere.Center + offset, sphere.Radius);
-            case OrientedBoundingBox oriented:
-                return new OrientedBoundingBox(oriented.Center + offset, oriented.HalfExtent, oriented.Orientation);
+            case BoundingBox<float> box:
+                return new BoundingBox<float>(box.Minimum + offset, box.Maximum + offset);
+            case BoundingSphere<float> sphere:
+                return new BoundingSphere<float>(sphere.Center + offset, sphere.Radius);
+            case OrientedBoundingBox<float> oriented:
+                return new OrientedBoundingBox<float>(oriented.Center + offset, oriented.HalfExtent, oriented.Orientation);
             case BoundingCapsule capsule:
                 return new BoundingCapsule(capsule.Start + offset, capsule.End + offset, capsule.Radius);
             default:
-                return ((ConvexHull)shape).Transform(Matrix4x4F.Translation(offset));
+                return ((ConvexHull)shape).Transform(Matrix4x4.CreateTranslation<float>(offset));
         }
     }
 

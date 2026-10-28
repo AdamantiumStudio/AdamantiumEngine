@@ -8,12 +8,12 @@ namespace Adamantium.MathTests
     {
         public static bool NearlyEqual(double a, double b, double epsilon)
         {
-            return MathHelper.WithinEpsilon(a, b, epsilon);
+            return MathHelper.Scalar.WithinEpsilon(a, b, epsilon);
         }
 
         public static bool NearlyEqual(double a, double b)
         {
-            return MathHelper.WithinEpsilon(a, b, 1e-8);
+            return MathHelper.Scalar.WithinEpsilon(a, b, 1e-8);
         }
 
         #region Double

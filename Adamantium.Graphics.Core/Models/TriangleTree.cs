@@ -17,7 +17,7 @@ public sealed class TriangleTree
     private const int StackSize = MaxDepth + 16;
     private const float Padding = 1e-5f;
 
-    private readonly Vector3[] points;
+    private readonly Vector3<double>[] points;
     private readonly int[] indices;
     private readonly PrimitiveType topology;
     private readonly Vector3F[] corners;
@@ -25,7 +25,7 @@ public sealed class TriangleTree
     private readonly Node[] nodes;
     private int nodeCount;
 
-    public TriangleTree(Vector3[] points, int[] indices, PrimitiveType topology)
+    public TriangleTree(Vector3<double>[] points, int[] indices, PrimitiveType topology)
     {
         this.points = points;
         this.indices = indices;
@@ -35,7 +35,7 @@ public sealed class TriangleTree
         var gathered = new Vector3F[triangles.Length];
         for (int i = 0; i < triangles.Length; i++)
         {
-            gathered[i] = (Vector3F)points[triangles[i]];
+            gathered[i] = points[triangles[i]].As<float>();
         }
 
         var count = triangles.Length / 3;
@@ -62,13 +62,13 @@ public sealed class TriangleTree
     public int TriangleCount => corners.Length / 3;
 
     /// <summary>Whether the tree was built from these very arrays in this topology.</summary>
-    public bool Describes(Vector3[] points, int[] indices, PrimitiveType topology)
+    public bool Describes(Vector3<double>[] points, int[] indices, PrimitiveType topology)
     {
         return ReferenceEquals(this.points, points) && ReferenceEquals(this.indices, indices) && this.topology == topology;
     }
 
     /// <summary>The nearest triangle along the ray, as a distance in lengths of the ray's direction.</summary>
-    public bool Intersect(Ray ray, out float distance)
+    public bool Intersect(Ray<float> ray, out float distance)
     {
         distance = float.MaxValue;
         var found = false;
@@ -103,7 +103,7 @@ public sealed class TriangleTree
             {
                 for (int i = node.First; i < node.First + node.Count; i++)
                 {
-                    if (Collision.RayIntersectsTriangle(ref ray, ref corners[i * 3], ref corners[i * 3 + 1], ref corners[i * 3 + 2], out float hit)
+                    if (Collision.RayIntersectsTriangle(ray, corners[i * 3], corners[i * 3 + 1], corners[i * 3 + 2], out float hit)
                         && hit < distance)
                     {
                         distance = hit;

@@ -18,7 +18,7 @@ public class CylinderTemplate : PrimitiveTemplate
         float diameter,
         float height,
         int tessellation = 3,
-        Matrix4x4? transform = null) : base(geometryType, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, tessellation, transform)
     {
         this.diameter = diameter;
         this.height = height;

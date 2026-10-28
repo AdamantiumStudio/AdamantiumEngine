@@ -14,7 +14,7 @@ public class ColliderShapeTests
     [Test]
     public void ACapsule_FitsAlongTheLongestSideOfItsMesh()
     {
-        var capsule = With(new CapsuleCollider(), Box(null, new Vector3(-0.5, -2, -0.5), new Vector3(0.5, 2, 0.5)));
+        var capsule = With(new CapsuleCollider(), Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5)));
 
         Assert.That(capsule.Direction, Is.EqualTo(CapsuleDirection.Y));
         Assert.That(capsule.Radius, Is.EqualTo(0.5f).Within(1e-5f));
@@ -26,7 +26,7 @@ public class ColliderShapeTests
     [Test]
     public void ACapsule_TakesTheDirectionItIsGiven()
     {
-        var capsule = With(new CapsuleCollider(), Box(null, new Vector3(-0.5, -2, -0.5), new Vector3(0.5, 2, 0.5)));
+        var capsule = With(new CapsuleCollider(), Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5)));
 
         capsule.Direction = CapsuleDirection.X;
 
@@ -38,8 +38,8 @@ public class ColliderShapeTests
     public void ACapsule_IsPickedOnItsRoundedSurface()
     {
         var scene = new PickScene();
-        var entity = Box(null, new Vector3(-2, -0.5, -0.5), new Vector3(2, 0.5, 0.5));
-        entity.Transform.Position = new Vector3(0, 0, 10);
+        var entity = Box(null, new Vector3<double>(-2, -0.5, -0.5), new Vector3<double>(2, 0.5, 0.5));
+        entity.Transform.Position = new Vector3<double>(0, 0, 10);
         With(new CapsuleCollider(), entity);
         scene.Place(entity);
 
@@ -52,13 +52,13 @@ public class ColliderShapeTests
     [Test]
     public void AHull_MissesWhereTheBoxRoundItWouldHit()
     {
-        var tetrahedron = Shape(null, [new Vector3(0, 0, 10), new Vector3(2, 0, 10), new Vector3(0, 2, 10), new Vector3(0, 0, 12)]);
+        var tetrahedron = Shape(null, [new Vector3<double>(0, 0, 10).As<float>(), new Vector3<double>(2, 0, 10).As<float>(), new Vector3<double>(0, 2, 10).As<float>(), new Vector3<double>(0, 0, 12).As<float>()]);
         var hull = With(new ConvexHullCollider(), tetrahedron);
         var box = new BoxCollider();
         tetrahedron.AddComponent(box);
         box.Initialize();
-        var corner = new Ray(new Vector3F(1.8f, 1.8f, -5), Vector3F.UnitZ);
-        var middle = new Ray(new Vector3F(0.3f, 0.3f, -5), Vector3F.UnitZ);
+        var corner = new Ray<float>(new Vector3F(1.8f, 1.8f, -5), Vector3F.UnitZ);
+        var middle = new Ray<float>(new Vector3F(0.3f, 0.3f, -5), Vector3F.UnitZ);
 
         Assert.That(box.Intersects(ref corner, out _), Is.True);
         Assert.That(hull.Intersects(ref corner, out _), Is.False);
@@ -69,14 +69,14 @@ public class ColliderShapeTests
     [Test]
     public void Colliders_OverlapWhereTheirEntitiesStand()
     {
-        var capsule = With(new CapsuleCollider(), Box(null, new Vector3(-0.5, -2, -0.5), new Vector3(0.5, 2, 0.5)));
-        var hullEntity = Box(null, new Vector3(-0.5, -0.5, -0.5), new Vector3(0.5, 0.5, 0.5));
+        var capsule = With(new CapsuleCollider(), Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5)));
+        var hullEntity = Box(null, new Vector3<double>(-0.5, -0.5, -0.5), new Vector3<double>(0.5, 0.5, 0.5));
         var hull = With(new ConvexHullCollider(), hullEntity);
 
-        hullEntity.Transform.Position = new Vector3(0.8, 1, 0);
+        hullEntity.Transform.Position = new Vector3<double>(0.8, 1, 0);
         Assert.That(capsule.Intersects(hull), Is.True);
 
-        hullEntity.Transform.Position = new Vector3(3, 1, 0);
+        hullEntity.Transform.Position = new Vector3<double>(3, 1, 0);
         Assert.That(capsule.Intersects(hull), Is.False);
     }
 
@@ -84,10 +84,10 @@ public class ColliderShapeTests
     public void AFrustum_SeesACapsuleInFront_AndNotOneBehind()
     {
         var scene = new PickScene();
-        var ahead = Box(null, new Vector3(-0.5, -2, -0.5), new Vector3(0.5, 2, 0.5));
-        ahead.Transform.Position = new Vector3(0, 0, 10);
-        var behind = Box(null, new Vector3(-0.5, -2, -0.5), new Vector3(0.5, 2, 0.5));
-        behind.Transform.Position = new Vector3(0, 0, -10);
+        var ahead = Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5));
+        ahead.Transform.Position = new Vector3<double>(0, 0, 10);
+        var behind = Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5));
+        behind.Transform.Position = new Vector3<double>(0, 0, -10);
         var seen = With(new CapsuleCollider(), ahead);
         var hidden = With(new CapsuleCollider(), behind);
         scene.Place(ahead);
@@ -102,10 +102,10 @@ public class ColliderShapeTests
     [Test]
     public void AHull_TakesInTheHullOfAPartUnderIt()
     {
-        var root = Box(null, new Vector3(-1, -1, -1), new Vector3(1, 1, 1));
+        var root = Box(null, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1));
         var rootHull = With(new ConvexHullCollider(), root);
-        var part = Box(root, new Vector3(-1, -1, -1), new Vector3(1, 1, 1));
-        part.Transform.Position = new Vector3(5, 0, 0);
+        var part = Box(root, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1));
+        part.Transform.Position = new Vector3<double>(5, 0, 0);
         var partHull = With(new ConvexHullCollider(), part);
 
         rootHull.Merge(partHull);
@@ -122,17 +122,19 @@ public class ColliderShapeTests
         return collider;
     }
 
-    private static Entity Box(Entity owner, Vector3 minimum, Vector3 maximum)
+    private static Entity Box(Entity owner, Vector3<double> minimum, Vector3<double> maximum)
     {
-        return Shape(owner, [.. new BoundingBox((Vector3F)minimum, (Vector3F)maximum).GetCorners()]);
+        var corners = new Vector3F[OrientedBoundingBox<float>.CornerCount];
+        new BoundingBox<float>(minimum.As<float>(), maximum.As<float>()).GetCorners(corners);
+        return Shape(owner, corners);
     }
 
     private static Entity Shape(Entity owner, Vector3F[] corners)
     {
-        var points = new Vector3[corners.Length];
+        var points = new Vector3<double>[corners.Length];
         for (int i = 0; i < corners.Length; i++)
         {
-            points[i] = (Vector3)corners[i];
+            points[i] = corners[i].As<double>();
         }
 
         var entity = new Entity(owner, "Shape");

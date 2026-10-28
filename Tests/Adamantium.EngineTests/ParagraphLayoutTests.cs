@@ -39,7 +39,7 @@ public class ParagraphLayoutTests
             Hyphens = hyphens,
             Language = language,
         };
-        layout.ProcessText(text, FontSize, new Size(width, height), TextWrapping.WrapByWords, trimming, alignment,
+        layout.ProcessText(text, FontSize, new Size<double>(width, height), TextWrapping.WrapByWords, trimming, alignment,
             VerticalTextAlignment.Top);
         return layout;
     }
@@ -203,7 +203,7 @@ public class ParagraphLayoutTests
         {
             Fallback = null, LineBreaking = breaking, Hyphens = Hyphens.Auto, Language = "ru", HyphenLimit = limit,
         };
-        limited.ProcessText(LongWords, FontSize, new Size(Column, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        limited.ProcessText(LongWords, FontSize, new Size<double>(Column, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assume.That(Run(free), Is.GreaterThan(limit), "without a limit more lines in a row end in a hyphen");
@@ -220,7 +220,7 @@ public class ParagraphLayoutTests
         {
             Fallback = null, LineBreaking = breaking, Hyphens = Hyphens.Auto, Language = "ru", HyphenLimit = 1,
         };
-        layout.ProcessText("высокопроизводительного", FontSize, new Size(60, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText("высокопроизводительного", FontSize, new Size<double>(60, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.GreaterThan(2));
@@ -240,7 +240,7 @@ public class ParagraphLayoutTests
             {
                 Fallback = null, LineBreaking = breaking, Hyphens = Hyphens.Manual, HyphenLimit = limit,
             };
-            layout.ProcessText(text, FontSize, new Size(110, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, FontSize, new Size<double>(110, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 alignment, VerticalTextAlignment.Top);
             return string.Join("|", Enumerable.Range(0, layout.LineCount).Select(i => layout.GetLine(i).Start));
         }

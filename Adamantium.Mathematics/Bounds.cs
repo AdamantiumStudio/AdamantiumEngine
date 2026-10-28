@@ -2,122 +2,90 @@
 
 namespace Adamantium.Mathematics
 {
+   /// <summary>
+   /// The bounds of something in a world kept in double: a box turned by <see cref="Orientation"/> around
+   /// <see cref="Center"/>, and the radius of the sphere fitted inside it. Made float - a box, an oriented box, a
+   /// sphere - only on request, as that loses precision far from the origin.
+   /// </summary>
    public struct Bounds
    {
-      public Vector3 Center;
+      /// <summary>The middle.</summary>
+      public Vector3<double> Center;
 
-      public Vector3 HalfExtent;
+      /// <summary>Half the size along the bounds' own axes.</summary>
+      public Vector3<double> HalfExtent;
 
-      public Vector3 Size => HalfExtent * 2;
-
-      public double Width => Size.X;
-
-      public double Height => Size.Y;
-
-      public double Depth => Size.Z;
-
+      /// <summary>The largest half extent: the radius of a ball whose bounds these are, the box's corners left
+      /// out.</summary>
       public double Radius;
 
-      public double Diameter => Radius * 2;
+      /// <summary>The turn from the world's axes to the bounds' own.</summary>
+      public Quaternion<double> Orientation;
 
-      public Quaternion Orientation;
-
-      public Bounds(Vector3 center, Vector3 halfExtents, Quaternion rotation)
+      /// <summary>Bounds around <paramref name="center"/>, <paramref name="halfExtents"/> to each side, turned by
+      /// <paramref name="rotation"/>.</summary>
+      public Bounds(Vector3<double> center, Vector3<double> halfExtents, Quaternion<double> rotation)
       {
          Center = center;
          HalfExtent = halfExtents;
-         Radius = Vector3F.Max(halfExtents);
+         Radius = Vector3<double>.Max(halfExtents);
          Orientation = rotation;
       }
 
-      public static Bounds FromPoints(Vector3[] points)
+      /// <summary>The full size along the bounds' own axes.</summary>
+      public readonly Vector3<double> Size => HalfExtent * 2;
+
+      /// <summary>The size along X.</summary>
+      public readonly double Width => Size.X;
+
+      /// <summary>The size along Y.</summary>
+      public readonly double Height => Size.Y;
+
+      /// <summary>The size along Z.</summary>
+      public readonly double Depth => Size.Z;
+
+      /// <summary>Twice <see cref="Radius"/>.</summary>
+      public readonly double Diameter => Radius * 2;
+
+      /// <summary>The smallest bounds along the world's axes holding every one of <paramref name="points"/>.</summary>
+      /// <exception cref="ArgumentException"><paramref name="points"/> is empty.</exception>
+      public static Bounds FromPoints(ReadOnlySpan<Vector3<double>> points)
       {
-         if (points == null || points.Length == 0)
-            throw new ArgumentNullException(nameof(points));
-
-         var minimum = new Vector3(float.MaxValue);
-         var maximum = new Vector3(float.MinValue);
-
-         for (int i = 0; i < points.Length; ++i)
-         {
-            Vector3.Min(ref minimum, ref points[i], out minimum);
-            Vector3.Max(ref maximum, ref points[i], out maximum);
-         }
-
-         var center = minimum + (maximum - minimum) / 2f;
-         var halfExtent = maximum - center;
-
-         return new Bounds(center, halfExtent, QuaternionF.Identity);
-      }
-      
-      public Bounds Transform(Vector3 scale, Quaternion rotation, Vector3 translation)
-      {
-         return new Bounds(Vector3.Transform(Center * scale, rotation) + translation, HalfExtent * scale, Orientation * rotation);
-      }
-
-      public Vector3[] GetCorners()
-      {
-         var corners = new Vector3[8];
-
-         var m = Matrix4x4.RotationQuaternion(Orientation);
-
-         var hX = m.Right * HalfExtent.X;
-         var hY = m.Up * HalfExtent.Y;
-         var hZ = m.Forward * HalfExtent.Z;
-
-         int i = 0;
-         corners[i++] = Center - hX + hY + hZ;
-         corners[i++] = Center + hX + hY + hZ;
-         corners[i++] = Center + hX - hY + hZ;
-         corners[i++] = Center - hX - hY + hZ;
-         corners[i++] = Center - hX + hY - hZ;
-         corners[i++] = Center + hX + hY - hZ;
-         corners[i++] = Center + hX - hY - hZ;
-         corners[i++] = Center - hX - hY - hZ;
-
-         return corners;
+         var box = BoundingBox.CreateFromPoints(points);
+         var center = (box.Minimum + box.Maximum) / 2;
+         return new Bounds(center, box.Maximum - center, Quaternion<double>.Identity);
       }
 
-      public static implicit operator BoundingBox(Bounds bounds)
-      {
-         var minimum = bounds.Center - bounds.HalfExtent;
-         var maximum = bounds.Center + bounds.HalfExtent;
-         return new BoundingBox(minimum, maximum);
-      }
+      /// <summary>The bounds scaled by <paramref name="scale"/> along the world's axes about the origin, turned by
+      /// <paramref name="rotation"/> around it, then moved by <paramref name="translation"/> - as
+      /// <see cref="OrientedBoundingBox{T}.Transform(Vector3{T}, Quaternion{T}, Vector3{T})"/> carries a box.</summary>
+      public readonly Bounds Transform(Vector3<double> scale, Quaternion<double> rotation, Vector3<double> translation) =>
+         FromBoundingBox(ToOrientedBoundingBox().Transform(scale, rotation, translation));
 
-      public static implicit operator OrientedBoundingBox(Bounds bounds)
-      {
-         return new OrientedBoundingBox(bounds.Center, bounds.HalfExtent, QuaternionF.Identity);
-      }
+      /// <summary>Copies the corners to <paramref name="corners"/>, in the order of
+      /// <see cref="OrientedBoundingBox{T}.GetCorners"/>.</summary>
+      /// <exception cref="ArgumentOutOfRangeException"><paramref name="corners"/> holds fewer than eight.</exception>
+      public readonly void GetCorners(Span<Vector3<double>> corners) => ToOrientedBoundingBox().GetCorners(corners);
 
-      public static implicit operator BoundingSphere(Bounds bounds)
-      {
-         return new BoundingSphere(bounds.Center, (float)bounds.Radius);
-      }
+      /// <summary>The box along the world's axes of <see cref="Center"/> and <see cref="HalfExtent"/>, the
+      /// orientation left out.</summary>
+      public readonly BoundingBox<double> ToBoundingBox() => new(Center - HalfExtent, Center + HalfExtent);
 
-      public static Bounds FromBoundingBox(OrientedBoundingBox obb)
-      {
-         return FromBoundingBox(ref obb);
-      }
+      /// <summary>The oriented box of the same center, half extent and orientation.</summary>
+      public readonly OrientedBoundingBox<double> ToOrientedBoundingBox() => new(Center, HalfExtent, Orientation);
 
-      public static Bounds FromBoundingBox(ref OrientedBoundingBox obb)
-      {
-         return new Bounds((Vector3)obb.Center, (Vector3)obb.HalfExtent, obb.Orientation);
-      }
+      /// <summary>The sphere of <see cref="Center"/> and <see cref="Radius"/>.</summary>
+      public readonly BoundingSphere<double> ToBoundingSphere() => new(Center, Radius);
 
-      public static Bounds FromBoundingSphere(BoundingSphere sphere)
-      {
-         return FromBoundingSphere(ref sphere);
-      }
+      /// <summary>The bounds of <paramref name="box"/>.</summary>
+      public static Bounds FromBoundingBox(OrientedBoundingBox<double> box) => new(box.Center, box.HalfExtent, box.Orientation);
 
-      public static Bounds FromBoundingSphere(ref BoundingSphere sphere)
-      {
-         return new Bounds((Vector3)sphere.Center, new Vector3(sphere.Radius), QuaternionF.Identity);
-      }
+      /// <summary>The bounds of <paramref name="sphere"/>: the cube around it.</summary>
+      public static Bounds FromBoundingSphere(BoundingSphere<double> sphere) =>
+         new(sphere.Center, new Vector3<double>(sphere.Radius), Quaternion<double>.Identity);
 
-      public override string ToString()
-      {
-         return $"Center: {Center}, HalfExtent: {HalfExtent}, Radius: {Radius}, Orientation: {Orientation}";
-      }
+      /// <inheritdoc />
+      public override readonly string ToString() =>
+         $"Center: {Center}, HalfExtent: {HalfExtent}, Radius: {Radius}, Orientation: {Orientation}";
    }
 }

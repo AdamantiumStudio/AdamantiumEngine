@@ -36,7 +36,7 @@ public class SpacingTests
             LetterSpacing = letters ?? SpacingRange.Letters,
             Tracking = tracking,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -83,7 +83,7 @@ public class SpacingTests
             Fallback = null, EmitNewlineCarets = true, LetterSpacing = new SpacingRange(-0.1, 0, 0.5),
         };
 
-        Assert.DoesNotThrow(() => layout.ProcessText("one two\n\n   \nthree four", FontSize, new Size(Width, double.NaN),
+        Assert.DoesNotThrow(() => layout.ProcessText("one two\n\n   \nthree four", FontSize, new Size<double>(Width, double.NaN),
             TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top));
         Assert.That(layout.LineCount, Is.EqualTo(4));
     }
@@ -96,7 +96,7 @@ public class SpacingTests
         {
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft, LetterSpacing = new SpacingRange(0, 0, 0.5),
         };
-        layout.ProcessText("漢字12月漢字漢字漢字漢字漢字", FontSize, new Size(200, 210), TextWrapping.WrapByWords,
+        layout.ProcessText("漢字12月漢字漢字漢字漢字漢字", FontSize, new Size<double>(200, 210), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
         var first = Array.FindIndex(glyphs, glyph => glyph.Symbol == '1');
@@ -112,7 +112,7 @@ public class SpacingTests
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, Tracking = 100 };
         var text = new AttributedText("ab", new TextAttributes { Tracking = -50 });
-        layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         var plain = Lay("ab").GetTextData();
@@ -300,7 +300,7 @@ public class SpacingTests
             {
                 Fallback = null, LineBreaking = breaking, LetterSpacing = new SpacingRange(-0.5, 0, 0.5),
             };
-            layout.ProcessText(text, 20, new Size(196, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, 20, new Size<double>(196, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
             return layout;
         }

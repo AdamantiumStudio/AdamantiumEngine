@@ -174,7 +174,7 @@ public class GltfDracoTests
                 var match = Nearest(original, Centroid(mesh, t), taken);
                 taken[match / 3] = true;
                 var turn = Enumerable.Range(0, 3).FirstOrDefault(r => Enumerable.Range(0, 3).All(j =>
-                    Vector3.Distance(original.Points[original.Indices[match + (r + j) % 3]], mesh.Points[mesh.Indices[t + j]]) < 0.01), -1);
+                    Vector3<double>.Distance(original.Points[original.Indices[match + (r + j) % 3]], mesh.Points[mesh.Indices[t + j]]) < 0.01), -1);
                 Assert.That(turn, Is.Not.EqualTo(-1), $"mesh {m} triangle {t / 3} has the corners of no original one, in its order");
                 for (int j = 0; j < 3; j++)
                 {
@@ -189,12 +189,12 @@ public class GltfDracoTests
         }
     }
 
-    private static Vector3 Centroid(Mesh mesh, int first) =>
+    private static Vector3<double> Centroid(Mesh mesh, int first) =>
         (mesh.Points[mesh.Indices[first]] + mesh.Points[mesh.Indices[first + 1]] + mesh.Points[mesh.Indices[first + 2]]) / 3;
 
-    private static int Nearest(Mesh mesh, Vector3 centroid, bool[] taken) =>
+    private static int Nearest(Mesh mesh, Vector3<double> centroid, bool[] taken) =>
         Enumerable.Range(0, mesh.Indices.Length / 3).Where(t => !taken[t]).Select(t => t * 3)
-            .MinBy(t => Vector3.Distance(Centroid(mesh, t), centroid));
+            .MinBy(t => Vector3<double>.Distance(Centroid(mesh, t), centroid));
 
     private static List<Mesh> Meshes(SceneData scene)
     {

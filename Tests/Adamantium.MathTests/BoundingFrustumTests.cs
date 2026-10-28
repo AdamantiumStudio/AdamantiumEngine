@@ -1,3 +1,4 @@
+using System;
 using Adamantium.Mathematics;
 using NUnit.Framework;
 
@@ -16,15 +17,15 @@ public class BoundingFrustumTests
         var before = new Vector3F(0, 0, Near * 0.6f);
         var after = new Vector3F(0, 0, Near * 1.1f);
 
-        Assert.That(frustum.Contains(ref before), Is.EqualTo(ContainmentType.Disjoint));
-        Assert.That(frustum.Contains(ref after), Is.EqualTo(ContainmentType.Contains));
+        Assert.That(frustum.Contains(before), Is.EqualTo(ContainmentType.Disjoint));
+        Assert.That(frustum.Contains(after), Is.EqualTo(ContainmentType.Contains));
     }
 
     [Test]
     public void ABoxAcrossOnePlane_ButBeyondAnother_IsDisjoint()
     {
         var frustum = Perspective();
-        var box = new BoundingBox(new Vector3F(-30, 40, 10), new Vector3F(-5, 45, 12));
+        var box = new BoundingBox<float>(new Vector3F(-30, 40, 10), new Vector3F(-5, 45, 12));
 
         Assert.That(frustum.Contains(box), Is.EqualTo(ContainmentType.Disjoint));
     }
@@ -34,8 +35,8 @@ public class BoundingFrustumTests
     {
         var frustum = Perspective();
 
-        Assert.That(frustum.Contains(new BoundingBox(new Vector3F(-1, -1, 10), new Vector3F(1, 1, 12))), Is.EqualTo(ContainmentType.Contains));
-        Assert.That(frustum.Contains(new BoundingBox(new Vector3F(-20, -1, 10), new Vector3F(1, 1, 12))), Is.EqualTo(ContainmentType.Intersects));
+        Assert.That(frustum.Contains(new BoundingBox<float>(new Vector3F(-1, -1, 10), new Vector3F(1, 1, 12))), Is.EqualTo(ContainmentType.Contains));
+        Assert.That(frustum.Contains(new BoundingBox<float>(new Vector3F(-20, -1, 10), new Vector3F(1, 1, 12))), Is.EqualTo(ContainmentType.Intersects));
     }
 
     [Test]
@@ -52,15 +53,15 @@ public class BoundingFrustumTests
     public void AFrustumInsideAnother_IsContained_AndOneFarAway_IsDisjoint()
     {
         var outer = Perspective();
-        var inner = new BoundingFrustum(Matrix4x4F.PerspectiveFovY(MathHelper.PiOverFour, 1, 2, 50), true);
-        var away = new BoundingFrustum(Matrix4x4F.Translation(0, 0, 500) * Matrix4x4F.PerspectiveFovY(MathHelper.PiOverFour, 1, 2, 50), true);
+        var inner = new BoundingFrustum<float>(Matrix4x4.CreatePerspectiveFovY<float>((MathF.PI / 4), 1, 2, 50), true);
+        var away = new BoundingFrustum<float>(Matrix4x4.CreateTranslation<float>(0, 0, 500) * Matrix4x4.CreatePerspectiveFovY<float>((MathF.PI / 4), 1, 2, 50), true);
 
         Assert.That(outer.Contains(inner), Is.EqualTo(ContainmentType.Contains));
         Assert.That(outer.Contains(away), Is.EqualTo(ContainmentType.Disjoint));
     }
 
-    private static BoundingFrustum Perspective()
+    private static BoundingFrustum<float> Perspective()
     {
-        return new BoundingFrustum(Matrix4x4F.PerspectiveFovY(MathHelper.PiOverTwo, 1, Near, Far), true);
+        return new BoundingFrustum<float>(Matrix4x4.CreatePerspectiveFovY<float>((MathF.PI / 2), 1, Near, Far), true);
     }
 }

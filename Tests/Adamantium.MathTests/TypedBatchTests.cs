@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using Vector3 = Adamantium.Mathematics.Typed.Vector3;
+using Vector3 = Adamantium.Mathematics.Vector3;
 
 namespace Adamantium.MathTests;
 

@@ -20,7 +20,7 @@ public sealed class ColorPaintOperation
     public uint GlyphIndex { get; private set; }
 
     /// <summary>From the clipping outline's space into the color glyph's.</summary>
-    public Matrix3x2 Transform { get; private set; }
+    public Matrix3x2<double> Transform { get; private set; }
 
     /// <summary>What a <see cref="ColorPaintOperationKind.Fill"/> paints; its transform maps into the color glyph's
     /// space too.</summary>
@@ -31,7 +31,7 @@ public sealed class ColorPaintOperation
 
     /// <summary>A step that cuts what follows to <paramref name="glyphIndex"/>'s outline, placed by
     /// <paramref name="transform"/>.</summary>
-    public static ColorPaintOperation PushClip(uint glyphIndex, Matrix3x2 transform) =>
+    public static ColorPaintOperation PushClip(uint glyphIndex, Matrix3x2<double> transform) =>
         new(ColorPaintOperationKind.PushClip) { GlyphIndex = glyphIndex, Transform = transform };
 
     /// <summary>A step that takes the last clip away.</summary>

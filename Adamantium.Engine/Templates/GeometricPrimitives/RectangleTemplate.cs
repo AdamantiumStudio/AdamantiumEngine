@@ -19,7 +19,7 @@ public class RectangleTemplate : PrimitiveTemplate
         float height = 1,
         CornerRadius corners = default,
         int tessellation = 20,
-        Matrix4x4? transform = null) : base(geometryType, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, tessellation, transform)
     {
         this.width = width;
         this.height = height;

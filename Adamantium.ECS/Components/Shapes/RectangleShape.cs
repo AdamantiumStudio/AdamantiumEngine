@@ -11,16 +11,16 @@ namespace Adamantium.ECS.Components;
 [ViewModel]
 public partial class RectangleShape : ProceduralShape
 {
-    [Bindable] private Vector2 size;
+    [Bindable] private Vector2<double> size;
     [Bindable] private double rounding;
 
     public RectangleShape()
     {
-        Size = new Vector2(1);
+        Size = new Vector2<double>(1);
         Tessellation = 20;
     }
 
-    partial void OnSizeChanged(Vector2 value) => Changed();
+    partial void OnSizeChanged(Vector2<double> value) => Changed();
 
     partial void OnRoundingChanged(double value) => Changed();
 

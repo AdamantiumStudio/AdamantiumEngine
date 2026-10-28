@@ -22,7 +22,7 @@ public class GlyphRowTests
 
         for (var size = 8.0; size <= 40; size += 0.25)
         {
-            layout.ProcessText(Letters, size, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+            layout.ProcessText(Letters, size, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             var scale = size / layout.Font.UnitsPerEm;
             var glyphs = layout.GetTextData();

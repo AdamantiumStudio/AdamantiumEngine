@@ -21,9 +21,9 @@ namespace Adamantium.Engine.CompilerTests
             // Values a float holds exactly - which is what a model file's coordinates are
             var points = new[]
             {
-                new Vector3(0.5, -0.25, 1024),
-                new Vector3(0.0625, 3.375, -0.125),
-                new Vector3(-16384, 0.75, 2.5)
+                new Vector3<double>(0.5, -0.25, 1024),
+                new Vector3<double>(0.0625, 3.375, -0.125),
+                new Vector3<double>(-16384, 0.75, 2.5)
             };
 
             var loaded = RoundTrip(Mesh(points));
@@ -40,9 +40,9 @@ namespace Adamantium.Engine.CompilerTests
             // 0.1 has no exact float, so the writer has to keep all eight bytes rather than round it
             var points = new[]
             {
-                new Vector3(0.1, 0.2, 0.3),
-                new Vector3(1.0 / 3.0, 2.0 / 7.0, 1e-17),
-                new Vector3(1, 2, 3)
+                new Vector3<double>(0.1, 0.2, 0.3),
+                new Vector3<double>(1.0 / 3.0, 2.0 / 7.0, 1e-17),
+                new Vector3<double>(1, 2, 3)
             };
 
             var loaded = RoundTrip(Mesh(points));
@@ -57,7 +57,7 @@ namespace Adamantium.Engine.CompilerTests
         public void Indices_SurviveBeyondWhatAUShortHolds()
         {
             // 70000 does not fit in a ushort, so the narrow path must not be taken
-            var points = Enumerable.Range(0, 3).Select(i => new Vector3(i, 0, 0)).ToArray();
+            var points = Enumerable.Range(0, 3).Select(i => new Vector3<double>(i, 0, 0)).ToArray();
             var mesh = Mesh(points);
             mesh.SetIndices([0, 70000, 65535]);
 
@@ -68,7 +68,7 @@ namespace Adamantium.Engine.CompilerTests
         public void Bitangents_ComeBackExactlyWhenTheyAreDerived()
         {
             // How CalculateTangentsAndBinormals makes them: cross(normal, tangent) * tangent.W
-            var mesh = Mesh([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)]);
+            var mesh = Mesh([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0)]);
             var normals = new[] { new Vector3F(0, 0, 1), new Vector3F(0, 0, 1), new Vector3F(0, 0, 1) };
             var tangents = new[] { new Vector4F(1, 0, 0, 1), new Vector4F(1, 0, 0, 1), new Vector4F(1, 0, 0, -1) };
             var bitangents = tangents
@@ -88,7 +88,7 @@ namespace Adamantium.Engine.CompilerTests
         public void Bitangents_AreKeptWhenTheyAreNotDerivable()
         {
             // A mesh whose bitangents came from somewhere else must not have them replaced by the rebuild
-            var mesh = Mesh([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)]);
+            var mesh = Mesh([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0)]);
             mesh.SetNormals([new Vector3F(0, 0, 1), new Vector3F(0, 0, 1), new Vector3F(0, 0, 1)]);
             var tangents = new[] { new Vector4F(1, 0, 0, 1), new Vector4F(1, 0, 0, 1), new Vector4F(1, 0, 0, 1) };
             var odd = new[] { new Vector3F(0.3f, 0.7f, 0.1f), new Vector3F(0, 1, 0), new Vector3F(0, 1, 0) };
@@ -101,7 +101,7 @@ namespace Adamantium.Engine.CompilerTests
         [Test]
         public void EverySemanticSurvivesTheRoundTrip()
         {
-            var mesh = Mesh([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)]);
+            var mesh = Mesh([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0)]);
             mesh.SetNormals([new Vector3F(0, 0, 1), new Vector3F(0, 1, 0), new Vector3F(1, 0, 0)]);
             mesh.SetUVs(0, [new Vector2F(0, 0), new Vector2F(0.5f, 0.25f), new Vector2F(1, 1)]);
             mesh.SetUVs(3, [new Vector2F(2, 3), new Vector2F(4, 5), new Vector2F(6, 7)]);
@@ -144,7 +144,7 @@ namespace Adamantium.Engine.CompilerTests
 
         #region Plumbing
 
-        private static Mesh Mesh(Vector3[] points)
+        private static Mesh Mesh(Vector3<double>[] points)
         {
             var mesh = new Mesh(PrimitiveType.TriangleList) { MaterialID = "mat" };
             mesh.SetPoints(points);
