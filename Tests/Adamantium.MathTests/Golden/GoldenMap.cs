@@ -172,6 +172,12 @@ public sealed class GoldenMap
             case int i:
                 into.Add(i);
                 return;
+            case uint u:
+                into.Add(u);
+                return;
+            case byte b:
+                into.Add(b);
+                return;
         }
 
         foreach (var field in value.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))

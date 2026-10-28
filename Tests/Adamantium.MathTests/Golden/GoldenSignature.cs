@@ -15,7 +15,7 @@ public sealed record GoldenSignature(string Type, string Method, bool IsInstance
         ["Quaternion"] = 4, ["QuaternionF"] = 4, ["Matrix3x2"] = 6, ["Matrix3x2F"] = 6, ["Matrix3x3"] = 9,
         ["Matrix3x3F"] = 9, ["Matrix4x4"] = 16, ["Matrix4x4F"] = 16, ["Size"] = 2, ["SizeF"] = 2, ["Rectangle"] = 4,
         ["RectangleF"] = 4, ["Thickness"] = 4, ["Ray"] = 6, ["Plane"] = 4, ["BoundingBox"] = 6, ["BoundingSphere"] = 4,
-        ["ViewportF"] = 6
+        ["ViewportF"] = 6, ["Color"] = 4, ["Color4F"] = 4, ["Color3F"] = 3, ["ColorBGRA"] = 4, ["Bool4"] = 4
     };
 
     private static readonly string[] SingleOnly = ["Ray", "Plane", "BoundingBox", "BoundingSphere", "Collision", "BoundingFrustum", "OrientedBoundingBox"];

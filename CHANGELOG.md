@@ -19,6 +19,11 @@ All packages share one version.
   projection, a field of view in degrees, collinearity, spherical blends of perpendicular rotations, the angles of a
   rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
   one or far apart - a far translation in float, a small 2D scale.
+- `Adamantium.Mathematics.Typed` colors and vertex values: `Color` (R8G8B8A8), `ColorBGRA` (B8G8R8A8), `Color3F`,
+  `Color4F` and `Bool4` (four 32-bit truths). A fraction becomes a byte as UNORM does - clamped, rounded to the
+  nearest - so a byte goes through a fraction and back unchanged; each packing is named by its byte order from the
+  lowest up, as Vulkan names its formats, and each `From` is the inverse of its `To`: the number 0xAARRGGBB, which
+  System.Drawing calls ARGB, is `FromBgra` here, and `FromArgb` takes alpha in the lowest byte.
 - `Adamantium.Mathematics.Typed` geometry, generic in the same way: `Size<T>`, `Rectangle<T>` (X, Y, Width, Height),
   `Viewport<T>`, `Ray<T>`, `Ray2<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
   `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
