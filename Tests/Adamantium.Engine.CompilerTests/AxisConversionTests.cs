@@ -63,6 +63,34 @@ namespace Adamantium.Engine.CompilerTests
                 $"{pair.From} -> {pair.To}");
         }
 
+        /// <summary>The mesh and the matrix agreeing proves nothing if both are wrong: the file's up has to come out as
+        /// the engine's, which is -Y. A Z_UP model used to stand on its head.</summary>
+        [Test]
+        public void TheFilesUp_BecomesTheEnginesUp([ValueSource(nameof(IntoTheEngine))] (UpAxis From, UpAxis To) pair)
+        {
+            var up = pair.From == UpAxis.Z_UP ? new Vector3<double>(0, 0, 1) : new Vector3<double>(0, 1, 0);
+
+            var mesh = new Mesh(PrimitiveType.TriangleList) { UpAxis = pair.From };
+            mesh.SetPoints([up]);
+            mesh.ChangeCoordinateSystem(pair.To);
+
+            Assert.That((mesh.Points[0].As<float>() - new Vector3F(0, -1, 0)).Length(), Is.LessThan(0.0001f),
+                $"{pair.From} -> {pair.To}");
+        }
+
+        /// <summary>A model has to face where the engine's models face, -Z. Blender and Max put a model's front to -Y
+        /// of a Z_UP file, glTF to +Z; a Z_UP model used to turn its back.</summary>
+        [TestCase(UpAxis.Z_UP, 0, -1, 0)]
+        [TestCase(UpAxis.Y_UP_RH_FRONT_Z, 0, 0, 1)]
+        public void TheFilesFront_BecomesTheEnginesFront(UpAxis from, double x, double y, double z)
+        {
+            var mesh = new Mesh(PrimitiveType.TriangleList) { UpAxis = from };
+            mesh.SetPoints([new Vector3<double>(x, y, z)]);
+            mesh.ChangeCoordinateSystem(UpAxis.Y_DOWN_RH);
+
+            Assert.That((mesh.Points[0].As<float>() - new Vector3F(0, 0, -1)).Length(), Is.LessThan(0.0001f));
+        }
+
         /// <summary>A triangle has to keep facing the way it faced. Whatever the axis change does to the points, the
         /// side the winding names must come out as the mapped original side - which is only true if the winding is
         /// reversed exactly when the change flips handedness, and left alone when it is a plain rotation.</summary>

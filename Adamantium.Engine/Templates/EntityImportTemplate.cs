@@ -124,19 +124,9 @@ public class EntityImportTemplate : IEntityTemplate
                     restPoses[currentMesh.ID] = new SceneData.KeyFrame(scale, currentMesh.Position, currentMesh.Rotation);
                 }
 
-                if (sceneData.Controllers.TryGetValue(currentMesh.ID, out var nodeSkin) && nodeSkin.JointsAreNodes)
+                if (sceneData.Controllers.TryGetValue(currentMesh.ID, out var nodeSkin))
                 {
                     skinned.Add((entity, nodeSkin));
-                }
-                else if (sceneData.Controllers.ContainsKey(currentMesh.ID))
-                {
-                    var controllerData = sceneData.Controllers[currentMesh.ID];
-                    var controller = new AnimationController();
-                    controller.BindShapeMatrix = controllerData.BindShapeMatrix;
-                    controller.ControllerId = controllerData.Name;
-                    controller.JointDictionary = controllerData.JointDictionary;
-
-                    entity.AddComponent(controller);
                 }
 
                 foreach (var newEntity in currentMesh.Dependencies)
@@ -164,7 +154,7 @@ public class EntityImportTemplate : IEntityTemplate
 
             if (sceneData.Clips is { Count: > 0 })
             {
-                var animation = new AnimationComponent { Skeletons = sceneData.Skeletons };
+                var animation = new AnimationComponent();
                 foreach (var (name, clip) in sceneData.Clips)
                 {
                     animation.Clips[name] = clip;
@@ -179,14 +169,6 @@ public class EntityImportTemplate : IEntityTemplate
                 }
 
                 animation.CurrentClip = sceneData.Clips.Keys.First();
-                owner.AddComponent(animation);
-            }
-            else if (sceneData.Animation.Count > 0)
-            {
-                var animation = new AnimationComponent();
-                animation.Animations = sceneData.Animation;
-                animation.Skeletons = sceneData.Skeletons;
-
                 owner.AddComponent(animation);
             }
 

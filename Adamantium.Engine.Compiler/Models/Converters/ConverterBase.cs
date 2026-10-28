@@ -191,24 +191,9 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 
          foreach (var controller in SceneDataContainer.Controllers.Values)
          {
-            controller.BindShapeMatrix = AxisConversion.Convert(controller.BindShapeMatrix, conversion);
-
             for (int i = 0; i < controller.JointMatrices.Count; i++)
             {
                controller.JointMatrices[i] = AxisConversion.Convert(controller.JointMatrices[i], conversion);
-            }
-
-            foreach (var name in controller.JointDictionary.Keys.ToArray())
-            {
-               controller.JointDictionary[name] = AxisConversion.Convert(controller.JointDictionary[name], conversion);
-            }
-         }
-
-         foreach (var joints in SceneDataContainer.Skeletons.Values)
-         {
-            foreach (var joint in Flatten(joints))
-            {
-               joint.LocalMatrix = AxisConversion.Convert(joint.LocalMatrix, conversion);
             }
          }
 
@@ -225,17 +210,6 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
                   frame.Rotation = rotation;
                }
             }
-         }
-      }
-
-      private static IEnumerable<SceneData.Joint> Flatten(List<SceneData.Joint> roots)
-      {
-         var stack = new Stack<SceneData.Joint>(roots);
-         while (stack.Count > 0)
-         {
-            var joint = stack.Pop();
-            yield return joint;
-            foreach (var child in joint.Children) stack.Push(child);
          }
       }
 

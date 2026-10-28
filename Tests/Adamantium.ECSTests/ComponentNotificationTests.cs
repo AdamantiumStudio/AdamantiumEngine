@@ -19,7 +19,6 @@ public class ComponentNotificationTests
         yield return Case(new Material(), m => m.TexturePath = "a.png", nameof(Material.TexturePath));
         yield return Case(new AnimationComponent(), a => a.AnimationSpeed = 2, nameof(AnimationComponent.AnimationSpeed));
         yield return Case(new AnimationComponent(), a => a.IsPaused = true, nameof(AnimationComponent.IsPaused));
-        yield return Case(new AnimationController(), c => c.ControllerId = "rig", nameof(AnimationController.ControllerId));
         yield return Case(new Camera(60, 800, 600, 0.1f, 1000f), c => c.Velocity = 7, nameof(CameraBase.Velocity));
     }
 

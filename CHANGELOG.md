@@ -417,8 +417,8 @@ All packages share one version.
   `Duration`, and `Targets` - the entities a clip poses by their node's key; a clip with targets poses them each frame
   (`Pose`, `Sample`), a joint and a wheel alike, through `Transform.SetPose`, which stands an entity as a node is posed
   whatever its pivot. `EntityImportTemplate` gives a model with clips one, its targets found among its nodes; a format
-  with a single clip - Collada - has it in `Clips`, under the model's name, and no longer in `SceneData.Animation`,
-  which only a scene saved before keeps. `RestPoses` keep how each target stands with no clip on it: choosing another
+  with a single clip - Collada - has it in `Clips`, under the model's name, its frames keyed by the nodes they move.
+  `RestPoses` keep how each target stands with no clip on it: choosing another
   clip, or none (`null`, an unknown name - which stops the play), stands them there first
   (`Rest`). `TimeAt` plays a clip by every `CalculateOptions`, back-and-forth ones included.
 - `SceneData.Material` and `Material` keep glTF's PBR: metallic and roughness factors and their map, normal map and its
@@ -1057,6 +1057,20 @@ All packages share one version.
 
 ### Fixed
 
+- A Collada skin bends. Its joints are nodes of the model, which the skin names by their IDs, found by their sids
+  under the controller's `skeleton`; the bind shape, read in the order the file writes it, is taken into each inverse
+  bind matrix; the clip moves the joints' nodes. It went through `AnimationController`, whose matrices nothing read,
+  and stood unbent. A joint the scene lacks is reported and kept.
+- Collada import: a node with no transform of its own stood where the node read before it stood, in the same file or
+  the one imported before; a joint with no id, sid or name, a morph controller, a skin with no weights, or two skins of
+  one mesh failed the import - the morph and the extra skins are reported and left out now; a mesh on a joint hangs
+  from it rather than standing apart; an id is no longer taken for another node's sid, and of joints sharing a sid
+  with no skeleton to choose among them the first is taken and reported; an influence of the bind shape alone
+  (joint -1) is left out and reported; a matrix node moved by its parts stood at the origin at rest.
+- A Z_UP model - Collada from Blender or Max, 3DS - stood on its head with its back to the camera: its up comes in as
+  the engine's, -Y, and its front, -Y in the file, as -Z, where a glTF model's goes.
+- Content is cooked again when any assembly of the compiler changes - an importer, the scene format - not only when
+  its own does.
 - `MSDFGenerator.GenerateMSDFForExistingTextureData` filled the space away from a glyph with a distance that changed
   with where the glyph sat in its em square; it is half the em now, for every glyph.
 - A character no family of a font fallback's list has - Hebrew or Arabic on a Linux whose fonts for them are not
@@ -1302,8 +1316,7 @@ All packages share one version.
   which the tools' update does after a tool moved or turned what it orbits; until its next frame the camera was swung
   along, and the view doubled while turning. A camera locked behind a turned host looks at it: its offset was turned
   by the host twice.
-- `Material`, `AnimationComponent` (its key frames, speed, pause and option), `AnimationController.ControllerId` and
-  `CameraBase.Velocity` say when they change (`[Bindable]`), as the other components do: an inspector showing them
+- `Material`, `AnimationComponent` (its key frames, speed, pause and option) and `CameraBase.Velocity` say when they change (`[Bindable]`), as the other components do: an inspector showing them
   did not follow a change made elsewhere.
 - The ground grid's axes, and its lines seen edge-on, are hidden behind what stands on the ground, as its cells are;
   they were drawn over it (`EditorOverlayProcessor.DrawFlatBehindScene`).
@@ -2153,6 +2166,11 @@ All packages share one version.
 
 ### Removed
 
+- `AnimationController`, `AnimationComponent.Skeletons` and `InterpolatedMatrices`, `SceneData.Animation`,
+  `SceneData.Skeletons`, `SceneData.Joint`, `SkeletonCollection`, `Controller.BindShapeMatrix`, `JointDictionary` and
+  `JointsAreNodes`, `FrameCollection.FullName` and `ControllerId`, `AnimationExtension`, `AnimationHelper` and
+  `CalculateKeyFrameOptions`: every skin bends through `Skin`, its joints nodes of the model. A scene saved with them
+  loads, what they held left out.
 - The float and double pairs of the mathematics - `Vector2`/`Vector2F`, `Vector3`/`Vector3F`, `Vector4`/`Vector4F`,
   `Quaternion`/`QuaternionF`, `Matrix3x2`/`Matrix3x2F`, `Matrix3x3`/`Matrix3x3F`, `Matrix4x4`/`Matrix4x4F`,
   `Rectangle`/`RectangleF`, `Size`/`SizeF`, `Int3`, `Int4`, `Ray2D`, `Ray2F`, `ViewportF` and the old `Ray`, `Plane`,

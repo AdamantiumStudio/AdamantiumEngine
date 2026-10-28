@@ -6,22 +6,20 @@ namespace Adamantium.Graphics.Core.Models;
 
 public partial class SceneData
 {
+   /// <summary>A skin: the joints a mesh's vertices are bound to - nodes of the model - and how the mesh stood against
+   /// them when it was bound.</summary>
    public class Controller
    {
       public Controller()
       {
-         BindShapeMatrix = Matrix4x4F.Identity;
          ControllerId = String.Empty;
          Name = String.Empty;
          MeshId = String.Empty;
-         JointDictionary = new Dictionary<String, Matrix4x4F>();
          JointNames = new List<String>();
          JointMatrices = new List<Matrix4x4F>();
          BoneIndices = new List<Vector4F>();
          BoneWeights = new List<Vector4F>();
       }
-
-      public Matrix4x4F BindShapeMatrix { get; set; }
 
       public String ControllerId { get; set; }
 
@@ -29,20 +27,17 @@ public partial class SceneData
 
       public String Name { get; set; }
 
-      public Dictionary<String, Matrix4x4F> JointDictionary { get; set; }
-
       public List<Vector4F> BoneIndices { get; set; }
-         
-      public List<Vector4F> BoneWeights { get; set; } 
 
+      public List<Vector4F> BoneWeights { get; set; }
+
+      /// <summary>The joints, in the order a vertex's bone indices count them: the <see cref="Model.ID"/>s of the
+      /// nodes they are.</summary>
       public List<String> JointNames { get; set; }
 
+      /// <summary>Each joint's inverse bind matrix, in the order of <see cref="JointNames"/>: from the mesh as it was
+      /// bound into the joint's own space.</summary>
       public List<Matrix4x4F> JointMatrices { get; set; }
-
-      /// <summary>Whether the joints are nodes of the model - <see cref="JointNames"/> their <see cref="Model.ID"/>s, in a
-      /// vertex's order, <see cref="JointMatrices"/> their inverse bind matrices - as glTF has them, rather than a
-      /// skeleton of their own.</summary>
-      public Boolean JointsAreNodes { get; set; }
 
       /// <summary>The ID of the node the source file names the skeleton's root; null when it names none.</summary>
       public String SkeletonRoot { get; set; }

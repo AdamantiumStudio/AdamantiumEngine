@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Adamantium.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.MVVM;
-using Serilog;
 
 namespace Adamantium.ECS.Components
 {
@@ -22,8 +20,6 @@ namespace Adamantium.ECS.Components
         /// <summary>The frames of the clip playing - <see cref="CurrentClip"/>'s - by what they move.</summary>
         public SceneData.AnimationCollection Animations { get; set; }
 
-        public SceneData.SkeletonCollection Skeletons { get; set; }
-
         /// <summary>The clips the model brings - walking, running, jumping - by name.</summary>
         public SceneData.AnimationSetCollection Clips { get; set; }
 
@@ -34,8 +30,8 @@ namespace Adamantium.ECS.Components
         /// <summary>The names of <see cref="Clips"/>, as a list to choose from.</summary>
         public IEnumerable<String> ClipNames => Clips.Keys;
 
-        /// <summary>The entities the clips pose, by the key their frames go by - a node of the model. A clip with any
-        /// of them poses those nodes; one with none plays as joints of a skeleton (<see cref="InterpolatedMatrices"/>).</summary>
+        /// <summary>The entities the clips pose, by the key their frames go by - a node of the model, a skeleton's
+        /// joint among them.</summary>
         public Dictionary<String, Entity> Targets { get; } = new();
 
         /// <summary>How each of <see cref="Targets"/> stands with no clip on it, by the same key: what a node takes back
@@ -87,31 +83,23 @@ namespace Adamantium.ECS.Components
         public AnimationComponent()
         {
             Animations = new SceneData.AnimationCollection();
-            Skeletons = new SceneData.SkeletonCollection();
             Clips = new SceneData.AnimationSetCollection();
             AnimationSpeed = 1.0;
-
-            InterpolatedMatrices = new Dictionary<string, Matrix4x4F>();
         }
 
         public AnimationComponent(AnimationComponent copy)
         {
             Animations = new SceneData.AnimationCollection(copy.Animations);
-            Skeletons = new SceneData.SkeletonCollection(copy.Skeletons);
             Clips = CopyClips(copy.Clips);
             CurrentClip = copy.CurrentClip;
             Option = CalculateOptions.CyclicForward;
-            InterpolatedMatrices = new Dictionary<string, Matrix4x4F>();
         }
-
-        public Dictionary<string, Matrix4x4F> InterpolatedMatrices { get; private set; }
 
         public override void CloneValues(IComponent clone)
         {
             base.CloneValues(clone);
             var animation = (AnimationComponent)clone;
             animation.Clips = CopyClips(Clips);
-            animation.Skeletons = new SceneData.SkeletonCollection(Skeletons);
             animation.Animations = Animations;
             animation.IsAnimationStarted = IsAnimationStarted;
             animation.AnimationStartTime = AnimationStartTime;
@@ -120,7 +108,6 @@ namespace Adamantium.ECS.Components
             animation.switchedOff = switchedOff;
             animation.lastPlayed = lastPlayed;
             animation.played = played;
-            animation.InterpolatedMatrices = new Dictionary<string, Matrix4x4F>();
             foreach (var (key, rest) in RestPoses)
             {
                 animation.RestPoses[key] = rest;
@@ -179,165 +166,7 @@ namespace Adamantium.ECS.Components
                 return;
             }
 
-            if (Targets.Count > 0)
-            {
-                PoseTargets(appTime, sincePlayed);
-            }
-            else
-            {
-                try
-                {
-                    var currentTime = appTime.TotalTime;
-                    InterpolatedMatrices.Clear();
-
-
-                    if (IsAnimationStarted == false)
-                    {
-                        IsAnimationStarted = true;
-                        AnimationStartTime = currentTime;
-                    }
-
-                    Double duration = currentTime.TotalSeconds - AnimationStartTime.TotalSeconds;
-                    Double maxDuration = Animations.Values.ToArray()[0].Last().TimeStamp;
-                    Double elapsed = 0;
-                    switch (Option)
-                    {
-                        case CalculateOptions.CyclicForward:
-                            elapsed = duration;
-                            if (duration > maxDuration)
-                            {
-                                elapsed = 0;
-                                AnimationStartTime = currentTime;
-                            }
-
-                            break;
-                        case CalculateOptions.CyclicBackward:
-                            elapsed = maxDuration - duration;
-                            if (elapsed < 0)
-                            {
-                                elapsed = maxDuration;
-                                AnimationStartTime = currentTime;
-                            }
-                            break;
-                        case CalculateOptions.OneTimeBackward:
-                            elapsed = maxDuration - duration;
-
-                            if (elapsed > 0)
-                            {
-                                foreach (var animationData in Animations)
-                                {
-                                    var keyFrameIndex = AnimationHelper.FindKeyIndex(animationData.Value.Count - 1,
-                                       1,
-                                       elapsed * AnimationSpeed,
-                                       Animations[animationData.Key], CalculateKeyFrameOptions.Backward);
-                                    //if (keyFrameIndex > animationData.Value.KeyFrames[EndingKeyFrame])
-                                    {
-                                        var time = AnimationHelper.CalculateCurrentFrameTime(elapsed * AnimationSpeed,
-                                           Animations[animationData.Key][keyFrameIndex].TimeStamp,
-                                           Animations[animationData.Key][keyFrameIndex - 1].TimeStamp);
-                                        Matrix4x4F interpolated =
-                                           AnimationHelper.InterpolateFrames(
-                                              Animations[animationData.Key][keyFrameIndex],
-                                              Animations[animationData.Key][keyFrameIndex - 1], time);
-                                        InterpolatedMatrices.Add(animationData.Key, interpolated);
-                                    }
-                                    //else
-                                    //{
-                                    //   InterpolatedMatrices.Add(animationData.Key,
-                                    //      Animations[animationData.Key].Frames[keyFrameIndex].ComposeMatrix());
-                                    //}
-                                }
-                            }
-                            break;
-
-                        case CalculateOptions.OneTimeForward:
-                            elapsed = duration;
-                            if (elapsed < maxDuration)
-                            {
-                                foreach (var animationData in Animations)
-                                {
-                                    var keyFrameIndex = AnimationHelper.FindKeyIndex(1, animationData.Value.Count - 1,
-                                       elapsed * AnimationSpeed,
-                                       Animations[animationData.Key]);
-                                    if (keyFrameIndex != -1)
-                                    {
-                                        var time = AnimationHelper.CalculateCurrentFrameTime(elapsed * AnimationSpeed,
-                                           Animations[animationData.Key][keyFrameIndex].TimeStamp,
-                                           Animations[animationData.Key][keyFrameIndex + 1].TimeStamp);
-                                        Matrix4x4F interpolated =
-                                           AnimationHelper.InterpolateFrames(
-                                              Animations[animationData.Key][keyFrameIndex],
-                                              Animations[animationData.Key][keyFrameIndex + 1], time);
-                                        InterpolatedMatrices.Add(animationData.Key, interpolated);
-                                    }
-                                }
-                            }
-                            break;
-
-                        case CalculateOptions.CyclicForwardBackward:
-
-                            break;
-                    }
-
-
-                    if (Option == CalculateOptions.CyclicForward)
-                    {
-                        foreach (var animationData in Animations)
-                        {
-                            var keyFrameIndex = AnimationHelper.FindKeyIndex(1, animationData.Value.Count - 1,
-                               elapsed * AnimationSpeed,
-                               Animations[animationData.Key], CalculateKeyFrameOptions.Forward);
-                            //if (keyFrameIndex < animationData.Value.KeyFrames.Count - 1)
-                            {
-                                var time = AnimationHelper.CalculateCurrentFrameTime(elapsed * AnimationSpeed,
-                                   Animations[animationData.Key][keyFrameIndex].TimeStamp,
-                                   Animations[animationData.Key][keyFrameIndex + 1].TimeStamp);
-                                Matrix4x4F interpolated =
-                                   AnimationHelper.InterpolateFrames(
-                                      Animations[animationData.Key][keyFrameIndex],
-                                      Animations[animationData.Key][keyFrameIndex + 1], time);
-                                InterpolatedMatrices.Add(animationData.Key, interpolated);
-                            }
-                            //else
-                            //{
-                            //   InterpolatedMatrices.Add(animationData.Key,
-                            //      Animations[animationData.Key].Frames[keyFrameIndex].ComposeMatrix());
-                            //   AnimationStartTime = currentTime;
-                            //}
-                        }
-                    }
-                    else if (Option == CalculateOptions.CyclicBackward)
-                    {
-                        foreach (var animationData in Animations)
-                        {
-                            var keyFrameIndex = AnimationHelper.FindKeyIndex(animationData.Value.Count - 1, 1,
-                               elapsed * AnimationSpeed,
-                               Animations[animationData.Key], CalculateKeyFrameOptions.Backward);
-                            //if (keyFrameIndex > animationData.Value.KeyFrames[EndingKeyFrame])
-                            {
-                                var time = AnimationHelper.CalculateCurrentFrameTime(elapsed * AnimationSpeed,
-                                   Animations[animationData.Key][keyFrameIndex].TimeStamp,
-                                   Animations[animationData.Key][keyFrameIndex - 1].TimeStamp);
-                                Matrix4x4F interpolated =
-                                   AnimationHelper.InterpolateFrames(
-                                      Animations[animationData.Key][keyFrameIndex],
-                                      Animations[animationData.Key][keyFrameIndex - 1], time);
-                                InterpolatedMatrices.Add(animationData.Key, interpolated);
-                            }
-                            //else
-                            //{
-                            //   InterpolatedMatrices.Add(animationData.Key,
-                            //      Animations[animationData.Key].Frames[keyFrameIndex].ComposeMatrix());
-                            //   AnimationStartTime = currentTime;
-                            //}
-                        }
-                    }
-                }
-                catch (Exception exception)
-                {
-                    Log.Logger.Error(exception, "Animation frame interpolation failed");
-                }
-            }
+            PoseTargets(appTime, sincePlayed);
         }
 
         private void SwitchOff()
@@ -350,7 +179,6 @@ namespace Adamantium.ECS.Components
             switchedOff = true;
             paused = false;
             IsAnimationStarted = false;
-            InterpolatedMatrices.Clear();
             Rest();
         }
 

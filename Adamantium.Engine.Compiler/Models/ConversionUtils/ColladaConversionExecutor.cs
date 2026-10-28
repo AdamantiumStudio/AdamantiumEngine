@@ -22,8 +22,10 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         /// <summary>What the file has that the parse cannot do - so the loss does not pass in silence.</summary>
         public List<String> UnsupportedFeatures { get; } = new();
 
-        //Geometries are parsed in parallel and all of them write here
-        private void ReportUnsupported(String feature)
+        private int unnamedJoints;
+
+        /// <summary>Notes a loss: geometries and controllers are parsed in parallel and all of them write here.</summary>
+        internal void ReportUnsupported(String feature)
         {
             lock (UnsupportedFeatures) UnsupportedFeatures.Add(feature);
         }
@@ -440,6 +442,19 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
 
         #region Controllers and animation
 
+        //The skin's bind shape, laid out as the inverse bind matrices are; none, or one not of sixteen numbers, is none
+        private Matrix4x4F ReadBindShape(String text)
+        {
+            var values = String.IsNullOrWhiteSpace(text) ? null : COLLADA.ConvertToFloatArray(text);
+            if (values is not { Length: 16 })
+            {
+                return Matrix4x4F.Identity;
+            }
+
+            var matrix = new Matrix4x4F(values);
+            return config.MatrixTransposeNeeded ? Matrix4x4F.Transpose(matrix) : matrix;
+        }
+
         public SceneData.Controller GetControllerData(controller controller, String filepath)
         {
             skin skin = controller.Item as skin;
@@ -486,8 +501,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                 List<Matrix4x4F> jointsMatrices = new List<Matrix4x4F>();
                 float[] weightsValues = null;
                 source[] sources = skin.source;
-                var bindShape = COLLADA.ConvertToDoubleArray(skin.bind_shape_matrix);
-                animationController.BindShapeMatrix = new Matrix4x4F(Array.ConvertAll(bindShape, x => (float)x));
+                var bindShape = ReadBindShape(skin.bind_shape_matrix);
                 foreach (source source in sources)
                 {
                     // On a source no <input> references, the indexer used to throw KeyNotFound
@@ -526,8 +540,9 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                                 {
                                     matrix = Matrix4x4F.Transpose(matrix);
                                 }
+                                //The mesh's bind shape goes first, so a joint's matrix takes the mesh as it is stored;
                                 //AssembleModel changes the coordinate system - meshes, bones and key frames at once
-                                jointsMatrices.Add(matrix);
+                                jointsMatrices.Add(bindShape * matrix);
                             }
                         }
                     }
@@ -552,15 +567,18 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                     return null;
                 }
 
+                //One matrix a joint: a joint without one is bound as the mesh is stored
+                if (jointsMatrices.Count != jointNames.Length)
+                {
+                    ReportUnsupported($"{controller.id}: {jointNames.Length} joints and {jointsMatrices.Count} inverse bind matrices");
+                }
+
+                //Joint names name nodes by sid until ResolveSkinJoints points them at the nodes' IDs
+                animationController.JointNames.AddRange(jointNames);
                 for (int i = 0; i < jointNames.Length; i++)
                 {
-                    // There may be fewer matrices than names: before this check such a file gave IndexOutOfRange,
-                    // and a repeated bone name threw on Add.
-                    if (i >= jointsMatrices.Count) break;
-                    animationController.JointDictionary[jointNames[i]] = jointsMatrices[i];
+                    animationController.JointMatrices.Add(i < jointsMatrices.Count ? jointsMatrices[i] : bindShape);
                 }
-                animationController.JointNames.AddRange(jointNames);
-                animationController.JointMatrices.AddRange(jointsMatrices);
 
                 for (int i = 0; i < list.Length; i++)
                 {
@@ -576,6 +594,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
 
                 int offset = 0;
                 int trimmedVertices = 0;
+                int bindShapeInfluences = 0;
                 var influences = new List<(int Bone, float Weight)>();
                 //<v> pairs up bone and weight indices: every first element indexes the bone array, every second
                 //the weight array. <vcount> says how many bones influence the vertex currently being walked.
@@ -588,7 +607,14 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                         var weight = weightsValues != null && weightIndex >= 0 && weightIndex < weightsValues.Length
                             ? weightsValues[weightIndex]
                             : 0f;
-                        influences.Add((bonesIndices[offset], weight));
+                        if (bonesIndices[offset] < 0)
+                        {
+                            bindShapeInfluences++;
+                        }
+                        else
+                        {
+                            influences.Add((bonesIndices[offset], weight));
+                        }
                         offset++;
                     }
 
@@ -625,6 +651,13 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                     ReportUnsupported($"{controller.id}: {trimmedVertices} vertices had more than 4 bones - the four " +
                                       "heaviest were kept and the weights renormalized");
                 }
+
+                //Joint -1 is the bind shape alone: the engine has no such joint, so the rest of the weight carries it
+                if (bindShapeInfluences > 0)
+                {
+                    ReportUnsupported($"{controller.id}: {bindShapeInfluences} influences of the bind shape alone " +
+                                      "(joint -1) were left out and the weights renormalized");
+                }
                 return animationController;
             }
             return null;
@@ -642,7 +675,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         {
             bool matrixTransposeNeeded = config.MatrixTransposeNeeded;
             bool singleMatrixPresent = false;
-            MatrixParams parameters = MatrixParams.Default;
+            var parameters = new MatrixParams();
             Matrix4x4F result = Matrix4x4F.Identity;
             if (node.Items == null)
             {
@@ -735,55 +768,19 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                     continue;
                 }
 
-                Dictionary<node, SceneData.Joint> nodeToJoint = new Dictionary<node, SceneData.Joint>();
-
-                SceneData.Joint joint = null;
-                SceneData.Model mesh = null;
-
                 var queue = new Queue<node>();
                 queue.Enqueue(node);
-                string controllerName = string.Empty;
                 while (queue.Count > 0)
                 {
                     var currentNode = queue.Dequeue();
                     GetLightsAndCameraTranformation(dataContainer, currentNode);
 
-                    mesh = GetMeshStructure(dataContainer, currentNode, nodeToMesh, geometries, controllers);
-
-                    if (config.GetJoints)
-                    {
-                        joint = GetJoint(currentNode, nodeToJoint);
-                        if (joint != null && joint.ParentJoint == null)
-                        {
-                            List<SceneData.Joint> joints;
-                            if (dataContainer.Skeletons.TryGetValue(controllerName, out joints))
-                            {
-                                joints.Add(joint);
-                            }
-                        }
-                    }
+                    var mesh = GetMeshStructure(dataContainer, currentNode, nodeToMesh, geometries, controllers);
                     if (currentNode.node1 != null)
                     {
                         foreach (var node1 in currentNode.node1)
                         {
-                            //If child node is joint and current node is NOT joint, it means that current joint contains controller name,
-                            //which is corresponding to the name of controller in library_controllers
-                            if (node1.type == NodeType.JOINT
-                               && currentNode.type == NodeType.NODE
-                               && string.IsNullOrEmpty(controllerName))
-                            {
-                                controllerName = currentNode.id;
-                                if (!dataContainer.Skeletons.ContainsKey(controllerName))
-                                {
-                                    dataContainer.Skeletons.Add(controllerName, new List<SceneData.Joint>());
-                                }
-                            }
-
                             queue.Enqueue(node1);
-                            if (joint != null)
-                            {
-                                nodeToJoint.Add(node1, joint);
-                            }
                             if (mesh != null)
                             {
                                 nodeToMesh.Add(node1, mesh);
@@ -840,57 +837,173 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
 
         private SceneData.Model GetMeshStructure(SceneData model, node rootNode, Dictionary<node, SceneData.Model> nodeToMesh, List<geometry> geometries, List<controller> controllers)
         {
-            if (rootNode.type != NodeType.JOINT && rootNode.instance_camera == null && rootNode.instance_light == null)
+            //A joint is a node of the model: a skin's joints and the channels moving them point at it by its ID. A joint
+            //nothing names still gets one of its own, which no id can be, or two such would be taken for one.
+            if (rootNode.type == NodeType.JOINT)
             {
-                var nodeName = !String.IsNullOrEmpty(rootNode.name) ? rootNode.name : rootNode.id;
-                string geometryId = String.Empty;
-                if (rootNode.instance_geometry != null)
+                var joint = CreateNode(model, rootNode, nodeToMesh, NodeId(rootNode) ?? $"#{++unnamedJoints}");
+                var carried = GeometryOf(rootNode, geometries, controllers);
+                if (!String.IsNullOrEmpty(carried))
                 {
-                    geometryId = Source(rootNode.instance_geometry[0].url);
+                    model.CreateMesh(joint, carried, !String.IsNullOrEmpty(rootNode.name) ? rootNode.name : carried);
                 }
-                else if (rootNode.instance_controller != null)
-                {
-                    var controllerId = Source(rootNode.instance_controller[0].url);
-                    foreach (var controller in controllers)
-                    {
-                        if (controllerId == controller.id)
-                        {
-                            geometryId = Source(((skin)controller.Item).source1);
-                            break;
-                        }
-                    }
-                }
+                return joint;
+            }
 
-                bool meshFound = false;
-                foreach (var geometry in geometries)
+            if (rootNode.instance_camera == null && rootNode.instance_light == null)
+            {
+                var geometryId = GeometryOf(rootNode, geometries, controllers);
+                if (!String.IsNullOrEmpty(geometryId) || rootNode.node1 != null)
                 {
-                    if (geometry.id == geometryId)
-                    {
-                        meshFound = true;
-                        break;
-                    }
-                }
-
-                if (meshFound || rootNode.node1 != null)
-                {
-                    SceneData.Model parentMesh;
-                    if (!nodeToMesh.TryGetValue(rootNode, out parentMesh))
-                    {
-                        parentMesh = model.Models;
-                    }
-                    var meshData = model.CreateMesh(parentMesh, geometryId, nodeName);
-
-                    if (config.GetMeshMatrices)
-                    {
-                        var matrixParams = GetObjectMatrix(rootNode);
-                        meshData.Scale = matrixParams.Scale;
-                        meshData.Rotation = matrixParams.Rotation;
-                        meshData.Position = matrixParams.Translation;
-                    }
-                    return meshData;
+                    return CreateNode(model, rootNode, nodeToMesh, geometryId ?? String.Empty);
                 }
             }
             return null;
+        }
+
+        //The geometry a node draws, directly or through its controller; null when there is none in the file
+        private static String GeometryOf(node node, List<geometry> geometries, List<controller> controllers)
+        {
+            String geometryId = null;
+            if (node.instance_geometry != null)
+            {
+                geometryId = Source(node.instance_geometry[0].url);
+            }
+            else if (node.instance_controller != null)
+            {
+                var controllerId = Source(node.instance_controller[0].url);
+                geometryId = controllers.FirstOrDefault(controller => controller.id == controllerId)?.Item switch
+                {
+                    skin skin => Source(skin.source1),
+                    morph morph => Source(morph.source1),
+                    _ => null
+                };
+            }
+
+            return geometries.Any(geometry => geometry.id == geometryId) ? geometryId : null;
+        }
+
+        private SceneData.Model CreateNode(SceneData model, node node, Dictionary<node, SceneData.Model> nodeToMesh, String id)
+        {
+            if (!nodeToMesh.TryGetValue(node, out var parentMesh))
+            {
+                parentMesh = model.Models;
+            }
+
+            var meshData = model.CreateMesh(parentMesh, id, !String.IsNullOrEmpty(node.name) ? node.name : node.id);
+            if (config.GetMeshMatrices)
+            {
+                var matrixParams = GetObjectMatrix(node);
+                meshData.Scale = matrixParams.Scale;
+                meshData.Rotation = matrixParams.Rotation;
+                meshData.Position = matrixParams.Translation;
+            }
+
+            return meshData;
+        }
+
+        /// <summary>The ID a node is known by in the model: its id, else its sid, else its name.</summary>
+        public static String NodeId(node node) =>
+            !String.IsNullOrEmpty(node.id) ? node.id : !String.IsNullOrEmpty(node.sid) ? node.sid : node.name;
+
+        /// <summary>Points each skin's joints at the nodes they are: a skin names a joint by its sid among the nodes
+        /// under the skeleton roots its instance gives - or by an id - and a joint is known by <see cref="NodeId"/>. A
+        /// name found nowhere is reported and kept.</summary>
+        public void ResolveSkinJoints(SceneData data, List<visual_scene> visualScenes)
+        {
+            var everywhere = IndexNodes(visualScenes);
+            var resolved = new HashSet<SceneData.Controller>();
+            var stack = new Stack<node>();
+            foreach (var scene in visualScenes ?? [])
+            {
+                foreach (var root in scene?.node ?? [])
+                {
+                    stack.Push(root);
+                }
+            }
+
+            var seenSids = new HashSet<String>(StringComparer.Ordinal);
+            var sharedSids = new HashSet<String>(StringComparer.Ordinal);
+            foreach (var node in stack)
+            {
+                CountSids(node, seenSids, sharedSids);
+            }
+
+            while (stack.Count > 0)
+            {
+                var node = stack.Pop();
+                foreach (var child in node.node1 ?? [])
+                {
+                    stack.Push(child);
+                }
+
+                foreach (var instance in node.instance_controller ?? [])
+                {
+                    var controllerId = Source(instance.url);
+                    var controller = data.Controllers.Values.FirstOrDefault(c => c.ControllerId == controllerId);
+                    if (controller == null || !resolved.Add(controller))
+                    {
+                        continue;
+                    }
+
+                    var underSkeleton = new Dictionary<String, node>(StringComparer.Ordinal);
+                    foreach (var skeleton in instance.skeleton ?? [])
+                    {
+                        if (everywhere.TryGetValue(Source(skeleton), out var skeletonRoot))
+                        {
+                            IndexSids(skeletonRoot, underSkeleton);
+                        }
+                    }
+
+                    for (var i = 0; i < controller.JointNames.Count; i++)
+                    {
+                        var name = controller.JointNames[i];
+                        if (underSkeleton.TryGetValue(name, out var joint))
+                        {
+                            controller.JointNames[i] = NodeId(joint);
+                        }
+                        else if (everywhere.TryGetValue(name, out joint))
+                        {
+                            if (sharedSids.Contains(name) && joint.id != name)
+                            {
+                                ReportUnsupported($"{controller.ControllerId}: several nodes are '{name}' and no " +
+                                                  $"skeleton says which; '{NodeId(joint)}' was taken");
+                            }
+                            controller.JointNames[i] = NodeId(joint);
+                        }
+                        else
+                        {
+                            ReportUnsupported($"{controller.ControllerId}: joint '{name}' is no node of the scene");
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void CountSids(node node, HashSet<String> seen, HashSet<String> shared)
+        {
+            if (!String.IsNullOrEmpty(node.sid) && !seen.Add(node.sid))
+            {
+                shared.Add(node.sid);
+            }
+
+            foreach (var child in node.node1 ?? [])
+            {
+                CountSids(child, seen, shared);
+            }
+        }
+
+        private static void IndexSids(node node, Dictionary<String, node> sids)
+        {
+            if (!String.IsNullOrEmpty(node.sid))
+            {
+                sids.TryAdd(node.sid, node);
+            }
+
+            foreach (var child in node.node1 ?? [])
+            {
+                IndexSids(child, sids);
+            }
         }
 
         public void GetLightsAndCameraTranformation(SceneData dataContainer, node rootNode)
@@ -933,39 +1046,6 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                 }
             }
 
-        }
-
-        private SceneData.Joint GetJoint(node rootNode, Dictionary<node, SceneData.Joint> nodeToJoint)
-        {
-            if (rootNode.type != NodeType.JOINT)
-            {
-                return null;
-            }
-
-            SceneData.Joint rootJoint;
-            nodeToJoint.TryGetValue(rootNode, out rootJoint);
-            var joint = new SceneData.Joint
-            {
-                JointSid = rootNode.sid,
-                JointName = rootNode.name,
-                ParentJoint = rootJoint,
-            };
-
-            rootJoint?.Children.Add(joint);
-
-            var matr = rootNode.Items[0] as matrix;
-            if (matr != null)
-            {
-                var matrix = new Matrix4x4F(Array.ConvertAll(matr.Values, x => (float)x));
-                if (config.MatrixTransposeNeeded)
-                {
-                    matrix = Matrix4x4F.Transpose(matrix);
-                }
-                //AssembleModel changes the coordinate system - meshes, bones and key frames at once
-                joint.LocalMatrix = matrix;
-            }
-
-            return joint;
         }
 
 

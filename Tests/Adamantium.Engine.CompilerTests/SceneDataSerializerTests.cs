@@ -31,11 +31,13 @@ namespace Adamantium.Engine.CompilerTests
 
             scene.Materials["mat1"] = new SceneData.Material { ID = "mat1", DiffuseColor = new Vector4F(1, 0, 0, 1) };
 
-            // skeleton: root joint -> child joint (exercises Joint.ParentJoint rebuild)
-            var rootJoint = new SceneData.Joint { JointName = "root" };
-            var childJoint = new SceneData.Joint { JointName = "spine" };
-            rootJoint.Children.Add(childJoint);
-            scene.Skeletons["skel1"] = [rootJoint];
+            // a skin: its joints are nodes, by ID, with their inverse bind matrices
+            scene.Controllers["node1"] = new SceneData.Controller
+            {
+                ControllerId = "skin1",
+                JointNames = ["node1"],
+                JointMatrices = [Matrix4x4.CreateTranslation<float>(0, -1, 0)]
+            };
 
             var bytes = SceneDataSerializer.Serialize(scene);
             var loaded = SceneDataSerializer.Deserialize(bytes);
@@ -70,12 +72,11 @@ namespace Adamantium.Engine.CompilerTests
             Assert.That(loaded.Materials.ContainsKey("mat1"), Is.True);
             Assert.That(loaded.Materials["mat1"].DiffuseColor, Is.EqualTo(new Vector4F(1, 0, 0, 1)));
 
-            // skeleton + Joint.ParentJoint back-reference rebuilt
-            Assert.That(loaded.Skeletons.ContainsKey("skel1"), Is.True);
-            var loadedRootJoint = loaded.Skeletons["skel1"][0];
-            Assert.That(loadedRootJoint.JointName, Is.EqualTo("root"));
-            Assert.That(loadedRootJoint.Children.Count, Is.EqualTo(1));
-            Assert.That(loadedRootJoint.Children[0].ParentJoint, Is.SameAs(loadedRootJoint));
+            // skin round-trip (Dictionary<,> subclass)
+            var loadedSkin = loaded.Controllers["node1"];
+            Assert.That(loadedSkin.ControllerId, Is.EqualTo("skin1"));
+            Assert.That(loadedSkin.JointNames, Is.EqualTo(new[] { "node1" }));
+            Assert.That(loadedSkin.JointMatrices[0], Is.EqualTo(Matrix4x4.CreateTranslation<float>(0, -1, 0)));
         }
 
         // A picture carried inside a model goes into the artifact with it; a material's PBR values with it too.

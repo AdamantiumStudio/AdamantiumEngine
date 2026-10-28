@@ -149,7 +149,7 @@ namespace Adamantium.Engine.ContentCompiler.CLI
             }
 
             Console.WriteLine($"OK: '{scene.Name}'  models={models}  meshes={meshes}  vertices={vertices}  indices={indices}  " +
-                              $"materials={scene.Materials.Count}  skeletons={scene.Skeletons.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}");
+                              $"materials={scene.Materials.Count}  skins={scene.Controllers.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}");
             return brokenParents == 0 ? 0 : 3;
         }
 
