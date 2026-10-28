@@ -23,7 +23,12 @@ All packages share one version.
   `Viewport<T>`, `Ray<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
   `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
   `CreateShadow` (and the 3x3 ones) for a plane. Double boxes and spheres far from the origin keep what float loses.
-  The scalar helpers are `MathHelper.Scalar`. Mistakes of the old types are set right: a ray's distances to spheres and
+  A whole-number rectangle takes a point as a cell, as a pixel is: the cells on its right and bottom edges are
+  outside. The helpers are set by what they work on: `MathHelper.Scalar` for single numbers, `MathHelper.Angle` for
+  angles between directions (from the arctangent, exact near 0 and π), `MathHelper.Polyline` for length, even
+  resampling, winding and convexity, `MathHelper.Curves` for Bézier spans of any degree, quadratic B-splines, NURBS and
+  arcs, appended to a list the caller keeps and sampled at their parameter's exact steps, the NURBS to its end.
+  Mistakes of the old types are set right: a ray's distances to spheres and
   points with a direction not of length one, segments and planes at a small angle taken as parallel, short directions
   and normals taken as none, crossing rays missed in float, a sheared sphere's radius, the nearest point of a sphere to
   its center, a NaN counted as a hit, and equality, exact now.

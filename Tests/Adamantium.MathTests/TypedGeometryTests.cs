@@ -58,6 +58,17 @@ public class TypedGeometryTests
     }
 
     [Test]
+    public void WholeNumberContains_TakesPointsAsCells_AsIntersectsDoes()
+    {
+        var pixels = Rectangle.Create(0, 0, 10, 10);
+
+        Assert.That(pixels.Contains(0, 0) && pixels.Contains(9, 9), Is.True);
+        Assert.That(pixels.Contains(10, 10) || pixels.Contains(10, 0) || pixels.Contains(0, 10), Is.False);
+        Assert.That(pixels.Intersects(Rectangle.Create(10, 10, 1, 1)), Is.False);
+        Assert.That(pixels.Contains(pixels), Is.True);
+    }
+
+    [Test]
     public void Intersect_OfBoxesThatOnlyTouch_IsEmpty_AndTheyDoNotIntersect()
     {
         var left = Rectangle.Create(0f, 0f, 10f, 10f);

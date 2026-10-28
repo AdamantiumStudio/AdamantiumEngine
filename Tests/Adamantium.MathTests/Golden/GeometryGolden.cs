@@ -20,9 +20,6 @@ public static class GeometryGolden
         map.NotMapped(key => key.StartsWith("Rectangle.") && (key.Contains(".Offset(") || key.Contains(".Inflate(")),
             "old bug: the integer rectangle's X and Y setters moved the right edge into the width, so moving grew it; " +
             "used nowhere; TypedGeometryTests checks the new");
-        map.NotMapped("Rectangle.Contains(this Int32,Int32)",
-            "meaning changed: the old left out the right and bottom edges, the float one and the new count them; used " +
-            "nowhere");
         map.NotMapped("RectangleF.Contains(this Vector2F&,Boolean&)",
             "meaning changed: this overload left out the right and bottom edges while the one by value counted them; " +
             "used nowhere");
@@ -95,6 +92,11 @@ public static class GeometryGolden
         {
             var x = i.Rectangle<int>();
             return [x.As<float>().Contains(i.Number<float>(), i.Number<float>()), x];
+        });
+        map.Calls($"{r}.Contains(this Int32,Int32)", i =>
+        {
+            var x = i.Rectangle<int>();
+            return [x.Contains(i.Number<int>(), i.Number<int>()), x];
         });
         map.Calls($"{r}.Intersects(this {r})", i => Self(i.Rectangle<int>(), i.Rectangle<int>(), (x, o) => x.Intersects(o)));
         map.Calls($"{r}.Intersects(this {r}&,Boolean&)", i =>

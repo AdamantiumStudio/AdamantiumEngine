@@ -484,7 +484,9 @@ public static class MatricesGolden
 
     private static bool IsDecompose(string key) => key.Contains(".Decompose(") || key.Contains(".DecomposeUniformScale(");
 
-    private static double UpperDeterminant(double[] m, int rowLength) =>
+    /// <summary>The determinant of the upper left 3x3 of the matrix laid out in <paramref name="m"/> by rows of
+    /// <paramref name="rowLength"/>.</summary>
+    internal static double UpperDeterminant(double[] m, int rowLength) =>
         m[0] * (m[rowLength + 1] * m[2 * rowLength + 2] - m[rowLength + 2] * m[2 * rowLength + 1])
         - m[1] * (m[rowLength] * m[2 * rowLength + 2] - m[rowLength + 2] * m[2 * rowLength])
         + m[2] * (m[rowLength] * m[2 * rowLength + 1] - m[rowLength + 1] * m[2 * rowLength]);

@@ -8,12 +8,15 @@ namespace Adamantium.Mathematics.Typed;
 /// <summary>
 /// An axis-aligned rectangle of any number type - <c>Rectangle&lt;int&gt;</c> for pixels, <c>Rectangle&lt;float&gt;</c>
 /// for layout boxes - stored as X, Y, Width, Height; the right and bottom edges are X + Width and Y + Height. Made with
-/// <see cref="Rectangle"/>'s factories. Edges count as inside; an intersection needs an area. Equality is exact;
+/// <see cref="Rectangle"/>'s factories. Edges count as inside, but a whole-number point is a cell, as a pixel is, and the
+/// cells on the right and bottom edges are outside; an intersection needs an area. Equality is exact;
 /// <see cref="NearEqual(Rectangle{T}, Rectangle{T})"/> compares within a tolerance.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct Rectangle<T> : IEquatable<Rectangle<T>>, IFormattable where T : unmanaged, INumber<T>
 {
+    private static readonly bool IsWhole = T.One / (T.One + T.One) == T.Zero;
+
     /// <summary>The left edge.</summary>
     public T X;
 
@@ -116,10 +119,15 @@ public struct Rectangle<T> : IEquatable<Rectangle<T>>, IFormattable where T : un
         Height += vertical + vertical;
     }
 
-    /// <summary>Whether the point <paramref name="x"/>, <paramref name="y"/> is inside or on an edge.</summary>
-    public readonly bool Contains(T x, T y) => x >= X && x <= Right && y >= Y && y <= Bottom;
+    /// <summary>Whether the point <paramref name="x"/>, <paramref name="y"/> is inside or on an edge. For whole numbers
+    /// the point is a cell, as a pixel is: the rectangle holds the cells from X to Right and from Y to Bottom, those two
+    /// left out - as many as its width and height - so a point on the right or bottom edge is outside, as it is for
+    /// <see cref="Intersects"/>.</summary>
+    public readonly bool Contains(T x, T y) =>
+        IsWhole ? x >= X && x < Right && y >= Y && y < Bottom : x >= X && x <= Right && y >= Y && y <= Bottom;
 
-    /// <summary>Whether <paramref name="point"/> is inside or on an edge.</summary>
+    /// <summary>Whether <paramref name="point"/> is inside or on an edge; for whole numbers, as
+    /// <see cref="Contains(T, T)"/> says.</summary>
     public readonly bool Contains(Vector2<T> point) => Contains(point.X, point.Y);
 
     /// <summary>Whether <paramref name="value"/> lies wholly inside, its edges allowed on these.</summary>
