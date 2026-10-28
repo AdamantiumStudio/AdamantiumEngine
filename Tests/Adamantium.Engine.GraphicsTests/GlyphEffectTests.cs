@@ -28,7 +28,7 @@ public class GlyphEffectTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText(text, 40, new Size(width, double.NaN), TextWrapping.NoWrap, trimming,
+        layout.ProcessText(text, 40, new Size<double>(width, double.NaN), TextWrapping.NoWrap, trimming,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -104,7 +104,7 @@ public class GlyphEffectTests
     public void AnEffect_ReachesTheGlyphsOfItsRange_AndNoOthers()
     {
         var run = Run(Layout());
-        GlyphEffect[] effects = [Effect(1, 1, Matrix3x2F.Rotation(0.5f), true)];
+        GlyphEffect[] effects = [Effect(1, 1, Matrix3x2.CreateRotation<float>(0.5f), true)];
 
         Assert.Multiple(() =>
         {
@@ -119,7 +119,7 @@ public class GlyphEffectTests
     {
         var layout = Layout();
         var run = Run(layout);
-        var turn = Effect(1, 1, Matrix3x2F.Rotation(1f), true);
+        var turn = Effect(1, 1, Matrix3x2.CreateRotation<float>(1f), true);
         var center = CenterOf(layout, 1);
         var corner = center + new Vector2F(5, 0);
 
@@ -142,7 +142,7 @@ public class GlyphEffectTests
         var run = Run(layout);
         var center = CenterOf(layout, 2);
 
-        var moved = Moved(run.Glyphs[2], center, Effect(0, 3, Matrix3x2F.Scaling(2f), false));
+        var moved = Moved(run.Glyphs[2], center, Effect(0, 3, Matrix3x2.CreateScale<float>(2f), false));
 
         Assert.That(moved.X, Is.EqualTo(center.X * 2).Within(1e-3));
         Assert.That(moved.Y, Is.EqualTo(center.Y * 2).Within(1e-3));
@@ -217,7 +217,7 @@ public class GlyphEffectTests
         var run = Run(Layout());
 
         var moved = Moved(run.Glyphs[0], new Vector2F(0, 0),
-            Effect(0, 3, Matrix3x2F.Translation(10, 0), false), Effect(0, 3, Matrix3x2F.Scaling(2f), false));
+            Effect(0, 3, Matrix3x2.CreateTranslation<float>(10, 0), false), Effect(0, 3, Matrix3x2.CreateScale<float>(2f), false));
 
         Assert.That(moved.X, Is.EqualTo(20).Within(1e-3), "moved first, then scaled");
     }
@@ -240,7 +240,7 @@ public class GlyphEffectTests
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
         layout.ProcessText(new AttributedText("xab").SetRuby(1, 2, new RubyAnnotation("ruby")), 40,
-            new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
+            new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
         Assume.That(layout.GetTextData().Count(g => g.Annotates), Is.EqualTo(4));
 
@@ -274,7 +274,7 @@ public class GlyphEffectTests
     public void AClipsSlot_HoldsItsShape_AndWhereItIsTakenFrom()
     {
         var clip = new GlyphClip(new RectangleF(1, 2, 30, 40), new Vector4F(3, 4, 5, 6),
-            Matrix3x2F.Translation(-7, -8), AfterTransform: true);
+            Matrix3x2.CreateTranslation<float>(-7, -8), AfterTransform: true);
 
         clip.ToSlot(out var rows, out _);
 

@@ -10,7 +10,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
         public class Cylinder
         {
             // Helper computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
-            private static Vector3 GetCircleVector(
+            private static Vector3<double> GetCircleVector(
                 int i,
                 int tessellation)
             {
@@ -18,7 +18,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var dx = (float) Math.Sin(angle);
                 var dz = (float) Math.Cos(angle);
 
-                return new Vector3(dx, 0, dz);
+                return new Vector3<double>(dx, 0, dz);
             }
 
             public static Mesh GenerateGeometry(
@@ -26,7 +26,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height = 1.0,
                 double diameter = 1.0,
                 int tessellation = 32,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (tessellation < 3)
                     tessellation = 3;
@@ -50,9 +50,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
             /// ellipse when the two differ - and .Y high.</summary>
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
-                Vector3 size,
+                Vector3<double> size,
                 int tessellation = 32,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (geometryType == GeometryType.Solid)
                 {
@@ -88,11 +88,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double depth,
                 int tessellation)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
                 int lastIndex = 0;
-                var radius = new Vector3(diameter / 2, 0, diameter / 2 * depth);
-                var topOffset = Vector3.Down * height / 2;
+                var radius = new Vector3<double>(diameter / 2, 0, diameter / 2 * depth);
+                var topOffset = Vector3<double>.Down * height / 2;
 
                 for (int i = 0; i <= tessellation; ++i)
                 {

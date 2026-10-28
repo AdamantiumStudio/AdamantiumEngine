@@ -35,7 +35,7 @@ public class GlyphScalingTests
             WordSpacing = words ?? SpacingRange.Words,
             JustificationAlternates = alternates,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -129,7 +129,7 @@ public class GlyphScalingTests
         {
             var typeface = Typeface.LoadFont(SourceSans);
             var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-            layout.ProcessText(Prose, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords,
+            layout.ProcessText(Prose, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords,
                 TextTrimming.CharEllipses, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
 
             Assert.That(layout.GetTextData().Count(glyph => glyph.PositionInString < 0 && glyph.Symbol == '.'), Is.Zero,
@@ -145,7 +145,7 @@ public class GlyphScalingTests
         {
             Fallback = null, Tracking = 60, GlyphScaling = new SpacingRange(1, 1, 1.1), WordSpacing = new SpacingRange(1, 1, 1.05),
         };
-        layout.ProcessText(Prose, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
 
@@ -174,7 +174,7 @@ public class GlyphScalingTests
         {
             Fallback = null, Hyphens = Hyphens.Auto, Language = "en-US", GlyphScaling = new SpacingRange(1.1, 1.1, 1.1),
         };
-        layout.ProcessText(Prose, FontSize, new Size(120, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(120, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var hyphens = layout.GetTextData().Where(glyph => glyph.PositionInString < 0 && glyph.Symbol == '-').ToArray();
 

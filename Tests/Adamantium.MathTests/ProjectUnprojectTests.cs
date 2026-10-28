@@ -6,7 +6,7 @@ namespace Adamantium.MathTests;
 [TestFixture]
 public class ProjectUnprojectTests
 {
-    private static readonly Matrix4x4F Projection = Matrix4x4F.PerspectiveFovX(60, 4f / 3, 0.1f, 1000);
+    private static readonly Matrix4x4F Projection = Matrix4x4.CreatePerspectiveFovX<float>(float.DegreesToRadians(60), 4f / 3, 0.1f, 1000);
 
     [Test]
     public void Single_UnprojectUndoesProject()
@@ -22,11 +22,11 @@ public class ProjectUnprojectTests
     [Test]
     public void Double_UnprojectUndoesProject()
     {
-        var projection = (Matrix4x4)Projection;
-        var point = new Vector3(1.5, -2, 10);
+        var projection = Projection.As<double>();
+        var point = new Vector3<double>(1.5, -2, 10);
 
-        var pixel = Vector3.Project(point, 0, 0, 800, 600, 0, 1, projection);
-        var back = Vector3.Unproject(pixel, 0, 0, 800, 600, 0, 1, projection);
+        var pixel = Vector3<double>.Project(point, 0, 0, 800, 600, 0, 1, projection);
+        var back = Vector3<double>.Unproject(pixel, 0, 0, 800, 600, 0, 1, projection);
 
         Assert.That((back - point).Length(), Is.LessThan(1e-3), $"{back} instead of {point}");
     }

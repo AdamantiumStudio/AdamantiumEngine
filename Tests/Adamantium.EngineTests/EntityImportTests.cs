@@ -21,9 +21,9 @@ public class EntityImportTests
         node.Position = new Vector3F(0, 0, 100);
         node.Meshes.Add(Box(1));
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
-        Assert.That(Find(model, node).Transform.Position, Is.EqualTo(new Vector3(0, 0, 100)));
+        Assert.That(Find(model, node).Transform.Position, Is.EqualTo(new Vector3<double>(0, 0, 100)));
     }
 
     [Test]
@@ -36,7 +36,7 @@ public class EntityImportTests
         var part = scene.CreateMesh(inner, "part", "Part");
         part.Meshes.Add(Box(1));
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
         Assert.That(ScaleAlongTheChain(Find(model, part)), Is.EqualTo(0.01f).Within(1e-6f));
     }
@@ -50,11 +50,11 @@ public class EntityImportTests
         node.Meshes.Add(Box(1));
         node.Meshes.Add(Box(1));
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
         var parts = Find(model, node).Dependencies;
         Assert.That(parts.Count, Is.EqualTo(2));
-        Assert.That(parts.All(p => p.Transform.Position == Vector3.Zero), Is.True);
+        Assert.That(parts.All(p => p.Transform.Position == Vector3<double>.Zero), Is.True);
     }
 
     [Test]
@@ -64,7 +64,7 @@ public class EntityImportTests
         scene.CreateMesh(scene.Models, "part", "Part").Meshes.Add(Box(1));
         scene.CreateMesh(scene.Models, "empty", "Empty");
 
-        Assert.That(Import(scene, Vector3.Zero), Is.Not.Null);
+        Assert.That(Import(scene, Vector3<double>.Zero), Is.Not.Null);
     }
 
     // As the file has it: the model's own origin lands where it is placed, and its position reads that; the geometry
@@ -76,12 +76,12 @@ public class EntityImportTests
         scene.Units.Value = 0.01f;
         scene.CreateMesh(scene.Models, "part", "Part").Meshes.Add(Box(1, 500));
 
-        var model = Import(scene, new Vector3(0, 0, 5));
+        var model = Import(scene, new Vector3<double>(0, 0, 5));
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.Transform.Position, Is.EqualTo(new Vector3(0, 0, 5)));
-            Assert.That(((Vector3F)model.GetCenterAbsolute() - new Vector3F(0, 0, 5)).Length(), Is.EqualTo(5f).Within(1e-3f));
+            Assert.That(model.Transform.Position, Is.EqualTo(new Vector3<double>(0, 0, 5)));
+            Assert.That((model.GetCenterAbsolute().As<float>() - new Vector3F(0, 0, 5)).Length(), Is.EqualTo(5f).Within(1e-3f));
         });
     }
 
@@ -92,12 +92,12 @@ public class EntityImportTests
         scene.Models.Position = new Vector3F(1, 2, 3);
         scene.CreateMesh(scene.Models, "part", "Part").Meshes.Add(Box(1, 500));
 
-        var model = Import(scene, new Vector3(0, 0, 5));
-        model.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(70));
+        var model = Import(scene, new Vector3<double>(0, 0, 5));
+        model.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(70));
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.Transform.Position, Is.EqualTo(new Vector3(1, 2, 8)));
+            Assert.That(model.Transform.Position, Is.EqualTo(new Vector3<double>(1, 2, 8)));
             Assert.That((model.Transform.GetWorldMatrixF().TranslationVector - new Vector3F(1, 2, 8)).Length(),
                 Is.LessThan(1e-4f), "the origin holds still as the model turns");
         });
@@ -110,13 +110,13 @@ public class EntityImportTests
         var part = scene.CreateMesh(scene.Models, "part", "Part");
         part.Meshes.Add(Box(1, 500));
         scene.CreateMesh(scene.Models, "other", "Other").Meshes.Add(Box(1));
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
         var entity = Find(model, part);
-        var before = (Vector3F)entity.GetCenterAbsolute();
+        var before = entity.GetCenterAbsolute().As<float>();
 
-        entity.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(40));
+        entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(40));
 
-        Assert.That(((Vector3F)entity.GetCenterAbsolute() - before).Length(), Is.LessThan(1e-3f));
+        Assert.That((entity.GetCenterAbsolute().As<float>() - before).Length(), Is.LessThan(1e-3f));
     }
 
     [Test]
@@ -125,16 +125,16 @@ public class EntityImportTests
         var scene = NewScene();
         var turned = scene.CreateMesh(scene.Models, "turned", "Turned");
         turned.Position = new Vector3F(10, 0, 0);
-        turned.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(90));
+        turned.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90));
         turned.Meshes.Add(Box(1, 0, 5));
         var still = scene.CreateMesh(scene.Models, "still", "Still");
         still.Meshes.Add(Box(1));
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
         var expected = Vector3F.TransformCoordinate(new Vector3F(0, 0, 5),
-            Matrix4x4F.RotationQuaternion(turned.Rotation) * Matrix4x4F.Translation(turned.Position));
-        var apart = (Vector3F)(Find(model, turned).GetCenterAbsolute() - Find(model, still).GetCenterAbsolute());
+            Matrix4x4.CreateFromQuaternion<float>(turned.Rotation) * Matrix4x4.CreateTranslation<float>(turned.Position));
+        var apart = (Find(model, turned).GetCenterAbsolute() - Find(model, still).GetCenterAbsolute()).As<float>();
         Assert.That((apart - expected).Length(), Is.LessThan(1e-3f));
     }
 
@@ -149,7 +149,7 @@ public class EntityImportTests
         var part = scene.CreateMesh(scene.Models, "part", "Part");
         part.Meshes.Add(box);
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
         Assert.That(Find(model, part).GetComponent<Material>().SpecularColor, Is.EqualTo(specular));
     }
@@ -165,7 +165,7 @@ public class EntityImportTests
         var part = scene.CreateMesh(scene.Models, "part", "Part");
         part.Meshes.Add(box);
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
         Assert.That(Find(model, part).GetComponent<Material>().DiffuseColor, Is.EqualTo(Material.DefaultDiffuseColor));
     }
@@ -194,7 +194,7 @@ public class EntityImportTests
         var part = scene.CreateMesh(scene.Models, "part", "Part");
         part.Meshes.Add(box);
 
-        var material = Find(Import(scene, Vector3.Zero), part).GetComponent<Material>();
+        var material = Find(Import(scene, Vector3<double>.Zero), part).GetComponent<Material>();
 
         Assert.Multiple(() =>
         {
@@ -224,7 +224,7 @@ public class EntityImportTests
             box.MaterialID = "skin";
             var part = scene.CreateMesh(scene.Models, "part", "Part");
             part.Meshes.Add(box);
-            return Find(Import(scene, Vector3.Zero), part).GetComponent<Material>().TexturePath;
+            return Find(Import(scene, Vector3<double>.Zero), part).GetComponent<Material>().TexturePath;
         }
 
         Assert.Multiple(() =>
@@ -244,7 +244,7 @@ public class EntityImportTests
         var part = scene.CreateMesh(scene.Models, "part", "Part");
         part.Meshes.Add(box);
 
-        var material = Find(Import(scene, Vector3.Zero), part).GetComponent<Material>();
+        var material = Find(Import(scene, Vector3<double>.Zero), part).GetComponent<Material>();
 
         Assert.That(material.TexturePath, Is.Null);
     }
@@ -260,7 +260,7 @@ public class EntityImportTests
         var part = scene.CreateMesh(scene.Models, "part", "Part");
         part.Meshes.Add(box);
 
-        var model = Import(scene, Vector3.Zero);
+        var model = Import(scene, Vector3<double>.Zero);
 
         Assert.That(Find(model, part).GetComponent<Material>().DiffuseColor, Is.EqualTo(diffuse));
     }
@@ -272,7 +272,7 @@ public class EntityImportTests
         return scene;
     }
 
-    private static Entity Import(SceneData scene, Vector3 at)
+    private static Entity Import(SceneData scene, Vector3<double> at)
     {
         return new EntityImportTemplate(scene, null, at).BuildEntity(new Entity()).Result;
     }
@@ -281,7 +281,7 @@ public class EntityImportTests
     {
         return new Mesh(PrimitiveType.TriangleList).SetPoints(
         [
-            new Vector3(-half, offsetY - half, offsetZ - half), new Vector3(half, offsetY + half, offsetZ + half)
+            new Vector3<double>(-half, offsetY - half, offsetZ - half), new Vector3<double>(half, offsetY + half, offsetZ + half)
         ]);
     }
 

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
@@ -9,15 +10,15 @@ namespace Adamantium.ECS.Components
 {
     public class BoxCollider : Collider
     {
-        private OrientedBoundingBox obb;
+        private OrientedBoundingBox<float> obb;
         private bool hasBox;
 
         public BoxCollider()
         {
-            ColliderData = new Dictionary<CameraBase, OrientedBoundingBox>();
+            ColliderData = new Dictionary<CameraBase, OrientedBoundingBox<float>>();
         }
         
-        protected Dictionary<CameraBase, OrientedBoundingBox> ColliderData { get; }
+        protected Dictionary<CameraBase, OrientedBoundingBox<float>> ColliderData { get; }
 
         public override void ClearData()
         {
@@ -31,7 +32,7 @@ namespace Adamantium.ECS.Components
 
         public override Mesh GetVisualRepresentation()
         {
-            Geometry = Shapes.Cube.GenerateGeometry(GeometryType.Outlined, Bounds.Size.X, Bounds.Size.Y, Bounds.Size.Z, 1, Matrix4x4.Translation(Bounds.Center));
+            Geometry = Shapes.Cube.GenerateGeometry(GeometryType.Outlined, Bounds.Size.X, Bounds.Size.Y, Bounds.Size.Z, 1, Matrix4x4.CreateTranslation<double>(Bounds.Center));
             return Geometry;
         }
 
@@ -48,11 +49,7 @@ namespace Adamantium.ECS.Components
 
         public override ContainmentType IsInsideCameraFrustum(Camera camera)
         {
-            if (ColliderData.TryGetValue(camera, out var bb))
-            {
-                return camera.Frustum.Contains(bb.GetCorners());
-            }
-            return camera.Frustum.Contains(obb.GetCorners());
+            return camera.Frustum.Contains(ColliderData.TryGetValue(camera, out var bb) ? bb : obb);
         }
 
         public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
@@ -67,16 +64,16 @@ namespace Adamantium.ECS.Components
 
         public override void CalculateFromMesh(Mesh mesh)
         {
-            obb = mesh.Bounds;
+            obb = mesh.Bounds.ToOrientedBoundingBox().As<float>();
             hasBox = true;
             base.CalculateFromMesh(mesh);
         }
 
         public void CalculateFromPoints(Vector3F[] points)
         {
-            obb = OrientedBoundingBox.FromPoints(points);
+            obb = OrientedBoundingBox.CreateFromPoints<float>(points);
             hasBox = true;
-            Bounds = Bounds.FromBoundingBox(obb);
+            Bounds = Bounds.FromBoundingBox(obb.As<double>());
         }
 
         /// <summary>
@@ -84,29 +81,30 @@ namespace Adamantium.ECS.Components
         /// </summary>
         public override void Merge(Collider collider)
         {
-            OrientedBoundingBox part = collider.Bounds;
-            var corners = part.Transform(PlacementOf(collider.Owner)).GetCorners();
-            obb = hasBox ? OrientedBoundingBox.Merge(ref obb, corners) : OrientedBoundingBox.FromPoints(corners);
+            Span<Vector3F> corners = stackalloc Vector3F[OrientedBoundingBox<float>.CornerCount];
+            collider.Bounds.ToOrientedBoundingBox().As<float>().Transform(PlacementOf(collider.Owner)).GetCorners(corners);
+            var placed = OrientedBoundingBox.CreateFromPoints<float>(corners);
+            obb = hasBox ? OrientedBoundingBox.CreateMerged(obb, placed) : placed;
             hasBox = true;
-            Bounds = Bounds.FromBoundingBox(obb);
+            Bounds = Bounds.FromBoundingBox(obb.As<double>());
         }
 
-        public override IConvexShape GetWorldShape()
+        public override IConvexShape<float> GetWorldShape()
         {
             return obb.Transform(Owner.Transform.GetWorldMatrixF());
         }
 
-        public override bool Intersects(ref Ray ray, out Vector3F point)
+        public override bool Intersects(ref Ray<float> ray, out Vector3F point)
         {
-            return obb.Intersects(ref ray, out point);
+            return obb.Intersects(ray, out point);
         }
 
-        public override bool IntersectsForCamera(Camera camera, ref Ray ray, out Vector3F point)
+        public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
         {
             point = Vector3F.Zero;
             if (ColliderData.ContainsKey(camera))
             {
-                return ColliderData[camera].Intersects(ref ray, out point);
+                return ColliderData[camera].Intersects(ray, out point);
             }
             return false;
         }

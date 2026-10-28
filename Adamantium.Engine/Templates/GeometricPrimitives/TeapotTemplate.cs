@@ -15,7 +15,7 @@ public class TeapotTemplate : PrimitiveTemplate
     public TeapotTemplate(
         float size,
         int tessellation = 1,
-        Matrix4x4? transform = null) : base(GeometryType.Solid, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(GeometryType.Solid, tessellation, transform)
     {
         this.size = size;
     }

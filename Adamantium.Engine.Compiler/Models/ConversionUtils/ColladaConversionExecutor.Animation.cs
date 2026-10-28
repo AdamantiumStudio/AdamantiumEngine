@@ -256,7 +256,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                     TimeStamp = time,
                     Position = translation,
                     Scale = scale,
-                    Rotation = QuaternionF.RotationYawPitchRoll(angles.Y, angles.X, angles.Z),
+                    Rotation = Quaternion.CreateFromYawPitchRoll<float>(angles.Y, angles.X, angles.Z),
                     Interpolation = InterpolationAt(channels, time)
                 });
             }
@@ -317,7 +317,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                 }
                 else if (item is rotate rotate && rotate.Values != null && rotate.Values.Length > 0)
                 {
-                    var angle = MathHelper.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
+                    var angle = float.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
                     switch (rotate.sid)
                     {
                         case "rotationX":
@@ -366,13 +366,13 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                     Write(ref scale, channel.Component, sampled);
                     break;
                 case ChannelTarget.RotationX:
-                    angles.X = MathHelper.DegreesToRadians(sampled[sampled.Length - 1]);
+                    angles.X = float.DegreesToRadians(sampled[sampled.Length - 1]);
                     break;
                 case ChannelTarget.RotationY:
-                    angles.Y = MathHelper.DegreesToRadians(sampled[sampled.Length - 1]);
+                    angles.Y = float.DegreesToRadians(sampled[sampled.Length - 1]);
                     break;
                 case ChannelTarget.RotationZ:
-                    angles.Z = MathHelper.DegreesToRadians(sampled[sampled.Length - 1]);
+                    angles.Z = float.DegreesToRadians(sampled[sampled.Length - 1]);
                     break;
             }
         }

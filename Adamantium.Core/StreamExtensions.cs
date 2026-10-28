@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Adamantium.Core
@@ -148,7 +147,7 @@ namespace Adamantium.Core
 
         public static unsafe T ReadStruct<T>(this Stream ms) where T: unmanaged
         {
-            var buffer = ReadBytes(ms, Marshal.SizeOf<T>());
+            var buffer = ReadBytes(ms, sizeof(T));
             T result;
             fixed(byte* bPtr = buffer)
             {

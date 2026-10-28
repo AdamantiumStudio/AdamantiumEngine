@@ -10,7 +10,7 @@ public class TransformMetaData
         Scale = Vector3F.One;
         AbsoluteWorld = Matrix4x4F.Identity;
         WorldMatrixF = Matrix4x4F.Identity;
-        WorldMatrix = Matrix4x4.Identity;
+        WorldMatrix = Matrix4x4<double>.Identity;
     }
 
     public CameraBase Camera { get; set; }
@@ -19,7 +19,7 @@ public class TransformMetaData
     // these (or the owner transform's IsWorldDirty) changed, so a static entity under a rotating camera is skipped
     // (the world matrix depends on camera POSITION, not its rotation - rotation lives in the per-frame view matrix).
     public bool Computed { get; set; }
-    public Vector3 LastCameraPosition { get; set; }
+    public Vector3<double> LastCameraPosition { get; set; }
 
     public Vector3F RelativePosition { get; set; }
 
@@ -29,7 +29,7 @@ public class TransformMetaData
 
     public Matrix4x4F WorldMatrixF { get; set; }
         
-    public Matrix4x4 WorldMatrix { get; set; }
+    public Matrix4x4<double> WorldMatrix { get; set; }
 
     public QuaternionF Rotation { get; set; }
 

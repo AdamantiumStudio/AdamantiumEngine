@@ -84,8 +84,8 @@ public class SvgGlyphTests
         var fill = operations[1].Fill;
 
         Assert.That(fill.Kind, Is.EqualTo(ColorFillKind.LinearGradient));
-        Assert.That(Matrix3x2.TransformPoint(fill.Transform, fill.Point0), Is.EqualTo(new Vector2(10, 40)));
-        Assert.That(Matrix3x2.TransformPoint(fill.Transform, fill.Point1), Is.EqualTo(new Vector2(210, 40)));
+        Assert.That(Vector2<double>.Transform(fill.Point0, fill.Transform), Is.EqualTo(new Vector2<double>(10, 40)));
+        Assert.That(Vector2<double>.Transform(fill.Point1, fill.Transform), Is.EqualTo(new Vector2<double>(210, 40)));
         Assert.That(fill.Stops.Select(s => s.Color?.A), Is.EqualTo(new byte?[] { 255, 128 }));
     }
 
@@ -101,7 +101,7 @@ public class SvgGlyphTests
         Assert.That(fill.Kind, Is.EqualTo(ColorFillKind.RadialGradient));
         Assert.That(fill.Extend, Is.EqualTo(ColorExtend.Reflect));
         Assert.That(fill.Stops, Has.Count.EqualTo(2));
-        Assert.That((fill.Point1, fill.Radius1), Is.EqualTo((new Vector2(5, 5), 4.0)));
+        Assert.That((fill.Point1, fill.Radius1), Is.EqualTo((new Vector2<double>(5, 5), 4.0)));
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class SvgGlyphTests
             "<path id=\"glyph5\" d=\"M0 0 C0 -40 100 -40 100 0 Z\" fill=\"url(#g)\"/>");
         var fill = operations[1].Fill;
 
-        var top = Matrix3x2.TransformPoint(fill.Transform, new Vector2(0, 0)).Y;
+        var top = Vector2<double>.Transform(new Vector2<double>(0, 0), fill.Transform).Y;
         Assert.That(top, Is.EqualTo(30).Within(1e-6), "the curve rises 30, its handles 40");
     }
 

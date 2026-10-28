@@ -20,7 +20,7 @@ internal sealed class ToolScene
 
     public Camera Camera { get; }
 
-    public PickRay RayAt(Vector3 worldPoint)
+    public PickRay RayAt(Vector3<double> worldPoint)
     {
         return RayAt(PixelOf(worldPoint));
     }
@@ -30,21 +30,21 @@ internal sealed class ToolScene
         return PickRay.FromCamera(Camera, pixel);
     }
 
-    public Vector2F PixelOf(Vector3 worldPoint)
+    public Vector2F PixelOf(Vector3<double> worldPoint)
     {
-        var inRender = (Vector3F)(worldPoint - Camera.WorldPosition);
+        var inRender = (worldPoint - Camera.WorldPosition).As<float>();
         var pixel = Vector3F.Project(inRender, 0, 0, Width, Height, 0, 1, Camera.ViewMatrix * Camera.ProjectionMatrix);
         return new Vector2F(pixel.X, pixel.Y);
     }
 
-    public void LookFrom(Vector3 eye, Vector3 at)
+    public void LookFrom(Vector3<double> eye, Vector3<double> at)
     {
         Camera.Owner.Transform.Position = eye;
         Camera.SetFreeLookAt(at);
         Camera.Update(new AppTime());
     }
 
-    public static Entity Target(Vector3 position)
+    public static Entity Target(Vector3<double> position)
     {
         var entity = new Entity(null, "Target");
         entity.Transform.Position = position;

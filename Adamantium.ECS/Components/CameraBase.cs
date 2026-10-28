@@ -86,11 +86,11 @@ namespace Adamantium.ECS.Components
         /// <see cref="OrthoFar"/>.</summary>
         public Matrix4x4F OrthoProjection { get; set; } = Matrix4x4F.Identity;
 
-        public Matrix4x4F RotationMatrix => Matrix4x4F.RotationQuaternion(Rotation);
+        public Matrix4x4F RotationMatrix => Matrix4x4.CreateFromQuaternion<float>(Rotation);
 
-        public BoundingFrustum Frustum { get; set; }
+        public BoundingFrustum<float> Frustum { get; set; }
 
-        public Vector3? LookAt { get; set; }
+        public Vector3<double>? LookAt { get; set; }
 
         [Bindable]
         public partial Double Velocity { get; set; }
@@ -116,19 +116,19 @@ namespace Adamantium.ECS.Components
         /// <summary>
         /// Camera relative X axis from view matrix
         /// </summary>
-        public Vector3 Right { get; protected set; }
+        public Vector3<double> Right { get; protected set; }
 
         /// <summary>
         /// Camera relative Y axis from view matrix
         /// </summary>
-        public Vector3 Up { get; protected set; }
+        public Vector3<double> Up { get; protected set; }
 
         /// <summary>
         /// Camera relative Z axis from view matrix
         /// </summary>
-        public Vector3 Forward { get; protected set; }
+        public Vector3<double> Forward { get; protected set; }
 
-        public Vector3 Backward => -Forward;
+        public Vector3<double> Backward => -Forward;
 
         /// <summary>The object a third-person camera FOLLOWS. It IS the parent of the camera's entity: transforms are
         /// relative to the parent, so the follow link and the transform link are one thing.</summary>
@@ -141,14 +141,14 @@ namespace Adamantium.ECS.Components
         /// <summary>Where the camera is IN THE WORLD. Its own <c>Transform.Position</c> is relative to its parent, and
         /// a third-person camera hangs off the object it follows - the scene is shifted by THIS one. Hung on another
         /// entity, it is still on its way there for <see cref="HostChangeTime"/>.</summary>
-        public Vector3 WorldPosition => (Owner?.Transform.WorldPosition ?? Vector3.Zero) + TravelOffset;
+        public Vector3<double> WorldPosition => (Owner?.Transform.WorldPosition ?? Vector3<double>.Zero) + TravelOffset;
 
         /// <summary>How long, in milliseconds, a camera hung on another entity or taken off one takes to get from where it
         /// stood and looked to its new place and view; 0 jumps there.</summary>
         public int HostChangeTime { get; set; } = 250;
 
         /// <summary>How far the camera still is from its place while it travels to a new host.</summary>
-        protected Vector3 TravelOffset { get; set; }
+        protected Vector3<double> TravelOffset { get; set; }
 
         /// <summary>
         /// Gets or Sets value indicating does ZNear and ZFar planes should be reversed for inverted depth buffer
@@ -290,7 +290,7 @@ namespace Adamantium.ECS.Components
         ///<summary>
         ///Sets camera as Free with specific parameters.
         ///</summary>
-        public abstract void SetFreeCamera(Vector3 position, Vector3 lookAt, Vector3 up);
+        public abstract void SetFreeCamera(Vector3<double> position, Vector3<double> lookAt, Vector3<double> up);
 
         ///<summary>
         ///Sets camera as Free where it stands, looking where it looks.
@@ -300,12 +300,12 @@ namespace Adamantium.ECS.Components
         ///<summary>
         ///Changes the Position (Offset) of Free camera.
         ///</summary>
-        public abstract void SetFreePosition(Vector3 position);
+        public abstract void SetFreePosition(Vector3<double> position);
 
         ///<summary>
         ///Changes the LookAt of Free camera.
         ///</summary>
-        public abstract void SetFreeLookAt(Vector3 lookAt);
+        public abstract void SetFreeLookAt(Vector3<double> lookAt);
 
         ///<summary>
         ///Sets camera as First Person with specific parameters.
@@ -313,12 +313,12 @@ namespace Adamantium.ECS.Components
         ///<remarks>
         ///objectRotation - rotation of the camera host (e.g. position of human body (and face) in space).
         ///</remarks>
-        public abstract void SetFirstPersonCamera(Vector3 position, QuaternionF objectRotation, Double faceDistance);
+        public abstract void SetFirstPersonCamera(Vector3<double> position, QuaternionF objectRotation, Double faceDistance);
 
         ///<summary>
         ///Changes the Position (Offset) and Rotation of First Person camera.
         ///</summary>
-        public abstract void SetFirstPersonPositionRotation(Vector3 position, QuaternionF objectRotation);
+        public abstract void SetFirstPersonPositionRotation(Vector3<double> position, QuaternionF objectRotation);
 
         ///<summary>
         ///Sets camera as Third Person with specific parameters.
@@ -336,10 +336,10 @@ namespace Adamantium.ECS.Components
             Entity hostObject,
             Vector3F initialRelRotation,
             CameraType desiredType,
-            Vector3? lookAt = null,
+            Vector3<double>? lookAt = null,
             Double? distanceToObject = null);
 
-        public abstract void SetSpecialCamera(Vector3 lookAt);
+        public abstract void SetSpecialCamera(Vector3<double> lookAt);
 
         ///<summary>
         ///Sets the Radius of spinning for 1st and 3rd person camera.
@@ -349,7 +349,7 @@ namespace Adamantium.ECS.Components
         ///<summary>
         ///Sets the LookAt of Third Person camera.
         ///</summary>
-        public abstract void SetThirdPersonLookAt(Vector3 lookAt);
+        public abstract void SetThirdPersonLookAt(Vector3<double> lookAt);
 
         ///<summary>
         ///Sets the camera's rear view.
@@ -373,14 +373,14 @@ namespace Adamantium.ECS.Components
         /// <summary>Travels to a point over <paramref name="time"/> milliseconds. The same machinery
         /// <see cref="JumpToObject"/> rides - offered because a place can be worth flying to without an object there
         /// to aim at.</summary>
-        public abstract void MoveTo(Vector3 position, int time);
+        public abstract void MoveTo(Vector3<double> position, int time);
 
         ///<summary>
         ///Returns quaternion, which has the same angle as the forward vector of the hosted object in left handed coordinate system
         ///</summary>
         public QuaternionF SyncRotationWithEntityForwardLH()
         {
-            return QuaternionF.RotationLookAtLH(SubjectForward, EntityRotationMatrix.Up);
+            return Quaternion.CreateLookToLH<float>(SubjectForward, EntityRotationMatrix.Up);
         }
 
         ///<summary>
@@ -388,7 +388,7 @@ namespace Adamantium.ECS.Components
         ///</summary>
         public QuaternionF SyncRotationWithEntityBackwardLH()
         {
-            return QuaternionF.RotationLookAtLH(-SubjectForward, EntityRotationMatrix.Up);
+            return Quaternion.CreateLookToLH<float>(-SubjectForward, EntityRotationMatrix.Up);
         }
 
         /// <summary>Which way the <see cref="Subject"/> FACES: -Z, as <c>Matrix4x4F.Forward</c> states and the models

@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Mathematics;
 using MessagePack;
@@ -34,7 +35,7 @@ internal static class MeshBlobs
     /// <summary>Positions live in <see cref="Vector3"/>, which is double, but a model's coordinates come from a
     /// float source and stay exactly representable. Written as float when that holds for every one of them -
     /// half the bytes for the largest array in the file - and as double the moment it does not.</summary>
-    public static void WritePoints(ref MessagePackWriter writer, Vector3[] points)
+    public static void WritePoints(ref MessagePackWriter writer, Vector3<double>[] points)
     {
         if (points == null || points.Length == 0)
         {
@@ -68,7 +69,7 @@ internal static class MeshBlobs
         writer.Write(MemoryMarshal.AsBytes<double>(wide));
     }
 
-    public static Vector3[] ReadPoints(ref MessagePackReader reader)
+    public static Vector3<double>[] ReadPoints(ref MessagePackReader reader)
     {
         var width = reader.ReadByte();
         if (reader.TryReadNil() || width == 0) return null;
@@ -80,19 +81,19 @@ internal static class MeshBlobs
         if (width == sizeof(float))
         {
             var narrow = Reinterpret<float>(raw);
-            var result = new Vector3[narrow.Length / 3];
+            var result = new Vector3<double>[narrow.Length / 3];
             for (var i = 0; i < result.Length; i++)
             {
-                result[i] = new Vector3(narrow[i * 3], narrow[i * 3 + 1], narrow[i * 3 + 2]);
+                result[i] = new Vector3<double>(narrow[i * 3], narrow[i * 3 + 1], narrow[i * 3 + 2]);
             }
             return result;
         }
 
         var wide = Reinterpret<double>(raw);
-        var points = new Vector3[wide.Length / 3];
+        var points = new Vector3<double>[wide.Length / 3];
         for (var i = 0; i < points.Length; i++)
         {
-            points[i] = new Vector3(wide[i * 3], wide[i * 3 + 1], wide[i * 3 + 2]);
+            points[i] = new Vector3<double>(wide[i * 3], wide[i * 3 + 1], wide[i * 3 + 2]);
         }
         return points;
     }
@@ -265,7 +266,7 @@ internal static class MeshBlobs
 
         for (var i = 0; i < bitangents.Length; i++)
         {
-            if (Derive(normals[i], tangents[i]) != bitangents[i]) return false;
+            if (!Vector3F.NearEqual(Derive(normals[i], tangents[i]), bitangents[i])) return false;
         }
         return true;
     }
@@ -283,12 +284,12 @@ internal static class MeshBlobs
     //The blobs are the machine's own bytes, so reading one back is a copy and not a conversion
     private static T[] Reinterpret<T>(byte[] raw) where T : struct
     {
-        var result = new T[raw.Length / Marshal.SizeOf<T>()];
+        var result = new T[raw.Length / Unsafe.SizeOf<T>()];
         raw.AsSpan().CopyTo(MemoryMarshal.AsBytes(result.AsSpan()));
         return result;
     }
 
-    private static bool FitInSingle(Vector3[] points)
+    private static bool FitInSingle(Vector3<double>[] points)
     {
         foreach (var point in points)
         {

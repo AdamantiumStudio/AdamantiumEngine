@@ -32,7 +32,7 @@ public class RubyTests
             attributed.SetRuby(start, length, new RubyAnnotation(reading, position));
         }
 
-        layout.ProcessText(attributed, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText(attributed, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -161,7 +161,7 @@ public class RubyTests
                 attributed.SetRuby(Base, 2, new RubyAnnotation(reading, position));
             }
 
-            layout.ProcessText(attributed, FontSize, new Size(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(attributed, FontSize, new Size<double>(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -215,7 +215,7 @@ public class RubyTests
     {
         var layout = new TextLayout(face.Value, face.Value.Fonts[0]) { Fallback = null };
         setUp?.Invoke(layout);
-        layout.ProcessText(attributed, FontSize, new Size(width, height), wrapping, trimming,
+        layout.ProcessText(attributed, FontSize, new Size<double>(width, height), wrapping, trimming,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -277,7 +277,7 @@ public class RubyTests
     [Test]
     public void TheAnnotation_ClearsAnObjectBase()
     {
-        var text = new AttributedText("ab￼cd").Apply(2, 1, new TextAttributes { ObjectSize = new Size(30, 30) })
+        var text = new AttributedText("ab￼cd").Apply(2, 1, new TextAttributes { ObjectSize = new Size<double>(30, 30) })
             .SetRuby(2, 1, new RubyAnnotation("box"));
         var layout = LayIn(SourceSans, text, 400);
         var box = layout.GetTextData().Single(glyph => glyph.PositionInString == 2);
@@ -381,7 +381,7 @@ public class RubyTests
         Assume.That(FontFallback.System.FontFor('と', latin, "ja"), Is.Not.Null, "a system font with kana");
         var layout = new TextLayout(SourceSans.Value, latin) { Fallback = FontFallback.System, LoadFontsInBackground = false };
         layout.ProcessText(new AttributedText("Tokyo").SetRuby(0, 5, new RubyAnnotation("とうきょう")), FontSize,
-            new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
+            new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
 
         Assert.That(Annotation(layout).All(glyph => glyph.Glyph.Index != 0 && !ReferenceEquals(glyph.Font, latin)), Is.True);
@@ -414,7 +414,7 @@ public class RubyTests
                 attributed.SetRuby(Base, 2, new RubyAnnotation("かんじ"));
             }
 
-            layout.ProcessText(attributed, FontSize, new Size(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(attributed, FontSize, new Size<double>(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -493,7 +493,7 @@ public class RubyTests
     {
         var text = new AttributedText("a").SetRuby(0, 1, new RubyAnnotation("averyveryverylongannotation"));
         var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]) { Fallback = null };
-        var size = layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+        var size = layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(size.Width, Is.GreaterThanOrEqualTo(Right(Annotation(layout)) - 0.5));
@@ -504,7 +504,7 @@ public class RubyTests
     {
         var text = new AttributedText("x a").SetRuby(2, 1, new RubyAnnotation("averyveryverylongannotation"));
         var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
 
         Assert.That(Right(Annotation(layout)), Is.EqualTo(300).Within(0.5));
@@ -522,7 +522,7 @@ public class RubyTests
             }
 
             var layout = new TextLayout(SourceSans.Value, SourceSans.Value.Fonts[0]) { Fallback = null, Tracking = 100 };
-            layout.ProcessText(text, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, FontSize, new Size<double>(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
             return layout;
         }
@@ -549,7 +549,7 @@ public class RubyTests
                 attributed.SetRuby(Base, 2, new RubyAnnotation("とてもながいよみがな"));
             }
 
-            layout.ProcessText(attributed, FontSize, new Size(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(attributed, FontSize, new Size<double>(200, 400), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -592,7 +592,7 @@ public class RubyTests
         var attributed = new AttributedText(Text);
         attributed.SetRuby(Base, overLength, new RubyAnnotation(over));
         attributed.SetRuby(Base, 2, new RubyAnnotation(under, RubyPosition.Under));
-        layout.ProcessText(attributed, FontSize, new Size(400, double.NaN), TextWrapping.WrapByWords,
+        layout.ProcessText(attributed, FontSize, new Size<double>(400, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -650,7 +650,7 @@ public class RubyTests
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, OpticalMarginAlignment = true };
         var attributed = new AttributedText("“Ab cd");
         attributed.SetRuby(0, 3, new RubyAnnotation("annotation", FontSize: 20));
-        layout.ProcessText(attributed, 40, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, 40, new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(Annotation(layout).Min(glyph => glyph.Rect.Left), Is.GreaterThanOrEqualTo(-0.5));
@@ -671,7 +671,7 @@ public class RubyTests
                 attributed.SetRuby(1, 1, new RubyAnnotation("v", FontSize: 4));
             }
 
-            layout.ProcessText(attributed, 40, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(attributed, 40, new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout;
         }
@@ -703,7 +703,7 @@ public class RubyTests
                 attributed.SetRuby(at, 1, new RubyAnnotation("x", FontSize: 2));
             }
 
-            layout.ProcessText(attributed, 40, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(attributed, 40, new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout.GetTextData().Where(glyph => glyph.PositionInString >= 0).ToArray();
         }

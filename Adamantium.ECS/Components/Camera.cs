@@ -20,11 +20,11 @@ namespace Adamantium.ECS.Components
         private int moveTime;
         private bool moveToObjectDone = true;
         private double moveToDuration = 0;
-        private Vector3 startingOffset;
-        private Vector3 endingPosition;
-        private Vector3 distance;
-        private Vector3 diameter;
-        private Vector3 center;
+        private Vector3<double> startingOffset;
+        private Vector3<double> endingPosition;
+        private Vector3<double> distance;
+        private Vector3<double> diameter;
+        private Vector3<double> center;
 
         // How far a jump stands from an object with no bounds to frame: an empty entity, a group.
         private const double UnframedDistance = 5;
@@ -54,7 +54,7 @@ namespace Adamantium.ECS.Components
         private double changeTime;
         private QuaternionF turnFrom;
         private QuaternionF turnTo;
-        private Vector3 turnPivot;
+        private Vector3<double> turnPivot;
         private double turnDistance;
         private double turnElapsed;
         private double turnTime;
@@ -66,12 +66,13 @@ namespace Adamantium.ECS.Components
         private bool subjectShown;
         private bool travelling;
         private double travelElapsed;
-        private Vector3 travelFrom;
+        private Vector3<double> travelFrom;
         private QuaternionF travelViewFrom;
-        private Vector3 lastStanding;
+        private Vector3<double> lastStanding;
         private bool entityTurnKnown;
         private QuaternionF knownEntityTurn;
         private QuaternionF lastView = QuaternionF.Identity;
+        private bool initialized;
 
         public Camera()
         {
@@ -92,8 +93,8 @@ namespace Adamantium.ECS.Components
             IsDepthInversed = !inverseDepth;
             Rotation = QuaternionF.Identity;
 
-            LookAt = Vector3.ForwardLH;
-            Up = -Vector3.UnitY;
+            LookAt = Vector3<double>.ForwardLH;
+            Up = -Vector3<double>.UnitY;
             Velocity = 1;
             CurrentVelocity = 0;
             DragVelocity = 200;
@@ -126,7 +127,7 @@ namespace Adamantium.ECS.Components
         /// <param name="zfar">Distance to far plane</param>
         /// <param name="inverseDepth">Is depth should be inverted</param>
         /// <remarks>If <paramref name="inverseDepth"/> is true, then znear and zfar will be swap when creating projection matrix</remarks>
-        public Camera(Vector3 lookAt, Vector3 up, Single fov, UInt32 width, UInt32 height,
+        public Camera(Vector3<double> lookAt, Vector3<double> up, Single fov, UInt32 width, UInt32 height,
            Single znear, Single zfar, bool inverseDepth = true)
         {
             IsDepthInversed = inverseDepth;
@@ -162,7 +163,8 @@ namespace Adamantium.ECS.Components
             BuildOrthoProjection();
             BuildUiProjection();
             ProjectionStale = false;
-            Frustum = new BoundingFrustum(ViewMatrix * ProjectionMatrix);
+            Frustum = new BoundingFrustum<float>(ViewMatrix * ProjectionMatrix);
+            initialized = true;
             base.Initialize();
         }
 
@@ -171,7 +173,7 @@ namespace Adamantium.ECS.Components
         /// </summary>
         public void UpdateFrustum()
         {
-            Frustum.ViewProjection = ViewMatrix * ProjectionMatrix;
+            Frustum = new BoundingFrustum<float>(ViewMatrix * ProjectionMatrix);
         }
 
         private Matrix4x4F _viewProjectionMatrix;
@@ -207,7 +209,7 @@ namespace Adamantium.ECS.Components
         private void BuildOrthoProjection()
         {
             var far = Math.Max(OrthoFar, OrthoNear + 1);
-            OrthoProjection = Matrix4x4F.OrthoLH(Width, Height, OrthoNear, far) * Matrix4x4F.Scaling(OrthoScale.X, OrthoScale.Y, 1);
+            OrthoProjection = Matrix4x4.CreateOrthoLH<float>(Width, Height, OrthoNear, far) * Matrix4x4.CreateScale<float>(OrthoScale.X, OrthoScale.Y, 1);
         }
 
         /// <summary>The projection drawn now: while <see cref="CameraBase.ProjectionType"/> changes, one flowing from the
@@ -348,7 +350,7 @@ namespace Adamantium.ECS.Components
                 return PerspectiveProjection;
             }
 
-            return Matrix4x4F.OrthoLH(Width, Height, ZNear, OrthoFar) * Matrix4x4F.Scaling(OrthoScale.X, OrthoScale.Y, 1);
+            return Matrix4x4.CreateOrthoLH<float>(Width, Height, ZNear, OrthoFar) * Matrix4x4.CreateScale<float>(OrthoScale.X, OrthoScale.Y, 1);
         }
 
         private void StepToFocus(double depth, double matching)
@@ -368,7 +370,7 @@ namespace Adamantium.ECS.Components
         {
             var forward = Forward;
             var diagonal = new Vector3F(forward.X < 0 ? -1 : 1, 1, forward.Z < 0 ? -1 : 1) * IsometricAxis;
-            return QuaternionF.RotationLookAtLH(diagonal, Vector3F.Up);
+            return Quaternion.CreateLookToLH<float>(diagonal, Vector3F.Up);
         }
 
         private void TurnAbout(QuaternionF rotation)
@@ -376,8 +378,8 @@ namespace Adamantium.ECS.Components
             Rotation = rotation;
             if (Type == CameraType.Free)
             {
-                var view = Matrix4x4F.RotationQuaternion(rotation);
-                Owner.Transform.Position = turnPivot - new Vector3(view.M13, view.M23, view.M33) * turnDistance;
+                var view = Matrix4x4.CreateFromQuaternion<float>(rotation);
+                Owner.Transform.Position = turnPivot - new Vector3<double>(view.M13, view.M23, view.M33) * turnDistance;
             }
         }
         
@@ -391,24 +393,24 @@ namespace Adamantium.ECS.Components
             //     zfar = ZNear;
             // }
             
-            UiProjection = Matrix4x4F.OrthoOffCenter(0, Width, 0, Height, znear, zfar);
+            UiProjection = Matrix4x4.CreateOrthoOffCenter<float>(0, Width, 0, Height, znear, zfar);
         }
 
         private void BuildPerspectiveFovX(float zNear, float zFar)
         {
-            PerspectiveProjection = Matrix4x4F.PerspectiveFovX(Fov, (float)Width / Height, zNear, zFar);
+            PerspectiveProjection = Matrix4x4.CreatePerspectiveFovX<float>(float.DegreesToRadians(Fov), (float)Width / Height, zNear, zFar);
         }
 
         private void BuildPerspectiveFovY(float zNear, float zFar)
         {
-            PerspectiveProjection = Matrix4x4F.PerspectiveFovY(MathHelper.DegreesToRadians(Fov), (float)Width / Height, zNear, zFar);
+            PerspectiveProjection = Matrix4x4.CreatePerspectiveFovY<float>(float.DegreesToRadians(Fov), (float)Width / Height, zNear, zFar);
         }
 
         private void GetAxisFromViewMatrix()
         {
-            Right = new Vector3(ViewMatrix.M11, ViewMatrix.M21, ViewMatrix.M31);
-            Up = new Vector3(ViewMatrix.M12, ViewMatrix.M22, ViewMatrix.M32);
-            Forward = new Vector3(ViewMatrix.M13, ViewMatrix.M23, ViewMatrix.M33);
+            Right = new Vector3<double>(ViewMatrix.M11, ViewMatrix.M21, ViewMatrix.M31);
+            Up = new Vector3<double>(ViewMatrix.M12, ViewMatrix.M22, ViewMatrix.M32);
+            Forward = new Vector3<double>(ViewMatrix.M13, ViewMatrix.M23, ViewMatrix.M33);
         }
 
         /// <inheritdoc />
@@ -422,10 +424,11 @@ namespace Adamantium.ECS.Components
             startingOffset = Owner.Transform.Position;
             if (LookAtObject != null)
             {
-                diameter = (Vector3)Forward * LookAtObject.GetDiameter() * Fov;
-                center = LookAtObject.GetCenterAbsolute() + diameter + Owner.Transform.Position - LookAtObject.GetLocalCenter();
+                diameter = (Vector3<double>)Forward * LookAtObject.GetDiameter() * Fov;
+                center = LookAtObject.GetCenterAbsolute() + diameter + Owner.Transform.Position - LookAtObject.GetLocalCenter().As<double>();
             }
             Type = CameraType.Special;
+            Owner.NotifyUpdated(TimeSpan.FromMilliseconds(time));
         }
 
         /// <summary>Drops a turn or a flight still in progress, leaving the camera exactly where it got to. What a drag
@@ -460,13 +463,14 @@ namespace Adamantium.ECS.Components
 
         /// <inheritdoc />
         /// <inheritdoc />
-        public override void MoveTo(Vector3 position, int time)
+        public override void MoveTo(Vector3<double> position, int time)
         {
             moveTime = time;
             moveToObjectDone = false;
             moveToDuration = 0;
             startingOffset = Owner.Transform.Position;
             endingPosition = position;
+            Owner.NotifyUpdated(TimeSpan.FromMilliseconds(time));
         }
 
         /// <inheritdoc />
@@ -479,7 +483,7 @@ namespace Adamantium.ECS.Components
             var world = lookAtObject.Transform.GetWorldMatrixF();
             var size = lookAtObject.GetDiameter() * Math.Max(world.Right.Length(), Math.Max(world.Up.Length(), world.Backward.Length()));
             var away = size > 0 ? FramingDistance(size) : UnframedDistance;
-            endingPosition = lookAtObject.GetCenterAbsolute() - (Vector3)Forward * away;
+            endingPosition = lookAtObject.GetCenterAbsolute() - (Vector3<double>)Forward * away;
             Type = CameraType.Free;
             FocusDistance = away;
             if (ProjectionType == CameraProjectionType.Ortho)
@@ -494,7 +498,7 @@ namespace Adamantium.ECS.Components
         // From the center: out of the body, then far enough back for a diameter in the world to fill the field of view
         // (Fov is in degrees), with the margin.
         private double FramingDistance(double size) =>
-            (size / 2 + size / (2 * Math.Tan(MathHelper.DegreesToRadians(Fov / 2)))) * FramingMargin;
+            (size / 2 + size / (2 * Math.Tan(float.DegreesToRadians(Fov / 2)))) * FramingMargin;
 
         private void MoveToPoint(AppTime appTime)
         {
@@ -502,7 +506,7 @@ namespace Adamantium.ECS.Components
             {
                 moveToDuration += appTime.FrameTime * 1000;
                 var weight = (float)moveToDuration / moveTime;
-                Owner.Transform.Position = Vector3.Lerp(startingOffset, endingPosition, weight);
+                Owner.Transform.Position = Vector3<double>.Lerp(startingOffset, endingPosition, weight);
                 if (moveToDuration >= moveTime)
                 {
                     Owner.Transform.Position = endingPosition;
@@ -517,7 +521,7 @@ namespace Adamantium.ECS.Components
         {
             // Built in Initialize only, the projections kept the field of view and planes a camera was made with, while
             // whatever reads ZNear or ZFar directly moved on with an edit.
-            if (ProjectionStale && Frustum != null && Width > 0 && Height > 0)
+            if (ProjectionStale && initialized && Width > 0 && Height > 0)
             {
                 ProjectionStale = false;
                 BuildPerspectiveFoV();
@@ -528,12 +532,13 @@ namespace Adamantium.ECS.Components
             FollowEntityTurn();
             FollowProjection(appTime);
 
-            // Rotation is a STRUCT behind a property: Rotation.Normalize() normalized a copy and dropped it, so the
-            // quaternion drifted from unit length as mouse-look multiplied into it - and a non-unit quaternion scales
-            // the rotation matrix, shrinking the third-person offset until the camera sat inside its subject.
-            var rotation = Rotation;
-            rotation.Normalize();
-            Rotation = rotation;
+            // Mouse-look multiplies into the rotation, and a non-unit quaternion scales the rotation matrix, shrinking the
+            // third-person offset until the camera sat inside its subject. Only a drifted one is normalized: normalizing
+            // a unit one moves it by an ulp each frame - a change every frame, and a view past straight down.
+            if (!Rotation.IsNormalized)
+            {
+                Rotation = QuaternionF.Normalize(Rotation);
+            }
 
             MoveToPoint(appTime);
 
@@ -542,7 +547,7 @@ namespace Adamantium.ECS.Components
             ContiniousRotation(appTime);
             if (Type == CameraType.Free)
             {
-                ViewMatrix = Matrix4x4F.RotationQuaternion(Rotation);
+                ViewMatrix = Matrix4x4.CreateFromQuaternion<float>(Rotation);
                 //ViewMatrix =  Matrix4x4F.LookAtRH(new Vector3F(0, 0, 0), Vector3F.Zero, Vector3F.Up);
                 //ViewMatrix.Transpose();
             }
@@ -551,25 +556,25 @@ namespace Adamantium.ECS.Components
                 if (Subject == null)
                 {
                     SetFreeCamera();
-                    ViewMatrix = Matrix4x4F.RotationQuaternion(Rotation);
+                    ViewMatrix = Matrix4x4.CreateFromQuaternion<float>(Rotation);
                 }
                 else
                 {
-                    ViewMatrix = Matrix4x4F.RotationQuaternion(QuaternionF.Multiply(Rotation, SyncRotationWithEntityForwardLH()));
+                    ViewMatrix = Matrix4x4.CreateFromQuaternion<float>(QuaternionF.Multiply(Rotation, SyncRotationWithEntityForwardLH()));
                 }
             }
             else if (Type == CameraType.Special)
             {
                 if (LookAtObject == null)
                 {
-                    ViewMatrix = Matrix4x4F.RotationQuaternion(Rotation);
+                    ViewMatrix = Matrix4x4.CreateFromQuaternion<float>(Rotation);
                 }
                 else
                 {
-                    Matrix4x4F rotMatrix = Matrix4x4F.RotationQuaternion(Rotation);
+                    Matrix4x4F rotMatrix = Matrix4x4.CreateFromQuaternion<float>(Rotation);
                     distance = center - Owner.Transform.Position;
-                    Owner.Transform.Position = (center) - new Vector3(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33) * distance.Length();
-                    ViewMatrix = Matrix4x4F.LookToLH(Vector3F.Zero, -new Vector3F(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33), new Vector3F(rotMatrix.M12, rotMatrix.M22, rotMatrix.M32));
+                    Owner.Transform.Position = (center) - new Vector3<double>(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33) * distance.Length();
+                    ViewMatrix = rotMatrix;
                 }
             }
             else
@@ -578,16 +583,16 @@ namespace Adamantium.ECS.Components
                 if (Subject == null)
                 {
                     SetFreeCamera();
-                    ViewMatrix = Matrix4x4F.RotationQuaternion(Rotation);
+                    ViewMatrix = Matrix4x4.CreateFromQuaternion<float>(Rotation);
                     return;
                 }
 
                 var back = OrbitBack(out var rotMatrix);
                 PlaceInOrbit(back);
 
-                ViewMatrix = Matrix4x4F.LookAtLH(
+                ViewMatrix = Matrix4x4.CreateLookAtLH<float>(
                     Vector3F.Zero,
-                    LookAt != null ? (Vector3)LookAt - Owner.Transform.Position : back,
+                    (LookAt != null ? (Vector3<double>)LookAt - Owner.Transform.Position : back).As<float>(),
                     new Vector3F(rotMatrix.M12, rotMatrix.M22, rotMatrix.M32));
 
             }
@@ -615,9 +620,9 @@ namespace Adamantium.ECS.Components
             PlaceInOrbit(back);
             if (Type == CameraType.ThirdPersonLocked && !travelling)
             {
-                ViewMatrix = Matrix4x4F.LookAtLH(
+                ViewMatrix = Matrix4x4.CreateLookAtLH<float>(
                     Vector3F.Zero,
-                    LookAt != null ? (Vector3)LookAt - Owner.Transform.Position : back,
+                    (LookAt != null ? (Vector3<double>)LookAt - Owner.Transform.Position : back).As<float>(),
                     new Vector3F(rotMatrix.M12, rotMatrix.M22, rotMatrix.M32));
                 GetAxisFromViewMatrix();
                 UpdateFrustum();
@@ -625,22 +630,22 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        private Vector3 OrbitBack(out Matrix4x4F rotMatrix)
+        private Vector3<double> OrbitBack(out Matrix4x4F rotMatrix)
         {
             var turn = Type == CameraType.ThirdPersonLocked
                 ? QuaternionF.Multiply(Rotation, SyncRotationWithEntityForwardLH())
                 : Rotation;
-            rotMatrix = Matrix4x4F.RotationQuaternion(turn);
-            return Vector3.Multiply(new Vector3(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33), Radius);
+            rotMatrix = Matrix4x4.CreateFromQuaternion<float>(turn);
+            return Vector3<double>.Multiply(new Vector3<double>(rotMatrix.M13, rotMatrix.M23, rotMatrix.M33), Radius);
         }
 
         // In the subject's space, from its CENTER: an offset from the origin orbits whatever point the model was authored
         // around, not the thing on screen. The offset is the view's, in the world: turned back by the host's own turn, so
         // a host turned - by the rotation tool, say - does not swing a free orbit round.
-        private void PlaceInOrbit(Vector3 back)
+        private void PlaceInOrbit(Vector3<double> back)
         {
-            var center = (Vector3)Subject.GetLocalCenter();
-            Owner.Transform.Position = center - (Vector3)Vector3F.TransformNormal((Vector3F)back, HostTurnBack());
+            var center = Subject.GetLocalCenter().As<double>();
+            Owner.Transform.Position = center - Vector3F.TransformNormal(back.As<float>(), HostTurnBack()).As<double>();
         }
 
         private void FollowEntityTurn()
@@ -702,11 +707,11 @@ namespace Adamantium.ECS.Components
                 var eased = done * done * (3 - 2 * done);
                 TravelOffset = (travelFrom - standing) * (1 - eased);
                 view = QuaternionF.Slerp(travelViewFrom, view, (float)eased);
-                ViewMatrix = Matrix4x4F.RotationQuaternion(view);
+                ViewMatrix = Matrix4x4.CreateFromQuaternion<float>(view);
                 if (done >= 1)
                 {
                     travelling = false;
-                    TravelOffset = Vector3.Zero;
+                    TravelOffset = Vector3<double>.Zero;
                 }
             }
 
@@ -719,11 +724,11 @@ namespace Adamantium.ECS.Components
         {
             if (Type != CameraType.ThirdPersonLocked)
             {
-                Rotation = QuaternionF.RotationYawPitchRoll(angleY, angleX, angleZ);
+                Rotation = Quaternion.CreateFromYawPitchRoll<float>(angleY, angleX, angleZ);
             }
             else
             {
-                Rotation = QuaternionF.RotationYawPitchRoll(0, angleX, 0);
+                Rotation = Quaternion.CreateFromYawPitchRoll<float>(0, angleX, 0);
             }
         }
 
@@ -732,7 +737,7 @@ namespace Adamantium.ECS.Components
         {
             if (Type == CameraType.Free)
             {
-                Owner.Transform.Position += Vector3.Multiply(Right, relativeX);
+                Owner.Transform.Position += Vector3<double>.Multiply(Right, relativeX);
             }
         }
 
@@ -741,7 +746,7 @@ namespace Adamantium.ECS.Components
         {
             if (Type == CameraType.Free)
             {
-                Owner.Transform.Position += Vector3.Multiply(Up, relativeY);
+                Owner.Transform.Position += Vector3<double>.Multiply(Up, relativeY);
             }
         }
 
@@ -754,7 +759,7 @@ namespace Adamantium.ECS.Components
             }
             else if (Type == CameraType.Free)
             {
-                Owner.Transform.Position += Vector3.Multiply(Forward, relativeZ);
+                Owner.Transform.Position += Vector3<double>.Multiply(Forward, relativeZ);
                 var focus = FocusDistance - relativeZ;
                 if (focus >= Math.Max(FocusFloor, ZNear * 2) || focus > FocusDistance)
                 {
@@ -810,15 +815,15 @@ namespace Adamantium.ECS.Components
             else if (Type == CameraType.ThirdPersonLocked)
             {
                 Rotation =
-                   QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(angleX)),
+                   QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(angleX)),
                       Rotation);
             }
             else if (Type == CameraType.ThirdPersonFreeAlt)
             {
                 Rotation =
-                   QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(angleX)),
+                   QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(angleX)),
                       Rotation);
-                Rotation = QuaternionF.Multiply(Rotation, QuaternionF.RotationAxis(HostUpVector, MathHelper.DegreesToRadians(angleY)));
+                Rotation = QuaternionF.Multiply(Rotation, Quaternion.CreateFromAxisAngle<float>(HostUpVector, float.DegreesToRadians(angleY)));
             }
             else if (Type == CameraType.Free)
             {
@@ -827,15 +832,15 @@ namespace Adamantium.ECS.Components
             else
             {
                 Rotation =
-                   QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(angleX)), Rotation);
+                   QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(angleX)), Rotation);
                 Rotation =
-                   QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(angleY)), Rotation);
+                   QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(angleY)), Rotation);
             }
         }
 
         private void TurnLevel(float pitchDegrees, float yawDegrees)
         {
-            var yaw = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(yawDegrees));
+            var yaw = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(yawDegrees));
             if (HoldsIsometric())
             {
                 if (yawDegrees == 0)
@@ -858,13 +863,13 @@ namespace Adamantium.ECS.Components
                 return;
             }
 
-            var before = Matrix4x4F.RotationQuaternion(turned);
-            var upright = before.M22 >= 0;
+            var before = Matrix4x4.CreateFromQuaternion<float>(turned);
+            var upright = before.M22 >= -UprightTolerance;
             var share = 1f;
             for (var i = 0; i < 12; i++)
             {
                 var pitched = Pitched(turned, pitchDegrees * share);
-                var view = Matrix4x4F.RotationQuaternion(pitched);
+                var view = Matrix4x4.CreateFromQuaternion<float>(pitched);
                 var steepEnough = Math.Abs(view.M23) < MaxLevelPitchSine || Math.Abs(view.M23) < Math.Abs(before.M23);
                 if (steepEnough && (!upright || view.M22 >= 0))
                 {
@@ -877,7 +882,7 @@ namespace Adamantium.ECS.Components
         }
 
         private static QuaternionF Pitched(QuaternionF rotation, float degrees) =>
-            QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(degrees)), rotation);
+            QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(degrees)), rotation);
 
         private Matrix4x4F HostTurnBack()
         {
@@ -894,15 +899,16 @@ namespace Adamantium.ECS.Components
             return Matrix4x4F.Transpose(turn);
         }
 
-        private static Vector3 ForwardOf(QuaternionF rotation)
+        private static Vector3<double> ForwardOf(QuaternionF rotation)
         {
-            var view = Matrix4x4F.RotationQuaternion(rotation);
-            return new Vector3(view.M13, view.M23, view.M33);
+            var view = Matrix4x4.CreateFromQuaternion<float>(rotation);
+            return new Vector3<double>(view.M13, view.M23, view.M33);
         }
 
         private bool HoldsIsometric() => isometricTurned && IsIsometric && TurnsToIsometric() && !turning;
 
-        private static readonly float MaxLevelPitchSine = MathF.Sin(MathHelper.DegreesToRadians(89f));
+        private static readonly float MaxLevelPitchSine = MathF.Sin(float.DegreesToRadians(89f));
+        private const float UprightTolerance = 1e-6f;
 
         /// <inheritdoc />
         public override void RotateRight(float angle)
@@ -919,7 +925,7 @@ namespace Adamantium.ECS.Components
                 return;
             }
 
-            Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(angle)), Rotation);
+            Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(angle)), Rotation);
         }
 
         /// <inheritdoc />
@@ -935,7 +941,7 @@ namespace Adamantium.ECS.Components
 
                 if (Type == CameraType.ThirdPersonFreeAlt)
                 {
-                    Rotation = QuaternionF.Multiply(Rotation, QuaternionF.RotationAxis(HostUpVector, MathHelper.DegreesToRadians(angle)));
+                    Rotation = QuaternionF.Multiply(Rotation, Quaternion.CreateFromAxisAngle<float>(HostUpVector, float.DegreesToRadians(angle)));
                 }
                 else if (Type == CameraType.Free)
                 {
@@ -944,7 +950,7 @@ namespace Adamantium.ECS.Components
                 else
                 {
                     Rotation =
-                       QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(angle)),
+                       QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(angle)),
                           Rotation);
                 }
             }
@@ -956,19 +962,19 @@ namespace Adamantium.ECS.Components
             if (Type != CameraType.ThirdPersonLocked && !HoldsIsometric())
             {
                 Rotation =
-                   QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians(angle)),
+                   QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians(angle)),
                       Rotation);
             }
         }
 
         /// <inheritdoc />
-        public override void SetFreeCamera(Vector3 position, Vector3 lookAt, Vector3 up)
+        public override void SetFreeCamera(Vector3<double> position, Vector3<double> lookAt, Vector3<double> up)
         {
             DeleteThirdPersonConfig(); // sets camera type to Free here (inside method)
 
             LookAt = lookAt;
             Up = up;
-            ViewMatrix = Matrix4x4F.LookAtLH(Vector3F.Zero, lookAt, up);
+            ViewMatrix = Matrix4x4.CreateLookAtLH<float>(Vector3F.Zero, lookAt.As<float>(), up.As<float>());
 
             // stub variables for Decompose function
             Vector3F scale, translation;
@@ -986,7 +992,7 @@ namespace Adamantium.ECS.Components
         }
 
         /// <inheritdoc />
-        public override void SetFreePosition(Vector3 position)
+        public override void SetFreePosition(Vector3<double> position)
         {
             if (Type == CameraType.Free)
             {
@@ -995,7 +1001,7 @@ namespace Adamantium.ECS.Components
         }
 
         /// <inheritdoc />
-        public override void SetFreeLookAt(Vector3 lookAt)
+        public override void SetFreeLookAt(Vector3<double> lookAt)
         {
             if (Type == CameraType.Free)
             {
@@ -1003,7 +1009,7 @@ namespace Adamantium.ECS.Components
                 lookAt -= Owner.Transform.Position;
                 Vector3F up = new Vector3F(ViewMatrix.M12, ViewMatrix.M22, ViewMatrix.M32);
 
-                ViewMatrix = Matrix4x4F.LookAtLH(Vector3F.Zero, lookAt, up);
+                ViewMatrix = Matrix4x4.CreateLookAtLH<float>(Vector3F.Zero, lookAt.As<float>(), up);
 
                 // stub variables for Decompose function
                 Vector3F scale, translation;
@@ -1014,7 +1020,7 @@ namespace Adamantium.ECS.Components
         }
 
         /// <inheritdoc />
-        public override void SetFirstPersonCamera(Vector3 position, QuaternionF objectRotation, Double faceDistance)
+        public override void SetFirstPersonCamera(Vector3<double> position, QuaternionF objectRotation, Double faceDistance)
         {
             Type = CameraType.FirstPerson;
 
@@ -1024,7 +1030,7 @@ namespace Adamantium.ECS.Components
         }
 
         /// <inheritdoc />
-        public override void SetFirstPersonPositionRotation(Vector3 position, QuaternionF objectRotation)
+        public override void SetFirstPersonPositionRotation(Vector3<double> position, QuaternionF objectRotation)
         {
             if (Type == CameraType.FirstPerson)
             {
@@ -1035,7 +1041,7 @@ namespace Adamantium.ECS.Components
 
         /// <inheritdoc />
         public override void SetThirdPersonCamera(Entity hostObject, Vector3F initialRelRotation, CameraType desiredType,
-           Vector3? lookAt = null, Double? distanceToObject = null)
+           Vector3<double>? lookAt = null, Double? distanceToObject = null)
         {
             if (!desiredType.IsThirdPerson() || hostObject == Owner)
             {
@@ -1074,21 +1080,21 @@ namespace Adamantium.ECS.Components
                 if (desiredType != CameraType.ThirdPersonLocked)
                 {
                     Rotation = SyncRotationWithEntityForwardLH();
-                    Rotation *= QuaternionF.RotationYawPitchRoll(MathHelper.DegreesToRadians(initialRelRotation.Y), MathHelper.DegreesToRadians(initialRelRotation.X), MathHelper.DegreesToRadians(initialRelRotation.Z));
+                    Rotation *= Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(initialRelRotation.Y), float.DegreesToRadians(initialRelRotation.X), float.DegreesToRadians(initialRelRotation.Z));
                     //Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(initialRelRotation.X)), Rotation);
                     //Rotation = QuaternionF.Multiply(Rotation, QuaternionF.RotationAxis(HostUpVector, MathHelper.DegreesToRadians(initialRelRotation.Y)));
                     //Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians(initialRelRotation.Z)), Rotation);
                 }
                 else
                 {
-                    Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(initialRelRotation.X));
+                    Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(initialRelRotation.X));
                 }
                 Type = desiredType;
             }
         }
 
         /// <inheritdoc />
-        public override void SetSpecialCamera(Vector3 lookAt)
+        public override void SetSpecialCamera(Vector3<double> lookAt)
         {
             Type = CameraType.Special;
 
@@ -1105,7 +1111,7 @@ namespace Adamantium.ECS.Components
         }
 
         /// <inheritdoc />
-        public override void SetThirdPersonLookAt(Vector3 lookAt)
+        public override void SetThirdPersonLookAt(Vector3<double> lookAt)
         {
             if ((Type == CameraType.ThirdPersonFree) || (Type == CameraType.ThirdPersonFreeAlt))
             {

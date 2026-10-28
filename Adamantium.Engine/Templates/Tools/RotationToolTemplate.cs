@@ -25,19 +25,19 @@ public class RotationToolTemplate:BaseToolTemplate
         var zAxisMeshManipulator = Shapes.Ellipse.GenerateGeometry(
             GeometryType.Outlined,
             EllipseType.EdgeToEdge,
-            new Vector2(maxDiameter),
+            new Vector2<double>(maxDiameter),
             0,
             360,
             true,
             tessellation).ContoursToLines();
 
-        var yAxisMeshManipulator = zAxisMeshManipulator.Clone(Matrix4x4.RotationX(MathHelper.DegreesToRadians(90)));
-        var xAxisMeshManipulator = yAxisMeshManipulator.Clone(Matrix4x4.RotationZ(MathHelper.DegreesToRadians(90)));
+        var yAxisMeshManipulator = zAxisMeshManipulator.Clone(Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90)));
+        var xAxisMeshManipulator = yAxisMeshManipulator.Clone(Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(90)));
 
         var currentViewAxisMesh = Shapes.Ellipse.GenerateGeometry(
             GeometryType.Outlined,
             EllipseType.EdgeToEdge,
-            new Vector2(maxDiameter + 0.25f),
+            new Vector2<double>(maxDiameter + 0.25f),
             0,
             360,
             true,
@@ -46,7 +46,7 @@ public class RotationToolTemplate:BaseToolTemplate
         var currentViewCircleMesh = Shapes.Ellipse.GenerateGeometry(
             GeometryType.Outlined,
             EllipseType.EdgeToEdge,
-            new Vector2(maxDiameter + 0.1f),
+            new Vector2<double>(maxDiameter + 0.1f),
             0,
             360,
             true,

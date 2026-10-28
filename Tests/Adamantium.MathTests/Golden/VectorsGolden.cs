@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
-using Adamantium.Mathematics.Typed;
-using Quaternion = Adamantium.Mathematics.Typed.Quaternion;
+using Adamantium.Mathematics;
+using Quaternion = Adamantium.Mathematics.Quaternion;
 
 namespace Adamantium.MathTests.Golden;
 

@@ -80,7 +80,7 @@ public class SvgPathDataTests
     public void AQuarterArc_IsTwoCubicsOnTheCircle()
     {
         var sink = new RecordingPathSink();
-        SvgPathData.ArcToCubics(new Vector2(1, 0), 1, 1, 0, false, true, new Vector2(0, 1), Math.PI / 4, sink);
+        SvgPathData.ArcToCubics(new Vector2<double>(1, 0), 1, 1, 0, false, true, new Vector2<double>(0, 1), Math.PI / 4, sink);
         var steps = sink.ToString().Split(' ');
         Assert.That(steps, Has.Length.EqualTo(2));
         Assert.That(steps[1], Does.EndWith(",0,1"));
@@ -95,10 +95,10 @@ public class SvgPathDataTests
     public void AnArc_WithoutAFiniteRadius_IsALine_AndToItsStart_IsNothing()
     {
         var sink = new RecordingPathSink();
-        SvgPathData.ArcToCubics(new Vector2(1, 0), 0, 1, 0, false, true, new Vector2(0, 1), Math.PI / 4, sink);
-        SvgPathData.ArcToCubics(new Vector2(0, 1), double.PositiveInfinity, 1, 0, false, true, new Vector2(2, 1),
+        SvgPathData.ArcToCubics(new Vector2<double>(1, 0), 0, 1, 0, false, true, new Vector2<double>(0, 1), Math.PI / 4, sink);
+        SvgPathData.ArcToCubics(new Vector2<double>(0, 1), double.PositiveInfinity, 1, 0, false, true, new Vector2<double>(2, 1),
             Math.PI / 4, sink);
-        SvgPathData.ArcToCubics(new Vector2(2, 1), 1, 1, 0, false, true, new Vector2(2, 1), Math.PI / 4, sink);
+        SvgPathData.ArcToCubics(new Vector2<double>(2, 1), 1, 1, 0, false, true, new Vector2<double>(2, 1), Math.PI / 4, sink);
         Assert.That(sink.ToString(), Is.EqualTo("L0,1 L2,1"));
     }
 

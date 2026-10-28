@@ -21,7 +21,7 @@ namespace Adamantium.FontTests
             // Dynamic atlas: pack the string's glyphs into a fixed-size atlas and copy their MSDF fields in - the
             // flow the other MSDF tests use. (PrepareTextureAtlas auto-sizes from FontParameters' glyph RANGE, and
             // the default range is empty, so it would yield a 0x0 atlas.)
-            var atlasData = new FontAtlasData(64, new Size(1024, 1024));
+            var atlasData = new FontAtlasData(64, new Size<double>(1024, 1024));
             var atlasGen = new TextureAtlasGenerator(typeface, font, atlasData, FontParameters.Default());
 
             var glyphs = font.TranslateIntoGlyphs("Hello string").DistinctBy(x => x.Index).ToArray();
@@ -103,7 +103,7 @@ namespace Adamantium.FontTests
         {
             var typeface = Typeface.LoadFont(@"OTFFonts/Crimson-Italic.otf", 3);
             var font = typeface.GetFont(0);
-            var atlasData = new FontAtlasData(64, new Size(1024, 1024));
+            var atlasData = new FontAtlasData(64, new Size<double>(1024, 1024));
             var atlasGen = new TextureAtlasGenerator(typeface, font, atlasData, FontParameters.Default());
             var glyphs = font.TranslateIntoGlyphs("Hello string").DistinctBy(x => x.Index).ToArray();
             var textureData = atlasGen.GenerateTextureForGlyphs(glyphs);

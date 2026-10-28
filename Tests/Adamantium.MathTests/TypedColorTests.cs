@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using Color = Adamantium.Mathematics.Typed.Color;
-using Vector4 = Adamantium.Mathematics.Typed.Vector4;
 
 namespace Adamantium.MathTests;
 

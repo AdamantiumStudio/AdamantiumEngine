@@ -12,9 +12,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
         {
             /// <summary>A band <paramref name="thickness"/> wide along <paramref name="points"/>, a quad a segment, facing
             /// a camera looking along +Z; its picture runs along the whole line, across it from its top edge.</summary>
-            public static Mesh GenerateGeometry(Vector2[] points, float thickness, Matrix4x4? transform = null)
+            public static Mesh GenerateGeometry(Vector2<double>[] points, float thickness, Matrix4x4<double>? transform = null)
             {
-                var vertexArray = new List<Vector3>();
+                var vertexArray = new List<Vector3<double>>();
                 var indicesArray = new List<int>();
                 var uvs = new List<Vector2F>();
 
@@ -30,15 +30,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var startPoint = points[i];
                     var endPoint = points[i + 1];
                     var direction = endPoint - startPoint;
-                    var normal = new Vector2(-direction.Y, direction.X);
+                    var normal = new Vector2<double>(-direction.Y, direction.X);
                     normal.Normalize();
                     var half = normal * (thickness * 0.5);
 
                     var start = vertexArray.Count;
-                    vertexArray.Add(new Vector3(startPoint - half, 0));
-                    vertexArray.Add(new Vector3(endPoint - half, 0));
-                    vertexArray.Add(new Vector3(startPoint + half, 0));
-                    vertexArray.Add(new Vector3(endPoint + half, 0));
+                    vertexArray.Add(new Vector3<double>(startPoint - half, 0));
+                    vertexArray.Add(new Vector3<double>(endPoint - half, 0));
+                    vertexArray.Add(new Vector3<double>(startPoint + half, 0));
+                    vertexArray.Add(new Vector3<double>(endPoint + half, 0));
 
                     var from = length > 0 ? (float)(travelled / length) : 0;
                     travelled += direction.Length();

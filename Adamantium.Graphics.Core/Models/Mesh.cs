@@ -17,7 +17,7 @@ public class Mesh
     private int triangleTreeVersion;
     private ConvexHull convexHull;
     private int convexHullVersion;
-    private Vector3[] convexHullPoints;
+    private Vector3<double>[] convexHullPoints;
 
     public static int RoundPrecision => 4;
     
@@ -63,7 +63,7 @@ public class Mesh
         
     public AdamantiumCollection<MeshContour> Contours { get; private set; }
 
-    public Vector3[] Points { get; private set; }
+    public Vector3<double>[] Points { get; private set; }
     
     public Color[] Colors { get; private set; }
 
@@ -183,7 +183,7 @@ public class Mesh
             var points = new Vector3F[Points.Length];
             for (int i = 0; i < points.Length; i++)
             {
-                points[i] = Points[i];
+                points[i] = Points[i].As<float>();
             }
 
             convexHull = ConvexHull.FromPoints(points);
@@ -204,14 +204,14 @@ public class Mesh
         return this;
     }
     
-    public void AddContour(IEnumerable<Vector3> inPoints, bool isGeometryClosed, bool generateSegments = true)
+    public void AddContour(IEnumerable<Vector3<double>> inPoints, bool isGeometryClosed, bool generateSegments = true)
     {
         Contours.Add(new MeshContour(inPoints, isGeometryClosed));
     }
 
-    public void AddContour(IEnumerable<Vector2> inPoints, bool isGeometryClosed, bool generateSegments = true)
+    public void AddContour(IEnumerable<Vector2<double>> inPoints, bool isGeometryClosed, bool generateSegments = true)
     {
-        var points = inPoints as Vector2[] ?? inPoints?.ToArray();
+        var points = inPoints as Vector2<double>[] ?? inPoints?.ToArray();
         if (points == null || points.Length == 0) return;
 
         Contours.Add(new MeshContour(points, isGeometryClosed));
@@ -259,10 +259,10 @@ public class Mesh
         return geometryPoints;
     }
     
-    public List<Vector2> MergeContourPoints()
+    public List<Vector2<double>> MergeContourPoints()
     {
-        var pointsHashSet = new HashSet<Vector2>();
-        var points = new List<Vector2>();
+        var pointsHashSet = new HashSet<Vector2<double>>();
+        var points = new List<Vector2<double>>();
 
         foreach (var contour in Contours)
         {
@@ -290,18 +290,18 @@ public class Mesh
         return segments;
     }
 
-    public Mesh SetPoints(IEnumerable<Vector2> points, bool updateBoundingBox = true)
+    public Mesh SetPoints(IEnumerable<Vector2<double>> points, bool updateBoundingBox = true)
     {
         if (points == null) return this;
 
-        return SetPoints(points.Select(point => (Vector3)point).ToArray(), updateBoundingBox);
+        return SetPoints(points.Select(point => (Vector3<double>)point).ToArray(), updateBoundingBox);
     }
         
-    public Mesh SetPoints(IEnumerable<Vector3> points, bool updateBoundingBox = true)
+    public Mesh SetPoints(IEnumerable<Vector3<double>> points, bool updateBoundingBox = true)
     {
         if (points == null) return this;
 
-        var pts = points as Vector3[] ?? points.ToArray();
+        var pts = points as Vector3<double>[] ?? points.ToArray();
         Points = pts;
 
         if (updateBoundingBox)
@@ -520,7 +520,7 @@ public class Mesh
     /// </summary>
     public Mesh ContoursToLines()
     {
-        var points = new List<Vector3>();
+        var points = new List<Vector3<double>>();
         foreach (var contour in Contours)
         {
             var outline = contour.Points;
@@ -528,8 +528,8 @@ public class Mesh
             for (int i = 0; i < count; i++)
             {
                 var next = outline[(i + 1) % outline.Length];
-                points.Add(new Vector3(outline[i].X, outline[i].Y, 0));
-                points.Add(new Vector3(next.X, next.Y, 0));
+                points.Add(new Vector3<double>(outline[i].X, outline[i].Y, 0));
+                points.Add(new Vector3<double>(next.X, next.Y, 0));
             }
         }
 
@@ -538,7 +538,7 @@ public class Mesh
 
     public Mesh Merge(Mesh mesh)
     {
-        return Merge(new []{new MergeInstance(mesh, Matrix4x4.Identity, false)});
+        return Merge(new []{new MergeInstance(mesh, Matrix4x4<double>.Identity, false)});
     }
 
     public Mesh Merge(params Mesh[] meshes)
@@ -547,7 +547,7 @@ public class Mesh
         for (var i = 0; i < meshes.Length; i++)
         {
             var mesh = meshes[i];
-            var mergeInstance = new MergeInstance(mesh, Matrix4x4.Identity, false);
+            var mergeInstance = new MergeInstance(mesh, Matrix4x4<double>.Identity, false);
             instances[i] = mergeInstance;
         }
         return Merge(instances);
@@ -559,7 +559,7 @@ public class Mesh
     /// </summary>
     public Mesh Merge(MergeInstance[] instances, bool forceOptimization = false)
     {
-        var positions = new List<Vector3>(Points);
+        var positions = new List<Vector3<double>>(Points);
         var normals = new List<Vector3F>(Normals.Length == Points.Length ? Normals : []);
         var everyHasNormals = Normals.Length == Points.Length;
         var uv0 = new List<Vector2F>(UV0.Length == Points.Length ? UV0 : new Vector2F[Points.Length]);
@@ -669,20 +669,19 @@ public class Mesh
         return this;
     }
 
-    private static Vector3F[] TransformedNormals(Vector3F[] normals, Matrix4x4 transform)
+    private static Vector3F[] TransformedNormals(Vector3F[] normals, Matrix4x4<double> transform)
     {
         if (transform.IsIdentity)
         {
             return normals;
         }
 
-        var normalMatrix = Matrix4x4.Transpose(Matrix4x4.Invert(transform));
+        var normalMatrix = Matrix4x4<double>.Transpose(Matrix4x4<double>.Invert(transform));
         var turned = new Vector3F[normals.Length];
         for (int i = 0; i < normals.Length; i++)
         {
-            var normal = (Vector3)normals[i];
-            Vector3.TransformNormal(ref normal, ref normalMatrix, out normal);
-            turned[i] = (Vector3F)Vector3.Normalize(normal);
+            var normal = Vector3<double>.TransformNormal(normals[i].As<double>(), normalMatrix);
+            turned[i] = Vector3<double>.Normalize(normal).As<float>();
         }
 
         return turned;
@@ -756,27 +755,25 @@ public class Mesh
         }
     }
 
-    public static Vector3[] ApplyTransform(IEnumerable<Vector3> positions, Matrix4x4 transform)
+    public static Vector3<double>[] ApplyTransform(IEnumerable<Vector3<double>> positions, Matrix4x4<double> transform)
     {
-        var points = positions as Vector3[] ?? positions.ToArray();
+        var points = positions as Vector3<double>[] ?? positions.ToArray();
         
         if (transform.IsIdentity)
         {
             return points;
         }
         
-        var transformed = new Vector3[points.Length];
+        var transformed = new Vector3<double>[points.Length];
         for (int i = 0; i < points.Length; i++)
         {
-            var position = points[i];
-            Vector3.TransformCoordinate(ref position, ref transform, out position);
-            transformed[i] = Vector3.Round(position, RoundPrecision);
+            transformed[i] = Vector3<double>.Round(Vector3<double>.TransformCoordinate(points[i], transform), RoundPrecision);
         }
 
         return transformed;
     }
 
-    public Mesh ApplyTransform(Matrix4x4? transform)
+    public Mesh ApplyTransform(Matrix4x4<double>? transform)
     {
         if (!transform.HasValue || transform.Value.IsIdentity)
         {
@@ -787,17 +784,15 @@ public class Mesh
             
         for (int i = 0; i < Points.Length; i++)
         {
-            var position = Points[i];
-            Vector3.TransformCoordinate(ref position, ref transformMatrix, out position);
-            Points[i] = Vector3.Round(position, RoundPrecision);
+            Points[i] = Vector3<double>.Round(Vector3<double>.TransformCoordinate(Points[i], transformMatrix), RoundPrecision);
         }
 
         foreach (var meshContour in Contours)
         {
             var points = meshContour.Points;
 
-            var transformed = new Vector2[points.Length];
-            Vector2.TransformCoordinate(points, ref transformMatrix, transformed);
+            var transformed = new Vector2<double>[points.Length];
+            Vector2<double>.TransformCoordinate(points, transformMatrix, transformed);
             meshContour.SetPoints(transformed, false);
         }
 
@@ -811,7 +806,7 @@ public class Mesh
 
         if (MorphTargets.Count > 0)
         {
-            var linear = (Matrix4x4F)transformMatrix;
+            var linear = transformMatrix.As<float>();
             var forNormals = Matrix4x4F.Transpose(Matrix4x4F.Invert(linear));
             foreach (var target in MorphTargets)
             {
@@ -837,7 +832,7 @@ public class Mesh
         }
     }
 
-    private void TransformNormals(ref Matrix4x4 transform)
+    private void TransformNormals(ref Matrix4x4<double> transform)
     {
         Normals = TransformedNormals(Normals, transform);
     }
@@ -849,7 +844,7 @@ public class Mesh
 
     public Mesh Clone()
     {
-        return Clone(Matrix4x4.Identity);
+        return Clone(Matrix4x4<double>.Identity);
     }
 
     /// <summary>
@@ -882,12 +877,12 @@ public class Mesh
         IsModified = true;
     }
 
-    public Mesh Clone(Matrix4x4 transform)
+    public Mesh Clone(Matrix4x4<double> transform)
     {
         Mesh clonedMesh = new Mesh();
         clonedMesh.MeshTopology = MeshTopology;
 
-        clonedMesh.Points = new Vector3[Points.Length];
+        clonedMesh.Points = new Vector3<double>[Points.Length];
         Points.CopyTo(clonedMesh.Points, 0);
 
         clonedMesh.Indices = new int[Indices.Length];
@@ -966,7 +961,7 @@ public class Mesh
         var vertexDict = new Dictionary<(Vertex, int), int>();
 
         int uniqueIndex = 0;
-        var optimizedPositions = new List<Vector3>();
+        var optimizedPositions = new List<Vector3<double>>();
         var optimizedNormals = new List<Vector3F>();
         var optimizedUV0 = new List<Vector2F>();
         var optimizedUV1 = new List<Vector2F>();
@@ -995,7 +990,7 @@ public class Mesh
             Color color = Colors != null && Colors.Length - 1 >= index ? Colors[index] : Mathematics.Colors.White;
             Vector4F jointIndex = JointIndices != null && JointIndices.Length - 1 >= index ? JointIndices[index] : Vector4F.Zero;
             Vector4F jointWeight = JointWeights != null && JointWeights.Length - 1 >= index ? JointWeights[index] : Vector4F.Zero;
-            var vertex = new Vertex(position, normal, uv0, uv1, uv2, uv3, color, jointIndex, jointWeight);
+            var vertex = new Vertex(position.As<float>(), normal, uv0, uv1, uv2, uv3, color, jointIndex, jointWeight);
             var key = (vertex, SameAs(sameData, index));
 
             if (!vertexDict.ContainsKey(key))
@@ -1295,7 +1290,7 @@ public class Mesh
         {
             var v0 = Points[Indices[i + 1]] - Points[Indices[i]];
             var v1 = Points[Indices[i + 2]] - Points[Indices[i]];
-            var n = Vector3F.Cross(v1, v0);
+            var n = Vector3F.Cross(v1.As<float>(), v0.As<float>());
             if (smoothNormals)
             {
                 normalsNew[Indices[i]] += n;
@@ -1335,9 +1330,9 @@ public class Mesh
                 int index1 = Indices[i + 1];
                 int index2 = Indices[i + 2];
 
-                Vector3F v1 = Points[index0];
-                Vector3F v2 = Points[index1];
-                Vector3F v3 = Points[index2];
+                Vector3F v1 = Points[index0].As<float>();
+                Vector3F v2 = Points[index1].As<float>();
+                Vector3F v3 = Points[index2].As<float>();
 
                 Vector2F uv1 = UV0[index0];
                 Vector2F uv2 = UV0[index1];
@@ -1404,7 +1399,7 @@ public class Mesh
             return this;
         }
 
-        var assembledPositions = new List<Vector3>();
+        var assembledPositions = new List<Vector3<double>>();
         for (int i = 0; i < positionIndices.Count; i++)
         {
             assembledPositions.Add(Points[positionIndices[i]]);
@@ -1634,7 +1629,7 @@ public class Mesh
 
     public Mesh ChangeCoordinateSystem(UpAxis destinationUpAxis)
     {
-        Vector3 position;
+        Vector3<double> position;
         if (UpAxis == destinationUpAxis)
         {
             return this;

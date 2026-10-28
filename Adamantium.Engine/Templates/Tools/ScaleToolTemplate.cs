@@ -26,25 +26,25 @@ public class ScaleToolTemplate : BaseToolTemplate
 
         var cubeSize = axisLength * 0.15f;
 
-        var xSize = new Vector3(axisLength, 0, 0);
-        var ySize = new Vector3(0, axisLength, 0);
-        var zSize = new Vector3(0, 0, axisLength);
+        var xSize = new Vector3<double>(axisLength, 0, 0);
+        var ySize = new Vector3<double>(0, axisLength, 0);
+        var zSize = new Vector3<double>(0, 0, axisLength);
 
-        var xAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, Vector3.Zero, xSize, 0);
-        var yAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, Vector3.Zero, ySize, 0);
-        var zAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, Vector3.Zero, zSize, 0);
+        var xAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, Vector3<double>.Zero, xSize, 0);
+        var yAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, Vector3<double>.Zero, ySize, 0);
+        var zAxisMesh = Shapes.Line.GenerateGeometry(GeometryType.Outlined, Vector3<double>.Zero, zSize, 0);
 
         var xAxisRoot = BuildSubEntity(root, "RightAxis", xAxisMesh, Colors.Red);
         var yAxisRoot = BuildSubEntity(root, "UpAxis", yAxisMesh, Colors.Green);
         var zAxisRoot = BuildSubEntity(root, "ForwardAxis", zAxisMesh, Colors.Blue);
 
-        var transform = Matrix4x4.Translation(new Vector3(axisLength, 0, 0));
+        var transform = Matrix4x4.CreateTranslation<double>(new Vector3<double>(axisLength, 0, 0));
         var xManipulator = Shapes.Cube.GenerateGeometry(GeometryType.Solid, cubeSize, 1, transform);
 
-        transform = Matrix4x4.Translation(new Vector3(0, axisLength, 0));
+        transform = Matrix4x4.CreateTranslation<double>(new Vector3<double>(0, axisLength, 0));
         var yManipulator = Shapes.Cube.GenerateGeometry(GeometryType.Solid, cubeSize, 1, transform);
 
-        transform = Matrix4x4.Translation(new Vector3(0, 0, axisLength));
+        transform = Matrix4x4.CreateTranslation<double>(new Vector3<double>(0, 0, axisLength));
         var zManipulator = Shapes.Cube.GenerateGeometry(GeometryType.Solid, cubeSize, 1, transform);
 
         var centralManipulator = Shapes.Cube.GenerateGeometry(GeometryType.Solid, cubeSize, 1);
@@ -58,7 +58,7 @@ public class ScaleToolTemplate : BaseToolTemplate
             GeometryType.Solid,
             cubeSize,
             1,
-            Matrix4x4.Translation(axisLength, 0, axisLength));
+            Matrix4x4.CreateTranslation<double>(axisLength, 0, axisLength));
 
         BuildSubEntity(root, "RightForwardManipulator", xzCube, Colors.Orange, BoundingVolume.OrientedBox);
 
@@ -66,16 +66,16 @@ public class ScaleToolTemplate : BaseToolTemplate
             GeometryType.Solid,
             cubeSize,
             1,
-            Matrix4x4.RotationX(MathHelper.DegreesToRadians(90)) * Matrix4x4.Translation(axisLength, axisLength, 0));
+            Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90)) * Matrix4x4.CreateTranslation<double>(axisLength, axisLength, 0));
 
         BuildSubEntity(root, "RightUpManipulator", xyCube, Colors.DarkCyan, BoundingVolume.OrientedBox);
 
-        var rot = QuaternionF.RotationYawPitchRoll(MathHelper.DegreesToRadians(90), MathHelper.DegreesToRadians(90), 0);
+        var rot = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(90), float.DegreesToRadians(90), 0);
         var zyCube = Shapes.Cube.GenerateGeometry(
             GeometryType.Solid,
             cubeSize,
             1,
-            Matrix4x4.RotationQuaternion(rot) * Matrix4x4.Translation(0, axisLength, axisLength));
+            Matrix4x4.CreateFromQuaternion<double>(rot.As<double>()) * Matrix4x4.CreateTranslation<double>(0, axisLength, axisLength));
 
         BuildSubEntity(root, "UpForwardManipulator", zyCube, Colors.DarkViolet, BoundingVolume.OrientedBox);
 

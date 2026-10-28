@@ -194,7 +194,7 @@ namespace Adamantium.Engine.CompilerTests
 
             var farthestVertex = scene.Models.Dependencies
                 .SelectMany(m => m.Meshes).SelectMany(m => m.Points)
-                .Select(p => ((Vector3F)p).Y)
+                .Select(p => p.As<float>().Y)
                 .OrderByDescending(Math.Abs).First();
 
             var controller = scene.Controllers.Values.Single();

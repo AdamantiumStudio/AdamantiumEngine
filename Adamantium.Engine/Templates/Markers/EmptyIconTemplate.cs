@@ -13,7 +13,7 @@ public class EmptyIconTemplate : MarkerIconTemplate
 
     protected override Mesh Generate()
     {
-        var icon = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.EdgeToEdge, new Vector2(0.17), 0, 360, true, 24);
+        var icon = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.EdgeToEdge, new Vector2<double>(0.17), 0, 360, true, 24);
         double[] angles = [90, 210, 330];
         var axes = new MergeInstance[angles.Length];
         for (int i = 0; i < angles.Length; i++)
@@ -24,8 +24,8 @@ public class EmptyIconTemplate : MarkerIconTemplate
                 Thickness,
                 new CornerRadius(Thickness / 2),
                 8,
-                Matrix4x4.Translation(Length / 2, 0, 0) * Matrix4x4.RotationZ(MathHelper.DegreesToRadians(angles[i])));
-            axes[i] = new MergeInstance(axis, Matrix4x4.Identity, false);
+                Matrix4x4.CreateTranslation<double>(Length / 2, 0, 0) * Matrix4x4.CreateRotationZ<double>((float)double.DegreesToRadians(angles[i])));
+            axes[i] = new MergeInstance(axis, Matrix4x4<double>.Identity, false);
         }
 
         return icon.Merge(axes);

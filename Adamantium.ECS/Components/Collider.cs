@@ -11,7 +11,7 @@ namespace Adamantium.ECS.Components
     {
         public Vector3F Size { get; set; }
 
-        public Vector3F LocalCenter => Bounds.Center;
+        public Vector3F LocalCenter => Bounds.Center.As<float>();
 
         public Vector3F Scale { get; set; }
 
@@ -78,15 +78,15 @@ namespace Adamantium.ECS.Components
 
         public abstract void Merge(Collider collider);
 
-        public abstract bool Intersects(ref Ray ray, out Vector3F point);
+        public abstract bool Intersects(ref Ray<float> ray, out Vector3F point);
 
-        public abstract bool IntersectsForCamera(Camera camera, ref Ray ray, out Vector3F point);
+        public abstract bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point);
 
         /// <summary>
         /// The collider where its entity stands in the world, as a shape <see cref="Gjk"/> can test; null while it holds
         /// nothing.
         /// </summary>
-        public abstract IConvexShape GetWorldShape();
+        public abstract IConvexShape<float> GetWorldShape();
 
         /// <summary>Whether this collider and <paramref name="other"/> share a point where their entities stand.</summary>
         public bool Intersects(Collider other)

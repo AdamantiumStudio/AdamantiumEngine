@@ -15,7 +15,7 @@ internal sealed class SvgGlyphConverter
     private const int MaxReferences = 8;
     private const int MaxVisits = 4096;
     private static readonly XNamespace XLink = "http://www.w3.org/1999/xlink";
-    private static readonly Matrix3x2 Flip = new(1, 0, 0, -1, 0, 0);
+    private static readonly Matrix3x2<double> Flip = new(1, 0, 0, -1, 0, 0);
 
     private static readonly HashSet<string> Skipped =
     [
@@ -54,7 +54,7 @@ internal sealed class SvgGlyphConverter
 
         // The glyph's ancestors style and move it, hide it, and clip it, the outermost first.
         var converter = new SvgGlyphConverter(document, glyph, palettes, palette, outline);
-        var ctm = Matrix3x2.Identity;
+        var ctm = Matrix3x2<double>.Identity;
         var style = SvgStyle.Initial;
         var clips = 0;
         foreach (var ancestor in element.Ancestors().Reverse())
@@ -65,7 +65,7 @@ internal sealed class SvgGlyphConverter
             }
 
             style = style.Inherit(ancestor, palettes, palette, true);
-            ctm = Matrix3x2.Multiply(SvgTransform.Parse((string)ancestor.Attribute("transform")), ctm);
+            ctm = Matrix3x2<double>.Multiply(SvgTransform.Parse((string)ancestor.Attribute("transform")), ctm);
             clips += converter.PushClipPath(ancestor, ctm) ? 1 : 0;
         }
 
@@ -78,7 +78,7 @@ internal sealed class SvgGlyphConverter
         return converter.operations.Count > 2 * clips ? converter.operations.ToArray() : [];
     }
 
-    private void Walk(XElement element, Matrix3x2 parent, SvgStyle inherited, int depth, bool referenced)
+    private void Walk(XElement element, Matrix3x2<double> parent, SvgStyle inherited, int depth, bool referenced)
     {
         var name = element.Name.LocalName;
         if (depth > MaxDepth || ++visits > MaxVisits || (Skipped.Contains(name) && !(referenced && name == "symbol")) ||
@@ -94,10 +94,10 @@ internal sealed class SvgGlyphConverter
         var transform = SvgTransform.Parse((string)element.Attribute("transform"));
         if (name == "use")
         {
-            transform = Matrix3x2.Multiply(new Matrix3x2(1, 0, 0, 1, Number(element, "x"), Number(element, "y")), transform);
+            transform = Matrix3x2<double>.Multiply(new Matrix3x2<double>(1, 0, 0, 1, Number(element, "x"), Number(element, "y")), transform);
         }
 
-        var ctm = Matrix3x2.Multiply(transform, parent);
+        var ctm = Matrix3x2<double>.Multiply(transform, parent);
         var clipped = PushClipPath(element, ctm);
         if (grouped)
         {
@@ -138,7 +138,7 @@ internal sealed class SvgGlyphConverter
         }
     }
 
-    private void Shape(XElement element, Matrix3x2 ctm, SvgStyle style)
+    private void Shape(XElement element, Matrix3x2<double> ctm, SvgStyle style)
     {
         if (style.Fill.Kind == SvgPaintKind.None)
         {
@@ -157,12 +157,12 @@ internal sealed class SvgGlyphConverter
             return;
         }
 
-        operations.Add(ColorPaintOperation.PushClip(Outline(contours, ctm, style.EvenOdd), Matrix3x2.Identity));
+        operations.Add(ColorPaintOperation.PushClip(Outline(contours, ctm, style.EvenOdd), Matrix3x2<double>.Identity));
         operations.Add(ColorPaintOperation.FillWith(fill));
         operations.Add(ColorPaintOperation.PopClip());
     }
 
-    private bool PushClipPath(XElement element, Matrix3x2 ctm)
+    private bool PushClipPath(XElement element, Matrix3x2<double> ctm)
     {
         var clipPath = document.FindReference(SvgStyle.Property(element, "clip-path"));
         if (clipPath == null || clipPath.Name.LocalName != "clipPath")
@@ -172,20 +172,20 @@ internal sealed class SvgGlyphConverter
 
         // In the units of the box of what it clips, that box mapped from 0 to 1 across and down, then moved by the clip's
         // own transform, as browsers place it.
-        var units = Matrix3x2.Identity;
+        var units = Matrix3x2<double>.Identity;
         if ((string)clipPath.Attribute("clipPathUnits") == "objectBoundingBox")
         {
             boxVisits = 0;
-            if (BoxOf(element, Matrix3x2.Identity, 0, true, false) is not { Width: > 0, Height: > 0 } box)
+            if (BoxOf(element, Matrix3x2<double>.Identity, 0, true, false) is not { Width: > 0, Height: > 0 } box)
             {
-                operations.Add(ColorPaintOperation.PushClip(Register([], false), Matrix3x2.Identity));
+                operations.Add(ColorPaintOperation.PushClip(Register([], false), Matrix3x2<double>.Identity));
                 return true;
             }
 
-            units = new Matrix3x2(box.Width, 0, 0, box.Height, box.X, box.Y);
+            units = new Matrix3x2<double>(box.Width, 0, 0, box.Height, box.X, box.Y);
         }
 
-        var clipCtm = Matrix3x2.Multiply(Matrix3x2.Multiply(units,
+        var clipCtm = Matrix3x2<double>.Multiply(Matrix3x2<double>.Multiply(units,
             SvgTransform.Parse((string)clipPath.Attribute("transform"))), ctm);
         var contours = new List<List<OutlinePoint>>();
         var evenOdd = false;
@@ -193,10 +193,10 @@ internal sealed class SvgGlyphConverter
         foreach (var child in clipPath.Elements())
         {
             var shape = child;
-            var childCtm = Matrix3x2.Multiply(SvgTransform.Parse((string)child.Attribute("transform")), clipCtm);
+            var childCtm = Matrix3x2<double>.Multiply(SvgTransform.Parse((string)child.Attribute("transform")), clipCtm);
             for (var hops = 0; hops < MaxReferences && shape.Name.LocalName == "use"; hops++)
             {
-                childCtm = Matrix3x2.Multiply(new Matrix3x2(1, 0, 0, 1, Number(shape, "x"), Number(shape, "y")), childCtm);
+                childCtm = Matrix3x2<double>.Multiply(new Matrix3x2<double>(1, 0, 0, 1, Number(shape, "x"), Number(shape, "y")), childCtm);
                 var target = document.FindReference(Reference(shape));
                 if (target == null)
                 {
@@ -204,7 +204,7 @@ internal sealed class SvgGlyphConverter
                 }
 
                 shape = target;
-                childCtm = Matrix3x2.Multiply(SvgTransform.Parse((string)shape.Attribute("transform")), childCtm);
+                childCtm = Matrix3x2<double>.Multiply(SvgTransform.Parse((string)shape.Attribute("transform")), childCtm);
             }
 
             var rule = SvgStyle.Property(child, "clip-rule");
@@ -215,14 +215,14 @@ internal sealed class SvgGlyphConverter
             }
         }
 
-        operations.Add(ColorPaintOperation.PushClip(Register(contours, evenOdd), Matrix3x2.Identity));
+        operations.Add(ColorPaintOperation.PushClip(Register(contours, evenOdd), Matrix3x2<double>.Identity));
         return true;
     }
 
     // An element's box in its own units, as SVG's objectBoundingBox takes it: its shape's, or the union of what it draws,
     // placed as the walk places it - the element's own transform and a use's place are already in its units at the top;
     // the geometry alone, null for none.
-    private RectangleF? BoxOf(XElement element, Matrix3x2 parent, int depth, bool top, bool referenced)
+    private RectangleF? BoxOf(XElement element, Matrix3x2<double> parent, int depth, bool top, bool referenced)
     {
         var name = element.Name.LocalName;
         if (depth > MaxDepth || ++boxVisits > MaxVisits || (Skipped.Contains(name) && !(referenced && name == "symbol"))
@@ -231,17 +231,17 @@ internal sealed class SvgGlyphConverter
             return null;
         }
 
-        var own = top ? Matrix3x2.Identity : SvgTransform.Parse((string)element.Attribute("transform"));
+        var own = top ? Matrix3x2<double>.Identity : SvgTransform.Parse((string)element.Attribute("transform"));
         if (!top && name == "use")
         {
-            own = Matrix3x2.Multiply(new Matrix3x2(1, 0, 0, 1, Number(element, "x"), Number(element, "y")), own);
+            own = Matrix3x2<double>.Multiply(new Matrix3x2<double>(1, 0, 0, 1, Number(element, "x"), Number(element, "y")), own);
         }
 
-        var transform = Matrix3x2.Multiply(own, parent);
+        var transform = Matrix3x2<double>.Multiply(own, parent);
         if (name is "path" or "rect" or "circle" or "ellipse" or "polygon" or "polyline")
         {
             return Bounds(SvgOutlines.Of(element).Select(contour => contour
-                .Select(p => new OutlinePoint(Matrix3x2.TransformPoint(transform, p), p.IsControl)).ToList()).ToList());
+                .Select(p => new OutlinePoint(Vector2<double>.Transform((Vector2<double>)p, transform), p.IsControl)).ToList()).ToList());
         }
 
         RectangleF? box = null;
@@ -271,7 +271,7 @@ internal sealed class SvgGlyphConverter
         return box;
     }
 
-    private uint Outline(List<List<OutlinePoint>> contours, Matrix3x2 ctm, bool evenOdd)
+    private uint Outline(List<List<OutlinePoint>> contours, Matrix3x2<double> ctm, bool evenOdd)
     {
         return Register(contours.Select(c => Transform(c, ctm)).ToList(), evenOdd);
     }
@@ -286,13 +286,13 @@ internal sealed class SvgGlyphConverter
         return outline(glyph.ToString(CultureInfo.InvariantCulture) + ":" + ordinal++, contours);
     }
 
-    private static List<OutlinePoint> Transform(List<OutlinePoint> contour, Matrix3x2 ctm)
+    private static List<OutlinePoint> Transform(List<OutlinePoint> contour, Matrix3x2<double> ctm)
     {
-        var toFont = Matrix3x2.Multiply(ctm, Flip);
-        return contour.Select(p => new OutlinePoint(Matrix3x2.TransformPoint(toFont, p), p.IsControl)).ToList();
+        var toFont = Matrix3x2<double>.Multiply(ctm, Flip);
+        return contour.Select(p => new OutlinePoint(Vector2<double>.Transform((Vector2<double>)p, toFont), p.IsControl)).ToList();
     }
 
-    private ColorFill Fill(SvgStyle style, RectangleF? bounds, Matrix3x2 ctm)
+    private ColorFill Fill(SvgStyle style, RectangleF? bounds, Matrix3x2<double> ctm)
     {
         var alpha = style.FillOpacity * style.Opacity;
         switch (style.Fill.Kind)
@@ -316,9 +316,9 @@ internal sealed class SvgGlyphConverter
     }
 
     private static ColorFill Solid(ColorStop stop) =>
-        new(ColorFillKind.Solid, [stop], ColorExtend.Pad, Matrix3x2.Identity);
+        new(ColorFillKind.Solid, [stop], ColorExtend.Pad, Matrix3x2<double>.Identity);
 
-    private ColorFill Gradient(XElement gradient, SvgStyle style, RectangleF? bounds, Matrix3x2 ctm, double alpha)
+    private ColorFill Gradient(XElement gradient, SvgStyle style, RectangleF? bounds, Matrix3x2<double> ctm, double alpha)
     {
         var chain = new List<XElement> { gradient };
         for (var hops = 0; hops < MaxReferences; hops++)
@@ -351,9 +351,9 @@ internal sealed class SvgGlyphConverter
             return null;
         }
 
-        var units = boxUnits ? new Matrix3x2(bounds.Value.Width, 0, 0, bounds.Value.Height, bounds.Value.X, bounds.Value.Y)
-            : Matrix3x2.Identity;
-        var transform = Matrix3x2.Multiply(Matrix3x2.Multiply(Matrix3x2.Multiply(
+        var units = boxUnits ? new Matrix3x2<double>(bounds.Value.Width, 0, 0, bounds.Value.Height, bounds.Value.X, bounds.Value.Y)
+            : Matrix3x2<double>.Identity;
+        var transform = Matrix3x2<double>.Multiply(Matrix3x2<double>.Multiply(Matrix3x2<double>.Multiply(
             SvgTransform.Parse(Attribute("gradientTransform")), units), ctm), Flip);
         var extend = Attribute("spreadMethod") switch
         {
@@ -372,9 +372,9 @@ internal sealed class SvgGlyphConverter
             var y2 = Coordinate("y2", 0);
             return new ColorFill(ColorFillKind.LinearGradient, stops, extend, transform)
             {
-                Point0 = new Vector2(x1, y1),
-                Point1 = new Vector2(x2, y2),
-                Point2 = new Vector2(x1 - (y2 - y1), y1 + (x2 - x1)),
+                Point0 = new Vector2<double>(x1, y1),
+                Point1 = new Vector2<double>(x2, y2),
+                Point2 = new Vector2<double>(x1 - (y2 - y1), y1 + (x2 - x1)),
             };
         }
 
@@ -382,9 +382,9 @@ internal sealed class SvgGlyphConverter
         var cy = Coordinate("cy", 0.5);
         return new ColorFill(ColorFillKind.RadialGradient, stops, extend, transform)
         {
-            Point0 = new Vector2(Coordinate("fx", cx), Coordinate("fy", cy)),
+            Point0 = new Vector2<double>(Coordinate("fx", cx), Coordinate("fy", cy)),
             Radius0 = Coordinate("fr", 0),
-            Point1 = new Vector2(cx, cy),
+            Point1 = new Vector2<double>(cx, cy),
             Radius1 = Coordinate("r", 0.5),
         };
     }
@@ -431,7 +431,7 @@ internal sealed class SvgGlyphConverter
     private static RectangleF? Bounds(List<List<OutlinePoint>> contours)
     {
         double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-        void Add(Vector2 p)
+        void Add(Vector2<double> p)
         {
             minX = Math.Min(minX, p.X);
             minY = Math.Min(minY, p.Y);
@@ -451,7 +451,7 @@ internal sealed class SvgGlyphConverter
 
                 if (i + 2 < contour.Count && i > 0)
                 {
-                    Vector2 p0 = contour[i - 1], p1 = contour[i], p2 = contour[i + 1], p3 = contour[i + 2];
+                    Vector2<double> p0 = contour[i - 1], p1 = contour[i], p2 = contour[i + 1], p3 = contour[i + 2];
                     foreach (var t in Extrema(p0.X, p1.X, p2.X, p3.X).Concat(Extrema(p0.Y, p1.Y, p2.Y, p3.Y)))
                     {
                         var u = 1 - t;

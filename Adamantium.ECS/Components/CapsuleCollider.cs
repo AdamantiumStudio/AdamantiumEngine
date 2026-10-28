@@ -45,7 +45,7 @@ public partial class CapsuleCollider : Collider
     public override void CalculateFromMesh(Mesh mesh)
     {
         base.CalculateFromMesh(mesh);
-        var size = (Vector3F)Bounds.Size;
+        var size = Bounds.Size.As<float>();
         Direction = size.X >= size.Y && size.X >= size.Z ? CapsuleDirection.X
             : size.Y >= size.Z ? CapsuleDirection.Y
             : CapsuleDirection.Z;
@@ -64,10 +64,10 @@ public partial class CapsuleCollider : Collider
 
     public override Mesh GetVisualRepresentation()
     {
-        var turn = Direction == CapsuleDirection.X ? Matrix4x4.RotationZ(MathHelper.DegreesToRadians(-90))
-            : Direction == CapsuleDirection.Z ? Matrix4x4.RotationX(MathHelper.DegreesToRadians(90))
-            : Matrix4x4.Identity;
-        Geometry = Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, Radius * 2, 40, turn * Matrix4x4.Translation((Vector3)capsule.Center));
+        var turn = Direction == CapsuleDirection.X ? Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(-90))
+            : Direction == CapsuleDirection.Z ? Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90))
+            : Matrix4x4<double>.Identity;
+        Geometry = Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, Radius * 2, 40, turn * Matrix4x4.CreateTranslation<double>(capsule.Center.As<double>()));
         return Geometry;
     }
 
@@ -79,17 +79,17 @@ public partial class CapsuleCollider : Collider
     public override ContainmentType IsInsideCameraFrustum(Camera camera)
     {
         var placed = colliderData.TryGetValue(camera, out var data) ? data : capsule;
-        return camera.Frustum.Contains(ref placed);
+        return placed.Within(camera.Frustum);
     }
 
     public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
     {
-        capsule = capsule.Transform(Matrix4x4F.Scaling(scale) * Matrix4x4F.RotationQuaternion(rotation) * Matrix4x4F.Translation(translation));
+        capsule = capsule.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
     }
 
     public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
     {
-        capsule = capsule.Transform(Matrix4x4F.Scaling(uniformScale) * Matrix4x4F.RotationQuaternion(rotation) * Matrix4x4F.Translation(translation));
+        capsule = capsule.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
     }
 
     /// <summary>
@@ -98,25 +98,27 @@ public partial class CapsuleCollider : Collider
     /// </summary>
     public override void Merge(Collider collider)
     {
-        OrientedBoundingBox part = collider.Bounds;
-        List<Vector3F> corners = [.. capsule.GetBoundingBox().GetCorners(), .. part.Transform(PlacementOf(collider.Owner)).GetCorners()];
-        var merged = OrientedBoundingBox.FromPoints(corners);
-        Bounds = Bounds.FromBoundingBox(merged);
+        Span<Vector3F> corners = stackalloc Vector3F[2 * OrientedBoundingBox<float>.CornerCount];
+        capsule.GetBoundingBox().GetCorners(corners[..OrientedBoundingBox<float>.CornerCount]);
+        collider.Bounds.ToOrientedBoundingBox().As<float>().Transform(PlacementOf(collider.Owner))
+            .GetCorners(corners[OrientedBoundingBox<float>.CornerCount..]);
+        var merged = OrientedBoundingBox.CreateFromPoints<float>(corners);
+        Bounds = Bounds.FromBoundingBox(merged.As<double>());
         Fit(merged.Size);
     }
 
-    public override bool Intersects(ref Ray ray, out Vector3F point)
+    public override bool Intersects(ref Ray<float> ray, out Vector3F point)
     {
-        return capsule.Intersects(ref ray, out point);
+        return capsule.Intersects(ray, out point);
     }
 
-    public override bool IntersectsForCamera(Camera camera, ref Ray ray, out Vector3F point)
+    public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
     {
         point = Vector3F.Zero;
-        return colliderData.TryGetValue(camera, out var placed) && placed.Intersects(ref ray, out point);
+        return colliderData.TryGetValue(camera, out var placed) && placed.Intersects(ray, out point);
     }
 
-    public override IConvexShape GetWorldShape()
+    public override IConvexShape<float> GetWorldShape()
     {
         return capsule.Transform(Owner.Transform.GetWorldMatrixF());
     }

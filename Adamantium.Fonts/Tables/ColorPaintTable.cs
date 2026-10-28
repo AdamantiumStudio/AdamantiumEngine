@@ -144,7 +144,7 @@ internal sealed class ColorPaintTable
 
             var context = new Context(this, palettes, palette, coordinates);
             context.Visiting.Add(glyphIndex);
-            Paint(paint, Matrix3x2.Identity, context, 0);
+            Paint(paint, Matrix3x2<double>.Identity, context, 0);
             return context.Operations.ToArray();
         }
         catch (IndexOutOfRangeException)
@@ -180,7 +180,7 @@ internal sealed class ColorPaintTable
         return -1;
     }
 
-    private void Paint(int at, Matrix3x2 transform, Context context, int depth)
+    private void Paint(int at, Matrix3x2<double> transform, Context context, int depth)
     {
         if (depth > MaxDepth || ++context.Visits > MaxVisits)
         {
@@ -218,7 +218,7 @@ internal sealed class ColorPaintTable
 
                 break;
             case >= 12 and <= 31:
-                Paint(Child(at), Matrix3x2.Multiply(Transform(at, context), transform), context, depth + 1);
+                Paint(Child(at), Matrix3x2<double>.Multiply(Transform(at, context), transform), context, depth + 1);
                 break;
             case 32:
                 Composite(at, transform, context, depth);
@@ -226,7 +226,7 @@ internal sealed class ColorPaintTable
         }
     }
 
-    private void Composite(int at, Matrix3x2 transform, Context context, int depth)
+    private void Composite(int at, Matrix3x2<double> transform, Context context, int depth)
     {
         var source = Child(at);
         var mode = data[at + 4];
@@ -245,7 +245,7 @@ internal sealed class ColorPaintTable
         context.Operations.Add(ColorPaintOperation.PopGroup(known ? (ColorCompositeMode)mode : ColorCompositeMode.SourceOver));
     }
 
-    private void PaintIsolated(int at, Matrix3x2 transform, Context context, int depth)
+    private void PaintIsolated(int at, Matrix3x2<double> transform, Context context, int depth)
     {
         var start = context.Operations.Count;
         Paint(at, transform, context, depth);
@@ -279,7 +279,7 @@ internal sealed class ColorPaintTable
         return false;
     }
 
-    private ColorFill Fill(int at, Matrix3x2 transform, Context context)
+    private ColorFill Fill(int at, Matrix3x2<double> transform, Context context)
     {
         var format = data[at];
         switch (format)
@@ -294,9 +294,9 @@ internal sealed class ColorPaintTable
                 return new ColorFill(ColorFillKind.LinearGradient, Stops(Child(at), format == 5, context),
                     Extend(Child(at)), transform)
                 {
-                    Point0 = new Vector2(Int16(at + 4) + context.Delta(index, 0), Int16(at + 6) + context.Delta(index, 1)),
-                    Point1 = new Vector2(Int16(at + 8) + context.Delta(index, 2), Int16(at + 10) + context.Delta(index, 3)),
-                    Point2 = new Vector2(Int16(at + 12) + context.Delta(index, 4), Int16(at + 14) + context.Delta(index, 5)),
+                    Point0 = new Vector2<double>(Int16(at + 4) + context.Delta(index, 0), Int16(at + 6) + context.Delta(index, 1)),
+                    Point1 = new Vector2<double>(Int16(at + 8) + context.Delta(index, 2), Int16(at + 10) + context.Delta(index, 3)),
+                    Point2 = new Vector2<double>(Int16(at + 12) + context.Delta(index, 4), Int16(at + 14) + context.Delta(index, 5)),
                 };
             }
             case 8 or 9:
@@ -305,7 +305,7 @@ internal sealed class ColorPaintTable
                 return new ColorFill(ColorFillKind.SweepGradient, Stops(Child(at), format == 9, context),
                     Extend(Child(at)), transform)
                 {
-                    Point0 = new Vector2(Int16(at + 4) + context.Delta(index, 0), Int16(at + 6) + context.Delta(index, 1)),
+                    Point0 = new Vector2<double>(Int16(at + 4) + context.Delta(index, 0), Int16(at + 6) + context.Delta(index, 1)),
                     StartAngle = (F2Dot14(at + 8) + context.Delta(index, 2) / 16384 + 1) * 180,
                     EndAngle = (F2Dot14(at + 10) + context.Delta(index, 3) / 16384 + 1) * 180,
                 };
@@ -316,16 +316,16 @@ internal sealed class ColorPaintTable
                 return new ColorFill(ColorFillKind.RadialGradient, Stops(Child(at), format == 7, context),
                     Extend(Child(at)), transform)
                 {
-                    Point0 = new Vector2(Int16(at + 4) + context.Delta(index, 0), Int16(at + 6) + context.Delta(index, 1)),
+                    Point0 = new Vector2<double>(Int16(at + 4) + context.Delta(index, 0), Int16(at + 6) + context.Delta(index, 1)),
                     Radius0 = UInt16(at + 8) + context.Delta(index, 2),
-                    Point1 = new Vector2(Int16(at + 10) + context.Delta(index, 3), Int16(at + 12) + context.Delta(index, 4)),
+                    Point1 = new Vector2<double>(Int16(at + 10) + context.Delta(index, 3), Int16(at + 12) + context.Delta(index, 4)),
                     Radius1 = UInt16(at + 14) + context.Delta(index, 5),
                 };
             }
         }
     }
 
-    private Matrix3x2 Transform(int at, Context context)
+    private Matrix3x2<double> Transform(int at, Context context)
     {
         var format = data[at];
         var variable = format % 2 == 1;
@@ -334,32 +334,32 @@ internal sealed class ColorPaintTable
             case 12 or 13:
                 var affine = at + (int)UInt24(at + 4);
                 var index = VarIndex(affine + 24, variable);
-                return new Matrix3x2(Fixed(affine) + context.Delta(index, 0) / 65536,
+                return new Matrix3x2<double>(Fixed(affine) + context.Delta(index, 0) / 65536,
                     Fixed(affine + 4) + context.Delta(index, 1) / 65536, Fixed(affine + 8) + context.Delta(index, 2) / 65536,
                     Fixed(affine + 12) + context.Delta(index, 3) / 65536, Fixed(affine + 16) + context.Delta(index, 4) / 65536,
                     Fixed(affine + 20) + context.Delta(index, 5) / 65536);
             case 14 or 15:
             {
                 var at8 = VarIndex(at + 8, variable);
-                return Matrix3x2.Translation(Int16(at + 4) + context.Delta(at8, 0), Int16(at + 6) + context.Delta(at8, 1));
+                return Matrix3x2.CreateTranslation<double>(Int16(at + 4) + context.Delta(at8, 0), Int16(at + 6) + context.Delta(at8, 1));
             }
             case 16 or 17:
             {
                 var at8 = VarIndex(at + 8, variable);
-                return Matrix3x2.Scaling(Unit(at + 4, at8, 0, context), Unit(at + 6, at8, 1, context));
+                return Matrix3x2.CreateScale<double>(Unit(at + 4, at8, 0, context), Unit(at + 6, at8, 1, context));
             }
             case 18 or 19:
             {
                 var at12 = VarIndex(at + 12, variable);
-                return AroundCenter(Matrix3x2.Scaling(Unit(at + 4, at12, 0, context), Unit(at + 6, at12, 1, context)),
+                return AroundCenter(Matrix3x2.CreateScale<double>(Unit(at + 4, at12, 0, context), Unit(at + 6, at12, 1, context)),
                     at + 8, at12, 2, context);
             }
             case 20 or 21:
-                return Matrix3x2.Scaling(Unit(at + 4, VarIndex(at + 6, variable), 0, context));
+                return Matrix3x2.CreateScale<double>(Unit(at + 4, VarIndex(at + 6, variable), 0, context));
             case 22 or 23:
             {
                 var at10 = VarIndex(at + 10, variable);
-                return AroundCenter(Matrix3x2.Scaling(Unit(at + 4, at10, 0, context)), at + 6, at10, 1, context);
+                return AroundCenter(Matrix3x2.CreateScale<double>(Unit(at + 4, at10, 0, context)), at + 6, at10, 1, context);
             }
             case 24 or 25:
                 return Rotation(Unit(at + 4, VarIndex(at + 6, variable), 0, context));
@@ -387,24 +387,24 @@ internal sealed class ColorPaintTable
     private double Unit(int at, uint index, int item, Context context) =>
         F2Dot14(at) + context.Delta(index, item) / 16384;
 
-    private Matrix3x2 AroundCenter(Matrix3x2 transform, int center, uint index, int item, Context context)
+    private Matrix3x2<double> AroundCenter(Matrix3x2<double> transform, int center, uint index, int item, Context context)
     {
         var x = Int16(center) + context.Delta(index, item);
         var y = Int16(center + 2) + context.Delta(index, item + 1);
-        return Matrix3x2.Multiply(Matrix3x2.Multiply(Matrix3x2.Translation(-x, -y), transform),
-            Matrix3x2.Translation(x, y));
+        return Matrix3x2<double>.Multiply(Matrix3x2<double>.Multiply(Matrix3x2.CreateTranslation<double>(-x, -y), transform),
+            Matrix3x2.CreateTranslation<double>(x, y));
     }
 
-    private static Matrix3x2 Rotation(double halfTurns)
+    private static Matrix3x2<double> Rotation(double halfTurns)
     {
         var cos = Math.Cos(halfTurns * Math.PI);
         var sin = Math.Sin(halfTurns * Math.PI);
-        return new Matrix3x2(cos, sin, -sin, cos, 0, 0);
+        return new Matrix3x2<double>(cos, sin, -sin, cos, 0, 0);
     }
 
-    private static Matrix3x2 Skew(double x, double y)
+    private static Matrix3x2<double> Skew(double x, double y)
     {
-        return new Matrix3x2(1, Math.Tan(y * Math.PI), -Math.Tan(x * Math.PI), 1, 0, 0);
+        return new Matrix3x2<double>(1, Math.Tan(y * Math.PI), -Math.Tan(x * Math.PI), 1, 0, 0);
     }
 
     private ColorExtend Extend(int colorLine)

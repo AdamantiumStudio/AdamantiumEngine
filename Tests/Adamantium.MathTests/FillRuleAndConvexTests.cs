@@ -15,13 +15,13 @@ namespace Adamantium.MathTests
         [Test]
         public void IsConvex_Classifies()
         {
-            Assert.IsTrue(MathHelper.IsConvex(Rect(0, 0, 10, 10)), "square");
-            Assert.IsTrue(MathHelper.IsConvex(new[] { V(0, 0), V(10, 0), V(5, 8) }), "triangle");
-            Assert.IsTrue(MathHelper.IsConvex(Circle(32)), "circle");
-            Assert.IsTrue(MathHelper.IsConvex(new[] { V(0, 0), V(5, 0), V(10, 0), V(10, 10), V(0, 10) }), "rect w/ collinear vertex");
-            Assert.IsFalse(MathHelper.IsConvex(new[] { V(0, 0), V(10, 0), V(10, 10), V(5, 5), V(0, 10) }), "concave notch");
-            Assert.IsFalse(MathHelper.IsConvex(Pentagram()), "pentagram (self-intersecting star)");
-            Assert.IsFalse(MathHelper.IsConvex(new[] { V(0, 0), V(10, 0) }), "degenerate (2 pts)");
+            Assert.IsTrue(MathHelper.Polyline.IsConvex<double>(Rect(0, 0, 10, 10)), "square");
+            Assert.IsTrue(MathHelper.Polyline.IsConvex<double>(new[] { V(0, 0), V(10, 0), V(5, 8) }), "triangle");
+            Assert.IsTrue(MathHelper.Polyline.IsConvex<double>(Circle(32)), "circle");
+            Assert.IsTrue(MathHelper.Polyline.IsConvex<double>(new[] { V(0, 0), V(5, 0), V(10, 0), V(10, 10), V(0, 10) }), "rect w/ collinear vertex");
+            Assert.IsFalse(MathHelper.Polyline.IsConvex<double>(new[] { V(0, 0), V(10, 0), V(10, 10), V(5, 5), V(0, 10) }), "concave notch");
+            Assert.IsFalse(MathHelper.Polyline.IsConvex<double>(Pentagram()), "pentagram (self-intersecting star)");
+            Assert.IsFalse(MathHelper.Polyline.IsConvex<double>(new[] { V(0, 0), V(10, 0) }), "degenerate (2 pts)");
         }
 
         // EvenOdd = real even-odd. NonZero = real non-zero WINDING: a ring that runs the other way round cancels the
@@ -78,7 +78,7 @@ namespace Adamantium.MathTests
         {
             // L-shape: bottom bar [0,20]x[0,10] + right bar [10,20]x[10,20]; top-left is a notch.
             var l = new[] { V(0, 0), V(20, 0), V(20, 20), V(10, 20), V(10, 10), V(0, 10) };
-            Assert.IsFalse(MathHelper.IsConvex(l), "L is concave");
+            Assert.IsFalse(MathHelper.Polyline.IsConvex<double>(l), "L is concave");
 
             var tris = Fill(l, FillRule.EvenOdd);
             Assert.IsTrue(Covered(tris, V(5, 5)), "bottom bar filled");
@@ -120,7 +120,7 @@ namespace Adamantium.MathTests
             Assert.IsFalse(Covered(tris, V(35, 35)), "the cell was filled in");
         }
 
-        static List<Vector3> FillDonut(FillRule rule)
+        static List<Vector3<double>> FillDonut(FillRule rule)
         {
             var p = new Polygon { FillRule = rule };
             p.AddContour(new MeshContour(Rect(0, 0, 100, 100)));
@@ -129,44 +129,44 @@ namespace Adamantium.MathTests
         }
 
         // ---- helpers ----
-        static Vector2 V(double x, double y) => new Vector2(x, y);
-        static Vector2[] Rect(double x0, double y0, double x1, double y1) => new[] { V(x0, y0), V(x1, y0), V(x1, y1), V(x0, y1) };
-        static Vector2[] RectCW(double x0, double y0, double x1, double y1) => new[] { V(x0, y0), V(x0, y1), V(x1, y1), V(x1, y0) };
+        static Vector2<double> V(double x, double y) => new Vector2<double>(x, y);
+        static Vector2<double>[] Rect(double x0, double y0, double x1, double y1) => new[] { V(x0, y0), V(x1, y0), V(x1, y1), V(x0, y1) };
+        static Vector2<double>[] RectCW(double x0, double y0, double x1, double y1) => new[] { V(x0, y0), V(x0, y1), V(x1, y1), V(x1, y0) };
 
-        static Vector2[] Circle(int n, double r = 100)
+        static Vector2<double>[] Circle(int n, double r = 100)
         {
-            var p = new Vector2[n];
+            var p = new Vector2<double>[n];
             for (int i = 0; i < n; i++) { double a = 2 * Math.PI * i / n; p[i] = V(r * Math.Cos(a), r * Math.Sin(a)); }
             return p;
         }
 
-        static Vector2[] Pentagram()
+        static Vector2<double>[] Pentagram()
         {
             var o = Circle(5, 100);
             return new[] { o[0], o[2], o[4], o[1], o[3] };   // star {5/2}
         }
 
-        static List<Vector3> Fill(Vector2[] pts, FillRule rule)
+        static List<Vector3<double>> Fill(Vector2<double>[] pts, FillRule rule)
         {
             var p = new Polygon { FillRule = rule };
             p.AddContour(new MeshContour(pts));
             return p.FillIndirect();
         }
 
-        static bool Covered(List<Vector3> tris, Vector2 pt)
+        static bool Covered(List<Vector3<double>> tris, Vector2<double> pt)
         {
             for (int i = 0; i + 2 < tris.Count; i += 3)
-                if (InTri(pt, (Vector2)tris[i], (Vector2)tris[i + 1], (Vector2)tris[i + 2])) return true;
+                if (InTri(pt, (Vector2<double>)tris[i], (Vector2<double>)tris[i + 1], (Vector2<double>)tris[i + 2])) return true;
             return false;
         }
 
-        static bool InTri(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
+        static bool InTri(Vector2<double> p, Vector2<double> a, Vector2<double> b, Vector2<double> c)
         {
             double d1 = Sgn(p, a, b), d2 = Sgn(p, b, c), d3 = Sgn(p, c, a);
             bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
             return !(neg && pos);
         }
 
-        static double Sgn(Vector2 p, Vector2 a, Vector2 b) => (p.X - b.X) * (a.Y - b.Y) - (a.X - b.X) * (p.Y - b.Y);
+        static double Sgn(Vector2<double> p, Vector2<double> a, Vector2<double> b) => (p.X - b.X) * (a.Y - b.Y) - (a.X - b.X) * (p.Y - b.Y);
     }
 }

@@ -28,7 +28,7 @@ public class KashidaTests
         {
             Fallback = null, Kashidas = kashidas, LineBreaking = breaking, WordSpacing = new SpacingRange(1, 1, 1.2),
         };
-        layout.ProcessText(Arabic, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Arabic, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         return layout;
     }
@@ -95,7 +95,7 @@ public class KashidaTests
         const string text = "Product abcمحمد and 2024علي with سلسلة words, then more words to justify the line again.";
         var typeface = Typeface.LoadFont(NotoSansArabic);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Direction = TextDirection.LeftToRight };
-        layout.ProcessText(text, FontSize, new Size(220, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(220, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
 
         Assert.That(Extenders(layout), Is.Not.Empty, "some line took a kashida");

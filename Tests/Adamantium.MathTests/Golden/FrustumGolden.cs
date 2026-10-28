@@ -1,5 +1,5 @@
 using System;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 
 namespace Adamantium.MathTests.Golden;
 

@@ -183,9 +183,9 @@ public class TransformService : EntityService
         }
 
         var world = entity.Transform.GetMetadata(camera).AbsoluteWorld;
-        ((BoundingBox)mesh.Bounds).GetCorners(corners);
+        mesh.Bounds.ToBoundingBox().As<float>().GetCorners(corners);
         var placed = Vector3F.TransformCoordinate(corners[0], world);
-        var box = new BoundingBox(placed, placed);
+        var box = new BoundingBox<float>(placed, placed);
         for (int i = 1; i < corners.Length; i++)
         {
             placed = Vector3F.TransformCoordinate(corners[i], world);
@@ -308,7 +308,7 @@ public class TransformService : EntityService
     {
         public readonly List<UniverseOutput> Outputs = [];
         public Camera Camera;
-        public Vector3 Position;
+        public Vector3<double> Position;
         public bool Moved;
     }
 }

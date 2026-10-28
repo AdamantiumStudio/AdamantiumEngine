@@ -7,28 +7,38 @@ All packages share one version.
 
 ### Added
 
-- `Adamantium.Mathematics.Typed`: one generic type for each number type in place of float and double pairs -
+- `IUniverseWatcher`, one in each universe's `Satellites`: what wakes a universe drawing on demand. It watches whatever
+  implements `INotifyUniverse` (`Watch` / `ReleaseWatch`) and is asked directly for one frame, a number of frames or a
+  while (`Watch()`, `Watch(int)`, `Watch(TimeSpan)`); asks between two frames wake the universe once, and while the
+  universe draws every frame (`FrameMode.Continuous`) it listens to nothing and every ask returns at once. The universe
+  watches its `EntityWorld`, which raises `UniverseChanged` as entities join and leave it, change owner, gain or lose
+  components, and as any `[Bindable]` of an entity or a component changes - a button that adds a light or moves a
+  camera wakes the scene with no code of its own. `Entity.World` is the world an entity is part of, through its owners;
+  `Entity.NotifyUpdated` asks for frames for a change not made through a property. `ToolsService` is watched: changing
+  the tool draws a frame. A camera's flight and turn (`MoveTo`, `RotateAroundSelectedObject`) keep the scene drawing
+  for as long as they take.
+- `Adamantium.Mathematics`: one generic type for each number type in place of float and double pairs -
   `Vector2<T>`, `Vector3<T>`, `Vector4<T>` (integers too), `Quaternion<T>`, `Matrix3x2<T>`, `Matrix3x3<T>`,
   `Matrix4x4<T>` - made with static factories as in System.Numerics (`Vector3.Create`, `Matrix4x4.CreateLookAtLH`,
   `Quaternion.CreateFromYawPitchRoll`...) and converted between number types only explicitly, with `As<T>()`. What
   needs fractions - length, normalizing, blending - is there only for fractional types. Equality is exact, a NaN
   equal to a NaN for dictionaries; `NearEqual` compares within a tolerance. Matrix products and transforms use SIMD
   where the processor has it - 128 bits for float, 256 or two halves of 128 for double - and give the same numbers on
-  every processor and without SIMD; only where two NaNs meet may a different NaN come out. The types the engine uses today stay until they are moved over; the new ones
-  answer as they do, apart from mistakes of theirs set right: triangular and echelon forms, a skew, an isometric
+  every processor and without SIMD; only where two NaNs meet may a different NaN come out. They answer as the float and
+  double types they replace did, apart from mistakes of those set right: triangular and echelon forms, a skew, an isometric
   projection, a field of view in degrees, collinearity, spherical blends of perpendicular rotations, the angles of a
   rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
   one or far apart - a far translation in float, a small 2D scale.
-- `Adamantium.Mathematics.Typed` batches: `Vector3<T>.TransformCoordinate` and `TransformNormal` over points kept as
+- `Adamantium.Mathematics` batches: `Vector3<T>.TransformCoordinate` and `TransformNormal` over points kept as
   separate arrays of X, Y and Z, eight floats or four doubles at a time in 256-bit SIMD, four or two in 128-bit (SSE,
   NEON); `Vector3.Narrow` brings points of a world kept in double near a camera as float for the GPU, the subtraction
   done in double. Each point comes out as the same number as alone, on every processor; Half goes one by one.
-- `Adamantium.Mathematics.Typed` colors and vertex values: `Color` (R8G8B8A8), `ColorBGRA` (B8G8R8A8), `Color3F`,
+- `Adamantium.Mathematics` colors and vertex values: `Color` (R8G8B8A8), `ColorBGRA` (B8G8R8A8), `Color3F`,
   `Color4F` and `Bool4` (four 32-bit truths). A fraction becomes a byte as UNORM does - clamped, rounded to the
   nearest - so a byte goes through a fraction and back unchanged; each packing is named by its byte order from the
   lowest up, as Vulkan names its formats, and each `From` is the inverse of its `To`: the number 0xAARRGGBB, which
   System.Drawing calls ARGB, is `FromBgra` here, and `FromArgb` takes alpha in the lowest byte.
-- `Adamantium.Mathematics.Typed` geometry, generic in the same way: `Size<T>`, `Rectangle<T>` (X, Y, Width, Height),
+- `Adamantium.Mathematics` geometry, generic in the same way: `Size<T>`, `Rectangle<T>` (X, Y, Width, Height),
   `Viewport<T>`, `Ray<T>`, `Ray2<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
   `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
   `CreateShadow` (and the 3x3 ones) for a plane. Double boxes and spheres far from the origin keep what float loses.
@@ -1762,6 +1772,15 @@ All packages share one version.
 
 ### Changed
 
+- The engine works on the generic mathematics types: a float or double vector, matrix, quaternion, rectangle or volume is
+  `Vector3<float>`, `Matrix4x4<double>`..., and the float names (`Vector3F`, `Matrix4x4F`, `QuaternionF`,
+  `RectangleF`...) are aliases a project declares itself (`global using Vector3F =
+  Adamantium.Mathematics.Vector3<float>;`). Methods that took `ref` arguments and gave `out` results take and return
+  values. `Camera.Frustum` is a value: rebuilt as the view or projection changes, never null. The colliders' shapes are
+  `IConvexShape<float>`; `Bounds` is kept in double and made a box, an oriented box or a sphere only with
+  `ToBoundingBox`, `ToOrientedBoundingBox` and `ToBoundingSphere`. A capsule checks itself against a frustum
+  (`BoundingCapsule.Within`), and a capsule or a hull meets the other volumes from its own side. Markup reads a
+  `Vector2` from "x y" or "x,y" through the type's own `Parse`, and a `Color` through its parser.
 - `Adamantium.Mathematics` and `Adamantium.Fonts` build for net10.0 alone; source generators load neither.
   `FontWeight`, `FontStretch`, `FontFeature` and the registry of OpenType features (`FeatureInfos`, `FeatureInfo`,
   `FeatureRegistration`), which markup is checked against at build, are in `Adamantium.Core` now
@@ -2134,6 +2153,12 @@ All packages share one version.
 
 ### Removed
 
+- The float and double pairs of the mathematics - `Vector2`/`Vector2F`, `Vector3`/`Vector3F`, `Vector4`/`Vector4F`,
+  `Quaternion`/`QuaternionF`, `Matrix3x2`/`Matrix3x2F`, `Matrix3x3`/`Matrix3x3F`, `Matrix4x4`/`Matrix4x4F`,
+  `Rectangle`/`RectangleF`, `Size`/`SizeF`, `Int3`, `Int4`, `Ray2D`, `Ray2F`, `ViewportF` and the old `Ray`, `Plane`,
+  bounding volumes, colors, `Bool4` and `MathHelper` - for the generic types that replace them; `ColorRGB`, `ColorRG`,
+  `VectorExtensions` and `AcceleratedMathConfig`, with no generic counterpart. The `Adamantium.Mathematics.Typed`
+  namespace is `Adamantium.Mathematics` now.
 - `FeatureInfo.DefaultFeatureState` and `FeatureState`: `TextShaper.DefaultFeatures` says which features shaping
   applies unasked.
 - `EffectPool` and `EffectPoolEventArgs`, `Effect.Pool`, `IGraphicsDevice.DefaultEffectPool`, `AddEffectPool` and

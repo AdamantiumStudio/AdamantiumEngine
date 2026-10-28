@@ -39,7 +39,7 @@ internal sealed class SegmentSearch
 
     /// <summary>Fills nearest[c], for each channel c whose bit is set in wanted, with the segments of that channel
     /// nearest the point, in the order of their indices; more than one when their distances tie.</summary>
-    public void FindNearest(Vector2 point, List<LineSegment2D>[] nearest, int wanted = SegmentGrid.AllChannels)
+    public void FindNearest(Vector2<double> point, List<LineSegment2D>[] nearest, int wanted = SegmentGrid.AllChannels)
     {
         for (var channel = 0; channel < SegmentGrid.ChannelCount; channel++)
         {
@@ -106,7 +106,7 @@ internal sealed class SegmentSearch
         }
     }
 
-    private void Visit(int cell, Vector2 point, int open)
+    private void Visit(int cell, Vector2<double> point, int open)
     {
         var startX = grid.StartX;
         var startY = grid.StartY;
@@ -192,7 +192,7 @@ internal sealed class SegmentSearch
         widestKeepSquared = widest;
     }
 
-    private void ResolveTies(int channel, Vector2 point)
+    private void ResolveTies(int channel, Vector2<double> point)
     {
         ties.Clear();
         var found = candidates[channel];

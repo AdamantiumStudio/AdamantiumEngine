@@ -23,7 +23,7 @@ public class ColorGlyphLayoutTests
         var font = TypefaceStore.GetTypeface(EmojiFont).Fonts[0];
         font.TryGetGlyphIndex(0x1F600, out var smile);
         var layout = new TextLayout(font.Typeface, font);
-        layout.ProcessText("\U0001F600", 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("\U0001F600", 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         var drawn = layout.GetGlyphs().Select(g => g.Glyph.Index).ToArray();

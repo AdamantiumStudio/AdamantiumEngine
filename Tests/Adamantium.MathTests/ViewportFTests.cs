@@ -9,14 +9,12 @@ namespace Adamantium.MathTests;
 [TestFixture]
 public class ViewportFTests
 {
-    private static readonly ViewportF Viewport = new(10, 20, 200, 100);
+    private static readonly ViewportF Viewport = new(10, 20, 200, 100, 0, 1);
 
     [Test]
     public void TheTopOfClipSpace_LandsAtTheTopOfTheViewport()
     {
-        var identity = Matrix4x4F.Identity;
-
-        var top = Viewport.Project(new Vector3F(-1, -1, 0.5f), identity, identity, identity);
+        var top = Viewport.Project(new Vector3F(-1, -1, 0.5f), Matrix4x4F.Identity);
 
         Assert.That((top.X, top.Y, top.Z), Is.EqualTo((10f, 20f, 0.5f)));
     }
@@ -24,12 +22,11 @@ public class ViewportFTests
     [Test]
     public void APickRayThroughWhereAPointLands_PassesThroughThePoint()
     {
-        var viewProjection = Matrix4x4F.Translation(0, 0, -5) * Matrix4x4F.PerspectiveFovY(1f, 2f, 0.1f, 100f);
+        var viewProjection = Matrix4x4.CreateTranslation<float>(0, 0, -5) * Matrix4x4.CreatePerspectiveFovY<float>(1f, 2f, 0.1f, 100f);
         var point = new Vector3F(0.3f, 0.7f, 1.2f);
-        var identity = Matrix4x4F.Identity;
-        var pixel = Viewport.Project(point, viewProjection, identity, identity);
+        var pixel = Viewport.Project(point, viewProjection);
 
-        var ray = Ray.GetPickRay((int)MathF.Round(pixel.X), (int)MathF.Round(pixel.Y), Viewport, viewProjection);
+        var ray = Ray.CreateFromViewport(MathF.Round(pixel.X), MathF.Round(pixel.Y), Viewport, viewProjection);
         var along = Vector3F.Dot(point - ray.Position, ray.Direction);
         var miss = (ray.Position + ray.Direction * along - point).Length();
 
@@ -39,12 +36,11 @@ public class ViewportFTests
     [Test]
     public void AProjectedPoint_UnprojectsToItself()
     {
-        var projection = Matrix4x4F.PerspectiveFovRH(1f, 2f, 0.1f, 100f);
-        var view = Matrix4x4F.Translation(0, 0, -5);
-        var world = Matrix4x4F.Identity;
+        var projection = Matrix4x4.CreatePerspectiveFovRH<float>(1f, 2f, 0.1f, 100f);
+        var view = Matrix4x4.CreateTranslation<float>(0, 0, -5);
         var point = new Vector3F(0.3f, -0.7f, 1.2f);
 
-        var back = Viewport.Unproject(Viewport.Project(point, projection, view, world), projection, view, world);
+        var back = Viewport.Unproject(Viewport.Project(point, view * projection), view * projection);
 
         Assert.That(back.X, Is.EqualTo(point.X).Within(1e-3f));
         Assert.That(back.Y, Is.EqualTo(point.Y).Within(1e-3f));

@@ -20,7 +20,7 @@ public static class LineRibbon
         var step = lines.MeshTopology == PrimitiveType.LineStrip ? 1 : 2;
         var segments = count < 2 ? 0 : (count - 2) / step + 1;
 
-        var positions = new Vector3[segments * 4];
+        var positions = new Vector3<double>[segments * 4];
         var others = new Vector3F[segments * 4];
         var corners = new Vector2F[segments * 4];
         var triangles = new int[segments * 6];
@@ -65,10 +65,10 @@ public static class LineRibbon
             .SetUVs(0, corners)
             .SetIndices(triangles);
 
-        void Corner(int at, Vector3 own, Vector3 other, float side, float end)
+        void Corner(int at, Vector3<double> own, Vector3<double> other, float side, float end)
         {
             positions[at] = own;
-            others[at] = (Vector3F)other;
+            others[at] = other.As<float>();
             corners[at] = new Vector2F(side, end);
         }
     }

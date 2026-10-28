@@ -25,8 +25,8 @@ public class PickingTests
     {
         var scene = new PickScene();
         var model = new Entity(null, "Model");
-        var part = PickScene.Box(model, "Part", new Vector3(0, 0, 10), 1);
-        PickScene.Box(model, "Other", new Vector3(-4, 0, 10), 1);
+        var part = PickScene.Box(model, "Part", new Vector3<double>(0, 0, 10), 1);
+        PickScene.Box(model, "Other", new Vector3<double>(-4, 0, 10), 1);
         PickScene.Bounds(model, new Vector3F(-5, -1, 8), new Vector3F(1, 1, 12));
         scene.Place(model);
         var ray = scene.RayThroughCenter();
@@ -40,8 +40,8 @@ public class PickingTests
     {
         var scene = new PickScene();
         var model = new Entity(null, "Model");
-        PickScene.Box(model, "Left", new Vector3(-2, 0, 10), 1);
-        PickScene.Box(model, "Right", new Vector3(2, 0, 10), 1);
+        PickScene.Box(model, "Left", new Vector3<double>(-2, 0, 10), 1);
+        PickScene.Box(model, "Right", new Vector3<double>(2, 0, 10), 1);
         PickScene.Bounds(model, new Vector3F(-3, -1, 9), new Vector3F(3, 1, 11));
         scene.Place(model);
         var ray = scene.RayThroughCenter();
@@ -55,7 +55,7 @@ public class PickingTests
     {
         var scene = new PickScene();
         var triangle = PickScene.Shape(null, "Triangle", PrimitiveType.TriangleList,
-            [new Vector3(-1, -1, 10), new Vector3(1, -1, 10), new Vector3(0, 1, 10)], [0, 1, 2]);
+            [new Vector3<double>(-1, -1, 10), new Vector3<double>(1, -1, 10), new Vector3<double>(0, 1, 10)], [0, 1, 2]);
         scene.Place(triangle);
 
         var hit = triangle.Pick(scene.RayThroughCenter(), PickMode.Triangles);
@@ -69,7 +69,7 @@ public class PickingTests
     {
         var scene = new PickScene();
         var triangle = PickScene.Shape(null, "Triangle", PrimitiveType.TriangleList,
-            [new Vector3(-1, -1, 10), new Vector3(1, -1, 10), new Vector3(0, 1, 10)]);
+            [new Vector3<double>(-1, -1, 10), new Vector3<double>(1, -1, 10), new Vector3<double>(0, 1, 10)]);
         scene.Place(triangle);
 
         Assert.That(triangle.Pick(scene.RayThroughCenter(), PickMode.Triangles).Entity, Is.SameAs(triangle));
@@ -81,8 +81,8 @@ public class PickingTests
         var scene = new PickScene();
         var mesh = PickScene.Shape(null, "Two", PrimitiveType.TriangleList,
         [
-            new Vector3(-1, -1, 20), new Vector3(1, -1, 20), new Vector3(0, 1, 20),
-            new Vector3(-1, -1, 10), new Vector3(1, -1, 10), new Vector3(0, 1, 10)
+            new Vector3<double>(-1, -1, 20), new Vector3<double>(1, -1, 20), new Vector3<double>(0, 1, 20),
+            new Vector3<double>(-1, -1, 10), new Vector3<double>(1, -1, 10), new Vector3<double>(0, 1, 10)
         ], [0, 1, 2, 3, 4, 5]);
         scene.Place(mesh);
 
@@ -96,11 +96,11 @@ public class PickingTests
         var model = new Entity(null, "Model");
         PickScene.Shape(model, "Frame", PrimitiveType.TriangleList,
         [
-            new Vector3(-5, -1, 10), new Vector3(-3, -1, 10), new Vector3(-4, 1, 10),
-            new Vector3(3, -1, 10), new Vector3(5, -1, 10), new Vector3(4, 1, 10)
+            new Vector3<double>(-5, -1, 10), new Vector3<double>(-3, -1, 10), new Vector3<double>(-4, 1, 10),
+            new Vector3<double>(3, -1, 10), new Vector3<double>(5, -1, 10), new Vector3<double>(4, 1, 10)
         ], [0, 1, 2, 3, 4, 5]);
         var part = PickScene.Shape(model, "Part", PrimitiveType.TriangleList,
-            [new Vector3(-1, -1, 15), new Vector3(1, -1, 15), new Vector3(0, 1, 15)], [0, 1, 2]);
+            [new Vector3<double>(-1, -1, 15), new Vector3<double>(1, -1, 15), new Vector3<double>(0, 1, 15)], [0, 1, 2]);
         scene.Place(model);
 
         Assert.That(model.Pick(scene.RayThroughCenter(), PickMode.Triangles).Entity, Is.SameAs(part));
@@ -111,11 +111,11 @@ public class PickingTests
     {
         var scene = new PickScene();
         var triangle = PickScene.Shape(null, "Triangle", PrimitiveType.TriangleList,
-            [new Vector3(-1, -1, 10), new Vector3(1, -1, 10), new Vector3(0, 1, 10)], [0, 1, 2]);
+            [new Vector3<double>(-1, -1, 10), new Vector3<double>(1, -1, 10), new Vector3<double>(0, 1, 10)], [0, 1, 2]);
         scene.Place(triangle);
         Assert.That(triangle.Pick(scene.RayThroughCenter(), PickMode.Triangles).Point.Z, Is.EqualTo(10f).Within(1e-3f));
 
-        triangle.GetComponent<MeshData>().Mesh.ApplyTransform(Matrix4x4.Translation(0, 0, 5));
+        triangle.GetComponent<MeshData>().Mesh.ApplyTransform(Matrix4x4.CreateTranslation<double>(0, 0, 5));
 
         Assert.That(triangle.Pick(scene.RayThroughCenter(), PickMode.Triangles).Point.Z, Is.EqualTo(15f).Within(1e-3f));
     }
@@ -125,7 +125,7 @@ public class PickingTests
     {
         var scene = new PickScene();
         var quad = PickScene.Shape(null, "Quad", PrimitiveType.TriangleStrip,
-            [new Vector3(-1, -1, 10), new Vector3(-1, 1, 10), new Vector3(1, -1, 10), new Vector3(1, 1, 10)]);
+            [new Vector3<double>(-1, -1, 10), new Vector3<double>(-1, 1, 10), new Vector3<double>(1, -1, 10), new Vector3<double>(1, 1, 10)]);
         scene.Place(quad);
 
         Assert.That(quad.Pick(scene.RayThroughCenter(), PickMode.Triangles).Entity, Is.SameAs(quad));
@@ -137,8 +137,8 @@ public class PickingTests
         var scene = new PickScene();
         var lines = PickScene.Shape(null, "Pairs", PrimitiveType.LineList,
         [
-            new Vector3(-5, -4, 10), new Vector3(-3, -4, 10),
-            new Vector3(3, 4, 10), new Vector3(5, 4, 10)
+            new Vector3<double>(-5, -4, 10), new Vector3<double>(-3, -4, 10),
+            new Vector3<double>(3, 4, 10), new Vector3<double>(5, 4, 10)
         ], [0, 1, 2, 3]);
         scene.Place(lines);
 
@@ -152,7 +152,7 @@ public class PickingTests
         var scene = new PickScene();
         var x = 3 * scene.PixelWidthAt(depth);
         var line = PickScene.Shape(null, "Line", PrimitiveType.LineList,
-            [new Vector3(x, -5, depth), new Vector3(x, 5, depth)]);
+            [new Vector3<double>(x, -5, depth), new Vector3<double>(x, 5, depth)]);
         scene.Place(line);
         var ray = scene.RayThroughCenter();
 
@@ -164,8 +164,8 @@ public class PickingTests
     public void Disabled_IsSkippedWithWhatIsUnderIt()
     {
         var scene = new PickScene();
-        var parent = PickScene.Box(null, "Parent", new Vector3(0, 0, 10), 1);
-        PickScene.Box(parent, "Child", new Vector3(0, 0, 10), 1);
+        var parent = PickScene.Box(null, "Parent", new Vector3<double>(0, 0, 10), 1);
+        PickScene.Box(parent, "Child", new Vector3<double>(0, 0, 10), 1);
         parent.IsEnabled = false;
         scene.Place(parent);
 
@@ -176,8 +176,8 @@ public class PickingTests
     public void Disabled_IsPickedWithWhatIsUnderIt_WhenAskedFor_ButHiddenNever()
     {
         var scene = new PickScene();
-        var parent = PickScene.Box(null, "Parent", new Vector3(0, 0, 10), 1);
-        var child = PickScene.Box(parent, "Child", new Vector3(0, 0, -5), 1);
+        var parent = PickScene.Box(null, "Parent", new Vector3<double>(0, 0, 10), 1);
+        var child = PickScene.Box(parent, "Child", new Vector3<double>(0, 0, -5), 1);
         parent.IsEnabled = false;
         scene.Place(parent);
         var ray = scene.RayThroughCenter();
@@ -193,9 +193,9 @@ public class PickingTests
     public void Hidden_IsSkippedWithWhatIsUnderIt_AndLetsTheRayThrough()
     {
         var scene = new PickScene();
-        var hidden = PickScene.Box(null, "Hidden", new Vector3(0, 0, 10), 1);
-        PickScene.Box(hidden, "Child", new Vector3(0, 0, -5), 1);
-        var behind = PickScene.Box(null, "Behind", new Vector3(0, 0, 20), 1);
+        var hidden = PickScene.Box(null, "Hidden", new Vector3<double>(0, 0, 10), 1);
+        PickScene.Box(hidden, "Child", new Vector3<double>(0, 0, -5), 1);
+        var behind = PickScene.Box(null, "Behind", new Vector3<double>(0, 0, 20), 1);
         hidden.Visible = false;
         scene.Place(hidden);
         scene.Place(behind);
@@ -212,8 +212,8 @@ public class PickingTests
     public void Ignored_LeavesWhatIsUnderItPickable()
     {
         var scene = new PickScene();
-        var parent = PickScene.Box(null, "Parent", new Vector3(0, 0, 10), 1);
-        var child = PickScene.Box(parent, "Child", new Vector3(0, 0, 10), 1);
+        var parent = PickScene.Box(null, "Parent", new Vector3<double>(0, 0, 10), 1);
+        var child = PickScene.Box(parent, "Child", new Vector3<double>(0, 0, 10), 1);
         parent.IgnoreInCollisionDetection = true;
         scene.Place(parent);
 
@@ -224,8 +224,8 @@ public class PickingTests
     public void Roots_NearestWinsWhateverTheOrder()
     {
         var scene = new PickScene();
-        var far = PickScene.Box(null, "Far", new Vector3(0, 0, 20), 1);
-        var near = PickScene.Box(null, "Near", new Vector3(0, 0, 10), 1);
+        var far = PickScene.Box(null, "Far", new Vector3<double>(0, 0, 20), 1);
+        var near = PickScene.Box(null, "Near", new Vector3<double>(0, 0, 10), 1);
         scene.Place(far);
         scene.Place(near);
 
@@ -236,7 +236,7 @@ public class PickingTests
     public void Scaled_HitsItsScaledSurface()
     {
         var scene = new PickScene();
-        var ball = PickScene.Ball(null, "Ball", new Vector3(0, 0, 20), 1);
+        var ball = PickScene.Ball(null, "Ball", new Vector3<double>(0, 0, 20), 1);
         ball.Transform.SetScaleFactor(3);
         scene.Place(ball);
 
@@ -250,7 +250,7 @@ public class PickingTests
     public void CollidersWithMeshColliders_Throws()
     {
         var scene = new PickScene();
-        var box = PickScene.Box(null, "Box", new Vector3(0, 0, 10), 1);
+        var box = PickScene.Box(null, "Box", new Vector3<double>(0, 0, 10), 1);
         scene.Place(box);
 
         Assert.Throws<ArgumentException>(() => box.Pick(scene.RayThroughCenter(), PickMode.Colliders | PickMode.MeshColliders));

@@ -42,14 +42,14 @@ public class MultipleSelectionTests
 
         output = new TestOutput();
         universe.Add(output);
-        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", Vector3.Zero, Vector3.ForwardLH, -Vector3.Up,
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             800, 600, 0.1f, 1000f);
         camera = cameraEntity.GetComponent<Camera>();
         output.Camera = camera;
         universe.EntityWorld.EntityManager.AddEntity(cameraEntity);
 
-        left = Cube("Left", new Vector3(-3, 0, 15));
-        right = Cube("Right", new Vector3(3, 0, 15));
+        left = Cube("Left", new Vector3<double>(-3, 0, 15));
+        right = Cube("Right", new Vector3<double>(3, 0, 15));
 
         transforms = new TransformService(universe.EntityWorld);
         transforms.Initialize();
@@ -58,7 +58,7 @@ public class MultipleSelectionTests
         Frame();
     }
 
-    private Entity Cube(string name, Vector3 at)
+    private Entity Cube(string name, Vector3<double> at)
     {
         var cube = new Entity(null, name);
         cube.Transform.Position = at;
@@ -179,9 +179,9 @@ public class MultipleSelectionTests
     private Entity CarriedSkin(out Vector2F bound, out Vector2F drawn)
     {
         var skinned = new Entity(null, "Skinned");
-        skinned.Transform.Position = new Vector3(0, 2.5, 15);
+        skinned.Transform.Position = new Vector3<double>(0, 2.5, 15);
         var mesh = new Mesh(PrimitiveType.TriangleList);
-        mesh.SetPoints([new Vector3(-1, 1, 0), new Vector3(1, 1, 0), new Vector3(0, -1, 0)]).SetIndices([0, 1, 2]);
+        mesh.SetPoints([new Vector3<double>(-1, 1, 0), new Vector3<double>(1, 1, 0), new Vector3<double>(0, -1, 0)]).SetIndices([0, 1, 2]);
         mesh.SetJointIndices([Vector4F.Zero, Vector4F.Zero, Vector4F.Zero]);
         mesh.SetJointWeights([Vector4F.UnitX, Vector4F.UnitX, Vector4F.UnitX]);
         skinned.AddComponent(new MeshData { Mesh = mesh, RenderMode = MeshRenderMode.Skinned });
@@ -191,10 +191,10 @@ public class MultipleSelectionTests
         skin.InverseBindMatrices.Add(Matrix4x4F.Identity);
         skinned.AddComponent(skin);
         universe.EntityWorld.EntityManager.AddEntity(skinned);
-        joint.Transform.Position = new Vector3(0, -5, 0);
+        joint.Transform.Position = new Vector3<double>(0, -5, 0);
         Frame();
         bound = PixelOf(skinned.Transform.Position);
-        drawn = PixelOf(skinned.Transform.Position + new Vector3(0, -5, 0));
+        drawn = PixelOf(skinned.Transform.Position + new Vector3<double>(0, -5, 0));
         return skinned;
     }
 
@@ -323,9 +323,9 @@ public class MultipleSelectionTests
         tools.Update(new AppTime());
     }
 
-    private Vector2F PixelOf(Vector3 world)
+    private Vector2F PixelOf(Vector3<double> world)
     {
-        var inRender = (Vector3F)(world - camera.WorldPosition);
+        var inRender = (world - camera.WorldPosition).As<float>();
         var pixel = Vector3F.Project(inRender, 0, 0, camera.Width, camera.Height, 0, 1, camera.ViewMatrix * camera.ProjectionMatrix);
         return new Vector2F(pixel.X, pixel.Y);
     }

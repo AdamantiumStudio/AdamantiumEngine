@@ -63,14 +63,14 @@ public class CameraGizmo
             cameraNumber++;
         }
 
-        var position = Vector3.Zero;
+        var position = Vector3<double>.Zero;
         var current = output.Camera;
         if (current != null)
         {
-            position = (CameraIcon.GetDiameter() * 2 * (Vector3)current.Forward) + current.GetOwnerPosition();
+            position = (CameraIcon.GetDiameter() * 2 * (Vector3<double>)current.Forward) + current.GetOwnerPosition();
         }
 
-        var entity = new CameraTemplate().BuildEntity(null, name, position, Vector3.ForwardLH, -Vector3.Up, output.Width, output.Height, DefaultZNear, DefaultZFar);
+        var entity = new CameraTemplate().BuildEntity(null, name, position, Vector3<double>.ForwardLH, -Vector3<double>.Up, output.Width, output.Height, DefaultZNear, DefaultZFar);
         entityWorld.EntityManager.AddEntity(entity);
         var camera = entity.GetComponent<Camera>();
         output.Camera = camera;
@@ -97,7 +97,7 @@ public class CameraGizmo
         }
 
         var transform = SelectedCamera.Transform.GetMetadata(camera);
-        var world = Matrix4x4F.RotationQuaternion(camera.Rotation) * transform.WorldMatrixF;
+        var world = Matrix4x4.CreateFromQuaternion<float>(camera.Rotation) * transform.WorldMatrixF;
         effect.Parameters["transparency"].SetValue(1.0f);
         effect.Parameters["worldMatrix"].SetValue(world);
         effect.Parameters["wvp"].SetValue(world * view * proj);

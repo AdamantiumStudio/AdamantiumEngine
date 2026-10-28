@@ -16,12 +16,12 @@ public class TransformStayInWorldTests
     {
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         var group = new Entity(null, "Group");
-        group.Transform.Position = new Vector3(5, -1, 2);
-        group.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(90f));
+        group.Transform.Position = new Vector3<double>(5, -1, 2);
+        group.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90f));
         group.Transform.ScaleFactor = new Vector3F(2);
         var entity = new Entity(null, "Entity");
-        entity.Transform.Position = new Vector3(1, 2, 3);
-        entity.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, 0.4f);
+        entity.Transform.Position = new Vector3<double>(1, 2, 3);
+        entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, 0.4f);
         world.EntityManager.AddEntity(group);
         world.EntityManager.AddEntity(entity);
         world.ForceUpdate();
@@ -51,13 +51,13 @@ public class TransformStayInWorldTests
     {
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         var group = new Entity(null, "Group");
-        group.Transform.Position = new Vector3(5, 0, 0);
-        group.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitZ, 0.7f);
+        group.Transform.Position = new Vector3<double>(5, 0, 0);
+        group.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, 0.7f);
         group.Transform.ScaleFactor = new Vector3F(1.5f);
         var entity = new Entity(null, "Entity");
         entity.Transform.ScaleFactor = mirrored ? new Vector3F(-1, 1, 1) : new Vector3F(3, 1, 1);
-        entity.Transform.PivotRotation = QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians(45f));
-        entity.Transform.Position = new Vector3(1, 2, 0);
+        entity.Transform.PivotRotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians(45f));
+        entity.Transform.Position = new Vector3<double>(1, 2, 0);
         world.EntityManager.AddEntity(group);
         world.EntityManager.AddEntity(entity);
         world.ForceUpdate();
@@ -76,14 +76,14 @@ public class TransformStayInWorldTests
         var group = new Entity(null, "Group");
         group.Transform.ScaleFactor = new Vector3F(1, 0, 1);
         var entity = new Entity(null, "Entity");
-        entity.Transform.Position = new Vector3(1, 2, 3);
+        entity.Transform.Position = new Vector3<double>(1, 2, 3);
 
         var kept = entity.Transform.StayInWorldUnder(group);
 
         Assert.Multiple(() =>
         {
             Assert.That(kept, Is.False);
-            Assert.That(entity.Transform.Position, Is.EqualTo(new Vector3(1, 2, 3)));
+            Assert.That(entity.Transform.Position, Is.EqualTo(new Vector3<double>(1, 2, 3)));
         });
     }
 
@@ -93,14 +93,14 @@ public class TransformStayInWorldTests
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         var group = new Entity(null, "Group");
         var entity = new Entity(null, "Entity");
-        entity.Transform.Position = new Vector3(123456.789, 2, 3);
+        entity.Transform.Position = new Vector3<double>(123456.789, 2, 3);
         world.EntityManager.AddEntity(group);
         world.EntityManager.AddEntity(entity);
         world.ForceUpdate();
 
         entity.Transform.StayInWorldUnder(group);
 
-        Assert.That(entity.Transform.Position, Is.EqualTo(new Vector3(123456.789, 2, 3)), "no float round trip");
+        Assert.That(entity.Transform.Position, Is.EqualTo(new Vector3<double>(123456.789, 2, 3)), "no float round trip");
     }
 
     private static void AssertSame(Matrix4x4F actual, Matrix4x4F expected, string when)

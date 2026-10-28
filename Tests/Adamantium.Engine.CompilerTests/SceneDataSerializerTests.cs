@@ -19,7 +19,7 @@ namespace Adamantium.Engine.CompilerTests
             child.Scale = new Vector3F(2, 2, 2);
 
             var mesh = new Mesh(PrimitiveType.TriangleList) { MaterialID = "mat1" };
-            mesh.SetPoints([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)]);
+            mesh.SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0)]);
             mesh.SetIndices([0, 1, 2]);
             mesh.SetNormals([new Vector3F(0, 0, 1), new Vector3F(0, 0, 1), new Vector3F(0, 0, 1)]);
             mesh.SetUVs(0, [new Vector2F(0, 0), new Vector2F(1, 0), new Vector2F(0, 1)]);
@@ -57,7 +57,7 @@ namespace Adamantium.Engine.CompilerTests
             Assert.That(loadedMesh.MaterialID, Is.EqualTo("mat1"));
             Assert.That(loadedMesh.MeshTopology, Is.EqualTo(PrimitiveType.TriangleList));
             Assert.That(loadedMesh.Points.Length, Is.EqualTo(3));
-            Assert.That(loadedMesh.Points[1], Is.EqualTo(new Vector3(1, 0, 0)));
+            Assert.That(loadedMesh.Points[1], Is.EqualTo(new Vector3<double>(1, 0, 0)));
             Assert.That(loadedMesh.Indices, Is.EqualTo(new[] { 0, 1, 2 }));
             Assert.That(loadedMesh.Normals[0], Is.EqualTo(new Vector3F(0, 0, 1)));
             Assert.That(loadedMesh.UV0[2], Is.EqualTo(new Vector2F(0, 1)));

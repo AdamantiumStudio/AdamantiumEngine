@@ -24,12 +24,12 @@ public class KerningLayoutTests
         };
         if (attributed != null)
         {
-            layout.ProcessText(attributed, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+            layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         }
         else
         {
-            layout.ProcessText(text, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+            layout.ProcessText(text, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         }
 
@@ -151,7 +151,7 @@ public class KerningLayoutTests
             {
                 Fallback = null, Kerning = kerning, DropCap = new DropCap(2, 2),
             };
-            layout.ProcessText(text, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, FontSize, new Size<double>(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout.GetTextData()[1].Rect.X - layout.GetTextData()[0].Rect.X;
         }

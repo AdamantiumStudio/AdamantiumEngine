@@ -12,13 +12,13 @@ namespace Adamantium.Engine.Templates.Tools;
 public class OrientationToolTemplate: BaseToolTemplate
 {
    private double size;
-   private Quaternion rotation;
+   private Quaternion<double> rotation;
 
    public OrientationToolTemplate(float size, Vector3F baseScale, QuaternionF rotation)
    {
       this.size = size;
       this.baseScale = baseScale;
-      this.rotation = rotation;
+      this.rotation = rotation.As<double>();
    }
 
    public override Entity BuildEntity(Entity owner, string name)
@@ -39,7 +39,7 @@ public class OrientationToolTemplate: BaseToolTemplate
       var sphere = Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.UVSphere, ball, 16);
       var arm = Shapes.Cylinder.GenerateGeometry(GeometryType.Solid, reach * 2, stem, 12);
 
-      var directions = new List<Vector3>();
+      var directions = new List<Vector3<double>>();
       var index = 0;
 
       foreach (var (direction, color) in Axes())
@@ -70,28 +70,28 @@ public class OrientationToolTemplate: BaseToolTemplate
    public const string HomeName = "HomeManipulator";
 
    /// <summary>What each ball stands for, in build order - see <see cref="TileName"/>.</summary>
-   public static Vector3[] TileDirections { get; private set; } = System.Array.Empty<Vector3>();
+   public static Vector3<double>[] TileDirections { get; private set; } = System.Array.Empty<Vector3<double>>();
 
    public static string TileName(int index) => "Axis" + index;
 
    // A cylinder is generated standing along Y; this lays it along the given axis.
-   private static QuaternionF Standing(Vector3 direction)
+   private static QuaternionF Standing(Vector3<double> direction)
    {
-      if (Math.Abs(direction.X) > 0.5) return QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians(90));
-      if (Math.Abs(direction.Z) > 0.5) return QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(90));
+      if (Math.Abs(direction.X) > 0.5) return Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians(90));
+      if (Math.Abs(direction.Z) > 0.5) return Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(90));
 
       return QuaternionF.Identity;
    }
 
    // An axis and its opposite share a hue and differ in shade - which end is which stays readable without labels.
-   private static IEnumerable<(Vector3 Direction, Color Color)> Axes()
+   private static IEnumerable<(Vector3<double> Direction, Color Color)> Axes()
    {
-      yield return (Vector3.Right, Colors.Red);
-      yield return (Vector3.Left, Colors.DarkRed);
-      yield return (Vector3.Up, Colors.Green);
-      yield return (Vector3.Down, Colors.DarkGreen);
-      yield return (Vector3.ForwardLH, Colors.Blue);
-      yield return (Vector3.BackwardLH, Colors.DarkBlue);
+      yield return (Vector3<double>.Right, Colors.Red);
+      yield return (Vector3<double>.Left, Colors.DarkRed);
+      yield return (Vector3<double>.Up, Colors.Green);
+      yield return (Vector3<double>.Down, Colors.DarkGreen);
+      yield return (Vector3<double>.ForwardLH, Colors.Blue);
+      yield return (Vector3<double>.BackwardLH, Colors.DarkBlue);
    }
 
    // The four flat arrows AROUND the gizmo - what steps the view 90 degrees at a time. They live in the screen plane
@@ -110,8 +110,8 @@ public class OrientationToolTemplate: BaseToolTemplate
       void Step(string name, double x, double y, double spin)
       {
          var entity = BuildSubEntity(root, name, shape, Colors.LightSlateGray, BoundingVolume.OrientedBox);
-         entity.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitZ, MathHelper.DegreesToRadians((float)spin));
-         entity.Transform.Position = new Vector3(x, y, 0);
+         entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians((float)spin));
+         entity.Transform.Position = new Vector3<double>(x, y, 0);
       }
 
       Step("StepRightManipulator", reach, 0, -90);

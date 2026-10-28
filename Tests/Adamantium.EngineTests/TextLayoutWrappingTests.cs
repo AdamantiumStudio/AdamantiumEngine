@@ -16,7 +16,7 @@ public class TextLayoutWrappingTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText(text, 20, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -68,7 +68,7 @@ public class TextLayoutWrappingTests
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
 
-        Assert.DoesNotThrow(() => layout.ProcessText("      Supercalifragilistic", 20, new Size(width, double.NaN),
+        Assert.DoesNotThrow(() => layout.ProcessText("      Supercalifragilistic", 20, new Size<double>(width, double.NaN),
             TextWrapping.WrapByWords, TextTrimming.None, alignment, VerticalTextAlignment.Top));
         Assert.That(layout.LineCount, Is.EqualTo(2), "the word goes down to a line of its own");
     }
@@ -84,7 +84,7 @@ public class TextLayoutWrappingTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText(text, 20, new Size(Width("one two three") + 2, line * 2.5), TextWrapping.WrapByWords,
+        layout.ProcessText(text, 20, new Size<double>(Width("one two three") + 2, line * 2.5), TextWrapping.WrapByWords,
             trimming, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.EqualTo(lines));
@@ -99,13 +99,13 @@ public class TextLayoutWrappingTests
         var widest = new[] { "2026年", "10月", "17日", "3つ", "12個" }.Max(unit =>
         {
             var alone = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-            return alone.ProcessText(unit, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+            return alone.ProcessText(unit, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top).Width;
         });
         for (var width = (int)Math.Ceiling(widest); width <= 400; width += 7)
         {
             var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-            layout.ProcessText(text, 20, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, 20, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
             for (var line = 1; line < layout.LineCount; line++)
@@ -124,7 +124,7 @@ public class TextLayoutWrappingTests
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
             "NotoSansCJK-Regular.ttc"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, 20, new Size(60, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(60, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.EqualTo(2));
@@ -141,7 +141,7 @@ public class TextLayoutWrappingTests
         var attributed = new AttributedText(text);
         attributed.SetParagraph(0, text.Length, new ParagraphAttributes { MarginLeft = 20, MarginRight = 20 });
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, 20, new Size(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, 20, new Size<double>(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Where(g => g.LineIndex == 0).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(130 + 1));
@@ -158,7 +158,7 @@ public class TextLayoutWrappingTests
         var attributed = new AttributedText(text);
         attributed.SetParagraph(0, text.Length, new ParagraphAttributes { TextIndent = 60 });
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, 20, new Size(100, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, 20, new Size<double>(100, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         for (var line = 1; line < layout.LineCount; line++)
@@ -178,7 +178,7 @@ public class TextLayoutWrappingTests
         var attributed = new AttributedText(text);
         attributed.SetParagraph(0, text.Length, new ParagraphAttributes { TextIndent = 40 });
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(attributed, 20, new Size(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, 20, new Size<double>(150, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().Where(g => g.LineIndex == 0).Max(g => g.Rect.Right), Is.LessThanOrEqualTo(150 + 1));
@@ -194,7 +194,7 @@ public class TextLayoutWrappingTests
         {
             Fallback = null, WritingMode = WritingMode.VerticalRightToLeft,
         };
-        layout.ProcessText("日本語の文章がここに続きます日本語の文章", 20, new Size(double.NaN, 100), TextWrapping.NoWrap,
+        layout.ProcessText("日本語の文章がここに続きます日本語の文章", 20, new Size<double>(double.NaN, 100), TextWrapping.NoWrap,
             TextTrimming.CharEllipses, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var data = layout.GetTextData();
         var letters = data.Where(g => g.PositionInString >= 0).ToArray();

@@ -202,8 +202,8 @@ public class GltfConverter : ConverterBase
             model.Extra = ExtraOf(node.Extras, node.Extensions);
             Place(model, node);
             ReadInstances(model, node);
-            var world = Matrix4x4F.Scaling(model.Scale) * Matrix4x4F.RotationQuaternion(model.Rotation)
-                        * Matrix4x4F.Translation(model.Position) * underWorld;
+            var world = Matrix4x4.CreateScale<float>(model.Scale) * Matrix4x4.CreateFromQuaternion<float>(model.Rotation)
+                        * Matrix4x4.CreateTranslation<float>(model.Position) * underWorld;
             ReadCamera(at, node, world);
             ReadLight(at, node, world);
 
@@ -613,7 +613,7 @@ public class GltfConverter : ConverterBase
         {
             camera.ProjectionType = CameraProjectionType.Perspective;
             camera.FovType = FovType.YFov;
-            camera.Fov = MathHelper.RadiansToDegrees(perspective.YFov);
+            camera.Fov = float.RadiansToDegrees(perspective.YFov);
             camera.AspectRatio = perspective.AspectRatio ?? 0;
             camera.ZNear = perspective.ZNear;
             camera.ZFar = perspective.ZFar ?? 0;
@@ -662,8 +662,8 @@ public class GltfConverter : ConverterBase
         {
             var outer = spot.TryGetProperty("outerConeAngle", out var outerElement) ? outerElement.GetSingle() : MathF.PI / 4;
             var inner = spot.TryGetProperty("innerConeAngle", out var innerElement) ? innerElement.GetSingle() : 0;
-            light.FalloffAngle = MathHelper.RadiansToDegrees(outer);
-            light.InnerConeAngle = MathHelper.RadiansToDegrees(inner);
+            light.FalloffAngle = float.RadiansToDegrees(outer);
+            light.InnerConeAngle = float.RadiansToDegrees(inner);
         }
 
         SceneDataContainer.LightData[light.ID] = light;
@@ -1392,13 +1392,13 @@ public class GltfConverter : ConverterBase
         return indices;
     }
 
-    private Vector3[] Vectors3(int accessor)
+    private Vector3<double>[] Vectors3(int accessor)
     {
         var values = Floats(accessor, 3);
-        var vectors = new Vector3[values.Length / 3];
+        var vectors = new Vector3<double>[values.Length / 3];
         for (int i = 0; i < vectors.Length; i++)
         {
-            vectors[i] = new Vector3(values[i * 3], values[i * 3 + 1], values[i * 3 + 2]);
+            vectors[i] = new Vector3<double>(values[i * 3], values[i * 3 + 1], values[i * 3 + 2]);
         }
 
         return vectors;

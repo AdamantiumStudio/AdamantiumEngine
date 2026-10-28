@@ -111,7 +111,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
             var semantic = indicesContainer.Semantic;
             //Vertices are reordered the way the faces name them, not the way the file stores them - so a
             //coordinate set may well repeat
-            var positions = new List<Vector3>();
+            var positions = new List<Vector3<double>>();
             var normals = new List<Vector3F>();
             var uv0 = new List<Vector2F>();
             for (int i = 0; i < indicesContainer.Positions.Count; i++)

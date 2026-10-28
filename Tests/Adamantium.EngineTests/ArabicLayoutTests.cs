@@ -31,11 +31,11 @@ public class ArabicLayoutTests
     {
         const string word = "محمد";
         var whole = NewLayout();
-        whole.ProcessText(word, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        whole.ProcessText(word, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var cut = NewLayout();
         cut.ProcessText(new AttributedText(word).Apply(1, 1, new TextAttributes { Features = FontFeature.ParseList("liga=0") }),
-            20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
+            20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
 
         Assert.That(Glyphs(cut), Is.EqualTo(Glyphs(whole)));
@@ -48,7 +48,7 @@ public class ArabicLayoutTests
     public void TheCaretStopsBetweenEveryTwoLettersOfAJoinedWord(string word)
     {
         var layout = NewLayout();
-        layout.ProcessText(word, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(word, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetCaretStops().Select(s => s.X), Is.Ordered.Descending.And.Unique);

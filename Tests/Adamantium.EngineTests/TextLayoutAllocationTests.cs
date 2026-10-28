@@ -25,7 +25,7 @@ public class TextLayoutAllocationTests
         void Lay(int typed)
         {
             var changed = text.Insert(500, new string('x', typed));
-            layout.ProcessText(new AttributedText(changed, attributes), 16, new Size(700, double.NaN),
+            layout.ProcessText(new AttributedText(changed, attributes), 16, new Size<double>(700, double.NaN),
                 TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         }
 

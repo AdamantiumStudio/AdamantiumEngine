@@ -487,8 +487,8 @@ internal sealed class GlyphQuadBuilder
             var quad = CellQuad(word, gd, rect);
             item = new FontItem
             {
-                ArrangeRect = quad,
-                Source = source,
+                ArrangeRect = (Vector4F)quad,
+                Source = (Vector4F)source,
                 Layer = gd.DepthLayer,
                 Depth = 1.0f,
                 Color = color,
@@ -499,12 +499,12 @@ internal sealed class GlyphQuadBuilder
         {
             item = new FontItem
             {
-                ArrangeRect = rect,
-                Source = FontAtlas.GetUVCoordinatesForGlyph(font, glyph),
+                ArrangeRect = (Vector4F)rect,
+                Source = (Vector4F)FontAtlas.GetUVCoordinatesForGlyph(font, glyph),
                 Layer = gd.DepthLayer,
                 Depth = 1.0f,
                 Color = color,
-                Synthesis = GlyphSynthesis(word, rect)
+                Synthesis = GlyphSynthesis(word, (Vector4F)rect)
             };
         }
         else

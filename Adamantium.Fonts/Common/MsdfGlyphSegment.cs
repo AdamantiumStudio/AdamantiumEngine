@@ -7,13 +7,13 @@ namespace Adamantium.Fonts.Common
         public Color MsdfColor;
         public LineSegment2D Segment;
         
-        public MsdfGlyphSegment(Vector2 start, Vector2 end)
+        public MsdfGlyphSegment(Vector2<double> start, Vector2<double> end)
         {
             Segment = new LineSegment2D(start, end);
             MsdfColor = Colors.White;
         }
         
-        public MsdfGlyphSegment(Vector2 start, Vector2 end, Color msdfColor)
+        public MsdfGlyphSegment(Vector2<double> start, Vector2<double> end, Color msdfColor)
         {
             Segment = new LineSegment2D(start, end);
             MsdfColor = msdfColor;

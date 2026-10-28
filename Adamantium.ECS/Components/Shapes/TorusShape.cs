@@ -11,17 +11,17 @@ namespace Adamantium.ECS.Components;
 [ViewModel]
 public partial class TorusShape : ProceduralShape
 {
-    [Bindable] private Vector3 size;
+    [Bindable] private Vector3<double> size;
     [Bindable] private double thickness;
 
     public TorusShape()
     {
-        Size = new Vector3(2, 0.5, 2);
+        Size = new Vector3<double>(2, 0.5, 2);
         Thickness = 0.5;
         Tessellation = 32;
     }
 
-    partial void OnSizeChanged(Vector3 value) => Changed();
+    partial void OnSizeChanged(Vector3<double> value) => Changed();
 
     partial void OnThicknessChanged(double value) => Changed();
 

@@ -34,7 +34,7 @@ public class KinsokuTests
         for (var width = 60; width <= 400; width += 7)
         {
             var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, LineBreaking = breaking };
-            layout.ProcessText(Text, 20, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(Text, 20, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             for (var line = 1; line < layout.LineCount; line++)
             {

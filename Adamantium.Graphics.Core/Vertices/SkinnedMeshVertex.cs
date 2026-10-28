@@ -43,7 +43,7 @@ public struct SkinnedMeshVertex : IEquatable<SkinnedMeshVertex>
         UV1 = uv1;
         UV2 = uv2;
         UV3 = uv3;
-        Color = (Vector4F)color;
+        Color = color.ToVector4();
         Tangent = tangent;
         BiTangent = bitangent;
         JointIndices = jointIndices;

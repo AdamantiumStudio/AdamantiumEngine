@@ -14,7 +14,7 @@ namespace Adamantium.EngineTests;
 [TestFixture]
 public class HandlesTests
 {
-    private static readonly Vector3 At = new(0, 0, 10);
+    private static readonly Vector3<double> At = new(0, 0, 10);
 
     [Test]
     public void Move_AlongAnAxis_FollowsThePointer()
@@ -23,9 +23,9 @@ public class HandlesTests
         var target = ToolScene.Target(At);
         var handles = new MoveHandles();
 
-        Drag(scene, handles, target, "RightAxis", At + new Vector3(0.5, 0, 0), At + new Vector3(2.5, 0, 0));
+        Drag(scene, handles, target, "RightAxis", At + new Vector3<double>(0.5, 0, 0), At + new Vector3<double>(2.5, 0, 0));
 
-        AssertNear(target.Transform.Position, At + new Vector3(2, 0, 0));
+        AssertNear(target.Transform.Position, At + new Vector3<double>(2, 0, 0));
     }
 
     [Test]
@@ -35,9 +35,9 @@ public class HandlesTests
         var target = ToolScene.Target(At);
         var handles = new MoveHandles();
 
-        Drag(scene, handles, target, "RightUpManipulator", At + new Vector3(0.5, 0.5, 0), At + new Vector3(1.5, -1, 0));
+        Drag(scene, handles, target, "RightUpManipulator", At + new Vector3<double>(0.5, 0.5, 0), At + new Vector3<double>(1.5, -1, 0));
 
-        AssertNear(target.Transform.Position, At + new Vector3(1, -1.5, 0));
+        AssertNear(target.Transform.Position, At + new Vector3<double>(1, -1.5, 0));
     }
 
     [Test]
@@ -61,7 +61,7 @@ public class HandlesTests
     public void Move_Squares_SitBetweenTheirArrows_FromEverySide()
     {
         var scene = new ToolScene();
-        var at = new Vector3(4, 4, 10);
+        var at = new Vector3<double>(4, 4, 10);
         var handles = new MoveHandles();
 
         handles.Place(ToolScene.Target(at), scene.Camera);
@@ -77,10 +77,10 @@ public class HandlesTests
         var scene = new ToolScene();
         var handles = new MoveHandles();
 
-        handles.Place(ToolScene.Target(new Vector3(0, 1.5, 10)), scene.Camera);
+        handles.Place(ToolScene.Target(new Vector3<double>(0, 1.5, 10)), scene.Camera);
         Assert.That(IsShown(handles, "RightForwardManipulator", scene), Is.False, "8.5 degrees off edge-on");
 
-        handles.Place(ToolScene.Target(new Vector3(0, 3.64, 10)), scene.Camera);
+        handles.Place(ToolScene.Target(new Vector3<double>(0, 3.64, 10)), scene.Camera);
         Assert.That(IsShown(handles, "RightForwardManipulator", scene), Is.True, "20 degrees off edge-on");
     }
 
@@ -88,13 +88,13 @@ public class HandlesTests
     public void Move_AcrossAPlane_ByItsOutline_StaysInThatPlane()
     {
         var scene = new ToolScene();
-        scene.LookFrom(At + new Vector3(-6, -5, -8), At);
+        scene.LookFrom(At + new Vector3<double>(-6, -5, -8), At);
         var target = ToolScene.Target(At);
         var handles = new MoveHandles();
 
-        Drag(scene, handles, target, "RightForwardOutline", At + new Vector3(0.3, 0, 0.3), At + new Vector3(1.3, 0, 0.8));
+        Drag(scene, handles, target, "RightForwardOutline", At + new Vector3<double>(0.3, 0, 0.3), At + new Vector3<double>(1.3, 0, 0.8));
 
-        AssertNear(target.Transform.Position, At + new Vector3(1, 0, 0.5));
+        AssertNear(target.Transform.Position, At + new Vector3<double>(1, 0, 0.5));
     }
 
     [Test]
@@ -148,8 +148,8 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
-        var along = Vector2F.Normalize(scene.PixelOf(At + new Vector3(radius, radius * 0.01, 0)) - grab);
+        var grab = scene.PixelOf(At + new Vector3<double>(radius, 0, 0));
+        var along = Vector2F.Normalize(scene.PixelOf(At + new Vector3<double>(radius, radius * 0.01, 0)) - grab);
 
         handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
         handles.Drag(target, scene.RayAt(grab + along * 20));
@@ -171,19 +171,19 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        var grab = scene.PixelOf(At + new Vector3<double>(radius, 0, 0));
         handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
 
         for (var degrees = 30; degrees <= 240; degrees += 30)
         {
-            var angle = MathHelper.DegreesToRadians((float)degrees);
-            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * Math.Cos(angle), radius * Math.Sin(angle), 0))));
+            var angle = float.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3<double>(radius * Math.Cos(angle), radius * Math.Sin(angle), 0))));
         }
 
         var turned = Vector3F.TransformNormal(Vector3F.UnitX, target.Transform.GetLocalMatrixF());
-        var expected = MathHelper.DegreesToRadians(240f);
+        var expected = float.DegreesToRadians(240f);
         Assert.That(Math.Abs(Math.Atan2(turned.Y, turned.X)), Is.EqualTo(Math.PI * 2 - expected).Within(1e-2));
-        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, QuaternionF.RotationAxis(Vector3F.UnitZ, expected))),
+        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, expected))),
             Is.EqualTo(1).Within(1e-3));
     }
 
@@ -197,8 +197,8 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
-        var along = Vector2F.Normalize(scene.PixelOf(At + new Vector3(radius, radius * 0.01, 0)) - grab);
+        var grab = scene.PixelOf(At + new Vector3<double>(radius, 0, 0));
+        var along = Vector2F.Normalize(scene.PixelOf(At + new Vector3<double>(radius, radius * 0.01, 0)) - grab);
         var radiusInPixels = (grab - scene.PixelOf(At)).Length();
         handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
 
@@ -227,23 +227,23 @@ public class HandlesTests
     public void Rotate_GoingRoundATiltedRing_TurnsAsFarAsItWent()
     {
         var scene = new ToolScene();
-        scene.LookFrom(At + new Vector3(10 * 0.6, 0, -10 * 0.8), At);
+        scene.LookFrom(At + new Vector3<double>(10 * 0.6, 0, -10 * 0.8), At);
         var target = ToolScene.Target(At);
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "RightAxisOrbit", scene);
-        var start = MathHelper.DegreesToRadians(-60f);
-        var grab = scene.PixelOf(At + new Vector3(0, radius * Math.Cos(start), radius * Math.Sin(start)));
+        var start = float.DegreesToRadians(-60f);
+        var grab = scene.PixelOf(At + new Vector3<double>(0, radius * Math.Cos(start), radius * Math.Sin(start)));
         handles.BeginDrag(target, handles.Shape.Get("RightAxisOrbit"), scene.RayAt(grab));
 
         for (var degrees = -30; degrees <= 210; degrees += 30)
         {
-            var angle = MathHelper.DegreesToRadians((float)degrees);
-            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(0, radius * Math.Cos(angle), radius * Math.Sin(angle)))));
+            var angle = float.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3<double>(0, radius * Math.Cos(angle), radius * Math.Sin(angle)))));
         }
 
-        var turn = MathHelper.DegreesToRadians(270f);
-        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, QuaternionF.RotationAxis(Vector3F.UnitX, turn))),
+        var turn = float.DegreesToRadians(270f);
+        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, turn))),
             Is.EqualTo(1).Within(1e-3));
     }
 
@@ -256,18 +256,18 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        var grab = scene.PixelOf(At + new Vector3<double>(radius, 0, 0));
         handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
-        handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * 3, 0, 0))));
+        handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3<double>(radius * 3, 0, 0))));
         for (var degrees = 10; degrees <= 150; degrees += 10)
         {
-            var angle = MathHelper.DegreesToRadians((float)degrees);
-            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * 3 * Math.Cos(angle), radius * 3 * Math.Sin(angle), 0))));
+            var angle = float.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3<double>(radius * 3 * Math.Cos(angle), radius * 3 * Math.Sin(angle), 0))));
         }
 
         var before = target.Transform.Rotation;
-        var back = MathHelper.DegreesToRadians(150f);
-        handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * Math.Cos(back), radius * Math.Sin(back), 0))));
+        var back = float.DegreesToRadians(150f);
+        handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3<double>(radius * Math.Cos(back), radius * Math.Sin(back), 0))));
 
         var lurch = 2 * Math.Acos(Math.Clamp(Math.Abs(QuaternionF.Dot(before, target.Transform.Rotation)), 0, 1));
         Assert.That(lurch, Is.LessThan(0.05));
@@ -281,7 +281,7 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        var grab = scene.PixelOf(At + new Vector3<double>(radius, 0, 0));
         var center = scene.PixelOf(At);
         handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
         handles.Drag(target, scene.RayAt(center + new Vector2F(1, 0.3f)));
@@ -301,17 +301,17 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "ForwardAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(radius, 0, 0));
+        var grab = scene.PixelOf(At + new Vector3<double>(radius, 0, 0));
         handles.BeginDrag(target, handles.Shape.Get("ForwardAxisOrbit"), scene.RayAt(grab));
 
         for (var degrees = -30; degrees >= -240; degrees -= 30)
         {
-            var angle = MathHelper.DegreesToRadians((float)degrees);
-            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3(radius * Math.Cos(angle), radius * Math.Sin(angle), 0))));
+            var angle = float.DegreesToRadians((float)degrees);
+            handles.Drag(target, scene.RayAt(scene.PixelOf(At + new Vector3<double>(radius * Math.Cos(angle), radius * Math.Sin(angle), 0))));
         }
 
-        var expected = MathHelper.DegreesToRadians(-240f);
-        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, QuaternionF.RotationAxis(Vector3F.UnitZ, expected))),
+        var expected = float.DegreesToRadians(-240f);
+        Assert.That(Math.Abs(QuaternionF.Dot(target.Transform.Rotation, Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, expected))),
             Is.EqualTo(1).Within(1e-3));
     }
 
@@ -324,12 +324,12 @@ public class HandlesTests
         scene.Camera.ProjectionTransitionTime = 0;
         scene.Camera.ProjectionType = Adamantium.ECS.Components.CameraProjectionType.Ortho;
         scene.Camera.Update(new AppTime());
-        var at = new Vector3(6, 0, 10);
+        var at = new Vector3<double>(6, 0, 10);
         var target = ToolScene.Target(at);
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "RightAxisOrbit", scene);
-        var grab = scene.PixelOf(at + new Vector3(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
+        var grab = scene.PixelOf(at + new Vector3<double>(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
         var along = Vector2F.Normalize(scene.PixelOf(at) - grab);
 
         handles.BeginDrag(target, handles.Shape.Get("RightAxisOrbit"), scene.RayAt(grab));
@@ -347,7 +347,7 @@ public class HandlesTests
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "RightAxisOrbit", scene);
-        var grab = scene.PixelOf(At + new Vector3(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
+        var grab = scene.PixelOf(At + new Vector3<double>(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
         var along = Vector2F.Normalize(scene.PixelOf(At) - grab);
 
         handles.BeginDrag(target, handles.Shape.Get("RightAxisOrbit"), scene.RayAt(grab));
@@ -423,8 +423,8 @@ public class HandlesTests
         var handles = new PivotHandles();
         handles.Place(target, scene.Camera);
         var radius = RingRadius(handles, "RightOrbit", scene);
-        var radiusPixels = (scene.PixelOf(At + new Vector3(0, radius, 0)) - scene.PixelOf(At)).Length();
-        var grab = scene.PixelOf(At + new Vector3(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
+        var radiusPixels = (scene.PixelOf(At + new Vector3<double>(0, radius, 0)) - scene.PixelOf(At)).Length();
+        var grab = scene.PixelOf(At + new Vector3<double>(0, radius * 0.5, -radius * Math.Sqrt(0.75)));
         var along = Vector2F.Normalize(scene.PixelOf(At) - grab);
 
         handles.BeginDrag(target, handles.Shape.Get("RightOrbit"), scene.RayAt(grab));
@@ -443,9 +443,9 @@ public class HandlesTests
         var target = ToolScene.Target(At);
         var handles = new ScaleHandles();
 
-        Drag(scene, handles, target, "RightAxis", At + new Vector3(1, 0, 0), At + new Vector3(2, 0, 0));
+        Drag(scene, handles, target, "RightAxis", At + new Vector3<double>(1, 0, 0), At + new Vector3<double>(2, 0, 0));
 
-        AssertNear((Vector3)target.Transform.ScaleFactor, new Vector3(2, 1, 1));
+        AssertNear(target.Transform.ScaleFactor.As<double>(), new Vector3<double>(2, 1, 1));
     }
 
     [Test]
@@ -453,15 +453,15 @@ public class HandlesTests
     {
         var scene = new ToolScene();
         var target = ToolScene.Target(At);
-        target.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitY, MathHelper.DegreesToRadians(30));
+        target.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(30));
         var before = Vector3F.TransformCoordinate(new Vector3F(1, 2, 3), target.Transform.GetWorldMatrixF());
         var handles = new PivotHandles();
 
-        Drag(scene, handles, target, "MoveUp", At + new Vector3(0, 0.6, 0), At + new Vector3(0, 2.6, 0));
+        Drag(scene, handles, target, "MoveUp", At + new Vector3<double>(0, 0.6, 0), At + new Vector3<double>(0, 2.6, 0));
 
-        AssertNear(target.Transform.Pivot, At + new Vector3(0, 2, 0));
+        AssertNear(target.Transform.Pivot, At + new Vector3<double>(0, 2, 0));
         var after = Vector3F.TransformCoordinate(new Vector3F(1, 2, 3), target.Transform.GetWorldMatrixF());
-        AssertNear((Vector3)after, (Vector3)before);
+        AssertNear(after.As<double>(), before.As<double>());
     }
 
     [Test]
@@ -472,7 +472,7 @@ public class HandlesTests
         light.AddComponent(new Light(LightType.Point));
         var handles = new PointLightHandles();
 
-        Drag(scene, handles, light, "AnchorPointRight", At + new Vector3(1, 0, 0), At + new Vector3(3, 0, 0));
+        Drag(scene, handles, light, "AnchorPointRight", At + new Vector3<double>(1, 0, 0), At + new Vector3<double>(3, 0, 0));
 
         Assert.That(light.GetComponent<Light>().Range, Is.EqualTo(3f).Within(1e-2f));
     }
@@ -484,15 +484,15 @@ public class HandlesTests
         var entity = ToolScene.Target(At);
         entity.AddComponent(new Light(LightType.Spot));
         var light = entity.GetComponent<Light>();
-        var axis = (Vector3)Vector3F.Normalize(light.Direction);
+        var axis = Vector3F.Normalize(light.Direction).As<double>();
         var handles = new SpotLightHandles();
 
         Drag(scene, handles, entity, "AnchorPointCenter", At + axis, At + axis * 4);
         Assert.That(light.Range, Is.EqualTo(4f).Within(1e-2f));
 
         var baseCenter = At + axis * 4;
-        Drag(scene, handles, entity, "AnchorPointRight", baseCenter + new Vector3(light.SpotRadius, 0, 0), baseCenter + new Vector3(4, 0, 0));
-        Assert.That(light.OuterSpotAngle, Is.EqualTo(MathHelper.DegreesToRadians(45)).Within(1e-2f));
+        Drag(scene, handles, entity, "AnchorPointRight", baseCenter + new Vector3<double>(light.SpotRadius, 0, 0), baseCenter + new Vector3<double>(4, 0, 0));
+        Assert.That(light.OuterSpotAngle, Is.EqualTo(float.DegreesToRadians(45)).Within(1e-2f));
     }
 
     [Test]
@@ -500,10 +500,10 @@ public class HandlesTests
     {
         var scene = new ToolScene();
         var entity = ToolScene.Target(At);
-        entity.Transform.Rotation = QuaternionF.RotationAxis(Vector3F.UnitX, MathHelper.DegreesToRadians(180));
+        entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(180));
         entity.AddComponent(new Light(LightType.Spot));
         var light = entity.GetComponent<Light>();
-        var axis = (Vector3)light.Direction;
+        var axis = light.Direction.As<double>();
         var handles = new SpotLightHandles();
 
         Drag(scene, handles, entity, "AnchorPointCenter", At + axis, At + axis * 5);
@@ -526,7 +526,7 @@ public class HandlesTests
         Assert.That(new SpotLightHandles().AppliesTo(ToolScene.Target(At)), Is.False);
     }
 
-    private static void Drag(ToolScene scene, Handles handles, Entity target, string part, Vector3 from, Vector3 to)
+    private static void Drag(ToolScene scene, Handles handles, Entity target, string part, Vector3<double> from, Vector3<double> to)
     {
         handles.Place(target, scene.Camera);
         handles.BeginDrag(target, handles.Shape.Get(part), scene.RayAt(from));
@@ -537,7 +537,7 @@ public class HandlesTests
     private static void AssertPicksOnlyDrawnHalves(Handles handles, string ringSuffix, int reach)
     {
         var scene = new ToolScene();
-        scene.LookFrom(At + new Vector3(-6, -5, -8), At);
+        scene.LookFrom(At + new Vector3<double>(-6, -5, -8), At);
         handles.Place(ToolScene.Target(At), scene.Camera);
         var center = scene.PixelOf(At);
         var rings = 0;
@@ -570,7 +570,7 @@ public class HandlesTests
     private static double RingRadius(Handles handles, string part, ToolScene scene)
     {
         var world = handles.Shape.Get(part).Transform.GetMetadata(scene.Camera).WorldMatrixF;
-        var rim = Vector3F.TransformCoordinate((Vector3F)handles.Shape.Get(part).GetComponent<MeshData>().Mesh.Points[0], world);
+        var rim = Vector3F.TransformCoordinate(handles.Shape.Get(part).GetComponent<MeshData>().Mesh.Points[0].As<float>(), world);
         return (rim - world.TranslationVector).Length();
     }
 
@@ -579,21 +579,21 @@ public class HandlesTests
         return handles.Shape.Get(part).Transform.GetMetadata(scene.Camera).Enabled;
     }
 
-    private static Vector3 CenterOf(Handles handles, string part, ToolScene scene)
+    private static Vector3<double> CenterOf(Handles handles, string part, ToolScene scene)
     {
         var entity = handles.Shape.Get(part);
         var world = entity.Transform.GetMetadata(scene.Camera).WorldMatrixF;
         var points = entity.GetComponent<MeshData>().Mesh.Points;
-        var sum = Vector3.Zero;
+        var sum = Vector3<double>.Zero;
         foreach (var point in points)
         {
-            sum += (Vector3)Vector3F.TransformCoordinate((Vector3F)point, world);
+            sum += Vector3F.TransformCoordinate(point.As<float>(), world).As<double>();
         }
 
         return sum / points.Length + scene.Camera.WorldPosition;
     }
 
-    private static int[] SideOf(Vector3 offset)
+    private static int[] SideOf(Vector3<double> offset)
     {
         return [Side(offset.X), Side(offset.Y), Side(offset.Z)];
     }
@@ -603,7 +603,7 @@ public class HandlesTests
         return Math.Abs(value) < 1e-3 ? 0 : Math.Sign(value);
     }
 
-    private static void AssertRing(Handles handles, string part, Func<Vector3, double> across)
+    private static void AssertRing(Handles handles, string part, Func<Vector3<double>, double> across)
     {
         var mesh = handles.Shape.Get(part).GetComponent<MeshData>().Mesh;
         Assert.That(mesh.MeshTopology, Is.EqualTo(PrimitiveType.LineList), part);
@@ -615,7 +615,7 @@ public class HandlesTests
         }
     }
 
-    private static void AssertNear(Vector3 actual, Vector3 expected)
+    private static void AssertNear(Vector3<double> actual, Vector3<double> expected)
     {
         Assert.That((actual - expected).Length(), Is.LessThan(1e-2), $"{actual} instead of {expected}");
     }

@@ -17,7 +17,7 @@ public class CameraProjectionTests
         new Entity(null, "Camera").AddComponent(camera);
         camera.Update(new AppTime());
 
-        var expected = 1f / (float)Math.Tan(MathHelper.DegreesToRadians(30));
+        var expected = 1f / (float)Math.Tan(float.DegreesToRadians(30));
         Assert.That(camera.ProjectionMatrix.M22, Is.EqualTo(expected).Within(1e-4f));
     }
 
@@ -33,7 +33,7 @@ public class CameraProjectionTests
         camera.Fov = 90;
         camera.Update(new AppTime());
 
-        var expected = 1f / (float)Math.Tan(MathHelper.DegreesToRadians(45));
+        var expected = 1f / (float)Math.Tan(float.DegreesToRadians(45));
         Assert.That(camera.ProjectionMatrix.M22, Is.EqualTo(expected).Within(1e-4f));
 
         camera.ZFar = 10f;

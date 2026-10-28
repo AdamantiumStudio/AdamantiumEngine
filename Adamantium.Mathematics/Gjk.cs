@@ -13,8 +13,8 @@ public static class Gjk
 
     /// <summary>Whether the two shapes share a point.</summary>
     public static bool Intersects<TFirst, TSecond>(TFirst first, TSecond second)
-        where TFirst : IConvexShape
-        where TSecond : IConvexShape
+        where TFirst : IConvexShape<float>
+        where TSecond : IConvexShape<float>
     {
         var simplex = new Vector3F[4];
         var count = 1;
@@ -53,8 +53,8 @@ public static class Gjk
     }
 
     private static Vector3F Support<TFirst, TSecond>(TFirst first, TSecond second, Vector3F direction)
-        where TFirst : IConvexShape
-        where TSecond : IConvexShape
+        where TFirst : IConvexShape<float>
+        where TSecond : IConvexShape<float>
     {
         return first.Support(direction) - second.Support(-direction);
     }

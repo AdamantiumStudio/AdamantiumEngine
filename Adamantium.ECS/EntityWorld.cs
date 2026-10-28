@@ -8,7 +8,9 @@ using Adamantium.ECS.Templates;
 
 namespace Adamantium.ECS
 {
-    public class EntityWorld
+    /// <summary>Entities and the services that run them. Raises <see cref="UniverseChanged"/> as entities join and leave
+    /// it, take another owner, gain or lose components, and as anything of theirs changes.</summary>
+    public class EntityWorld : INotifyUniverse
     {
         public EntityWorld(IDependencyResolver container, Satellites satellites)
         {
@@ -28,6 +30,10 @@ namespace Adamantium.ECS
         /// The one-of-a-kind objects of whoever owns this world - its universe, or the application.
         /// </summary>
         public Satellites Satellites { get; }
+
+        public event EventHandler<UniverseChangedEventArgs> UniverseChanged;
+
+        internal void Changed(UniverseChangedEventArgs change) => UniverseChanged?.Invoke(this, change);
 
         public void Initialize()
         {

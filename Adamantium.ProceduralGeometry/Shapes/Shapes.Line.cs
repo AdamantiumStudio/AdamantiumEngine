@@ -11,10 +11,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
         {
             public static Mesh GenerateGeometry(
                 GeometryType geometryType, 
-                Vector3 startPoint, 
-                Vector3 endPoint, 
+                Vector3<double> startPoint, 
+                Vector3<double> endPoint, 
                 double thickness, 
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 Mesh mesh;
                 if (geometryType == GeometryType.Solid)
@@ -31,14 +31,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            public static Mesh GenerateSolidGeometry(Vector3 startPoint, Vector3 endPoint, double thickness)
+            public static Mesh GenerateSolidGeometry(Vector3<double> startPoint, Vector3<double> endPoint, double thickness)
             {
                 var primitiveType = PrimitiveType.TriangleList;
 
-                var vertexArray = new List<Vector3>();
+                var vertexArray = new List<Vector3<double>>();
 
                 var direction = endPoint - startPoint;
-                var normal = new Vector3(-direction.Y, direction.X);
+                var normal = new Vector3<double>(-direction.Y, direction.X);
                 normal.Normalize();
                 var p0 = startPoint - normal * (thickness * 0.5f);
                 var p1 = endPoint - normal * (thickness * 0.5f);
@@ -73,11 +73,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            public static Mesh GenerateOutlinedGeometry(Vector3 startPoint, Vector3 endPoint)
+            public static Mesh GenerateOutlinedGeometry(Vector3<double> startPoint, Vector3<double> endPoint)
             {
                 var primitiveType = PrimitiveType.LineStrip;
 
-                var positions = new Vector3[2];
+                var positions = new Vector3<double>[2];
                 positions[0] = startPoint;
                 positions[1] = endPoint;
 

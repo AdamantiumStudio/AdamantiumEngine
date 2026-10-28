@@ -13,7 +13,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 GeometryType geometryType,
                 double size,
                 int tessellation = 1,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return GenerateGeometry(geometryType, size, size, size, tessellation, transform);
             }
@@ -24,7 +24,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height = 1,
                 double depth = 1,
                 int tessellation = 1,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (width <= 0)
                 {
@@ -80,12 +80,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var deltaY = height / tessellation;
                 var deltaZ = depth / tessellation;
 
-                var front = new List<Vector3>();
-                var right = new List<Vector3>();
-                var back = new List<Vector3>();
-                var left = new List<Vector3>();
-                var top = new List<Vector3>();
-                var bottom = new List<Vector3>();
+                var front = new List<Vector3<double>>();
+                var right = new List<Vector3<double>>();
+                var back = new List<Vector3<double>>();
+                var left = new List<Vector3<double>>();
+                var top = new List<Vector3<double>>();
+                var bottom = new List<Vector3<double>>();
 
                 var frontUV = new List<Vector2F>();
                 var rightUV = new List<Vector2F>();
@@ -99,7 +99,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 {
                     for (var x = 0; x < lineWidth; x++)
                     {
-                        var pos = new Vector3(-sizeX + deltaX * x, -sizeY + deltaY * y, -sizeZ);
+                        var pos = new Vector3<double>(-sizeX + deltaX * x, -sizeY + deltaY * y, -sizeZ);
                         var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         front.Add(pos);
                         frontUV.Add(uv);
@@ -107,7 +107,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     for (var z = 0; z < lineWidth; z++)
                     {
-                        var pos = new Vector3(sizeX, -sizeY + deltaY * y, -sizeZ + deltaZ * z);
+                        var pos = new Vector3<double>(sizeX, -sizeY + deltaY * y, -sizeZ + deltaZ * z);
                         var uv = new Vector2F(1.0f * z / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         right.Add(pos);
                         rightUV.Add(uv);
@@ -115,7 +115,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     for (var x = 0; x < lineWidth; x++)
                     {
-                        var pos = new Vector3(sizeX - deltaX * x, -sizeY + deltaY * y, sizeZ);
+                        var pos = new Vector3<double>(sizeX - deltaX * x, -sizeY + deltaY * y, sizeZ);
                         var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         back.Add(pos);
                         backUV.Add(uv);
@@ -123,7 +123,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     for (var z = 0; z < lineWidth; z++)
                     {
-                        var pos = new Vector3(-sizeX, -sizeY + deltaY * y, sizeZ - deltaZ * z);
+                        var pos = new Vector3<double>(-sizeX, -sizeY + deltaY * y, sizeZ - deltaZ * z);
                         var uv = new Vector2F(1.0f * z / tessellation * uvFactor.X, 1.0f * y / tessellation * uvFactor.Y);
                         left.Add(pos);
                         leftUV.Add(uv);
@@ -135,29 +135,29 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 {
                     for (var x = 0; x < lineWidth; x++)
                     {
-                        var pos = new Vector3(-sizeX + deltaX * x, sizeY, -sizeZ + deltaZ * z);
+                        var pos = new Vector3<double>(-sizeX + deltaX * x, sizeY, -sizeZ + deltaZ * z);
                         var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * z / tessellation * uvFactor.Y);
                         top.Add(pos);
                         topUV.Add(uv);
                     }
                 }
 
-                var rot = Quaternion.RotationAxis(Vector3.UnitX, MathHelper.DegreesToRadians(180));
-                var rotationMatrix = Matrix4x4.RotationQuaternion(rot);
+                var rot = Quaternion.CreateFromAxisAngle<double>(Vector3<double>.UnitX, float.DegreesToRadians(180));
+                var rotationMatrix = Matrix4x4.CreateFromQuaternion<double>(rot);
                 //Generate bottom cap
                 for (var z = 0; z < lineWidth; z++)
                 {
                     for (var x = 0; x < lineWidth; x++)
                     {
-                        var pos = new Vector3(-sizeX + deltaX * x, sizeY, -sizeZ + deltaZ * z);
+                        var pos = new Vector3<double>(-sizeX + deltaX * x, sizeY, -sizeZ + deltaZ * z);
                         var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * z / tessellation * uvFactor.Y);
-                        pos = Vector3.TransformCoordinate(pos, rotationMatrix);
+                        pos = Vector3<double>.TransformCoordinate(pos, rotationMatrix);
                         bottom.Add(pos);
                         bottomUV.Add(uv);
                     }
                 }
 
-                var allVertices = new List<Vector3>();
+                var allVertices = new List<Vector3<double>>();
 
                 allVertices.AddRange(front);
                 allVertices.AddRange(right);
@@ -228,15 +228,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var endPositionY = height / 2;
                 var endPositionZ = depth / 2;
 
-                var vertices = new List<Vector3>();
-                vertices.Add(new Vector3(startPositionX, startPositionY, startPositionZ));
-                vertices.Add(new Vector3(startPositionX, endPositionY, startPositionZ));
-                vertices.Add(new Vector3(endPositionX, endPositionY, startPositionZ));
-                vertices.Add(new Vector3(endPositionX, startPositionY, startPositionZ));
-                vertices.Add(new Vector3(startPositionX, startPositionY, endPositionZ));
-                vertices.Add(new Vector3(startPositionX, endPositionY, endPositionZ));
-                vertices.Add(new Vector3(endPositionX, endPositionY, endPositionZ));
-                vertices.Add(new Vector3(endPositionX, startPositionY, endPositionZ));
+                var vertices = new List<Vector3<double>>();
+                vertices.Add(new Vector3<double>(startPositionX, startPositionY, startPositionZ));
+                vertices.Add(new Vector3<double>(startPositionX, endPositionY, startPositionZ));
+                vertices.Add(new Vector3<double>(endPositionX, endPositionY, startPositionZ));
+                vertices.Add(new Vector3<double>(endPositionX, startPositionY, startPositionZ));
+                vertices.Add(new Vector3<double>(startPositionX, startPositionY, endPositionZ));
+                vertices.Add(new Vector3<double>(startPositionX, endPositionY, endPositionZ));
+                vertices.Add(new Vector3<double>(endPositionX, endPositionY, endPositionZ));
+                vertices.Add(new Vector3<double>(endPositionX, startPositionY, endPositionZ));
 
                 // The twelve edges as pairs: a list needs no strip restart, which not every draw turns on.
                 List<int> indices =

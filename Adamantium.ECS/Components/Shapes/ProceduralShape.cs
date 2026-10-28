@@ -72,8 +72,8 @@ public abstract partial class ProceduralShape : ActivatableComponent
     /// <summary><see cref="Tessellation"/> kept between <paramref name="least"/> and <see cref="MostTessellation"/>.</summary>
     protected int TessellationFrom(int least) => Math.Clamp(Tessellation, least, MostTessellation);
 
-    protected static Vector2 Positive(Vector2 size) => new(Math.Max(size.X, LeastSize), Math.Max(size.Y, LeastSize));
+    protected static Vector2<double> Positive(Vector2<double> size) => new(Math.Max(size.X, LeastSize), Math.Max(size.Y, LeastSize));
 
-    protected static Vector3 Positive(Vector3 size) =>
+    protected static Vector3<double> Positive(Vector3<double> size) =>
         new(Math.Max(size.X, LeastSize), Math.Max(size.Y, LeastSize), Math.Max(size.Z, LeastSize));
 }

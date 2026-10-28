@@ -10,8 +10,8 @@ namespace Adamantium.ECS.Components
     {
         public Transform()
         {
-            InitialPosition = Vector3.Zero;
-            Position = Vector3.Zero;
+            InitialPosition = Vector3<double>.Zero;
+            Position = Vector3<double>.Zero;
             Rotation = QuaternionF.Identity;
             PivotRotation = QuaternionF.Identity;
             baseScale = Vector3F.One;
@@ -19,25 +19,25 @@ namespace Adamantium.ECS.Components
             TransformData = new Dictionary<CameraBase, TransformMetaData>();
         }
 
-        [Bindable] private Vector3 initialPosition;
-        [Bindable] private Vector3 position;
+        [Bindable] private Vector3<double> initialPosition;
+        [Bindable] private Vector3<double> position;
         [Bindable, Affects(nameof(Angles))] private QuaternionF rotation;
         [Bindable, Affects(nameof(Scale))] private Vector3F baseScale;
         [Bindable, Affects(nameof(Scale))] private Vector3F scaleFactor;
-        private Vector3 pivot;
+        private Vector3<double> pivot;
         [Bindable] private QuaternionF pivotRotation;
 
         private readonly Dictionary<CameraBase, TransformMetaData> TransformData;
 
-        public Vector3F GetRelativePosition(Vector3 offset)
+        public Vector3F GetRelativePosition(Vector3<double> offset)
         {
-            return WorldPosition - offset;
+            return (WorldPosition - offset).As<float>();
         }
 
         /// <summary>Where this entity is IN THE WORLD: its own position composed through its parents. <see cref="Position"/>
         /// is relative to the parent, so for anything below a root the two differ. Camera-independent, unlike
         /// <see cref="TransformMetaData.AbsoluteWorld"/>, which the render pass records per camera.</summary>
-        public Vector3 WorldPosition => (Vector3)GetWorldMatrixF().TranslationVector;
+        public Vector3<double> WorldPosition => GetWorldMatrixF().TranslationVector.As<double>();
 
         public void RemoveMetadata(CameraBase camera)
         {
@@ -90,14 +90,13 @@ namespace Adamantium.ECS.Components
         }
 
         /// <summary>The point this entity turns and scales about, in its parent's space. Moving it leaves the entity in place.</summary>
-        public Vector3 Pivot
+        public Vector3<double> Pivot
         {
             get => pivot + Position;
             set
             {
-                var shift = (Vector3F)(value - Pivot);
-                var local = GetLocalMatrixF();
-                Matrix4x4F.Invert(ref local, out var inverse);
+                var shift = (value - Pivot).As<float>();
+                var inverse = Matrix4x4F.Invert(GetLocalMatrixF());
                 ShiftPivot(inverse == Matrix4x4F.Zero ? shift : Vector3F.TransformNormal(shift, inverse));
             }
         }
@@ -110,8 +109,8 @@ namespace Adamantium.ECS.Components
             }
 
             var drift = Vector3F.TransformNormal(offset, GetLocalMatrixF()) - offset;
-            pivot += (Vector3)offset;
-            Position += (Vector3)drift;
+            pivot += offset.As<double>();
+            Position += drift.As<double>();
             IsWorldDirty = true;
             RaisePropertyChanged(nameof(Pivot));
         }
@@ -119,7 +118,7 @@ namespace Adamantium.ECS.Components
         // Every input of the world matrix marks it to be computed again.
         partial void OnPivotRotationChanged(QuaternionF value) => IsWorldDirty = true;
 
-        partial void OnPositionChanged(Vector3 value) => IsWorldDirty = true;
+        partial void OnPositionChanged(Vector3<double> value) => IsWorldDirty = true;
 
         partial void OnRotationChanged(QuaternionF value) => IsWorldDirty = true;
 
@@ -142,8 +141,8 @@ namespace Adamantium.ECS.Components
                 if (turn != anglesRotation)
                 {
                     turn.ToYawPitchRoll(out var yaw, out var pitch, out var roll);
-                    angles = new Vector3F(MathHelper.RadiansToDegrees(pitch), MathHelper.RadiansToDegrees(yaw),
-                        MathHelper.RadiansToDegrees(roll));
+                    angles = new Vector3F(float.RadiansToDegrees(pitch), float.RadiansToDegrees(yaw),
+                        float.RadiansToDegrees(roll));
                     anglesRotation = turn;
                 }
 
@@ -151,8 +150,8 @@ namespace Adamantium.ECS.Components
             }
             set
             {
-                var turn = QuaternionF.RotationYawPitchRoll(MathHelper.DegreesToRadians(value.Y),
-                    MathHelper.DegreesToRadians(value.X), MathHelper.DegreesToRadians(value.Z));
+                var turn = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(value.Y),
+                    float.DegreesToRadians(value.X), float.DegreesToRadians(value.Z));
                 angles = value;
                 anglesRotation = turn;
                 Rotation = turn;
@@ -164,11 +163,11 @@ namespace Adamantium.ECS.Components
         /// costs nothing. Starts true so the first frame computes.</summary>
         public bool IsWorldDirty { get; set; } = true;
 
-        public void Move(Vector3 direction, Double distance)
+        public void Move(Vector3<double> direction, Double distance)
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply(direction, distance);
+                var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
                     Position = distanceVector;
@@ -176,11 +175,11 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public void Move(Vector3 direction, Vector3 distance)
+        public void Move(Vector3<double> direction, Vector3<double> distance)
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply(direction, distance);
+                var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
                     Position = distanceVector;
@@ -188,11 +187,11 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public void Translate(Vector3 direction, Double distance)
+        public void Translate(Vector3<double> direction, Double distance)
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply(direction, distance);
+                var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
                     Position += distanceVector;
@@ -204,7 +203,7 @@ namespace Adamantium.ECS.Components
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply((Vector3)GetRotationMatrixF().Right, distance);
+                var distanceVector = Vector3<double>.Multiply(GetRotationMatrixF().Right.As<double>(), distance);
                 if (IsEnabled)
                 {
                     Position += distanceVector;
@@ -216,7 +215,7 @@ namespace Adamantium.ECS.Components
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply((Vector3)GetRotationMatrixF().Up, distance);
+                var distanceVector = Vector3<double>.Multiply(GetRotationMatrixF().Up.As<double>(), distance);
                 if (IsEnabled)
                 {
                     Position += distanceVector;
@@ -228,7 +227,7 @@ namespace Adamantium.ECS.Components
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply((Vector3)GetRotationMatrixF().Forward, distance);
+                var distanceVector = Vector3<double>.Multiply(GetRotationMatrixF().Forward.As<double>(), distance);
                 if (IsEnabled)
                 {
                     Position += distanceVector;
@@ -236,11 +235,11 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public void Translate(Vector3 direction, Vector3 distance)
+        public void Translate(Vector3<double> direction, Vector3<double> distance)
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply(direction, distance);
+                var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
                     Position += distanceVector;
@@ -248,11 +247,11 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public void TranslatePivot(Vector3 direction, Double distance)
+        public void TranslatePivot(Vector3<double> direction, Double distance)
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply(direction, distance);
+                var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
                     Pivot += distanceVector;
@@ -260,11 +259,11 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        public void TranslatePivot(Vector3 direction, Vector3 distance)
+        public void TranslatePivot(Vector3<double> direction, Vector3<double> distance)
         {
             lock (this)
             {
-                var distanceVector = Vector3.Multiply(direction, distance);
+                var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
                     Pivot += distanceVector;
@@ -276,29 +275,29 @@ namespace Adamantium.ECS.Components
         {
             if (units == RotationUnits.Degrees)
             {
-                angle = MathHelper.DegreesToRadians(angle);
+                angle = float.DegreesToRadians(angle);
             }
             return angle;
         }
 
         public Matrix4x4F GetRotationMatrixF()
         {
-            return Matrix4x4F.RotationQuaternion(Rotation);
+            return Matrix4x4.CreateFromQuaternion<float>(Rotation);
         }
 
         public Matrix4x4F GetPivotRotationMatrixF()
         {
-            return Matrix4x4F.RotationQuaternion(PivotRotation);
+            return Matrix4x4.CreateFromQuaternion<float>(PivotRotation);
         }
         
-        public Matrix4x4 GetRotationMatrix()
+        public Matrix4x4<double> GetRotationMatrix()
         {
-            return Matrix4x4.RotationQuaternion(Rotation);
+            return Matrix4x4.CreateFromQuaternion<double>(Rotation.As<double>());
         }
 
-        public Matrix4x4 GetPivotRotationMatrix()
+        public Matrix4x4<double> GetPivotRotationMatrix()
         {
-            return Matrix4x4.RotationQuaternion(PivotRotation);
+            return Matrix4x4.CreateFromQuaternion<double>(PivotRotation.As<double>());
         }
 
         public void ResetPosition()
@@ -329,7 +328,7 @@ namespace Adamantium.ECS.Components
         {
             if (IsEnabled)
             {
-                ShiftPivot(-(Vector3F)pivot);
+                ShiftPivot(-pivot.As<float>());
             }
         }
 
@@ -346,7 +345,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(axis, angle), Rotation);
+                Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(axis, angle), Rotation);
             }
         }
 
@@ -355,7 +354,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(GetRotationMatrixF().Right, angle), Rotation);
+                Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(GetRotationMatrixF().Right, angle), Rotation);
             }
         }
 
@@ -364,7 +363,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(GetRotationMatrixF().Up, angle), Rotation);
+                Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(GetRotationMatrixF().Up, angle), Rotation);
             }
         }
 
@@ -373,7 +372,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                Rotation = QuaternionF.Multiply(QuaternionF.RotationAxis(GetRotationMatrixF().Forward, angle), Rotation);
+                Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(GetRotationMatrixF().Forward, angle), Rotation);
             }
         }
 
@@ -382,7 +381,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                PivotRotation = QuaternionF.Multiply(QuaternionF.RotationAxis(axis, angle), PivotRotation);
+                PivotRotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(axis, angle), PivotRotation);
             }
         }
 
@@ -391,7 +390,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                PivotRotation = QuaternionF.Multiply(QuaternionF.RotationAxis(GetPivotRotationMatrixF().Right, angle), PivotRotation);
+                PivotRotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(GetPivotRotationMatrixF().Right, angle), PivotRotation);
             }
         }
 
@@ -400,7 +399,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                PivotRotation = QuaternionF.Multiply(QuaternionF.RotationAxis(GetPivotRotationMatrixF().Up, angle), PivotRotation);
+                PivotRotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(GetPivotRotationMatrixF().Up, angle), PivotRotation);
             }
         }
 
@@ -409,7 +408,7 @@ namespace Adamantium.ECS.Components
             angle = EnsureAngle(angle, units);
             if (IsEnabled)
             {
-                PivotRotation = QuaternionF.Multiply(QuaternionF.RotationAxis(GetPivotRotationMatrixF().Forward, angle), PivotRotation);
+                PivotRotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(GetPivotRotationMatrixF().Forward, angle), PivotRotation);
             }
         }
 
@@ -419,7 +418,7 @@ namespace Adamantium.ECS.Components
         public void SyncOrientationWithCameraForwardLH(CameraBase camera)
         {
             var rotMatr = camera.RotationMatrix;
-            var quat = QuaternionF.RotationLookAtLH(rotMatr.Forward, rotMatr.Up);
+            var quat = Quaternion.CreateLookToLH<float>(rotMatr.Forward, rotMatr.Up);
             Owner.Transform.Rotation = quat;
         }
 
@@ -429,7 +428,7 @@ namespace Adamantium.ECS.Components
         public void SyncOrientationWithCameraBackwardLH(CameraBase camera)
         {
             var rotMatr = camera.RotationMatrix;
-            var quat = QuaternionF.RotationLookAtLH(rotMatr.Backward, rotMatr.Up);
+            var quat = Quaternion.CreateLookToLH<float>(rotMatr.Backward, rotMatr.Up);
             Owner.Transform.Rotation = quat;
         }
 
@@ -489,27 +488,25 @@ namespace Adamantium.ECS.Components
         /// <summary>Stands the entity in its parent as a model's node is posed - an animation's key, say: scaled by
         /// <paramref name="baseScale"/> (the user's <see cref="ScaleFactor"/> on top) and turned about its own origin, then
         /// moved to <paramref name="position"/>. Its pivot stays where it is on it, and only moves the position kept.</summary>
-        public void SetPose(Vector3 position, QuaternionF rotation, Vector3F baseScale)
+        public void SetPose(Vector3<double> position, QuaternionF rotation, Vector3F baseScale)
         {
             Rotation = rotation;
             BaseScale = baseScale;
             var scaling = Scale;
-            var center = (Vector3F)pivot;
+            var center = pivot.As<float>();
             var unmoved = Vector3F.Zero;
-            Matrix4x4F.Transformation(ref center, ref pivotRotation, ref scaling, ref center, ref this.rotation, ref unmoved,
-                out var aboutPivot);
-            Position = position - (Vector3)aboutPivot.TranslationVector;
+            var aboutPivot = Matrix4x4.CreateTransformation(center, pivotRotation, scaling, center, this.rotation, unmoved);
+            Position = position - aboutPivot.TranslationVector.As<double>();
         }
 
         /// <summary>Where this entity stands in its parent: scaled and turned about its pivot, then moved to its position.</summary>
         public Matrix4x4F GetLocalMatrixF()
         {
             var scaling = Scale;
-            var localPosition = (Vector3F)Position;
-            var scalingCenter = (Vector3F)pivot;
+            var localPosition = Position.As<float>();
+            var scalingCenter = pivot.As<float>();
             var rotationCenter = scalingCenter;
-            Matrix4x4F.Transformation(ref scalingCenter, ref pivotRotation, ref scaling, ref rotationCenter, ref rotation, ref localPosition, out var localMatrix);
-            return localMatrix;
+            return Matrix4x4.CreateTransformation(scalingCenter, pivotRotation, scaling, rotationCenter, rotation, localPosition);
         }
 
         /// <summary>
@@ -528,8 +525,7 @@ namespace Adamantium.ECS.Components
                 return true;
             }
 
-            Matrix4x4F.Invert(ref newParent, out var inverse);
-            var between = oldParent * inverse;
+            var between = oldParent * Matrix4x4F.Invert(newParent);
             if (between.Determinant() <= 1e-12f || !between.Decompose(out var scale, out var turn, out _))
             {
                 return false;
@@ -538,8 +534,8 @@ namespace Adamantium.ECS.Components
             var target = (GetLocalMatrixF() * between).TranslationVector;
             Rotation = QuaternionF.Multiply(turn, Rotation);
             ScaleFactor *= (scale.X + scale.Y + scale.Z) / 3;
-            Position = Vector3.Zero;
-            Position = (Vector3)(target - GetLocalMatrixF().TranslationVector);
+            Position = Vector3<double>.Zero;
+            Position = (target - GetLocalMatrixF().TranslationVector).As<double>();
             return true;
         }
 
@@ -568,7 +564,7 @@ namespace Adamantium.ECS.Components
 
         /// <summary>As <see cref="CalculateFinalTransform(CameraBase, Matrix4x4F)"/>, with the camera's world position
         /// worked out once for the frame's walk.</summary>
-        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld, Vector3 cameraWorld)
+        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld, Vector3<double> cameraWorld)
         {
             var localMatrix = GetLocalMatrixF();
 
@@ -579,15 +575,15 @@ namespace Adamantium.ECS.Components
 
             // Camera-relative render matrix: the view is rotation-only, so shift the world by the camera's WORLD
             // position - Transform.Position is relative to a parent, which a third-person camera has.
-            var cameraPosition = (Vector3F)cameraWorld;
-            var renderWorld = absoluteWorld * Matrix4x4F.Translation(-cameraPosition);
+            var cameraPosition = cameraWorld.As<float>();
+            var renderWorld = absoluteWorld * Matrix4x4.CreateTranslation<float>(-cameraPosition);
 
             var metadata = GetMetadata(camera);
             metadata.AbsoluteWorld = absoluteWorld;
-            metadata.RelativePosition = (Vector3)absoluteWorld.TranslationVector - cameraWorld;
-            metadata.Pivot = (Vector3F)pivot;
+            metadata.RelativePosition = (absoluteWorld.TranslationVector.As<double>() - cameraWorld).As<float>();
+            metadata.Pivot = pivot.As<float>();
             metadata.WorldMatrixF = renderWorld;
-            metadata.WorldMatrix = (Matrix4x4)renderWorld;
+            metadata.WorldMatrix = renderWorld.As<double>();
             metadata.Rotation = Rotation;
             metadata.Scale = Scale;
             // Record the inputs so TransformService can skip this (camera, node) next frame if none of them changed.

@@ -12,14 +12,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private class UVSphere
             {
                 public static Mesh GenerateGeometry(
-                    Vector3 size,
+                    Vector3<double> size,
                     int tessellation = 40)
                 {
 
                     int verticalSegments = tessellation;
                     int horizontalSegments = tessellation * 2;
 
-                    var vertices = new Vector3[(verticalSegments + 1) * (horizontalSegments + 1)];
+                    var vertices = new Vector3<double>[(verticalSegments + 1) * (horizontalSegments + 1)];
                     var normals = new Vector3F[vertices.Length];
                     var uvs = new Vector2F[vertices.Length];
                     var indices = new int[verticalSegments * horizontalSegments * 6];
@@ -48,11 +48,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                             dx *= dxz;
                             dz *= dxz;
 
-                            var normal = new Vector3(dx, dy, dz);
+                            var normal = new Vector3<double>(dx, dy, dz);
 
                             // Stretched by axis, an ellipsoid's normal leans the other way: its direction over the radii.
                             vertices[vertexCount] = normal * radius;
-                            normals[vertexCount] = (Vector3F)Vector3.Normalize(normal / radius);
+                            normals[vertexCount] = Vector3<double>.Normalize(normal / radius).As<float>();
                             uvs[vertexCount++] = new Vector2F(1.0f - u, 1.0f - v);
                         }
                     }
@@ -102,15 +102,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 // Geodesic sphere
                 //--------------------------------------------------------------------------------------
 
-                private static readonly Vector3[] OctahedronVertices =
+                private static readonly Vector3<double>[] OctahedronVertices =
                 {
                     // when looking down the negative z-axis (into the screen)
-                    new Vector3(0, 1, 0), // 0 top
-                    new Vector3(0, 0, -1), // 1 front
-                    new Vector3(1, 0, 0), // 2 right
-                    new Vector3(0, 0, 1), // 3 back
-                    new Vector3(-1, 0, 0), // 4 left
-                    new Vector3(0, -1, 0), // 5 bottom
+                    new Vector3<double>(0, 1, 0), // 0 top
+                    new Vector3<double>(0, 0, -1), // 1 front
+                    new Vector3<double>(1, 0, 0), // 2 right
+                    new Vector3<double>(0, 0, 1), // 3 back
+                    new Vector3<double>(-1, 0, 0), // 4 left
+                    new Vector3<double>(0, -1, 0), // 5 bottom
                 };
 
                 private static readonly int[] OctahedronIndices = new int[]
@@ -125,7 +125,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     5, 1, 2, // bottom front-right face
                 };
 
-                private List<Vector3> vertexPositions;
+                private List<Vector3<double>> vertexPositions;
 
                 private List<int> indexList;
 
@@ -141,7 +141,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 /// <param name="tessellation">The tessellation.</param>
                 /// <returns>A <see cref="Mesh"/> containing all necesseray info in raw format.</returns>
                 public static Mesh GenerateGeometry(
-                    Vector3 size,
+                    Vector3<double> size,
                     int tessellation = 3)
                 {
                     var sphere = new GeoSphere();
@@ -155,7 +155,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 /// <param name="tessellation">The tessellation.</param>
                 /// <returns>A Geodesic sphere.</returns>
                 private Mesh GenerateSphere(
-                    Vector3 size,
+                    Vector3<double> size,
                     int tessellation = 3)
                 {
                     subdividedEdges = new Dictionary<UndirectedEdge, int>();
@@ -163,7 +163,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var radius = size / 2.0;
 
                     // Start with an octahedron; copy the data into the vertex/index collection.
-                    vertexPositions = new List<Vector3>(OctahedronVertices);
+                    vertexPositions = new List<Vector3<double>>(OctahedronVertices);
                     indexList = new List<int>(OctahedronIndices);
 
                     for (int iSubdivision = 0; iSubdivision < tessellation; ++iSubdivision)
@@ -184,9 +184,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                             int iv2 = indexList[iTriangle * 3 + 2];
 
                             // Get the new vertices
-                            Vector3 v01; // vertex on the midpoint of v0 and v1
-                            Vector3 v12; // ditto v1 and v2
-                            Vector3 v20; // ditto v2 and v0
+                            Vector3<double> v01; // vertex on the midpoint of v0 and v1
+                            Vector3<double> v12; // ditto v1 and v2
+                            Vector3<double> v20; // ditto v2 and v0
                             int iv01; // index of v01
                             int iv12; // index of v12
                             int iv20; // index of v20
@@ -231,16 +231,16 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     }
 
                     // Now that we've completed subdivision, fill in the final vertex collection
-                    var directions = new List<Vector3>(vertexPositions.Count);
-                    var points = new List<Vector3>(vertexPositions.Count);
+                    var directions = new List<Vector3<double>>(vertexPositions.Count);
+                    var points = new List<Vector3<double>>(vertexPositions.Count);
                     var normals = new List<Vector3F>(vertexPositions.Count);
                     var uvs = new List<Vector2F>(vertexPositions.Count);
                     foreach (var position in vertexPositions)
                     {
-                        var direction = Vector3.Normalize(position);
+                        var direction = Vector3<double>.Normalize(position);
                         directions.Add(direction);
                         points.Add(direction * radius);
-                        normals.Add((Vector3F)Vector3.Normalize(direction / radius));
+                        normals.Add(Vector3<double>.Normalize(direction / radius).As<float>());
 
                         var longitude = Math.Atan2(direction.X, -direction.Z);
                         var latitude = Math.Acos(Math.Clamp(direction.Y, -1, 1));
@@ -310,15 +310,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     return mesh;
                 }
 
-                private static bool OnPole(Vector3 direction) => Math.Abs(direction.Y) > 1 - 1e-9;
+                private static bool OnPole(Vector3<double> direction) => Math.Abs(direction.Y) > 1 - 1e-9;
 
-                private static bool OnSeam(Vector3 direction) => Math.Abs(direction.X) < 1e-9 && direction.Z > 0;
+                private static bool OnSeam(Vector3<double> direction) => Math.Abs(direction.X) < 1e-9 && direction.Z > 0;
 
                 // Function that, when given the index of two vertices, creates a new vertex at the midpoint of those vertices.
                 private void DivideEdge(
                     int i0,
                     int i1,
-                    out Vector3 outVertex,
+                    out Vector3<double> outVertex,
                     out int outIndex)
                 {
                     var edge = new UndirectedEdge(i0, i1);
@@ -400,7 +400,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private class CubeSphere
             {
                 public static Mesh GenerateGeometry(
-                    Vector3 size,
+                    Vector3<double> size,
                     int tessellation = 3)
                 {
                     if (size.X <= 0 || size.Y <= 0 || size.Z <= 0)
@@ -440,7 +440,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         theta = Math.Acos(z / d);
                         phi = Math.Atan2(y, x);
 
-                        var position = new Vector3();
+                        var position = new Vector3<double>();
                         position.X = (float) (radius.X * Math.Sin(theta) * Math.Cos(phi));
                         position.Y = (float) (radius.Y * Math.Sin(theta) * Math.Sin(phi));
                         position.Z = (float) (radius.Z * Math.Cos(theta));
@@ -459,15 +459,15 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double diameter = 1.0,
                 int tessellation = 40)
             {
-                return GenerateOutlinedGeometry(new Vector3(diameter), tessellation);
+                return GenerateOutlinedGeometry(new Vector3<double>(diameter), tessellation);
             }
 
             /// <summary>Three rings of a sphere stretched to <paramref name="size"/>, one round each axis.</summary>
             public static Mesh GenerateOutlinedGeometry(
-                Vector3 size,
+                Vector3<double> size,
                 int tessellation = 40)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
                 var radius = size / 2;
 
@@ -479,9 +479,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         var angle = Math.PI * 2 / tessellation * i;
                         var cos = Math.Cos(angle);
                         var sin = Math.Sin(angle);
-                        vertices.Add(ring == 0 ? new Vector3(radius.X * cos, 0, radius.Z * sin)
-                            : ring == 1 ? new Vector3(radius.X * cos, radius.Y * sin, 0)
-                            : new Vector3(0, radius.Y * cos, radius.Z * sin));
+                        vertices.Add(ring == 0 ? new Vector3<double>(radius.X * cos, 0, radius.Z * sin)
+                            : ring == 1 ? new Vector3<double>(radius.X * cos, radius.Y * sin, 0)
+                            : new Vector3<double>(0, radius.Y * cos, radius.Z * sin));
                         indices.Add(start + i);
                         indices.Add(start + (i + 1) % tessellation);
                     }
@@ -500,9 +500,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 SphereType sphereType,
                 double diameter = 1.0f,
                 int tessellation = 40,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
-                return GenerateGeometry(geometryType, sphereType, new Vector3(diameter), tessellation, transform);
+                return GenerateGeometry(geometryType, sphereType, new Vector3<double>(diameter), tessellation, transform);
             }
 
             /// <summary>A sphere stretched to <paramref name="size"/> along each axis - an ellipsoid, with its normals
@@ -510,9 +510,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
                 SphereType sphereType,
-                Vector3 size,
+                Vector3<double> size,
                 int tessellation = 40,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (tessellation < 3 && sphereType != SphereType.GeoSphere)
                 {

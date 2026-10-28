@@ -18,7 +18,7 @@ public class PlaneTemplate : PrimitiveTemplate
         float width,
         float length,
         int tessellation = 1,
-        Matrix4x4? transform = null) : base(geometryType, tessellation, transform)
+        Matrix4x4<double>? transform = null) : base(geometryType, tessellation, transform)
     {
         this.width = width;
         this.length = length;

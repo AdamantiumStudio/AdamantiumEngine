@@ -1,10 +1,8 @@
 using System;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using Quaternion = Adamantium.Mathematics.Typed.Quaternion;
-using QuaternionD = Adamantium.Mathematics.Typed.Quaternion<double>;
-using QuaternionF = Adamantium.Mathematics.Typed.Quaternion<float>;
-using Vector3D = Adamantium.Mathematics.Typed.Vector3<double>;
+using QuaternionD = Adamantium.Mathematics.Quaternion<double>;
+using Vector3D = Adamantium.Mathematics.Vector3<double>;
 
 namespace Adamantium.MathTests;
 

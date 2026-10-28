@@ -37,7 +37,7 @@ public class TextLayout : DisposableObject
 
     public uint ElementsCount => _quads.ElementsCount;
 
-    public Size CalculatedLayoutSize { get; private set; }
+    public Size<double> CalculatedLayoutSize { get; private set; }
 
     /// <summary>
     /// Emits a zero-width glyph for each newline, so a text editor can place the caret there. Skipped by rendering; off
@@ -304,7 +304,7 @@ public class TextLayout : DisposableObject
 
     public float FontSize { get; private set; }
 
-    public Size RealTextDimensions { get; private set; }
+    public Size<double> RealTextDimensions { get; private set; }
 
     /// <summary>The attributed text last laid out; null when it was a plain string.</summary>
     public AttributedText AttributedText => _attributed;
@@ -336,9 +336,9 @@ public class TextLayout : DisposableObject
         return (_laid?.Glyphs ?? []).ToArray();
     }
 
-    public Size ProcessText(string text,
+    public Size<double> ProcessText(string text,
         double fontSize,
-        Size textArea,
+        Size<double> textArea,
         TextWrapping textWrapping,
         TextTrimming textTrimming,
         HorizontalTextAlignment horizontalTextAlignment,
@@ -349,7 +349,7 @@ public class TextLayout : DisposableObject
             justifyLastLine);
         var options = Snapshot();
 
-        if (_attributed == null && Text == text && MathHelper.IsZero(FontSize - fontSize)
+        if (_attributed == null && Text == text && MathHelper.Scalar.IsZero(FontSize - fontSize)
             && _previousRenderingParameters == @params && options.LaysOutLike(_laidOutOptions))
         {
             return CalculatedLayoutSize;
@@ -365,9 +365,9 @@ public class TextLayout : DisposableObject
     }
 
     /// <summary>Lays out text whose ranges carry their own features, language, colors, background and lines.</summary>
-    public Size ProcessText(AttributedText text,
+    public Size<double> ProcessText(AttributedText text,
         double fontSize,
-        Size textArea,
+        Size<double> textArea,
         TextWrapping textWrapping,
         TextTrimming textTrimming,
         HorizontalTextAlignment horizontalTextAlignment,
@@ -386,7 +386,7 @@ public class TextLayout : DisposableObject
         return ProcessText(text.Text, fontSize, @params);
     }
 
-    public Size ProcessText(string text, double fontSize, TextRenderingParameters renderingParameters)
+    public Size<double> ProcessText(string text, double fontSize, TextRenderingParameters renderingParameters)
     {
         return Lay(text, fontSize, renderingParameters, Snapshot());
     }
@@ -584,7 +584,7 @@ public class TextLayout : DisposableObject
     public IReadOnlyList<(int Start, int End)> GetVisualRanges(CaretPosition anchor, CaretPosition focus) =>
         _navigator.GetVisualRanges(anchor, focus);
 
-    private static TextRenderingParameters Parameters(Size textArea, TextWrapping textWrapping,
+    private static TextRenderingParameters Parameters(Size<double> textArea, TextWrapping textWrapping,
         TextTrimming textTrimming, HorizontalTextAlignment horizontalTextAlignment,
         VerticalTextAlignment verticalTextAlignment, bool justifyLastLine)
     {
@@ -605,7 +605,7 @@ public class TextLayout : DisposableObject
             JustifyLastLine = justifyLastLine,
             TextWrapping = textWrapping,
             TextTrimming = textTrimming,
-            TextArea = new Rectangle(Vector2F.Zero, textArea)
+            TextArea = new Rectangle<int>(Vector2F.Zero.As<int>(), textArea.As<int>())
         };
     }
 
@@ -634,7 +634,7 @@ public class TextLayout : DisposableObject
         EmitNewlineCarets = EmitNewlineCarets,
     };
 
-    private Size Lay(string text, double fontSize, TextRenderingParameters renderingParameters, TextLayoutOptions options)
+    private Size<double> Lay(string text, double fontSize, TextRenderingParameters renderingParameters, TextLayoutOptions options)
     {
         Revision++;
         // Empty text clears the previous glyphs, or a recycled row keeps drawing its old text.
@@ -654,10 +654,10 @@ public class TextLayout : DisposableObject
                 HasPendingFonts = HasPendingFonts,
             });
             _quads.Clear();
-            CalculatedLayoutSize = Size.Zero;
-            RealTextDimensions = Size.Zero;
+            CalculatedLayoutSize = Size<double>.Zero;
+            RealTextDimensions = Size<double>.Zero;
             _textUpdated = true;
-            return Size.Zero;
+            return Size<double>.Zero;
         }
 
         RenderingParameters = renderingParameters;

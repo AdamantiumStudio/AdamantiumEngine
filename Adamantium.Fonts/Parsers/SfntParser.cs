@@ -1285,7 +1285,7 @@ namespace Adamantium.Fonts.Parsers
         {
             var glyphHeader = ReadTTFGlyphHeader(reader);
             glyph.BoundingRectangle =
-                Rectangle.FromCorners(glyphHeader.XMin, glyphHeader.YMin, glyphHeader.XMax, glyphHeader.YMax);
+                Rectangle.CreateFromCorners<int>(glyphHeader.XMin, glyphHeader.YMin, glyphHeader.XMax, glyphHeader.YMax);
 
             if (glyphHeader.NumberOfContours >= 0)
             {

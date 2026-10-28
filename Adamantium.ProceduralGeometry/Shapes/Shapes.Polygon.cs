@@ -11,10 +11,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
         {
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
-                Vector2 radii,
+                Vector2<double> radii,
                 int tessellation = 40,
                 double startAngle = 0,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (tessellation < 3)
                 {
@@ -25,19 +25,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 switch (geometryType)
                 {
                     case GeometryType.Solid:
-                        mesh = GenerateSolidGeometry(radii, tessellation, startAngle);
+                        mesh = GenerateSolidGeometry(radii.As<float>(), tessellation, startAngle);
                         break;
                     // BOTH means both: the filled mesh AND the outline contour a stroke reads. It used to fall through to
                     // the outline alone, so anything asking for Both got a line strip and no fill at all - which is what a
                     // filled polygon drawing as a thin ring turned out to be.
                     case GeometryType.Both:
                     {
-                        mesh = GenerateSolidGeometry(radii, tessellation, startAngle);
+                        mesh = GenerateSolidGeometry(radii.As<float>(), tessellation, startAngle);
                         mesh.AddContour(Corners(radii, tessellation, startAngle), true);   // a closed loop
                         break;
                     }
                     default:
-                        mesh = GenerateOutlinedGeometry(radii, tessellation, startAngle);
+                        mesh = GenerateOutlinedGeometry(radii.As<float>(), tessellation, startAngle);
                         break;
                 }
 
@@ -48,14 +48,14 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             /// <summary>The polygon's corners, corner 0 at <paramref name="startAngle"/> degrees from +x, shared by fill and
             /// outline. The angle offsets the inscribed ellipse's parameter, so a squashed polygon stays in its box.</summary>
-            public static List<Vector3> Corners(Vector2 radii, int tessellation, double startAngle)
+            public static List<Vector3<double>> Corners(Vector2<double> radii, int tessellation, double startAngle)
             {
-                var start = MathHelper.DegreesToRadians(startAngle);
-                var points = new List<Vector3>(tessellation);
+                var start = (float)double.DegreesToRadians(startAngle);
+                var points = new List<Vector3<double>>(tessellation);
                 for (var i = 0; i < tessellation; ++i)
                 {
                     var angle = start + (float)Math.PI * 2 / tessellation * i;
-                    points.Add(new Vector3(radii.X * (float)Math.Cos(angle), radii.Y * (float)Math.Sin(angle), 0));
+                    points.Add(new Vector3<double>(radii.X * (float)Math.Cos(angle), radii.Y * (float)Math.Sin(angle), 0));
                 }
 
                 return points;
@@ -63,11 +63,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
             private static Mesh GenerateSolidGeometry(Vector2F diameter, int tessellation, double startAngle)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
-                var center = Vector3.Zero;
-                var start = MathHelper.DegreesToRadians(startAngle);
+                var center = Vector3<double>.Zero;
+                var start = (float)double.DegreesToRadians(startAngle);
 
                 for (int i = 0; i < tessellation; ++i)
                 {
@@ -75,7 +75,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     var x = center.X + diameter.X * (float)Math.Cos(angle);
                     var y = center.Y + diameter.Y * (float)Math.Sin(angle);
-                    vertices.Add(new Vector3(x, y, 0));
+                    vertices.Add(new Vector3<double>(x, y, 0));
                     var uv = new Vector2F(
                        0.5f + (float)((x - center.X) / (2 * diameter.X)),
                        0.5f + (float)((y - center.Y) / (2 * diameter.Y)));
@@ -107,10 +107,10 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 int tessellation,
                 double startAngle)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
-                var center = Vector3.Zero;
-                var start = MathHelper.DegreesToRadians(startAngle);
+                var center = Vector3<double>.Zero;
+                var start = (float)double.DegreesToRadians(startAngle);
                 int lastIndex = 0;
 
                 for (int i = 0; i <= tessellation; ++i)
@@ -119,7 +119,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                     var x = center.X + diameter.X * (float)Math.Cos(angle);
                     var y = center.Y + diameter.Y * (float)Math.Sin(angle);
-                    vertices.Add(new Vector3(x, y, 0));
+                    vertices.Add(new Vector3<double>(x, y, 0));
                     indices.Add(lastIndex++);
                 }
 

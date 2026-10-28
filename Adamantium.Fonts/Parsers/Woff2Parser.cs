@@ -461,7 +461,7 @@ namespace Adamantium.Fonts.Parsers
                     var minY = FontReader.ReadInt16();
                     var maxX = FontReader.ReadInt16();
                     var maxY = FontReader.ReadInt16();
-                    glyph.BoundingRectangle = Rectangle.FromCorners(minX, minY, maxX, maxY);
+                    glyph.BoundingRectangle = Rectangle.CreateFromCorners<int>(minX, minY, maxX, maxY);
                 }
                 else
                 {

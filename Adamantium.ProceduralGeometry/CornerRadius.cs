@@ -41,9 +41,9 @@ namespace Adamantium.ProceduralGeometry
         public Double BottomLeft;
 
         /// <summary>True when all four corners have the same radius (a single value describes the whole shape).</summary>
-        public bool IsUniform => MathHelper.NearEqual(TopLeft, TopRight)
-                                 && MathHelper.NearEqual(TopRight, BottomRight)
-                                 && MathHelper.NearEqual(BottomRight, BottomLeft);
+        public bool IsUniform => MathHelper.Scalar.NearEqual(TopLeft, TopRight)
+                                 && MathHelper.Scalar.NearEqual(TopRight, BottomRight)
+                                 && MathHelper.Scalar.NearEqual(BottomRight, BottomLeft);
 
         public bool Equals(CornerRadius other)
         {
@@ -74,10 +74,10 @@ namespace Adamantium.ProceduralGeometry
 
         public static bool operator ==(CornerRadius radius1, CornerRadius radius2)
         {
-            return MathHelper.NearEqual(radius1.TopLeft, radius2.TopLeft) &&
-                   MathHelper.NearEqual(radius1.TopRight, radius2.TopRight) &&
-                   MathHelper.NearEqual(radius1.BottomRight, radius2.BottomRight) &&
-                   MathHelper.NearEqual(radius1.BottomLeft, radius2.BottomLeft);
+            return MathHelper.Scalar.NearEqual(radius1.TopLeft, radius2.TopLeft) &&
+                   MathHelper.Scalar.NearEqual(radius1.TopRight, radius2.TopRight) &&
+                   MathHelper.Scalar.NearEqual(radius1.BottomRight, radius2.BottomRight) &&
+                   MathHelper.Scalar.NearEqual(radius1.BottomLeft, radius2.BottomLeft);
         }
 
         public static bool operator !=(CornerRadius radius1, CornerRadius radius2)

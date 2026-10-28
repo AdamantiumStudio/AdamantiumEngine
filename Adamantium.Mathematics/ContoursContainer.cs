@@ -56,7 +56,7 @@ public class ContoursContainer
 
         for (var i = 1; i < contours.Count; i++)
         {
-            BoundingBox = BoundingBox.Merge(contours[i].BoundingBox);
+            BoundingBox = Rectangle<float>.Union(BoundingBox, contours[i].BoundingBox);
         }
     }
 

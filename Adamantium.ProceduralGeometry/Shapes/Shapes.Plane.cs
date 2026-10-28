@@ -16,7 +16,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double width, 
                 double length, 
                 int tessellation = 1, 
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return GenerateGeometry(geometryType, width, length, tessellation, Vector2F.One, transform);
             }
@@ -27,7 +27,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double length, 
                 int tessellation, 
                 Vector2F uvFactor, 
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 if (width <= 0)
                 {
@@ -66,7 +66,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 Vector2F uvFactor)
             {
                 var lineWidth = tessellation + 1;
-                var vertices = new Vector3[lineWidth * lineWidth];
+                var vertices = new Vector3<double>[lineWidth * lineWidth];
                 var uvs = new Vector2F[lineWidth * lineWidth];
 
                 var sizeX = width / 2;
@@ -81,7 +81,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 {
                     for (int x = 0; x < lineWidth; ++x)
                     {
-                        var pos = new Vector3(-sizeX + deltaX * x, 0, -sizeZ + deltaZ * z);
+                        var pos = new Vector3<double>(-sizeX + deltaX * x, 0, -sizeZ + deltaZ * z);
                         var uv = new Vector2F(1.0f * x / tessellation * uvFactor.X, 1.0f * (tessellation - z) / tessellation * uvFactor.Y);
                         vertices[vertexCount] = pos;
                         uvs[vertexCount] = uv;
@@ -133,11 +133,11 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var sizeX = width / 2;
                 var sizeZ = length / 2;
 
-                var vertices = new List<Vector3>();
-                vertices.Add(new Vector3(-sizeX, 0, -sizeZ));
-                vertices.Add(new Vector3(sizeX, 0, -sizeZ));
-                vertices.Add(new Vector3(sizeX, 0, sizeZ));
-                vertices.Add(new Vector3(-sizeX, 0, sizeZ));
+                var vertices = new List<Vector3<double>>();
+                vertices.Add(new Vector3<double>(-sizeX, 0, -sizeZ));
+                vertices.Add(new Vector3<double>(sizeX, 0, -sizeZ));
+                vertices.Add(new Vector3<double>(sizeX, 0, sizeZ));
+                vertices.Add(new Vector3<double>(-sizeX, 0, sizeZ));
 
                 var mesh = new Mesh();
                 mesh.SetTopology(PrimitiveType.LineStrip).

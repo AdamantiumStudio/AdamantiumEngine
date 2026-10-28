@@ -180,7 +180,7 @@ public class ColorPaintTests
         return text.ToString();
     }
 
-    private static double[] Values(Matrix3x2 m) => [m.M11, m.M12, m.M21, m.M22, m.M31, m.M32];
+    private static double[] Values(Matrix3x2<double> m) => [m.M11, m.M12, m.M21, m.M22, m.M31, m.M32];
 
     private static string Kind(ColorFillKind kind) =>
         kind switch

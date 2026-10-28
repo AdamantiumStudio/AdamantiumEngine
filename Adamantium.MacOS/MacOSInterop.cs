@@ -15,7 +15,7 @@ namespace Adamantium.MacOS
         public static extern IntPtr CreateApplication(IntPtr appDelegate);
         
         [DllImport(WrapperFramework, EntryPoint = "CreateWindow")]
-        public static extern IntPtr CreateWindow(Rectangle windowRect, uint windowStyle, string title);
+        public static extern IntPtr CreateWindow(Rectangle<int> windowRect, uint windowStyle, string title);
         
         [DllImport(WrapperFramework, EntryPoint = "CreateApplicationDelegate")]
         public static extern IntPtr CreateApplicationDelegate();

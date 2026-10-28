@@ -28,7 +28,7 @@ public class JapaneseLayoutTests
         {
             Fallback = null, SpacingTrim = trim, HangingPunctuation = hanging, LineBreaking = breaking, Language = "ja",
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -129,7 +129,7 @@ public class JapaneseLayoutTests
         {
             Fallback = null, LineBreaking = breaking, Language = "en-US", Hyphens = Hyphens.Auto,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var close = text.IndexOf('）');
 

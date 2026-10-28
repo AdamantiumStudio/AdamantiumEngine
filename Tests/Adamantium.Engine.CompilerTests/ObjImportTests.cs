@@ -46,9 +46,9 @@ f 1//1 2//1 3//1
             var mesh = SingleMesh(scene);
             Assert.That(mesh.Normals.Length, Is.EqualTo(mesh.Points.Length), "every vertex must have a normal");
 
-            var a = (Vector3F)mesh.Points[mesh.Indices[0]];
-            var b = (Vector3F)mesh.Points[mesh.Indices[1]];
-            var c = (Vector3F)mesh.Points[mesh.Indices[2]];
+            var a = mesh.Points[mesh.Indices[0]].As<float>();
+            var b = mesh.Points[mesh.Indices[1]].As<float>();
+            var c = mesh.Points[mesh.Indices[2]].As<float>();
             var face = Vector3F.Cross(b - a, c - a);
             face.Normalize();
 

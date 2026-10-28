@@ -22,13 +22,13 @@ public class MeshMergeTests
     [Test]
     public void Merge_EveryPartWithNormals_KeepsThemAll_TurnedWithTheirPart()
     {
-        var turned = new MergeInstance(Triangle(withNormals: true), Matrix4x4.RotationY(MathHelper.DegreesToRadians(90)), true);
+        var turned = new MergeInstance(Triangle(withNormals: true), Matrix4x4.CreateRotationY<double>(float.DegreesToRadians(90)), true);
 
         var merged = Triangle(withNormals: true).Merge([turned]);
 
         Assert.That(merged.Normals.Length, Is.EqualTo(merged.Points.Length));
         Assert.That((merged.Normals[0] - Vector3F.UnitZ).Length(), Is.LessThan(1e-5f));
-        var expected = Vector3F.Normalize(Vector3F.TransformNormal(Vector3F.UnitZ, (Matrix4x4F)Matrix4x4.RotationY(MathHelper.DegreesToRadians(90))));
+        var expected = Vector3F.Normalize(Vector3F.TransformNormal(Vector3F.UnitZ, Matrix4x4.CreateRotationY<double>(float.DegreesToRadians(90)).As<float>()));
         Assert.That((merged.Normals[3] - expected).Length(), Is.LessThan(1e-5f));
     }
 
@@ -47,7 +47,7 @@ public class MeshMergeTests
     private static Mesh Triangle(bool withNormals)
     {
         var mesh = new Mesh(PrimitiveType.TriangleList)
-            .SetPoints([new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0)])
+            .SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0)])
             .SetIndices([0, 1, 2]);
         return withNormals ? mesh.SetNormals([Vector3F.UnitZ, Vector3F.UnitZ, Vector3F.UnitZ]) : mesh;
     }

@@ -36,18 +36,18 @@ namespace Adamantium.Mathematics.Triangulation
         /// filled by the fill rule.</summary>
         /// <param name="polygon"></param>
         /// <returns></returns>
-        public static List<Vector3> Triangulate(Polygon polygon)
+        public static List<Vector3<double>> Triangulate(Polygon polygon)
         {
             var additionalRayIntersections = new Dictionary<GeometrySegment, SortedList<double, GeometryIntersection>>();
             
-            var rays = new List<Ray2D>();
+            var rays = new List<Ray2<double>>();
             var sortedY = new List<double>();
             var sortedYHashSet = new HashSet<double>();
             var raysIntersectionPoints = new List<GeometryIntersection[]>();
-            var interPoints = new List<Vector2>();
+            var interPoints = new List<Vector2<double>>();
             
             var verticallySortedPointList = polygon.SortPoints();
-            var ray = new Ray2D(Vector2.Zero, Vector2.UnitX);
+            var ray = new Ray2<double>(Vector2<double>.Zero, Vector2<double>.UnitX);
             var leftmostXCoord = polygon.LeftmostXCoord;
             for (var i = 0; i < verticallySortedPointList.Count; ++i)
             {
@@ -59,7 +59,7 @@ namespace Adamantium.Mathematics.Triangulation
 
                 sortedY.Add(point.Coordinates.Y);
                 sortedYHashSet.Add(point.Coordinates.Y);
-                ray.Origin = new Vector2(leftmostXCoord, point.Coordinates.Y);
+                ray.Position = new Vector2<double>(leftmostXCoord, point.Coordinates.Y);
                 rays.Add(ray);
 
                 var rayPoints = new List<GeometryIntersection>();
@@ -100,13 +100,13 @@ namespace Adamantium.Mathematics.Triangulation
             {
                 foreach (var rayPoint in rayPoints)
                 {
-                    rayPoint.Coordinates = Vector2.Round(rayPoint.Coordinates, 4);
+                    rayPoint.Coordinates = Vector2<double>.Round(rayPoint.Coordinates, 4);
                 }
             }
             
             polygon.UpdatePolygonUsingAdditionalRayInterPoints(additionalRayIntersections);
 
-            var finalTriangles = new List<Vector3>();
+            var finalTriangles = new List<Vector3<double>>();
             for (var i = 0; i < rays.Count - 1; ++i)
             {
                 var upperInterPoints = raysIntersectionPoints[i];
@@ -154,7 +154,7 @@ namespace Adamantium.Mathematics.Triangulation
         {
             for (var i = 0; i < lst.Count; ++i)
             {
-                if (MathHelper.WithinEpsilon(point, lst[i], Polygon.Epsilon))
+                if (MathHelper.Scalar.WithinEpsilon(point, lst[i], Polygon.Epsilon))
                 {
                     return true;
                 }
@@ -162,25 +162,25 @@ namespace Adamantium.Mathematics.Triangulation
             return false;
         }
 
-        private static bool IsSimilarTo(Vector2 point, List<Vector2> lst)
+        private static bool IsSimilarTo(Vector2<double> point, List<Vector2<double>> lst)
         {
             for (var i = 0; i < lst.Count; ++i)
             {
-                if (MathHelper.WithinEpsilon(point, lst[i], Polygon.Epsilon))
+                if (Vector2<double>.NearEqual(point, lst[i], new Vector2<double>(Polygon.Epsilon)))
                 {
                     return true;
                 }
             }
             return false;
         }
-        
-        private static bool IsSimilarTo(Vector2 point, List<GeometryIntersection> lst, out GeometryIntersection similarPoint)
+
+        private static bool IsSimilarTo(Vector2<double> point, List<GeometryIntersection> lst, out GeometryIntersection similarPoint)
         {
             similarPoint = null;
             
             for (var i = 0; i < lst.Count; ++i)
             {
-                if (MathHelper.WithinEpsilon(point, lst[i].Coordinates, Polygon.Epsilon))
+                if (Vector2<double>.NearEqual(point, lst[i].Coordinates, new Vector2<double>(Polygon.Epsilon)))
                 {
                     similarPoint = lst[i];
                     return true;
@@ -190,11 +190,11 @@ namespace Adamantium.Mathematics.Triangulation
             return false;
         }
 
-        private static bool IsXPointSimilarTo(Vector2 point, List<GeometryIntersection> lst)
+        private static bool IsXPointSimilarTo(Vector2<double> point, List<GeometryIntersection> lst)
         {
             for (var i = 0; i < lst.Count; ++i)
             {
-                if (MathHelper.WithinEpsilon(point.X, lst[i].Coordinates.X, Polygon.Epsilon))
+                if (MathHelper.Scalar.WithinEpsilon(point.X, lst[i].Coordinates.X, Polygon.Epsilon))
                 {
                     return true;
                 }
@@ -208,32 +208,32 @@ namespace Adamantium.Mathematics.Triangulation
         /// <param name="trianglesList"></param>
         /// <param name="startSegment2D"></param>
         /// <param name="endSegment2D"></param>
-        private static void CreateTriangles(List<Vector3> trianglesList, GeometrySegment startSegment2D, GeometrySegment endSegment2D)
+        private static void CreateTriangles(List<Vector3<double>> trianglesList, GeometrySegment startSegment2D, GeometrySegment endSegment2D)
         {
-            if (MathHelper.IsClockwise(startSegment2D.Start, endSegment2D.Start, endSegment2D.End, Vector3.BackwardRH))
+            if (MathHelper.Polyline.IsClockwise(startSegment2D.Start, endSegment2D.Start, endSegment2D.End))
             {
-                trianglesList.Add((Vector3)startSegment2D.Start);
-                trianglesList.Add((Vector3)endSegment2D.Start);
-                trianglesList.Add((Vector3)endSegment2D.End);
+                trianglesList.Add((Vector3<double>)startSegment2D.Start);
+                trianglesList.Add((Vector3<double>)endSegment2D.Start);
+                trianglesList.Add((Vector3<double>)endSegment2D.End);
             }
 
-            if (MathHelper.IsClockwise(startSegment2D.Start, endSegment2D.End, startSegment2D.End, Vector3.BackwardRH))
+            if (MathHelper.Polyline.IsClockwise(startSegment2D.Start, endSegment2D.End, startSegment2D.End))
             {
                 //Second triangle
-                trianglesList.Add((Vector3)startSegment2D.Start);
-                trianglesList.Add((Vector3)endSegment2D.End);
-                trianglesList.Add((Vector3)startSegment2D.End);
+                trianglesList.Add((Vector3<double>)startSegment2D.Start);
+                trianglesList.Add((Vector3<double>)endSegment2D.End);
+                trianglesList.Add((Vector3<double>)startSegment2D.End);
             }
         }
 
         /// <summary>
         /// Triangulates a CONVEX simple polygon as a fan in O(n): triangles (v0, vi, vi+1). Each triangle is
         /// emitted clockwise (same convention as <see cref="CreateTriangles"/>) so winding stays consistent.
-        /// Caller must guarantee convexity (see <see cref="MathHelper.IsConvex"/>).
+        /// Caller must guarantee convexity (see <see cref="MathHelper.Polyline.IsConvex{T}"/>).
         /// </summary>
-        public static List<Vector3> FanTriangulate(IReadOnlyList<Vector2> points)
+        public static List<Vector3<double>> FanTriangulate(IReadOnlyList<Vector2<double>> points)
         {
-            var triangles = new List<Vector3>();
+            var triangles = new List<Vector3<double>>();
             for (var i = 1; i + 1 < points.Count; i++)
             {
                 AddTriangleClockwise(triangles, points[0], points[i], points[i + 1]);
@@ -245,9 +245,9 @@ namespace Adamantium.Mathematics.Triangulation
         /// Triangulates a single SIMPLE (non-self-intersecting) closed contour via earcut in ~O(n), producing
         /// ~n-2 triangles (no slivers). Triangles are emitted clockwise (same convention as the scanline path).
         /// </summary>
-        public static List<Vector3> EarcutTriangulate(IReadOnlyList<Vector2> ring)
+        public static List<Vector3<double>> EarcutTriangulate(IReadOnlyList<Vector2<double>> ring)
         {
-            var triangles = new List<Vector3>();
+            var triangles = new List<Vector3<double>>();
             int n = ring.Count;
             if (n < 3) return triangles;
 
@@ -270,12 +270,12 @@ namespace Adamantium.Mathematics.Triangulation
         /// Triangulates an outer ring with holes via earcut (holes cut out). All rings must be simple and
         /// non-crossing (caller guarantees). Triangles are emitted clockwise.
         /// </summary>
-        public static List<Vector3> EarcutWithHoles(IReadOnlyList<Vector2> outer, IReadOnlyList<IReadOnlyList<Vector2>> holes)
+        public static List<Vector3<double>> EarcutWithHoles(IReadOnlyList<Vector2<double>> outer, IReadOnlyList<IReadOnlyList<Vector2<double>>> holes)
         {
-            var triangles = new List<Vector3>();
+            var triangles = new List<Vector3<double>>();
             if (outer.Count < 3) return triangles;
 
-            var all = new List<Vector2>(outer);
+            var all = new List<Vector2<double>>(outer);
             int[] holeIndices = null;
             if (holes != null && holes.Count > 0)
             {
@@ -304,19 +304,19 @@ namespace Adamantium.Mathematics.Triangulation
             return triangles;
         }
 
-        private static void AddTriangleClockwise(List<Vector3> triangles, Vector2 a, Vector2 b, Vector2 c)
+        private static void AddTriangleClockwise(List<Vector3<double>> triangles, Vector2<double> a, Vector2<double> b, Vector2<double> c)
         {
-            if (MathHelper.IsClockwise(a, b, c, Vector3.BackwardRH))
+            if (MathHelper.Polyline.IsClockwise(a, b, c))
             {
-                triangles.Add((Vector3)a);
-                triangles.Add((Vector3)b);
-                triangles.Add((Vector3)c);
+                triangles.Add((Vector3<double>)a);
+                triangles.Add((Vector3<double>)b);
+                triangles.Add((Vector3<double>)c);
             }
             else
             {
-                triangles.Add((Vector3)a);
-                triangles.Add((Vector3)c);
-                triangles.Add((Vector3)b);
+                triangles.Add((Vector3<double>)a);
+                triangles.Add((Vector3<double>)c);
+                triangles.Add((Vector3<double>)b);
             }
         }
 
@@ -326,7 +326,7 @@ namespace Adamantium.Mathematics.Triangulation
 
             public int Compare(GeometryIntersection x, GeometryIntersection y)
             {
-                if (MathHelper.WithinEpsilon(x.Coordinates.X, y.Coordinates.X, Polygon.Epsilon))
+                if (MathHelper.Scalar.WithinEpsilon(x.Coordinates.X, y.Coordinates.X, Polygon.Epsilon))
                 {
                     return 0;
                 }

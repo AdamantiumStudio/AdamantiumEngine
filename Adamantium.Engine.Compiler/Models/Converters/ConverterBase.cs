@@ -240,7 +240,7 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
       }
 
       private static Matrix4x4F Compose(Vector3F scale, QuaternionF rotation, Vector3F translation) =>
-         Matrix4x4F.Scaling(scale) * Matrix4x4F.RotationQuaternion(rotation) * Matrix4x4F.Translation(translation);
+         Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation);
 
       private IEnumerable<SceneData.Model> Models()
       {

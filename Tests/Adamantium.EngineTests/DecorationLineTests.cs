@@ -21,7 +21,7 @@ public class DecorationLineTests
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, WritingMode = mode };
         var attributed = new AttributedText("Lined text");
         attributed.Apply(0, 10, attributes);
-        layout.ProcessText(attributed, FontSize, new Size(double.NaN, mode == WritingMode.Horizontal ? double.NaN : 300),
+        layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, mode == WritingMode.Horizontal ? double.NaN : 300),
             TextWrapping.WrapByWords, TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }

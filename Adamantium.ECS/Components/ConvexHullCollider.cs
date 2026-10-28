@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
@@ -36,7 +38,7 @@ public class ConvexHullCollider : Collider
 
     public override Mesh GetVisualRepresentation()
     {
-        List<Vector3> lines = [];
+        List<Vector3<double>> lines = [];
         if (hull != null)
         {
             var edges = new HashSet<(int, int)>();
@@ -48,8 +50,8 @@ public class ConvexHullCollider : Collider
                     var b = hull.Triangles[i + (k + 1) % 3];
                     if (edges.Add(a < b ? (a, b) : (b, a)))
                     {
-                        lines.Add((Vector3)hull.Vertices[a]);
-                        lines.Add((Vector3)hull.Vertices[b]);
+                        lines.Add(hull.Vertices[a].As<double>());
+                        lines.Add(hull.Vertices[b].As<double>());
                     }
                 }
             }
@@ -91,12 +93,12 @@ public class ConvexHullCollider : Collider
 
     public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
     {
-        Take(hull?.Transform(Matrix4x4F.Scaling(scale) * Matrix4x4F.RotationQuaternion(rotation) * Matrix4x4F.Translation(translation)));
+        Take(hull?.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation)));
     }
 
     public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
     {
-        Take(hull?.Transform(Matrix4x4F.Scaling(uniformScale) * Matrix4x4F.RotationQuaternion(rotation) * Matrix4x4F.Translation(translation)));
+        Take(hull?.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation)));
     }
 
     /// <summary>
@@ -116,21 +118,22 @@ public class ConvexHullCollider : Collider
         }
         else
         {
-            OrientedBoundingBox part = collider.Bounds;
-            points.AddRange(part.Transform(placement).GetCorners());
+            Span<Vector3F> part = stackalloc Vector3F[OrientedBoundingBox<float>.CornerCount];
+            collider.Bounds.ToOrientedBoundingBox().As<float>().Transform(placement).GetCorners(part);
+            points.AddRange(part);
         }
 
         Take(ConvexHull.FromPoints(points));
-        Bounds = Bounds.FromBoundingBox(OrientedBoundingBox.FromPoints(points));
+        Bounds = Bounds.FromBoundingBox(OrientedBoundingBox.CreateFromPoints<float>(CollectionsMarshal.AsSpan(points)).As<double>());
     }
 
-    public override bool Intersects(ref Ray ray, out Vector3F point)
+    public override bool Intersects(ref Ray<float> ray, out Vector3F point)
     {
         point = Vector3F.Zero;
-        return hull != null && hull.Intersects(ref ray, out point);
+        return hull != null && hull.Intersects(ray, out point);
     }
 
-    public override bool IntersectsForCamera(Camera camera, ref Ray ray, out Vector3F point)
+    public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
     {
         point = Vector3F.Zero;
         if (hull == null || !colliderData.TryGetValue(camera, out var placement))
@@ -138,10 +141,9 @@ public class ConvexHullCollider : Collider
             return false;
         }
 
-        var world = placement.World;
-        Matrix4x4F.Invert(ref world, out var inverse);
-        var local = new Ray(Vector3F.TransformCoordinate(ray.Position, inverse), Vector3F.TransformNormal(ray.Direction, inverse));
-        if (!hull.Intersects(ref local, out float distance))
+        var inverse = Matrix4x4F.Invert(placement.World);
+        var local = new Ray<float>(Vector3F.TransformCoordinate(ray.Position, inverse), Vector3F.TransformNormal(ray.Direction, inverse));
+        if (!hull.Intersects(local, out float distance))
         {
             return false;
         }
@@ -150,7 +152,7 @@ public class ConvexHullCollider : Collider
         return true;
     }
 
-    public override IConvexShape GetWorldShape()
+    public override IConvexShape<float> GetWorldShape()
     {
         return hull?.Transform(Owner.Transform.GetWorldMatrixF());
     }

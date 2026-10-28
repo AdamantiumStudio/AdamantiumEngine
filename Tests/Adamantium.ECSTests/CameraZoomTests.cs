@@ -51,7 +51,7 @@ public class CameraZoomTests
         {
             Assert.That(focus / camera.FocusDistance, Is.EqualTo(camera.ZoomStep * camera.ZoomStep).Within(1e-9));
             Assert.That(moved.Length(), Is.EqualTo(focus - camera.FocusDistance).Within(1e-6));
-            Assert.That(Vector3.Dot(Vector3.Normalize(moved), camera.Forward), Is.GreaterThan(0.9999));
+            Assert.That(Vector3<double>.Dot(Vector3<double>.Normalize(moved), camera.Forward), Is.GreaterThan(0.9999));
         });
     }
 

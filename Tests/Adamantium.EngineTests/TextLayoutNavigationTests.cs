@@ -14,7 +14,7 @@ public class TextLayoutNavigationTests
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf");
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { EmitNewlineCarets = true };
-        layout.ProcessText(text, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }

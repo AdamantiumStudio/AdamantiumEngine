@@ -9,7 +9,7 @@ namespace Adamantium.Engine.Compiler.Converter.Containers
       {
       }
 
-      public List<Vector3> Positions { get; internal set; }
+      public List<Vector3<double>> Positions { get; internal set; }
       public List<Vector3F> Normals { get; internal set; }
       public List<Vector2F> UV { get; internal set; }
 

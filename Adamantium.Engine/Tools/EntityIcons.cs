@@ -70,13 +70,13 @@ public class EntityIcons : EditorProcessor
 
     /// <summary>Puts an icon at <paramref name="at"/> in the world, facing the camera, <paramref name="pixels"/> points
     /// big on its screen.</summary>
-    public static void PlaceIcon(Entity icon, Vector3 at, float pixels, CameraBase camera)
+    public static void PlaceIcon(Entity icon, Vector3<double> at, float pixels, CameraBase camera)
     {
         var size = pixels * ScreenSpace.UnitsPerPoint(camera, at);
         var metadata = icon.Transform.GetMetadata(camera);
-        metadata.WorldMatrixF = Matrix4x4F.Scaling(size, -size, size)
-                                * Matrix4x4F.RotationQuaternion(ScreenSpace.Facing(camera))
-                                * Matrix4x4F.Translation(ScreenSpace.InRender(at, camera));
+        metadata.WorldMatrixF = Matrix4x4.CreateScale<float>(size, -size, size)
+                                * Matrix4x4.CreateFromQuaternion<float>(ScreenSpace.Facing(camera))
+                                * Matrix4x4.CreateTranslation<float>(ScreenSpace.InRender(at, camera));
         metadata.Enabled = true;
     }
 
@@ -111,7 +111,7 @@ public class EntityIcons : EditorProcessor
 
             var at = target.GetComponent<Camera>()?.WorldPosition ?? target.Transform.WorldPosition;
             var inRender = ScreenSpace.InRender(at, camera);
-            if (Vector3F.Dot(inRender, (Vector3F)camera.Forward) <= camera.ZNear && camera.ProjectionMatrix.M44 < 0.5f)
+            if (Vector3F.Dot(inRender, camera.Forward.As<float>()) <= camera.ZNear && camera.ProjectionMatrix.M44 < 0.5f)
             {
                 continue;
             }
@@ -263,8 +263,8 @@ public class EntityIcons : EditorProcessor
             var raysMetadata = rays.Transform.GetMetadata(camera);
             var stretchAndTurn = target.GetComponent<Camera>() is { } seen
                 ? ViewOf(seen, rays, size)
-                : Matrix4x4F.Scaling(size) * TurnOf(target);
-            raysMetadata.WorldMatrixF = stretchAndTurn * Matrix4x4F.Translation(ScreenSpace.InRender(at, camera));
+                : Matrix4x4.CreateScale<float>(size) * TurnOf(target);
+            raysMetadata.WorldMatrixF = stretchAndTurn * Matrix4x4.CreateTranslation<float>(ScreenSpace.InRender(at, camera));
             raysMetadata.Enabled = true;
         }
     }
@@ -282,12 +282,12 @@ public class EntityIcons : EditorProcessor
 
         var length = 2 * size;
         var stretch = flat
-            ? Matrix4x4F.Scaling(0.5f * size * projection.M22 / projection.M11, 0.5f * size, length)
-            : Matrix4x4F.Scaling(length / projection.M11, length / projection.M22, length);
+            ? Matrix4x4.CreateScale<float>(0.5f * size * projection.M22 / projection.M11, 0.5f * size, length)
+            : Matrix4x4.CreateScale<float>(length / projection.M11, length / projection.M22, length);
 
-        var right = (Vector3F)seen.Right;
-        var up = -(Vector3F)seen.Up;
-        var forward = (Vector3F)seen.Forward;
+        var right = seen.Right.As<float>();
+        var up = -seen.Up.As<float>();
+        var forward = seen.Forward.As<float>();
         var turn = new Matrix4x4F(
             right.X, right.Y, right.Z, 0,
             up.X, up.Y, up.Z, 0,

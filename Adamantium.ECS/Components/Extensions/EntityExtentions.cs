@@ -21,14 +21,14 @@ namespace Adamantium.ECS.Components.Extensions
                });
         }
 
-        public static Vector3 GetCenterAbsolute(this Entity owner)
+        public static Vector3<double> GetCenterAbsolute(this Entity owner)
         {
             var transform = owner.Transform;
             var collision = owner.GetComponent<Collider>();
 
             return collision == null
                 ? transform.WorldPosition
-                : (Vector3)Vector3F.TransformCoordinate(collision.LocalCenter, transform.GetWorldMatrixF());
+                : Vector3F.TransformCoordinate(collision.LocalCenter, transform.GetWorldMatrixF()).As<double>();
         }
 
         public static Vector3F GetLocalCenter(this Entity owner)
@@ -71,7 +71,7 @@ namespace Adamantium.ECS.Components.Extensions
             // never a diameter and is now a position relative to a parent besides.
             var collision = owner.GetComponent<Collider>();
 
-            return collision == null ? 0 : Vector3F.Max(collision.Bounds.Size);
+            return collision == null ? 0 : Vector3F.Max(collision.Bounds.Size.As<float>());
         }
 
         public static Matrix4x4F GetActualMatrixF(this Entity owner, CameraBase camera)
@@ -79,7 +79,7 @@ namespace Adamantium.ECS.Components.Extensions
             return owner.Transform.GetMetadata(camera).WorldMatrixF;
         }
         
-        public static Matrix4x4 GetActualMatrix(this Entity owner, CameraBase camera)
+        public static Matrix4x4<double> GetActualMatrix(this Entity owner, CameraBase camera)
         {
             return owner.Transform.GetMetadata(camera).WorldMatrix;
         }
@@ -94,7 +94,7 @@ namespace Adamantium.ECS.Components.Extensions
             return owner.Transform.GetRelativePosition(camera.GetOwnerPosition());
         }
 
-        public static Vector3 GetOwnerPosition(this IEntityOwner component)
+        public static Vector3<double> GetOwnerPosition(this IEntityOwner component)
         {
             return component.Owner.Transform.WorldPosition;
         }
@@ -104,14 +104,14 @@ namespace Adamantium.ECS.Components.Extensions
             return component.Owner.Transform.Rotation;
         }
 
-        public static Vector3 GetPositionForNewObject(this Entity owner, CameraBase camera)
+        public static Vector3<double> GetPositionForNewObject(this Entity owner, CameraBase camera)
         {
-            return camera.GetOwnerPosition() + (owner.GetDiameter() * (Vector3)camera.Forward * camera.Fov);
+            return camera.GetOwnerPosition() + (owner.GetDiameter() * (Vector3<double>)camera.Forward * camera.Fov);
         }
 
-        public static Vector3 GetPositionForNewObject(this Entity owner, CameraBase camera, double diameter)
+        public static Vector3<double> GetPositionForNewObject(this Entity owner, CameraBase camera, double diameter)
         {
-            return camera.GetOwnerPosition() + (diameter * (Vector3)camera.Forward * (camera.Fov/4));
+            return camera.GetOwnerPosition() + (diameter * (Vector3<double>)camera.Forward * (camera.Fov/4));
         }
     }
 }

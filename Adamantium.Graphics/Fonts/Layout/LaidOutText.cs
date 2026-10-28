@@ -64,9 +64,9 @@ internal sealed record LaidOutText
 
     public int DropCapLines { get; init; }
 
-    public Size Size { get; init; }
+    public Size<double> Size { get; init; }
 
-    public Size? RealTextDimensions { get; init; }
+    public Size<double>? RealTextDimensions { get; init; }
 
     public Glyph DotGlyph { get; init; }
 

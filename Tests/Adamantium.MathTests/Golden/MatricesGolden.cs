@@ -1,10 +1,10 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using Adamantium.Mathematics.Typed;
-using Matrix3x2 = Adamantium.Mathematics.Typed.Matrix3x2;
-using Matrix4x4 = Adamantium.Mathematics.Typed.Matrix4x4;
-using Quaternion = Adamantium.Mathematics.Typed.Quaternion;
+using Adamantium.Mathematics;
+using Matrix3x2 = Adamantium.Mathematics.Matrix3x2;
+using Matrix4x4 = Adamantium.Mathematics.Matrix4x4;
+using Quaternion = Adamantium.Mathematics.Quaternion;
 
 namespace Adamantium.MathTests.Golden;
 

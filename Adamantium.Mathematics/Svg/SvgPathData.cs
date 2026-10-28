@@ -14,10 +14,10 @@ public static class SvgPathData
     public static void Walk(string data, ISvgPathSink sink)
     {
         var reader = new SvgNumberReader(data);
-        var current = Vector2.Zero;
-        var start = Vector2.Zero;
-        var cubic = (Vector2?)null;
-        var quadratic = (Vector2?)null;
+        var current = Vector2<double>.Zero;
+        var start = Vector2<double>.Zero;
+        var cubic = (Vector2<double>?)null;
+        var quadratic = (Vector2<double>?)null;
         var open = false;
         var begun = false;
         var arguments = new double[7];
@@ -50,10 +50,10 @@ public static class SvgPathData
                     return;
                 }
 
-                var origin = relative ? current : Vector2.Zero;
+                var origin = relative ? current : Vector2<double>.Zero;
                 if (letter == 'M' && first)
                 {
-                    current = start = origin + new Vector2(arguments[0], arguments[1]);
+                    current = start = origin + new Vector2<double>(arguments[0], arguments[1]);
                     sink.MoveTo(current);
                     begun = true;
                     open = true;
@@ -69,28 +69,28 @@ public static class SvgPathData
                     open = true;
                 }
 
-                Vector2? nextCubic = null;
-                Vector2? nextQuadratic = null;
+                Vector2<double>? nextCubic = null;
+                Vector2<double>? nextQuadratic = null;
                 switch (letter)
                 {
                     case 'M':
                     case 'L':
-                        current = origin + new Vector2(arguments[0], arguments[1]);
+                        current = origin + new Vector2<double>(arguments[0], arguments[1]);
                         sink.LineTo(current);
                         break;
                     case 'H':
-                        current = new Vector2((relative ? current.X : 0) + arguments[0], current.Y);
+                        current = new Vector2<double>((relative ? current.X : 0) + arguments[0], current.Y);
                         sink.LineTo(current);
                         break;
                     case 'V':
-                        current = new Vector2(current.X, (relative ? current.Y : 0) + arguments[0]);
+                        current = new Vector2<double>(current.X, (relative ? current.Y : 0) + arguments[0]);
                         sink.LineTo(current);
                         break;
                     case 'C':
                     {
-                        var second = origin + new Vector2(arguments[2], arguments[3]);
-                        var end = origin + new Vector2(arguments[4], arguments[5]);
-                        sink.CubicTo(origin + new Vector2(arguments[0], arguments[1]), second, end);
+                        var second = origin + new Vector2<double>(arguments[2], arguments[3]);
+                        var end = origin + new Vector2<double>(arguments[4], arguments[5]);
+                        sink.CubicTo(origin + new Vector2<double>(arguments[0], arguments[1]), second, end);
                         nextCubic = second;
                         current = end;
                         break;
@@ -98,8 +98,8 @@ public static class SvgPathData
                     case 'S':
                     {
                         var firstControl = cubic is { } had ? current * 2 - had : current;
-                        var second = origin + new Vector2(arguments[0], arguments[1]);
-                        var end = origin + new Vector2(arguments[2], arguments[3]);
+                        var second = origin + new Vector2<double>(arguments[0], arguments[1]);
+                        var end = origin + new Vector2<double>(arguments[2], arguments[3]);
                         sink.CubicTo(firstControl, second, end);
                         nextCubic = second;
                         current = end;
@@ -107,8 +107,8 @@ public static class SvgPathData
                     }
                     case 'Q':
                     {
-                        var control = origin + new Vector2(arguments[0], arguments[1]);
-                        var end = origin + new Vector2(arguments[2], arguments[3]);
+                        var control = origin + new Vector2<double>(arguments[0], arguments[1]);
+                        var end = origin + new Vector2<double>(arguments[2], arguments[3]);
                         sink.QuadraticTo(control, end);
                         nextQuadratic = control;
                         current = end;
@@ -117,7 +117,7 @@ public static class SvgPathData
                     case 'T':
                     {
                         var control = quadratic is { } had ? current * 2 - had : current;
-                        var end = origin + new Vector2(arguments[0], arguments[1]);
+                        var end = origin + new Vector2<double>(arguments[0], arguments[1]);
                         sink.QuadraticTo(control, end);
                         nextQuadratic = control;
                         current = end;
@@ -125,7 +125,7 @@ public static class SvgPathData
                     }
                     case 'A':
                     {
-                        var end = origin + new Vector2(arguments[5], arguments[6]);
+                        var end = origin + new Vector2<double>(arguments[5], arguments[6]);
                         sink.ArcTo(arguments[0], arguments[1], arguments[2], arguments[3] != 0, arguments[4] != 0, end);
                         current = end;
                         break;
@@ -156,8 +156,8 @@ public static class SvgPathData
     /// <paramref name="sink"/>, none sweeping more than <paramref name="maxPiece"/> radians: the radii taken as their
     /// sizes and grown to reach the end when too small, as SVG says; a line for a radius of zero or infinity, nothing for
     /// an arc that ends where it starts.</summary>
-    public static void ArcToCubics(Vector2 start, double radiusX, double radiusY, double rotation, bool largeArc,
-        bool sweep, Vector2 end, double maxPiece, ISvgPathSink sink)
+    public static void ArcToCubics(Vector2<double> start, double radiusX, double radiusY, double rotation, bool largeArc,
+        bool sweep, Vector2<double> end, double maxPiece, ISvgPathSink sink)
     {
         var rx = Math.Abs(radiusX);
         var ry = Math.Abs(radiusY);
@@ -234,18 +234,18 @@ public static class SvgPathData
     private static double Angle(double ux, double uy, double vx, double vy) =>
         Math.Atan2(ux * vy - uy * vx, ux * vx + uy * vy);
 
-    private static Vector2 ArcPoint(double cx, double cy, double rx, double ry, double cos, double sin, double angle)
+    private static Vector2<double> ArcPoint(double cx, double cy, double rx, double ry, double cos, double sin, double angle)
     {
         var x = rx * Math.Cos(angle);
         var y = ry * Math.Sin(angle);
-        return new Vector2(cx + cos * x - sin * y, cy + sin * x + cos * y);
+        return new Vector2<double>(cx + cos * x - sin * y, cy + sin * x + cos * y);
     }
 
-    private static Vector2 ArcTangent(double rx, double ry, double cos, double sin, double angle)
+    private static Vector2<double> ArcTangent(double rx, double ry, double cos, double sin, double angle)
     {
         var x = -rx * Math.Sin(angle);
         var y = ry * Math.Cos(angle);
-        return new Vector2(cos * x - sin * y, sin * x + cos * y);
+        return new Vector2<double>(cos * x - sin * y, sin * x + cos * y);
     }
 
     private static bool IsNumberStart(char c) => c is >= '0' and <= '9' or '-' or '+' or '.';

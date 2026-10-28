@@ -5,19 +5,19 @@ namespace Adamantium.Fonts.Common
 {
     public class OutlineSegment
     {
-        public List<Vector2> Points { get; }
+        public List<Vector2<double>> Points { get; }
 
         public OutlineSegment()
         {
-            Points = new List<Vector2>();
+            Points = new List<Vector2<double>>();
         }
         
-        public OutlineSegment(List<Vector2> points)
+        public OutlineSegment(List<Vector2<double>> points)
         {
             Points = points;
         }
 
-        public void AddPoint(Vector2 point)
+        public void AddPoint(Vector2<double> point)
         {
             Points.Add(point);
         }

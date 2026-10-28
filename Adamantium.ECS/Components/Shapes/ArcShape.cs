@@ -12,20 +12,20 @@ namespace Adamantium.ECS.Components;
 [ViewModel]
 public partial class ArcShape : ProceduralShape
 {
-    [Bindable] private Vector2 size;
+    [Bindable] private Vector2<double> size;
     [Bindable] private double thickness;
     [Bindable] private float startAngle;
     [Bindable] private float stopAngle;
 
     public ArcShape()
     {
-        Size = new Vector2(1);
+        Size = new Vector2<double>(1);
         Thickness = 0.1;
         StopAngle = 270;
         Tessellation = 40;
     }
 
-    partial void OnSizeChanged(Vector2 value) => Changed();
+    partial void OnSizeChanged(Vector2<double> value) => Changed();
 
     partial void OnThicknessChanged(double value) => Changed();
 

@@ -75,7 +75,7 @@ namespace Adamantium.MathTests
             sb.AppendLine();
             sb.AppendLine("== Rounded rect resize sweep (60 frames @ tess=20) ==");
             {
-                var frames = new Vector2[60][];
+                var frames = new Vector2<double>[60][];
                 for (int i = 0; i < 60; i++) frames[i] = RoundedRect(120 + i, 80, 8, 20);
                 var (ms, min, _) = Measure(() =>
                 {
@@ -124,10 +124,10 @@ namespace Adamantium.MathTests
             Assert.Pass("\n" + text);
         }
 
-        static Vector2[] Circle(int n, double r = 100)
+        static Vector2<double>[] Circle(int n, double r = 100)
         {
-            var p = new Vector2[n];
-            for (int i = 0; i < n; i++) { double a = 2 * Math.PI * i / n; p[i] = new Vector2(r * Math.Cos(a), r * Math.Sin(a)); }
+            var p = new Vector2<double>[n];
+            for (int i = 0; i < n; i++) { double a = 2 * Math.PI * i / n; p[i] = new Vector2<double>(r * Math.Cos(a), r * Math.Sin(a)); }
             return p;
         }
 
@@ -142,29 +142,29 @@ namespace Adamantium.MathTests
         // Faithful copy of Shapes.Rectangle.GenerateRoundCorner: tess+1 points per 90-degree corner, snapped to
         // 3 decimals, in the engine's corner order (TL -180, TR 90, BR 0, BL -90). Produces the exact contour the
         // RectangleRenderUnit feeds the triangulator for a rounded border.
-        static Vector2[] RoundedRect(double w, double h, double radius, int tess)
+        static Vector2<double>[] RoundedRect(double w, double h, double radius, int tess)
         {
             radius = Math.Min(radius, Math.Min(w, h) / 2);
             double halfW = w / 2, halfH = h / 2;
-            var v = new List<Vector2>();
+            var v = new List<Vector2<double>>();
 
-            void Corner(double startDeg, Vector2 center)
+            void Corner(double startDeg, Vector2<double> center)
             {
-                double step = -MathHelper.DegreesToRadians(90.0 / tess);
-                double a = MathHelper.DegreesToRadians(startDeg);
+                double step = -(float)double.DegreesToRadians(90.0 / tess);
+                double a = (float)double.DegreesToRadians(startDeg);
                 for (int i = 0; i <= tess; i++)
                 {
                     var x = center.X + radius * Math.Cos(a);
                     var y = center.Y - radius * Math.Sin(a);
                     a += step;
-                    v.Add(Vector2.Round(new Vector2(x, y), 3));
+                    v.Add(Vector2<double>.Round(new Vector2<double>(x, y), 3));
                 }
             }
 
-            Corner(-180, new Vector2(-halfW + radius, -halfH + radius));
-            Corner(90, new Vector2(halfW - radius, -halfH + radius));
-            Corner(0, new Vector2(halfW - radius, halfH - radius));
-            Corner(-90, new Vector2(-halfW + radius, halfH - radius));
+            Corner(-180, new Vector2<double>(-halfW + radius, -halfH + radius));
+            Corner(90, new Vector2<double>(halfW - radius, -halfH + radius));
+            Corner(0, new Vector2<double>(halfW - radius, halfH - radius));
+            Corner(-90, new Vector2<double>(-halfW + radius, halfH - radius));
             return v.ToArray();
         }
 
@@ -194,14 +194,14 @@ namespace Adamantium.MathTests
             return p;
         }
 
-        static Vector2[] Gear(int n, double r0 = 60, double r1 = 100)
+        static Vector2<double>[] Gear(int n, double r0 = 60, double r1 = 100)
         {
-            var p = new Vector2[n];
-            for (int i = 0; i < n; i++) { double a = 2 * Math.PI * i / n; double r = (i % 2 == 0) ? r0 : r1; p[i] = new Vector2(r * Math.Cos(a), r * Math.Sin(a)); }
+            var p = new Vector2<double>[n];
+            for (int i = 0; i < n; i++) { double a = 2 * Math.PI * i / n; double r = (i % 2 == 0) ? r0 : r1; p[i] = new Vector2<double>(r * Math.Cos(a), r * Math.Sin(a)); }
             return p;
         }
 
-        static Polygon Single(Vector2[] pts)
+        static Polygon Single(Vector2<double>[] pts)
         {
             var p = new Polygon { FillRule = FillRule.EvenOdd };
             p.AddContour(new MeshContour(pts));
@@ -216,7 +216,7 @@ namespace Adamantium.MathTests
             var step = 100.0 / (side + 1);
 
             p.AddContour(new MeshContour(new[] {
-                new Vector2(0, 0), new Vector2(100, 0), new Vector2(100, 100), new Vector2(0, 100) }));
+                new Vector2<double>(0, 0), new Vector2<double>(100, 0), new Vector2<double>(100, 100), new Vector2<double>(0, 100) }));
 
             for (var i = 0; i < cells; i++)
             {
@@ -224,11 +224,11 @@ namespace Adamantium.MathTests
                 var w = step * 0.6;
 
                 p.AddContour(new MeshContour(new[] {
-                    new Vector2(x, y), new Vector2(x, y + w), new Vector2(x + w, y + w), new Vector2(x + w, y) }));
+                    new Vector2<double>(x, y), new Vector2<double>(x, y + w), new Vector2<double>(x + w, y + w), new Vector2<double>(x + w, y) }));
             }
 
             p.AddContour(new MeshContour(new[] {
-                new Vector2(90, 40), new Vector2(130, 40), new Vector2(90, 70) }));
+                new Vector2<double>(90, 40), new Vector2<double>(130, 40), new Vector2<double>(90, 70) }));
 
             return p;
         }
@@ -241,7 +241,7 @@ namespace Adamantium.MathTests
             {
                 double x = (i % side) * 30, y = (i / side) * 30;
                 p.AddContour(new MeshContour(new[] {
-                    new Vector2(x, y), new Vector2(x + 20, y), new Vector2(x + 20, y + 20), new Vector2(x, y + 20) }));
+                    new Vector2<double>(x, y), new Vector2<double>(x + 20, y), new Vector2<double>(x + 20, y + 20), new Vector2<double>(x, y + 20) }));
             }
             return p;
         }

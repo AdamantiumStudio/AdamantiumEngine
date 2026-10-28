@@ -91,7 +91,7 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
       private Mesh currentGeometry;
 
       //Raw mesh data, kept until the whole mesh has been read - see the VertexList case
-      private List<Vector3> rawPositions;
+      private List<Vector3<double>> rawPositions;
       private List<Vector2F> rawUVs;
       private List<int> faceIndices;
       private List<uint> smoothingGroups;
@@ -113,9 +113,9 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
          var faceNormals = new Vector3F[faceIndices.Count / 3];
          for (var face = 0; face < faceNormals.Length; face++)
          {
-            var a = (Vector3F)rawPositions[faceIndices[face * 3]];
-            var b = (Vector3F)rawPositions[faceIndices[face * 3 + 1]];
-            var c = (Vector3F)rawPositions[faceIndices[face * 3 + 2]];
+            var a = rawPositions[faceIndices[face * 3]].As<float>();
+            var b = rawPositions[faceIndices[face * 3 + 1]].As<float>();
+            var c = rawPositions[faceIndices[face * 3 + 2]].As<float>();
             faceNormals[face] = Vector3F.Cross(b - a, c - a);
          }
 
@@ -156,7 +156,7 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
 
          uint Group(int face) => face < smoothingGroups.Count ? smoothingGroups[face] : 0u;
 
-         var positions = new List<Vector3>(faceIndices.Count);
+         var positions = new List<Vector3<double>>(faceIndices.Count);
          var normals = new List<Vector3F>(faceIndices.Count);
          var uvs = new List<Vector2F>(faceIndices.Count);
          var hasUVs = rawUVs.Count == rawPositions.Count;
@@ -241,13 +241,13 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
                      // Assembling right here was the trouble: the UV chunk comes AFTER the faces, so by the time
                      // the coordinates arrived the points had already been reordered and no longer matched them.
                      // Everything is kept raw now and put together once the whole mesh has been read.
-                     rawPositions = new List<Vector3>(vertexCount);
+                     rawPositions = new List<Vector3<double>>(vertexCount);
                      rawUVs = new List<Vector2F>();
                      faceIndices = new List<int>();
                      smoothingGroups = new List<uint>();
                      for (int x = 0; x < vertexCount; x++)
                      {
-                        Vector3 vertex;
+                        Vector3<double> vertex;
                         vertex.X = binaryReader.ReadSingle();
                         vertex.Y = binaryReader.ReadSingle();
                         vertex.Z = binaryReader.ReadSingle();

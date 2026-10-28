@@ -63,8 +63,7 @@ public class Skin : Component
     /// joints without composing every joint's parents again.</summary>
     public int FillPalette(Span<Matrix4x4F> palette, CameraBase camera)
     {
-        var mesh = Owner.Transform.GetWorldMatrixF(camera);
-        Matrix4x4F.Invert(ref mesh, out var toMesh);
+        var toMesh = Matrix4x4F.Invert(Owner.Transform.GetWorldMatrixF(camera));
         var count = Math.Min(Joints.Count, palette.Length);
         for (int i = 0; i < count; i++)
         {
@@ -103,16 +102,15 @@ public class Skin : Component
     /// A box in the mesh's own space that holds every point of <paramref name="mesh"/> however its joints stand now,
     /// found without posing the points: the mesh's own box as each joint carries it, all together.
     /// </summary>
-    public BoundingBox PosedBounds(Mesh mesh) => PosedBounds(mesh, null);
+    public BoundingBox<float> PosedBounds(Mesh mesh) => PosedBounds(mesh, null);
 
     /// <summary>As <see cref="PosedBounds(Mesh)"/>, from the world matrices the transforms were worked out with for
     /// <paramref name="camera"/> this frame.</summary>
-    public BoundingBox PosedBounds(Mesh mesh, CameraBase camera)
+    public BoundingBox<float> PosedBounds(Mesh mesh, CameraBase camera)
     {
-        BoundingBox bound = mesh.Bounds;
+        var bound = mesh.Bounds.ToBoundingBox().As<float>();
         var reach = bound;
-        var meshWorld = Owner.Transform.GetWorldMatrixF(camera);
-        Matrix4x4F.Invert(ref meshWorld, out var toMesh);
+        var toMesh = Matrix4x4F.Invert(Owner.Transform.GetWorldMatrixF(camera));
         bound.GetCorners(boxCorners);
         Analyze(mesh);
         foreach (var joint in usedJoints)
@@ -135,10 +133,10 @@ public class Skin : Component
     /// joint's scale, and one bent by none stays where the mesh puts it. Looser than <see cref="PosedBounds(Mesh,
     /// CameraBase)"/>, and cheaper: no matrix is composed and no corner carried.
     /// </summary>
-    public BoundingBox WorldBounds(Mesh mesh, CameraBase camera)
+    public BoundingBox<float> WorldBounds(Mesh mesh, CameraBase camera)
     {
         Analyze(mesh);
-        var box = new BoundingBox(new Vector3F(float.MaxValue), new Vector3F(float.MinValue));
+        var box = new BoundingBox<float>(new Vector3F(float.MaxValue), new Vector3F(float.MinValue));
         if (restPoints)
         {
             box = RestBounds(mesh, camera);
@@ -149,7 +147,7 @@ public class Skin : Component
             var joint = Joints[usedJoints[k]];
             if (joint == null)
             {
-                box = BoundingBox.Merge(box, RestBounds(mesh, camera));
+                box = BoundingBox.CreateMerged<float>(box, RestBounds(mesh, camera));
                 continue;
             }
 
@@ -163,12 +161,12 @@ public class Skin : Component
         return box;
     }
 
-    private BoundingBox RestBounds(Mesh mesh, CameraBase camera)
+    private BoundingBox<float> RestBounds(Mesh mesh, CameraBase camera)
     {
         var world = Owner.Transform.GetWorldMatrixF(camera);
-        ((BoundingBox)mesh.Bounds).GetCorners(boxCorners);
+        mesh.Bounds.ToBoundingBox().As<float>().GetCorners(boxCorners);
         var first = Vector3F.TransformCoordinate(boxCorners[0], world);
-        var box = new BoundingBox(first, first);
+        var box = new BoundingBox<float>(first, first);
         for (int i = 1; i < boxCorners.Length; i++)
         {
             var corner = Vector3F.TransformCoordinate(boxCorners[i], world);
@@ -205,7 +203,7 @@ public class Skin : Component
         {
             for (int i = 0; i < points.Length; i++)
             {
-                var point = (Vector3F)points[i];
+                var point = points[i].As<float>();
                 var bent = Follow(point, indices[i].X, weights[i].X, used, reach, ref rest)
                            | Follow(point, indices[i].Y, weights[i].Y, used, reach, ref rest)
                            | Follow(point, indices[i].Z, weights[i].Z, used, reach, ref rest)
@@ -272,11 +270,11 @@ public class Skin : Component
 
     /// <summary>The nearest triangle of <paramref name="mesh"/> along <paramref name="ray"/>, both in the mesh's own space,
     /// as the skin puts it now; the distance in lengths of the ray's direction.</summary>
-    public bool Intersect(Mesh mesh, Ray ray, out float distance) => Intersect(mesh, ray, null, out distance);
+    public bool Intersect(Mesh mesh, Ray<float> ray, out float distance) => Intersect(mesh, ray, null, out distance);
 
     /// <summary>As <see cref="Intersect(Mesh, Ray, out float)"/>, from the world matrices the transforms were worked out
     /// with for <paramref name="camera"/> this frame.</summary>
-    public bool Intersect(Mesh mesh, Ray ray, CameraBase camera, out float distance)
+    public bool Intersect(Mesh mesh, Ray<float> ray, CameraBase camera, out float distance)
     {
         Pose(mesh, camera);
         if (posedTree == null || treeVersion != mesh.Version || !posedTree.Describes(mesh.Points, mesh.Indices, mesh.MeshTopology))
@@ -331,7 +329,7 @@ public class Skin : Component
         var jointed = mesh.IsAnimationPresent && indices.Length == points.Length && weights.Length == points.Length;
         for (int i = 0; i < points.Length; i++)
         {
-            var point = (Vector3F)points[i];
+            var point = points[i].As<float>();
             posed[i] = jointed ? Carry(point, indices[i], Vector4F.Max(weights[i], Vector4F.Zero), filled) : point;
         }
 

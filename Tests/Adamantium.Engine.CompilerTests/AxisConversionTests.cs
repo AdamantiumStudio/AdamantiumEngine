@@ -28,15 +28,15 @@ namespace Adamantium.Engine.CompilerTests
         public void Matrix_MovesAPointExactlyAsTheMeshDoes([ValueSource(nameof(Pairs))] (UpAxis From, UpAxis To) pair)
         {
             // An asymmetric point: on (1,1,1) an axis swap is indistinguishable from identity
-            var point = new Vector3(2, 3, 5);
+            var point = new Vector3<double>(2, 3, 5);
 
             var mesh = new Mesh(PrimitiveType.TriangleList) { UpAxis = pair.From };
             mesh.SetPoints([point]);
             mesh.ChangeCoordinateSystem(pair.To);
 
-            var byMatrix = Vector3F.TransformCoordinate((Vector3F)point, AxisConversion.Between(pair.From, pair.To));
+            var byMatrix = Vector3F.TransformCoordinate(point.As<float>(), AxisConversion.Between(pair.From, pair.To));
 
-            Assert.That((Vector3F)mesh.Points[0], Is.EqualTo(byMatrix).Using<Vector3F>(
+            Assert.That(mesh.Points[0].As<float>(), Is.EqualTo(byMatrix).Using<Vector3F>(
                 (a, b) => (a - b).Length() < 0.0001f ? 0 : 1),
                 $"{pair.From} -> {pair.To}: the mesh and the matrix sent the point to different places");
         }
@@ -86,16 +86,16 @@ namespace Adamantium.Engine.CompilerTests
         //Which side the winding names
         private static Vector3F Facing(Mesh mesh)
         {
-            var a = (Vector3F)mesh.Points[mesh.Indices[0]];
-            var b = (Vector3F)mesh.Points[mesh.Indices[1]];
-            var c = (Vector3F)mesh.Points[mesh.Indices[2]];
+            var a = mesh.Points[mesh.Indices[0]].As<float>();
+            var b = mesh.Points[mesh.Indices[1]].As<float>();
+            var c = mesh.Points[mesh.Indices[2]].As<float>();
             return Vector3F.Cross(b - a, c - a);
         }
 
         private static Mesh Triangle(UpAxis upAxis)
         {
             var mesh = new Mesh(PrimitiveType.TriangleList) { UpAxis = upAxis };
-            mesh.SetPoints([new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 3, 0)]);
+            mesh.SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(2, 0, 0), new Vector3<double>(0, 3, 0)]);
             mesh.SetIndices([0, 1, 2]);
             return mesh;
         }
@@ -115,7 +115,7 @@ namespace Adamantium.Engine.CompilerTests
             var translation = new Vector3F(2, 3, 5);
             var conversion = AxisConversion.Between(pair.From, pair.To);
 
-            var moved = AxisConversion.Convert(Matrix4x4F.Translation(translation), conversion);
+            var moved = AxisConversion.Convert(Matrix4x4.CreateTranslation<float>(translation), conversion);
             moved.Decompose(out _, out _, out var position);
 
             var expected = Vector3F.TransformCoordinate(translation, conversion);

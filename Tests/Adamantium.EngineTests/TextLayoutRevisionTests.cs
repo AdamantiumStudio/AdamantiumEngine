@@ -18,7 +18,7 @@ public class TextLayoutRevisionTests
             "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
 
-        Size Lay() => layout.ProcessText("one two three four", 20, new Size(80, double.NaN), TextWrapping.WrapByWords,
+        Size<double> Lay() => layout.ProcessText("one two three four", 20, new Size<double>(80, double.NaN), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
 
         Lay();

@@ -1,10 +1,6 @@
 using System;
 using Adamantium.Mathematics;
-using Adamantium.Mathematics.Typed;
 using NUnit.Framework;
-using Rectangle = Adamantium.Mathematics.Typed.Rectangle;
-using Size = Adamantium.Mathematics.Typed.Size;
-using Vector2 = Adamantium.Mathematics.Typed.Vector2;
 
 namespace Adamantium.MathTests;
 

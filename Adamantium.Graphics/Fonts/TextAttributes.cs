@@ -52,7 +52,7 @@ public sealed class TextAttributes
     /// a line of a UI's text: it advances the line by its width and stands on the baseline, its height raising the line
     /// as a tall glyph would. Nothing is drawn for it; whoever placed it draws the object at
     /// <see cref="TextLayout.GetInlineObjects"/>. Horizontal text only.</summary>
-    public Size? ObjectSize { get; init; }
+    public Size<double>? ObjectSize { get; init; }
 
     /// <summary>The font's palette color glyphs are drawn in ('CPAL', <see cref="IFont.ColorPalettes"/>); unset, or one
     /// the font lacks, draws them in its first.</summary>

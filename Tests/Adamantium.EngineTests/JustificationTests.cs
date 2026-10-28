@@ -35,7 +35,7 @@ public class JustificationTests
         {
             Fallback = null, LineBreaking = breaking, EmitNewlineCarets = true,
         };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             alignment, VerticalTextAlignment.Top);
         return layout;
     }
@@ -50,7 +50,7 @@ public class JustificationTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", font));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, LastLineAlignment = last };
-        layout.ProcessText(text, FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         var (left, right) = Ink(layout, layout.LineCount - 1);
         var rightToLeft = layout.IsRightToLeftParagraph(0);
@@ -81,7 +81,7 @@ public class JustificationTests
             Fallback = null, SingleWordJustification = single, LastLineAlignment = last,
             LetterSpacing = letters ?? SpacingRange.Letters, OpticalMarginAlignment = hangs,
         };
-        layout.ProcessText(text, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         return layout;
     }
@@ -136,7 +136,7 @@ public class JustificationTests
         {
             Fallback = null, EmitNewlineCarets = true, LastLineAlignment = HorizontalTextAlignment.Center,
         };
-        layout.ProcessText("abc\n", FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("abc\n", FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top, justifyLastLine: true);
 
         Assert.That(layout.GetCaretStops()[4].X, Is.EqualTo(0).Within(0.5));
@@ -150,7 +150,7 @@ public class JustificationTests
         {
             Fallback = null, EmitNewlineCarets = true, LastLineAlignment = HorizontalTextAlignment.Center,
         };
-        layout.ProcessText("abc\n", FontSize, new Size(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText("abc\n", FontSize, new Size<double>(Width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetCaretStops()[4].X, Is.EqualTo(Width / 2).Within(0.5));
@@ -165,7 +165,7 @@ public class JustificationTests
         const string text = "Incomprehensibilities notwithstanding, we go on.";
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, SingleWordJustification = single };
-        layout.ProcessText(text, FontSize, new Size(220, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, FontSize, new Size<double>(220, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Justify, VerticalTextAlignment.Top);
         var line = layout.GetLine(0);
         var (left, right) = Ink(layout, 0);

@@ -1,11 +1,5 @@
 using System;
-using Adamantium.Mathematics.Typed;
-using Matrix3x3 = Adamantium.Mathematics.Typed.Matrix3x3;
-using Matrix4x4 = Adamantium.Mathematics.Typed.Matrix4x4;
-using BoundingBox = Adamantium.Mathematics.Typed.BoundingBox;
-using BoundingSphere = Adamantium.Mathematics.Typed.BoundingSphere;
-using Collision = Adamantium.Mathematics.Typed.Collision;
-using Ray = Adamantium.Mathematics.Typed.Ray;
+using Adamantium.Mathematics;
 
 namespace Adamantium.MathTests.Golden;
 

@@ -89,12 +89,12 @@ public class GlyphOutlineShadowTests
         setUp?.Invoke(layout);
         if (attributed != null)
         {
-            layout.ProcessText(attributed, FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+            layout.ProcessText(attributed, FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         }
         else
         {
-            layout.ProcessText("Hgy", FontSize, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+            layout.ProcessText("Hgy", FontSize, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         }
 

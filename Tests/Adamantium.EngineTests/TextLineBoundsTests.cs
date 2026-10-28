@@ -29,7 +29,7 @@ public class TextLineBoundsTests
         var font = Font();
         var layout = new TextLayout(font.Typeface, font) { Fallback = null, LineBounds = bounds };
         setUp?.Invoke(layout);
-        layout.ProcessText(text, Size, new Size(1000, height), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(text, Size, new Size<double>(1000, height), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, alignment);
         return layout;
     }
@@ -127,8 +127,8 @@ public class TextLineBoundsTests
         var font = Font();
         var layout = new TextLayout(font.Typeface, font) { Fallback = null, LineBounds = TextLineBounds.Tight };
         var attributed = new AttributedText("ab" + (char)0xFFFC + "cd");
-        attributed.Apply(2, 1, new TextAttributes { ObjectSize = new Size(40, 150) });
-        layout.ProcessText(attributed, Size, new Size(1000, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        attributed.Apply(2, 1, new TextAttributes { ObjectSize = new Size<double>(40, 150) });
+        layout.ProcessText(attributed, Size, new Size<double>(1000, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetInlineObjects().Single().Rect.Y, Is.InRange(0, 1));

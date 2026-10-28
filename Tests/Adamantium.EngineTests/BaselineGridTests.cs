@@ -36,12 +36,12 @@ public class BaselineGridTests
         var layout = Layout(grid);
         if (attributed != null)
         {
-            layout.ProcessText(attributed, FontSize, new Size(width, height), TextWrapping.WrapByWords,
+            layout.ProcessText(attributed, FontSize, new Size<double>(width, height), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, alignment);
         }
         else
         {
-            layout.ProcessText(text, FontSize, new Size(width, height), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, FontSize, new Size<double>(width, height), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, alignment);
         }
 
@@ -121,7 +121,7 @@ public class BaselineGridTests
     {
         var layout = Layout(new BaselineGrid(Step));
         layout.Frames = [new RectangleF(0, 7, 140, 200), new RectangleF(160, 0, 140, 200)];
-        layout.ProcessText(Prose + " " + Prose, FontSize, new Size(300, 200), TextWrapping.WrapByWords,
+        layout.ProcessText(Prose + " " + Prose, FontSize, new Size<double>(300, 200), TextWrapping.WrapByWords,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var lines = Baselines(layout);
 
@@ -142,7 +142,7 @@ public class BaselineGridTests
     public void InAFixedHeight_EveryLineThatIsKeptStartsInside(TextTrimming trimming)
     {
         var layout = Layout(new BaselineGrid(Step));
-        layout.ProcessText(Prose, FontSize, new Size(300, 50), TextWrapping.WrapByWords, trimming,
+        layout.ProcessText(Prose, FontSize, new Size<double>(300, 50), TextWrapping.WrapByWords, trimming,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var tops = Enumerable.Range(0, layout.LineCount).Select(i => layout.GetLine(i).Top).ToArray();
 
@@ -156,7 +156,7 @@ public class BaselineGridTests
         var attributed = new AttributedText(text).Apply(14, 13, new TextAttributes { FontSize = FontSize * 2 });
         var layout = Layout(new BaselineGrid(Step));
         layout.Frames = [new RectangleF(0, 0, 300, 400)];
-        layout.ProcessText(attributed, FontSize, new Size(300, 400), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, FontSize, new Size<double>(300, 400), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var lines = Baselines(layout);
 
@@ -181,7 +181,7 @@ public class BaselineGridTests
         var layout = Layout(gridded ? new BaselineGrid(Step) : null);
         layout.Frames = [new RectangleF(0, 0, 300, 100), new RectangleF(320, 0, 300, 400)];
         layout.Exclusions = [exclusion];
-        layout.ProcessText(attributed, FontSize, new Size(620, 400), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, FontSize, new Size<double>(620, 400), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
 
@@ -232,7 +232,7 @@ public class BaselineGridTests
                 layout.Frames = [new RectangleF(0, 0, 220, 2000)];
             }
 
-            layout.ProcessText(attributed, FontSize, new Size(220, framed ? 2000 : double.NaN), TextWrapping.WrapByWords,
+            layout.ProcessText(attributed, FontSize, new Size<double>(220, framed ? 2000 : double.NaN), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return Baselines(layout);
         }
@@ -254,7 +254,7 @@ public class BaselineGridTests
     {
         var layout = Layout(new BaselineGrid(Step));
         layout.Frames = [new RectangleF(0, 0, 300, 23)];
-        layout.ProcessText(Prose, FontSize, new Size(300, 23), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(300, 23), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.LineCount, Is.EqualTo(1));
@@ -276,7 +276,7 @@ public class BaselineGridTests
         var layout = Layout(new BaselineGrid(Step, FirstLineOnly: true));
         layout.LineBreaking = breaking;
         layout.Frames = [new RectangleF(0, 0, 300, 600)];
-        layout.ProcessText(attributed, FontSize, new Size(300, 600), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, FontSize, new Size<double>(300, 600), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var second = Enumerable.Range(0, layout.LineCount).First(i => layout.GetLine(i).Start > Prose.Length);
 
@@ -294,7 +294,7 @@ public class BaselineGridTests
             layout.Frames = [new RectangleF(0, 0, 300, 600)];
         }
 
-        layout.ProcessText(Prose, FontSize, new Size(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(300, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var cap = layout.GetTextData().Single(glyph => glyph.PositionInString == 0);
         var font = layout.Font;
@@ -323,7 +323,7 @@ public class BaselineGridTests
     {
         var layout = Layout(new BaselineGrid(40));
         layout.Frames = [new RectangleF(0, 41, 300, 22), new RectangleF(320, 0, 300, 200)];
-        layout.ProcessText(Prose, FontSize, new Size(620, 200), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(620, 200), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var first = layout.GetTextData()[0];
 
@@ -351,7 +351,7 @@ public class BaselineGridTests
         var glyphs = grids.Select(grid =>
         {
             var layout = Layout(grid, WritingMode.VerticalRightToLeft);
-            layout.ProcessText("縦書きの文章です。", FontSize, new Size(double.NaN, 200), TextWrapping.WrapByWords,
+            layout.ProcessText("縦書きの文章です。", FontSize, new Size<double>(double.NaN, 200), TextWrapping.WrapByWords,
                 TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout.GetTextData().Select(glyph => glyph.Rect).ToArray();
         }).ToArray();
@@ -365,7 +365,7 @@ public class BaselineGridTests
     {
         var plain = Layout(new BaselineGrid(Step));
         plain.Frames = [new RectangleF(0, 0, 300, 1200)];
-        plain.ProcessText(Prose, FontSize, new Size(300, 1200), TextWrapping.WrapByWords, TextTrimming.None,
+        plain.ProcessText(Prose, FontSize, new Size<double>(300, 1200), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var rowTop = (float)(plain.GetLine(0).Top + row * Step);
         var bottom = MathF.BitIncrement(rowTop);
@@ -373,7 +373,7 @@ public class BaselineGridTests
         layout.Frames = [new RectangleF(0, 0, 300, 1200)];
         layout.Exclusions = [new RectangleF(-10, 0, 320, bottom)];
 
-        layout.ProcessText(Prose, FontSize, new Size(300, 1200), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(Prose, FontSize, new Size<double>(300, 1200), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.Multiple(() =>

@@ -10,8 +10,8 @@ public class PlacementToolTests
     [Test]
     public void ARayLookingDown_MeetsTheGroundUnderIt_FarFromTheWorldsOrigin()
     {
-        var eye = new Vector3(1e7, -10, 2e7);
-        var ray = new Ray(Vector3F.Zero, Vector3F.Normalize(new Vector3F(1, 1, 0)));
+        var eye = new Vector3<double>(1e7, -10, 2e7);
+        var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(1, 1, 0)));
 
         Assert.That(PlacementTool.OnGround(ray, eye, 0, 1000, out var point), Is.True);
         Assert.Multiple(() =>
@@ -25,9 +25,9 @@ public class PlacementToolTests
     [Test]
     public void ARaisedGround_IsMetAtItsHeight()
     {
-        var ray = new Ray(Vector3F.Zero, Vector3F.UnitY);
+        var ray = new Ray<float>(Vector3F.Zero, Vector3F.UnitY);
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3(0, -10, 0), -4, 1000, out var point), Is.True);
+        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), -4, 1000, out var point), Is.True);
         Assert.That(point.Y, Is.EqualTo(-4).Within(1e-6));
     }
 
@@ -35,17 +35,17 @@ public class PlacementToolTests
     [TestCase(1, 0, 0)]
     public void ARayAwayFromOrAlongTheGround_MeetsNothing(float x, float y, float z)
     {
-        var ray = new Ray(Vector3F.Zero, new Vector3F(x, y, z));
+        var ray = new Ray<float>(Vector3F.Zero, new Vector3F(x, y, z));
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3(0, -10, 0), 0, 1000, out _), Is.False);
+        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), 0, 1000, out _), Is.False);
     }
 
     [Test]
     public void GroundPastTheReach_IsNotMet()
     {
-        var ray = new Ray(Vector3F.Zero, Vector3F.Normalize(new Vector3F(100, 1, 0)));
+        var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(100, 1, 0)));
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3(0, -10, 0), 0, 500, out _), Is.False);
+        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), 0, 500, out _), Is.False);
     }
 
     // A flat view casts its rays from far behind the camera: the reach counts across the ground, not along the ray.
@@ -53,9 +53,9 @@ public class PlacementToolTests
     public void ARayFromFarBehindTheEye_MeetsTheGroundNearIt()
     {
         var direction = Vector3F.Normalize(new Vector3F(0, 1, 1));
-        var ray = new Ray(direction * -10000, direction);
+        var ray = new Ray<float>(direction * -10000, direction);
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3(0, -10, 0), 0, 500, out var point), Is.True);
+        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), 0, 500, out var point), Is.True);
         Assert.That(point.Z, Is.EqualTo(10).Within(1e-2));
     }
 
@@ -68,7 +68,7 @@ public class PlacementToolTests
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = 12 };
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
         camera.Update(new Adamantium.Core.AppTime());
-        var ray = new Ray(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0.2f, up, 1)));
+        var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0.2f, up, 1)));
 
         var point = PlacementTool.UnderFocus(ray, camera, 0, camera.FocusDistance);
 
@@ -86,13 +86,13 @@ public class PlacementToolTests
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
-        camera.Owner.Transform.Position = new Vector3(4, -3, 1);
+        camera.Owner.Transform.Position = new Vector3<double>(4, -3, 1);
         camera.Update(new Adamantium.Core.AppTime());
-        var ray = new Ray(new Vector3F(0.5f, 0, -10000), Vector3F.UnitZ);
+        var ray = new Ray<float>(new Vector3F(0.5f, 0, -10000), Vector3F.UnitZ);
 
         var point = PlacementTool.UnderFocus(ray, camera, 0, 12);
 
-        Assert.That(point, Is.EqualTo(new Vector3(4.5, 0, 13)).Using<Vector3>((a, b) => (a - b).Length() < 1e-2));
+        Assert.That(point, Is.EqualTo(new Vector3<double>(4.5, 0, 13)).Using<Vector3<double>>((a, b) => (a - b).Length() < 1e-2));
     }
 
     // Where the ground under the pointer is as deep as the depth asked, the two points are one: no jump between them.
@@ -101,9 +101,9 @@ public class PlacementToolTests
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
-        camera.Owner.Transform.Position = new Vector3(0, -3, 0);
+        camera.Owner.Transform.Position = new Vector3<double>(0, -3, 0);
         camera.Update(new Adamantium.Core.AppTime());
-        var ray = new Ray(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0, 3, 20)));
+        var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0, 3, 20)));
 
         PlacementTool.OnGround(ray, camera.WorldPosition, 0, 500, out var onGround);
         var beyond = PlacementTool.UnderFocus(ray, camera, 0, 20);
@@ -114,8 +114,8 @@ public class PlacementToolTests
     [Test]
     public void AnObject_RestsOnThePointByItsLowestPoint_UpBeingMinusY()
     {
-        var position = PlacementTool.RestOn(new Vector3(3, 0, 4), 0.5f);
+        var position = PlacementTool.RestOn(new Vector3<double>(3, 0, 4), 0.5f);
 
-        Assert.That(position, Is.EqualTo(new Vector3(3, -0.5, 4)));
+        Assert.That(position, Is.EqualTo(new Vector3<double>(3, -0.5, 4)));
     }
 }

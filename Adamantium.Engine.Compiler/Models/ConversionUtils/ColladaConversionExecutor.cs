@@ -138,7 +138,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         {
             var rawMesh = new Mesh();
             SceneData.GeometryData rawGeometryData = new SceneData.GeometryData();
-            var tmp = new Vector3();
+            var tmp = new Vector3<double>();
             Vector2F tmpTexture = new Vector2F();
             meshId = geometry.id;
             name = geometry.name;
@@ -690,22 +690,22 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                         {
                             case "rotationX":
                             case "rotateX":
-                                rotationX = MathHelper.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
+                                rotationX = float.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
                                 break;
                             case "rotationY":
                             case "rotateY":
-                                rotationY = MathHelper.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
+                                rotationY = float.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
                                 break;
                             case "rotationZ":
                             case "rotateZ":
-                                rotationZ = MathHelper.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
+                                rotationZ = float.DegreesToRadians((float)rotate.Values[rotate.Values.Length - 1]);
                                 break;
                         }
                     }
                 }
                 parameters.Scale = scale;
                 parameters.Translation = translation;
-                parameters.Rotation = QuaternionF.RotationYawPitchRoll(rotationY, rotationX, rotationZ);
+                parameters.Rotation = Quaternion.CreateFromYawPitchRoll<float>(rotationY, rotationX, rotationZ);
 
                 return parameters;
                 //result = Matrix4x4F.Scaling(scale) * Matrix4x4F.RotationX(rotationX) * Matrix4x4F.RotationX(rotationY) * Matrix4x4F.RotationX(rotationZ) *

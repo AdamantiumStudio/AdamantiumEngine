@@ -1,10 +1,8 @@
 using System;
-using Adamantium.Mathematics.Typed;
+using Adamantium.Mathematics;
 using NUnit.Framework;
-using Matrix3x3 = Adamantium.Mathematics.Typed.Matrix3x3;
-using Matrix3x3D = Adamantium.Mathematics.Typed.Matrix3x3<double>;
-using Quaternion = Adamantium.Mathematics.Typed.Quaternion;
-using Vector3D = Adamantium.Mathematics.Typed.Vector3<double>;
+using Matrix3x3D = Adamantium.Mathematics.Matrix3x3<double>;
+using Vector3D = Adamantium.Mathematics.Vector3<double>;
 
 namespace Adamantium.MathTests;
 
@@ -106,10 +104,10 @@ public class TypedMatrix3x3Tests
         var turn = Quaternion.CreateFromYawPitchRoll(0.3, -0.2, 0.9);
 
         var small = Matrix3x3.CreateFromQuaternion(turn);
-        var large = Adamantium.Mathematics.Typed.Matrix4x4.CreateFromQuaternion(turn);
+        var large = Matrix4x4.CreateFromQuaternion(turn);
 
         Assert.That(small, Is.EqualTo((Matrix3x3D)large));
-        Assert.That((Matrix3x3D)(Adamantium.Mathematics.Typed.Matrix4x4<double>)small, Is.EqualTo(small));
+        Assert.That((Matrix3x3D)(Matrix4x4<double>)small, Is.EqualTo(small));
         Assert.That(Quaternion<double>.NearEqual(Quaternion.CreateFromRotationMatrix(small), turn), Is.True);
     }
 

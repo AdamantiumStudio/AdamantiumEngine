@@ -1,6 +1,5 @@
 using System;
-using Adamantium.Mathematics.Typed;
-using Rectangle = Adamantium.Mathematics.Typed.Rectangle;
+using Adamantium.Mathematics;
 
 namespace Adamantium.MathTests.Golden;
 
@@ -24,7 +23,7 @@ public static class GeometryGolden
             "meaning changed: this overload left out the right and bottom edges while the one by value counted them; " +
             "used nowhere");
         map.NotMapped("RectangleF.Merge(this RectangleF)",
-            "used nowhere; Union holds two ordered rectangles as Merge did");
+            "Union holds two ordered rectangles as Merge did - ContoursContainer moved to it");
         map.ChangedWhere(key => key.StartsWith("Size.Equals("), inputs => Array.Exists(inputs, double.IsNaN),
             "decided 28.10: Equals takes a NaN as equal to a NaN, as a dictionary key needs and System.Numerics does; " +
             "== still does not");

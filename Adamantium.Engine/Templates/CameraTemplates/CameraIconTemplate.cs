@@ -20,21 +20,21 @@ public class CameraIconTemplate
         var ellipse1 = Shapes.Ellipse.GenerateGeometry(
             GeometryType.Outlined, 
             EllipseType.EdgeToEdge,
-            new Vector2(0.3f), 
+            new Vector2<double>(0.3f), 
             0, 
             360, 
             true, 
             40, 
-            Matrix4x4.Translation(-0.25f, 0.15f, 0));
-        var ellipse2 = ellipse1.Clone(Matrix4x4.Translation(0.24, 0.12, 0));
+            Matrix4x4.CreateTranslation<double>(-0.25f, 0.15f, 0));
+        var ellipse2 = ellipse1.Clone(Matrix4x4.CreateTranslation<double>(0.24, 0.12, 0));
 
-        var lensPoints = new List<Vector2>();
-        lensPoints.Add(new Vector2(0.24, 0.05));
-        lensPoints.Add(new Vector2(0.3, 0.1));
-        lensPoints.Add(new Vector2(0.4, 0.1));
-        lensPoints.Add(new Vector2(0.4, -0.1));
-        lensPoints.Add(new Vector2(0.3, -0.1));
-        lensPoints.Add(new Vector2(0.24, -0.05));
+        var lensPoints = new List<Vector2<double>>();
+        lensPoints.Add(new Vector2<double>(0.24, 0.05));
+        lensPoints.Add(new Vector2<double>(0.3, 0.1));
+        lensPoints.Add(new Vector2<double>(0.4, 0.1));
+        lensPoints.Add(new Vector2<double>(0.4, -0.1));
+        lensPoints.Add(new Vector2<double>(0.3, -0.1));
+        lensPoints.Add(new Vector2<double>(0.24, -0.05));
 
         var polygon = new Polygon();
         var cameraBase = rectangle.GetContour(0);

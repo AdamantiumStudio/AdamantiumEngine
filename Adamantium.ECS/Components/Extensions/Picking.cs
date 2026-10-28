@@ -67,8 +67,8 @@ public static class Picking
         var candidates = new Candidates();
         try
         {
-            var origin = ray.Ray.Position + (Vector3F)(ray.Camera?.WorldPosition ?? Vector3.Zero);
-            foreach (var (entity, _) in index.RayCast(new Ray(origin, ray.Ray.Direction)))
+            var origin = ray.Ray.Position + (ray.Camera?.WorldPosition ?? Vector3<double>.Zero).As<float>();
+            foreach (var (entity, _) in index.RayCast(new Ray<float>(origin, ray.Ray.Direction)))
             {
                 if (!Pickable(entity, withDisabled))
                 {
@@ -113,7 +113,7 @@ public static class Picking
     /// <summary>
     /// Where a collider placed by <paramref name="world"/> meets the ray, for a shape that is not an entity of its own.
     /// </summary>
-    public static bool PickCollider(Collider collider, in Matrix4x4F world, in Ray ray, out Vector3F point, out float depth)
+    public static bool PickCollider(Collider collider, in Matrix4x4F world, in Ray<float> ray, out Vector3F point, out float depth)
     {
         point = Vector3F.Zero;
         depth = 0;
@@ -219,8 +219,8 @@ public static class Picking
             return;
         }
 
-        var bounds = skin != null ? skin.PosedBounds(mesh, pick.Camera) : (BoundingBox)mesh.Bounds;
-        if (Collision.RayIntersectsBox(ref local, ref bounds, out float entry))
+        var bounds = skin != null ? skin.PosedBounds(mesh, pick.Camera) : mesh.Bounds.ToBoundingBox().As<float>();
+        if (Collision.RayIntersectsBox(local, bounds, out float entry))
         {
             candidates.Add(new TriangleCandidate(entity, mesh, skin, local, entry));
         }
@@ -249,7 +249,7 @@ public static class Picking
         return nearest;
     }
 
-    private readonly record struct TriangleCandidate(Entity Entity, Mesh Mesh, Skin Skin, Ray Local, float Entry);
+    private readonly record struct TriangleCandidate(Entity Entity, Mesh Mesh, Skin Skin, Ray<float> Local, float Entry);
 
     private struct Candidates
     {
@@ -311,9 +311,9 @@ public static class Picking
                 continue;
             }
 
-            var start = Vector3F.TransformCoordinate((Vector3F)points[a], world);
-            var end = Vector3F.TransformCoordinate((Vector3F)points[b], world);
-            var gap = Collision.RayIntersectsLineSegment(ref ray, start, end, out var point);
+            var start = Vector3F.TransformCoordinate(points[a].As<float>(), world);
+            var end = Vector3F.TransformCoordinate(points[b].As<float>(), world);
+            var gap = Collision.RayIntersectsLineSegment(ray, start, end, out var point);
             var depth = Vector3F.Dot(point - ray.Position, ray.Direction);
             if (depth >= 0 && gap <= aperture * pick.PixelSize(depth))
             {
@@ -325,8 +325,8 @@ public static class Picking
     private static bool MayPassNear(Bounds bounds, in Matrix4x4F world, in PickRay pick, float aperture)
     {
         var ray = pick.Ray;
-        var center = Vector3F.TransformCoordinate((Vector3F)bounds.Center, world);
-        var radius = ((Vector3F)bounds.HalfExtent).Length() * MaxScale(in world);
+        var center = Vector3F.TransformCoordinate(bounds.Center.As<float>(), world);
+        var radius = (bounds.HalfExtent.As<float>()).Length() * MaxScale(in world);
         var along = Vector3F.Dot(center - ray.Position, ray.Direction);
         if (along + radius < 0)
         {
@@ -346,17 +346,16 @@ public static class Picking
         return Math.Max(x, Math.Max(y, z));
     }
 
-    private static bool ToLocal(in Ray ray, in Matrix4x4F world, out Ray local)
+    private static bool ToLocal(in Ray<float> ray, in Matrix4x4F world, out Ray<float> local)
     {
-        var matrix = world;
-        Matrix4x4F.Invert(ref matrix, out var inverse);
+        var inverse = Matrix4x4F.Invert(world);
         if (inverse == Matrix4x4F.Zero)
         {
             local = default;
             return false;
         }
 
-        local = new Ray(Vector3F.TransformCoordinate(ray.Position, inverse), Vector3F.TransformNormal(ray.Direction, inverse));
+        local = new Ray<float>(Vector3F.TransformCoordinate(ray.Position, inverse), Vector3F.TransformNormal(ray.Direction, inverse));
         return true;
     }
 }

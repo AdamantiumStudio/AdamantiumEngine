@@ -20,14 +20,14 @@ namespace Adamantium.Fonts.TextureGeneration
             // cellSize > 0: the body (width x height) sits centered inside a fixed square cell and the field
             // is computed across the whole cell. Otherwise fall back to a tight body + margin bitmap.
             FullGlyphSize = cellSize > 0
-                ? new Size(cellSize, cellSize)
-                : new Size(width + (Margin * 2), height + (Margin * 2));
+                ? new Size<double>(cellSize, cellSize)
+                : new Size<double>(width + (Margin * 2), height + (Margin * 2));
             Pixels = new byte[(int)FullGlyphSize.Width * (int)FullGlyphSize.Height * 4];
         }
         
         public char Character { get; set; }
 
-        public Rectangle BoundingRect;
+        public Rectangle<int> BoundingRect;
 
         public RectangleF UVRect;
 
@@ -53,34 +53,32 @@ namespace Adamantium.Fonts.TextureGeneration
         
         public uint Margin { get; }
 
-        public Size FullGlyphSize { get; }
+        public Size<double> FullGlyphSize { get; }
         
         public uint IndexInAtlas { get; set; }
         
         public uint DepthLayer { get; set; }
 
-        public void CalculateUV(Size atlasSize)
+        public void CalculateUV(Size<double> atlasSize)
         {
             // The body is centered inside its (FullGlyphSize) cell; the UV must point at the body, not the
             // whole cell. The centering offset (cell - body)/2 reduces to Margin in the tight body+margin
             // layout, so this stays correct for both layouts.
             var padX = ((int)FullGlyphSize.Width - BoundingRect.Width) / 2;
             var padY = ((int)FullGlyphSize.Height - BoundingRect.Height) / 2;
-            RectangleF uvRect;
-            uvRect.Left = (float)((BoundingRect.Left + padX) / atlasSize.Width);
-            uvRect.Top = (float)((BoundingRect.Top + padY) / atlasSize.Height);
-            uvRect.Right = (float)((BoundingRect.Left + padX + BoundingRect.Width) / atlasSize.Width);
-            uvRect.Bottom = (float)((BoundingRect.Top + padY + BoundingRect.Height) / atlasSize.Height);
-            UVRect = uvRect;
+            UVRect = Rectangle.CreateFromCorners(
+                (float)((BoundingRect.Left + padX) / atlasSize.Width),
+                (float)((BoundingRect.Top + padY) / atlasSize.Height),
+                (float)((BoundingRect.Left + padX + BoundingRect.Width) / atlasSize.Width),
+                (float)((BoundingRect.Top + padY + BoundingRect.Height) / atlasSize.Height));
 
             // Whole-cell UV: the full bitmap (body + margin) is uploaded with its top-left at BoundingRect
             // (see FontAtlas.ProcessTextureData), so it spans [Left, Left+FullWidth) x [Top, Top+FullHeight).
-            RectangleF uvFull;
-            uvFull.Left = (float)(BoundingRect.Left / atlasSize.Width);
-            uvFull.Top = (float)(BoundingRect.Top / atlasSize.Height);
-            uvFull.Right = (float)((BoundingRect.Left + (int)FullGlyphSize.Width) / atlasSize.Width);
-            uvFull.Bottom = (float)((BoundingRect.Top + (int)FullGlyphSize.Height) / atlasSize.Height);
-            UVRectFull = uvFull;
+            UVRectFull = Rectangle.CreateFromCorners(
+                (float)(BoundingRect.Left / atlasSize.Width),
+                (float)(BoundingRect.Top / atlasSize.Height),
+                (float)((BoundingRect.Left + (int)FullGlyphSize.Width) / atlasSize.Width),
+                (float)((BoundingRect.Top + (int)FullGlyphSize.Height) / atlasSize.Height));
         }
 
         public override string ToString()

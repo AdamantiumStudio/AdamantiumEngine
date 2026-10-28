@@ -11,7 +11,7 @@ using Adamantium.Imaging;
 using Adamantium.Mathematics;
 using Adamantium.MVVM;
 using Adamantium.Vulkan.Core;
-using Rectangle = Adamantium.Mathematics.Rectangle;
+using Rectangle = Adamantium.Mathematics.Rectangle<int>;
 
 namespace Adamantium.Multiverse
 {
@@ -49,7 +49,7 @@ namespace Adamantium.Multiverse
         /// <summary>
         /// Bounds of the <see cref="UniverseOutput"/> starting always from (0,0)
         /// </summary>
-        public Rectangle ClientBounds { get; protected set; }
+        public Rectangle<int> ClientBounds { get; protected set; }
 
         /// <summary>
         /// Cursor type that will be displayed when mouse cursor will enter <see cref="UniverseOutput"/> 
@@ -291,7 +291,7 @@ namespace Adamantium.Multiverse
 
         internal void OnWindowSizeChanged()
         {
-            SizeChanged?.Invoke(new UniverseOutputSizeChangedPayload(this, new Size(Width, Height)));
+            SizeChanged?.Invoke(new UniverseOutputSizeChangedPayload(this, new Size<double>(Width, Height)));
         }
 
         protected void OnKeyInput(KeyboardInput args)
@@ -405,7 +405,7 @@ namespace Adamantium.Multiverse
 
             Width = width;
             Height = height;
-            ClientBounds = new Rectangle(0, 0, (int)width, (int)height);
+            ClientBounds = new Rectangle<int>(0, 0, (int)width, (int)height);
             UpdateViewportAndScissor(width, height);
             return true;
         }

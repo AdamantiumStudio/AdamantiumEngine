@@ -15,7 +15,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height,
                 double diameter,
                 int tessellation = 40,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return Generate(geometryType, height, diameter, 1, tessellation, transform);
             }
@@ -26,9 +26,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
             /// </summary>
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
-                Vector3 size,
+                Vector3<double> size,
                 int tessellation = 40,
-                Matrix4x4? transform = null)
+                Matrix4x4<double>? transform = null)
             {
                 return Generate(geometryType, Math.Max(size.Y - size.X, 0), size.X, size.Z / size.X, tessellation, transform);
             }
@@ -39,7 +39,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double diameter,
                 double depth,
                 int tessellation,
-                Matrix4x4? transform)
+                Matrix4x4<double>? transform)
             {
                 if (tessellation < 8)
                 {
@@ -61,7 +61,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            private static Vector3 Stretch(Vector3 point, double depth) => new(point.X, point.Y, point.Z * depth);
+            private static Vector3<double> Stretch(Vector3<double> point, double depth) => new(point.X, point.Y, point.Z * depth);
 
             private static Mesh GenerateSolidGeometry(
                 double height,
@@ -70,7 +70,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 int tessellation)
             {
                 var primitiveType = PrimitiveType.TriangleList;
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var uvs = new List<Vector2F>();
                 var indices = new List<int>();
                 if (tessellation < 3)
@@ -117,9 +117,9 @@ namespace Adamantium.ProceduralGeometry.Shapes
                         dx *= dxz;
                         dz *= dxz;
 
-                        var normal = new Vector3(dx, dy, dz);
+                        var normal = new Vector3<double>(dx, dy, dz);
                         var uv = new Vector2F(1.0f - (u * uScale), 1.0f - (v * vScale));
-                        var position = radius * normal + new Vector3(0, deltaY, 0);
+                        var position = radius * normal + new Vector3<double>(0, deltaY, 0);
                         vertices.Add(Stretch(position, depth));
                         uvs.Add(uv);
                     }
@@ -161,35 +161,35 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double depth,
                 int tessellation)
             {
-                var vertices = new List<Vector3>();
+                var vertices = new List<Vector3<double>>();
                 var indices = new List<int>();
                 var half = height / 2;
 
-                var profile = new List<Vector3>();
+                var profile = new List<Vector3<double>>();
                 for (int i = 0; i <= tessellation / 2; ++i)
                 {
                     var angle = Math.PI * 2 / tessellation * i;
-                    profile.Add(new Vector3(radius * Math.Cos(angle), half + radius * Math.Sin(angle), 0));
+                    profile.Add(new Vector3<double>(radius * Math.Cos(angle), half + radius * Math.Sin(angle), 0));
                 }
 
                 for (int i = tessellation / 2; i <= tessellation; ++i)
                 {
                     var angle = Math.PI * 2 / tessellation * i;
-                    profile.Add(new Vector3(radius * Math.Cos(angle), -half + radius * Math.Sin(angle), 0));
+                    profile.Add(new Vector3<double>(radius * Math.Cos(angle), -half + radius * Math.Sin(angle), 0));
                 }
 
-                var quarter = Matrix4x4.RotationY(MathHelper.DegreesToRadians(90));
-                var top = new List<Vector3>();
-                var bottom = new List<Vector3>();
+                var quarter = Matrix4x4.CreateRotationY<double>(float.DegreesToRadians(90));
+                var top = new List<Vector3<double>>();
+                var bottom = new List<Vector3<double>>();
                 for (int i = 0; i < tessellation; ++i)
                 {
                     var angle = Math.PI * 2 / tessellation * i;
-                    top.Add(new Vector3(radius * Math.Cos(angle), -half, radius * Math.Sin(angle)));
-                    bottom.Add(new Vector3(radius * Math.Cos(angle), half, radius * Math.Sin(angle)));
+                    top.Add(new Vector3<double>(radius * Math.Cos(angle), -half, radius * Math.Sin(angle)));
+                    bottom.Add(new Vector3<double>(radius * Math.Cos(angle), half, radius * Math.Sin(angle)));
                 }
 
                 AddLoop(vertices, indices, profile);
-                AddLoop(vertices, indices, profile.Select(point => Vector3.TransformCoordinate(point, quarter)).ToList());
+                AddLoop(vertices, indices, profile.Select(point => Vector3<double>.TransformCoordinate(point, quarter)).ToList());
                 AddLoop(vertices, indices, top);
                 AddLoop(vertices, indices, bottom);
 
@@ -206,7 +206,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 return mesh;
             }
 
-            private static void AddLoop(List<Vector3> vertices, List<int> indices, List<Vector3> loop)
+            private static void AddLoop(List<Vector3<double>> vertices, List<int> indices, List<Vector3<double>> loop)
             {
                 var start = vertices.Count;
                 vertices.AddRange(loop);

@@ -13,7 +13,7 @@ public class ZeroToleranceTests
     [TestCase(-0.01f, false)]
     public void IsZero_MeansCloseToZero(float value, bool zero)
     {
-        Assert.That(MathHelper.IsZero(value), Is.EqualTo(zero));
-        Assert.That(MathHelper.IsZero((double)value * 1e-3), Is.EqualTo(zero));
+        Assert.That(MathHelper.Scalar.IsZero(value), Is.EqualTo(zero));
+        Assert.That(MathHelper.Scalar.IsZero((double)value * 1e-3), Is.EqualTo(zero));
     }
 }

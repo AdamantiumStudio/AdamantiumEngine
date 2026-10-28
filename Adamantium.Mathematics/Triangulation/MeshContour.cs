@@ -7,13 +7,13 @@ namespace Adamantium.Mathematics.Triangulation;
 public class MeshContour
 {
     /// <summary>Coordinates are snapped to this many decimals on ingestion. The triangulator compares points
-    /// exactly (==, Dictionary&lt;Vector2&gt; keys), so without snapping, coordinates that are equal up to
+    /// exactly (==, Dictionary&lt;Vector2<double>&gt; keys), so without snapping, coordinates that are equal up to
     /// floating-point noise are treated as distinct points — producing spurious strips/holes (e.g. when combining
     /// nested ellipses). 5 decimals is far finer than any 2D UI layout needs.</summary>
     public const int CoordinatePrecision = 5;
 
     public string Name { get; set; }
-    public Vector2[] Points { get; set; } = [];
+    public Vector2<double>[] Points { get; set; } = [];
 
     public List<GeometryIntersection> GeometryPoints { get; set; }
 
@@ -33,20 +33,20 @@ public class MeshContour
 
     }
 
-    public MeshContour(IEnumerable<Vector3> points, bool isGeometryClosed = true, bool generateSegments = false) :
+    public MeshContour(IEnumerable<Vector3<double>> points, bool isGeometryClosed = true, bool generateSegments = false) :
         this()
     {
-        var pts = new List<Vector2>();
+        var pts = new List<Vector2<double>>();
         foreach (var vector3 in points)
         {
-            pts.Add((Vector2)vector3);
+            pts.Add((Vector2<double>)vector3);
         }
 
         IsGeometryClosed = isGeometryClosed;
         SetPoints(pts, generateSegments);
     }
     
-    public MeshContour(IEnumerable<Vector2> points, bool isGeometryClosed = true, bool generateSegments = false) : this()
+    public MeshContour(IEnumerable<Vector2<double>> points, bool isGeometryClosed = true, bool generateSegments = false) : this()
     {
         IsGeometryClosed = isGeometryClosed;
         SetPoints(points, generateSegments);
@@ -67,21 +67,21 @@ public class MeshContour
     {
         if (Points.Length > 0)
         {
-            BoundingBox = RectangleF.FromPoints(Points.ToArray());
+            BoundingBox = Rectangle.CreateBounding<double>(Points).As<float>();
         }
     }
     
-    public void SetOrUpdatePoints(IEnumerable<Vector2> points, bool generateSegments = true)
+    public void SetOrUpdatePoints(IEnumerable<Vector2<double>> points, bool generateSegments = true)
     {
         SetPoints(points, generateSegments);
     }
 
-    public void SetPoints(IEnumerable<Vector2> points, bool generateSegments = true)
+    public void SetPoints(IEnumerable<Vector2<double>> points, bool generateSegments = true)
     {
-        var tmpList = new List<Vector2>();
+        var tmpList = new List<Vector2<double>>();
         // Snap to CoordinatePrecision first so floating-point-noise-equal coordinates become exactly equal for the
         // triangulator's exact point comparisons (and the dedup below collapses the now-coincident points).
-        var pts = points.Select(p => Vector2.Round(p, CoordinatePrecision)).ToArray();
+        var pts = points.Select(p => Vector2<double>.Round(p, CoordinatePrecision)).ToArray();
         // Check for duplicating points going together and remove them
         for (int i = 0; i < pts.Length - 1; i++)
         {
@@ -119,13 +119,13 @@ public class MeshContour
         if (Segments == null || Segments.Count == 0)
         {
             GeometryPoints?.Clear();
-            Points = Array.Empty<Vector2>();
+            Points = Array.Empty<Vector2<double>>();
             return;
         }
 
         var pointsHashSet = new HashSet<GeometryIntersection>();
         GeometryPoints = new List<GeometryIntersection>();
-        var updatedPoints = new List<Vector2>();
+        var updatedPoints = new List<Vector2<double>>();
 
         foreach (var segment in Segments)
         {
@@ -186,15 +186,15 @@ public class MeshContour
 
     public void RemoveSelfIntersections(FillRule fillRule)
     {
-        var intersectionsList = new Dictionary<Vector2, GeometryIntersection>();
+        var intersectionsList = new Dictionary<Vector2<double>, GeometryIntersection>();
         var selfIntersections = new Dictionary<GeometrySegment, SortedList<double, GeometryIntersection>>();
         foreach (var segment in Segments) selfIntersections[segment] = new SortedList<double, GeometryIntersection>();
 
-        void Record(GeometrySegment seg, Vector2 point)
+        void Record(GeometrySegment seg, Vector2<double> point)
         {
             // Snap computed intersection points to the same precision as contour points, so they coincide cleanly
             // with existing endpoints instead of landing a floating-point-epsilon away.
-            point = Vector2.Round(point, CoordinatePrecision);
+            point = Vector2<double>.Round(point, CoordinatePrecision);
             if (point == seg.Start || point == seg.End) return;
             if (!intersectionsList.TryGetValue(point, out var inter))
             {
@@ -297,13 +297,13 @@ public class MeshContour
         
         if (Points == null) return copy;
         
-        copy.Points = new Vector2[Points.Length];
+        copy.Points = new Vector2<double>[Points.Length];
         Array.Copy(Points, copy.Points, Points.Length);
         
         for (var i = 0; i < copy.Points.Length; i++)
         {
             var point = copy.Points[i];
-            copy.Points[i] = Vector2.Round(point, CoordinatePrecision);
+            copy.Points[i] = Vector2<double>.Round(point, CoordinatePrecision);
         }
         
         if (GeometryPoints != null) copy.GeometryPoints = new List<GeometryIntersection>(GeometryPoints);

@@ -31,7 +31,7 @@ public class TextLayoutFallbackTests
             layout.Fallback = fallback;
         }
 
-        layout.ProcessText(text, 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }
@@ -55,7 +55,7 @@ public class TextLayoutFallbackTests
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts",
             "NotoColorEmoji.subset.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText("8 9", 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
+        layout.ProcessText("8 9", 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var glyphs = layout.GetTextData();
         var space = glyphs.Single(g => g.PositionInString == 1);
@@ -74,7 +74,7 @@ public class TextLayoutFallbackTests
             "NotoSansHebrew-Regular.ttf"));
         Assume.That(typeface.Fonts[0].TryGetGlyphIndex(space, out _), Is.False);
         var layout = new TextLayout(typeface, typeface.Fonts[0]);
-        layout.ProcessText("שלום" + (char)space + "עולם", 20, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+        layout.ProcessText("שלום" + (char)space + "עולם", 20, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
 
         Assert.That(layout.GetTextData().All(g => g.Font == layout.Font), Is.True);

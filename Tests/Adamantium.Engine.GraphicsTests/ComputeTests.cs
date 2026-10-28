@@ -299,7 +299,7 @@ namespace Adamantium.Engine.GraphicsTests
             expand.Parameters["PointCount"].SetValue((uint)pointCount);
             expand.Parameters["HalfThickness"].SetValue(half);
 
-            var proj = Matrix4x4F.OrthoOffCenter(0, 64, 0, 64, 0, 100000);
+            var proj = Matrix4x4.CreateOrthoOffCenter<float>(0, 64, 0, 64, 0, 100000);
             draw.Parameters["Projection"].SetValue(proj);
             draw.Parameters["StrokeColor"].SetValue(new Vector4F(1, 1, 1, 1));
 
@@ -439,7 +439,7 @@ namespace Adamantium.Engine.GraphicsTests
             fill.Parameters["Indirect"].SetValue(indirect.GetDeviceAddress());
             fill.Parameters["Output"].SetValue(verts.GetDeviceAddress());
 
-            var proj = Matrix4x4F.OrthoOffCenter(0, 64, 0, 64, 0, 100000);
+            var proj = Matrix4x4.CreateOrthoOffCenter<float>(0, 64, 0, 64, 0, 100000);
             draw.Parameters["Projection"].SetValue(proj);
             draw.Parameters["StrokeColor"].SetValue(new Vector4F(1, 1, 1, 1));
 

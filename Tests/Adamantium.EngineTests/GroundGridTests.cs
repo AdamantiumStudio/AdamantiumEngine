@@ -16,7 +16,7 @@ public class GroundGridTests
     public void FarFromHome_ThePointsNearTheEyeLieAsFarFromTheLinesAsInTheWorld()
     {
         var scene = new ToolScene();
-        scene.LookFrom(new Vector3(12_345_670, -10, -3_000_004), new Vector3(12_345_670, 0, -2_999_994));
+        scene.LookFrom(new Vector3<double>(12_345_670, -10, -3_000_004), new Vector3<double>(12_345_670, 0, -2_999_994));
         var grid = new GroundGrid { CellSize = 0.1f };
         var phases = new Vector4F[GroundGrid.Levels / 2];
         grid.PhasesFor(scene.Camera, phases);
@@ -37,7 +37,7 @@ public class GroundGridTests
     public void NearHome_TheAxesCrossWhereTheWorldsDo_AndTheGridLiesOnTheGround()
     {
         var scene = new ToolScene();
-        scene.LookFrom(new Vector3(3, -10, 4), new Vector3(3, 0, 14));
+        scene.LookFrom(new Vector3<double>(3, -10, 4), new Vector3<double>(3, 0, 14));
         var grid = new GroundGrid();
 
         var layout = grid.LayoutFor(scene.Camera);
@@ -58,7 +58,7 @@ public class GroundGridTests
         var scene = new ToolScene();
         scene.Camera.ProjectionTransitionTime = 0;
         scene.Camera.ProjectionType = Adamantium.ECS.Components.CameraProjectionType.Ortho;
-        scene.LookFrom(new Vector3(0, -10, 0), new Vector3(0, 0, 57));
+        scene.LookFrom(new Vector3<double>(0, -10, 0), new Vector3<double>(0, 0, 57));
         var grid = new GroundGrid();
 
         var layout = grid.LayoutFor(scene.Camera);
@@ -72,7 +72,7 @@ public class GroundGridTests
     public void ARaisedGrid_LiesAtItsY_AndReachesByTheEyesHeightAboveIt()
     {
         var scene = new ToolScene();
-        scene.LookFrom(new Vector3(3, -10, 4), new Vector3(3, 0, 14));
+        scene.LookFrom(new Vector3<double>(3, -10, 4), new Vector3<double>(3, 0, 14));
         var grid = new GroundGrid { PlaneY = -4 };
 
         var layout = grid.LayoutFor(scene.Camera);

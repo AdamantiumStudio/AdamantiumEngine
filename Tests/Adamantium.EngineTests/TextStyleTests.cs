@@ -90,13 +90,13 @@ public class TextStyleTests
         var text = new AttributedText("a" + (char)0xFFFC + "b")
             .Apply(1, 1, new TextAttributes
             {
-                ObjectSize = new Size(10, 12), BaselineAlignment = BaselineAlignment.Top, Foreground = Red,
+                ObjectSize = new Size<double>(10, 12), BaselineAlignment = BaselineAlignment.Top, Foreground = Red,
             })
             .ClearOverrides(0, 3);
 
         Assert.Multiple(() =>
         {
-            Assert.That(text.AttributesAt(1).ObjectSize, Is.EqualTo(new Size(10, 12)));
+            Assert.That(text.AttributesAt(1).ObjectSize, Is.EqualTo(new Size<double>(10, 12)));
             Assert.That(text.AttributesAt(1).BaselineAlignment, Is.EqualTo(BaselineAlignment.Top));
             Assert.That(text.AttributesAt(1).Foreground, Is.Null);
         });
@@ -196,7 +196,7 @@ public class TextStyleTests
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
         double FirstPen()
         {
-            layout.ProcessText(text, 16, new Size(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+            layout.ProcessText(text, 16, new Size<double>(400, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
             return layout.GetTextData().First().PenX;
         }

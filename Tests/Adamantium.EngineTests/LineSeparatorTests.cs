@@ -19,7 +19,7 @@ public class LineSeparatorTests
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", font));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
-        layout.ProcessText(text, 20, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, alignment,
+        layout.ProcessText(text, 20, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None, alignment,
             VerticalTextAlignment.Top);
         return layout;
     }

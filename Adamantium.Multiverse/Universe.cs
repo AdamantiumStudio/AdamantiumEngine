@@ -63,11 +63,15 @@ public class Universe : IUniverse
         new UnboundedChannelOptions { SingleReader = true, AllowSynchronousContinuations = true });
     private readonly HashSet<UniverseOutput> outputsAsked = [];
     private bool everyOutputAsked = true;
+    private readonly UniverseWatcher watcher;
     private string lastFailedFrame;
     private int hostedFramesDrawn;
     private long hostedFpsSince;
     private long hostedDrawnAt;
     private Single fps;
+    private Single renderFps;
+    private double drawTimeMs;
+    private double gpuTimeMs;
 
     /// <summary>
     /// <paramref name="container"/> is the process's: the host has registered its surfaces and windows there.
@@ -124,7 +128,10 @@ public class Universe : IUniverse
             
         platform = new UniversePlatform(this);
         EntityWorld = new EntityWorld(Container, Satellites);
+        watcher = new UniverseWatcher(Invalidate);
+        watcher.Watch(EntityWorld);
 
+        Satellites.Add<IUniverseWatcher>(watcher);
         Satellites.Add<IUniverse>(this);
         Satellites.Add<IAdamantiumApplication>(this);
         Satellites.Add<IUniversePlatform>(platform);
@@ -216,23 +223,39 @@ public class Universe : IUniverse
         
     public UInt32 DesiredFPS { get; set; }
 
-    /// <summary>CPU cost of one drawn frame (recording and submitting), averaged over the last second.</summary>
-    public Double DrawTimeMs { get; private set; }
+    /// <summary>CPU cost of one drawn frame (recording and submitting), averaged over the last second; 0 while the
+    /// universe has drawn nothing for a second.</summary>
+    public Double DrawTimeMs
+    {
+        get => DrawnLately ? drawTimeMs : 0;
+        private set => drawTimeMs = value;
+    }
 
     /// <summary>Frames per second the universe's rendering could sustain, from <see cref="DrawTimeMs"/> - not the rate its
-    /// host ticks it at.</summary>
-    public Single RenderFps { get; private set; }
+    /// host ticks it at; 0 while it has drawn nothing for a second.</summary>
+    public Single RenderFps
+    {
+        get => DrawnLately ? renderFps : 0;
+        private set => renderFps = value;
+    }
 
     /// <summary>GPU time of one drawn frame, averaged over the last second; other queues' work running meanwhile counts
-    /// too.</summary>
-    public Double GpuTimeMs { get; private set; }
+    /// too. 0 while the universe has drawn nothing for a second.</summary>
+    public Double GpuTimeMs
+    {
+        get => DrawnLately ? gpuTimeMs : 0;
+        private set => gpuTimeMs = value;
+    }
 
     /// <summary>Frames the universe has actually run a second, over the last second: what the eye sees.</summary>
     public Single Fps
     {
-        get => hostedLoop != null && Stopwatch.GetElapsedTime(Volatile.Read(ref hostedDrawnAt)).TotalSeconds > 1 ? 0 : fps;
+        get => DrawnLately ? fps : 0;
         private set => fps = value;
     }
+
+    private bool DrawnLately =>
+        hostedLoop == null || Stopwatch.GetElapsedTime(Volatile.Read(ref hostedDrawnAt)).TotalSeconds <= 1;
 
     /// <summary>
     /// Condition on which the loop will be exited
@@ -385,6 +408,7 @@ public class Universe : IUniverse
         set
         {
             frameMode = value;
+            watcher.IsWatching = value == FrameMode.OnDemand;
             messages.Writer.TryWrite(new UniverseMessage(null, null));
         }
     }
@@ -517,7 +541,8 @@ public class Universe : IUniverse
         return drawn;
     }
 
-    private bool FramesAsked() => everyOutputAsked || outputsAsked.Count > 0 || messages.Reader.TryPeek(out _);
+    private bool FramesAsked() =>
+        everyOutputAsked || outputsAsked.Count > 0 || messages.Reader.TryPeek(out _) || watcher.Owes;
 
     private void WaitForMessage()
     {
@@ -532,6 +557,7 @@ public class Universe : IUniverse
 
     private void TakeMessages()
     {
+        watcher.Woken();
         everyOutputAsked |= frameMode == FrameMode.Continuous;
         while (messages.Reader.TryRead(out var message))
         {
@@ -566,7 +592,7 @@ public class Universe : IUniverse
     private void StartFrame(bool everyOutput)
     {
         TakeMessages();
-        everyOutputAsked |= everyOutput;
+        everyOutputAsked |= everyOutput | watcher.TakeFrame();
         MarkOutputsDrawn();
     }
 
@@ -1106,11 +1132,11 @@ public class Universe : IUniverse
     private void OnOutputCreated(UniverseOutput output)
     {
         var entity = new CameraTemplate().BuildEntity(
-            null, $"Main camera for {output.Name}", Vector3.Zero, Vector3.ForwardLH, -Vector3.Up,
+            null, $"Main camera for {output.Name}", Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             output.Width, output.Height, 0.1f, 1000000.0f);
-        entity.Transform.Position = new Vector3(0, -3, -20);
+        entity.Transform.Position = new Vector3<double>(0, -3, -20);
         var camera = entity.GetComponent<Camera>();
-        camera.SetFreeLookAt(Vector3.Zero);
+        camera.SetFreeLookAt(Vector3<double>.Zero);
         EntityWorld.EntityManager.AddEntity(entity);
         output.OwnCamera = camera;
         output.Camera = camera;

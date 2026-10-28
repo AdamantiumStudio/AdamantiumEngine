@@ -193,7 +193,7 @@ namespace Adamantium.Fonts.TextureGeneration
         }
 
         private static ColoredDistance GetColoredDistances(SegmentSearch search, List<LineSegment2D>[] closest,
-            Vector2 point, double range, double pxRange, bool isTtf)
+            Vector2<double> point, double range, double pxRange, bool isTtf)
         {
             // there can be up to two closest segments in case if point is close to segments' connection
             // we will store both and then determine the signed pseudo-distance
@@ -242,7 +242,7 @@ namespace Adamantium.Fonts.TextureGeneration
             var glyphBoundingRectangle = glyph.BoundingRectangle;
             var widthRatio = (double)(glyphBoundingRectangle.Width) / unitsPerEm;
             var heightRatio = (double)(glyphBoundingRectangle.Height) / unitsPerEm;
-            var size = new Size(Math.Ceiling(originalSize * widthRatio),
+            var size = new Size<double>(Math.Ceiling(originalSize * widthRatio),
                 Math.Ceiling(originalSize * heightRatio));
             
             var textureData = new GlyphTextureData((uint)size.Width, (uint)size.Height, glyph.Index, margin, glyph.RelatedCharacters.FirstOrDefault());
@@ -290,7 +290,7 @@ namespace Adamantium.Fonts.TextureGeneration
             return segments;
         }
 
-        private static bool IsNear(Vector2 point, Vector2 other) =>
+        private static bool IsNear(Vector2<double> point, Vector2<double> other) =>
             Math.Abs(point.X - other.X) < VertexTolerance && Math.Abs(point.Y - other.Y) < VertexTolerance;
 
         public static GlyphTextureData GenerateDirectMSDF(
@@ -325,7 +325,7 @@ namespace Adamantium.Fonts.TextureGeneration
                 glyphWidth /= overflow;
                 glyphHeight /= overflow;
             }
-            var size = new Size(
+            var size = new Size<double>(
                 Math.Max(1, Math.Ceiling(glyphWidth)),
                 Math.Max(1, Math.Ceiling(glyphHeight)));
 
@@ -368,7 +368,7 @@ namespace Adamantium.Fonts.TextureGeneration
                         var cx = x - marginPx;
                         var cy = y - marginPx;
                         var samplingPoint =
-                            new Vector2(glyphBoundingRectangle.Width / size.Width * (cx + 0.5) + glyphBoundingRectangle.X,
+                            new Vector2<double>(glyphBoundingRectangle.Width / size.Width * (cx + 0.5) + glyphBoundingRectangle.X,
                                 glyphBoundingRectangle.Height - (glyphBoundingRectangle.Height / size.Height * (cy + 0.5) -
                                                                  glyphBoundingRectangle.Y));
 
@@ -466,7 +466,7 @@ namespace Adamantium.Fonts.TextureGeneration
                     //        glyphBoundingRectangle.Height - (glyphBoundingRectangle.Height / size.Height * (y + 0.5) -
                     //                                         glyphBoundingRectangle.Y));
                     var samplingPoint =
-                            new Vector2(glyphBoundingRectangle.Width / size.Width * (x + 0.5) + glyphBoundingRectangle.X - paddingX,
+                            new Vector2<double>(glyphBoundingRectangle.Width / size.Width * (x + 0.5) + glyphBoundingRectangle.X - paddingX,
                                 glyphBoundingRectangle.Height - (glyphBoundingRectangle.Height / size.Height * (y + 0.5) -
                                                                  glyphBoundingRectangle.Y + paddingY));
 

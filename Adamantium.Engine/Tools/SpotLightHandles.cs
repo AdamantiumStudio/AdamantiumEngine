@@ -16,12 +16,12 @@ public class SpotLightHandles : Handles
     private const float AnchorPoints = 9;
     private const float Smallest = 0.01f;
 
-    private static readonly float SmallestAngle = MathHelper.DegreesToRadians(1f);
-    private static readonly float LargestAngle = MathHelper.DegreesToRadians(89.5f);
+    private static readonly float SmallestAngle = float.DegreesToRadians(1f);
+    private static readonly float LargestAngle = float.DegreesToRadians(89.5f);
 
     private readonly Entity end;
     private readonly Entity[] rim;
-    private Vector3 apex;
+    private Vector3<double> apex;
     private Vector3F axis;
     private Vector3F side;
     private bool range;
@@ -48,18 +48,18 @@ public class SpotLightHandles : Handles
         var radius = light.SpotRadius;
 
         var metadata = Shape.Transform.GetMetadata(camera);
-        metadata.WorldMatrixF = Matrix4x4F.Scaling(2 * radius, light.Range, 2 * radius)
-                                * Matrix4x4F.RotationQuaternion(orientation)
-                                * Matrix4x4F.Translation(InRender(at, camera));
+        metadata.WorldMatrixF = Matrix4x4.CreateScale<float>(2 * radius, light.Range, 2 * radius)
+                                * Matrix4x4.CreateFromQuaternion<float>(orientation)
+                                * Matrix4x4.CreateTranslation<float>(InRender(at, camera));
         metadata.Enabled = true;
 
-        var baseCenter = at + (Vector3)(direction * light.Range);
+        var baseCenter = at + (direction * light.Range).As<double>();
         PlaceAt(end, baseCenter, AnchorPoints, camera);
 
         var sides = SidesOf(orientation);
         for (int i = 0; i < rim.Length; i++)
         {
-            PlaceAt(rim[i], baseCenter + (Vector3)(sides[i] * radius), AnchorPoints, camera);
+            PlaceAt(rim[i], baseCenter + (sides[i] * radius).As<double>(), AnchorPoints, camera);
         }
     }
 

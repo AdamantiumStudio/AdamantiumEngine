@@ -72,8 +72,8 @@ namespace Adamantium.ECS.Components
          Vector3F interpolatedScale = Vector3F.Lerp(firstKeyFrame.Scale, secondKeyFrame.Scale, (float)time);
          Vector3F interpolatedTranslation = Vector3F.Lerp(firstKeyFrame.Position, secondKeyFrame.Position, (float)time);
          QuaternionF interpolatedQuaternion = QuaternionF.Slerp(firstKeyFrame.Rotation, secondKeyFrame.Rotation, (float)time);
-         return Matrix4x4F.Scaling(interpolatedScale) * Matrix4x4F.RotationQuaternion(interpolatedQuaternion) *
-                Matrix4x4F.Translation(interpolatedTranslation);
+         return Matrix4x4.CreateScale<float>(interpolatedScale) * Matrix4x4.CreateFromQuaternion<float>(interpolatedQuaternion) *
+                Matrix4x4.CreateTranslation<float>(interpolatedTranslation);
       }
    }
 }

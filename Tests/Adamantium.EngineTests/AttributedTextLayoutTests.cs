@@ -24,7 +24,7 @@ public class AttributedTextLayoutTests
     private static void Process(TextLayout layout, AttributedText text, double width = double.NaN)
     {
         var wrapping = double.IsNaN(width) ? TextWrapping.NoWrap : TextWrapping.WrapByWords;
-        layout.ProcessText(text, 20, new Size(width, double.NaN), wrapping, TextTrimming.None,
+        layout.ProcessText(text, 20, new Size<double>(width, double.NaN), wrapping, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
     }
 
@@ -123,7 +123,7 @@ public class AttributedTextLayoutTests
         var plain = NewLayout();
         Process(plain, new AttributedText("ab"));
         var large = NewLayout();
-        large.ProcessText(new AttributedText("ab"), 40, new Size(double.NaN, double.NaN), TextWrapping.NoWrap,
+        large.ProcessText(new AttributedText("ab"), 40, new Size<double>(double.NaN, double.NaN), TextWrapping.NoWrap,
             TextTrimming.None, HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         var layout = NewLayout();
         layout.EmitNewlineCarets = true;

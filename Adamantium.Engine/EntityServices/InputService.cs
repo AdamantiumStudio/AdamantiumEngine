@@ -250,7 +250,7 @@ public class InputService : EntityService
         var hit = Picking.Pick(EntityWorld.RootEntities, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
         if (hit.IsHit)
         {
-            var depth = Vector3F.Dot(hit.Point, (Vector3F)camera.Forward);
+            var depth = Vector3F.Dot(hit.Point, camera.Forward.As<float>());
             if (depth > camera.ZNear)
             {
                 return depth;

@@ -12,15 +12,15 @@ namespace Adamantium.MathTests
     [TestFixture]
     public class PlanarFillTests
     {
-        private static Vector2 V(double x, double y) => new(x, y);
+        private static Vector2<double> V(double x, double y) => new(x, y);
 
-        private static Vector2[] Rect(double x0, double y0, double x1, double y1) =>
+        private static Vector2<double>[] Rect(double x0, double y0, double x1, double y1) =>
             new[] { V(x0, y0), V(x1, y0), V(x1, y1), V(x0, y1) };
 
-        private static Vector2[] RectCW(double x0, double y0, double x1, double y1) =>
+        private static Vector2<double>[] RectCW(double x0, double y0, double x1, double y1) =>
             new[] { V(x0, y0), V(x0, y1), V(x1, y1), V(x1, y0) };
 
-        private static bool Covered(List<Vector3> triangles, Vector2 point)
+        private static bool Covered(List<Vector3<double>> triangles, Vector2<double> point)
         {
             for (var i = 0; i + 2 < triangles.Count; i += 3)
             {
@@ -42,7 +42,7 @@ namespace Adamantium.MathTests
         [Test]
         public void OverlapIsUnionUnderNonZero_AndSymmetricDifferenceUnderEvenOdd()
         {
-            var rings = new List<Vector2[]> { Rect(0, 0, 60, 60), Rect(40, 40, 100, 100) };
+            var rings = new List<Vector2<double>[]> { Rect(0, 0, 60, 60), Rect(40, 40, 100, 100) };
 
             var union = PlanarFill.Fill(rings, FillRule.NonZero);
             var xor = PlanarFill.Fill(rings, FillRule.EvenOdd);
@@ -63,7 +63,7 @@ namespace Adamantium.MathTests
         [Test]
         public void AContraryInnerRingIsAHoleUnderNonZero()
         {
-            var rings = new List<Vector2[]> { Rect(0, 0, 100, 100), RectCW(25, 25, 75, 75) };
+            var rings = new List<Vector2<double>[]> { Rect(0, 0, 100, 100), RectCW(25, 25, 75, 75) };
             var filled = PlanarFill.Fill(rings, FillRule.NonZero);
 
             Assert.Multiple(() =>
@@ -77,7 +77,7 @@ namespace Adamantium.MathTests
         [Test]
         public void AnInnerRingTheSameWayRoundIsNotAHole()
         {
-            var rings = new List<Vector2[]> { Rect(0, 0, 100, 100), Rect(25, 25, 75, 75) };
+            var rings = new List<Vector2<double>[]> { Rect(0, 0, 100, 100), Rect(25, 25, 75, 75) };
             var filled = PlanarFill.Fill(rings, FillRule.NonZero);
 
             Assert.That(Covered(filled, V(50, 50)), Is.True);
@@ -88,7 +88,7 @@ namespace Adamantium.MathTests
         [Test]
         public void AHoleSurvivesAContourThatCrossesTheOutline()
         {
-            var rings = new List<Vector2[]>
+            var rings = new List<Vector2<double>[]>
             {
                 Rect(0, 0, 100, 100),
                 RectCW(25, 25, 45, 45),
@@ -109,8 +109,8 @@ namespace Adamantium.MathTests
         [Test]
         public void AStarFillsItsMiddleUnderNonZeroOnly()
         {
-            var star = new Vector2[5];
-            var outer = new Vector2[5];
+            var star = new Vector2<double>[5];
+            var outer = new Vector2<double>[5];
 
             for (var i = 0; i < 5; i++)
             {
@@ -124,7 +124,7 @@ namespace Adamantium.MathTests
             star[3] = outer[1];
             star[4] = outer[3];
 
-            var rings = new List<Vector2[]> { star };
+            var rings = new List<Vector2<double>[]> { star };
 
             Assert.Multiple(() =>
             {
@@ -137,7 +137,7 @@ namespace Adamantium.MathTests
         [Test]
         public void OneCleanRingIsFilled()
         {
-            var filled = PlanarFill.Fill(new List<Vector2[]> { Rect(0, 0, 10, 10) }, FillRule.NonZero);
+            var filled = PlanarFill.Fill(new List<Vector2<double>[]> { Rect(0, 0, 10, 10) }, FillRule.NonZero);
 
             Assert.That(Covered(filled, V(5, 5)), Is.True);
         }

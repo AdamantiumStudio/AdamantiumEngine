@@ -27,7 +27,7 @@ public class BaselineShiftTests
         setUp?.Invoke(layout);
         var attributed = new AttributedText(text);
         attributed.Apply(start, length, attributes);
-        layout.ProcessText(attributed, FontSize, new Size(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
+        layout.ProcessText(attributed, FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords, TextTrimming.None,
             HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         return layout;
     }

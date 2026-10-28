@@ -237,9 +237,9 @@ namespace Adamantium.Engine.CompilerTests
         {
             for (var t = 0; t + 2 < mesh.Indices.Length; t += 3)
             {
-                var a = (Vector3F)mesh.Points[mesh.Indices[t]];
-                var b = (Vector3F)mesh.Points[mesh.Indices[t + 1]];
-                var c = (Vector3F)mesh.Points[mesh.Indices[t + 2]];
+                var a = mesh.Points[mesh.Indices[t]].As<float>();
+                var b = mesh.Points[mesh.Indices[t + 1]].As<float>();
+                var c = mesh.Points[mesh.Indices[t + 2]].As<float>();
                 var face = Vector3F.Cross(c - a, b - a);
                 if (face.LengthSquared() < 1e-10f) continue;
                 face.Normalize();
@@ -256,9 +256,9 @@ namespace Adamantium.Engine.CompilerTests
 
         private static System.Collections.Generic.IEnumerable<float> EdgeLengths(Mesh mesh)
         {
-            var a = (Vector3F)mesh.Points[mesh.Indices[0]];
-            var b = (Vector3F)mesh.Points[mesh.Indices[1]];
-            var c = (Vector3F)mesh.Points[mesh.Indices[2]];
+            var a = mesh.Points[mesh.Indices[0]].As<float>();
+            var b = mesh.Points[mesh.Indices[1]].As<float>();
+            var c = mesh.Points[mesh.Indices[2]].As<float>();
             yield return (b - a).Length();
             yield return (c - b).Length();
             yield return (a - c).Length();

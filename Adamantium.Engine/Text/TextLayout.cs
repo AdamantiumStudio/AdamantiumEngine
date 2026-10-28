@@ -5,7 +5,7 @@ using Adamantium.Fonts;
 using Adamantium.Fonts.Common;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
-using Rectangle = Adamantium.Mathematics.Rectangle;
+using Rectangle = Adamantium.Mathematics.Rectangle<int>;
 
 namespace Adamantium.Engine;
 
@@ -14,12 +14,12 @@ public class TextLayout
     private IFont font;
     private string inputString;
     private float fontSizeInPixels;
-    private Rectangle boundingRectangle;
+    private Rectangle<int> boundingRectangle;
     public float Scale { get; }
 
     public Mesh Mesh { get; private set; }
 
-    public TextLayout(IFont font, string inputString, float fontSizeInPixels, Rectangle boundingRectangle)
+    public TextLayout(IFont font, string inputString, float fontSizeInPixels, Rectangle<int> boundingRectangle)
     {
         this.font = font;
         this.inputString = inputString;

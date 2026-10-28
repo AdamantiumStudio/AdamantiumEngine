@@ -11,12 +11,12 @@ public class PerspectiveProjectionTests
 
     private static Matrix4x4F FovX()
     {
-        return Matrix4x4F.PerspectiveFovX(60, 4f / 3, Near, Far);
+        return Matrix4x4.CreatePerspectiveFovX<float>(float.DegreesToRadians(60), 4f / 3, Near, Far);
     }
 
     private static Matrix4x4F FovY()
     {
-        return Matrix4x4F.PerspectiveFovY(MathHelper.DegreesToRadians(60), 3f / 4, Near, Far);
+        return Matrix4x4.CreatePerspectiveFovY<float>(float.DegreesToRadians(60), 3f / 4, Near, Far);
     }
 
     [Test]
@@ -35,7 +35,7 @@ public class PerspectiveProjectionTests
     public void FovX_SpansItsFovAcross()
     {
         var projection = FovX();
-        var halfWidth = 1f / (float)System.Math.Tan(MathHelper.DegreesToRadians(30));
+        var halfWidth = 1f / (float)System.Math.Tan(float.DegreesToRadians(30));
 
         Assert.That(projection.M11, Is.EqualTo(halfWidth).Within(1e-4f));
         Assert.That(projection.M22, Is.EqualTo(halfWidth * 4f / 3).Within(1e-4f));

@@ -8,7 +8,7 @@ public static class ContourProcessingHelper
 {
     public static void ProcessContoursIntersections(List<GeometrySegment> contoursSegments1, List<GeometrySegment> contoursSegments2)
     {
-        var intersectionsList = new Dictionary<Vector2, GeometryIntersection>();
+        var intersectionsList = new Dictionary<Vector2<double>, GeometryIntersection>();
         var mesh1Intersections = new Dictionary<GeometrySegment, SortedList<double, GeometryIntersection>>();
         var mesh2Intersections = new Dictionary<GeometrySegment, SortedList<double, GeometryIntersection>>();
 
@@ -54,8 +54,8 @@ public static class ContourProcessingHelper
         FillMeshSegments(mesh2Intersections);
     }
     
-    private static void ProcessIntersection(Vector2 point, 
-                                            Dictionary<Vector2, GeometryIntersection> intersectionsList,
+    private static void ProcessIntersection(Vector2<double> point, 
+                                            Dictionary<Vector2<double>, GeometryIntersection> intersectionsList,
                                             Dictionary<GeometrySegment, SortedList<double, GeometryIntersection>> meshIntersections,
                                             GeometrySegment segment)
     {
@@ -96,9 +96,9 @@ public static class ContourProcessingHelper
         {
             var segmentCenter = (segment2.End - segment2.Start) * 0.5 + segment2.Start;
             
-            var ray = new Ray2D(segmentCenter, Vector2.UnitX);
+            var ray = new Ray2<double>(segmentCenter, Vector2<double>.UnitX);
             var intersectionCnt = 0;
-            var rayIntersectionPoints = new HashSet<Vector2>();
+            var rayIntersectionPoints = new HashSet<Vector2<double>>();
             
             foreach (var segment1 in contourSegments)
             {
@@ -121,7 +121,7 @@ public static class ContourProcessingHelper
                 var seg = new LineSegment2D(segment1);
                 if (Collision2D.RaySegmentIntersection(ref ray, ref seg, out var intPoint))
                 {
-                    intPoint = Vector2.Round(intPoint, 4);
+                    intPoint = Vector2<double>.Round(intPoint, 4);
                     
                     if (!rayIntersectionPoints.Contains(intPoint))
                     {

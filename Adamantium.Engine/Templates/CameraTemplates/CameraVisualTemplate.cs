@@ -16,12 +16,12 @@ public class CameraVisualTemplate
         float halfSize = 1f;
         var nearRectangle = Shapes.Rectangle.GenerateGeometry(GeometryType.Outlined, halfSize/2, halfSize/4, new CornerRadius(0));
 
-        var farRectangle = Shapes.Rectangle.GenerateGeometry(GeometryType.Outlined, halfSize*2, halfSize, new CornerRadius(0), 2, Matrix4x4.Translation(Vector3.UnitZ*2));
+        var farRectangle = Shapes.Rectangle.GenerateGeometry(GeometryType.Outlined, halfSize*2, halfSize, new CornerRadius(0), 2, Matrix4x4.CreateTranslation<double>(Vector3<double>.UnitZ*2));
 
-        var direction1 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3(-halfSize / 4, halfSize / 8, 0), new Vector3(-halfSize, halfSize / 2, halfSize * 2), 0);
-        var direction2 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3(-halfSize / 4, -halfSize / 8, 0), new Vector3(-halfSize, -halfSize / 2, halfSize * 2), 0);
-        var direction3 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3(halfSize / 4, halfSize / 8, 0), new Vector3(halfSize, halfSize / 2, halfSize * 2), 0);
-        var direction4 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3(halfSize / 4, -halfSize / 8, 0), new Vector3(halfSize, -halfSize / 2, halfSize * 2), 0);
+        var direction1 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3<double>(-halfSize / 4, halfSize / 8, 0), new Vector3<double>(-halfSize, halfSize / 2, halfSize * 2), 0);
+        var direction2 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3<double>(-halfSize / 4, -halfSize / 8, 0), new Vector3<double>(-halfSize, -halfSize / 2, halfSize * 2), 0);
+        var direction3 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3<double>(halfSize / 4, halfSize / 8, 0), new Vector3<double>(halfSize, halfSize / 2, halfSize * 2), 0);
+        var direction4 = Shapes.Line.GenerateGeometry(GeometryType.Outlined, new Vector3<double>(halfSize / 4, -halfSize / 8, 0), new Vector3<double>(halfSize, -halfSize / 2, halfSize * 2), 0);
 
         nearRectangle.Merge(farRectangle, direction1, direction2, direction3, direction4);
             

@@ -10,12 +10,12 @@ namespace Adamantium.ECS.Components
 {
    public class SphereCollider: Collider
    {
-      private BoundingSphere sphere;
-      protected Dictionary<CameraBase, BoundingSphere> ColliderData { get; }
+      private BoundingSphere<float> sphere;
+      protected Dictionary<CameraBase, BoundingSphere<float>> ColliderData { get; }
 
       public SphereCollider()
       {
-         ColliderData = new Dictionary<CameraBase, BoundingSphere>();
+         ColliderData = new Dictionary<CameraBase, BoundingSphere<float>>();
       }
 
       public override void ClearData()
@@ -30,13 +30,13 @@ namespace Adamantium.ECS.Components
 
       public override Mesh GetVisualRepresentation()
       {
-         Geometry = Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, Vector3F.Max(Bounds.Size), 40);
+         Geometry = Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, Vector3F.Max(Bounds.Size.As<float>()), 40);
          return Geometry;
       }
 
       public override void CalculateFromMesh(Mesh mesh)
       {
-         sphere = mesh.Bounds;
+         sphere = mesh.Bounds.ToBoundingSphere().As<float>();
          base.CalculateFromMesh(mesh);
       }
 
@@ -57,7 +57,7 @@ namespace Adamantium.ECS.Components
 
       public override ContainmentType IsInsideCameraFrustum(Camera camera)
       {
-         BoundingSphere data;
+         BoundingSphere<float> data;
          if (ColliderData.TryGetValue(camera, out data))
          {
             return camera.Frustum.Contains(data);
@@ -67,13 +67,12 @@ namespace Adamantium.ECS.Components
 
       public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
       {
-         var uniformScale = Vector3F.Max(scale);
-         sphere = sphere.Transform(ref uniformScale, ref translation);
+         sphere = sphere.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
       }
 
       public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
       {
-         sphere = sphere.Transform(ref uniformScale, ref translation);
+         sphere = sphere.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
       }
 
       public override void Merge(Collider collider)
@@ -81,22 +80,22 @@ namespace Adamantium.ECS.Components
          throw new NotImplementedException();
       }
 
-      public override bool Intersects(ref Ray ray, out Vector3F point)
+      public override bool Intersects(ref Ray<float> ray, out Vector3F point)
       {
-         return sphere.Intersects(ref ray, out point);
+         return sphere.Intersects(ray, out point);
       }
 
-      public override IConvexShape GetWorldShape()
+      public override IConvexShape<float> GetWorldShape()
       {
          return sphere.Transform(Owner.Transform.GetWorldMatrixF());
       }
 
-       public override bool IntersectsForCamera(Camera camera, ref Ray ray, out Vector3F point)
+       public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
        {
            point = Vector3F.Zero;
            if (ColliderData.ContainsKey(camera))
            {
-               return ColliderData[camera].Intersects(ref ray, out point);
+               return ColliderData[camera].Intersects(ray, out point);
            }
            return false;
        }

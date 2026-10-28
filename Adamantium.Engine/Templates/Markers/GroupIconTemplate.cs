@@ -18,7 +18,7 @@ public class GroupIconTemplate : MarkerIconTemplate
 
     protected override Mesh Generate()
     {
-        var points = new List<Vector3>();
+        var points = new List<Vector3<double>>();
         AddCube(points, 4, 3.75);
         AddCube(points, 11, 7.5);
         AddCube(points, 11, 13);
@@ -33,34 +33,34 @@ public class GroupIconTemplate : MarkerIconTemplate
         return mesh;
     }
 
-    private static void AddCube(List<Vector3> points, double x, double y)
+    private static void AddCube(List<Vector3<double>> points, double x, double y)
     {
         const double halfWidth = 2.3;
         const double halfHeight = 2.5;
         const double side = 1.25;
-        var top = new Vector2(x, y - halfHeight);
-        var topRight = new Vector2(x + halfWidth, y - side);
-        var bottomRight = new Vector2(x + halfWidth, y + side);
-        var bottom = new Vector2(x, y + halfHeight);
-        var bottomLeft = new Vector2(x - halfWidth, y + side);
-        var topLeft = new Vector2(x - halfWidth, y - side);
-        var center = new Vector2(x, y);
+        var top = new Vector2<double>(x, y - halfHeight);
+        var topRight = new Vector2<double>(x + halfWidth, y - side);
+        var bottomRight = new Vector2<double>(x + halfWidth, y + side);
+        var bottom = new Vector2<double>(x, y + halfHeight);
+        var bottomLeft = new Vector2<double>(x - halfWidth, y + side);
+        var topLeft = new Vector2<double>(x - halfWidth, y - side);
+        var center = new Vector2<double>(x, y);
 
         AddFace(points, top, topRight, center, topLeft);
         AddFace(points, topLeft, center, bottom, bottomLeft);
         AddFace(points, center, topRight, bottomRight, bottom);
     }
 
-    private static void AddFace(List<Vector3> points, params Vector2[] corners)
+    private static void AddFace(List<Vector3<double>> points, params Vector2<double>[] corners)
     {
-        var middle = Vector2.Zero;
+        var middle = Vector2<double>.Zero;
         foreach (var corner in corners)
         {
             middle += corner;
         }
 
         middle /= corners.Length;
-        var shrunk = new Vector2[corners.Length];
+        var shrunk = new Vector2<double>[corners.Length];
         for (var i = 0; i < corners.Length; i++)
         {
             shrunk[i] = middle + (corners[i] - middle) * FaceShrink;
@@ -69,20 +69,20 @@ public class GroupIconTemplate : MarkerIconTemplate
         Fill(points, shrunk);
     }
 
-    private static void AddBar(List<Vector3> points, double fromX, double fromY, double toX, double toY)
+    private static void AddBar(List<Vector3<double>> points, double fromX, double fromY, double toX, double toY)
     {
         var half = BarWidth / 2;
         Fill(points, fromX == toX
-            ? [new Vector2(fromX - half, fromY), new Vector2(fromX + half, fromY), new Vector2(toX + half, toY), new Vector2(toX - half, toY)]
-            : [new Vector2(fromX, fromY - half), new Vector2(toX, toY - half), new Vector2(toX, toY + half), new Vector2(fromX, fromY + half)]);
+            ? [new Vector2<double>(fromX - half, fromY), new Vector2<double>(fromX + half, fromY), new Vector2<double>(toX + half, toY), new Vector2<double>(toX - half, toY)]
+            : [new Vector2<double>(fromX, fromY - half), new Vector2<double>(toX, toY - half), new Vector2<double>(toX, toY + half), new Vector2<double>(fromX, fromY + half)]);
     }
 
-    private static void Fill(List<Vector3> points, Vector2[] pixels)
+    private static void Fill(List<Vector3<double>> points, Vector2<double>[] pixels)
     {
-        var contour = new Vector2[pixels.Length];
+        var contour = new Vector2<double>[pixels.Length];
         for (var i = 0; i < pixels.Length; i++)
         {
-            contour[i] = new Vector2((pixels[i].X - CenterX) * Unit, (CenterY - pixels[i].Y) * Unit);
+            contour[i] = new Vector2<double>((pixels[i].X - CenterX) * Unit, (CenterY - pixels[i].Y) * Unit);
         }
 
         var polygon = new Polygon { FillRule = FillRule.NonZero };

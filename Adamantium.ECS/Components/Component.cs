@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Adamantium.Graphics.Core;
 using Adamantium.MVVM;
 
@@ -44,6 +45,12 @@ namespace Adamantium.ECS.Components
         }
 
         public event EventHandler<OwnerChangedEventArgs> OwnerChanged;
+
+        protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
+        {
+            base.RaisePropertyChanged(propertyName);
+            owner?.NotifyUpdated();
+        }
 
 
         public virtual void Initialize()

@@ -22,7 +22,7 @@ public class PointLightHandles : Handles
     ];
 
     private readonly Entity[] anchors;
-    private Vector3 center;
+    private Vector3<double> center;
     private Vector3F direction;
 
     public PointLightHandles()
@@ -47,12 +47,12 @@ public class PointLightHandles : Handles
         var at = target.Transform.WorldPosition;
 
         var metadata = Shape.Transform.GetMetadata(camera);
-        metadata.WorldMatrixF = Matrix4x4F.Scaling(2 * range) * Matrix4x4F.Translation(InRender(at, camera));
+        metadata.WorldMatrixF = Matrix4x4.CreateScale<float>(2 * range) * Matrix4x4.CreateTranslation<float>(InRender(at, camera));
         metadata.Enabled = true;
 
         for (int i = 0; i < anchors.Length; i++)
         {
-            PlaceAt(anchors[i], at + (Vector3)(Directions[i] * range), AnchorPoints, camera);
+            PlaceAt(anchors[i], at + (Directions[i] * range).As<double>(), AnchorPoints, camera);
         }
     }
 

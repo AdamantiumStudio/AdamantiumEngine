@@ -10,39 +10,39 @@ namespace Adamantium.MathTests
         [Test]
         public void RayToLineIntersection3D()
         {
-            Ray ray = new Ray(Vector3.Zero, Vector3.ForwardLH);
-            var start = new Vector3(-10, 0, 10);
-            var end = new Vector3(10, 1, 10);
-            var distance = Collision.RayIntersectsLineSegment(ref ray, start, end, out Vector3F coordinates);
+            Ray<float> ray = new Ray<float>(Vector3<double>.Zero.As<float>(), Vector3<double>.ForwardLH.As<float>());
+            var start = new Vector3<double>(-10, 0, 10);
+            var end = new Vector3<double>(10, 1, 10);
+            var distance = Collision.RayIntersectsLineSegment(ray, start.As<float>(), end.As<float>(), out Vector3F coordinates);
 
         }
 
         [Test]
         public void RayToLineAxisIntersection3D()
         {
-            Ray ray = new Ray(new Vector3(0, 1, 0), Vector3.ForwardLH);
-            Vector3 start = new Vector3(0, 0.05, 0);
-            Vector3 end = new Vector3(0, 1, 0);
-            var distanceUp = Collision.RayIntersectsLineSegment(ref ray, start, end, out Vector3F coordinatesUp);
+            Ray<float> ray = new Ray<float>(new Vector3<double>(0, 1, 0).As<float>(), Vector3<double>.ForwardLH.As<float>());
+            Vector3<double> start = new Vector3<double>(0, 0.05, 0);
+            Vector3<double> end = new Vector3<double>(0, 1, 0);
+            var distanceUp = Collision.RayIntersectsLineSegment(ray, start.As<float>(), end.As<float>(), out Vector3F coordinatesUp);
 
-            ray = new Ray(new Vector3(1, 0, 0), Vector3.Left);
-            start = new Vector3(0, 0, 0.05);
-            end = new Vector3(0, 0, 1);
-            var distanceForward = Collision.RayIntersectsLineSegment(ref ray, start, end, out Vector3F coordinatesForward);
+            ray = new Ray<float>(new Vector3<double>(1, 0, 0).As<float>(), Vector3<double>.Left.As<float>());
+            start = new Vector3<double>(0, 0, 0.05);
+            end = new Vector3<double>(0, 0, 1);
+            var distanceForward = Collision.RayIntersectsLineSegment(ray, start.As<float>(), end.As<float>(), out Vector3F coordinatesForward);
 
-            ray = new Ray(new Vector3(7.72, 0, -10), Vector3.ForwardLH);
-            start = new Vector3(0.05, 0, 0);
-            end = new Vector3(7.78, 0, 0);
-            var distanceRight = Collision.RayIntersectsLineSegment(ref ray, start, end, out Vector3F coordinatesRight);
+            ray = new Ray<float>(new Vector3<double>(7.72, 0, -10).As<float>(), Vector3<double>.ForwardLH.As<float>());
+            start = new Vector3<double>(0.05, 0, 0);
+            end = new Vector3<double>(7.78, 0, 0);
+            var distanceRight = Collision.RayIntersectsLineSegment(ray, start.As<float>(), end.As<float>(), out Vector3F coordinatesRight);
         }
 
 
         [Test]
         public void RayToLineIntersection2D()
         {
-            var start = new Vector2(0.4999995, 0.86);
-            var end = new Vector2(0);
-            var ray = new Ray2D(new Vector2(0.5, 1), -Vector2.UnitY);
+            var start = new Vector2<double>(0.4999995, 0.86);
+            var end = new Vector2<double>(0);
+            var ray = new Ray2<double>(new Vector2<double>(0.5, 1), -Vector2<double>.UnitY);
 
             var segment = new LineSegment2D(start, end);
             Collision2D.RaySegmentIntersection(ref ray, ref segment, out var interPoint);
@@ -51,13 +51,13 @@ namespace Adamantium.MathTests
         [Test]
         public void IsPointOnSegment()
         {
-            var point = new Vector2(0.004363479, 0);
+            var point = new Vector2<double>(0.004363479, 0);
 
-            var start = new Vector2(0);
-            var end = new Vector2(1, 0);
+            var start = new Vector2<double>(0);
+            var end = new Vector2<double>(1, 0);
 
-            var start2 = new Vector2(0.9998477, 0.01745023);
-            var end2 = new Vector2(0);
+            var start2 = new Vector2<double>(0.9998477, 0.01745023);
+            var end2 = new Vector2<double>(0);
 
             LineSegment2D segment1 = new LineSegment2D(start, end);
             LineSegment2D segment2 = new LineSegment2D(start2, end2);
@@ -72,8 +72,8 @@ namespace Adamantium.MathTests
         [Test]
         public void RayIntersectsLineSegment2D()
         {
-            Ray2D ray = new Ray2D(new Vector2(0.2, -0.2), -Vector2.UnitY);
-            LineSegment2D segment2D = new LineSegment2D(new Vector2(0.2, 0.2), new Vector2(-0.2, 0.2));
+            Ray2<double> ray = new Ray2<double>(new Vector2<double>(0.2, -0.2), -Vector2<double>.UnitY);
+            LineSegment2D segment2D = new LineSegment2D(new Vector2<double>(0.2, 0.2), new Vector2<double>(-0.2, 0.2));
             var intersects = Collision2D.RaySegmentIntersection(ref ray, ref segment2D, out var point);
 
             Assert.IsFalse(intersects);
@@ -83,8 +83,8 @@ namespace Adamantium.MathTests
         [Test]
         public void RayIntersectsLineSegment2D_Should_Intersects()
         {
-            Ray2D ray = new Ray2D(new Vector2(-0.2, 0.2), -Vector2.UnitY);
-            LineSegment2D segment2D = new LineSegment2D(new Vector2(0.2, 0.2), new Vector2(-0.2, 0.2));
+            Ray2<double> ray = new Ray2<double>(new Vector2<double>(-0.2, 0.2), -Vector2<double>.UnitY);
+            LineSegment2D segment2D = new LineSegment2D(new Vector2<double>(0.2, 0.2), new Vector2<double>(-0.2, 0.2));
             var intersects = Collision2D.RaySegmentIntersection(ref ray, ref segment2D, out var point);
 
             Assert.IsTrue(intersects);
@@ -93,8 +93,8 @@ namespace Adamantium.MathTests
         [Test]
         public void RayIntersectsLineSegment2D_Correct()
         {
-            Ray2D ray = new Ray2D(new Vector2(0.2, -0.2), Vector2.UnitY);
-            LineSegment2D segment2D = new LineSegment2D(new Vector2(0.2, 0.2), new Vector2(-0.2, 0.2));
+            Ray2<double> ray = new Ray2<double>(new Vector2<double>(0.2, -0.2), Vector2<double>.UnitY);
+            LineSegment2D segment2D = new LineSegment2D(new Vector2<double>(0.2, 0.2), new Vector2<double>(-0.2, 0.2));
             var intersects = Collision2D.RaySegmentIntersection(ref ray, ref segment2D, out var point);
 
             Assert.IsTrue(intersects);
@@ -108,8 +108,8 @@ namespace Adamantium.MathTests
         [Test]
         public void LineSegmentIntersectsLineSegment2D()
         {
-            LineSegment2D segment2D = new LineSegment2D(new Vector2(0, 0), new Vector2(10, 0));
-            LineSegment2D segment2 = new LineSegment2D(new Vector2(10, 0), new Vector2(15, 0));
+            LineSegment2D segment2D = new LineSegment2D(new Vector2<double>(0, 0), new Vector2<double>(10, 0));
+            LineSegment2D segment2 = new LineSegment2D(new Vector2<double>(10, 0), new Vector2<double>(15, 0));
             var intersects = Collision2D.SegmentSegmentIntersection(ref segment2D, ref segment2, out var point);
 
             Assert.IsFalse(intersects);

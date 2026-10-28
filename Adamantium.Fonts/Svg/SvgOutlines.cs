@@ -51,23 +51,23 @@ internal static class SvgOutlines
         var bottom = y + height;
         if (radiusX <= 0 || radiusY <= 0)
         {
-            sink.MoveTo(new Vector2(x, y));
-            sink.LineTo(new Vector2(right, y));
-            sink.LineTo(new Vector2(right, bottom));
-            sink.LineTo(new Vector2(x, bottom));
+            sink.MoveTo(new Vector2<double>(x, y));
+            sink.LineTo(new Vector2<double>(right, y));
+            sink.LineTo(new Vector2<double>(right, bottom));
+            sink.LineTo(new Vector2<double>(x, bottom));
             sink.Close();
             return;
         }
 
-        sink.MoveTo(new Vector2(x + radiusX, y));
-        sink.LineTo(new Vector2(right - radiusX, y));
-        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2(right, y + radiusY));
-        sink.LineTo(new Vector2(right, bottom - radiusY));
-        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2(right - radiusX, bottom));
-        sink.LineTo(new Vector2(x + radiusX, bottom));
-        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2(x, bottom - radiusY));
-        sink.LineTo(new Vector2(x, y + radiusY));
-        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2(x + radiusX, y));
+        sink.MoveTo(new Vector2<double>(x + radiusX, y));
+        sink.LineTo(new Vector2<double>(right - radiusX, y));
+        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2<double>(right, y + radiusY));
+        sink.LineTo(new Vector2<double>(right, bottom - radiusY));
+        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2<double>(right - radiusX, bottom));
+        sink.LineTo(new Vector2<double>(x + radiusX, bottom));
+        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2<double>(x, bottom - radiusY));
+        sink.LineTo(new Vector2<double>(x, y + radiusY));
+        sink.ArcTo(radiusX, radiusY, 0, false, true, new Vector2<double>(x + radiusX, y));
         sink.Close();
     }
 
@@ -78,9 +78,9 @@ internal static class SvgOutlines
             return;
         }
 
-        sink.MoveTo(new Vector2(cx + rx, cy));
-        sink.ArcTo(rx, ry, 0, true, true, new Vector2(cx - rx, cy));
-        sink.ArcTo(rx, ry, 0, true, true, new Vector2(cx + rx, cy));
+        sink.MoveTo(new Vector2<double>(cx + rx, cy));
+        sink.ArcTo(rx, ry, 0, true, true, new Vector2<double>(cx - rx, cy));
+        sink.ArcTo(rx, ry, 0, true, true, new Vector2<double>(cx + rx, cy));
         sink.Close();
     }
 
@@ -88,7 +88,7 @@ internal static class SvgOutlines
     {
         for (var i = 0; i + 1 < numbers.Count; i += 2)
         {
-            var point = new Vector2(numbers[i], numbers[i + 1]);
+            var point = new Vector2<double>(numbers[i], numbers[i + 1]);
             if (i == 0)
             {
                 sink.MoveTo(point);

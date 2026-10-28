@@ -24,7 +24,7 @@ public class HardBreakLineTests
         var typeface = Typeface.LoadFont(path);
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null, EmitNewlineCarets = newlineCarets };
         setUp?.Invoke(layout);
-        layout.ProcessText(text, 16, new Size(width, double.NaN), wrapping, trimming, HorizontalTextAlignment.Left,
+        layout.ProcessText(text, 16, new Size<double>(width, double.NaN), wrapping, trimming, HorizontalTextAlignment.Left,
             VerticalTextAlignment.Top);
         return layout;
     }
