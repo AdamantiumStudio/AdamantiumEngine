@@ -1,6 +1,7 @@
 # Builds the engine, runs the tests that need no GPU and packs the packages: for every pull request, and for master
 # once it is merged into. On Windows and on Linux: the effects generator compiles the built-in shaders during the build
-# on either, and a path or a file name that only Windows forgives fails on Linux before it is merged.
+# on either, and a path or a file name that only Windows forgives fails on Linux before it is merged. The maths tests
+# also run on macOS ARM64.
 name: CI
 
 on:
@@ -106,3 +107,33 @@ jobs:
       - name: Pack
         if: steps.changes.outputs.code == 'true' && matrix.os == 'windows-latest'
         run: dotnet pack AdamantiumEngine.sln -c Release --no-build -o artifacts/nupkg
+
+  # The maths on ARM64 - Apple Silicon - where SIMD is 128-bit NEON and the double matrices take their two-half path,
+  # which the x64 runners only imitate. Only the maths tests: the rest of the engine is not built on macOS yet. Not a
+  # check master requires. Once with SIMD, once without, as the two paths must give the same answers.
+  maths-arm64:
+    name: maths (macos arm64)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Processor
+        run: |
+          uname -m
+          dotnet --info | grep -E "RID|Architecture"
+
+      - name: Build
+        run: dotnet build Tests/Adamantium.MathTests/Adamantium.MathTests.csproj -c Release -warnaserror
+
+      - name: Test
+        run: dotnet test Tests/Adamantium.MathTests/Adamantium.MathTests.csproj -c Release --no-build
+
+      - name: Test without SIMD
+        env:
+          DOTNET_EnableHWIntrinsic: 0
+        run: dotnet test Tests/Adamantium.MathTests/Adamantium.MathTests.csproj -c Release --no-build

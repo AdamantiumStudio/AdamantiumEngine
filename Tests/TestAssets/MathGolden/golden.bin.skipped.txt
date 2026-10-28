@@ -1,0 +1,353 @@
+Vector2.get_Item(this Int32): property or event accessor
+Vector2.set_Item(this Int32,Double): property or event accessor
+Vector2.ToArray(this ): returns Double[]
+Vector2.Orthogonalize(Vector2[],Vector2[]): takes Vector2[]
+Vector2.Orthonormalize(Vector2[],Vector2[]): takes Vector2[]
+Vector2.Transform(Vector2[],QuaternionF&,Vector2[]): takes Vector2[]
+Vector2.Transform(Vector2[],Matrix4x4&,Vector4[]): takes Vector2[]
+Vector2.TransformCoordinate(Vector2[],Matrix4x4&,Vector2[]): takes Vector2[]
+Vector2.TransformNormal(Vector2[],Matrix4x4&,Vector2[]): takes Vector2[]
+Vector2.ToString(this ): returns String
+Vector2.ToString(this String): returns String
+Vector2.ToString(this IFormatProvider): returns String
+Vector2.ToString(this String,IFormatProvider): returns String
+Vector2.Equals(this Object): takes Object
+Vector2F.get_Item(this Int32): property or event accessor
+Vector2F.set_Item(this Int32,Single): property or event accessor
+Vector2F.ToArray(this ): returns Single[]
+Vector2F.Orthogonalize(Vector2F[],Vector2F[]): takes Vector2F[]
+Vector2F.Orthonormalize(Vector2F[],Vector2F[]): takes Vector2F[]
+Vector2F.Transform(Vector2F[],QuaternionF&,Vector2F[]): takes Vector2F[]
+Vector2F.Transform(Vector2F[],Matrix4x4F&,Vector4F[]): takes Vector2F[]
+Vector2F.TransformCoordinate(Vector2F[],Matrix4x4F&,Vector2F[]): takes Vector2F[]
+Vector2F.TransformNormal(Vector2F[],Matrix4x4F&,Vector2F[]): takes Vector2F[]
+Vector2F.ToString(this ): returns String
+Vector2F.ToString(this String): returns String
+Vector2F.ToString(this IFormatProvider): returns String
+Vector2F.ToString(this String,IFormatProvider): returns String
+Vector2F.Equals(this Object): takes Object
+Vector3.get_Item(this Int32): property or event accessor
+Vector3.set_Item(this Int32,Double): property or event accessor
+Vector3.ToArray(this ): returns Double[]
+Vector3.Orthogonalize(Vector3[],Vector3[]): takes Vector3[]
+Vector3.Orthonormalize(Vector3[],Vector3[]): takes Vector3[]
+Vector3.Transform(Vector3[],Quaternion&,Vector3[]): takes Vector3[]
+Vector3.Transform(Vector3[],Matrix4x4&,Vector4[]): takes Vector3[]
+Vector3.TransformCoordinate(Vector3[],Matrix4x4&,Vector3[]): takes Vector3[]
+Vector3.TransformNormal(Vector3[],Matrix4x4&,Vector3[]): takes Vector3[]
+Vector3.ToString(this ): returns String
+Vector3.ToString(this String): returns String
+Vector3.ToString(this IFormatProvider): returns String
+Vector3.ToString(this String,IFormatProvider): returns String
+Vector3.Equals(this Object): takes Object
+Vector3F.get_Item(this Int32): property or event accessor
+Vector3F.set_Item(this Int32,Single): property or event accessor
+Vector3F.ToArray(this ): returns Single[]
+Vector3F.Orthogonalize(Vector3F[],Vector3F[]): takes Vector3F[]
+Vector3F.Orthonormalize(Vector3F[],Vector3F[]): takes Vector3F[]
+Vector3F.Transform(Vector3F[],QuaternionF&,Vector3F[]): takes Vector3F[]
+Vector3F.Transform(Vector3F[],Matrix4x4F&,Vector4F[]): takes Vector3F[]
+Vector3F.TransformCoordinate(Vector3F[],Matrix4x4F&,Vector3F[]): takes Vector3F[]
+Vector3F.TransformNormal(Vector3F[],Matrix4x4F&,Vector3F[]): takes Vector3F[]
+Vector3F.ToString(this ): returns String
+Vector3F.ToString(this String): returns String
+Vector3F.ToString(this IFormatProvider): returns String
+Vector3F.ToString(this String,IFormatProvider): returns String
+Vector3F.Equals(this Object): takes Object
+Vector4.get_Item(this Int32): property or event accessor
+Vector4.set_Item(this Int32,Double): property or event accessor
+Vector4.ToArray(this ): returns Double[]
+Vector4.Orthogonalize(Vector4[],Vector4[]): takes Vector4[]
+Vector4.Orthonormalize(Vector4[],Vector4[]): takes Vector4[]
+Vector4.Transform(Vector4[],QuaternionF&,Vector4[]): takes Vector4[]
+Vector4.Transform(Vector4[],Matrix4x4F&,Vector4[]): takes Vector4[]
+Vector4.ToString(this ): returns String
+Vector4.ToString(this String): returns String
+Vector4.ToString(this IFormatProvider): returns String
+Vector4.ToString(this String,IFormatProvider): returns String
+Vector4.Equals(this Object): takes Object
+Vector4F.get_Item(this Int32): property or event accessor
+Vector4F.set_Item(this Int32,Single): property or event accessor
+Vector4F.ToArray(this ): returns Single[]
+Vector4F.Orthogonalize(Vector4F[],Vector4F[]): takes Vector4F[]
+Vector4F.Orthonormalize(Vector4F[],Vector4F[]): takes Vector4F[]
+Vector4F.Transform(Vector4F[],QuaternionF&,Vector4F[]): takes Vector4F[]
+Vector4F.Transform(Vector4F[],Matrix4x4F&,Vector4F[]): takes Vector4F[]
+Vector4F.ToString(this ): returns String
+Vector4F.ToString(this String): returns String
+Vector4F.ToString(this IFormatProvider): returns String
+Vector4F.ToString(this String,IFormatProvider): returns String
+Vector4F.Equals(this Object): takes Object
+Quaternion.get_Item(this Int32): property or event accessor
+Quaternion.set_Item(this Int32,Double): property or event accessor
+Quaternion.ToArray(this ): returns Double[]
+Quaternion.SquadSetup(Quaternion,Quaternion,Quaternion,Quaternion): returns Quaternion[]
+Quaternion.ToString(this ): returns String
+Quaternion.ToString(this String): returns String
+Quaternion.ToString(this IFormatProvider): returns String
+Quaternion.ToString(this String,IFormatProvider): returns String
+Quaternion.Equals(this Object): takes Object
+QuaternionF.get_Item(this Int32): property or event accessor
+QuaternionF.set_Item(this Int32,Single): property or event accessor
+QuaternionF.ToArray(this ): returns Single[]
+QuaternionF.SquadSetup(QuaternionF,QuaternionF,QuaternionF,QuaternionF): returns QuaternionF[]
+QuaternionF.ToString(this ): returns String
+QuaternionF.ToString(this String): returns String
+QuaternionF.ToString(this IFormatProvider): returns String
+QuaternionF.ToString(this String,IFormatProvider): returns String
+QuaternionF.Equals(this Object): takes Object
+Matrix3x2.set_Row1(this Vector2): property or event accessor
+Matrix3x2.set_Row2(this Vector2): property or event accessor
+Matrix3x2.set_Row3(this Vector2): property or event accessor
+Matrix3x2.set_Column1(this Vector3F): property or event accessor
+Matrix3x2.set_Column2(this Vector3F): property or event accessor
+Matrix3x2.set_TranslationVector(this Vector2): property or event accessor
+Matrix3x2.set_ScaleVector(this Vector2): property or event accessor
+Matrix3x2.get_Item(this Int32): property or event accessor
+Matrix3x2.set_Item(this Int32,Double): property or event accessor
+Matrix3x2.get_Item(this Int32,Int32): property or event accessor
+Matrix3x2.set_Item(this Int32,Int32,Double): property or event accessor
+Matrix3x2.ToArray(this ): returns Double[]
+Matrix3x2.ToString(this ): returns String
+Matrix3x2.ToString(this String): returns String
+Matrix3x2.ToString(this IFormatProvider): returns String
+Matrix3x2.ToString(this String,IFormatProvider): returns String
+Matrix3x2.Equals(this Object): takes Object
+Matrix3x2F.set_Row1(this Vector2F): property or event accessor
+Matrix3x2F.set_Row2(this Vector2F): property or event accessor
+Matrix3x2F.set_Row3(this Vector2F): property or event accessor
+Matrix3x2F.set_Column1(this Vector3F): property or event accessor
+Matrix3x2F.set_Column2(this Vector3F): property or event accessor
+Matrix3x2F.set_TranslationVector(this Vector2F): property or event accessor
+Matrix3x2F.set_ScaleVector(this Vector2F): property or event accessor
+Matrix3x2F.get_Item(this Int32): property or event accessor
+Matrix3x2F.set_Item(this Int32,Single): property or event accessor
+Matrix3x2F.get_Item(this Int32,Int32): property or event accessor
+Matrix3x2F.set_Item(this Int32,Int32,Single): property or event accessor
+Matrix3x2F.ToArray(this ): returns Single[]
+Matrix3x2F.ToString(this ): returns String
+Matrix3x2F.ToString(this String): returns String
+Matrix3x2F.ToString(this IFormatProvider): returns String
+Matrix3x2F.ToString(this String,IFormatProvider): returns String
+Matrix3x2F.Equals(this Object): takes Object
+Matrix3x3.set_Row1(this Vector3): property or event accessor
+Matrix3x3.set_Row2(this Vector3): property or event accessor
+Matrix3x3.set_Row3(this Vector3): property or event accessor
+Matrix3x3.set_Column1(this Vector3): property or event accessor
+Matrix3x3.set_Column2(this Vector3): property or event accessor
+Matrix3x3.set_Column3(this Vector3): property or event accessor
+Matrix3x3.set_ScaleVector(this Vector3): property or event accessor
+Matrix3x3.get_Item(this Int32): property or event accessor
+Matrix3x3.set_Item(this Int32,Double): property or event accessor
+Matrix3x3.get_Item(this Int32,Int32): property or event accessor
+Matrix3x3.set_Item(this Int32,Int32,Double): property or event accessor
+Matrix3x3.ToArray(this ): returns Double[]
+Matrix3x3.ToString(this ): returns String
+Matrix3x3.ToString(this String): returns String
+Matrix3x3.ToString(this IFormatProvider): returns String
+Matrix3x3.ToString(this String,IFormatProvider): returns String
+Matrix3x3.Equals(this Object): takes Object
+Matrix3x3F.set_Row1(this Vector3F): property or event accessor
+Matrix3x3F.set_Row2(this Vector3F): property or event accessor
+Matrix3x3F.set_Row3(this Vector3F): property or event accessor
+Matrix3x3F.set_Column1(this Vector3F): property or event accessor
+Matrix3x3F.set_Column2(this Vector3F): property or event accessor
+Matrix3x3F.set_Column3(this Vector3F): property or event accessor
+Matrix3x3F.set_ScaleVector(this Vector3F): property or event accessor
+Matrix3x3F.get_Item(this Int32): property or event accessor
+Matrix3x3F.set_Item(this Int32,Single): property or event accessor
+Matrix3x3F.get_Item(this Int32,Int32): property or event accessor
+Matrix3x3F.set_Item(this Int32,Int32,Single): property or event accessor
+Matrix3x3F.ToArray(this ): returns Single[]
+Matrix3x3F.ToString(this ): returns String
+Matrix3x3F.ToString(this String): returns String
+Matrix3x3F.ToString(this IFormatProvider): returns String
+Matrix3x3F.ToString(this String,IFormatProvider): returns String
+Matrix3x3F.Equals(this Object): takes Object
+Matrix4x4.set_Up(this Vector3): property or event accessor
+Matrix4x4.set_Down(this Vector3): property or event accessor
+Matrix4x4.set_Right(this Vector3): property or event accessor
+Matrix4x4.set_Left(this Vector3): property or event accessor
+Matrix4x4.set_Forward(this Vector3): property or event accessor
+Matrix4x4.set_Backward(this Vector3): property or event accessor
+Matrix4x4.set_Row1(this Vector4): property or event accessor
+Matrix4x4.set_Row2(this Vector4): property or event accessor
+Matrix4x4.set_Row3(this Vector4): property or event accessor
+Matrix4x4.set_Row4(this Vector4): property or event accessor
+Matrix4x4.set_Column1(this Vector4): property or event accessor
+Matrix4x4.set_Column2(this Vector4): property or event accessor
+Matrix4x4.set_Column3(this Vector4): property or event accessor
+Matrix4x4.set_Column4(this Vector4): property or event accessor
+Matrix4x4.set_TranslationVector(this Vector3): property or event accessor
+Matrix4x4.set_ScaleVector(this Vector3): property or event accessor
+Matrix4x4.get_Item(this Int32): property or event accessor
+Matrix4x4.set_Item(this Int32,Double): property or event accessor
+Matrix4x4.get_Item(this Int32,Int32): property or event accessor
+Matrix4x4.set_Item(this Int32,Int32,Double): property or event accessor
+Matrix4x4.ToArray(this ): returns Double[]
+Matrix4x4.ToString(this ): returns String
+Matrix4x4.ToString(this String): returns String
+Matrix4x4.ToString(this IFormatProvider): returns String
+Matrix4x4.ToString(this String,IFormatProvider): returns String
+Matrix4x4.Equals(this Object): takes Object
+Matrix4x4F.set_Up(this Vector3F): property or event accessor
+Matrix4x4F.set_Down(this Vector3F): property or event accessor
+Matrix4x4F.set_Right(this Vector3F): property or event accessor
+Matrix4x4F.set_Left(this Vector3F): property or event accessor
+Matrix4x4F.set_Forward(this Vector3F): property or event accessor
+Matrix4x4F.set_Backward(this Vector3F): property or event accessor
+Matrix4x4F.set_Row1(this Vector4F): property or event accessor
+Matrix4x4F.set_Row2(this Vector4F): property or event accessor
+Matrix4x4F.set_Row3(this Vector4F): property or event accessor
+Matrix4x4F.set_Row4(this Vector4F): property or event accessor
+Matrix4x4F.set_Column1(this Vector4F): property or event accessor
+Matrix4x4F.set_Column2(this Vector4F): property or event accessor
+Matrix4x4F.set_Column3(this Vector4F): property or event accessor
+Matrix4x4F.set_Column4(this Vector4F): property or event accessor
+Matrix4x4F.set_TranslationVector(this Vector3F): property or event accessor
+Matrix4x4F.set_ScaleVector(this Vector3F): property or event accessor
+Matrix4x4F.get_Item(this Int32): property or event accessor
+Matrix4x4F.set_Item(this Int32,Single): property or event accessor
+Matrix4x4F.get_Item(this Int32,Int32): property or event accessor
+Matrix4x4F.set_Item(this Int32,Int32,Single): property or event accessor
+Matrix4x4F.ToArray(this ): returns Single[]
+Matrix4x4F.ToString(this ): returns String
+Matrix4x4F.ToString(this String): returns String
+Matrix4x4F.ToString(this IFormatProvider): returns String
+Matrix4x4F.ToString(this String,IFormatProvider): returns String
+Matrix4x4F.Equals(this Object): takes Object
+Int3.get_Item(this Int32): property or event accessor
+Int3.set_Item(this Int32,Int32): property or event accessor
+Int3.ToArray(this ): returns Int32[]
+Int3.ToString(this ): returns String
+Int3.ToString(this String): returns String
+Int3.ToString(this IFormatProvider): returns String
+Int3.ToString(this String,IFormatProvider): returns String
+Int3.Equals(this Object): takes Object
+Int3.op_Implicit(Int32[]): takes Int32[]
+Int3.op_Implicit(Int3): returns Int32[]
+Int4.get_Item(this Int32): property or event accessor
+Int4.set_Item(this Int32,Int32): property or event accessor
+Int4.ToArray(this ): returns Int32[]
+Int4.ToString(this ): returns String
+Int4.ToString(this String): returns String
+Int4.ToString(this IFormatProvider): returns String
+Int4.ToString(this String,IFormatProvider): returns String
+Int4.Equals(this Object): takes Object
+Int4.op_Implicit(Int32[]): takes Int32[]
+Int4.op_Implicit(Int4): returns Int32[]
+Bool4.set_X(this Boolean): property or event accessor
+Bool4.set_Y(this Boolean): property or event accessor
+Bool4.set_Z(this Boolean): property or event accessor
+Bool4.set_W(this Boolean): property or event accessor
+Bool4.get_Item(this Int32): property or event accessor
+Bool4.set_Item(this Int32,Boolean): property or event accessor
+Bool4.ToArray(this ): returns Boolean[]
+Bool4.ToString(this ): returns String
+Bool4.ToString(this String,IFormatProvider): returns String
+Bool4.Equals(this Object): takes Object
+Bool4.op_Implicit(Boolean[]): takes Boolean[]
+Bool4.op_Implicit(Bool4): returns Boolean[]
+Rectangle.set_X(this Int32): property or event accessor
+Rectangle.set_Y(this Int32): property or event accessor
+Rectangle.set_Right(this Int32): property or event accessor
+Rectangle.set_Bottom(this Int32): property or event accessor
+Rectangle.set_Size(this SizeF): property or event accessor
+Rectangle.Equals(this Object): takes Object
+Rectangle.ToString(this ): returns String
+RectangleF.FromPoints(Vector2[]): takes Vector2[]
+RectangleF.set_X(this Single): property or event accessor
+RectangleF.set_Y(this Single): property or event accessor
+RectangleF.set_Width(this Single): property or event accessor
+RectangleF.set_Height(this Single): property or event accessor
+RectangleF.set_Location(this Vector2F): property or event accessor
+RectangleF.set_Size(this Vector2F): property or event accessor
+RectangleF.Equals(this Object): takes Object
+RectangleF.ToString(this ): returns String
+Size.set_Width(this Double): property or event accessor
+Size.set_Height(this Double): property or event accessor
+Size.Equals(this Object): takes Object
+Size.ToString(this ): returns String
+SizeF.Equals(this Object): takes Object
+SizeF.ToString(this ): returns String
+Plane.get_Item(this Int32): property or event accessor
+Plane.set_Item(this Int32,Single): property or event accessor
+Plane.ToArray(this ): returns Single[]
+Plane.Intersects(this ConvexHull): takes ConvexHull
+Plane.Transform(Plane[],QuaternionF&): takes Plane[]
+Plane.Transform(Plane[],Matrix4x4F&): takes Plane[]
+Plane.ToString(this ): returns String
+Plane.ToString(this String): returns String
+Plane.ToString(this IFormatProvider): returns String
+Plane.ToString(this String,IFormatProvider): returns String
+Plane.Equals(this Object): takes Object
+Ray.Intersects(this ConvexHull,Single&): takes ConvexHull
+Ray.ToString(this ): returns String
+Ray.ToString(this String): returns String
+Ray.ToString(this IFormatProvider): returns String
+Ray.ToString(this String,IFormatProvider): returns String
+Ray.Equals(this Object): takes Object
+BoundingBox.GetCorners(this ): returns Vector3F[]
+BoundingBox.GetCorners(this Vector3F[]): takes Vector3F[]
+BoundingBox.Intersects(this ConvexHull): takes ConvexHull
+BoundingBox.FromPoints(Vector3F[],BoundingBox&): takes Vector3F[]
+BoundingBox.FromPoints(Vector3F[]): takes Vector3F[]
+BoundingBox.ToString(this ): returns String
+BoundingBox.ToString(this String): returns String
+BoundingBox.ToString(this IFormatProvider): returns String
+BoundingBox.ToString(this String,IFormatProvider): returns String
+BoundingBox.Equals(this Object): takes Object
+BoundingSphere.Intersects(this ConvexHull): takes ConvexHull
+BoundingSphere.FromPoints(Vector3F[],Int32,Int32,BoundingSphere&): takes Vector3F[]
+BoundingSphere.FromPoints(Vector3F[],BoundingSphere&): takes Vector3F[]
+BoundingSphere.FromPoints(Vector3F[]): takes Vector3F[]
+BoundingSphere.ToString(this ): returns String
+BoundingSphere.ToString(this String): returns String
+BoundingSphere.ToString(this IFormatProvider): returns String
+BoundingSphere.ToString(this String,IFormatProvider): returns String
+BoundingSphere.Equals(this Object): takes Object
+Color.get_Item(this Int32): property or event accessor
+Color.set_Item(this Int32,Byte): property or event accessor
+Color.ToFloatArray(this ): returns Single[]
+Color.ToArray(this ): returns Byte[]
+Color.ToString(this ): returns String
+Color.ToString(this String): returns String
+Color.ToString(this IFormatProvider): returns String
+Color.ToString(this String,IFormatProvider): returns String
+Color.Equals(this Object): takes Object
+Color3F.get_Item(this Int32): property or event accessor
+Color3F.set_Item(this Int32,Single): property or event accessor
+Color3F.ToArray(this ): returns Single[]
+Color3F.ToString(this ): returns String
+Color3F.ToString(this String): returns String
+Color3F.ToString(this IFormatProvider): returns String
+Color3F.ToString(this String,IFormatProvider): returns String
+Color3F.Equals(this Object): takes Object
+Color4F.get_Item(this Int32): property or event accessor
+Color4F.set_Item(this Int32,Single): property or event accessor
+Color4F.ToArray(this ): returns Single[]
+Color4F.ToString(this ): returns String
+Color4F.ToString(this String): returns String
+Color4F.ToString(this IFormatProvider): returns String
+Color4F.ToString(this String,IFormatProvider): returns String
+Color4F.Equals(this Object): takes Object
+ColorBGRA.get_Item(this Int32): property or event accessor
+ColorBGRA.set_Item(this Int32,Byte): property or event accessor
+ColorBGRA.ToArray(this ): returns Byte[]
+ColorBGRA.ToString(this ): returns String
+ColorBGRA.ToString(this String): returns String
+ColorBGRA.ToString(this IFormatProvider): returns String
+ColorBGRA.ToString(this String,IFormatProvider): returns String
+ColorBGRA.Equals(this Object): takes Object
+MathHelper.IsConvex(IReadOnlyList`1): takes IReadOnlyList`1
+MathHelper.IsPointInShape(Vector2,List`1): takes List`1
+MathHelper.GetBSpline2(IEnumerable`1,UInt32): returns List`1
+MathHelper.GetNurbsCurve(IEnumerable`1,Int32,Boolean,Double): returns Vector2[]
+MathHelper.GetNurbsCurve(IEnumerable`1,IReadOnlyList`1,Int32,Boolean,Double): returns Vector2[]
+MathHelper.GetBezier(IReadOnlyList`1,UInt32): returns List`1
+MathHelper.GetQuadraticBezier(Vector2,Vector2,Vector2,UInt32): returns List`1
+MathHelper.GetCubicBezier(Vector2,Vector2,Vector2,Vector2,UInt32): returns List`1
+MathHelper.SimplifyByMinSpacing(IReadOnlyList`1,Double): returns Vector2[]
+MathHelper.PolylineLength(IReadOnlyList`1): takes IReadOnlyList`1
+MathHelper.ResampleByArcLength(IReadOnlyList`1,Int32): returns Vector2[]
+MathHelper.GetArcPoints(Vector2,Vector2,Double,Boolean,Double): returns List`1

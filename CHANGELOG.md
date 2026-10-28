@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.Mathematics.Typed`: one generic type for each number type in place of float and double pairs -
+  `Vector2<T>`, `Vector3<T>`, `Vector4<T>` (integers too), `Quaternion<T>`, `Matrix3x2<T>`, `Matrix3x3<T>`,
+  `Matrix4x4<T>` - made with static factories as in System.Numerics (`Vector3.Create`, `Matrix4x4.CreateLookAtLH`,
+  `Quaternion.CreateFromYawPitchRoll`...) and converted between number types only explicitly, with `As<T>()`. What
+  needs fractions - length, normalizing, blending - is there only for fractional types. Equality is exact, a NaN
+  equal to a NaN for dictionaries; `NearEqual` compares within a tolerance. Matrix products and transforms use SIMD
+  where the processor has it - 128 bits for float, 256 or two halves of 128 for double - and give the same bits on
+  every processor and without SIMD. The types the engine uses today stay until they are moved over; the new ones
+  answer as they do, apart from mistakes of theirs set right: triangular and echelon forms, a skew, an isometric
+  projection, a field of view in degrees, collinearity, spherical blends of perpendicular rotations, the angles of a
+  rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
+  one or far apart - a far translation in float, a small 2D scale.
+
 - Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
   `PatchList`, set by the caller; `IGraphicsDevice.TessellationDomainOrigin`: the corner of the domain at (0, 0), upper
   left unless set. A tessellated draw of another topology, or of patches of no points or more than the device's
