@@ -133,13 +133,13 @@ public static class Vector2
         /// <summary>The point <paramref name="vector"/>, with a Z of zero and a W of one, times
         /// <paramref name="transform"/>.</summary>
         public static Vector4<T> Transform(Vector2<T> vector, Matrix4x4<T> transform) =>
-            Matrix4x4Simd.Transform(new Vector4<T>(vector, T.Zero, T.One), transform);
+            Matrix4x4Simd.TransformPoint(new Vector3<T>(vector, T.Zero), transform);
 
         /// <summary>The point <paramref name="coordinate"/> times <paramref name="transform"/>, divided by the W of the
         /// answer: a projected point.</summary>
         public static Vector2<T> TransformCoordinate(Vector2<T> coordinate, Matrix4x4<T> transform)
         {
-            var result = Matrix4x4Simd.Transform(new Vector4<T>(coordinate, T.Zero, T.One), transform);
+            var result = Matrix4x4Simd.TransformPoint(new Vector3<T>(coordinate, T.Zero), transform);
             return (Vector2<T>)result * (T.One / result.W);
         }
 

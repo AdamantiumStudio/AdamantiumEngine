@@ -9,7 +9,8 @@ namespace Adamantium.Mathematics.Typed;
 /// (SSE, NEON); double rows in 256 bits (AVX) or as two 128-bit halves (SSE2, NEON). The matrices are reinterpreted
 /// whole as <see cref="SimdRows{TVector}"/>, which the JIT keeps in registers - row by row conversions go through the
 /// stack and cost half the speed. A row times a matrix is summed as two pairs of products, each rounded as the
-/// element-by-element formula rounds it, so every path - and every processor - gives the same bits; fused
+/// element-by-element formula rounds it, so every path - and every processor - gives the same numbers, only where two
+/// NaNs meet may a different one come out; fused
 /// multiply-add would be about 7% faster for float and 5% for double, but its bits differ between processors. The
 /// checks are JIT constants, so one path is left in the machine code.
 /// </summary>
@@ -56,6 +57,42 @@ internal static class Matrix4x4Simd
         }
 
         return new Matrix4x4<T>(Row(left.Row1, right), Row(left.Row2, right), Row(left.Row3, right), Row(left.Row4, right));
+    }
+
+    /// <summary>The point <paramref name="point"/>, with a W of one, * <paramref name="matrix"/>: the same numbers as
+    /// <see cref="Transform{T}"/> gives - where two NaNs meet, which comes out is the processor's - but each coordinate
+    /// spread across a register as it stands; a row put together from three numbers and read back whole would stall on
+    /// its way through memory.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector4<T> TransformPoint<T>(Vector3<T> point, Matrix4x4<T> matrix) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(float) && Vector128.IsHardwareAccelerated)
+        {
+            var m = Unsafe.As<Matrix4x4<T>, SimdRows<Vector128<float>>>(ref matrix);
+            var result = Vector128.Create(float.CreateTruncating(point.X)) * m.Row1 + Vector128.Create(float.CreateTruncating(point.Y)) * m.Row2
+                         + (Vector128.Create(float.CreateTruncating(point.Z)) * m.Row3 + m.Row4);
+            return Unsafe.As<Vector128<float>, Vector4<T>>(ref result);
+        }
+
+        if (typeof(T) == typeof(double) && Vector256.IsHardwareAccelerated)
+        {
+            var m = Unsafe.As<Matrix4x4<T>, SimdRows<Vector256<double>>>(ref matrix);
+            var result = Vector256.Create(double.CreateTruncating(point.X)) * m.Row1 + Vector256.Create(double.CreateTruncating(point.Y)) * m.Row2
+                         + (Vector256.Create(double.CreateTruncating(point.Z)) * m.Row3 + m.Row4);
+            return Unsafe.As<Vector256<double>, Vector4<T>>(ref result);
+        }
+
+        if (typeof(T) == typeof(double) && Vector128.IsHardwareAccelerated)
+        {
+            var m = Unsafe.As<Matrix4x4<T>, SimdRows<DoubleRowHalves>>(ref matrix);
+            var (x, y, z) = (Vector128.Create(double.CreateTruncating(point.X)), Vector128.Create(double.CreateTruncating(point.Y)),
+                Vector128.Create(double.CreateTruncating(point.Z)));
+            var result = new DoubleRowHalves(x * m.Row1.Low + y * m.Row2.Low + (z * m.Row3.Low + m.Row4.Low),
+                x * m.Row1.High + y * m.Row2.High + (z * m.Row3.High + m.Row4.High));
+            return Unsafe.As<DoubleRowHalves, Vector4<T>>(ref result);
+        }
+
+        return Row(new Vector4<T>(point, T.One), matrix);
     }
 
     /// <summary>The row vector <paramref name="row"/> * <paramref name="matrix"/>.</summary>

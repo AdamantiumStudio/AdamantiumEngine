@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Adamantium.Mathematics.Typed;
 
@@ -15,6 +16,35 @@ public static class Vector3
 
     /// <summary>A vector of <paramref name="value"/>'s X and Y and <paramref name="z"/>.</summary>
     public static Vector3<T> Create<T>(Vector2<T> value, T z) where T : unmanaged, INumber<T> => new(value, z);
+
+    /// <summary>Writes each of <paramref name="points"/> less <paramref name="origin"/>, rounded to float, into
+    /// <paramref name="destination"/>: a world kept in double brought near a camera for the GPU, the subtraction done
+    /// in double so nothing near the camera is lost. Many at a time in SIMD, each as the subtraction and the cast one
+    /// by one give it.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="destination"/> is shorter than
+    /// <paramref name="points"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> overlaps <paramref name="points"/>.</exception>
+    public static void Narrow(ReadOnlySpan<Vector3<double>> points, Vector3<double> origin, Span<Vector3<float>> destination)
+    {
+        SpanArguments.CheckDestination(points, destination);
+        Matrix4x4Batch.Narrow(MemoryMarshal.Cast<Vector3<double>, double>(points), origin,
+            MemoryMarshal.Cast<Vector3<float>, float>(destination[..points.Length]));
+    }
+
+    /// <summary>Writes each point kept as <paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/> less
+    /// <paramref name="origin"/>, rounded to float, into <paramref name="destinationX"/>,
+    /// <paramref name="destinationY"/>, <paramref name="destinationZ"/>, as <see cref="Narrow(ReadOnlySpan{Vector3{double}}, Vector3{double}, Span{Vector3{float}})"/>
+    /// does.</summary>
+    /// <exception cref="ArgumentException">The sources differ in length, or the spans overlap.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A destination is shorter than the sources.</exception>
+    public static void Narrow(ReadOnlySpan<double> x, ReadOnlySpan<double> y, ReadOnlySpan<double> z, Vector3<double> origin,
+        Span<float> destinationX, Span<float> destinationY, Span<float> destinationZ)
+    {
+        SpanArguments.CheckComponents(x, y, z, destinationX, destinationY, destinationZ);
+        Matrix4x4Batch.Narrow(x, origin.X, destinationX);
+        Matrix4x4Batch.Narrow(y, origin.Y, destinationY);
+        Matrix4x4Batch.Narrow(z, origin.Z, destinationZ);
+    }
 
     extension<T>(Vector3<T>) where T : unmanaged, INumber<T>, ISignedNumber<T>
     {
@@ -155,14 +185,13 @@ public static class Vector3
 
         /// <summary>The point <paramref name="vector"/>, with a W of one, times <paramref name="transform"/>, the W of the
         /// answer kept.</summary>
-        public static Vector4<T> Transform(Vector3<T> vector, Matrix4x4<T> transform) =>
-            Matrix4x4Simd.Transform(new Vector4<T>(vector, T.One), transform);
+        public static Vector4<T> Transform(Vector3<T> vector, Matrix4x4<T> transform) => Matrix4x4Simd.TransformPoint(vector, transform);
 
         /// <summary>The point <paramref name="coordinate"/> times <paramref name="transform"/>, divided by the W of the
         /// answer: a projected point.</summary>
         public static Vector3<T> TransformCoordinate(Vector3<T> coordinate, Matrix4x4<T> transform)
         {
-            var result = Matrix4x4Simd.Transform(new Vector4<T>(coordinate, T.One), transform);
+            var result = Matrix4x4Simd.TransformPoint(coordinate, transform);
             return (Vector3<T>)result * (T.One / result.W);
         }
 
@@ -224,6 +253,34 @@ public static class Vector3
             {
                 destination[i] = TransformNormal(source[i], transform);
             }
+        }
+
+        /// <summary>Writes each point kept as <paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/> projected
+        /// by <paramref name="transform"/> into <paramref name="destinationX"/>, <paramref name="destinationY"/>,
+        /// <paramref name="destinationZ"/> - many points at a time in SIMD, each the same number as
+        /// <see cref="TransformCoordinate(Vector3{T}, Matrix4x4{T})"/> gives it, only a NaN maybe another NaN. A
+        /// destination may be any of the very same spans as the sources.</summary>
+        /// <exception cref="ArgumentException">The sources differ in length, or the spans overlap other than in place.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A destination is shorter than the sources.</exception>
+        public static void TransformCoordinate(ReadOnlySpan<T> x, ReadOnlySpan<T> y, ReadOnlySpan<T> z, Matrix4x4<T> transform,
+            Span<T> destinationX, Span<T> destinationY, Span<T> destinationZ)
+        {
+            SpanArguments.CheckComponents(x, y, z, destinationX, destinationY, destinationZ);
+            Matrix4x4Batch.TransformCoordinate(x, y, z, transform, destinationX, destinationY, destinationZ);
+        }
+
+        /// <summary>Writes each direction kept as <paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/> times
+        /// <paramref name="transform"/>, without translation, into <paramref name="destinationX"/>,
+        /// <paramref name="destinationY"/>, <paramref name="destinationZ"/> - many at a time in SIMD, each the same
+        /// number as <see cref="TransformNormal(Vector3{T}, Matrix4x4{T})"/> gives it, only a NaN maybe another NaN. A
+        /// destination may be any of the very same spans as the sources.</summary>
+        /// <exception cref="ArgumentException">The sources differ in length, or the spans overlap other than in place.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A destination is shorter than the sources.</exception>
+        public static void TransformNormal(ReadOnlySpan<T> x, ReadOnlySpan<T> y, ReadOnlySpan<T> z, Matrix4x4<T> transform,
+            Span<T> destinationX, Span<T> destinationY, Span<T> destinationZ)
+        {
+            SpanArguments.CheckComponents(x, y, z, destinationX, destinationY, destinationZ);
+            Matrix4x4Batch.TransformNormal(x, y, z, transform, destinationX, destinationY, destinationZ);
         }
 
         /// <summary>The point <paramref name="vector"/> projected by <paramref name="worldViewProjection"/> into the

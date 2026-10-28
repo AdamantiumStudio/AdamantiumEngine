@@ -13,12 +13,16 @@ All packages share one version.
   `Quaternion.CreateFromYawPitchRoll`...) and converted between number types only explicitly, with `As<T>()`. What
   needs fractions - length, normalizing, blending - is there only for fractional types. Equality is exact, a NaN
   equal to a NaN for dictionaries; `NearEqual` compares within a tolerance. Matrix products and transforms use SIMD
-  where the processor has it - 128 bits for float, 256 or two halves of 128 for double - and give the same bits on
-  every processor and without SIMD. The types the engine uses today stay until they are moved over; the new ones
+  where the processor has it - 128 bits for float, 256 or two halves of 128 for double - and give the same numbers on
+  every processor and without SIMD; only where two NaNs meet may a different NaN come out. The types the engine uses today stay until they are moved over; the new ones
   answer as they do, apart from mistakes of theirs set right: triangular and echelon forms, a skew, an isometric
   projection, a field of view in degrees, collinearity, spherical blends of perpendicular rotations, the angles of a
   rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
   one or far apart - a far translation in float, a small 2D scale.
+- `Adamantium.Mathematics.Typed` batches: `Vector3<T>.TransformCoordinate` and `TransformNormal` over points kept as
+  separate arrays of X, Y and Z, eight floats or four doubles at a time in 256-bit SIMD, four or two in 128-bit (SSE,
+  NEON); `Vector3.Narrow` brings points of a world kept in double near a camera as float for the GPU, the subtraction
+  done in double. Each point comes out as the same number as alone, on every processor; Half goes one by one.
 - `Adamantium.Mathematics.Typed` colors and vertex values: `Color` (R8G8B8A8), `ColorBGRA` (B8G8R8A8), `Color3F`,
   `Color4F` and `Bool4` (four 32-bit truths). A fraction becomes a byte as UNORM does - clamped, rounded to the
   nearest - so a byte goes through a fraction and back unchanged; each packing is named by its byte order from the
