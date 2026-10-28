@@ -387,6 +387,32 @@ public class TypedVolumeTests
     }
 
     [Test]
+    public void FifthReview_HalfAndFarCases()
+    {
+        static Vector3<Half> H(float x, float y, float z) => new((Half)x, (Half)y, (Half)z);
+
+        var far = Ray.Create(H(-38592, -20416, 49408), H(4.48046875f, 2.25390625f, -5.7109375f));
+        Assert.That(far.Intersects(H(-2714, -207.25f, -4956), H(2035, -7716, 3440), H(8056, 5844, 4632), out Half toTriangle), Is.True);
+        Assert.That((float)toTriangle, Is.EqualTo(8797.65f).Within(16f));
+
+        Assert.That((float)Collision.DistanceSquaredSegmentSegment(H(0, 0, 0), H(1, 0, 0), H(0, 0, 1), H(1, 1e-4f, 1)), Is.EqualTo(1f).Within(0.01f));
+        var flat = new Plane<Half>(H(0, 0, 1), Half.Zero);
+        var tilted = new Plane<Half>(H(0, 1e-4f, 1), Half.Zero);
+        Assert.That(flat.Intersects(tilted), Is.EqualTo(flat.Intersects(tilted, out Ray<Half> _)));
+
+        var skew = Ray.Create(H(20, -235, -370), H(1, 1 + 1 / 512f, 1 + 2 / 512f));
+        Assert.That(Collision.RayIntersectsRay(Ray.Create(Vector3<Half>.Zero, H(1, 1, 1)), skew, out _), Is.False);
+
+        Assert.That(Ray.Create(Vector3<Half>.Zero, H(1000, 1, 0)).Intersects(new Plane<Half>(H(0, 1, 0), (Half)(-100)), out Vector3<Half> _), Is.False);
+        Assert.That(Ray.Create(Vector3<Half>.Zero, H(1.5e-5f, 0, 0)).Intersects(BoundingBox.Create(H(0.5f, -1, -1), H(1, 1, 1)), out Half toBox), Is.True);
+        Assert.That((float)toBox, Is.EqualTo(33300f).Within(100f));
+
+        var nan = Ray.Create(Vector3D.Zero, Vector3.Create(double.NaN, 0.0, 0.0));
+        Assert.That(nan.Intersects(BoundingSphere.Create(Vector3D.Zero, 1.0)), Is.False);
+        Assert.That(nan.Intersects(Vector3D.Zero), Is.False);
+    }
+
+    [Test]
     public void AHitBeyondTheTypesReach_IsNoHit()
     {
         var crawling = Ray.Create(Vector3<float>.Zero, new Vector3<float>(1e-30f, 0, 0));

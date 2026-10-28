@@ -5,10 +5,10 @@ namespace Adamantium.Mathematics.Typed;
 /// <summary>
 /// Closest points, distances, intersections and containment between rays, planes, triangles, boxes and spheres. A
 /// ray's distances are in units of its direction; a hit behind the ray's start, or farther than the number type reaches,
-/// is no hit, and a ray that starts inside a volume hits it at distance zero; a NaN is no hit. Lines are taken as
-/// parallel, and triangles as flat, when the sine of their angle is below about 1e-6 - the same for every number type, as
-/// it is a matter of geometry, not of precision; Half, though, places a meeting at a small angle only as well as its
-/// thousandths allow.
+/// is no hit, and a ray that starts inside a volume hits it at distance zero; a NaN is no hit. Lines and planes are taken
+/// as parallel when the sine of their angle is below about 1e-6 - the same for every number type, as it is a matter of
+/// geometry, not of precision; a ray misses a triangle when the product of the sines of the triangle's angle at its
+/// first vertex and of the ray's angle to its plane is below about 1e-7.
 /// </summary>
 public static class Collision
 {
@@ -197,17 +197,15 @@ public static class Collision
             return false;
         }
 
-        var cross = CrossRounded(direction1, direction2);
-        var sine = LengthScaled(cross);
-        var normal = cross / sine;
-        var s = Vector3<T>.Dot(CrossRounded(offset, direction2), normal) / sine;
-        var t = Vector3<T>.Dot(CrossRounded(offset, direction1), normal) / sine;
-        if (s < T.Zero || t < T.Zero)
+        var s = AlongToClosest(offset, direction1, direction2);
+        var t = AlongToClosest(-offset, direction2, direction1);
+        var point1 = ray1.Position + s * direction1;
+        if (!(s >= T.Zero && t >= T.Zero && T.IsFinite(Largest(point1))))
         {
             return false;
         }
 
-        var point1 = ray1.Position + s * direction1;
+        var normal = CrossRounded(direction1, direction2) / LengthScaled(CrossRounded(direction1, direction2));
         var apart = T.Abs(Vector3<T>.Dot(offset, normal));
         if (!(apart <= T.Max(tolerance, MathHelper.Scalar.ZeroTolerance<T>() * Largest(point1))))
         {
@@ -274,20 +272,21 @@ public static class Collision
             return false;
         }
 
-        var u = Vector3<T>.Dot(fromVertex, directionCrossEdge2) * away / size / determinant;
+        var u = Vector3<T>.Dot(fromVertex, directionCrossEdge2) / determinant * away / size;
         if (!(u >= T.Zero && u <= T.One))
         {
             return false;
         }
 
         var fromVertexCrossEdge1 = Vector3<T>.Cross(fromVertex, edge1);
-        var v = Vector3<T>.Dot(direction, fromVertexCrossEdge1) * away / size / determinant;
+        var v = Vector3<T>.Dot(direction, fromVertexCrossEdge1) / determinant * away / size;
         if (!(v >= T.Zero && u + v <= T.One))
         {
             return false;
         }
 
-        var along = Vector3<T>.Dot(edge2, fromVertexCrossEdge1) * away / determinant / length;
+        var reach = Vector3<T>.Dot(edge2, fromVertexCrossEdge1) / determinant;
+        var along = away >= length ? reach * (away / length) : reach / (length / away);
         if (!(along >= T.Zero && T.IsFinite(along)))
         {
             return false;
@@ -307,11 +306,18 @@ public static class Collision
     public static bool RayIntersectsBox<T>(Ray<T> ray, BoundingBox<T> box, out T distance) where T : unmanaged, IFloatingPointIeee754<T>
     {
         distance = T.Zero;
+        var length = Largest(ray.Direction);
+        if (T.IsNaN(length))
+        {
+            return false;
+        }
+
+        var heading = length == T.Zero ? ray.Direction : ray.Direction / length;
         var nearest = T.Zero;
         var farthest = T.PositiveInfinity;
         for (var axis = 0; axis < 3; axis++)
         {
-            var (position, direction) = (ray.Position[axis], ray.Direction[axis]);
+            var (position, direction) = (ray.Position[axis], heading[axis]);
             var (minimum, maximum) = (box.Minimum[axis], box.Maximum[axis]);
             var inverse = T.One / direction;
             if (T.IsInfinity(inverse))
@@ -338,12 +344,13 @@ public static class Collision
             }
         }
 
-        if (!T.IsFinite(nearest))
+        var along = length == T.Zero ? nearest : nearest / length;
+        if (!T.IsFinite(along))
         {
             return false;
         }
 
-        distance = nearest;
+        distance = along;
         return true;
     }
 
@@ -385,15 +392,16 @@ public static class Collision
 
         var (normal1, d1) = OfUnitNormal(plane1);
         var (normal2, d2) = OfUnitNormal(plane2);
-        var direction = Vector3<T>.Cross(normal1, normal2);
-        var denominator = direction.LengthSquared();
-        var point = Vector3<T>.Cross(d2 * normal1 - d1 * normal2, direction) / denominator;
+        var cross = CrossRounded(normal1, normal2);
+        var sine = LengthScaled(cross);
+        var direction = cross / sine;
+        var point = Vector3<T>.Cross(d2 * normal1 - d1 * normal2, direction) / sine;
         if (!(T.IsFinite(point.X) && T.IsFinite(point.Y) && T.IsFinite(point.Z)))
         {
             return false;
         }
 
-        line = new Ray<T>(point, direction / T.Sqrt(denominator));
+        line = new Ray<T>(point, direction);
         return true;
     }
 
@@ -557,6 +565,11 @@ public static class Collision
     {
         distance = T.Zero;
         var scale = T.Max(Largest(ray.Position - center), T.Abs(radius));
+        if (T.IsNaN(Largest(ray.Direction)))
+        {
+            return false;
+        }
+
         if (scale == T.Zero)
         {
             return true;
@@ -591,7 +604,20 @@ public static class Collision
     private static bool PointAt<T>(Ray<T> ray, bool hit, T distance, out Vector3<T> point) where T : unmanaged, IFloatingPointIeee754<T>
     {
         point = hit ? ray.Position + ray.Direction * distance : Vector3<T>.Zero;
+        if (hit && !T.IsFinite(Largest(point)))
+        {
+            point = Vector3<T>.Zero;
+            return false;
+        }
+
         return hit;
+    }
+
+    private static T AlongToClosest<T>(Vector3<T> offset, Vector3<T> direction, Vector3<T> other) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var cross = CrossRounded(direction, other);
+        var sine = LengthScaled(cross);
+        return Vector3<T>.Dot(CrossRounded(offset, other), cross / sine) / sine;
     }
 
     private static T Parallel<T>() where T : unmanaged, IFloatingPointIeee754<T> => T.CreateTruncating(1e-6);
@@ -643,9 +669,7 @@ public static class Collision
             else
             {
                 var b = Vector3<T>.Dot(along1, along2);
-                s = NotParallel(along1, along2)
-                    ? T.Clamp((b * f - c * e) / Vector3<T>.Cross(along1, along2).LengthSquared(), T.Zero, range1)
-                    : T.Zero;
+                s = NotParallel(along1, along2) ? T.Clamp(AlongToClosest(-between, along1, along2), T.Zero, range1) : T.Zero;
                 t = (b * s + f) / e;
                 if (t < T.Zero)
                 {
