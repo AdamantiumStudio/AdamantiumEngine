@@ -7,6 +7,49 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.Mathematics.Typed`: one generic type for each number type in place of float and double pairs -
+  `Vector2<T>`, `Vector3<T>`, `Vector4<T>` (integers too), `Quaternion<T>`, `Matrix3x2<T>`, `Matrix3x3<T>`,
+  `Matrix4x4<T>` - made with static factories as in System.Numerics (`Vector3.Create`, `Matrix4x4.CreateLookAtLH`,
+  `Quaternion.CreateFromYawPitchRoll`...) and converted between number types only explicitly, with `As<T>()`. What
+  needs fractions - length, normalizing, blending - is there only for fractional types. Equality is exact, a NaN
+  equal to a NaN for dictionaries; `NearEqual` compares within a tolerance. Matrix products and transforms use SIMD
+  where the processor has it - 128 bits for float, 256 or two halves of 128 for double - and give the same numbers on
+  every processor and without SIMD; only where two NaNs meet may a different NaN come out. The types the engine uses today stay until they are moved over; the new ones
+  answer as they do, apart from mistakes of theirs set right: triangular and echelon forms, a skew, an isometric
+  projection, a field of view in degrees, collinearity, spherical blends of perpendicular rotations, the angles of a
+  rotation looking straight up or down, a mirror's decomposition, the inverse of a matrix whose elements lie far from
+  one or far apart - a far translation in float, a small 2D scale.
+- `Adamantium.Mathematics.Typed` batches: `Vector3<T>.TransformCoordinate` and `TransformNormal` over points kept as
+  separate arrays of X, Y and Z, eight floats or four doubles at a time in 256-bit SIMD, four or two in 128-bit (SSE,
+  NEON); `Vector3.Narrow` brings points of a world kept in double near a camera as float for the GPU, the subtraction
+  done in double. Each point comes out as the same number as alone, on every processor; Half goes one by one.
+- `Adamantium.Mathematics.Typed` colors and vertex values: `Color` (R8G8B8A8), `ColorBGRA` (B8G8R8A8), `Color3F`,
+  `Color4F` and `Bool4` (four 32-bit truths). A fraction becomes a byte as UNORM does - clamped, rounded to the
+  nearest - so a byte goes through a fraction and back unchanged; each packing is named by its byte order from the
+  lowest up, as Vulkan names its formats, and each `From` is the inverse of its `To`: the number 0xAARRGGBB, which
+  System.Drawing calls ARGB, is `FromBgra` here, and `FromArgb` takes alpha in the lowest byte.
+- `Adamantium.Mathematics.Typed` geometry, generic in the same way: `Size<T>`, `Rectangle<T>` (X, Y, Width, Height),
+  `Viewport<T>`, `Ray<T>`, `Ray2<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
+  `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
+  `CreateShadow` (and the 3x3 ones) for a plane. Double boxes and spheres far from the origin keep what float loses.
+  A whole-number rectangle takes a point as a cell, as a pixel is: the cells on its right and bottom edges are
+  outside. The helpers are set by what they work on: `MathHelper.Scalar` for single numbers, `MathHelper.Angle` for
+  angles between directions (from the arctangent, exact near 0 and π), `MathHelper.Polyline` for length, even
+  resampling, winding and convexity, `MathHelper.Curves` for Bézier spans of any degree, quadratic B-splines, NURBS and
+  arcs, appended to a list the caller keeps and sampled at their parameter's exact steps, the NURBS to its end.
+  `BoundingFrustum<T>` is a value now, its planes and corners kept inline; an endless far plane keeps everything ahead
+  inside, its corners at infinity along the edges, and the tests by corners - support point, plane, frustum - take them
+  as such. `OrientedBoundingBox<T>` answers in its own axes as an axis-aligned box does - touching is meeting, a NaN
+  is outside, a box turned inside out holds nothing - and meets other boxes, segments and frustums by their separating
+  axes and planes.
+  Mistakes of the old types are set right: a ray's distances to spheres and
+  points with a direction not of length one, segments and planes at a small angle taken as parallel, short directions
+  and normals taken as none, crossing rays missed in float, a sheared sphere's radius, the nearest point of a sphere to
+  its center, a NaN counted as a hit or as inside a frustum, a frustum's planes lost to overflow on large matrices, an
+  oriented box's turn composed the wrong way round and its scale laid along its own axes, a sheared box no longer
+  holding what it held, a box and frustum apart by the frustum's plane taken as crossing,
+  and equality, exact now - a frustum's taking in whether it checks its far plane.
+
 - Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
   `PatchList`, set by the caller; `IGraphicsDevice.TessellationDomainOrigin`: the corner of the domain at (0, 0), upper
   left unless set. A tessellated draw of another topology, or of patches of no points or more than the device's
@@ -1004,6 +1047,8 @@ All packages share one version.
 
 ### Fixed
 
+- `MSDFGenerator.GenerateMSDFForExistingTextureData` filled the space away from a glyph with a distance that changed
+  with where the glyph sat in its em square; it is half the em now, for every glyph.
 - A character no family of a font fallback's list has - Hebrew or Arabic on a Linux whose fonts for them are not
   among the families listed there - was drawn as the missing-glyph box though a font installed for it had it. The
   fallback goes on to the collection's other families now, those sharing most words of the text's family name first.
