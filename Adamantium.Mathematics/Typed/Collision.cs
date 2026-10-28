@@ -420,15 +420,21 @@ public static class Collision
         var normal = plane.Normal;
         var nearest = new Vector3<T>(normal.X >= T.Zero ? box.Minimum.X : box.Maximum.X,
             normal.Y >= T.Zero ? box.Minimum.Y : box.Maximum.Y, normal.Z >= T.Zero ? box.Minimum.Z : box.Maximum.Z);
-        if (Vector3<T>.Dot(normal, nearest) + plane.D > T.Zero)
+        if (Reach(normal, nearest) + plane.D > T.Zero)
         {
             return PlaneIntersectionType.Front;
         }
 
         var farthest = new Vector3<T>(normal.X >= T.Zero ? box.Maximum.X : box.Minimum.X,
             normal.Y >= T.Zero ? box.Maximum.Y : box.Minimum.Y, normal.Z >= T.Zero ? box.Maximum.Z : box.Minimum.Z);
-        return Vector3<T>.Dot(normal, farthest) + plane.D < T.Zero ? PlaneIntersectionType.Back : PlaneIntersectionType.Intersecting;
+        return Reach(normal, farthest) + plane.D < T.Zero ? PlaneIntersectionType.Back : PlaneIntersectionType.Intersecting;
     }
+
+    /// <summary>The dot product of <paramref name="normal"/> and <paramref name="point"/> leaving out the axes the normal
+    /// has none of, so a point endless along such an axis - a box's corner - does not turn it into NaN.</summary>
+    internal static T Reach<T>(Vector3<T> normal, Vector3<T> point) where T : unmanaged, IFloatingPointIeee754<T> =>
+        (normal.X == T.Zero ? T.Zero : normal.X * point.X) + (normal.Y == T.Zero ? T.Zero : normal.Y * point.Y)
+        + (normal.Z == T.Zero ? T.Zero : normal.Z * point.Z);
 
     /// <summary>Which side of <paramref name="plane"/> <paramref name="sphere"/> is on, or whether it crosses it.</summary>
     public static PlaneIntersectionType PlaneIntersectsSphere<T>(Plane<T> plane, BoundingSphere<T> sphere)
@@ -620,7 +626,8 @@ public static class Collision
         return Vector3<T>.Dot(CrossRounded(offset, other), cross / sine) / sine;
     }
 
-    private static T Parallel<T>() where T : unmanaged, IFloatingPointIeee754<T> => T.CreateTruncating(1e-6);
+    /// <summary>The sine of the angle below which lines and planes count as parallel.</summary>
+    internal static T Parallel<T>() where T : unmanaged, IFloatingPointIeee754<T> => T.CreateTruncating(1e-6);
 
     private static bool NotParallel<T>(Vector3<T> direction1, Vector3<T> direction2) where T : unmanaged, IFloatingPointIeee754<T>
     {
@@ -705,12 +712,14 @@ public static class Collision
         return T.FusedMultiplyAdd(a, b, -cd) + T.FusedMultiplyAdd(-c, d, cd);
     }
 
-    private static T LengthScaled<T>(Vector3<T> value) where T : unmanaged, IFloatingPointIeee754<T>
+    /// <summary>The length of <paramref name="value"/>, scaled first so no square overflows or underflows.</summary>
+    internal static T LengthScaled<T>(Vector3<T> value) where T : unmanaged, IFloatingPointIeee754<T>
     {
         var largest = Largest(value);
         return largest > T.Zero && T.IsFinite(largest) ? largest * (value / largest).Length() : largest;
     }
 
-    private static T Largest<T>(Vector3<T> value) where T : unmanaged, IFloatingPointIeee754<T> =>
+    /// <summary>The largest magnitude of <paramref name="value"/>'s components; NaN when one is.</summary>
+    internal static T Largest<T>(Vector3<T> value) where T : unmanaged, IFloatingPointIeee754<T> =>
         T.Max(T.Abs(value.X), T.Max(T.Abs(value.Y), T.Abs(value.Z)));
 }

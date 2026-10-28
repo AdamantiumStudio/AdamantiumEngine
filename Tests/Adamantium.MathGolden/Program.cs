@@ -28,7 +28,7 @@ public static class Program
         typeof(Matrix3x3F), typeof(Matrix4x4), typeof(Matrix4x4F), typeof(Int3), typeof(Int4), typeof(Bool4),
         typeof(Rectangle), typeof(RectangleF), typeof(Size), typeof(SizeF), typeof(Plane), typeof(Ray),
         typeof(BoundingBox), typeof(BoundingSphere), typeof(Color), typeof(Color3F), typeof(Color4F),
-        typeof(ColorBGRA), typeof(MathHelper), typeof(Collision)
+        typeof(ColorBGRA), typeof(MathHelper), typeof(Collision), typeof(BoundingFrustum), typeof(OrientedBoundingBox)
     ];
 
     public static int Main(string[] args)

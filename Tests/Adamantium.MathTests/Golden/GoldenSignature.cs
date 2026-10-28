@@ -18,13 +18,14 @@ public sealed record GoldenSignature(string Type, string Method, bool IsInstance
         ["ViewportF"] = 6
     };
 
-    private static readonly string[] SingleOnly = ["Ray", "Plane", "BoundingBox", "BoundingSphere", "Collision"];
+    private static readonly string[] SingleOnly = ["Ray", "Plane", "BoundingBox", "BoundingSphere", "Collision", "BoundingFrustum"];
 
     /// <summary>Whether every parameter's type has a known count of numbers.</summary>
     public bool IsSized => Parameters.All(p => SizeOf(p) > 0) && (!IsInstance || SizeOf(Type) > 0);
 
     /// <summary>Whether the type or a parameter is of single precision: Single, Vector3F, QuaternionF... - or one of the
-    /// types that were single precision alone, without an F: Ray, Plane, BoundingBox, BoundingSphere, Collision.</summary>
+    /// types that were single precision alone, without an F: Ray, Plane, BoundingBox, BoundingSphere, Collision,
+    /// BoundingFrustum.</summary>
     public bool IsSinglePrecision =>
         IsSingle(Type) || Parameters.Any(p => p.TrimEnd('&') == "Single" || IsSingle(p.TrimEnd('&')));
 

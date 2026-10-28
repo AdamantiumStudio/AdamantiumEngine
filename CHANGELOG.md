@@ -28,10 +28,14 @@ All packages share one version.
   angles between directions (from the arctangent, exact near 0 and π), `MathHelper.Polyline` for length, even
   resampling, winding and convexity, `MathHelper.Curves` for Bézier spans of any degree, quadratic B-splines, NURBS and
   arcs, appended to a list the caller keeps and sampled at their parameter's exact steps, the NURBS to its end.
+  `BoundingFrustum<T>` is a value now, its planes and corners kept inline; an endless far plane keeps everything ahead
+  inside, its corners at infinity along the edges, and the tests by corners - support point, plane, frustum - take them
+  as such.
   Mistakes of the old types are set right: a ray's distances to spheres and
   points with a direction not of length one, segments and planes at a small angle taken as parallel, short directions
   and normals taken as none, crossing rays missed in float, a sheared sphere's radius, the nearest point of a sphere to
-  its center, a NaN counted as a hit, and equality, exact now.
+  its center, a NaN counted as a hit or as inside a frustum, a frustum's planes lost to overflow on large matrices,
+  and equality, exact now - a frustum's taking in whether it checks its far plane.
 
 - Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
   `PatchList`, set by the caller; `IGraphicsDevice.TessellationDomainOrigin`: the corner of the domain at (0, 0), upper

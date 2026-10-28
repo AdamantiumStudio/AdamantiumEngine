@@ -7,14 +7,21 @@ using Adamantium.Mathematics;
 namespace Adamantium.MathGolden;
 
 /// <summary>Values the recorded operations take and return, as flat lists of numbers: a primitive is one number, a
-/// value type its fields in declaration order.</summary>
+/// value type its fields in declaration order, a frustum its view-projection matrix and whether it checks its far
+/// plane.</summary>
 public static class Values
 {
     private const BindingFlags Fields = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-    /// <summary>Whether <paramref name="type"/> is a number, a bool, an enum or a value type made of them alone.</summary>
+    /// <summary>Whether <paramref name="type"/> is a number, a bool, an enum, a frustum or a value type made of them
+    /// alone.</summary>
     public static bool IsFlat(Type type)
     {
+        if (type == typeof(BoundingFrustum))
+        {
+            return true;
+        }
+
         if (type.IsPrimitive || type.IsEnum)
         {
             return type != typeof(IntPtr) && type != typeof(UIntPtr) && type != typeof(char);
@@ -42,6 +49,10 @@ public static class Values
                 return;
             case IConvertible convertible when value.GetType().IsPrimitive:
                 into.Add(convertible.ToDouble(null));
+                return;
+            case BoundingFrustum frustum:
+                Flatten(frustum.ViewProjection, into);
+                into.Add(frustum.EnableFarPlaneCheck ? 1 : 0);
                 return;
         }
 
@@ -74,6 +85,18 @@ public static class Values
         if (type == typeof(BoundingSphere))
         {
             return new BoundingSphere(new Vector3F(F(random), F(random), F(random)), Math.Abs(F(random)));
+        }
+
+        if (type == typeof(OrientedBoundingBox))
+        {
+            var halfExtent = new Vector3F(Math.Abs(F(random)), Math.Abs(F(random)), Math.Abs(F(random)));
+            return new OrientedBoundingBox(new Vector3F(F(random), F(random), F(random)), halfExtent,
+                (QuaternionF)Random(typeof(QuaternionF), random));
+        }
+
+        if (type == typeof(BoundingFrustum))
+        {
+            return new BoundingFrustum(ViewProjection(random), random.Next(2) == 1);
         }
 
         if (type == typeof(float))
@@ -142,6 +165,11 @@ public static class Values
             return value;
         }
 
+        if (type == typeof(BoundingFrustum))
+        {
+            return new BoundingFrustum((Matrix4x4F)Special(typeof(Matrix4x4F), kind, random, same), kind == ValueKind.Unit);
+        }
+
         if (kind == ValueKind.Unit && type.GetProperty("Identity", BindingFlags.Public | BindingFlags.Static) is { } identity
                                    && identity.PropertyType == type)
         {
@@ -193,4 +221,18 @@ public static class Values
     }
 
     private static float F(Random random) => (float)(random.NextDouble() * 8 - 4);
+
+    // A camera's: looking from a random point to another, through a perspective or an orthographic projection.
+    private static Matrix4x4F ViewProjection(Random random)
+    {
+        var eye = new Vector3F(F(random), F(random), F(random));
+        var target = eye + new Vector3F(F(random), F(random), F(random));
+        var view = Matrix4x4F.LookAtLH(eye, target, Vector3F.UnitY);
+        var near = 0.1f + (float)random.NextDouble() * 2;
+        var far = near + 1 + (float)random.NextDouble() * 100;
+        var projection = random.Next(2) == 1
+            ? Matrix4x4F.PerspectiveFovY(0.3f + (float)random.NextDouble() * 2.2f, 0.5f + (float)random.NextDouble() * 1.5f, near, far)
+            : Matrix4x4F.OrthoLH(1 + (float)random.NextDouble() * 20, 1 + (float)random.NextDouble() * 20, near, far);
+        return view * projection;
+    }
 }

@@ -351,3 +351,24 @@ MathHelper.SimplifyByMinSpacing(IReadOnlyList`1,Double): returns Vector2[]
 MathHelper.PolylineLength(IReadOnlyList`1): takes IReadOnlyList`1
 MathHelper.ResampleByArcLength(IReadOnlyList`1,Int32): returns Vector2[]
 MathHelper.GetArcPoints(Vector2,Vector2,Double,Boolean,Double): returns List`1
+BoundingFrustum.set_ViewProjection(this Matrix4x4F): property or event accessor
+BoundingFrustum.set_EnableFarPlaneCheck(this Boolean): property or event accessor
+BoundingFrustum.Contains(this ConvexHull): takes ConvexHull
+BoundingFrustum.Intersects(this ConvexHull): takes ConvexHull
+BoundingFrustum.Contains(this Vector3F[]): takes Vector3F[]
+BoundingFrustum.Equals(this Object): takes Object
+BoundingFrustum.GetCorners(this ): returns Vector3F[]
+BoundingFrustum.GetCorners(this Vector3F[]): takes Vector3F[]
+BoundingFrustum.ToString(this ): returns String
+OrientedBoundingBox.FromPoints(Vector3F[]): takes Vector3F[]
+OrientedBoundingBox.FromPoints(Vector3[]): takes Vector3[]
+OrientedBoundingBox.FromPoints(List`1): takes List`1
+OrientedBoundingBox.Equals(this Object): takes Object
+OrientedBoundingBox.ToString(this ): returns String
+OrientedBoundingBox.Contains(this Vector3F[]): takes Vector3F[]
+OrientedBoundingBox.Intersects(this ConvexHull): takes ConvexHull
+OrientedBoundingBox.Intersects(this Ray&): returns Nullable`1
+OrientedBoundingBox.GetCorners(this ): returns Vector3F[]
+OrientedBoundingBox.GetCorners(this Vector3F[],Int32): takes Vector3F[]
+OrientedBoundingBox.Merge(OrientedBoundingBox&,Vector3F[]): takes Vector3F[]
+OrientedBoundingBox.Merge(OrientedBoundingBox&,Vector3[]): takes Vector3[]

@@ -66,6 +66,11 @@ public sealed class GoldenInputs
     /// <summary>The next four numbers as a sphere: its center, then its radius.</summary>
     public BoundingSphere<T> BoundingSphere<T>() where T : unmanaged, IFloatingPointIeee754<T> => new(Vector3<T>(), Number<T>());
 
+    /// <summary>The next seventeen numbers as a frustum: its view-projection matrix row by row, then whether it checks
+    /// its far plane.</summary>
+    public BoundingFrustum<T> BoundingFrustum<T>() where T : unmanaged, IFloatingPointIeee754<T> =>
+        new(Matrix4x4<T>(), Number<double>() != 0);
+
     /// <summary>The next six numbers as a viewport: X, Y, width, height, then the depth range.</summary>
     public Viewport<T> Viewport<T>() where T : unmanaged, IFloatingPointIeee754<T> =>
         new(Number<T>(), Number<T>(), Number<T>(), Number<T>(), Number<T>(), Number<T>());
