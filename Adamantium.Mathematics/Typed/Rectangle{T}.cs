@@ -126,9 +126,10 @@ public struct Rectangle<T> : IEquatable<Rectangle<T>>, IFormattable where T : un
     public readonly bool Contains(Rectangle<T> value) =>
         X <= value.X && value.Right <= Right && Y <= value.Y && value.Bottom <= Bottom;
 
-    /// <summary>Whether the two overlap in an area - touching edges do not count, as for <see cref="Intersect"/>.</summary>
+    /// <summary>Whether the two overlap in an area - touching edges, or a rectangle of no area, do not count, as for
+    /// <see cref="Intersect"/>.</summary>
     public readonly bool Intersects(Rectangle<T> value) =>
-        value.X < Right && X < value.Right && value.Y < Bottom && Y < value.Bottom;
+        T.Max(X, value.X) < T.Min(Right, value.Right) && T.Max(Y, value.Y) < T.Min(Bottom, value.Bottom);
 
     /// <summary>The rectangle in another number type, each value converted as a cast would.</summary>
     public readonly Rectangle<TOther> As<TOther>() where TOther : unmanaged, INumber<TOther> =>

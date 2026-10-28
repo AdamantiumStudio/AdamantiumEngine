@@ -50,6 +50,20 @@ public sealed class GoldenMap
     public void ChangedWhere(Func<string, bool> applies, Func<double[], bool> changed, string reason) =>
         changedCases.Add((applies, changed, reason));
 
+    /// <summary>Records that <paramref name="type"/>'s Equals, == and != compare exactly now where the old ones took
+    /// values within a tolerance as equal - <paramref name="oldEquals"/>, given the two values' numbers - and a NaN as
+    /// equal to nothing: excuses the cases with a NaN and those the old took as equal without their numbers being
+    /// the same.</summary>
+    public void ExactWhereOldWasNear(string type, Func<double[], double[], bool> oldEquals) =>
+        ChangedWhere(key => key.StartsWith(type + ".Equals(") || key.StartsWith(type + ".op_Equality(") || key.StartsWith(type + ".op_Inequality("),
+            inputs =>
+            {
+                var (first, second) = (inputs[..(inputs.Length / 2)], inputs[(inputs.Length / 2)..]);
+                return Array.Exists(inputs, double.IsNaN) || (!first.AsSpan().SequenceEqual(second) && oldEquals(first, second));
+            },
+            "decided 28.10: equality is exact, as in System.Numerics, Equals taking a NaN as equal to a NaN; the old took " +
+            "values within a tolerance as equal; NearEqual compares so now");
+
     /// <summary>Whether the answer to <paramref name="key"/> on <paramref name="inputs"/> is known to differ from the old
     /// one.</summary>
     public bool IsChanged(string key, double[] inputs) => changedCases.Exists(rule => rule.Applies(key) && rule.Changed(inputs));

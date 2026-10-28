@@ -23,7 +23,10 @@ All packages share one version.
   `Viewport<T>`, `Ray<T>`, `Plane<T>`, `BoundingBox<T>`, `BoundingSphere<T>` and the tests between them in
   `Collision`; `Ray.CreateFromViewport` for the ray through a point of the screen, `Matrix4x4.CreateReflection` and
   `CreateShadow` (and the 3x3 ones) for a plane. Double boxes and spheres far from the origin keep what float loses.
-  The scalar helpers are `MathHelper.Scalar`.
+  The scalar helpers are `MathHelper.Scalar`. Mistakes of the old types are set right: a ray's distances to spheres and
+  points with a direction not of length one, segments and planes at a small angle taken as parallel, short directions
+  and normals taken as none, crossing rays missed in float, a sheared sphere's radius, the nearest point of a sphere to
+  its center, a NaN counted as a hit, and equality, exact now.
 
 - Tessellated passes draw. `IGraphicsDevice.PatchControlPoints`: how many control points make a patch of a
   `PatchList`, set by the caller; `IGraphicsDevice.TessellationDomainOrigin`: the corner of the domain at (0, 0), upper

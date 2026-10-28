@@ -31,9 +31,13 @@ public static class GeometryGolden
         map.ChangedWhere(key => key.StartsWith("Size.Equals("), inputs => Array.Exists(inputs, double.IsNaN),
             "decided 28.10: Equals takes a NaN as equal to a NaN, as a dictionary key needs and System.Numerics does; " +
             "== still does not");
-        map.ChangedWhere(key => key.StartsWith("RectangleF.Intersects("), Touching,
-            "meaning changed: rectangles that only touch intersected in the float one, not in the integer one; the new " +
-            "follows Intersect, which needs an area");
+        map.ChangedWhere(key => key.StartsWith("RectangleF.Intersects("), inputs => Touching(inputs) || NoArea(inputs),
+            "meaning changed: rectangles that only touch, or one of no area inside the other, intersected in the float " +
+            "one, not in the integer one; the new follows Intersect, which needs an area");
+        map.ChangedWhere(key => key.StartsWith("Rectangle.Intersects("),
+            inputs => inputs[2] <= 0 || inputs[3] <= 0 || inputs[6] <= 0 || inputs[7] <= 0,
+            "old bug: a rectangle of no area, or of a negative size, could intersect another; Intersects needs an area " +
+            "now, as Intersect does");
         map.ChangedWhere(key => key == "RectangleF.op_Explicit(RectangleF)",
             inputs => Array.Exists(inputs, value => !double.IsFinite(value) || Math.Abs(value) > 2e9),
             "a value past the integer range: the cast's answer was the processor's, As<int> saturates");
@@ -66,9 +70,10 @@ public static class GeometryGolden
         map.Returns("Size.op_Inequality(Size,Size)", i => i.Size<double>() != i.Size<double>());
         map.Calls("Size.Equals(this Size)", i => Self(i.Size<double>(), i.Size<double>(), (x, o) => x.Equals(o)));
 
-        map.Calls("SizeF.Equals(this SizeF)", i => Self(i.Size<float>(), i.Size<float>(), (x, o) => Size<float>.NearEqual(x, o)));
-        map.Returns("SizeF.op_Equality(SizeF,SizeF)", i => Size<float>.NearEqual(i.Size<float>(), i.Size<float>()));
-        map.Returns("SizeF.op_Inequality(SizeF,SizeF)", i => !Size<float>.NearEqual(i.Size<float>(), i.Size<float>()));
+        map.Calls("SizeF.Equals(this SizeF)", i => Self(i.Size<float>(), i.Size<float>(), (x, o) => x.Equals(o)));
+        map.Returns("SizeF.op_Equality(SizeF,SizeF)", i => i.Size<float>() == i.Size<float>());
+        map.Returns("SizeF.op_Inequality(SizeF,SizeF)", i => i.Size<float>() != i.Size<float>());
+        map.ExactWhereOldWasNear("SizeF", (a, b) => Size<float>.NearEqual(new GoldenInputs(a).Size<float>(), new GoldenInputs(b).Size<float>()));
     }
 
     private static void RegisterIntegerRectangle(GoldenMap map)
@@ -179,11 +184,11 @@ public static class GeometryGolden
         map.Returns($"{r}.Union({r},{r})",
             i => Corners(Rectangle<float>.Union(i.RectangleByCorners<float>(), i.RectangleByCorners<float>())));
         map.Calls($"{r}.Equals(this {r})",
-            i => SelfF(i.RectangleByCorners<float>(), i.RectangleByCorners<float>(), (x, o) => Rectangle<float>.NearEqual(x, o)));
-        map.Returns($"{r}.op_Equality({r},{r})",
-            i => Rectangle<float>.NearEqual(i.RectangleByCorners<float>(), i.RectangleByCorners<float>()));
-        map.Returns($"{r}.op_Inequality({r},{r})",
-            i => !Rectangle<float>.NearEqual(i.RectangleByCorners<float>(), i.RectangleByCorners<float>()));
+            i => SelfF(i.RectangleByCorners<float>(), i.RectangleByCorners<float>(), (x, o) => x.Equals(o)));
+        map.Returns($"{r}.op_Equality({r},{r})", i => i.RectangleByCorners<float>() == i.RectangleByCorners<float>());
+        map.Returns($"{r}.op_Inequality({r},{r})", i => i.RectangleByCorners<float>() != i.RectangleByCorners<float>());
+        map.ExactWhereOldWasNear(r, (a, b) =>
+            Rectangle<float>.NearEqual(new GoldenInputs(a).RectangleByCorners<float>(), new GoldenInputs(b).RectangleByCorners<float>()));
         map.Returns($"{r}.op_Explicit({r})", i => i.RectangleByCorners<float>().As<int>());
         map.Returns($"{r}.op_Implicit({r})", i => (Vector4<float>)i.RectangleByCorners<float>());
     }
@@ -193,6 +198,9 @@ public static class GeometryGolden
 
     private static bool Touching(double[] inputs) =>
         inputs[4] == inputs[2] || inputs[0] == inputs[6] || inputs[5] == inputs[3] || inputs[1] == inputs[7];
+
+    private static bool NoArea(double[] inputs) =>
+        inputs[2] <= inputs[0] || inputs[3] <= inputs[1] || inputs[6] <= inputs[4] || inputs[7] <= inputs[5];
 
     private static object[] Self<TSelf>(TSelf self, Func<TSelf, object> answer) => [answer(self), self];
 

@@ -27,10 +27,28 @@ public static class VolumesGolden
             "takes an oriented box or a capsule: checked with those types");
         map.Tolerance(key => key.StartsWith("Ray.GetPickRay("), 1e-3,
             "the direction is the difference of two points unprojected through a random, badly conditioned matrix: old " +
-            "and new each miss a double reference by up to 3.5e-4 in float, neither nearer");
+            "and new each miss a double reference in float, by up to 3.5e-4 on the recorded cases and wholly on nearly " +
+            "singular matrices, neither nearer on average");
         map.ChangedWhere(key => key.StartsWith("Ray.GetPickRay(") || key.StartsWith("Plane.Transform(Plane"),
             inputs => Array.TrueForAll(inputs, double.IsFinite) && Array.Exists(inputs, value => Math.Abs(value) > 1e15),
             "old bug: the inverse inside overflowed float into NaN on 4e30 elements; the new inverse is scaled first");
+        map.NotMapped(RaySphereOrPoint,
+            "old bug: the ray's direction was taken to be of length one, so a longer one - every recorded ray - hit " +
+            "spheres and points it passes by and gave wrong distances; TypedVolumeTests checks the new against exact " +
+            "arithmetic");
+        map.ChangedWhere(RayOrPlaneWithPlane, inputs => Array.Exists(inputs, double.IsNaN),
+            "old bug: a NaN anywhere made a hit at distance NaN, or planes that meet; now it is no hit");
+        map.ChangedWhere(key => key.StartsWith("BoundingSphere.Transform(this Matrix4x4"), inputs => Sheared(inputs, 4),
+            "old bug: the radius grew by the longest axis, too little for a matrix that shears - the carried sphere " +
+            "stuck out; it grows by the most the matrix stretches any direction now");
+        map.ChangedWhere(key => key.StartsWith("Collision.ClosestPointSphere"),
+            inputs => Array.Exists(inputs, value => Math.Abs(value) > 1e15) || (inputs[0] == inputs[4] && inputs[1] == inputs[5] && inputs[2] == inputs[6]),
+            "old bug: for the center itself it gave the center, not a point of the surface, and far from the origin the " +
+            "offset's square overflowed into NaN; now a point of the surface, the offset scaled first");
+        map.ChangedWhere(key => key.StartsWith("Collision.BoxContainsSphere(") || key.StartsWith("BoundingBox.Contains(this BoundingSphere"),
+            inputs => inputs[3] - inputs[0] <= inputs[9] || inputs[4] - inputs[1] <= inputs[9] || inputs[5] - inputs[2] <= inputs[9],
+            "old bug: a sphere held whole had also to be wider than its radius each way, so a point - radius 0 - in a " +
+            "flat box was only intersecting; now one held whole is contained");
         map.ChangedWhere(key => key.StartsWith("Collision.BoxContainsSphere(") || key.StartsWith("BoundingBox.Contains(this BoundingSphere"),
             inputs => Array.Exists(inputs, double.IsNaN),
             "old bug: with a NaN, BoxIntersectsSphere said apart while BoxContainsSphere said intersecting; now both say " +
@@ -38,23 +56,19 @@ public static class VolumesGolden
         map.ChangedWhere(key => key.StartsWith("Collision.DistanceBoxPoint("), inputs => Array.Exists(inputs, double.IsNaN),
             "old bug: every comparison with a NaN failed, so a NaN point counted as inside, at distance 0; now NaN in " +
             "gives NaN out");
-        map.Calls("Ray.Equals(this Ray)", i => Self(i.Ray<float>(), i.Ray<float>(), (x, o) => Ray<float>.NearEqual(x, o)));
+        map.Calls("Ray.Equals(this Ray)", i => Self(i.Ray<float>(), i.Ray<float>(), (x, o) => x.Equals(o)));
         map.Calls("Ray.Equals(this Ray&)", i =>
         {
             var (x, o) = (i.Ray<float>(), i.Ray<float>());
-            return [Ray<float>.NearEqual(x, o), o, x];
+            return [x.Equals(o), o, x];
         });
-        map.Returns("Ray.op_Equality(Ray,Ray)", i => Ray<float>.NearEqual(i.Ray<float>(), i.Ray<float>()));
-        map.Returns("Ray.op_Inequality(Ray,Ray)", i => !Ray<float>.NearEqual(i.Ray<float>(), i.Ray<float>()));
+        map.Returns("Ray.op_Equality(Ray,Ray)", i => i.Ray<float>() == i.Ray<float>());
+        map.Returns("Ray.op_Inequality(Ray,Ray)", i => i.Ray<float>() != i.Ray<float>());
+        map.ExactWhereOldWasNear("Ray", (a, b) => Ray<float>.NearEqual(new GoldenInputs(a).Ray<float>(), new GoldenInputs(b).Ray<float>()));
     }
 
     private static void RegisterRay(GoldenMap map)
     {
-        Instance(map, "Ray.Intersects(this Vector3F&)", i => i.Ray<float>(), (x, i) =>
-        {
-            var point = i.Vector3<float>();
-            return [x.Intersects(point), point];
-        });
         Instance(map, "Ray.Intersects(this Ray&)", i => i.Ray<float>(), (x, i) =>
         {
             var ray = i.Ray<float>();
@@ -124,24 +138,6 @@ public static class VolumesGolden
             var box = i.BoundingBox<float>();
             i.Vector3<float>();
             return [x.Intersects(box, out Vector3<float> point), box, point];
-        });
-        Instance(map, "Ray.Intersects(this BoundingSphere&)", i => i.Ray<float>(), (x, i) =>
-        {
-            var sphere = i.BoundingSphere<float>();
-            return [x.Intersects(sphere), sphere];
-        });
-        Instance(map, "Ray.Intersects(this BoundingSphere)", i => i.Ray<float>(), (x, i) => [x.Intersects(i.BoundingSphere<float>())]);
-        Instance(map, "Ray.Intersects(this BoundingSphere&,Single&)", i => i.Ray<float>(), (x, i) =>
-        {
-            var sphere = i.BoundingSphere<float>();
-            i.Number<float>();
-            return [x.Intersects(sphere, out float distance), sphere, distance];
-        });
-        Instance(map, "Ray.Intersects(this BoundingSphere&,Vector3F&)", i => i.Ray<float>(), (x, i) =>
-        {
-            var sphere = i.BoundingSphere<float>();
-            i.Vector3<float>();
-            return [x.Intersects(sphere, out Vector3<float> point), sphere, point];
         });
         map.Returns("Ray.GetPickRay(Int32,Int32,ViewportF,Matrix4x4F)",
             i => Ray.CreateFromViewport(i.Number<float>(), i.Number<float>(), i.Viewport<float>(), i.Matrix4x4<float>()));
@@ -235,14 +231,15 @@ public static class VolumesGolden
         map.Returns("Plane.Transform(Plane,Matrix4x4F)", i => Plane<float>.Transform(i.Plane<float>(), i.Matrix4x4<float>()));
         map.Returns("Plane.op_Multiply(Single,Plane)", i => i.Number<float>() * i.Plane<float>());
         map.Returns("Plane.op_Multiply(Plane,Single)", i => i.Plane<float>() * i.Number<float>());
-        map.Calls("Plane.Equals(this Plane)", i => Self(i.Plane<float>(), i.Plane<float>(), (x, o) => OldPlaneEquals(x, o)));
+        map.Calls("Plane.Equals(this Plane)", i => Self(i.Plane<float>(), i.Plane<float>(), (x, o) => x.Equals(o)));
         map.Calls("Plane.Equals(this Plane&)", i =>
         {
             var (x, o) = (i.Plane<float>(), i.Plane<float>());
-            return [OldPlaneEquals(x, o), o, x];
+            return [x.Equals(o), o, x];
         });
-        map.Returns("Plane.op_Equality(Plane,Plane)", i => OldPlaneEquals(i.Plane<float>(), i.Plane<float>()));
-        map.Returns("Plane.op_Inequality(Plane,Plane)", i => !OldPlaneEquals(i.Plane<float>(), i.Plane<float>()));
+        map.Returns("Plane.op_Equality(Plane,Plane)", i => i.Plane<float>() == i.Plane<float>());
+        map.Returns("Plane.op_Inequality(Plane,Plane)", i => i.Plane<float>() != i.Plane<float>());
+        map.ExactWhereOldWasNear("Plane", (a, b) => OldPlaneEquals(new GoldenInputs(a).Plane<float>(), new GoldenInputs(b).Plane<float>()));
     }
 
     private static void RegisterBox(GoldenMap map)
@@ -279,16 +276,16 @@ public static class VolumesGolden
         map.Returns("BoundingBox.Merge(BoundingBox,BoundingBox)",
             i => BoundingBox.CreateMerged(i.BoundingBox<float>(), i.BoundingBox<float>()));
         map.Calls("BoundingBox.Equals(this BoundingBox)",
-            i => Self(i.BoundingBox<float>(), i.BoundingBox<float>(), (x, o) => BoundingBox<float>.NearEqual(x, o)));
+            i => Self(i.BoundingBox<float>(), i.BoundingBox<float>(), (x, o) => x.Equals(o)));
         map.Calls("BoundingBox.Equals(this BoundingBox&)", i =>
         {
             var (x, o) = (i.BoundingBox<float>(), i.BoundingBox<float>());
-            return [BoundingBox<float>.NearEqual(x, o), o, x];
+            return [x.Equals(o), o, x];
         });
-        map.Returns("BoundingBox.op_Equality(BoundingBox,BoundingBox)",
-            i => BoundingBox<float>.NearEqual(i.BoundingBox<float>(), i.BoundingBox<float>()));
-        map.Returns("BoundingBox.op_Inequality(BoundingBox,BoundingBox)",
-            i => !BoundingBox<float>.NearEqual(i.BoundingBox<float>(), i.BoundingBox<float>()));
+        map.Returns("BoundingBox.op_Equality(BoundingBox,BoundingBox)", i => i.BoundingBox<float>() == i.BoundingBox<float>());
+        map.Returns("BoundingBox.op_Inequality(BoundingBox,BoundingBox)", i => i.BoundingBox<float>() != i.BoundingBox<float>());
+        map.ExactWhereOldWasNear("BoundingBox",
+            (a, b) => BoundingBox<float>.NearEqual(new GoldenInputs(a).BoundingBox<float>(), new GoldenInputs(b).BoundingBox<float>()));
     }
 
     private static void RegisterSphere(GoldenMap map)
@@ -303,23 +300,6 @@ public static class VolumesGolden
         });
         Instance(map, "BoundingSphere.Transform(this Matrix4x4F)", i => i.BoundingSphere<float>(), (x, i) => [x.Transform(i.Matrix4x4<float>())]);
         Instance(map, "BoundingSphere.Support(this Vector3F)", i => i.BoundingSphere<float>(), (x, i) => [x.Support(i.Vector3<float>())]);
-        Instance(map, "BoundingSphere.Intersects(this Ray&)", i => i.BoundingSphere<float>(), (x, i) =>
-        {
-            var ray = i.Ray<float>();
-            return [x.Intersects(ray), ray];
-        });
-        Instance(map, "BoundingSphere.Intersects(this Ray&,Single&)", i => i.BoundingSphere<float>(), (x, i) =>
-        {
-            var ray = i.Ray<float>();
-            i.Number<float>();
-            return [x.Intersects(ray, out float distance), ray, distance];
-        });
-        Instance(map, "BoundingSphere.Intersects(this Ray&,Vector3F&)", i => i.BoundingSphere<float>(), (x, i) =>
-        {
-            var ray = i.Ray<float>();
-            i.Vector3<float>();
-            return [x.Intersects(ray, out Vector3<float> point), ray, point];
-        });
         Instance(map, "BoundingSphere.Intersects(this Plane&)", i => i.BoundingSphere<float>(), (x, i) =>
         {
             var plane = i.Plane<float>();
@@ -356,16 +336,18 @@ public static class VolumesGolden
         map.Returns("BoundingSphere.Merge(BoundingSphere,BoundingSphere)",
             i => BoundingSphere.CreateMerged(i.BoundingSphere<float>(), i.BoundingSphere<float>()));
         map.Calls("BoundingSphere.Equals(this BoundingSphere)",
-            i => Self(i.BoundingSphere<float>(), i.BoundingSphere<float>(), (x, o) => OldSphereEquals(x, o)));
+            i => Self(i.BoundingSphere<float>(), i.BoundingSphere<float>(), (x, o) => x.Equals(o)));
         map.Calls("BoundingSphere.Equals(this BoundingSphere&)", i =>
         {
             var (x, o) = (i.BoundingSphere<float>(), i.BoundingSphere<float>());
-            return [OldSphereEquals(x, o), o, x];
+            return [x.Equals(o), o, x];
         });
         map.Returns("BoundingSphere.op_Equality(BoundingSphere,BoundingSphere)",
-            i => OldSphereEquals(i.BoundingSphere<float>(), i.BoundingSphere<float>()));
+            i => i.BoundingSphere<float>() == i.BoundingSphere<float>());
         map.Returns("BoundingSphere.op_Inequality(BoundingSphere,BoundingSphere)",
-            i => !OldSphereEquals(i.BoundingSphere<float>(), i.BoundingSphere<float>()));
+            i => i.BoundingSphere<float>() != i.BoundingSphere<float>());
+        map.ExactWhereOldWasNear("BoundingSphere",
+            (a, b) => OldSphereEquals(new GoldenInputs(a).BoundingSphere<float>(), new GoldenInputs(b).BoundingSphere<float>()));
     }
 
     private static void RegisterCollision(GoldenMap map)
@@ -392,7 +374,6 @@ public static class VolumesGolden
             i => Collision.DistanceSpherePoint(i.BoundingSphere<float>(), i.Vector3<float>()));
         map.Returns("Collision.DistanceSphereSphere(BoundingSphere,BoundingSphere)",
             i => Collision.DistanceSphereSphere(i.BoundingSphere<float>(), i.BoundingSphere<float>()));
-        map.Returns("Collision.RayIntersectsPoint(Ray,Vector3F)", i => Collision.RayIntersectsPoint(i.Ray<float>(), i.Vector3<float>()));
         RayTest(map, "RayIntersectsRay(Ray&,Ray&,Vector3F&)", i => i.Ray<float>(), 3, (ray, other) =>
             (Collision.RayIntersectsRay(ray, other, out var point), point));
         RayTest(map, "RayIntersectsPlane(Ray&,Plane&,Single&)", i => i.Plane<float>(), 1, (ray, plane) =>
@@ -403,10 +384,6 @@ public static class VolumesGolden
             (Collision.RayIntersectsBox(ray, box, out float distance), distance));
         RayTest(map, "RayIntersectsBox(Ray&,BoundingBox&,Vector3F&)", i => i.BoundingBox<float>(), 3, (ray, box) =>
             (Collision.RayIntersectsBox(ray, box, out Vector3<float> point), point));
-        RayTest(map, "RayIntersectsSphere(Ray&,BoundingSphere&,Single&)", i => i.BoundingSphere<float>(), 1, (ray, sphere) =>
-            (Collision.RayIntersectsSphere(ray, sphere, out float distance), distance));
-        RayTest(map, "RayIntersectsSphere(Ray&,BoundingSphere&,Vector3F&)", i => i.BoundingSphere<float>(), 3, (ray, sphere) =>
-            (Collision.RayIntersectsSphere(ray, sphere, out Vector3<float> point), point));
         map.Calls("Collision.RayIntersectsTriangle(Ray&,Vector3F&,Vector3F&,Vector3F&,Single&)", i =>
         {
             var (ray, a, b, c) = (i.Ray<float>(), i.Vector3<float>(), i.Vector3<float>(), i.Vector3<float>());
@@ -493,6 +470,26 @@ public static class VolumesGolden
             var answers = answer(self, i);
             return selfAfter ? [.. answers, self] : answers;
         });
+
+    private static bool RaySphereOrPoint(string key) =>
+        key.StartsWith("Collision.RayIntersectsSphere(") || key.StartsWith("Collision.RayIntersectsPoint(")
+        || key.StartsWith("Ray.Intersects(this BoundingSphere") || key == "Ray.Intersects(this Vector3F&)"
+        || key.StartsWith("BoundingSphere.Intersects(this Ray");
+
+    private static bool RayOrPlaneWithPlane(string key) =>
+        key.StartsWith("Collision.RayIntersectsPlane(") || key.StartsWith("Collision.PlaneIntersectsPlane(")
+        || key.StartsWith("Ray.Intersects(this Plane") || key.StartsWith("Plane.Intersects(this Ray")
+        || key.StartsWith("Plane.Intersects(this Plane");
+
+    private static bool Sheared(double[] inputs, int at)
+    {
+        double Dot(int row1, int row2) =>
+            inputs[at + row1 * 4] * inputs[at + row2 * 4] + inputs[at + row1 * 4 + 1] * inputs[at + row2 * 4 + 1]
+            + inputs[at + row1 * 4 + 2] * inputs[at + row2 * 4 + 2];
+
+        var largest = Math.Max(Dot(0, 0), Math.Max(Dot(1, 1), Dot(2, 2)));
+        return Math.Max(Math.Abs(Dot(0, 1)), Math.Max(Math.Abs(Dot(0, 2)), Math.Abs(Dot(1, 2)))) > 1e-5 * largest;
+    }
 
     private static bool OldPlaneEquals(Plane<float> left, Plane<float> right) =>
         Vector3<float>.NearEqual(left.Normal, right.Normal) && left.D == right.D;

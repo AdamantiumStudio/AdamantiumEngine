@@ -33,11 +33,29 @@ public struct BoundingSphere<T> : IEquatable<BoundingSphere<T>>, IFormattable wh
     public readonly BoundingSphere<T> Transform(T scale, Vector3<T> translation) => new(Center * scale + translation, Radius * scale);
 
     /// <summary>A sphere holding this one carried by <paramref name="matrix"/>: its center carried, its radius scaled by
-    /// the longest of the matrix's axes.</summary>
-    public readonly BoundingSphere<T> Transform(Matrix4x4<T> matrix)
+    /// the most the matrix stretches any direction - for a matrix without shear, the longest of its axes.</summary>
+    public readonly BoundingSphere<T> Transform(Matrix4x4<T> matrix) =>
+        new(Vector3<T>.TransformCoordinate(Center, matrix), Radius * LargestStretch(matrix.Right, matrix.Up, matrix.Forward));
+
+    private static T LargestStretch(Vector3<T> row1, Vector3<T> row2, Vector3<T> row3)
     {
-        var scale = T.Max(matrix.Right.Length(), T.Max(matrix.Up.Length(), matrix.Forward.Length()));
-        return new BoundingSphere<T>(Vector3<T>.TransformCoordinate(Center, matrix), Radius * scale);
+        var (g11, g22, g33) = (row1.LengthSquared(), row2.LengthSquared(), row3.LengthSquared());
+        var (g12, g13, g23) = (Vector3<T>.Dot(row1, row2), Vector3<T>.Dot(row1, row3), Vector3<T>.Dot(row2, row3));
+        var longest = T.Max(g11, T.Max(g22, g33));
+        var offDiagonal = g12 * g12 + g13 * g13 + g23 * g23;
+        if (offDiagonal == T.Zero)
+        {
+            return T.Sqrt(longest);
+        }
+
+        var three = T.CreateTruncating(3);
+        var mean = (g11 + g22 + g33) / three;
+        var (b11, b22, b33) = (g11 - mean, g22 - mean, g33 - mean);
+        var p = T.Sqrt((b11 * b11 + b22 * b22 + b33 * b33 + (offDiagonal + offDiagonal)) / T.CreateTruncating(6));
+        var determinant = b11 * (b22 * b33 - g23 * g23) - g12 * (g12 * b33 - g23 * g13) + g13 * (g12 * g23 - b22 * g13);
+        var half = T.Clamp(determinant / (p * p * p) / (T.One + T.One), -T.One, T.One);
+        var largest = mean + (p + p) * T.Cos(T.Acos(half) / three);
+        return T.Sqrt(T.Max(largest, longest));
     }
 
     /// <summary>The point of the surface farthest along <paramref name="direction"/>; for no direction, the one along

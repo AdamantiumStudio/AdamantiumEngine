@@ -32,8 +32,8 @@ public static class Collision
         }
         else
         {
-            var denominator = a * c - b * b;
-            s = denominator > SegmentsParallel<T>() * a * c ? T.Max((b * e - c * d) / denominator, T.Zero) : T.Zero;
+            var denominator = Vector3<T>.Cross(u, v).LengthSquared();
+            s = denominator > Parallel<T>() * Parallel<T>() * a * c ? T.Max((b * e - c * d) / denominator, T.Zero) : T.Zero;
             t = (b * s + e) / c;
             if (t < T.Zero)
             {
@@ -113,10 +113,21 @@ public static class Collision
     public static Vector3<T> ClosestPointBoxPoint<T>(BoundingBox<T> box, Vector3<T> point) where T : unmanaged, IFloatingPointIeee754<T> =>
         Vector3<T>.Min(Vector3<T>.Max(point, box.Minimum), box.Maximum);
 
-    /// <summary>The point of <paramref name="sphere"/>'s surface nearest <paramref name="point"/>.</summary>
+    /// <summary>The point of <paramref name="sphere"/>'s surface nearest <paramref name="point"/>; for the center itself,
+    /// the one along X.</summary>
     public static Vector3<T> ClosestPointSpherePoint<T>(BoundingSphere<T> sphere, Vector3<T> point)
-        where T : unmanaged, IFloatingPointIeee754<T> =>
-        Vector3<T>.Normalize(point - sphere.Center) * sphere.Radius + sphere.Center;
+        where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var offset = point - sphere.Center;
+        var largest = Largest(offset);
+        if (largest == T.Zero)
+        {
+            return sphere.Center + new Vector3<T>(sphere.Radius, T.Zero, T.Zero);
+        }
+
+        offset /= largest;
+        return offset * (sphere.Radius / offset.Length()) + sphere.Center;
+    }
 
     /// <summary>The point of <paramref name="sphere1"/>'s surface nearest <paramref name="sphere2"/>'s center.</summary>
     public static Vector3<T> ClosestPointSphereSphere<T>(BoundingSphere<T> sphere1, BoundingSphere<T> sphere2)
@@ -193,8 +204,8 @@ public static class Collision
             else
             {
                 var b = Vector3<T>.Dot(d1, d2);
-                var denominator = a * e - b * b;
-                s = denominator > SegmentsParallel<T>() * a * e ? T.Clamp((b * f - c * e) / denominator, T.Zero, T.One) : T.Zero;
+                var denominator = Vector3<T>.Cross(d1, d2).LengthSquared();
+                s = denominator > Parallel<T>() * Parallel<T>() * a * e ? T.Clamp((b * f - c * e) / denominator, T.Zero, T.One) : T.Zero;
                 t = (b * s + f) / e;
                 if (t < T.Zero)
                 {
@@ -218,12 +229,13 @@ public static class Collision
     public static bool RayIntersectsPoint<T>(Ray<T> ray, Vector3<T> point) where T : unmanaged, IFloatingPointIeee754<T> =>
         RayIntersectsSphereSquared(ray, point, MathHelper.Scalar.ZeroTolerance<T>(), out _);
 
-    /// <summary>Whether the two rays meet, and the point where they do; for rays along one line, the start of the one
-    /// the other runs into.</summary>
+    /// <summary>Whether the two rays meet - pass within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of their largest
+    /// coordinate - and the point where they do; for rays along one line, the start of the one the other runs
+    /// into.</summary>
     public static bool RayIntersectsRay<T>(Ray<T> ray1, Ray<T> ray2, out Vector3<T> point) where T : unmanaged, IFloatingPointIeee754<T>
     {
         point = Vector3<T>.Zero;
-        var cross = Vector3<T>.Cross(ray1.Direction, ray2.Direction);
+        var cross = CrossRounded(ray1.Direction, ray2.Direction);
         var denominator = cross.LengthSquared();
         var offset = ray2.Position - ray1.Position;
         var parallel = Parallel<T>() * Parallel<T>();
@@ -249,15 +261,17 @@ public static class Collision
             return false;
         }
 
-        var s = Vector3<T>.Dot(Vector3<T>.Cross(offset, ray2.Direction), cross) / denominator;
-        var t = Vector3<T>.Dot(Vector3<T>.Cross(offset, ray1.Direction), cross) / denominator;
+        var s =Vector3<T>.Dot(CrossRounded(offset, ray2.Direction), cross) / denominator;
+        var t = Vector3<T>.Dot(CrossRounded(offset, ray1.Direction), cross) / denominator;
         if (s < T.Zero || t < T.Zero)
         {
             return false;
         }
 
         var point1 = ray1.Position + s * ray1.Direction;
-        if (!Vector3<T>.NearEqual(ray2.Position + t * ray2.Direction, point1))
+        var scale = T.Max(T.Max(Largest(ray1.Position), Largest(ray2.Position)), Largest(point1));
+        var apart = T.Abs(Vector3<T>.Dot(offset, cross)) / T.Sqrt(denominator);
+        if (!(apart <= MathHelper.Scalar.ZeroTolerance<T>() * scale))
         {
             return false;
         }
@@ -267,17 +281,16 @@ public static class Collision
     }
 
     /// <summary>Whether <paramref name="ray"/> meets <paramref name="plane"/> ahead of its start, and how far along it;
-    /// a ray along the plane, within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/>, does not.</summary>
+    /// a ray along the plane does not.</summary>
     public static bool RayIntersectsPlane<T>(Ray<T> ray, Plane<T> plane, out T distance) where T : unmanaged, IFloatingPointIeee754<T>
     {
         distance = T.Zero;
-        var direction = Vector3<T>.Dot(plane.Normal, ray.Direction);
-        if (MathHelper.Scalar.IsZero(direction))
+        if (!NotPerpendicular(plane.Normal, ray.Direction))
         {
             return false;
         }
 
-        var along = (-plane.D - Vector3<T>.Dot(plane.Normal, ray.Position)) / direction;
+        var along = (-plane.D - Vector3<T>.Dot(plane.Normal, ray.Position)) / Vector3<T>.Dot(plane.Normal, ray.Direction);
         if (along < T.Zero)
         {
             return false;
@@ -337,8 +350,8 @@ public static class Collision
         where T : unmanaged, IFloatingPointIeee754<T> =>
         PointAt(ray, RayIntersectsTriangle(ray, vertex1, vertex2, vertex3, out T distance), distance, out point);
 
-    /// <summary>Whether <paramref name="ray"/> meets <paramref name="box"/>, and how far along it - zero from inside. A
-    /// direction component within <see cref="MathHelper.Scalar.ZeroTolerance{T}"/> of zero counts as none.</summary>
+    /// <summary>Whether <paramref name="ray"/> meets <paramref name="box"/>, and how far along it - zero from
+    /// inside.</summary>
     public static bool RayIntersectsBox<T>(Ray<T> ray, BoundingBox<T> box, out T distance) where T : unmanaged, IFloatingPointIeee754<T>
     {
         distance = T.Zero;
@@ -348,7 +361,8 @@ public static class Collision
         {
             var (position, direction) = (ray.Position[axis], ray.Direction[axis]);
             var (minimum, maximum) = (box.Minimum[axis], box.Maximum[axis]);
-            if (MathHelper.Scalar.IsZero(direction))
+            var inverse = T.One / direction;
+            if (T.IsInfinity(inverse))
             {
                 if (position < minimum || position > maximum)
                 {
@@ -358,7 +372,6 @@ public static class Collision
                 continue;
             }
 
-            var inverse = T.One / direction;
             var (t1, t2) = ((minimum - position) * inverse, (maximum - position) * inverse);
             if (t1 > t2)
             {
@@ -400,17 +413,16 @@ public static class Collision
             : distance < T.Zero ? PlaneIntersectionType.Back : PlaneIntersectionType.Intersecting;
     }
 
-    /// <summary>Whether the two planes meet: whether their normals are not parallel, within
-    /// <see cref="MathHelper.Scalar.ZeroTolerance{T}"/>.</summary>
+    /// <summary>Whether the two planes meet: whether their normals are not parallel.</summary>
     public static bool PlaneIntersectsPlane<T>(Plane<T> plane1, Plane<T> plane2) where T : unmanaged, IFloatingPointIeee754<T> =>
-        !MathHelper.Scalar.IsZero(Vector3<T>.Cross(plane1.Normal, plane2.Normal).LengthSquared());
+        NotParallel(plane1.Normal, plane2.Normal);
 
     /// <summary>Whether the two planes meet, and the line where they do, its direction of length one.</summary>
     public static bool PlaneIntersectsPlane<T>(Plane<T> plane1, Plane<T> plane2, out Ray<T> line) where T : unmanaged, IFloatingPointIeee754<T>
     {
         var direction = Vector3<T>.Cross(plane1.Normal, plane2.Normal);
         var denominator = direction.LengthSquared();
-        if (MathHelper.Scalar.IsZero(denominator))
+        if (!NotParallel(plane1.Normal, plane2.Normal))
         {
             line = default;
             return false;
@@ -499,8 +511,7 @@ public static class Collision
             : ContainmentType.Intersects;
     }
 
-    /// <summary>Whether <paramref name="box"/> holds <paramref name="sphere"/> wholly, in part or not at all; a sphere
-    /// held whole must also be narrower than the box each way.</summary>
+    /// <summary>Whether <paramref name="box"/> holds <paramref name="sphere"/> wholly, in part or not at all.</summary>
     public static ContainmentType BoxContainsSphere<T>(BoundingBox<T> box, BoundingSphere<T> sphere) where T : unmanaged, IFloatingPointIeee754<T>
     {
         if (!BoxIntersectsSphere(box, sphere))
@@ -512,7 +523,7 @@ public static class Collision
         for (var axis = 0; axis < 3; axis++)
         {
             var (minimum, maximum) = (box.Minimum[axis], box.Maximum[axis]);
-            if (!(minimum + radius <= center[axis] && center[axis] <= maximum - radius && maximum - minimum > radius))
+            if (!(minimum + radius <= center[axis] && center[axis] <= maximum - radius))
             {
                 return ContainmentType.Intersects;
             }
@@ -582,6 +593,7 @@ public static class Collision
     {
         distance = T.Zero;
         var offset = ray.Position - center;
+        var a = ray.Direction.LengthSquared();
         var b = Vector3<T>.Dot(offset, ray.Direction);
         var c = Vector3<T>.Dot(offset, offset) - radiusSquared;
         if (c > T.Zero && b > T.Zero)
@@ -589,13 +601,18 @@ public static class Collision
             return false;
         }
 
-        var discriminant = b * b - c;
-        if (discriminant < T.Zero)
+        if (c <= T.Zero)
+        {
+            return true;
+        }
+
+        var discriminant = b * b - a * c;
+        if (!(discriminant >= T.Zero && a > T.Zero))
         {
             return false;
         }
 
-        distance = T.Max(-b - T.Sqrt(discriminant), T.Zero);
+        distance = c / (T.Sqrt(discriminant) - b);
         return true;
     }
 
@@ -607,5 +624,29 @@ public static class Collision
 
     private static T Parallel<T>() where T : unmanaged, IFloatingPointIeee754<T> => T.CreateTruncating(1e-6);
 
-    private static T SegmentsParallel<T>() where T : unmanaged, IFloatingPointIeee754<T> => T.CreateTruncating(1e-7);
+    private static bool NotParallel<T>(Vector3<T> direction1, Vector3<T> direction2) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var (unit1, unit2) = (direction1 / Largest(direction1), direction2 / Largest(direction2));
+        return Vector3<T>.Cross(unit1, unit2).LengthSquared() > Parallel<T>() * Parallel<T>() * unit1.LengthSquared() * unit2.LengthSquared();
+    }
+
+    private static bool NotPerpendicular<T>(Vector3<T> direction1, Vector3<T> direction2) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var (unit1, unit2) = (direction1 / Largest(direction1), direction2 / Largest(direction2));
+        var cosine = Vector3<T>.Dot(unit1, unit2);
+        return cosine * cosine > Parallel<T>() * Parallel<T>() * unit1.LengthSquared() * unit2.LengthSquared();
+    }
+
+    private static Vector3<T> CrossRounded<T>(Vector3<T> left, Vector3<T> right) where T : unmanaged, IFloatingPointIeee754<T> =>
+        new(DifferenceOfProducts(left.Y, right.Z, left.Z, right.Y), DifferenceOfProducts(left.Z, right.X, left.X, right.Z),
+            DifferenceOfProducts(left.X, right.Y, left.Y, right.X));
+
+    private static T DifferenceOfProducts<T>(T a, T b, T c, T d) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var cd = c * d;
+        return T.FusedMultiplyAdd(a, b, -cd) + T.FusedMultiplyAdd(-c, d, cd);
+    }
+
+    private static T Largest<T>(Vector3<T> value) where T : unmanaged, IFloatingPointIeee754<T> =>
+        T.Max(T.Abs(value.X), T.Max(T.Abs(value.Y), T.Abs(value.Z)));
 }
