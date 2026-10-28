@@ -367,6 +367,39 @@ public class TypedVolumeTests
     }
 
     [Test]
+    public void ExtremeRatios_InFloatAndHalf_KeepTheirAnswer()
+    {
+        static Vector3<Half> H(float x, float y, float z) => new((Half)x, (Half)y, (Half)z);
+
+        Assert.That(Collision.RayIntersectsLineSegment(Ray.Create(Vector3<float>.Zero, new Vector3<float>(1e-20f, 0, 0)),
+            new Vector3<float>(1e30f, -1, 0), new Vector3<float>(1e30f, 1, 0), out var point), Is.EqualTo(0f));
+        Assert.That(point, Is.EqualTo(new Vector3<float>(1e30f, 0, 0)));
+        Assert.That((float)Collision.RayIntersectsLineSegment(Ray.Create(Vector3<Half>.Zero, H(0.001f, 0, 0)), H(60000, -1, 0), H(60000, 1, 0), out _),
+            Is.EqualTo(0f).Within(0.01f), "within Half's precision at 60000");
+        Assert.That(Ray.Create(H(0.002f, 0.002f, 1000), -Vector3<Half>.UnitZ).Intersects(H(0, 0, 0), H(0.01f, 0, 0), H(0, 0.01f, 0), out Half far),
+            Is.True);
+        Assert.That((float)far, Is.EqualTo(1000f));
+        Assert.That(Ray.Create(H(2e-4f, 2e-4f, 100), -Vector3<Half>.UnitZ).Intersects(H(0, 0, 0), H(1e-3f, 0, 0), H(0, 1e-3f, 0), out Half _),
+            Is.True);
+        Assert.That(Collision.RayIntersectsRay(Ray.Create(Vector3<Half>.Zero, Vector3<Half>.UnitX), Ray.Create(H(0, 1, 0), H(1, -2e-4f, 0)),
+            out var meeting), Is.True);
+        Assert.That((float)meeting.X, Is.EqualTo(5000f).Within(50f));
+    }
+
+    [Test]
+    public void AHitBeyondTheTypesReach_IsNoHit()
+    {
+        var crawling = Ray.Create(Vector3<float>.Zero, new Vector3<float>(1e-30f, 0, 0));
+        var wall = new Plane<float>(Vector3<float>.UnitX, -1e10f);
+        var box = BoundingBox.Create(new Vector3<float>(1e10f, -1, -1), new Vector3<float>(2e10f, 1, 1));
+
+        Assert.That(crawling.Intersects(wall, out float _), Is.False);
+        Assert.That(crawling.Intersects(box, out float _), Is.False);
+        Assert.That(crawling.Intersects(new Vector3<float>(1e10f, -1, -1), new Vector3<float>(1e10f, 1, -1), new Vector3<float>(1e10f, 0, 1), out float _),
+            Is.False);
+    }
+
+    [Test]
     public void FarAndNearParallelRays_MeetOnlyOnOneLine()
     {
         var right = Ray.Create(new Vector3<float>(-1e30f, 0, 0), Vector3<float>.UnitX);
