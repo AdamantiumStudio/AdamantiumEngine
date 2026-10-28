@@ -19,6 +19,8 @@
     <ItemGroup>
       <_AdamantiumContentManifest Include="$(MSBuildProjectDirectory)\Content.acontent"
                                   Condition="Exists('$(MSBuildProjectDirectory)\Content.acontent')" />
+      <!-- The compiler's own assembly is not rebuilt when only an importer under it changes. -->
+      <_AdamantiumContentCompilerFiles Include="$([System.IO.Path]::GetDirectoryName('$(AdamantiumContentCompiler)'))\Adamantium.*.dll" />
     </ItemGroup>
   </Target>
 
@@ -58,7 +60,7 @@
        the compiler changed; the compiler keeps its own cache besides, so a run only does what is stale. -->
   <Target Name="CookAdamantiumContent"
           DependsOnTargets="ResolveProjectReferences;_ListAdamantiumContent"
-          Inputs="@(AdamantiumContent);@(_AdamantiumContentManifest);$(_AdamantiumContentList);$(_AdamantiumContentSettings);$(AdamantiumContentCompiler)"
+          Inputs="@(AdamantiumContent);@(_AdamantiumContentManifest);$(_AdamantiumContentList);$(_AdamantiumContentSettings);$(AdamantiumContentCompiler);@(_AdamantiumContentCompilerFiles)"
           Outputs="$(_AdamantiumContentStamp)"
           Condition="'$(DesignTimeBuild)' != 'true'">
     <Exec Command="&quot;$(_AdamantiumDotnet)&quot; &quot;$(AdamantiumContentCompiler)&quot; build &quot;$(MSBuildProjectDirectory)&quot; --files &quot;$(_AdamantiumContentList)&quot; --out &quot;$(_AdamantiumContentOutput)&quot; --cache &quot;$(_AdamantiumContentCache)&quot;" />

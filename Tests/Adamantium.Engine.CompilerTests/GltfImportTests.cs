@@ -326,7 +326,6 @@ public class GltfImportTests
         var inverseBindOfKnee = AxisConversion.Convert(Matrix4x4.CreateTranslation<float>(0, -1, 0), ToEngine);
         Assert.Multiple(() =>
         {
-            Assert.That(skin.JointsAreNodes, Is.True);
             Assert.That(skin.JointNames, Is.EqualTo(new[] { GltfConverter.NodeId(hip), GltfConverter.NodeId(knee) }));
             Assert.That(skin.JointMatrices[0], Is.EqualTo(Matrix4x4F.Identity));
             Assert.That(skin.JointMatrices[1], Is.EqualTo(inverseBindOfKnee).Using<Matrix4x4F>(NearMatrix));

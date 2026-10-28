@@ -326,7 +326,6 @@ public class GltfConverter : ConverterBase
             ControllerId = id,
             Name = skin.Name ?? $"Skin {skinIndex}",
             MeshId = meshId,
-            JointsAreNodes = true,
             SkeletonRoot = skin.Skeleton is { } skeleton ? NodeId(skeleton) : null,
             Extra = ExtraOf(skin.Extras, skin.Extensions)
         };

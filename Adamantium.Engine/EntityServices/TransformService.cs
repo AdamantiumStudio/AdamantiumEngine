@@ -151,7 +151,6 @@ public class TransformService : EntityService
             }
 
             current.GetComponent<AnimationComponent>()?.Update(appTime);
-            current.GetComponent<AnimationController>()?.Update(appTime);
         });
     }
 

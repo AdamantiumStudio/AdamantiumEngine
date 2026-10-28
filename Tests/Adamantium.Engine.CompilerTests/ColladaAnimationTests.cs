@@ -63,11 +63,7 @@ namespace Adamantium.Engine.CompilerTests
                 Bone("Bone", translate: "0 0 0"),
                 Channel("Bone/location.X", "0 1", "0 4", stride: 1)));
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(scene.Clips.Keys, Is.EqualTo(new[] { "model" }));
-                Assert.That(scene.Animation, Is.Empty, "not a second copy beside the clip");
-            });
+            Assert.That(scene.Clips.Keys, Is.EqualTo(new[] { "model" }));
         }
 
         [Test]

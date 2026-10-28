@@ -24,8 +24,9 @@ public static class AxisConversion
                //(x, z, -y)
                case UpAxis.Y_UP_RH: return Axes(1, 0, 0, 0, 0, -1, 0, 1, 0);
                //(x, z, y)
-               case UpAxis.Y_UP_LH:
-               case UpAxis.Y_DOWN_RH: return Axes(1, 0, 0, 0, 0, 1, 0, 1, 0);
+               case UpAxis.Y_UP_LH: return Axes(1, 0, 0, 0, 0, 1, 0, 1, 0);
+               //(-x, -z, y): up to -Y, the front (-Y, as Blender and Max face) to -Z - as Y_UP_RH_FRONT_Z goes
+               case UpAxis.Y_DOWN_RH: return Axes(-1, 0, 0, 0, 0, 1, 0, -1, 0);
             }
             break;
 

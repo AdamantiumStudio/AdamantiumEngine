@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.IO;
 using MessagePack;
 using MessagePack.Resolvers;
@@ -8,7 +7,7 @@ namespace Adamantium.Graphics.Core.Models;
 /// <summary>
 /// (De)serializes a <see cref="SceneData"/> graph to/from the baked binary model format (.aemf) using
 /// MessagePack's contractless resolver plus a custom <see cref="MeshFormatter"/>. Back-references skipped
-/// during serialization (Model.Parent, Joint.ParentJoint) and the mesh lookup tables are restored via
+/// during serialization (Model.Parent) and the mesh lookup tables are restored via
 /// <see cref="SceneData.RebuildHierarchy"/> after deserialization.
 /// </summary>
 public static class SceneDataSerializer
@@ -30,7 +29,6 @@ public static class SceneDataSerializer
                     new DictionarySubclassFormatter<SceneData.TextureCollection, string, SceneData.Texture>(),
                     new DictionarySubclassFormatter<SceneData.AnimationCollection, string, SceneData.FrameCollection>(),
                     new DictionarySubclassFormatter<SceneData.AnimationSetCollection, string, SceneData.AnimationCollection>(),
-                    new DictionarySubclassFormatter<SceneData.SkeletonCollection, string, List<SceneData.Joint>>(),
                     new ListSubclassFormatter<SceneData.FrameCollection, SceneData.KeyFrame>()
                 ],
                 [ContractlessStandardResolver.Instance]))

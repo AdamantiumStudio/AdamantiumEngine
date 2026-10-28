@@ -1670,12 +1670,12 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            (position.Y, position.Z) = (position.Z, position.Y);
+                            (position.X, position.Y, position.Z) = (-position.X, -position.Z, position.Y);
                             Points[i] = position;
 
                             ConvertUVs(i);
                         }
-                        TurnNormals(n => new Vector3F(n.X, n.Z, n.Y));
+                        TurnNormals(n => new Vector3F(-n.X, -n.Z, n.Y));
                         break;
                 }
                 break;

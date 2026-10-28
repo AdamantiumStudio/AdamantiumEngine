@@ -132,9 +132,10 @@ namespace Adamantium.Engine.Compiler.Models.Converters
          //Geometry takes bone weights from the controller table, so wait for it here
          controllerTask.Wait();
          CancellationToken.ThrowIfCancellationRequested();
+         executor.ResolveSkinJoints(SceneDataContainer, dataContainer.VisualScenes);
 
          var materialsTask = Task.Run(() => ParseData(dataContainer.Materials, dataContainer.Effects));
-         //Animations read the controllers' bone lists (already built) and the visual-scene nodes, not the geometry
+         //Animations read the visual-scene nodes, not the geometry
          var animationTask = Task.Run(() => ParseData(dataContainer.Animations, dataContainer.VisualScenes));
 
          ParseData(dataContainer.Geometries);
@@ -206,9 +207,20 @@ namespace Adamantium.Engine.Compiler.Models.Converters
       private void ParseData(controller controller)
       {
          SceneData.Controller comp = executor.GetControllerData(controller, FilePath);
+         if (comp == null)
+         {
+            executor.ReportUnsupported(controller.Item is morph
+               ? $"{controller.id}: a morph controller is not read"
+               : $"{controller.id}: a skin without joints or weights is not read");
+            return;
+         }
+
          lock (SceneDataContainer.Controllers)
          {
-            SceneDataContainer.Controllers.Add(comp.MeshId, comp);
+            if (!SceneDataContainer.Controllers.TryAdd(comp.MeshId, comp))
+            {
+               executor.ReportUnsupported($"{controller.id}: {comp.MeshId} has a skin already, this one is not read");
+            }
          }
       }
 
@@ -221,36 +233,18 @@ namespace Adamantium.Engine.Compiler.Models.Converters
          var clip = new SceneData.AnimationCollection();
          foreach (var frames in executor.GetAnimations(animations, nodes))
          {
-            frames.ControllerId = ControllerFor(frames.JointId);
-            clip[frames.FullName] = frames;
+            if (nodes.TryGetValue(frames.JointId, out var node))
+            {
+               frames.JointId = ColladaConversionExecutor.NodeId(node);
+            }
+
+            clip[frames.JointId] = frames;
          }
 
          if (clip.Count > 0)
          {
             SceneDataContainer.Clips[Path.GetFileNameWithoutExtension(FileName)] = clip;
          }
-      }
-
-      //Whose joint this is. The controller's bone list is the authority; a substring of the name is the fallback
-      private String ControllerFor(String jointId)
-      {
-         foreach (var controller in SceneDataContainer.Controllers)
-         {
-            if (controller.Value.JointNames.Contains(jointId))
-            {
-               return controller.Value.Name;
-            }
-         }
-
-         foreach (var controller in SceneDataContainer.Controllers)
-         {
-            var name = controller.Value.Name;
-            if (!String.IsNullOrEmpty(name) && jointId.Contains(name))
-            {
-               return name;
-            }
-         }
-         return String.Empty;
       }
 
       #endregion

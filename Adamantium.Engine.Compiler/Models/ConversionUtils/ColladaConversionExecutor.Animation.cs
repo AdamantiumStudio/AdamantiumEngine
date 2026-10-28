@@ -292,7 +292,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         /// off &lt;translate&gt;/&lt;scale&gt;/&lt;rotate&gt; by the same conventions
         /// <see cref="GetObjectMatrix"/> uses - a round trip through a quaternion would not return the angles
         /// exactly.</summary>
-        private static (Vector3F Translation, Vector3F Scale, Vector3F Angles) RestPose(node node)
+        private (Vector3F Translation, Vector3F Scale, Vector3F Angles) RestPose(node node)
         {
             var translation = Vector3F.Zero;
             var scale = Vector3F.One;
@@ -305,6 +305,10 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                 {
                     // The node is given as a matrix: the angles cannot be recovered honestly, translation and scale can
                     var composed = new Matrix4x4F(Array.ConvertAll(single.Values, x => (float)x));
+                    if (config.MatrixTransposeNeeded)
+                    {
+                        composed.Transpose();
+                    }
                     composed.Decompose(out scale, out _, out translation);
                 }
                 else if (item is TargetableFloat3 float3)
@@ -439,30 +443,34 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         }
 
         /// <summary>Visual-scene nodes by id and by sid: a channel targets one of these, and which of the two is
-        /// the exporter's choice.</summary>
+        /// the exporter's choice. An id is unique and wins over a sid; of the nodes sharing a sid, the first in the
+        /// document is taken.</summary>
         public static Dictionary<String, node> IndexNodes(List<visual_scene> visualScenes)
         {
             var nodes = new Dictionary<String, node>(StringComparer.Ordinal);
-            foreach (var scene in visualScenes ?? new List<visual_scene>())
+            foreach (var bySid in new[] { false, true })
             {
-                foreach (var root in scene?.node ?? Array.Empty<node>())
+                foreach (var scene in visualScenes ?? new List<visual_scene>())
                 {
-                    IndexNode(root, nodes);
+                    foreach (var root in scene?.node ?? Array.Empty<node>())
+                    {
+                        IndexNode(root, nodes, bySid);
+                    }
                 }
             }
             return nodes;
         }
 
-        private static void IndexNode(node node, Dictionary<String, node> nodes)
+        private static void IndexNode(node node, Dictionary<String, node> nodes, bool bySid)
         {
             if (node == null) return;
 
-            if (!String.IsNullOrEmpty(node.id)) nodes[node.id] = node;
-            if (!String.IsNullOrEmpty(node.sid)) nodes[node.sid] = node;
+            var key = bySid ? node.sid : node.id;
+            if (!String.IsNullOrEmpty(key)) nodes.TryAdd(key, node);
 
             foreach (var child in node.node1 ?? Array.Empty<node>())
             {
-                IndexNode(child, nodes);
+                IndexNode(child, nodes, bySid);
             }
         }
     }

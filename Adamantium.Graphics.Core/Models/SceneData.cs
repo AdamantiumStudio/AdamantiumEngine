@@ -14,11 +14,9 @@ public partial class SceneData
       Images = new ImageCollection();
       CameraData = new CameraCollection();
       LightData = new LightCollection();
-      Animation = new AnimationCollection();
       Clips = new AnimationSetCollection();
       Materials = new MaterialCollection();
       Controllers = new ControllerCollection();
-      Skeletons = new SkeletonCollection();
       Units = new Unit();
       Scenes = [];
       AnimationSources = [];
@@ -155,28 +153,6 @@ public partial class SceneData
             }
          }
       }
-
-      if (Skeletons != null)
-      {
-         foreach (var joints in Skeletons.Values)
-         {
-            foreach (var joint in joints)
-            {
-               RelinkJoints(joint);
-            }
-         }
-      }
-   }
-
-   private static void RelinkJoints(Joint joint)
-   {
-      if (joint.Children == null) return;
-
-      foreach (var child in joint.Children)
-      {
-         child.ParentJoint = joint;
-         RelinkJoints(child);
-      }
    }
 
    public String Name { get; set; }
@@ -234,15 +210,8 @@ public partial class SceneData
    public MaterialCollection Materials { get; set; }
    public CameraCollection CameraData { get; set; }
    public LightCollection LightData { get; set; }
-   /// <summary>The one clip of a scene saved before <see cref="Clips"/>; a scene imported now has its frames there.</summary>
-   public AnimationCollection Animation { get; set; }
-
-   /// <summary>Every clip of the model by name - walking, running - each its frames by what they move: a joint of a
-   /// skeleton (<see cref="FrameCollection.FullName"/>) or a node of the model (its <see cref="Model.ID"/>). A format
-   /// with one clip has it here, under the model's name.</summary>
+   /// <summary>Every clip of the model by name - walking, running - each its frames by the node of the model they
+   /// move (its <see cref="Model.ID"/>), a skeleton's joint among them. A format with one clip has it here, under the
+   /// model's name.</summary>
    public AnimationSetCollection Clips { get; set; }
-   /// <summary>
-   /// List of Hierarchical joints. One root for one skeleton
-   /// </summary>
-   public SkeletonCollection Skeletons { get; set; }
 }

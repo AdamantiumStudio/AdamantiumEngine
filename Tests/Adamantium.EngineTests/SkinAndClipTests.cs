@@ -44,7 +44,6 @@ public class SkinAndClipTests
         {
             Assert.That(skin, Is.Not.Null);
             Assert.That(skin.Joints, Is.EqualTo(new[] { hip, knee }));
-            Assert.That(model.GetComponent<AnimationController>(), Is.Null, "no skeleton of its own");
         });
     }
 
@@ -134,6 +133,43 @@ public class SkinAndClipTests
             Assert.That(unseen.Take(2), Is.EqualTo(composed.Take(2)).Using<Matrix4x4F>(Near));
             Assert.That(movedLooked.Take(2), Is.EqualTo(movedComposed.Take(2)).Using<Matrix4x4F>(Near));
             Assert.That(movedComposed[1], Is.Not.EqualTo(composed[1]).Using<Matrix4x4F>(Near), "the knee moved");
+        });
+    }
+
+    [Test]
+    public void TwoSkeletons_EachSkinBendsWithItsOwn_AndOneClipMovesBoth()
+    {
+        var scene = SkinnedScene();
+        var arm = scene.CreateMesh(scene.Models, "arm", "Arm");
+        var mesh = new Mesh(PrimitiveType.TriangleList);
+        mesh.SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, -1, 0)]).SetIndices([0, 1, 2]);
+        mesh.SetJointIndices([new Vector4F(1, 0, 0, 0), new Vector4F(1, 0, 0, 0), new Vector4F(1, 0, 0, 0)]);
+        mesh.SetJointWeights([new Vector4F(1, 0, 0, 0), new Vector4F(1, 0, 0, 0), new Vector4F(1, 0, 0, 0)]);
+        arm.Meshes.Add(mesh);
+        var shoulder = scene.CreateMesh(scene.Models, "shoulder", "Shoulder");
+        scene.CreateMesh(shoulder, "elbow", "Elbow").Position = new Vector3F(1, 0, 0);
+        scene.Controllers["arm"] = new SceneData.Controller
+        {
+            ControllerId = "arm",
+            JointNames = ["shoulder", "elbow"],
+            JointMatrices = [Matrix4x4F.Identity, Matrix4x4.CreateTranslation<float>(-1, 0, 0)]
+        };
+        var clip = Clip("knee", (0, new Vector3F(0, -1, 0)), (1, new Vector3F(2, -1, 0)));
+        clip["elbow"] = Clip("elbow", (0, new Vector3F(1, 0, 0)), (1, new Vector3F(1, 3, 0)))["elbow"];
+        scene.Clips["Both"] = clip;
+        var model = Import(scene, out var leg, out var hip, out var knee);
+        var armEntity = model.Dependencies.Single(e => e.Name.StartsWith("Arm"));
+        var shoulderEntity = model.Dependencies.Single(e => e.Name.StartsWith("Shoulder"));
+        var elbowEntity = shoulderEntity.Dependencies.Single();
+
+        model.GetComponent<AnimationComponent>().Pose(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(leg.GetComponent<Skin>().Joints, Is.EqualTo(new[] { hip, knee }));
+            Assert.That(armEntity.GetComponent<Skin>().Joints, Is.EqualTo(new[] { shoulderEntity, elbowEntity }));
+            Assert.That(knee.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(2, -1, 0)).Using<Vector3F>(Near));
+            Assert.That(elbowEntity.Transform.GetLocalMatrixF().TranslationVector, Is.EqualTo(new Vector3F(1, 3, 0)).Using<Vector3F>(Near));
         });
     }
 
@@ -535,7 +571,6 @@ public class SkinAndClipTests
         scene.Controllers["leg"] = new SceneData.Controller
         {
             ControllerId = "leg",
-            JointsAreNodes = true,
             JointNames = ["hip", "knee"],
             JointMatrices = [Matrix4x4F.Identity, Matrix4x4.CreateTranslation<float>(0, 1, 0)]
         };
