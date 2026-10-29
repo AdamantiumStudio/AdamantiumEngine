@@ -1,5 +1,4 @@
-﻿using Adamantium.Core;
-using Adamantium.Graphics.Core;
+﻿using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
@@ -27,7 +26,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
             private static Vector3F StretchNormal(Vector3<double> normal, double depth) =>
                 Vector3<double>.Normalize(new Vector3<double>(normal.X, normal.Y, normal.Z / depth)).As<float>();
 
-            private static void CreateConeCap(
+            private static void AddEnd(
                 List<Vector3<double>> positions,
                 List<Vector3F> normals,
                 List<Vector2F> uvs,
@@ -36,45 +35,23 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double height,
                 double radius,
                 double depth,
-                bool isTop)
+                bool top)
             {
-                for (int i = 0; i < tessellation - 2; i++)
+                var start = positions.Count;
+                for (int k = 1; k < tessellation - 1; k++)
                 {
-                    int i1 = (i + 1) % tessellation;
-                    int i2 = (i + 2) % tessellation;
-
-                    if (isTop)
-                    {
-                        Utilities.Swap(ref i1, ref i2);
-                    }
-
-                    int vbase = positions.Count;
-                    indices.Add(vbase);
-                    indices.Add(vbase + i1);
-                    indices.Add(vbase + i2);
+                    indices.AddRange(top ? [start, start + k + 1, start + k] : [start, start + k, start + k + 1]);
                 }
 
-                var normal = Up;
-                var downTheTexture = -1.0;
-
-                if (!isTop)
-                {
-                    normal = -normal;
-                    downTheTexture = 1.0;
-                }
-
-                var diameter = new Vector2F((float)radius * 2);
+                var facing = top ? Up : -Up;
+                var across = (float)(radius * 2);
+                var textureDown = top ? -1.0 : 1.0;
                 for (int i = 0; i < tessellation; i++)
                 {
-                    var circleVector = GetCircleVector(i, tessellation);
-                    var position = (circleVector * radius) + (normal * height);
-                    var uv = new Vector2F(
-                        0.5f + (float)(position.X / diameter.X),
-                        0.5f + (float)(downTheTexture * position.Z / diameter.Y));
-
-                    positions.Add(Stretch(position, depth));
-                    normals.Add(normal.As<float>());
-                    uvs.Add(uv);
+                    var point = GetCircleVector(i, tessellation) * radius + facing * height;
+                    positions.Add(Stretch(point, depth));
+                    normals.Add(facing.As<float>());
+                    uvs.Add(new Vector2F(0.5f + (float)(point.X / across), 0.5f + (float)(textureDown * point.Z / across)));
                 }
             }
 
@@ -154,39 +131,36 @@ namespace Adamantium.ProceduralGeometry.Shapes
 
                 var topOffset = Up * height;
 
-                int stride = tessellation + 1;
-
                 for (int i = 0; i <= tessellation; i++)
                 {
-                    var circle = GetCircleVector(i, tessellation);
-
-                    var sideOffsetTop = circle * topRadius;
-                    var sideOffsetBottom = circle * bottomRadius;
-
-                    var sideNormal = StretchNormal(circle * (height * 2) + Up * (bottomRadius - topRadius), depth);
-
+                    var round = GetCircleVector(i, tessellation);
+                    var slope = StretchNormal(round * (height * 2) + Up * (bottomRadius - topRadius), depth);
                     var uv = new Vector2F(i / (float)tessellation, 0);
 
-                    positions.Add(Stretch(sideOffsetTop + topOffset, depth));
-                    normals.Add(sideNormal);
+                    positions.Add(Stretch(round * topRadius + topOffset, depth));
+                    normals.Add(slope);
                     uvs.Add(uv);
-                    positions.Add(Stretch(sideOffsetBottom - topOffset, depth));
-                    normals.Add(sideNormal);
+                    positions.Add(Stretch(round * bottomRadius - topOffset, depth));
+                    normals.Add(slope);
                     uvs.Add(uv + Vector2F.UnitY);
-
-                    if (i == tessellation) continue;
-
-                    indices.Add(i * 2);
-                    indices.Add((i * 2 + 2) % (stride * 2));
-                    indices.Add(i * 2 + 1);
-
-                    indices.Add(i * 2 + 1);
-                    indices.Add((i * 2 + 2) % (stride * 2));
-                    indices.Add((i * 2 + 3) % (stride * 2));
                 }
 
-                if (topRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, topRadius, depth, true);
-                if (bottomRadius > 0) CreateConeCap(positions, normals, uvs, indices, tessellation, height, bottomRadius, depth, false);
+                for (int i = 0; i < tessellation; i++)
+                {
+                    var upper = 2 * i;
+                    var lower = upper + 1;
+                    indices.AddRange([upper, upper + 2, lower, lower, upper + 2, lower + 2]);
+                }
+
+                if (topRadius > 0)
+                {
+                    AddEnd(positions, normals, uvs, indices, tessellation, height, topRadius, depth, true);
+                }
+
+                if (bottomRadius > 0)
+                {
+                    AddEnd(positions, normals, uvs, indices, tessellation, height, bottomRadius, depth, false);
+                }
 
                 var mesh = new Mesh();
                 mesh.SetTopology(primitiveType).

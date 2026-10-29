@@ -9,7 +9,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
     {
         public class Capsule
         {
-            
+
             public static Mesh GenerateGeometry(
                 GeometryType geometryType,
                 double height,
@@ -69,88 +69,60 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 double depth,
                 int tessellation)
             {
-                var primitiveType = PrimitiveType.TriangleList;
-                var vertices = new List<Vector3<double>>();
-                var uvs = new List<Vector2F>();
-                var indices = new List<int>();
-                if (tessellation < 3)
-                    tessellation = 3;
+                List<Vector3<double>> vertices = [];
+                List<Vector3F> normals = [];
+                List<Vector2F> uvs = [];
+                List<int> indices = [];
 
-                float uScale = 1;
-                float vScale = 1;
+                int ringsPerEnd = tessellation;
+                int around = 4 * tessellation;
+                int columns = around + 1;
+                var quarterTurn = Math.PI / 2;
 
-                int verticalSegments = 2 * tessellation;
-                int horizontalSegments = 4 * tessellation;
-
-                // Create rings of vertices at progressively higher latitudes.
-                for (int i = 0; i < verticalSegments; i++)
+                for (int ring = 0; ring < 2 * ringsPerEnd; ring++)
                 {
-                    float v;
-                    double deltaY;
-                    float latitude;
-                    if (i < verticalSegments / 2)
+                    var upper = ring >= ringsPerEnd;
+                    var fromStart = (float)(upper ? ring - ringsPerEnd : ring) / (ringsPerEnd - 1);
+                    var latitude = upper ? fromStart * quarterTurn : (fromStart - 1) * quarterTurn;
+                    var rise = Math.Sin(latitude);
+                    var across = Math.Cos(latitude);
+                    var y = radius * rise + (upper ? height / 2 : -height / 2);
+                    var v = upper ? 0.25f * (1 - fromStart) : 1 - 0.25f * fromStart;
+
+                    for (int column = 0; column < columns; column++)
                     {
-                        deltaY = -height / 2;
-                        v = 1.0f - (0.25f * i / (tessellation - 1));
-                        latitude = (float) (i * Math.PI / (verticalSegments - 2) - Math.PI / 2.0);
-                    }
-                    else
-                    {
-                        deltaY = height / 2;
-                        v = 0.5f - 0.25f * (i - 1) / (tessellation - 1);
-                        latitude = (float) ((i - 1) * Math.PI / (verticalSegments - 2) - Math.PI / 2.0);
-                    }
-
-                    var dy = (float) Math.Sin(latitude);
-                    var dxz = (float) Math.Cos(latitude);
-
-
-                    // Create a single ring of vertices at this latitude.
-                    for (int j = 0; j <= horizontalSegments; j++)
-                    {
-                        float u = (float) j / horizontalSegments;
-
-                        var longitude = (float) (j * 2.0 * Math.PI / horizontalSegments);
-                        var dx = (float) Math.Sin(longitude);
-                        var dz = (float) Math.Cos(longitude);
-
-                        dx *= dxz;
-                        dz *= dxz;
-
-                        var normal = new Vector3<double>(dx, dy, dz);
-                        var uv = new Vector2F(1.0f - (u * uScale), 1.0f - (v * vScale));
-                        var position = radius * normal + new Vector3<double>(0, deltaY, 0);
-                        vertices.Add(Stretch(position, depth));
-                        uvs.Add(uv);
+                        var longitude = column * 2 * Math.PI / around;
+                        var direction = new Vector3<double>(across * Math.Sin(longitude), rise, across * Math.Cos(longitude));
+                        vertices.Add(Stretch(new Vector3<double>(radius * direction.X, y, radius * direction.Z), depth));
+                        normals.Add(Vector3<double>.Normalize(new Vector3<double>(direction.X, direction.Y, direction.Z / depth)).As<float>());
+                        uvs.Add(new Vector2F(1 - (float)column / around, 1 - v));
                     }
                 }
 
-                // Fill the index buffer with triangles joining each pair of latitude rings.
-                int stride = horizontalSegments + 1;
-
-                for (int i = 0; i < verticalSegments - 1; i++)
+                for (int ring = 0; ring < 2 * ringsPerEnd - 1; ring++)
                 {
-                    for (int j = 0; j <= horizontalSegments; j++)
+                    for (int column = 0; column < around; column++)
                     {
-                        int nextI = i + 1;
-                        int nextJ = (j + 1) % stride;
+                        var here = ring * columns + column;
+                        var above = here + columns;
 
-                        indices.Add(i * stride + j);
-                        indices.Add(nextI * stride + j);
-                        indices.Add(i * stride + nextJ);
+                        indices.Add(here);
+                        indices.Add(above);
+                        indices.Add(here + 1);
 
-                        indices.Add(i * stride + nextJ);
-                        indices.Add(nextI * stride + j);
-                        indices.Add(nextI * stride + nextJ);
+                        indices.Add(here + 1);
+                        indices.Add(above);
+                        indices.Add(above + 1);
                     }
                 }
 
                 var mesh = new Mesh();
-                mesh.SetTopology(primitiveType).
+                mesh.SetTopology(PrimitiveType.TriangleList).
                     SetPoints(vertices).
+                    SetNormals(normals).
                     SetUVs(0, uvs).
                     SetIndices(indices).
-                    Optimize();
+                    Optimize(recalculateNormals: false);
 
                 return mesh;
             }

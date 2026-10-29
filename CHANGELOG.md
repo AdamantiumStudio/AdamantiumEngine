@@ -1068,6 +1068,12 @@ All packages share one version.
   of the branch it removes, not only the first.
 - An imported model's entities are named by their nodes' names; they carried the node's ID after it as well
   ("CockpitID619", "Torsonode5").
+- A capsule's seam no longer shows: its normals are those of its shape, the same on both sides of the seam, rather
+  than averaged from the triangles on each side apart; and its bands no longer stitch the seam's column to the first,
+  which made a ring of slivers.
+- The teapot's normals where a patch closes to a point - the top of the lid's knob, the middle of the bottom - no
+  longer lie flat at some sizes and tessellations: whether the surface's tangents vanish there is judged by the
+  patch's size.
 - `ContentManager`: `Unload(type, name)` looked for the asset under another key than `Load` kept it by, and found
   nothing; the key compared names ignoring case and hashed them with it; loads of one kept asset at the same time each
   read it, and two of a type with no reader registered yet could fail on registering it. A kept asset is read once now,

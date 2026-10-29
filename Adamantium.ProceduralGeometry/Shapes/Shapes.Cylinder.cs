@@ -9,7 +9,6 @@ namespace Adamantium.ProceduralGeometry.Shapes
     {
         public class Cylinder
         {
-            // Helper computes a point on a unit circle, aligned to the x/z plane and centered on the origin.
             private static Vector3<double> GetCircleVector(
                 int i,
                 int tessellation)
