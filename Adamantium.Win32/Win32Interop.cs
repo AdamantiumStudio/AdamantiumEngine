@@ -552,6 +552,12 @@ namespace Adamantium.Win32
         [DllImport("shell32.dll", EntryPoint = "DragQueryFileW", CharSet = CharSet.Unicode)]
         public static extern uint DragQueryFile(IntPtr drop, uint index, [Out] char[] file, uint charCount);
 
+        /// <summary>Copies, moves, renames or deletes files as the shell does - deleting into the Recycle Bin among it;
+        /// 0 when it went, though the user may have stopped it (<see cref="SHFILEOPSTRUCT.AnyOperationsAborted"/>).
+        /// </summary>
+        [DllImport("shell32.dll", EntryPoint = "SHFileOperationW", CharSet = CharSet.Unicode)]
+        public static extern int SHFileOperation(ref SHFILEOPSTRUCT operation);
+
         [DllImport("kernel32.dll")]
         public static extern UIntPtr GlobalSize(IntPtr mem);
 

@@ -22,7 +22,12 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         /// <summary>What the file has that the parse cannot do - so the loss does not pass in silence.</summary>
         public List<String> UnsupportedFeatures { get; } = new();
 
-        private int unnamedJoints;
+        private readonly Dictionary<node, String> ids = new();
+        private readonly HashSet<String> takenIds = new(StringComparer.Ordinal);
+        private readonly HashSet<SceneData.Model> carriers = new();
+        private readonly List<GeometryUse> uses = new();
+        private readonly Dictionary<String, GeometryParts> geometryParts = new(StringComparer.Ordinal);
+        private int unnamedNodes;
 
         /// <summary>Notes a loss: geometries and controllers are parsed in parallel and all of them write here.</summary>
         internal void ReportUnsupported(String feature)
@@ -70,15 +75,9 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
 
         #region Geometry
 
-        internal SceneData.Model ConstructMesh(SceneData container, List<IndicesContainer> indicesContainers, Mesh mesh, String meshId, String meshName)
+        private static List<(Mesh Mesh, String Symbol)> ConstructMesh(List<IndicesContainer> indicesContainers, Mesh mesh)
         {
-            SceneData.Model constructedMesh = container.GetModelByID(meshId);
-
-            if (constructedMesh == null)
-            {
-                constructedMesh = container.CreateMesh(container.Models, meshId, meshName);
-            }
-            
+            var parts = new List<(Mesh Mesh, String Symbol)>();
             foreach (var indicesContainer in indicesContainers)
             {
                 // Without indices there is nothing to assemble. AssemblePoints on an empty list used to silently
@@ -131,9 +130,10 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                     finalMesh.AssembleBones(indicesContainer.Positions);
                 }
 
-                constructedMesh.Meshes.Add(finalMesh);
+                parts.Add((finalMesh, indicesContainer.MaterialId));
             }
-            return constructedMesh;
+
+            return parts;
         }
 
         public Mesh GetRawMesh(geometry geometry, Dictionary<String, VertexSemantic> semanticIdMapping, out String meshId, out String name)
@@ -795,71 +795,137 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
 
         private void RemoveDeadEndMeshes(SceneData model)
         {
-            List<SceneData.Model> meshesToRemove = new List<SceneData.Model>();
-            Stack<SceneData.Model> stack = new Stack<SceneData.Model>();
-            stack.Push(model.Models);
-            while (stack.Count > 0)
+            if (model.Models != null)
             {
-                var current = stack.Pop();
+                Prune(model, model.Models);
+            }
+        }
 
-                // The root is not a dead-end mesh but the scene's container. Without Parent != null, a scene of
-                // joints alone (or of lights and cameras) took away the ROOT, RemoveMesh nulled Models, and
-                // assembly threw.
-                if (current.Dependencies.Count == 0 && String.IsNullOrEmpty(current.ID) && current.Parent != null)
+        private bool Prune(SceneData model, SceneData.Model branch)
+        {
+            var kept = carriers.Contains(branch);
+            for (var i = branch.Dependencies.Count - 1; i >= 0; i--)
+            {
+                var child = branch.Dependencies[i];
+                if (Prune(model, child))
                 {
-                    meshesToRemove.Add(current);
+                    kept = true;
                 }
-
-                foreach (var mesh in current.Dependencies)
+                else
                 {
-                    stack.Push(mesh);
+                    model.RemoveMesh(child);
                 }
             }
 
-            foreach (var mesh in meshesToRemove)
-            {
-                var incorrectMesh = mesh;
-                while (String.IsNullOrEmpty(incorrectMesh.ID) && incorrectMesh.Parent != null)
-                {
-                    var temp = incorrectMesh.Parent;
-                    if (temp.Meshes.Count == 0 && temp.Parent != null)
-                    {
-                        incorrectMesh = temp;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-                model.RemoveMesh(incorrectMesh);
-            }
+            return kept;
         }
 
         private SceneData.Model GetMeshStructure(SceneData model, node rootNode, Dictionary<node, SceneData.Model> nodeToMesh, List<geometry> geometries, List<controller> controllers)
         {
-            //A joint is a node of the model: a skin's joints and the channels moving them point at it by its ID. A joint
-            //nothing names still gets one of its own, which no id can be, or two such would be taken for one.
-            if (rootNode.type == NodeType.JOINT)
+            var id = IdOf(rootNode);
+            var isJoint = rootNode.type == NodeType.JOINT;
+            if (!isJoint && (rootNode.instance_camera != null || rootNode.instance_light != null))
             {
-                var joint = CreateNode(model, rootNode, nodeToMesh, NodeId(rootNode) ?? $"#{++unnamedJoints}");
-                var carried = GeometryOf(rootNode, geometries, controllers);
-                if (!String.IsNullOrEmpty(carried))
-                {
-                    model.CreateMesh(joint, carried, !String.IsNullOrEmpty(rootNode.name) ? rootNode.name : carried);
-                }
-                return joint;
+                return null;
             }
 
-            if (rootNode.instance_camera == null && rootNode.instance_light == null)
+            var geometryId = GeometryOf(rootNode, geometries, controllers);
+            if (!isJoint && geometryId == null && rootNode.node1 == null)
             {
-                var geometryId = GeometryOf(rootNode, geometries, controllers);
-                if (!String.IsNullOrEmpty(geometryId) || rootNode.node1 != null)
+                return null;
+            }
+
+            var created = CreateNode(model, rootNode, nodeToMesh, id);
+            if (isJoint || geometryId != null)
+            {
+                carriers.Add(created);
+            }
+
+            if (geometryId != null)
+            {
+                var binding = rootNode.instance_geometry?[0].bind_material ?? rootNode.instance_controller?[0].bind_material;
+                uses.Add(new GeometryUse(created, geometryId, binding));
+            }
+
+            return created;
+        }
+
+        /// <summary>The ID a node is known by in the model, its own: <see cref="NodeId"/> while no other node has it -
+        /// a name repeats, an id does not - else that with a number after it, as a node nothing names gets.</summary>
+        public String IdOf(node node)
+        {
+            if (ids.TryGetValue(node, out var id))
+            {
+                return id;
+            }
+
+            var named = NodeId(node);
+            id = !String.IsNullOrEmpty(named) && takenIds.Add(named) ? named : $"{named}#{++unnamedNodes}";
+            takenIds.Add(id);
+            ids[node] = id;
+            return id;
+        }
+
+        /// <summary>Keeps a geometry's parts, each with the material symbol it names, to be hung on the nodes that draw it.
+        /// </summary>
+        internal void AddGeometry(List<IndicesContainer> indicesContainers, Mesh mesh, String meshId, String meshName)
+        {
+            geometryParts[meshId] = new GeometryParts(meshName, ConstructMesh(indicesContainers, mesh));
+        }
+
+        /// <summary>Hangs each geometry on every node that draws it - the first takes the parts as read, each other a copy
+        /// of its own - with the materials the node binds to its symbols. A geometry no node draws comes at the scene's
+        /// root, as it did.</summary>
+        public void PlaceGeometries(SceneData sceneData)
+        {
+            var placed = new HashSet<String>(StringComparer.Ordinal);
+            foreach (var use in uses)
+            {
+                if (!geometryParts.TryGetValue(use.GeometryId, out var parts))
                 {
-                    return CreateNode(model, rootNode, nodeToMesh, geometryId ?? String.Empty);
+                    continue;
+                }
+
+                var first = placed.Add(use.GeometryId);
+                var symbols = Bindings(use.Binding);
+                foreach (var (part, symbol) in parts.Meshes)
+                {
+                    var mesh = first ? part : part.Clone();
+                    mesh.MaterialID = symbol != null ? symbols.GetValueOrDefault(symbol) : null;
+                    use.Model.Meshes.Add(mesh);
                 }
             }
-            return null;
+
+            foreach (var (geometryId, parts) in geometryParts)
+            {
+                if (placed.Contains(geometryId))
+                {
+                    continue;
+                }
+
+                var id = takenIds.Add(geometryId) ? geometryId : $"{geometryId}#{++unnamedNodes}";
+                var model = sceneData.CreateMesh(sceneData.Models, id, parts.Name);
+                model.Meshes.AddRange(parts.Meshes.Select(part => part.Mesh));
+            }
         }
+
+        private static Dictionary<String, String> Bindings(bind_material binding)
+        {
+            var symbols = new Dictionary<String, String>(StringComparer.Ordinal);
+            foreach (var material in binding?.technique_common ?? [])
+            {
+                if (!String.IsNullOrEmpty(material.symbol))
+                {
+                    symbols.TryAdd(material.symbol, Source(material.target));
+                }
+            }
+
+            return symbols;
+        }
+
+        private sealed record GeometryUse(SceneData.Model Model, String GeometryId, bind_material Binding);
+
+        private sealed record GeometryParts(String Name, List<(Mesh Mesh, String Symbol)> Meshes);
 
         //The geometry a node draws, directly or through its controller; null when there is none in the file
         private static String GeometryOf(node node, List<geometry> geometries, List<controller> controllers)
@@ -902,17 +968,19 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
             return meshData;
         }
 
-        /// <summary>The ID a node is known by in the model: its id, else its sid, else its name.</summary>
+        /// <summary>What a node is called by: its id, else its sid, else its name.</summary>
         public static String NodeId(node node) =>
             !String.IsNullOrEmpty(node.id) ? node.id : !String.IsNullOrEmpty(node.sid) ? node.sid : node.name;
 
         /// <summary>Points each skin's joints at the nodes they are: a skin names a joint by its sid among the nodes
-        /// under the skeleton roots its instance gives - or by an id - and a joint is known by <see cref="NodeId"/>. A
-        /// name found nowhere is reported and kept.</summary>
+        /// under the skeleton roots its instance gives - or by an id - and a joint is known by <see cref="IdOf"/>. A
+        /// name found nowhere is reported and kept. Each skin is then known by the node that draws with it, as the model
+        /// knows that node.</summary>
         public void ResolveSkinJoints(SceneData data, List<visual_scene> visualScenes)
         {
             var everywhere = IndexNodes(visualScenes);
             var resolved = new HashSet<SceneData.Controller>();
+            var drawnWith = new Dictionary<String, SceneData.Controller>(StringComparer.Ordinal);
             var stack = new Stack<node>();
             foreach (var scene in visualScenes ?? [])
             {
@@ -941,7 +1009,13 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                 {
                     var controllerId = Source(instance.url);
                     var controller = data.Controllers.Values.FirstOrDefault(c => c.ControllerId == controllerId);
-                    if (controller == null || !resolved.Add(controller))
+                    if (controller == null)
+                    {
+                        continue;
+                    }
+
+                    drawnWith[IdOf(node)] = controller;
+                    if (!resolved.Add(controller))
                     {
                         continue;
                     }
@@ -960,16 +1034,16 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                         var name = controller.JointNames[i];
                         if (underSkeleton.TryGetValue(name, out var joint))
                         {
-                            controller.JointNames[i] = NodeId(joint);
+                            controller.JointNames[i] = IdOf(joint);
                         }
                         else if (everywhere.TryGetValue(name, out joint))
                         {
                             if (sharedSids.Contains(name) && joint.id != name)
                             {
                                 ReportUnsupported($"{controller.ControllerId}: several nodes are '{name}' and no " +
-                                                  $"skeleton says which; '{NodeId(joint)}' was taken");
+                                                  $"skeleton says which; '{IdOf(joint)}' was taken");
                             }
-                            controller.JointNames[i] = NodeId(joint);
+                            controller.JointNames[i] = IdOf(joint);
                         }
                         else
                         {
@@ -977,6 +1051,16 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
                         }
                     }
                 }
+            }
+
+            foreach (var drawn in drawnWith.Values.Distinct())
+            {
+                data.Controllers.Remove(drawn.MeshId);
+            }
+
+            foreach (var (nodeId, controller) in drawnWith)
+            {
+                data.Controllers[nodeId] = controller;
             }
         }
 
@@ -1048,56 +1132,6 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
 
         }
 
-
-        //Reads the material bindings out of the visual scenes
-        public void ResolveMaterialsBinding(SceneData sceneData, visual_scene visualScene)
-        {
-            if (visualScene != null)
-            {
-                foreach (var node in visualScene.node)
-                {
-                    FindMaterialsBinding(sceneData, node);
-                }
-            }
-        }
-
-        private void FindMaterialsBinding(SceneData sceneData, node node)
-        {
-            if (node != null && node.type != NodeType.JOINT)
-            {
-                Stack<node> stack = new Stack<node>();
-                stack.Push(node);
-                while (stack.Count > 0)
-                {
-                    var root = stack.Pop();
-                    instance_geometry[] nodeId = root.instance_geometry;
-                    if (nodeId != null)
-                    {
-                        string meshId = Source(nodeId[0].url);
-                        var mesh = sceneData.GetModelByID(meshId);
-                        if (mesh != null)
-                        {
-                            int i = 0;
-                            if (nodeId[0].bind_material != null)
-                            {
-                                foreach (var materialInstance in nodeId[0].bind_material.technique_common)
-                                {
-                                    mesh.Meshes[i].MaterialID = Source(materialInstance.target);
-                                    i++;
-                                }
-                            }
-                        }
-                    }
-                    if (root.node1 != null)
-                    {
-                        foreach (var node1 in root.node1)
-                        {
-                            stack.Push(node1);
-                        }
-                    }
-                }
-            }
-        }
 
         #endregion
 

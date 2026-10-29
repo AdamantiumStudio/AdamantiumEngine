@@ -205,7 +205,7 @@ namespace Adamantium.Engine.CompilerTests
             var scene = Import(Document(geometries, nodes));
 
             var imported = Models(scene).Where(m => m.Meshes.Count > 0).Select(m => m.ID).ToArray();
-            Assert.That(imported, Is.EqualTo(names));
+            Assert.That(imported, Is.EqualTo(names.Select(name => name + "-node")), "each node by its own id");
         }
 
         #region Checks that do not depend on the coordinate system

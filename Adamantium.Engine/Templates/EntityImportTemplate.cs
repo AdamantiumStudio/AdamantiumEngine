@@ -57,7 +57,7 @@ public class EntityImportTemplate : IEntityTemplate
                 return null;
             }
 
-            var nameToEntityId = new Dictionary<string, Entity>();
+            var entityOf = new Dictionary<SceneData.Model, Entity>(ReferenceEqualityComparer.Instance);
             var nodeEntities = new Dictionary<string, Entity>();
             var restPoses = new Dictionary<string, SceneData.KeyFrame>();
             var drawnOf = new Dictionary<Entity, List<Entity>>();
@@ -65,7 +65,7 @@ public class EntityImportTemplate : IEntityTemplate
             owner.Name = sceneData.Name;
             owner.Source = sceneData.Source;
             owner.IconKey = EntityIconKeys.Model;
-            nameToEntityId.Add(sceneData.Models.ToString(), owner);
+            entityOf.Add(sceneData.Models, owner);
             var stack = new Stack<SceneData.Model>();
             stack.Push(sceneData.Models);
             while (stack.Count > 0)
@@ -78,10 +78,10 @@ public class EntityImportTemplate : IEntityTemplate
                 }
                 else
                 {
-                    if (nameToEntityId.TryGetValue(currentMesh.Parent.ToString(), out var parentEntity))
+                    if (entityOf.TryGetValue(currentMesh.Parent, out var parentEntity))
                     {
-                        entity = new Entity(parentEntity, currentMesh.ToString());
-                        nameToEntityId.Add(currentMesh.ToString(), entity);
+                        entity = new Entity(parentEntity, currentMesh.Name);
+                        entityOf.Add(currentMesh, entity);
                     }
                 }
 
