@@ -1829,6 +1829,11 @@ All packages share one version.
   byte for byte the same: the rows are read whole, a palette is gathered and looked up in a small table of its own
   rather than a hash set and a dictionary, and gray and opacity are checked a vector at a time. A 5400×2700 photo is
   written about as fast as Pillow writes it, its RGBA form faster.
+- PNG and GIF read faster on one core, the pixels the same: a 5400×2700 RGB PNG in 160 ms rather than 345, RGBA in
+  165 rather than 310, 16-bit gray in 165 rather than 295, a palette in 70 rather than 95; a GIF of that size in 160
+  rather than 200. PNG undoes Paeth a pixel at a time without copying it through a buffer, of 2-byte pixels too,
+  spreads RGB to RGBA sixteen bytes at a time and inflates in large pieces; GIF unpacks a frame's indices at once,
+  each LZW string copied from where it was given out, and a frame is laid over the canvas four opaque pixels at a time.
 - JPEG decodes 1.7 to 2.8 times as fast on one core, as fast as libjpeg-turbo for 4:2:0 and progressive pictures and
   within a fifth of it for 4:4:4; a TIFF of JPEG tiles reads within a sixth of GDAL. The inverse DCT runs as the even and
   odd halves of the 8-point transform on eight rows at once - a vector a row with AVX, two with NEON or SSE, where it
