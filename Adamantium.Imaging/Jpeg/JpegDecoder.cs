@@ -1,9 +1,11 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace Adamantium.Imaging.Jpeg;
 
-/// <summary>Decodes a JPEG (ITU-T T.81, JFIF): baseline, extended and progressive, 8 or 12 bits, gray, YCbCr, RGB,
+/// <summary>Decodes a JPEG (ITU-T T.81, JFIF): baseline, extended and progressive, Huffman- or arithmetic-coded, 8 or
+/// 12 bits, gray, YCbCr, RGB,
 /// CMYK and YCCK, any subsampling whose factors divide the largest. The picture comes out RGBA - 8 bits a channel, 16
 /// for 12-bit samples.</summary>
 public sealed class JpegDecoder
@@ -72,6 +74,7 @@ public sealed class JpegDecoder
     /// components are RGB as they are when <paramref name="rgb"/>; rows past <paramref name="rows"/> are left out.
     /// The stream's tables start as <paramref name="tables"/>' (<see cref="JpegStream.Tables"/>), when given.
     /// Returns the picture's size, channels and bits.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static (int Width, int Height, int Channels, int Precision) DecodeSamples(ReadOnlySpan<byte> data,
         JpegStream tables, bool rgb, Span<byte> output, int stride, int rows)
     {

@@ -5,9 +5,9 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Imaging.Jpeg;
 
-/// <summary>Encodes a picture as baseline JPEG (ITU-T T.81) in a JFIF file: gray as one component, color as YCbCr
-/// with every component at full resolution. Quantization is Annex K.1's tables scaled by the quality; the Huffman
-/// tables are made for the picture (Annex K.2).</summary>
+/// <summary>Encodes a picture as baseline JPEG (ITU-T T.81) in a JFIF file: gray as one component, color as YCbCr,
+/// the chroma at full resolution or shared by two or four pixels (<see cref="JpegSubsampling"/>). Quantization is Annex
+/// K.1's tables scaled by the quality; the Huffman tables are made for the picture (Annex K.2).</summary>
 public static class JpegEncoder
 {
     // Annex K.1, natural order.
@@ -29,9 +29,15 @@ public static class JpegEncoder
     private static readonly float[] Basis = BuildBasis();
 
     /// <summary>Writes <paramref name="image"/>'s first frame to <paramref name="output"/> at
-    /// <paramref name="quality"/>, 1 to 100: gray formats as gray, the others' color, alpha dropped. Samples of 16
-    /// bits keep their high 8.</summary>
-    public static void Encode(IRawBitmap image, Stream output, int quality)
+    /// <paramref name="quality"/>, 1 to 100, every pixel with chroma of its own: gray formats as gray, the others'
+    /// color, alpha dropped. Samples of 16 bits keep their high 8.</summary>
+    public static void Encode(IRawBitmap image, Stream output, int quality) =>
+        Encode(image, output, quality, JpegSubsampling.None);
+
+    /// <summary>As <see cref="Encode(IRawBitmap, Stream, int)"/>, a color picture's chroma shared as
+    /// <paramref name="subsampling"/> says - each chroma sample the average of the pixels that share it. A gray picture
+    /// has no chroma to share.</summary>
+    public static void Encode(IRawBitmap image, Stream output, int quality, JpegSubsampling subsampling)
     {
         var description = image.GetImageDescription();
         var (channels, bytes, red) = Layout(description.Format);
@@ -44,48 +50,64 @@ public static class JpegEncoder
         var pixels = image.GetRawPixels(0);
         var gray = channels == 1;
         var components = gray ? 1 : 3;
-        var blocksAcross = (width + 7) / 8;
-        var blocksDown = (height + 7) / 8;
-        var coefficients = new short[components][];
-        var tables = new[] { Scaled(LuminanceTable, quality), Scaled(ChrominanceTable, quality) };
-        Span<float> block = stackalloc float[64 * 3];
-        for (var c = 0; c < components; c++)
+        var (across, down) = gray ? (1, 1) : subsampling switch
         {
-            coefficients[c] = new short[blocksAcross * blocksDown * 64];
+            JpegSubsampling.HalfWidth => (2, 1),
+            JpegSubsampling.Half => (2, 2),
+            _ => (1, 1)
+        };
+        var lumaBlocks = across * down;
+        var mcusAcross = (width + 8 * across - 1) / (8 * across);
+        var mcusDown = (height + 8 * down - 1) / (8 * down);
+        var mcus = mcusAcross * mcusDown;
+
+        var coefficients = new short[components][];
+        coefficients[0] = new short[mcus * lumaBlocks * 64];
+        for (var c = 1; c < components; c++)
+        {
+            coefficients[c] = new short[mcus * 64];
         }
 
-        // Samples: the edge pixels repeated past the picture's edge, then the forward DCT and quantization.
-        for (var by = 0; by < blocksDown; by++)
+        ushort[][] tables = [Scaled(LuminanceTable, quality), Scaled(ChrominanceTable, quality)];
+        Span<float> luma = stackalloc float[64];
+        Span<float> chroma = stackalloc float[128];
+        var share = 1f / lumaBlocks;
+        for (var mcu = 0; mcu < mcus; mcu++)
         {
-            for (var bx = 0; bx < blocksAcross; bx++)
+            int left = mcu % mcusAcross * 8 * across, top = mcu / mcusAcross * 8 * down;
+            chroma.Clear();
+            for (var block = 0; block < lumaBlocks; block++)
             {
+                int blockLeft = block % across * 8, blockTop = block / across * 8;
                 for (var y = 0; y < 8; y++)
                 {
-                    var row = Math.Min(by * 8 + y, height - 1);
+                    var row = Math.Min(top + blockTop + y, height - 1);
                     for (var x = 0; x < 8; x++)
                     {
-                        var column = Math.Min(bx * 8 + x, width - 1);
+                        var column = Math.Min(left + blockLeft + x, width - 1);
                         var at = ((long)row * width + column) * channels * bytes;
                         var high = bytes - 1;
                         if (gray)
                         {
-                            block[y * 8 + x] = pixels[at + high] - 128;
+                            luma[y * 8 + x] = pixels[at + high] - 128;
                             continue;
                         }
 
                         float r = pixels[at + red * bytes + high], g = pixels[at + bytes + high],
                             b = pixels[at + (2 - red) * bytes + high];
-                        block[y * 8 + x] = 0.299f * r + 0.587f * g + 0.114f * b - 128;
-                        block[64 + y * 8 + x] = -0.168736f * r - 0.331264f * g + 0.5f * b;
-                        block[128 + y * 8 + x] = 0.5f * r - 0.418688f * g - 0.081312f * b;
+                        luma[y * 8 + x] = 0.299f * r + 0.587f * g + 0.114f * b - 128;
+                        var sample = (blockTop + y) / down * 8 + (blockLeft + x) / across;
+                        chroma[sample] += share * (-0.168736f * r - 0.331264f * g + 0.5f * b);
+                        chroma[64 + sample] += share * (0.5f * r - 0.418688f * g - 0.081312f * b);
                     }
                 }
 
-                for (var c = 0; c < components; c++)
-                {
-                    Forward(block.Slice(c * 64, 64), tables[c == 0 ? 0 : 1],
-                        coefficients[c].AsSpan((by * blocksAcross + bx) * 64, 64));
-                }
+                Forward(luma, tables[0], coefficients[0].AsSpan((mcu * lumaBlocks + block) * 64, 64));
+            }
+
+            for (var c = 1; c < components; c++)
+            {
+                Forward(chroma.Slice((c - 1) * 64, 64), tables[1], coefficients[c].AsSpan(mcu * 64, 64));
             }
         }
 
@@ -105,15 +127,20 @@ public static class JpegEncoder
         }
 
         var writer = new BinaryWriter(output);
-        Headers(writer, width, height, components, tables, dc, ac);
+        Headers(writer, width, height, components, (across << 4) | down, tables, dc, ac);
         var bits = new JpegBitWriter(output);
         var predictors = new int[components];
-        for (var b = 0; b < blocksAcross * blocksDown; b++)
+        for (var mcu = 0; mcu < mcus; mcu++)
         {
-            for (var c = 0; c < components; c++)
+            for (var block = 0; block < lumaBlocks; block++)
             {
-                var table = c == 0 ? 0 : 1;
-                Emit(bits, coefficients[c].AsSpan(b * 64, 64), ref predictors[c], dc[table], ac[table]);
+                Emit(bits, coefficients[0].AsSpan((mcu * lumaBlocks + block) * 64, 64), ref predictors[0], dc[0],
+                    ac[0]);
+            }
+
+            for (var c = 1; c < components; c++)
+            {
+                Emit(bits, coefficients[c].AsSpan(mcu * 64, 64), ref predictors[c], dc[1], ac[1]);
             }
         }
 
@@ -279,8 +306,8 @@ public static class JpegEncoder
         }
     }
 
-    private static void Headers(BinaryWriter writer, int width, int height, int components, ushort[][] tables,
-        JpegHuffmanCode[] dc, JpegHuffmanCode[] ac)
+    private static void Headers(BinaryWriter writer, int width, int height, int components, int lumaFactors,
+        ushort[][] tables, JpegHuffmanCode[] dc, JpegHuffmanCode[] ac)
     {
         writer.Write([0xFF, 0xD8]);
         Segment(writer, 0xE0, [(byte)'J', (byte)'F', (byte)'I', (byte)'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]);
@@ -302,7 +329,8 @@ public static class JpegEncoder
         frame[5] = (byte)components;
         for (var c = 0; c < components; c++)
         {
-            (frame[6 + 3 * c], frame[7 + 3 * c], frame[8 + 3 * c]) = ((byte)(c + 1), 0x11, (byte)(c == 0 ? 0 : 1));
+            (frame[6 + 3 * c], frame[7 + 3 * c], frame[8 + 3 * c]) =
+                ((byte)(c + 1), (byte)(c == 0 ? lumaFactors : 0x11), (byte)(c == 0 ? 0 : 1));
         }
 
         Segment(writer, 0xC0, frame);
@@ -330,216 +358,5 @@ public static class JpegEncoder
         BinaryPrimitives.WriteUInt16BigEndian(head[2..], (ushort)(content.Length + 2));
         writer.Write(head);
         writer.Write(content);
-    }
-}
-
-/// <summary>A Huffman code made for symbol counts (ITU-T T.81, Annex K.2): code lengths by pairing the two rarest,
-/// cut to 16 bits, then codes in order of length (C.2).</summary>
-internal sealed class JpegHuffmanCode
-{
-    private readonly byte[] _counts = new byte[16];
-    private byte[] _symbols;
-    private readonly int[] _codes = new int[256];
-    private readonly int[] _sizes = new int[256];
-
-    public JpegHuffmanCode(int[] counts)
-    {
-        // Counts so skewed that a code passes 32 bits are halved until none does.
-        var scaled = (int[])counts.Clone();
-        int[] size;
-        while (!Lengths(scaled, out size))
-        {
-            for (var i = 0; i < 256; i++)
-            {
-                scaled[i] = scaled[i] == 0 ? 0 : (scaled[i] + 1) / 2;
-            }
-        }
-
-        var bits = new int[33];
-        for (var i = 0; i < 257; i++)
-        {
-            if (size[i] > 0)
-            {
-                bits[size[i]]++;
-            }
-        }
-
-        Assign(size, bits);
-    }
-
-    // K.2: the code length of each symbol, and of the one kept back; false when one passes 32 bits.
-    private static bool Lengths(int[] counts, out int[] size)
-    {
-        var frequency = new long[257];
-        for (var i = 0; i < 256; i++)
-        {
-            frequency[i] = counts[i];
-        }
-
-        // One code point kept back, so no code is all ones.
-        frequency[256] = 1;
-        size = new int[257];
-        var others = new int[257];
-        Array.Fill(others, -1);
-        while (true)
-        {
-            int first = -1, second = -1;
-            for (var i = 0; i < 257; i++)
-            {
-                if (frequency[i] > 0 && (first < 0 || frequency[i] <= frequency[first]))
-                {
-                    first = i;
-                }
-            }
-
-            for (var i = 0; i < 257; i++)
-            {
-                if (frequency[i] > 0 && i != first && (second < 0 || frequency[i] <= frequency[second]))
-                {
-                    second = i;
-                }
-            }
-
-            if (second < 0)
-            {
-                break;
-            }
-
-            frequency[first] += frequency[second];
-            frequency[second] = 0;
-            for (size[first]++; others[first] >= 0; size[first]++)
-            {
-                first = others[first];
-            }
-
-            others[first] = second;
-            for (size[second]++; others[second] >= 0; size[second]++)
-            {
-                second = others[second];
-            }
-        }
-
-        return Array.TrueForAll(size, length => length <= 32);
-    }
-
-    private void Assign(int[] size, int[] bits)
-    {
-        // K.3: lengths past 16 bits folded in, keeping a prefix code.
-        for (var i = 32; i > 16; i--)
-        {
-            while (bits[i] > 0)
-            {
-                var j = i - 2;
-                while (bits[j] == 0)
-                {
-                    j--;
-                }
-
-                bits[i] -= 2;
-                bits[i - 1]++;
-                bits[j + 1] += 2;
-                bits[j]--;
-            }
-        }
-
-        var longest = 16;
-        while (bits[longest] == 0)
-        {
-            longest--;
-        }
-
-        bits[longest]--;
-        var symbols = new System.Collections.Generic.List<byte>();
-        for (var length = 1; length <= 32; length++)
-        {
-            for (var symbol = 0; symbol < 256; symbol++)
-            {
-                if (size[symbol] == length)
-                {
-                    symbols.Add((byte)symbol);
-                }
-            }
-        }
-
-        // The symbols in order of their original lengths take the adjusted lengths in turn.
-        var ordered = symbols.ToArray();
-        var code = 0;
-        var index = 0;
-        for (var length = 1; length <= 16; length++)
-        {
-            _counts[length - 1] = (byte)bits[length];
-            for (var i = 0; i < bits[length]; i++, index++, code++)
-            {
-                _codes[ordered[index]] = code;
-                _sizes[ordered[index]] = length;
-            }
-
-            code <<= 1;
-        }
-
-        _symbols = ordered[..index];
-    }
-
-    /// <summary>The DHT entry for this code as table <paramref name="id"/> (class in the high nibble).</summary>
-    public byte[] Table(byte id) => [id, .. _counts, .. _symbols];
-
-    public void Write(JpegBitWriter bits, int symbol) => bits.Write(_codes[symbol], _sizes[symbol]);
-}
-
-/// <summary>Bits into a JPEG entropy-coded segment, most significant first, 0xFF stuffed with 0x00 (F.1.2.3);
-/// the last byte padded with ones.</summary>
-internal sealed class JpegBitWriter
-{
-    private readonly Stream _output;
-    private readonly byte[] _buffer = new byte[1 << 16];
-    private int _used;
-    private ulong _bits;
-    private int _count;
-
-    public JpegBitWriter(Stream output)
-    {
-        _output = output;
-    }
-
-    public void Write(int value, int size)
-    {
-        if (size == 0)
-        {
-            return;
-        }
-
-        _bits = (_bits << size) | ((uint)value & ((1u << size) - 1));
-        _count += size;
-        while (_count >= 8)
-        {
-            _count -= 8;
-            Put((byte)(_bits >> _count));
-        }
-    }
-
-    public void Flush()
-    {
-        if (_count > 0)
-        {
-            Write((1 << (8 - _count)) - 1, 8 - _count);
-        }
-
-        _output.Write(_buffer, 0, _used);
-        _used = 0;
-    }
-
-    private void Put(byte value)
-    {
-        if (_used + 2 > _buffer.Length)
-        {
-            _output.Write(_buffer, 0, _used);
-            _used = 0;
-        }
-
-        _buffer[_used++] = value;
-        if (value == 0xFF)
-        {
-            _buffer[_used++] = 0;
-        }
     }
 }

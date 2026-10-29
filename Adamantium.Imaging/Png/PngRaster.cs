@@ -28,7 +28,8 @@ internal static class PngRaster
         CheckCanHold(file, frame, width, height);
         var bits = file.Channels * file.BitDepth;
         var output = new byte[(long)width * height * (file.Wide ? 8 : 4)];
-        using var inflater = new ZLibStream(new SegmentStream(data, frame.Segments), CompressionMode.Decompress);
+        using var inflater = new BufferedStream(
+            new ZLibStream(new SegmentStream(data, frame.Segments), CompressionMode.Decompress), 1 << 16);
         var rowBytes = (int)(((long)width * bits + 7) / 8);
         var bytesPerPixel = Math.Max(1, bits / 8);
         var row = new byte[rowBytes + 1];
@@ -145,7 +146,7 @@ internal static class PngRaster
             }
             case 4:
             {
-                if (bytesPerPixel is 3 or 4 or 6 or 8 && Vector128.IsHardwareAccelerated)
+                if (bytesPerPixel is 2 or 3 or 4 or 6 or 8 && Vector128.IsHardwareAccelerated)
                 {
                     PaethPixels(row, prior, bytesPerPixel);
                     return;
@@ -174,18 +175,18 @@ internal static class PngRaster
     // Paeth a pixel at a time, its bytes side by side: each pixel waits on the one to its left, its bytes on nothing.
     // Distances as 9.4 has them: |p - left| = |above - upperLeft|, |p - above| = |left - upperLeft|,
     // |p - upperLeft| = |left + above - 2 upperLeft|.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void PaethPixels(Span<byte> row, ReadOnlySpan<byte> prior, int bytesPerPixel)
     {
-        Span<byte> bytes = stackalloc byte[16];
+        ref var at = ref MemoryMarshal.GetReference(row);
+        ref var over = ref MemoryMarshal.GetReference(prior);
         var left = Vector128<short>.Zero;
         var upperLeft = Vector128<short>.Zero;
         var mask = Vector128.Create((short)0xFF);
-        for (var at = 0; at + bytesPerPixel <= row.Length; at += bytesPerPixel)
+        for (var offset = 0; offset + bytesPerPixel <= row.Length; offset += bytesPerPixel)
         {
-            prior.Slice(at, bytesPerPixel).CopyTo(bytes);
-            var above = Vector128.WidenLower(Vector128.Create<byte>(bytes)).AsInt16();
-            row.Slice(at, bytesPerPixel).CopyTo(bytes);
-            var filtered = Vector128.WidenLower(Vector128.Create<byte>(bytes)).AsInt16();
+            var above = ReadPixel(ref Unsafe.Add(ref over, offset), bytesPerPixel);
+            var filtered = ReadPixel(ref Unsafe.Add(ref at, offset), bytesPerPixel);
             var toLeft = Vector128.Abs(above - upperLeft);
             var toAbove = Vector128.Abs(left - upperLeft);
             var toUpperLeft = Vector128.Abs(left + above - upperLeft - upperLeft);
@@ -194,10 +195,48 @@ internal static class PngRaster
             var predictor = Vector128.ConditionalSelect(useLeft, left,
                 Vector128.ConditionalSelect(useAbove, above, upperLeft));
             var pixel = (filtered + predictor) & mask;
-            var narrowed = Vector128.Narrow(pixel.AsUInt16(), pixel.AsUInt16());
-            narrowed.CopyTo(bytes);
-            bytes[..bytesPerPixel].CopyTo(row[at..]);
+            WritePixel(ref Unsafe.Add(ref at, offset), bytesPerPixel,
+                Vector128.Narrow(pixel.AsUInt16(), pixel.AsUInt16()).AsUInt64().ToScalar());
             (left, upperLeft) = (pixel, above);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<short> ReadPixel(ref byte first, int bytesPerPixel)
+    {
+        var bytes = bytesPerPixel switch
+        {
+            2 => Unsafe.ReadUnaligned<ushort>(ref first),
+            3 => Unsafe.ReadUnaligned<ushort>(ref first) | ((ulong)Unsafe.Add(ref first, 2) << 16),
+            4 => Unsafe.ReadUnaligned<uint>(ref first),
+            6 => Unsafe.ReadUnaligned<uint>(ref first) | ((ulong)Unsafe.ReadUnaligned<ushort>(ref Unsafe.Add(ref first, 4)) << 32),
+            _ => Unsafe.ReadUnaligned<ulong>(ref first)
+        };
+        return Vector128.WidenLower(Vector128.CreateScalar(bytes).AsByte()).AsInt16();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void WritePixel(ref byte first, int bytesPerPixel, ulong bytes)
+    {
+        switch (bytesPerPixel)
+        {
+            case 2:
+                Unsafe.WriteUnaligned(ref first, (ushort)bytes);
+                break;
+            case 3:
+                Unsafe.WriteUnaligned(ref first, (ushort)bytes);
+                Unsafe.Add(ref first, 2) = (byte)(bytes >> 16);
+                break;
+            case 4:
+                Unsafe.WriteUnaligned(ref first, (uint)bytes);
+                break;
+            case 6:
+                Unsafe.WriteUnaligned(ref first, (uint)bytes);
+                Unsafe.WriteUnaligned(ref Unsafe.Add(ref first, 4), (ushort)(bytes >> 32));
+                break;
+            default:
+                Unsafe.WriteUnaligned(ref first, bytes);
+                break;
         }
     }
 
@@ -236,7 +275,22 @@ internal static class PngRaster
 
                 return;
             case (2, 8):
-                for (var i = 0; i < count; i++)
+            {
+                var i = 0;
+                if (key == null && step == 1 && Vector128.IsHardwareAccelerated)
+                {
+                    ref var from = ref MemoryMarshal.GetReference(row);
+                    ref var to = ref MemoryMarshal.GetReference(into);
+                    var spread = Vector128.Create((byte)0, 1, 2, 255, 3, 4, 5, 255, 6, 7, 8, 255, 9, 10, 11, 255);
+                    var opaque = Vector128.Create(0xFF000000u).AsByte();
+                    for (; i + 6 <= count; i += 4)
+                    {
+                        (Vector128.Shuffle(Vector128.LoadUnsafe(ref from, (nuint)(i * 3)), spread) | opaque)
+                            .StoreUnsafe(ref to, (nuint)(i * 4));
+                    }
+                }
+
+                for (; i < count; i++)
                 {
                     var at = i * step * 4;
                     byte r = row[i * 3], g = row[i * 3 + 1], b = row[i * 3 + 2];
@@ -245,6 +299,7 @@ internal static class PngRaster
                 }
 
                 return;
+            }
             case (4, 8):
                 for (var i = 0; i < count; i++)
                 {
@@ -259,6 +314,18 @@ internal static class PngRaster
                 var palette = MemoryMarshal.Cast<byte, uint>(file.Palette.AsSpan());
                 var depth = file.BitDepth;
                 var mask = (1 << depth) - 1;
+                if (depth == 8 && step == 1 && palette.Length == 256)
+                {
+                    ref var entries = ref MemoryMarshal.GetReference(palette);
+                    ref var pixels = ref Unsafe.As<byte, uint>(ref MemoryMarshal.GetReference(into));
+                    for (var i = 0; i < count; i++)
+                    {
+                        Unsafe.Add(ref pixels, i) = Unsafe.Add(ref entries, row[i]);
+                    }
+
+                    return;
+                }
+
                 for (var i = 0; i < count; i++)
                 {
                     var index = depth == 8 ? row[i] : (row[i * depth / 8] >> (8 - depth - i * depth % 8)) & mask;

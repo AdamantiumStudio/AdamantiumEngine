@@ -168,24 +168,19 @@ public sealed class GifImage : IRawBitmap
         var rowBytes = region.Width * 4;
         var pixels = new byte[reach * rowBytes];
         var left = region.X - image.X;
-        var reader = new GifLzw.Reader(image.Data, image.MinCodeSize);
-        var line = new byte[image.Width];
-        for (var row = 0; row < rows; row++)
+        var indices = new byte[image.Width * Math.Min(rows, decodable)];
+        var given = new GifLzwReader(image.Data, image.MinCodeSize).Read(indices);
+        for (var row = 0; row < rows && row * image.Width < given; row++)
         {
-            var got = reader.Read(line);
+            var line = indices.AsSpan(row * image.Width, Math.Min(image.Width, given - row * image.Width));
             var y = image.Y + (image.Interlaced ? InterlacedRow(row, image.Height) : row) - region.Y;
-            if (y >= 0 && y < reach && got > left)
+            if (y >= 0 && y < reach && line.Length > left)
             {
                 var to = MemoryMarshal.Cast<byte, uint>(pixels.AsSpan(y * rowBytes, rowBytes));
-                for (var x = 0; x < region.Width && left + x < got; x++)
+                for (var x = 0; x < region.Width && left + x < line.Length; x++)
                 {
                     to[x] = colors[line[left + x]];
                 }
-            }
-
-            if (got < line.Length)
-            {
-                break;
             }
         }
 

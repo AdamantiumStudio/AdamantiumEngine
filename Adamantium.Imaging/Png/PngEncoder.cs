@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Text;
 using Adamantium.Vulkan.Core;
 
@@ -29,7 +32,7 @@ public static class PngEncoder
         // Frames are asked for one at a time, twice - an animation's are composed when asked for, and all of them
         // together could be any size.
         var frameCount = (int)Math.Max(1, image.FramesCount);
-        var source = new Source(image, width, height, channels, wide, bgr);
+        var source = new PngSourceRows(image, width, height, channels, wide, bgr);
         var png = image as PngImage;
         var (colorType, depth, palette) = Choose(source, frameCount, png?.Metadata?.Background);
         var colorMetadata = new MemoryStream();
@@ -46,12 +49,14 @@ public static class PngEncoder
         colorMetadata.WriteTo(output);
         if (palette != null)
         {
-            var entries = new byte[palette.Count * 3];
+            var colors = palette.Colors;
+            var entries = new byte[colors.Count * 3];
             var alphas = new List<byte>();
-            for (var i = 0; i < palette.Count; i++)
+            for (var i = 0; i < colors.Count; i++)
             {
-                (entries[i * 3], entries[i * 3 + 1], entries[i * 3 + 2]) = (palette[i].R, palette[i].G, palette[i].B);
-                alphas.Add(palette[i].A);
+                (entries[i * 3], entries[i * 3 + 1], entries[i * 3 + 2]) =
+                    ((byte)colors[i], (byte)(colors[i] >> 8), (byte)(colors[i] >> 16));
+                alphas.Add((byte)(colors[i] >> 24));
             }
 
             writer.Chunk("PLTE", entries);
@@ -133,74 +138,53 @@ public static class PngEncoder
         _ => throw new NotSupportedException($"PNG is not written from {(Format)format} pixels.")
     };
 
-    // The source's pixels as RGBA of 16 bits, read one at a time.
-    private sealed class Source(IRawBitmap image, int width, int height, int channels, bool wide, bool bgr)
-    {
-        public byte[] Frame(int index) => image.GetRawPixels((uint)index);
-
-        public int Width => width;
-
-        public int Height => height;
-
-        public bool Wide => wide;
-
-        public (ushort R, ushort G, ushort B, ushort A) Pixel(byte[] pixels, long index)
-        {
-            var size = wide ? 2 : 1;
-            var at = index * channels * size;
-            ushort Read(int c) => wide
-                ? BinaryPrimitives.ReadUInt16LittleEndian(pixels.AsSpan((int)(at + c * 2)))
-                : pixels[at + c];
-            var top = wide ? ushort.MaxValue : (ushort)255;
-            return channels switch
-            {
-                1 => (Read(0), Read(0), Read(0), top),
-                3 => bgr ? (Read(2), Read(1), Read(0), top) : (Read(0), Read(1), Read(2), top),
-                _ => bgr ? (Read(2), Read(1), Read(0), Read(3)) : (Read(0), Read(1), Read(2), Read(3))
-            };
-        }
-    }
-
-    private readonly record struct Color(byte R, byte G, byte B, byte A)
-    {
-        public uint Key => (uint)(R | (G << 8) | (B << 16) | (A << 24));
-
-        public static Color Of(uint key) => new((byte)key, (byte)(key >> 8), (byte)(key >> 16), (byte)(key >> 24));
-    }
-
-    private static uint Key(ushort r, ushort g, ushort b, ushort a) =>
-        (uint)((byte)r | ((byte)g << 8) | ((byte)b << 16) | ((byte)a << 24));
-
     // The color type and depth that hold every pixel of every frame and the background, and the palette when one does.
-    private static (int ColorType, int Depth, List<Color> Palette) Choose(Source source, int frameCount,
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static (int ColorType, int Depth, PngPalette Palette) Choose(PngSourceRows source, int frameCount,
         (ushort R, ushort G, ushort B)? background)
     {
         var gray = background is not { } shade || shade.R == shade.G && shade.G == shade.B;
         var opaque = true;
-        var top = source.Wide ? ushort.MaxValue : 255;
-        var colors = source.Wide ? null : new HashSet<uint>();
-        var last = 0u;
-        for (var f = 0; f < frameCount; f++)
+        var palette = source.Wide ? null : new PngPalette();
+        var narrow = source.Wide ? null : new uint[source.Width];
+        var wide = source.Wide ? new ulong[source.Width] : null;
+        for (var f = 0; f < frameCount && (gray || opaque || palette != null); f++)
         {
             var pixels = source.Frame(f);
-            for (long i = 0; i < (long)source.Width * source.Height; i++)
+            for (var y = 0; y < source.Height && (gray || opaque || palette != null); y++)
             {
-                var (r, g, b, a) = source.Pixel(pixels, i);
-                gray &= r == g && g == b;
-                opaque &= a == top;
-                if (colors is { Count: <= 256 })
+                if (wide != null)
                 {
-                    // Neighbors are mostly of one color: the set is asked only when it changes.
-                    var key = Key(r, g, b, a);
-                    if (key != last || colors.Count == 0)
+                    source.ReadRow(pixels, y, wide);
+                    foreach (var pixel in wide)
                     {
-                        colors.Add(key);
-                        last = key;
+                        gray &= (ushort)pixel == (ushort)(pixel >> 16) && (ushort)pixel == (ushort)(pixel >> 32);
+                        opaque &= pixel >> 48 == ushort.MaxValue;
                     }
+
+                    continue;
                 }
-                else if (!gray && !opaque)
+
+                var row = source.ReadRow(pixels, y, narrow);
+                gray &= IsGray(row);
+                opaque &= IsOpaque(row);
+                if (palette == null)
                 {
-                    break;
+                    continue;
+                }
+
+                var last = ~row[0];
+                foreach (var pixel in row)
+                {
+                    if (pixel != last)
+                    {
+                        last = pixel;
+                        if (!palette.Add(pixel))
+                        {
+                            palette = null;
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -212,33 +196,25 @@ public static class PngEncoder
         }
 
         // bKGD of a palette image is an entry of it: the background takes one when no pixel's color is it.
-        if (colors is { Count: <= 256 } && background is { } color
-            && !colors.Any(key => Color.Of(key) is var entry && entry.R == color.R >> 8 && entry.G == color.G >> 8
-                                  && entry.B == color.B >> 8))
+        if (palette != null && background is { } color && BackgroundIndex(palette, color) < 0
+            && !palette.Add((uint)(color.R >> 8) | (uint)(color.G >> 8 << 8) | (uint)(color.B >> 8 << 16) | 0xFF000000))
         {
-            colors.Add(Key((ushort)(color.R >> 8), (ushort)(color.G >> 8), (ushort)(color.B >> 8), 255));
+            palette = null;
         }
 
-        if (colors is { Count: <= 256 })
+        if (palette == null)
         {
-            // Translucent entries first, so tRNS stops at the last of them; by key after, so the order is the same
-            // whatever order the pixels came in.
-            var palette = new List<Color>();
-            foreach (var key in colors)
-            {
-                palette.Add(Color.Of(key));
-            }
-
-            palette.Sort((x, y) => x.A != y.A ? x.A.CompareTo(y.A) : x.Key.CompareTo(y.Key));
-            var bits = palette.Count <= 2 ? 1 : palette.Count <= 4 ? 2 : palette.Count <= 16 ? 4 : 8;
-            return (3, bits, palette);
+            return (opaque ? 2 : 6, depth, null);
         }
 
-        return (opaque ? 2 : 6, depth, null);
+        palette.Order();
+        var count = palette.Colors.Count;
+        return (3, count <= 2 ? 1 : count <= 4 ? 2 : count <= 16 ? 4 : 8, palette);
     }
 
     // The frame's rows in the chosen form, each after its filter byte.
-    private static byte[] Scanlines(Source source, int frame, int colorType, int depth, List<Color> palette)
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static byte[] Scanlines(PngSourceRows source, int frame, int colorType, int depth, PngPalette palette)
     {
         var channels = colorType switch { 0 => 1, 2 => 3, 3 => 1, 4 => 2, _ => 4 };
         var rowBytes = (source.Width * channels * depth + 7) / 8;
@@ -247,58 +223,30 @@ public static class PngEncoder
         var raw = new byte[rowBytes];
         var prior = new byte[rowBytes];
         var best = new byte[rowBytes];
-        Dictionary<uint, int> indices = null;
-        if (palette != null)
-        {
-            indices = new Dictionary<uint, int>();
-            for (var i = 0; i < palette.Count; i++)
-            {
-                indices[palette[i].Key] = i;
-            }
-        }
-
+        var narrow = source.Wide ? null : new uint[source.Width];
+        var wide = source.Wide ? new ulong[source.Width] : null;
         var pixels = source.Frame(frame);
-        var lastKey = 0u;
-        var lastIndex = -1;
         for (var y = 0; y < source.Height; y++)
         {
-            Array.Clear(raw);
-            for (var x = 0; x < source.Width; x++)
+            if (wide != null)
             {
-                var (r, g, b, a) = source.Pixel(pixels, (long)y * source.Width + x);
+                source.ReadRow(pixels, y, wide);
+                WriteRow(wide, channels, raw);
+            }
+            else
+            {
+                var pixelRow = source.ReadRow(pixels, y, narrow);
                 if (palette != null)
                 {
-                    var key = Key(r, g, b, a);
-                    if (key != lastKey || lastIndex < 0)
-                    {
-                        (lastKey, lastIndex) = (key, indices[key]);
-                    }
-
-                    var index = lastIndex;
-                    raw[x * depth / 8] |= (byte)(index << (8 - depth - x * depth % 8));
-                    continue;
+                    WriteIndices(pixelRow, palette, depth, raw);
                 }
-
-                Span<ushort> samples = [r, a, 0, 0];
-                if (colorType is 2 or 6)
+                else
                 {
-                    (samples[0], samples[1], samples[2], samples[3]) = (r, g, b, a);
-                }
-
-                for (var c = 0; c < channels; c++)
-                {
-                    if (depth == 16)
-                    {
-                        BinaryPrimitives.WriteUInt16BigEndian(raw.AsSpan((x * channels + c) * 2), samples[c]);
-                    }
-                    else
-                    {
-                        raw[x * channels + c] = (byte)samples[c];
-                    }
+                    WriteRow(pixelRow, channels, raw);
                 }
             }
 
-            var row = result.AsSpan(y * (rowBytes + 1), rowBytes + 1);
+            var row = result.AsSpan((int)((long)y * (rowBytes + 1)), rowBytes + 1);
             var filter = palette != null || depth < 8 ? (byte)0 : Filter(raw, prior, best, bytesPerPixel);
             row[0] = filter;
             (filter == 0 ? raw : best).AsSpan().CopyTo(row[1..]);
@@ -306,6 +254,160 @@ public static class PngEncoder
         }
 
         return result;
+    }
+
+    private static bool IsGray(ReadOnlySpan<uint> row)
+    {
+        var x = 0;
+        if (Vector128.IsHardwareAccelerated)
+        {
+            var low = Vector128.Create(0xFFFFu);
+            for (; x + 4 <= row.Length; x += 4)
+            {
+                var pixels = Vector128.Create(row.Slice(x, 4));
+                if (((pixels ^ (pixels >>> 8)) & low) != Vector128<uint>.Zero)
+                {
+                    return false;
+                }
+            }
+        }
+
+        for (; x < row.Length; x++)
+        {
+            if (((row[x] ^ (row[x] >> 8)) & 0xFFFF) != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsOpaque(ReadOnlySpan<uint> row)
+    {
+        var x = 0;
+        if (Vector128.IsHardwareAccelerated)
+        {
+            var opaque = Vector128.Create(0xFF000000u);
+            for (; x + 4 <= row.Length; x += 4)
+            {
+                if ((Vector128.Create(row.Slice(x, 4)) & opaque) != opaque)
+                {
+                    return false;
+                }
+            }
+        }
+
+        for (; x < row.Length; x++)
+        {
+            if (row[x] < 0xFF000000)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void WriteIndices(ReadOnlySpan<uint> row, PngPalette palette, int depth, byte[] raw)
+    {
+        var last = ~row[0];
+        var index = 0;
+        if (depth < 8)
+        {
+            Array.Clear(raw);
+        }
+
+        for (var x = 0; x < row.Length; x++)
+        {
+            if (row[x] != last)
+            {
+                last = row[x];
+                index = palette.IndexOf(last);
+            }
+
+            if (depth == 8)
+            {
+                raw[x] = (byte)index;
+            }
+            else
+            {
+                raw[x * depth / 8] |= (byte)(index << (8 - depth - x * depth % 8));
+            }
+        }
+    }
+
+    private static void WriteRow(ReadOnlySpan<uint> row, int channels, byte[] raw)
+    {
+        if (channels == 4)
+        {
+            MemoryMarshal.AsBytes(row).CopyTo(raw);
+            return;
+        }
+
+        for (var x = 0; x < row.Length; x++)
+        {
+            var pixel = row[x];
+            switch (channels)
+            {
+                case 1:
+                    raw[x] = (byte)pixel;
+                    break;
+                case 2:
+                    (raw[2 * x], raw[2 * x + 1]) = ((byte)pixel, (byte)(pixel >> 24));
+                    break;
+                default:
+                    (raw[3 * x], raw[3 * x + 1], raw[3 * x + 2]) = ((byte)pixel, (byte)(pixel >> 8),
+                        (byte)(pixel >> 16));
+                    break;
+            }
+        }
+    }
+
+    private static void WriteRow(ulong[] row, int channels, byte[] raw)
+    {
+        var samples = MemoryMarshal.Cast<byte, ushort>(raw.AsSpan());
+        for (var x = 0; x < row.Length; x++)
+        {
+            var pixel = row[x];
+            var at = x * channels;
+            switch (channels)
+            {
+                case 1:
+                    samples[at] = BigEndian(pixel);
+                    break;
+                case 2:
+                    (samples[at], samples[at + 1]) = (BigEndian(pixel), BigEndian(pixel >> 48));
+                    break;
+                default:
+                    (samples[at], samples[at + 1], samples[at + 2]) =
+                        (BigEndian(pixel), BigEndian(pixel >> 16), BigEndian(pixel >> 32));
+                    if (channels == 4)
+                    {
+                        samples[at + 3] = BigEndian(pixel >> 48);
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private static ushort BigEndian(ulong sample) => BitConverter.IsLittleEndian
+        ? BinaryPrimitives.ReverseEndianness((ushort)sample)
+        : (ushort)sample;
+
+    private static int BackgroundIndex(PngPalette palette, (ushort R, ushort G, ushort B) color)
+    {
+        var rgb = (uint)(color.R >> 8) | (uint)(color.G >> 8 << 8) | (uint)(color.B >> 8 << 16);
+        for (var i = 0; i < palette.Colors.Count; i++)
+        {
+            if ((palette.Colors[i] & 0xFFFFFF) == rgb)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     // 12.8: the filter of the five whose output, its bytes taken as signed, sums least in magnitude - the sums of all
@@ -410,7 +512,7 @@ public static class PngEncoder
     }
 
     private static void WriteOtherMetadata(ChunkWriter writer, PngMetadata metadata, int colorType, int depth,
-        List<Color> palette)
+        PngPalette palette)
     {
         if (metadata == null)
         {
@@ -459,14 +561,13 @@ public static class PngEncoder
 
     // bKGD in the image's own samples - of its depth, or its palette's entry; null for a color the palette lacks.
     private static byte[] BackgroundOf((ushort R, ushort G, ushort B) color, int colorType, int depth,
-        List<Color> palette)
+        PngPalette palette)
     {
         int Sample(ushort value) => depth == 16 ? value : value >> 8;
         switch (colorType)
         {
             case 3:
-                var index = palette.FindIndex(entry => entry.R == color.R >> 8 && entry.G == color.G >> 8
-                                                                                && entry.B == color.B >> 8);
+                var index = BackgroundIndex(palette, color);
                 return index < 0 ? null : [(byte)index];
             case 0 or 4:
                 var gray = new byte[2];

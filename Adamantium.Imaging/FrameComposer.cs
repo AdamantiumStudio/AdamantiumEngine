@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Adamantium.Imaging;
 
@@ -188,12 +189,26 @@ internal sealed class FrameComposer
 
     private static void Over(ReadOnlySpan<byte> source, Span<byte> target)
     {
-        for (var i = 0; i < source.Length; i += 4)
+        var from = MemoryMarshal.Cast<byte, uint>(source);
+        var to = MemoryMarshal.Cast<byte, uint>(target);
+        var opaque = Vector128.Create(0xFF000000u);
+        for (var pixel = 0; pixel < from.Length; pixel++)
         {
-            int alpha = source[i + 3];
+            if (Vector128.IsHardwareAccelerated && pixel + 4 <= from.Length)
+            {
+                var four = Vector128.Create(from.Slice(pixel, 4));
+                if ((four & opaque) == opaque)
+                {
+                    four.CopyTo(to[pixel..]);
+                    pixel += 3;
+                    continue;
+                }
+            }
+
+            var alpha = (int)(from[pixel] >> 24);
             if (alpha == 255)
             {
-                source.Slice(i, 4).CopyTo(target[i..]);
+                to[pixel] = from[pixel];
                 continue;
             }
 
@@ -202,6 +217,7 @@ internal sealed class FrameComposer
                 continue;
             }
 
+            var i = pixel * 4;
             int under = target[i + 3];
             var result = alpha * 255 + under * (255 - alpha);
             for (var c = 0; c < 3; c++)

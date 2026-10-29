@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Adamantium.Imaging.Jpeg;
 
 namespace Adamantium.Imaging.Tiff;
@@ -15,6 +16,7 @@ internal static class TiffJpeg
     /// YCbCr data converted - or CMYK. Rows of the frame past the output are left out. A stream whose frame is wider
     /// than <paramref name="width"/> or taller than <paramref name="height"/>, or that does not match the samples, or
     /// that the JPEG decoder cannot read, throws <see cref="InvalidDataException"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static void Decode(ReadOnlySpan<byte> input, JpegStream tables, bool rgb, int width, int height,
         int samples, int bits, Span<byte> output)
     {
@@ -94,6 +96,7 @@ internal static class TiffJpeg
     /// and tiles; null for none.</summary>
     public static JpegStream Tables(ReadOnlySpan<byte> tag) => tag.Length > 4 ? JpegStream.Tables(tag) : null;
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static (int Count, int Width, int Height) Frames(ReadOnlySpan<byte> stream)
     {
         var count = 0;

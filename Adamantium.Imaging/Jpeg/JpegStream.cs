@@ -1,20 +1,36 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.IO;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Adamantium.Imaging.Jpeg;
 
 /// <summary>Decodes a JPEG stream (ITU-T T.81) into its components' samples: sequential DCT frames of 8 or 12 bits
-/// (baseline and extended, SOF0/SOF1) and progressive ones (SOF2), Huffman-coded; restart intervals; the number of
-/// lines given after the first scan (DNL). JFIF (T.871) and Adobe's APP14 say how the components are to be colored.
-/// Lossless, hierarchical and arithmetic-coded frames throw <see cref="NotSupportedException"/>; a broken stream
+/// (baseline and extended, SOF0/SOF1) and progressive ones (SOF2), Huffman-coded, and both arithmetic-coded
+/// (SOF9/SOF10, <see cref="JpegArithmeticScan"/>); restart intervals; the number of lines given after the first scan
+/// (DNL). JFIF (T.871) and Adobe's APP14 say how the components are to be colored. Lossless and hierarchical frames
+/// throw <see cref="NotSupportedException"/>; a broken stream
 /// <see cref="InvalidDataException"/>, while data cut short decodes as far as it goes.</summary>
 internal sealed class JpegStream
 {
     private const int MaxComponents = 4;
+
+    // Pictures from this size are turned into samples on a thread of their own, a row of units behind the reading: one
+    // thread, so the rows' coefficients pass between two cores only. A tile of a TIFF is smaller, and its reader
+    // already decodes tiles side by side.
+    private const long PipelinedPixels = 1 << 18;
+
+    // Rows of units read ahead of those turned into samples, at most.
+    private const int PipelinedRows = 4;
 
     // ZigZag[k]: the natural position of the k-th coefficient in zig-zag order (A.3.6).
     internal static readonly byte[] ZigZag = BuildZigZag();
@@ -22,6 +38,8 @@ internal sealed class JpegStream
     private readonly ushort[][] _quantization = new ushort[4][];
     private readonly JpegHuffman[] _dcTables = new JpegHuffman[4];
     private readonly JpegHuffman[] _acTables = new JpegHuffman[4];
+    private readonly byte[] _dcBounds = [0x10, 0x10, 0x10, 0x10];
+    private readonly byte[] _acThresholds = [5, 5, 5, 5];
     private readonly bool _preview;
     private bool _rgba;
     private JpegComponent[] _components;
@@ -52,6 +70,15 @@ internal sealed class JpegStream
 
     public bool Progressive { get; private set; }
 
+    /// <summary>Whether the frame is arithmetic-coded (SOF9, SOF10) rather than Huffman-coded.</summary>
+    public bool Arithmetic { get; private set; }
+
+    /// <summary>MCUs across the frame: what an interleaved scan's units are counted in.</summary>
+    public int McusAcross => _mcusAcross;
+
+    /// <summary>MCUs, or a lone component's blocks, a restart interval holds; 0 for none.</summary>
+    public int RestartInterval => _restartInterval;
+
     public bool Jfif { get; private set; }
 
     /// <summary>Adobe's APP14 color transform - 0 none, 1 YCbCr, 2 YCCK; -1 without the segment.</summary>
@@ -70,6 +97,7 @@ internal sealed class JpegStream
     /// <paramref name="tables"/>'s - an abbreviated stream of tables only (B.5) - as TIFF shares them. With
     /// <paramref name="rgba"/>, a frame whose RGBA picture no array holds is refused as soon as its size is known.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static JpegStream Decode(ReadOnlySpan<byte> data, bool preview, JpegStream tables, bool rgba)
     {
         var stream = new JpegStream(preview, tables) { _rgba = rgba };
@@ -141,6 +169,7 @@ internal sealed class JpegStream
     }
 
     /// <summary>Gives the samples back to the pool they came from; the stream is not to be read after.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Release()
     {
         foreach (var component in _components ?? [])
@@ -200,6 +229,7 @@ internal sealed class JpegStream
         return order;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Read(ReadOnlySpan<byte> data, bool tablesOnly)
     {
         if (data.Length < 4 || data[0] != 0xFF || data[1] != 0xD8)
@@ -262,16 +292,20 @@ internal sealed class JpegStream
                 case 0xDD:
                     _restartInterval = segment.Length >= 2 ? BinaryPrimitives.ReadUInt16BigEndian(segment) : 0;
                     break;
-                case 0xC0 or 0xC1 or 0xC2:
+                case 0xC0 or 0xC1 or 0xC2 or 0xC9 or 0xCA:
                     if (_components != null)
                     {
                         throw new NotSupportedException("A JPEG stream of more than one frame - hierarchical - is not "
                                                         + "read.");
                     }
 
-                    ReadFrame(segment, marker == 0xC2, data, Math.Min(at, data.Length));
+                    Arithmetic = marker >= 0xC9;
+                    ReadFrame(segment, marker is 0xC2 or 0xCA, data, Math.Min(at, data.Length));
                     break;
-                case >= 0xC3 and <= 0xCF when marker is not (0xC4 or 0xC8 or 0xCC):
+                case 0xCC:
+                    ReadConditioning(segment);
+                    break;
+                case >= 0xC3 and <= 0xCF when marker is not (0xC4 or 0xC8):
                     throw new NotSupportedException($"JPEG of {Kind(marker)} is not read.");
                 case 0xDA:
                     if (_components == null)
@@ -321,10 +355,41 @@ internal sealed class JpegStream
         0xC3 => "lossless coding",
         0xC5 or 0xC6 or 0xC7 => "hierarchical coding",
         0xCB => "lossless arithmetic coding",
-        0xCD or 0xCE or 0xCF => "hierarchical arithmetic coding",
-        _ => "arithmetic coding"
+        _ => "hierarchical arithmetic coding"
     };
 
+    private void ReadConditioning(ReadOnlySpan<byte> segment)
+    {
+        for (var at = 0; at + 1 < segment.Length; at += 2)
+        {
+            int table = segment[at] & 15, value = segment[at + 1];
+            if (table > 3)
+            {
+                throw new InvalidDataException($"A JPEG arithmetic conditioning table {table}.");
+            }
+
+            if (segment[at] >> 4 == 0)
+            {
+                if ((value & 15) > value >> 4)
+                {
+                    throw new InvalidDataException("A JPEG DC conditioning with L above U.");
+                }
+
+                _dcBounds[table] = (byte)value;
+            }
+            else
+            {
+                if (value is 0 or > 63)
+                {
+                    throw new InvalidDataException($"A JPEG AC conditioning Kx of {value}.");
+                }
+
+                _acThresholds[table] = (byte)value;
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void ReadQuantization(ReadOnlySpan<byte> segment)
     {
         while (!segment.IsEmpty)
@@ -350,6 +415,7 @@ internal sealed class JpegStream
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void ReadHuffman(ReadOnlySpan<byte> segment)
     {
         while (!segment.IsEmpty)
@@ -379,6 +445,7 @@ internal sealed class JpegStream
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void ReadFrame(ReadOnlySpan<byte> segment, bool progressive, ReadOnlySpan<byte> data, int after)
     {
         if (segment.Length < 6)
@@ -520,6 +587,7 @@ internal sealed class JpegStream
         return 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private int ReadScan(ReadOnlySpan<byte> header, ReadOnlySpan<byte> data, int at, bool first)
     {
         if (header.Length < 1 || header.Length < 1 + 2 * header[0] + 3 || header[0] is 0 or > MaxComponents)
@@ -537,6 +605,12 @@ internal sealed class JpegStream
                       ?? throw new InvalidDataException($"A JPEG scan of component {id}, which the frame lacks.");
             // A table the stream does not define is K.3's - the luminance one as table 0, chrominance as the others.
             int dc = tables >> 4, ac = tables & 15;
+            if (Arithmetic && (dc > 3 || ac > 3))
+            {
+                throw new InvalidDataException("A JPEG scan names an arithmetic conditioning table past the fourth.");
+            }
+
+            (scan[i].DcSelector, scan[i].AcSelector) = (dc, ac);
             scan[i].Dc = dc < 4 ? _dcTables[dc] ?? (dc == 0 ? JpegStandardTables.DcLuminance
                 : JpegStandardTables.DcChrominance) : null;
             scan[i].Ac = ac < 4 ? _acTables[ac] ?? (ac == 0 ? JpegStandardTables.AcLuminance
@@ -572,8 +646,8 @@ internal sealed class JpegStream
                 ? component.Quantization ?? _quantization[component.Table]
                 : _quantization[component.Table];
 
-            if (start == 0 && high == 0 && component.Dc == null || start > 0 && component.Ac == null
-                || !Progressive && component.Ac == null)
+            if (!Arithmetic && (start == 0 && high == 0 && component.Dc == null || start > 0 && component.Ac == null
+                                || !Progressive && component.Ac == null))
             {
                 throw new InvalidDataException("A JPEG scan without its Huffman tables.");
             }
@@ -581,9 +655,21 @@ internal sealed class JpegStream
 
         _eobRun = 0;
         var units = count == 1 ? scan[0].BlocksAcross * scan[0].BlocksDown : _mcusAcross * _mcusDown;
+        if (Arithmetic)
+        {
+            var after = new JpegArithmeticScan(this, scan, start, end, high, low, _dcBounds, _acThresholds)
+                .Decode(data, at, units);
+            return SkipEntropyData(data, after);
+        }
+
         if (!Progressive && _restartInterval > 0 && Intervals(data, at, units) is { } starts)
         {
             return InParallel(scan, data, starts, units);
+        }
+
+        if (!Progressive && !_preview && Environment.ProcessorCount > 1 && (long)Width * Height >= PipelinedPixels)
+        {
+            return Pipelined(scan, data, at, units);
         }
 
         var reader = new JpegBitReader(data, at);
@@ -645,8 +731,129 @@ internal sealed class JpegStream
         return SkipEntropyData(data, starts[^1]);
     }
 
+    private int Pipelined(JpegComponent[] scan, ReadOnlySpan<byte> data, int at, int units)
+    {
+        var across = scan.Length == 1 ? scan[0].BlocksAcross : _mcusAcross;
+        var blocks = 0;
+        foreach (var component in scan)
+        {
+            blocks += scan.Length == 1 ? 1 : component.Horizontal * component.Vertical;
+        }
+
+        using var free = new BlockingCollection<(short[] Coefficients, int[] Masks)>();
+        using var read = new BlockingCollection<(int First, int Last, short[] Coefficients, int[] Masks)>();
+        for (var i = 0; i < PipelinedRows; i++)
+        {
+            free.Add((new short[across * blocks * 64], new int[across * blocks]));
+        }
+
+        var storing = Task.Factory.StartNew(() =>
+        {
+            try
+            {
+                foreach (var (first, last, coefficients, masks) in read.GetConsumingEnumerable())
+                {
+                    StoreUnits(scan, first, last, coefficients, masks);
+                    free.Add((coefficients, masks));
+                }
+            }
+            finally
+            {
+                free.CompleteAdding();
+            }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        var reader = new JpegBitReader(data, at);
+        var predictors = new int[scan.Length];
+        try
+        {
+            for (var first = 0; first < units; first += across)
+            {
+                if (!free.TryTake(out var row, Timeout.Infinite))
+                {
+                    break;
+                }
+
+                var last = Math.Min(units, first + across);
+                DecodeUnits(ref reader, scan, predictors, first, last, row.Coefficients, row.Masks);
+                read.Add((first, last, row.Coefficients, row.Masks));
+            }
+        }
+        finally
+        {
+            read.CompleteAdding();
+            try
+            {
+                storing.Wait();
+            }
+            catch (AggregateException failed)
+            {
+                ExceptionDispatchInfo.Capture(failed.InnerExceptions[0]).Throw();
+            }
+        }
+
+        return SkipEntropyData(data, reader.Position);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void DecodeUnits(ref JpegBitReader reader, JpegComponent[] scan, int[] predictors, int first, int last,
+        short[] coefficients, int[] masks)
+    {
+        var block = 0;
+        for (var unit = first; unit < last; unit++)
+        {
+            if (_restartInterval > 0 && unit > 0 && unit % _restartInterval == 0)
+            {
+                reader.Restart();
+                Array.Clear(predictors);
+            }
+
+            for (var c = 0; c < scan.Length; c++)
+            {
+                var component = scan[c];
+                var count = scan.Length == 1 ? 1 : component.Horizontal * component.Vertical;
+                for (var i = 0; i < count; i++, block++)
+                {
+                    masks[block] = DecodeSequential(ref reader, component, ref predictors[c],
+                        coefficients.AsSpan(block * 64, 64));
+                }
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void StoreUnits(JpegComponent[] scan, int first, int last, short[] coefficients, int[] masks)
+    {
+        var block = 0;
+        for (var unit = first; unit < last; unit++)
+        {
+            if (scan.Length == 1)
+            {
+                var component = scan[0];
+                Store(component, coefficients.AsSpan(block * 64, 64), masks[block], unit % component.BlocksAcross,
+                    unit / component.BlocksAcross);
+                block++;
+                continue;
+            }
+
+            var (across, down) = (unit % _mcusAcross, unit / _mcusAcross);
+            foreach (var component in scan)
+            {
+                for (var v = 0; v < component.Vertical; v++)
+                {
+                    for (var h = 0; h < component.Horizontal; h++, block++)
+                    {
+                        Store(component, coefficients.AsSpan(block * 64, 64), masks[block],
+                            across * component.Horizontal + h, down * component.Vertical + v);
+                    }
+                }
+            }
+        }
+    }
+
     // Units first to last of a scan: blocks of its one component, or MCUs of several; restart markers passed when
     // restarts says so.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Units(ref JpegBitReader reader, JpegComponent[] scan, int[] predictors, int first, int last,
         bool restarts, int start, int end, int high, int low)
     {
@@ -685,6 +892,7 @@ internal sealed class JpegStream
 
     // To the next marker that is not a restart: the data after a scan's units - the end of a cut-short one, or the
     // whole of a scan the preview passes over.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static int SkipEntropyData(ReadOnlySpan<byte> data, int at)
     {
         while (at + 1 < data.Length)
@@ -700,6 +908,7 @@ internal sealed class JpegStream
         return data.Length;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Block(ref JpegBitReader reader, JpegComponent component, ref int predictor, int across, int down,
         int start, int end, int high, int low)
     {
@@ -737,6 +946,7 @@ internal sealed class JpegStream
     }
 
     // G.1.2.2: the first pass over a band of AC coefficients, with runs of blocks that end at once (EOBRUN).
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void FirstAc(ref JpegBitReader reader, JpegHuffman table, Span<short> coefficients, int start, int end,
         int low)
     {
@@ -773,12 +983,13 @@ internal sealed class JpegStream
                 return;
             }
 
-            coefficients[ZigZag[k]] = (short)(reader.Receive(size) * (1 << low));
+            coefficients[k] = (short)(reader.Receive(size) * (1 << low));
         }
     }
 
     // G.1.2.3: one more bit of each coefficient of the band - a coefficient already nonzero gains a correction bit,
     // a new one comes in as ±1 at this bit, after its run of still-zero coefficients.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void RefineAc(ref JpegBitReader reader, JpegHuffman table, Span<short> coefficients, int start, int end,
         int low)
     {
@@ -812,10 +1023,9 @@ internal sealed class JpegStream
 
                 for (; k <= end; k++)
                 {
-                    var at = ZigZag[k];
-                    if (coefficients[at] != 0)
+                    if (coefficients[k] != 0)
                     {
-                        Correct(ref reader, ref coefficients[at], plus, minus);
+                        Correct(ref reader, ref coefficients[k], plus, minus);
                     }
                     else
                     {
@@ -823,7 +1033,7 @@ internal sealed class JpegStream
                         {
                             if (value != 0)
                             {
-                                coefficients[at] = (short)value;
+                                coefficients[k] = (short)value;
                             }
 
                             break;
@@ -837,12 +1047,15 @@ internal sealed class JpegStream
 
         if (_eobRun > 0)
         {
-            for (; k <= end; k++)
+            if (k <= end)
             {
-                var at = ZigZag[k];
-                if (coefficients[at] != 0)
+                var band = NonzeroBits(coefficients) >> k;
+                band &= end - k == 63 ? ulong.MaxValue : (1UL << (end - k + 1)) - 1;
+                while (band != 0)
                 {
+                    var at = k + BitOperations.TrailingZeroCount(band);
                     Correct(ref reader, ref coefficients[at], plus, minus);
+                    band &= band - 1;
                 }
             }
 
@@ -850,6 +1063,21 @@ internal sealed class JpegStream
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ulong NonzeroBits(ReadOnlySpan<short> coefficients)
+    {
+        ref var first = ref MemoryMarshal.GetReference(coefficients);
+        ulong bits = 0;
+        for (var i = 0; i < 64; i += 8)
+        {
+            var zero = Vector128.Equals(Vector128.LoadUnsafe(ref first, (nuint)i), Vector128<short>.Zero);
+            bits |= (ulong)(~zero.ExtractMostSignificantBits() & 0xFF) << i;
+        }
+
+        return bits;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void Correct(ref JpegBitReader reader, ref short coefficient, int plus, int minus)
     {
         if (reader.Bit() && (coefficient & plus) == 0)
@@ -859,10 +1087,20 @@ internal sealed class JpegStream
     }
 
     // A block of a sequential scan, decoded and turned into samples at once.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Sequential(ref JpegBitReader reader, JpegComponent component, ref int predictor, int across,
         int down)
     {
         Span<short> coefficients = stackalloc short[64];
+        var rows = DecodeSequential(ref reader, component, ref predictor, coefficients);
+        Store(component, coefficients, rows, across, down);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int DecodeSequential(ref JpegBitReader reader, JpegComponent component, ref int predictor,
+        scoped Span<short> coefficients)
+    {
+        coefficients.Clear();
         reader.DecodeValue(component.Dc, out var difference);
         predictor += difference;
         coefficients[0] = (short)Math.Clamp(predictor, short.MinValue, short.MaxValue);
@@ -898,10 +1136,14 @@ internal sealed class JpegStream
             rows |= JpegIdct.Mask(at);
         }
 
-        Store(component, coefficients, rows, across, down);
+        return rows;
     }
 
-    private void Store(JpegComponent component, ReadOnlySpan<short> coefficients, int rows, int across, int down)
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    /// <summary>A block's <paramref name="coefficients"/> (natural order; <paramref name="rows"/> the
+    /// <see cref="JpegIdct.Mask"/> of its AC terms) into <paramref name="component"/>'s samples, its block
+    /// <paramref name="across"/> and <paramref name="down"/>.</summary>
+    internal void Store(JpegComponent component, ReadOnlySpan<short> coefficients, int rows, int across, int down)
     {
         var quantization = component.Quantization;
         if (_preview)
@@ -932,8 +1174,9 @@ internal sealed class JpegStream
         }
     }
 
-    // Coefficients a progressive frame keeps of each block: its DC term alone for the eighth-scale picture.
-    private int Kept => _preview ? 1 : 64;
+    /// <summary>Coefficients a progressive frame keeps of each block: its DC term alone for the eighth-scale picture.
+    /// </summary>
+    internal int Kept => _preview ? 1 : 64;
 
     // The coefficients of a progressive frame into samples, once every scan is in - rows of blocks at once.
     private void FinishProgressive()
@@ -945,25 +1188,38 @@ internal sealed class JpegStream
                 throw new InvalidDataException("A JPEG component without its quantization table.");
             }
 
-            Parallel.For(0, component.StoredDown, down =>
-            {
-                for (var across = 0; across < component.StoredAcross; across++)
-                {
-                    var coefficients = component.Coefficients.AsSpan((down * component.StoredAcross + across) * Kept,
-                        Kept);
-                    var rows = 0;
-                    for (var i = 1; i < Kept; i++)
-                    {
-                        if (coefficients[i] != 0)
-                        {
-                            rows |= JpegIdct.Mask(i);
-                        }
-                    }
-
-                    Store(component, coefficients, rows, across, down);
-                }
-            });
+            Parallel.For(0, component.StoredDown, down => StoreRow(component, down));
             component.Coefficients = null;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void StoreRow(JpegComponent component, int down)
+    {
+        Span<short> natural = stackalloc short[64];
+        for (var across = 0; across < component.StoredAcross; across++)
+        {
+            var coefficients = component.Coefficients.AsSpan((down * component.StoredAcross + across) * Kept, Kept);
+            if (Kept == 1)
+            {
+                Store(component, coefficients, 0, across, down);
+                continue;
+            }
+
+            natural.Clear();
+            natural[0] = coefficients[0];
+            var rows = 0;
+            var nonzero = NonzeroBits(coefficients) & ~1UL;
+            while (nonzero != 0)
+            {
+                var k = BitOperations.TrailingZeroCount(nonzero);
+                var at = ZigZag[k];
+                natural[at] = coefficients[k];
+                rows |= JpegIdct.Mask(at);
+                nonzero &= nonzero - 1;
+            }
+
+            Store(component, natural, rows, across, down);
         }
     }
 }

@@ -45,9 +45,15 @@ internal sealed class JpegComponent
 
     public int Stride { get; set; }
 
-    /// <summary>A progressive frame's coefficients, 64 a block in natural order, blocks in rows of
-    /// <see cref="StoredAcross"/>.</summary>
+    /// <summary>A progressive frame's coefficients, 64 a block in zigzag order - a band of a scan is a run of them -
+    /// blocks in rows of <see cref="StoredAcross"/>.</summary>
     public short[] Coefficients { get; set; }
+
+    /// <summary>The DC and AC table destinations the scan names for it (B.2.3): Huffman tables, or the arithmetic
+    /// coder's conditioning tables and statistics areas.</summary>
+    public int DcSelector { get; set; }
+
+    public int AcSelector { get; set; }
 
     public JpegHuffman Dc { get; set; }
 

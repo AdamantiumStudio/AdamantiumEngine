@@ -9,6 +9,8 @@ All packages share one version.
 
 - `Win32Interop.SHFileOperation` with `SHFILEOPSTRUCT` and `ShellFileOperation`: the shell's own file operations,
   deleting into the Recycle Bin among them.
+- `Win32Interop.AllowSetForegroundWindow` with `AsfwAny`: the foreground process lets another bring its window to the
+  front.
 
 - `IUniverseWatcher`, one in each universe's `Satellites`: what wakes a universe drawing on demand. It watches whatever
   implements `INotifyUniverse` (`Watch` / `ReleaseWatch`) and is asked directly for one frame, a number of frames or a
@@ -151,8 +153,13 @@ All packages share one version.
   swapped, 16 bits by their high bytes, RGB and gray given alpha; the ICO reader and color glyphs read PNG through
   it, so 16-bit PNG works there too.
 - `JpegEncoder.Encode(image, output, quality)`: a picture written as JPEG at a quality of 1 to 100, from gray, RGB,
-  BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100.
+  BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100. `Encode(image, output, quality,
+  subsampling)` shares a color picture's chroma between two pixels side by side or a square of four
+  (`JpegSubsampling.HalfWidth`, `Half` - 4:2:2, 4:2:0), each chroma sample their average.
 - `JpegDecoder.Size`: the picture's size from its frame header, decoding nothing - what the preview is an eighth of.
+- JPEG reads arithmetic-coded frames (T.81, Annex D; F.1.4; G.1.3), sequential and progressive (SOF9, SOF10), with
+  their conditioning (DAC) and restart intervals; they threw `NotSupportedException`. Lossless and hierarchical frames
+  still do.
 - `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
   application asks before it offers the heap as a choice, and what the device goes by.
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
@@ -1818,6 +1825,26 @@ All packages share one version.
 
 ### Changed
 
+- PNG writes a picture of 256 colors or fewer as a palette in about half the time, others in four fifths, the files
+  byte for byte the same: the rows are read whole, a palette is gathered and looked up in a small table of its own
+  rather than a hash set and a dictionary, and gray and opacity are checked a vector at a time. A 5400×2700 photo is
+  written about as fast as Pillow writes it, its RGBA form faster.
+- PNG and GIF read faster on one core, the pixels the same: a 5400×2700 RGB PNG in 160 ms rather than 345, RGBA in
+  165 rather than 310, 16-bit gray in 165 rather than 295, a palette in 70 rather than 95; a GIF of that size in 160
+  rather than 200. PNG undoes Paeth a pixel at a time without copying it through a buffer, of 2-byte pixels too,
+  spreads RGB to RGBA sixteen bytes at a time and inflates in large pieces; GIF unpacks a frame's indices at once,
+  each LZW string copied from where it was given out, and a frame is laid over the canvas four opaque pixels at a time.
+- JPEG decodes 1.7 to 2.8 times as fast on one core, as fast as libjpeg-turbo for 4:2:0 and progressive pictures and
+  within a fifth of it for 4:4:4; a TIFF of JPEG tiles reads within a sixth of GDAL. The inverse DCT runs as the even and
+  odd halves of the 8-point transform on eight rows at once - a vector a row with AVX, two with NEON or SSE, where it
+  takes two thirds of the time the cosine matrix took; one look-up gives a Huffman
+  code together with the value after it; 8-bit gray, YCbCr and RGB pictures are colored from the samples as bytes, sixteen
+  pixels at a time; a progressive frame keeps its coefficients in zigzag order, so a refinement of a band visits only the
+  coefficients already nonzero. The decoding is compiled fully optimized from the first picture, and the code a TIFF
+  reader runs for each tile too: they ran unoptimized for as long as an application went on compiling other code.
+  A big picture without restart intervals is turned into samples on a thread of its own a row of blocks behind the
+  reading: on many cores a 4:2:0 photo of 58 megapixels decodes in 150 ms rather than 220, 4:4:4 in 210 rather than
+  335.
 - The engine works on the generic mathematics types: a float or double vector, matrix, quaternion, rectangle or volume is
   `Vector3<float>`, `Matrix4x4<double>`..., and the float names (`Vector3F`, `Matrix4x4F`, `QuaternionF`,
   `RectangleF`...) are aliases a project declares itself (`global using Vector3F =

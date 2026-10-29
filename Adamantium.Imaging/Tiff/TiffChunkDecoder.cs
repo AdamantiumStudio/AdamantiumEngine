@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Imaging.Jpeg;
 
@@ -96,6 +97,7 @@ internal sealed class TiffChunkDecoder
     /// <summary>Decodes strip or tile (<paramref name="across"/>, <paramref name="down"/>) of
     /// <paramref name="plane"/> into <paramref name="native"/>: its rows inside the image, each
     /// <see cref="NativeRowBytes"/> long. One the file leaves out comes out zero.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Decode(int across, int down, int plane, Span<byte> native)
     {
         var rows = _layout.ChunkRows(down);
