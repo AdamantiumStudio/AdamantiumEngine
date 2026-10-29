@@ -41,17 +41,21 @@ All packages share one version and are released together.
 - **.NET 10.**
 - **Windows 10 or 11, x64.** macOS and Linux are planned; the macOS code exists but has not been built and run
   recently, so it is not claimed.
-- **A GPU and driver with Vulkan 1.4**, `VK_EXT_shader_object` and `VK_EXT_descriptor_heap`, and the `shaderInt64`,
-  `shaderDrawParameters` and `geometryShader` features. The descriptor heap is recent, and it sets the floor. By the
-  reports on [vulkan.gpuinfo.org](https://vulkan.gpuinfo.org):
+- **A GPU and driver with Vulkan 1.4** and the `shaderInt64`, `shaderDrawParameters` and `samplerAnisotropy` features,
+  buffer device addresses and descriptor indexing - for descriptor sets, update after bind of sampled images. Neither of
+  the newer extensions is needed from the driver: without `VK_EXT_descriptor_heap` the engine binds through descriptor
+  sets, and `VK_EXT_shader_object` comes with the
+  [`Adamantium.Vulkan.ShaderObjectLayer`](https://www.nuget.org/packages/Adamantium.Vulkan.ShaderObjectLayer) package -
+  Khronos' shader object layer - where the driver lacks it. By the vendors' driver notes:
   - **NVIDIA:** Turing or newer - GeForce GTX 16 and RTX 20 series and later, Quadro RTX and T series, RTX A, Ada and
-    Blackwell. Ampere and newer report it from driver 582, Turing from driver 595.
-  - **AMD:** RDNA 3 or newer - Radeon RX 7000 and RX 9000 series, Radeon PRO W7000, and Radeon 740M, 760M, 780M and
-    newer integrated graphics, with a current driver.
-  - **Intel:** no Windows driver reports the descriptor heap yet.
+    Blackwell.
+  - **AMD:** RDNA or newer - Radeon RX 5000 series and later, from Adrenalin 25.1.1. The RX 5000 and RX 6000 series
+    now get their own driver from AMD.
+  - **Intel:** Arc and Core Ultra graphics whose driver reports Vulkan 1.4 - `vulkaninfo` says which.
 
   The engine is developed and tested on an NVIDIA Quadro RTX 4000 with NVIDIA's
-  [Vulkan developer driver](https://developer.nvidia.com/vulkan-driver); other GPUs have not been tested.
+  [Vulkan developer driver](https://developer.nvidia.com/vulkan-driver), with the descriptor heap and with descriptor
+  sets; other GPUs have not been tested.
 - **No Vulkan SDK.** The Slang shader compiler ships in the
   [`Adamantium.Vulkan.Slang`](https://www.nuget.org/packages/Adamantium.Vulkan.Slang) package.
 
