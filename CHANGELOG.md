@@ -1057,6 +1057,16 @@ All packages share one version.
 
 ### Fixed
 
+- `ContentManager`: `Unload(type, name)` looked for the asset under another key than `Load` kept it by, and found
+  nothing; the key compared names ignoring case and hashed them with it; loads of one kept asset at the same time each
+  read it, and two of a type with no reader registered yet could fail on registering it. A kept asset is read once now,
+  loads at the same time waiting for it; a failed load is read again next time; `Unload` disposes an asset still being
+  read once it is. `Load` throws `AssetNotFoundException` and `NotSupportedException` as it says, not wrapped in an
+  `AggregateException`; a reader is given the load's options (`ContentReaderParameters.Options`), which were never set.
+- `VertexUtils`: the vertex input of a structure, worked out on several render threads at once, could corrupt the
+  cache it is kept in; the inputs follow the fields' declaration order by their metadata, and a static field is no
+  longer taken for one.
+- `SpriteEffects` is a set of flags, as `FlipBoth` makes it.
 - A Collada skin bends. Its joints are nodes of the model, which the skin names by their IDs, found by their sids
   under the controller's `skeleton`; the bind shape, read in the order the file writes it, is taken into each inverse
   bind matrix; the clip moves the joints' nodes. It went through `AnimationController`, whose matrices nothing read,
@@ -2166,6 +2176,16 @@ All packages share one version.
 
 ### Removed
 
+- `ContentReaderAttribute` - a reader is registered in `ContentManager.Readers` - `AssetLoadException`,
+  `EffectContentResolver`, which looked for a name with `fx` stuck on and backslashes for slashes,
+  `ContentReaderParameters.DeviceId` and `OutputPath`, `ContentManager.OutputDirectory`: nothing used them.
+- `VertexInputElement` and `VertexBufferLayout`, and the semantic index and offset of `VertexInputElementAttribute`:
+  a vertex structure's inputs are its marked fields, in order, at their places (`VertexUtils`).
+  `VertexUtils.GetBindingDescription` and `GetVertexAttributeDescription`, for pipelines built whole; the dynamic
+  state's `GetBindingDescription2` and `GetVertexAttributeDescription2` stay.
+- `VertexPosition`, `VertexPositionColor`, `VertexPositionColorNormal`, `VertexPositionColorNormalTexture`,
+  `VertexPositionColorTexture`, `VertexPositionNormalTexture` and `VertexPositionTexture`, which nothing drew with -
+  `VertexPositionTexture.Size` was the offset of its UV, not its size. `MeshVertex` and `SkinnedMeshVertex` stay.
 - `AnimationController`, `AnimationComponent.Skeletons` and `InterpolatedMatrices`, `SceneData.Animation`,
   `SceneData.Skeletons`, `SceneData.Joint`, `SkeletonCollection`, `Controller.BindShapeMatrix`, `JointDictionary` and
   `JointsAreNodes`, `FrameCollection.FullName` and `ControllerId`, `AnimationExtension`, `AnimationHelper` and

@@ -97,7 +97,6 @@ public class Universe : IUniverse
         // Cooked artifacts win over raw source.
         Content.Resolvers.Add(new CookedContentResolver());
         Content.Resolvers.Add(new FileSystemContentResolver());
-        Content.Resolvers.Add(new EffectContentResolver());
         // The texture reader takes its device from the Satellites at load time, when it exists.
         Content.Readers.Add(typeof(SceneData), new SceneDataContentReader());
         Content.Readers.Add(typeof(Texture), new TextureContentReader());

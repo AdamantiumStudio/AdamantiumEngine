@@ -1,28 +1,19 @@
-﻿namespace Adamantium.Graphics
+﻿using System;
+
+namespace Adamantium.Graphics
 {
-   /// <summary>
-   /// Possible sprite effects
-   /// </summary>
+   /// <summary>How a sprite's texture is mirrored inside its rectangle; the two flips combine.</summary>
+   [Flags]
    public enum SpriteEffects
    {
-      /// <summary>
-      /// No effect
-      /// </summary>
       None = 0,
-      
-      /// <summary>
-      /// Flip sprite horizontally
-      /// </summary>
+
+      /// <summary>Left and right swapped.</summary>
       FlipHorizontally = 1,
-      
-      /// <summary>
-      /// Flip sprite vertically
-      /// </summary>
+
+      /// <summary>Top and bottom swapped.</summary>
       FlipVertically = 2,
 
-      /// <summary>
-      /// Flip sprite horizontally and vertically
-      /// </summary>
-      FlipBoth = FlipHorizontally|FlipVertically
+      FlipBoth = FlipHorizontally | FlipVertically
    }
 }
