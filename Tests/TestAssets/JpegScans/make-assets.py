@@ -12,3 +12,23 @@ for (x, y), ink in {(0, 0): (255, 0, 0, 0), (8, 0): (0, 255, 0, 0), (0, 8): (0, 
                     (8, 8): (0, 0, 0, 255)}.items():
     cmyk.paste(ink, (x, y, x + 8, y + 8))
 cmyk.save("cmyk-adobe.jpg", quality=95)
+
+# Arithmetic coding (SOF9, SOF10) is written by ImageMagick over libjpeg-turbo, `magick` on the path. Each file holds the
+# same coefficients as arith-huffman.jpg - the same picture, quality and sampling - so it decodes to the same pixels.
+import subprocess
+
+source.save("arith-source.png")
+for name, options in {
+    "arith-huffman": [],
+    "arith-sequential": ["-define", "jpeg:arithmetic-coding=true"],
+    "arith-sequential-restart": ["-define", "jpeg:arithmetic-coding=true", "-define", "jpeg:restart-interval=1"],
+    "arith-progressive": ["-define", "jpeg:arithmetic-coding=true", "-interlace", "JPEG"],
+    "arith-progressive-restart": ["-define", "jpeg:arithmetic-coding=true", "-interlace", "JPEG", "-define",
+                                  "jpeg:restart-interval=1"],
+}.items():
+    subprocess.run(["magick", "arith-source.png", "-quality", "90", "-sampling-factor", "2x2", *options,
+                    name + ".jpg"], check=True)
+for name, options in {"arith-gray-huffman": [], "arith-gray-progressive": ["-define", "jpeg:arithmetic-coding=true",
+                                                                            "-interlace", "JPEG"]}.items():
+    subprocess.run(["magick", "arith-source.png", "-colorspace", "Gray", "-quality", "85", *options, name + ".jpg"],
+                   check=True)

@@ -4,7 +4,8 @@ using System.Runtime.CompilerServices;
 
 namespace Adamantium.Imaging.Jpeg;
 
-/// <summary>Decodes a JPEG (ITU-T T.81, JFIF): baseline, extended and progressive, 8 or 12 bits, gray, YCbCr, RGB,
+/// <summary>Decodes a JPEG (ITU-T T.81, JFIF): baseline, extended and progressive, Huffman- or arithmetic-coded, 8 or
+/// 12 bits, gray, YCbCr, RGB,
 /// CMYK and YCCK, any subsampling whose factors divide the largest. The picture comes out RGBA - 8 bits a channel, 16
 /// for 12-bit samples.</summary>
 public sealed class JpegDecoder

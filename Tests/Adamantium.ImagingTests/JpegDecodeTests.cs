@@ -85,6 +85,18 @@ public class JpegDecodeTests
         Assert.That(BitmapLoader.Load(TestAssets.Path($"JpegScans/{name}.jpg")).GetRawPixels(0),
             Is.EqualTo(BitmapLoader.Load(TestAssets.Path($"JpegScans/{baseline}.jpg")).GetRawPixels(0)));
 
+    // Arithmetic coding (SOF9, SOF10) codes the same coefficients as Huffman coding: each file, written from the same
+    // picture at the same quality, decodes to the pixels of the Huffman-coded one - sequential and progressive, with
+    // restart intervals, gray.
+    [TestCase("arith-sequential", "arith-huffman")]
+    [TestCase("arith-sequential-restart", "arith-huffman")]
+    [TestCase("arith-progressive", "arith-huffman")]
+    [TestCase("arith-progressive-restart", "arith-huffman")]
+    [TestCase("arith-gray-progressive", "arith-gray-huffman")]
+    public void ArithmeticCodedScans_DecodeAsHuffman(string name, string huffman) =>
+        Assert.That(BitmapLoader.Load(TestAssets.Path($"JpegScans/{name}.jpg")).GetRawPixels(0),
+            Is.EqualTo(BitmapLoader.Load(TestAssets.Path($"JpegScans/{huffman}.jpg")).GetRawPixels(0)));
+
     // Pillow writes T.81's K.3 tables when it does not optimize: the stream without its DHT segments decodes the same,
     // by the tables the decoder falls back on.
     [Test]

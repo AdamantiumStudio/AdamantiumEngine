@@ -15,9 +15,10 @@ using System.Threading.Tasks;
 namespace Adamantium.Imaging.Jpeg;
 
 /// <summary>Decodes a JPEG stream (ITU-T T.81) into its components' samples: sequential DCT frames of 8 or 12 bits
-/// (baseline and extended, SOF0/SOF1) and progressive ones (SOF2), Huffman-coded; restart intervals; the number of
-/// lines given after the first scan (DNL). JFIF (T.871) and Adobe's APP14 say how the components are to be colored.
-/// Lossless, hierarchical and arithmetic-coded frames throw <see cref="NotSupportedException"/>; a broken stream
+/// (baseline and extended, SOF0/SOF1) and progressive ones (SOF2), Huffman-coded, and both arithmetic-coded
+/// (SOF9/SOF10, <see cref="JpegArithmeticScan"/>); restart intervals; the number of lines given after the first scan
+/// (DNL). JFIF (T.871) and Adobe's APP14 say how the components are to be colored. Lossless and hierarchical frames
+/// throw <see cref="NotSupportedException"/>; a broken stream
 /// <see cref="InvalidDataException"/>, while data cut short decodes as far as it goes.</summary>
 internal sealed class JpegStream
 {
@@ -37,6 +38,8 @@ internal sealed class JpegStream
     private readonly ushort[][] _quantization = new ushort[4][];
     private readonly JpegHuffman[] _dcTables = new JpegHuffman[4];
     private readonly JpegHuffman[] _acTables = new JpegHuffman[4];
+    private readonly byte[] _dcBounds = [0x10, 0x10, 0x10, 0x10];
+    private readonly byte[] _acThresholds = [5, 5, 5, 5];
     private readonly bool _preview;
     private bool _rgba;
     private JpegComponent[] _components;
@@ -66,6 +69,15 @@ internal sealed class JpegStream
     public int Precision { get; private set; }
 
     public bool Progressive { get; private set; }
+
+    /// <summary>Whether the frame is arithmetic-coded (SOF9, SOF10) rather than Huffman-coded.</summary>
+    public bool Arithmetic { get; private set; }
+
+    /// <summary>MCUs across the frame: what an interleaved scan's units are counted in.</summary>
+    public int McusAcross => _mcusAcross;
+
+    /// <summary>MCUs, or a lone component's blocks, a restart interval holds; 0 for none.</summary>
+    public int RestartInterval => _restartInterval;
 
     public bool Jfif { get; private set; }
 
@@ -280,16 +292,20 @@ internal sealed class JpegStream
                 case 0xDD:
                     _restartInterval = segment.Length >= 2 ? BinaryPrimitives.ReadUInt16BigEndian(segment) : 0;
                     break;
-                case 0xC0 or 0xC1 or 0xC2:
+                case 0xC0 or 0xC1 or 0xC2 or 0xC9 or 0xCA:
                     if (_components != null)
                     {
                         throw new NotSupportedException("A JPEG stream of more than one frame - hierarchical - is not "
                                                         + "read.");
                     }
 
-                    ReadFrame(segment, marker == 0xC2, data, Math.Min(at, data.Length));
+                    Arithmetic = marker >= 0xC9;
+                    ReadFrame(segment, marker is 0xC2 or 0xCA, data, Math.Min(at, data.Length));
                     break;
-                case >= 0xC3 and <= 0xCF when marker is not (0xC4 or 0xC8 or 0xCC):
+                case 0xCC:
+                    ReadConditioning(segment);
+                    break;
+                case >= 0xC3 and <= 0xCF when marker is not (0xC4 or 0xC8):
                     throw new NotSupportedException($"JPEG of {Kind(marker)} is not read.");
                 case 0xDA:
                     if (_components == null)
@@ -339,9 +355,39 @@ internal sealed class JpegStream
         0xC3 => "lossless coding",
         0xC5 or 0xC6 or 0xC7 => "hierarchical coding",
         0xCB => "lossless arithmetic coding",
-        0xCD or 0xCE or 0xCF => "hierarchical arithmetic coding",
-        _ => "arithmetic coding"
+        _ => "hierarchical arithmetic coding"
     };
+
+    private void ReadConditioning(ReadOnlySpan<byte> segment)
+    {
+        for (var at = 0; at + 1 < segment.Length; at += 2)
+        {
+            int table = segment[at] & 15, value = segment[at + 1];
+            if (table > 3)
+            {
+                throw new InvalidDataException($"A JPEG arithmetic conditioning table {table}.");
+            }
+
+            if (segment[at] >> 4 == 0)
+            {
+                if ((value & 15) > value >> 4)
+                {
+                    throw new InvalidDataException("A JPEG DC conditioning with L above U.");
+                }
+
+                _dcBounds[table] = (byte)value;
+            }
+            else
+            {
+                if (value is 0 or > 63)
+                {
+                    throw new InvalidDataException($"A JPEG AC conditioning Kx of {value}.");
+                }
+
+                _acThresholds[table] = (byte)value;
+            }
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void ReadQuantization(ReadOnlySpan<byte> segment)
@@ -559,6 +605,12 @@ internal sealed class JpegStream
                       ?? throw new InvalidDataException($"A JPEG scan of component {id}, which the frame lacks.");
             // A table the stream does not define is K.3's - the luminance one as table 0, chrominance as the others.
             int dc = tables >> 4, ac = tables & 15;
+            if (Arithmetic && (dc > 3 || ac > 3))
+            {
+                throw new InvalidDataException("A JPEG scan names an arithmetic conditioning table past the fourth.");
+            }
+
+            (scan[i].DcSelector, scan[i].AcSelector) = (dc, ac);
             scan[i].Dc = dc < 4 ? _dcTables[dc] ?? (dc == 0 ? JpegStandardTables.DcLuminance
                 : JpegStandardTables.DcChrominance) : null;
             scan[i].Ac = ac < 4 ? _acTables[ac] ?? (ac == 0 ? JpegStandardTables.AcLuminance
@@ -594,8 +646,8 @@ internal sealed class JpegStream
                 ? component.Quantization ?? _quantization[component.Table]
                 : _quantization[component.Table];
 
-            if (start == 0 && high == 0 && component.Dc == null || start > 0 && component.Ac == null
-                || !Progressive && component.Ac == null)
+            if (!Arithmetic && (start == 0 && high == 0 && component.Dc == null || start > 0 && component.Ac == null
+                                || !Progressive && component.Ac == null))
             {
                 throw new InvalidDataException("A JPEG scan without its Huffman tables.");
             }
@@ -603,6 +655,13 @@ internal sealed class JpegStream
 
         _eobRun = 0;
         var units = count == 1 ? scan[0].BlocksAcross * scan[0].BlocksDown : _mcusAcross * _mcusDown;
+        if (Arithmetic)
+        {
+            var after = new JpegArithmeticScan(this, scan, start, end, high, low, _dcBounds, _acThresholds)
+                .Decode(data, at, units);
+            return SkipEntropyData(data, after);
+        }
+
         if (!Progressive && _restartInterval > 0 && Intervals(data, at, units) is { } starts)
         {
             return InParallel(scan, data, starts, units);
@@ -1081,7 +1140,10 @@ internal sealed class JpegStream
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private void Store(JpegComponent component, ReadOnlySpan<short> coefficients, int rows, int across, int down)
+    /// <summary>A block's <paramref name="coefficients"/> (natural order; <paramref name="rows"/> the
+    /// <see cref="JpegIdct.Mask"/> of its AC terms) into <paramref name="component"/>'s samples, its block
+    /// <paramref name="across"/> and <paramref name="down"/>.</summary>
+    internal void Store(JpegComponent component, ReadOnlySpan<short> coefficients, int rows, int across, int down)
     {
         var quantization = component.Quantization;
         if (_preview)
@@ -1112,8 +1174,9 @@ internal sealed class JpegStream
         }
     }
 
-    // Coefficients a progressive frame keeps of each block: its DC term alone for the eighth-scale picture.
-    private int Kept => _preview ? 1 : 64;
+    /// <summary>Coefficients a progressive frame keeps of each block: its DC term alone for the eighth-scale picture.
+    /// </summary>
+    internal int Kept => _preview ? 1 : 64;
 
     // The coefficients of a progressive frame into samples, once every scan is in - rows of blocks at once.
     private void FinishProgressive()

@@ -157,6 +157,9 @@ All packages share one version.
   subsampling)` shares a color picture's chroma between two pixels side by side or a square of four
   (`JpegSubsampling.HalfWidth`, `Half` - 4:2:2, 4:2:0), each chroma sample their average.
 - `JpegDecoder.Size`: the picture's size from its frame header, decoding nothing - what the preview is an eighth of.
+- JPEG reads arithmetic-coded frames (T.81, Annex D; F.1.4; G.1.3), sequential and progressive (SOF9, SOF10), with
+  their conditioning (DAC) and restart intervals; they threw `NotSupportedException`. Lossless and hierarchical frames
+  still do.
 - `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
   application asks before it offers the heap as a choice, and what the device goes by.
 - The engine runs on GPUs without `VK_EXT_descriptor_heap`: there shaders reach their resources through descriptor sets.
