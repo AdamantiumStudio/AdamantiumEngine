@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Adamantium.Imaging.Jpeg;
 
@@ -13,6 +14,8 @@ internal sealed class JpegHuffman
 
     // Per look-up value: the code's length in the high byte and its symbol in the low one; 0 for a longer code.
     private readonly ushort[] _fast = new ushort[1 << FastBits];
+
+    private readonly int[] _withValue = new int[1 << FastBits];
     private readonly int[] _largest = new int[18];
     private readonly int[] _offset = new int[17];
     private readonly byte[] _symbols;
@@ -20,6 +23,7 @@ internal sealed class JpegHuffman
     /// <summary>The table of <paramref name="counts"/> - how many codes of each length 1 to 16 - and their
     /// <paramref name="symbols"/> in code order. Counts that do not make a prefix code throw
     /// <see cref="InvalidDataException"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public JpegHuffman(ReadOnlySpan<byte> counts, ReadOnlySpan<byte> symbols)
     {
         _symbols = symbols.ToArray();
@@ -57,7 +61,27 @@ internal sealed class JpegHuffman
         }
 
         _largest[17] = int.MaxValue;
+        for (var bits = 0; bits < _fast.Length; bits++)
+        {
+            var entry = _fast[bits];
+            int length = entry >> 8, symbol = entry & 0xFF, size = symbol & 15;
+            if (length == 0 || length + size > FastBits)
+            {
+                continue;
+            }
+
+            var raw = (bits >> (FastBits - length - size)) & ((1 << size) - 1);
+            var value = size == 0 ? 0 : raw < 1 << (size - 1) ? raw - (1 << size) + 1 : raw;
+            _withValue[bits] = (value << 16) | (symbol << 8) | (length + size);
+        }
     }
+
+    /// <summary>The code at the top of <paramref name="bits"/> together with the value its symbol's low four bits say
+    /// follow, when both fit <see cref="FastBits"/>: the bits they take in the low byte, the symbol in the next, the
+    /// value signed in the high half. 0 when they do not fit.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int DecodeWithValue(ulong bits) =>
+        Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_withValue), (nint)(bits >> (64 - FastBits)));
 
     /// <summary>The symbol of the code at the top of <paramref name="bits"/> (the next bits, most significant first),
     /// and its length; a length of 0 when no code matches - broken data.</summary>
@@ -74,6 +98,7 @@ internal sealed class JpegHuffman
         return Long(bits, out length);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private int Long(ulong bits, out int length)
     {
         for (length = FastBits + 1; length <= 16; length++)

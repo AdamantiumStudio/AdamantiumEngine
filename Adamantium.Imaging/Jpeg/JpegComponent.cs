@@ -45,8 +45,8 @@ internal sealed class JpegComponent
 
     public int Stride { get; set; }
 
-    /// <summary>A progressive frame's coefficients, 64 a block in natural order, blocks in rows of
-    /// <see cref="StoredAcross"/>.</summary>
+    /// <summary>A progressive frame's coefficients, 64 a block in zigzag order - a band of a scan is a run of them -
+    /// blocks in rows of <see cref="StoredAcross"/>.</summary>
     public short[] Coefficients { get; set; }
 
     public JpegHuffman Dc { get; set; }

@@ -125,9 +125,16 @@ internal static class JpegColor
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void Rows(JpegStream stream, JpegColorModel model, bool rgba, Span<byte> output, int stride,
         int rowBytes, int width, int first, int last)
     {
+        if (JpegByteRows.CanWrite(stream, model))
+        {
+            JpegByteRows.Write(stream, model, rgba, output, stride, width, first, last);
+            return;
+        }
+
         var lines = new int[stream.Components.Length][];
         for (var c = 0; c < lines.Length; c++)
         {
@@ -175,6 +182,7 @@ internal static class JpegColor
         : component.Wide[y * component.Stride + x];
 
     // Row y of the picture from component's samples, each a sample value.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void Stretch(JpegStream stream, JpegComponent component, int y, Span<int> row, Span<int> scratch)
     {
         var across = Max(stream, true) / component.Horizontal;
@@ -257,6 +265,7 @@ internal static class JpegColor
     }
 
     // The 8-bit gray, YCbCr and RGB rows straight to bytes; false for the rest.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static bool Fast(int[][] rows, int width, JpegColorModel model, bool rgba, Span<byte> output)
     {
         switch (model)
@@ -377,6 +386,7 @@ internal static class JpegColor
 
     // The halves of 8-bit samples: near, the component's row nearest the picture's, and far, the one beyond it -
     // three parts to one in each direction stretched; scratch holds the vertical step's columns.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void Smooth(ReadOnlySpan<byte> near, ReadOnlySpan<byte> far, int across, int down, bool odd,
         Span<int> row, Span<int> scratch)
     {
@@ -491,6 +501,7 @@ internal static class JpegColor
         ? Sample(component, x, near)
         : 3 * Sample(component, x, near) + Sample(component, x, far);
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void Convert(int[][] rows, int width, JpegColorModel model, int precision, bool adobe, bool rgba,
         Span<byte> output)
     {

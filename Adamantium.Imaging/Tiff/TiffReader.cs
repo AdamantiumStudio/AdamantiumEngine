@@ -223,6 +223,7 @@ public sealed class TiffReader : IDisposable
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void DecodeInto(int level, int column, int row, int x, int y, int width, int height,
         Span<byte> destination)
     {
@@ -479,6 +480,7 @@ public sealed class TiffReader : IDisposable
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Decode(int level, int column, int row, int band, int left, int top, int width, int height,
         Span<byte> destination, int destinationWidth)
     {

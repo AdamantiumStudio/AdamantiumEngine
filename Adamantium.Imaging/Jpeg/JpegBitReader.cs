@@ -93,6 +93,14 @@ internal ref struct JpegBitReader
     public int DecodeValue(JpegHuffman table, out int value)
     {
         var bits = Peek();
+        var entry = table.DecodeWithValue(bits);
+        if (entry != 0)
+        {
+            Skip(entry & 0xFF);
+            value = entry >> 16;
+            return (entry >> 8) & 0xFF;
+        }
+
         var symbol = table.Decode(bits, out var length);
         var size = symbol & 15;
         if (length == 0 || size == 0)
@@ -140,6 +148,7 @@ internal ref struct JpegBitReader
         _position = _data.Length;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Fill()
     {
         // As many whole bytes as fit, at once, when none of them is 0xFF; byte by byte around one.

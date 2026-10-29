@@ -9,6 +9,8 @@ All packages share one version.
 
 - `Win32Interop.SHFileOperation` with `SHFILEOPSTRUCT` and `ShellFileOperation`: the shell's own file operations,
   deleting into the Recycle Bin among them.
+- `Win32Interop.AllowSetForegroundWindow` with `AsfwAny`: the foreground process lets another bring its window to the
+  front.
 
 - `IUniverseWatcher`, one in each universe's `Satellites`: what wakes a universe drawing on demand. It watches whatever
   implements `INotifyUniverse` (`Watch` / `ReleaseWatch`) and is asked directly for one frame, a number of frames or a
@@ -1818,6 +1820,13 @@ All packages share one version.
 
 ### Changed
 
+- JPEG decodes 1.7 to 2.8 times as fast on one core, as fast as libjpeg-turbo for 4:2:0 and progressive pictures and
+  within a fifth of it for 4:4:4; a TIFF of JPEG tiles reads within a sixth of GDAL. The inverse DCT runs as the even and
+  odd halves of the 8-point transform on eight rows at once where the processor has AVX; one look-up gives a Huffman
+  code together with the value after it; 8-bit gray, YCbCr and RGB pictures are colored from the samples as bytes, sixteen
+  pixels at a time; a progressive frame keeps its coefficients in zigzag order, so a refinement of a band visits only the
+  coefficients already nonzero. The decoding is compiled fully optimized from the first picture, and the code a TIFF
+  reader runs for each tile too: they ran unoptimized for as long as an application went on compiling other code.
 - The engine works on the generic mathematics types: a float or double vector, matrix, quaternion, rectangle or volume is
   `Vector3<float>`, `Matrix4x4<double>`..., and the float names (`Vector3F`, `Matrix4x4F`, `QuaternionF`,
   `RectangleF`...) are aliases a project declares itself (`global using Vector3F =
