@@ -1829,6 +1829,9 @@ All packages share one version.
   pixels at a time; a progressive frame keeps its coefficients in zigzag order, so a refinement of a band visits only the
   coefficients already nonzero. The decoding is compiled fully optimized from the first picture, and the code a TIFF
   reader runs for each tile too: they ran unoptimized for as long as an application went on compiling other code.
+  A big picture without restart intervals is turned into samples on a thread of its own a row of blocks behind the
+  reading: on many cores a 4:2:0 photo of 58 megapixels decodes in 150 ms rather than 220, 4:4:4 in 210 rather than
+  335.
 - The engine works on the generic mathematics types: a float or double vector, matrix, quaternion, rectangle or volume is
   `Vector3<float>`, `Matrix4x4<double>`..., and the float names (`Vector3F`, `Matrix4x4F`, `QuaternionF`,
   `RectangleF`...) are aliases a project declares itself (`global using Vector3F =

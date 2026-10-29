@@ -85,6 +85,40 @@ public class JpegEncodeTests
         Assert.That(sum / (width * height * 3), Is.LessThan(4.0));
     }
 
+    // A picture this big has its rows of blocks turned into samples on a thread of its own while the next rows are read.
+    [TestCase(JpegSubsampling.None, 1100u, 500u)]
+    [TestCase(JpegSubsampling.Half, 1100u, 517u)]
+    public void ABigPicture_ReadsBackAsThePicture(JpegSubsampling subsampling, uint width, uint height)
+    {
+        ReadsBackAsThePicture(subsampling, width, height);
+    }
+
+    [Test]
+    public void ABigGrayPicture_ReadsBackAsThePicture()
+    {
+        const uint width = 900, height = 700;
+        var pixels = new byte[width * height];
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = (byte)(i % width * 255 / width);
+        }
+
+        var image = Image.New2D(width, height, 1, SurfaceFormat.R8.UNorm);
+        System.Runtime.InteropServices.Marshal.Copy(pixels, 0, image.PixelBuffer[0].DataPointer, pixels.Length);
+
+        var decoded = new JpegDecoder(new MemoryStream(Encode(image.ConvertToRawBitmap(), JpegSubsampling.None)))
+            .Decode();
+
+        var actual = decoded.GetRawPixels(0);
+        double sum = 0;
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            sum += Math.Abs(actual[i * 4] - pixels[i]);
+        }
+
+        Assert.That(sum / pixels.Length, Is.LessThan(2.0));
+    }
+
     [Test]
     public void SharedChroma_TakesLessRoom()
     {
