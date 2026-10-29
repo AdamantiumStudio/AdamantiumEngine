@@ -1,12 +1,13 @@
 using System.IO;
+using Adamantium.Graphics.Core.Assets;
 using MessagePack;
 using MessagePack.Resolvers;
 
 namespace Adamantium.Graphics.Core.Models;
 
 /// <summary>
-/// (De)serializes a <see cref="SceneData"/> graph to/from the baked binary model format (.aemf) using
-/// MessagePack's contractless resolver plus a custom <see cref="MeshFormatter"/>. Back-references skipped
+/// (De)serializes a <see cref="SceneData"/> graph - the body of a baked model (.aemf, an <see cref="AssetFile"/>) -
+/// using MessagePack's contractless resolver plus a custom <see cref="MeshFormatter"/>. Back-references skipped
 /// during serialization (Model.Parent) and the mesh lookup tables are restored via
 /// <see cref="SceneData.RebuildHierarchy"/> after deserialization.
 /// </summary>
@@ -51,5 +52,21 @@ public static class SceneDataSerializer
         var scene = MessagePackSerializer.Deserialize<SceneData>(stream, Options);
         scene?.RebuildHierarchy();
         return scene;
+    }
+
+    /// <summary>Reads the model of the baked model file at <paramref name="path"/>. Throws
+    /// <see cref="AssetFormatException"/> when this engine does not read the file or the model in it.</summary>
+    public static SceneData ReadAssetFile(string path)
+    {
+        var body = AssetFile.Read(path, AssetFileSection.Body).Body
+                   ?? throw new AssetFormatException($"{path}: the file holds no model; import its source again");
+        try
+        {
+            return Deserialize(body);
+        }
+        catch (MessagePackSerializationException exception)
+        {
+            throw new AssetFormatException($"{path}: its model cannot be read; import its source again", exception);
+        }
     }
 }

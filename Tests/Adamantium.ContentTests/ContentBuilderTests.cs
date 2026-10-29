@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Adamantium.Content.Pipeline;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using NUnit.Framework;
 
@@ -52,6 +53,51 @@ public class ContentBuilderTests
         Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
         Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj.aemf")), Is.True);
         Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj")), Is.False);
+    }
+
+    [Test]
+    public void ACookedModel_RecordsTheSourceItWasImportedFrom()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        manifest.Assets[0].Parameters["Scale"] = "2";
+
+        new ContentBuilder().Build(manifest, _project);
+
+        var source = AssetFile.Read(Path.Combine(_output, "Models", "triangle.obj.aemf"), AssetFileSection.Source).Source;
+        Assert.Multiple(() =>
+        {
+            Assert.That(source.Path, Is.EqualTo("triangle.obj"));
+            Assert.That(source.Importer, Is.EqualTo("Model"));
+            Assert.That(source.Parameters, Is.EqualTo(new Dictionary<string, string> { ["Scale"] = "2" }));
+        });
+    }
+
+    [Test]
+    public void ALinkedModel_RecordsItsSourceFromWhereTheLinkPutsIt()
+    {
+        var shared = Path.Combine(Path.GetDirectoryName(_project), Path.GetFileName(_project) + "-shared");
+        Directory.CreateDirectory(shared);
+        File.WriteAllText(Path.Combine(shared, "x.obj"), Triangle);
+        try
+        {
+            var manifest = Manifest();
+            manifest.Assets.Add(new ContentAsset
+            {
+                Source = Path.GetRelativePath(_project, Path.Combine(shared, "x.obj")),
+                LogicalName = "Models/x.obj"
+            });
+
+            new ContentBuilder().Build(manifest, _project);
+
+            var source = AssetFile.Read(Path.Combine(_output, "Models", "x.obj.aemf"), AssetFileSection.Source).Source;
+            Assert.That(source.Path, Is.EqualTo("../../" + Path.GetFileName(shared) + "/x.obj"));
+        }
+        finally
+        {
+            Directory.Delete(shared, true);
+        }
     }
 
     [Test]
@@ -197,7 +243,8 @@ public class ContentBuilderTests
         var result = Build("Models/tri.obj");
 
         Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
-        var scene = SceneDataSerializer.Deserialize(File.ReadAllBytes(Path.Combine(_output, "Models", "tri.obj.aemf")));
+        var file = AssetFile.Read(Path.Combine(_output, "Models", "tri.obj.aemf"), AssetFileSection.Body);
+        var scene = SceneDataSerializer.Deserialize(file.Body);
         var names = scene.Images.Values.Select(image => image.ImageName).ToList();
         Assert.That(names, Has.Count.EqualTo(1));
         Assert.That(names[0], Is.EqualTo("tex.png"));

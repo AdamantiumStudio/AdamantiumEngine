@@ -19,8 +19,7 @@ public class SceneDataAssetReader : IAssetReader
         if (parameters.AssetPath != null &&
             parameters.AssetPath.EndsWith(".aemf", StringComparison.OrdinalIgnoreCase))
         {
-            using var stream = File.OpenRead(parameters.AssetPath);
-            scene = SceneDataSerializer.Deserialize(stream);
+            scene = SceneDataSerializer.ReadAssetFile(parameters.AssetPath);
         }
         else
         {

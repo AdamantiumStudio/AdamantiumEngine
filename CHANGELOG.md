@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- A cooked model (`.aemf`) is an `AssetFile`: the signature `AEMF`, the format version and a table of sections, then
+  the sections - a PNG thumbnail, the `AssetSource` it was imported from (its path, importer and settings) and the model
+  itself - each read without the others (`AssetFile.Read(path, AssetFileSection.Thumbnail)`).
+  `SceneDataSerializer.ReadAssetFile` reads the model of one.
 - `Win32Interop.SHFileOperation` with `SHFILEOPSTRUCT` and `ShellFileOperation`: the shell's own file operations,
   deleting into the Recycle Bin among them.
 - `Win32Interop.AllowSetForegroundWindow` with `AsfwAny`: the foreground process lets another bring its window to the
@@ -1826,6 +1830,11 @@ All packages share one version.
 
 ### Changed
 
+- Every file the content build cooks is an `AssetFile`: an `IContentWriter` writes its body, and the build adds the
+  header and the `AssetSource`. A model cooked before the header, a file of another format version, or a model whose
+  body this engine no longer reads is refused with `AssetFormatException`, which asks to import its source again; the
+  content build cooks such files again by itself. Content projects built with the published `Adamantium.Content.Build`
+  package cook the old format until the next package release.
 - The content manager is the asset service: `ContentManager`/`IContentManager` are `AssetService`/`IAssetService`,
   `Universe.Content` is `Universe.Assets`, and the loading types are named for assets too (`IAssetReader` with
   `ReadAssetAsync`, `AssetReaderParameters`, `AssetLoadOptions`, `IAssetResolver`, `CookedAssetResolver`,

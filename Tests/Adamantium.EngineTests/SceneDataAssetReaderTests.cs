@@ -40,6 +40,59 @@ public class SceneDataAssetReaderTests
     }
 
     [Test]
+    public void ABakedModel_IsReadFromItsAssetFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".aemf");
+        using (var stream = File.Create(path))
+        {
+            new AssetFile { Body = SceneDataSerializer.Serialize(new SceneData { Name = "baked" }) }.WriteTo(stream);
+        }
+
+        try
+        {
+            var scene = (SceneData)new SceneDataAssetReader().ReadAssetAsync(null,
+                new AssetReaderParameters { AssetName = "Models/box.obj", AssetPath = path }).GetAwaiter().GetResult();
+
+            Assert.That(scene.Source, Is.EqualTo("Models/box.obj"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ABakedModelThisEngineDoesNotRead_AsksToBeImportedAgain(bool withHeader)
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".aemf");
+        var old = SceneDataSerializer.Serialize(new SceneData { Name = "old" });
+        using (var stream = File.Create(path))
+        {
+            if (withHeader)
+            {
+                new AssetFile { Body = [0xC1] }.WriteTo(stream);
+            }
+            else
+            {
+                stream.Write(old);
+            }
+        }
+
+        try
+        {
+            var exception = Assert.Throws<AssetFormatException>(() => new SceneDataAssetReader().ReadAssetAsync(null,
+                new AssetReaderParameters { AssetName = "Models/box.obj", AssetPath = path }).GetAwaiter().GetResult());
+
+            Assert.That(exception.Message, Does.StartWith(path).And.Contain("import its source again"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
     public void AnImportedModel_CarriesItsSource()
     {
         var scene = new SceneData { Name = "box.obj", Source = "Models/Box/box.obj" };

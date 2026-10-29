@@ -3,8 +3,8 @@ using System.IO;
 namespace Adamantium.Content.Pipeline;
 
 /// <summary>
-/// Serializes a cooked intermediate to the baked binary form. The runtime counterpart is
-/// <c>Adamantium.Graphics.Core.Assets.IAssetReader</c>.
+/// Serializes a cooked intermediate to the body of an <see cref="Adamantium.Graphics.Core.Assets.AssetFile"/>. The
+/// runtime counterpart is <see cref="Adamantium.Graphics.Core.Assets.IAssetReader"/>.
 /// </summary>
 public interface IContentWriter
 {

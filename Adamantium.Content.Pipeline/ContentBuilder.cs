@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Adamantium.Content.Pipeline.Importers;
 using Adamantium.Content.Pipeline.Writers;
+using Adamantium.Graphics.Core.Assets;
 
 namespace Adamantium.Content.Pipeline;
 
@@ -162,10 +163,13 @@ public sealed class ContentBuilder
 
                 var cookedDirectory = Path.GetDirectoryName(cookedFull);
                 Directory.CreateDirectory(cookedDirectory);
-                using (var stream = File.Create(cookedFull))
+                WriteAssetFile(cookedFull, writer, content, new AssetSource
                 {
-                    writer.Write(stream, content);
-                }
+                    Path = Normalize(Path.GetRelativePath(
+                        Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
+                    Importer = importerName,
+                    Parameters = asset.Parameters == null ? new() : new(asset.Parameters)
+                });
 
                 List<string> written = [];
                 foreach (var (from, to) in companions)
@@ -200,6 +204,15 @@ public sealed class ContentBuilder
         cache.Prune(manifest.Assets.Select(asset => asset.Source), outputDirectory);
         cache.Save(cachePath);
         return result;
+    }
+
+    private static void WriteAssetFile(string path, IContentWriter writer, object content, AssetSource source)
+    {
+        using var body = new MemoryStream();
+        writer.Write(body, content);
+
+        using var stream = File.Create(path);
+        new AssetFile { Source = source, Body = body.ToArray() }.WriteTo(stream);
     }
 
     private static void Copy(ContentAsset asset, string sourceFull, string logicalName, string outputDirectory,

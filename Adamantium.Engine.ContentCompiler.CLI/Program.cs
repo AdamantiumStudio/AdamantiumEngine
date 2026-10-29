@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Adamantium.Content.Pipeline;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 
 namespace Adamantium.Engine.ContentCompiler.CLI
@@ -115,7 +116,19 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                 return 1;
             }
 
-            var scene = SceneDataSerializer.Deserialize(File.ReadAllBytes(aemfPath));
+            AssetFile file;
+            SceneData scene;
+            try
+            {
+                file = AssetFile.Read(aemfPath, AssetFileSection.Thumbnail | AssetFileSection.Source);
+                scene = SceneDataSerializer.ReadAssetFile(aemfPath);
+            }
+            catch (AssetFormatException exception)
+            {
+                Console.WriteLine(exception.Message);
+                return 2;
+            }
+
             if (scene?.Models == null)
             {
                 Console.WriteLine("Deserialized to null scene.");
@@ -149,7 +162,8 @@ namespace Adamantium.Engine.ContentCompiler.CLI
             }
 
             Console.WriteLine($"OK: '{scene.Name}'  models={models}  meshes={meshes}  vertices={vertices}  indices={indices}  " +
-                              $"materials={scene.Materials.Count}  skins={scene.Controllers.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}");
+                              $"materials={scene.Materials.Count}  skins={scene.Controllers.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}  " +
+                              $"source={file.Source?.Path ?? "-"}  thumbnail={(file.Thumbnail == null ? "none" : $"{file.Thumbnail.Length} bytes")}");
             return brokenParents == 0 ? 0 : 3;
         }
 
