@@ -355,8 +355,9 @@ All packages share one version.
   `ToolProcessor.ShowsLightHandles` leaves a selected light's handles out of a tool that drags nothing - an editor's
   delete tool is built on `SelectTool` so.
 - glTF import opens meshopt-compressed assets, `EXT_meshopt_compression` and `KHR_meshopt_compression`, with a decoder
-  of our own (`GltfMeshopt`): vertex data of versions 0 and 1, triangles and index sequences, and the octahedral,
-  quaternion, exponential and color filters. Compressed buffer views are unpacked as the file is read; a buffer no
+  of our own (`GltfMeshopt`), as the Khronos extension specifies it: vertex data of versions 0 and 1, triangles and
+  index sequences, and the octahedral, quaternion, exponential and color filters; a triangle stream of a version
+  neither extension has is refused. Compressed buffer views are unpacked as the file is read; a buffer no
   view reads - the placeholder or fallback behind compressed views - is not loaded.
 - glTF import opens Draco-compressed meshes, `KHR_draco_mesh_compression`, with a decoder of our own
   (`DracoDecoder`, Draco bitstream 2.2): sequential and edgebreaker connectivity (standard and valence traversal,

@@ -130,9 +130,24 @@ public class GltfMeshoptTests
         AssertSame(filtered, plain, 0.02f);
     }
 
-    private static IEnumerable<TestCaseData> Vectors()
+    // A triangle stream of version 0 (header 0xE0) is in neither extension: both take only 0xE1.
+    [Test]
+    public void TrianglesOfAVersionTheExtensionsLack_AreRefused()
+    {
+        var vector = AllVectors().Single(v => v.Encoded[0] == 0xE0);
+
+        Assert.Throws<InvalidDataException>(() => GltfMeshopt.Decode(vector.Compression, vector.Encoded));
+    }
+
+    private static IEnumerable<TestCaseData> Vectors() => AllVectors()
+        .Where(vector => vector.Encoded[0] != 0xE0)
+        .Select(vector => new TestCaseData(vector.Compression, vector.Encoded, vector.Decoded)
+            .SetName($"Unpacks_AsTheReferenceDecoder({vector.Name})"));
+
+    private static List<(string Name, GltfMeshoptCompression Compression, byte[] Encoded, byte[] Decoded)> AllVectors()
     {
         using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(Data, "MeshoptVectors.json")));
+        var vectors = new List<(string, GltfMeshoptCompression, byte[], byte[])>();
         foreach (var vector in json.RootElement.EnumerateArray())
         {
             var compression = new GltfMeshoptCompression
@@ -142,10 +157,11 @@ public class GltfMeshoptTests
                 Count = vector.GetProperty("count").GetInt32(),
                 ByteStride = vector.GetProperty("stride").GetInt32()
             };
-            yield return new TestCaseData(compression, vector.GetProperty("encoded").GetBytesFromBase64(),
-                    vector.GetProperty("decoded").GetBytesFromBase64())
-                .SetName($"Unpacks_AsTheReferenceDecoder({vector.GetProperty("name").GetString()})");
+            vectors.Add((vector.GetProperty("name").GetString(), compression,
+                vector.GetProperty("encoded").GetBytesFromBase64(), vector.GetProperty("decoded").GetBytesFromBase64()));
         }
+
+        return vectors;
     }
 
     private static int Component(byte[] bytes, int at, int size, bool signed) => (size, signed) switch
