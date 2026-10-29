@@ -153,7 +153,9 @@ All packages share one version.
   swapped, 16 bits by their high bytes, RGB and gray given alpha; the ICO reader and color glyphs read PNG through
   it, so 16-bit PNG works there too.
 - `JpegEncoder.Encode(image, output, quality)`: a picture written as JPEG at a quality of 1 to 100, from gray, RGB,
-  BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100.
+  BGR, RGBA and BGRA pixels of 8 or 16 bits; `BitmapLoader` writes at 100. `Encode(image, output, quality,
+  subsampling)` shares a color picture's chroma between two pixels side by side or a square of four
+  (`JpegSubsampling.HalfWidth`, `Half` - 4:2:2, 4:2:0), each chroma sample their average.
 - `JpegDecoder.Size`: the picture's size from its frame header, decoding nothing - what the preview is an eighth of.
 - `GraphicsAdapter.SupportsDescriptorHeap`: whether the device has the descriptor heap, extension and feature - what an
   application asks before it offers the heap as a choice, and what the device goes by.
