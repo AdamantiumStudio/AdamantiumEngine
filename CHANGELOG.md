@@ -552,8 +552,8 @@ All packages share one version.
   cells by it.
 
 - `PlacementTool`, an editor tool that places a new object with the mouse: a see-through ghost of it
-  (`EditorOverlayProcessor.DrawGhost`) follows the pointer, resting by its lowest point on the surface under it or, past
-  every surface, on the ground grid as far as the grid is drawn. A click raises `Placed`; with Shift held the tool stays,
+  (`EditorOverlayProcessor.DrawGhost`) hangs on the pointer, resting by its lowest point on the surface under it - a
+  scene entity, or the ground grid as far as the grid is drawn. A click on a surface raises `Placed`; with Shift held the tool stays,
   else it is done (`Finished`), as it is on Esc; the right button turns the camera.
   `NeedsSomethingUnder` places only on a scene entity, as a camera riding on one is. `Icon` draws an icon with the ghost
   for what the scene shows by an icon.
@@ -1325,10 +1325,16 @@ All packages share one version.
 - A free third-person orbit stays where it is when its host turns: its offset is the view's, in the world, turned back
   by the host's own turn. It swung round with the host while its view stayed, so it looked away, and the rotation tool,
   used while looking through it, chased the swing and shook the camera.
-- Placing an object, the pointer leaving the scene - above the horizon, past the grid - leaves the ghost where it last
-  touched the scene; with an eye standing on the ground, which the pointer never meets ahead, the ghost goes on the
-  ground under what the pointer shows at the camera's focus (its subject, for an orbit; `PlacementTool.UnderFocus`),
-  nothing placed out of view. The ghost vanished there, and from an eye on the ground nothing could be placed.
+- Placing an object, the ghost hangs on the pointer and goes down only onto a surface. With no surface under the
+  pointer - above the horizon, past the grid - it hangs at the depth it last touched one in that view, paler, and a
+  click places nothing (`PlacementTool.CanPlace`, `PlacementTool.Along`); before it has touched any, at the depth of the
+  ground the pointer meets first going down the view (`PlacementTool.FirstGroundBelow`), so it is as small as it will be
+  on landing; off the scene - over the ribbon it was picked from - it is not drawn. A view along the ground - a flat
+  side view, an eye standing on it - meets it ahead nowhere, so there the ghost goes on the ground under what the
+  pointer shows at the camera's focus (its subject, for an orbit; `PlacementTool.UnderFocus`), as long as that is in
+  view. It vanished above the horizon at first; then it stayed where it last touched the scene, or sat on the
+  ground under the camera's focus, and a click put it there: picked from the ribbon, it showed at the foot of the scene
+  far from the pointer and jumped under it as the pointer came in, and a click anywhere dropped it.
 - In a flat view the ground grid shows whole from the screen's near edge and fades only far off, as ground does toward
   a horizon in a perspective (`GroundGrid.CenterFor`, `GroundGridLayout.Center`); looking straight down it lies round
   what the camera looks at. It lay round the eye, often far behind what a flat view shows, reached by how low the view
