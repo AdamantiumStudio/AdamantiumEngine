@@ -67,14 +67,10 @@ public partial class SceneData
          {
             var current = stack.Pop();
 
-            if (meshesDictionary.ContainsKey(mesh.ToString()))
+            meshesDictionary.Remove(current.ToString());
+            if (ReferenceEquals(meshToId.GetValueOrDefault(current.ID), current))
             {
-               meshesDictionary.Remove(mesh.ToString());
-            }
-
-            if (meshToId.ContainsKey(mesh.ID))
-            {
-               meshToId.Remove(mesh.ID);
+               meshToId.Remove(current.ID);
             }
 
             foreach (var mesh1 in current.Dependencies)

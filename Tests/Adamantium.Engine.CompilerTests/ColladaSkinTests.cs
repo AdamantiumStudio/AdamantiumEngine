@@ -100,7 +100,42 @@ public class ColladaSkinTests
 
         var knee = scene.Models.Dependencies.Single(m => m.Name == "Armature").Dependencies.Single().Dependencies.Single();
 
-        Assert.That(knee.Dependencies.Select(m => m.ID), Is.EqualTo(new[] { "leg" }));
+        Assert.Multiple(() =>
+        {
+            Assert.That(knee.ID, Is.EqualTo("Armature_Knee"));
+            Assert.That(knee.Meshes, Has.Count.EqualTo(1), "the joint draws the leg itself");
+            Assert.That(knee.Dependencies, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void TheSkin_IsKnownByTheNodeThatDrawsWithIt()
+    {
+        var scene = Import(LeggedDocument());
+
+        var leg = scene.Models.Dependencies.Single(m => m.ID == "leg-node");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(scene.Controllers.Keys, Is.EqualTo(new[] { "leg-node" }));
+            Assert.That(leg.Meshes, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void AGeometryDrawnPlainAndSkinned_IsOnBothNodes()
+    {
+        var scene = Import(LeggedDocument(boxFirst: true));
+
+        var box = scene.Models.Dependencies.Single(m => m.ID == "Box");
+        var leg = scene.Models.Dependencies.Single(m => m.ID == "leg-node");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(box.Meshes, Has.Count.EqualTo(1));
+            Assert.That(leg.Meshes, Has.Count.EqualTo(1));
+            Assert.That(leg.Meshes[0], Is.Not.SameAs(box.Meshes[0]));
+        });
     }
 
     [Test]

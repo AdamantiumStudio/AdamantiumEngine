@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.SHFileOperation` with `SHFILEOPSTRUCT` and `ShellFileOperation`: the shell's own file operations,
+  deleting into the Recycle Bin among them.
+
 - `IUniverseWatcher`, one in each universe's `Satellites`: what wakes a universe drawing on demand. It watches whatever
   implements `INotifyUniverse` (`Watch` / `ReleaseWatch`) and is asked directly for one frame, a number of frames or a
   while (`Watch()`, `Watch(int)`, `Watch(TimeSpan)`); asks between two frames wake the universe once, and while the
@@ -1057,6 +1060,14 @@ All packages share one version.
 
 ### Fixed
 
+- Every Collada node is a model known by its own ID, not by the geometry it draws: a clip moving a node that is no
+  joint now plays, a geometry drawn by several nodes is on each of them - a copy each - and nodes of one name no longer
+  merge into one. A node takes the materials its binding names for each part's symbol, a skinned one too; they went
+  by the binding's order, and a skinned node got none. A skin is known by the node that draws with it. A group that
+  draws nothing is left out without taking its drawing siblings along, and `SceneData.RemoveMesh` forgets every model
+  of the branch it removes, not only the first.
+- An imported model's entities are named by their nodes' names; they carried the node's ID after it as well
+  ("CockpitID619", "Torsonode5").
 - A capsule's seam no longer shows: its normals are those of its shape, the same on both sides of the seam, rather
   than averaged from the triangles on each side apart; and its bands no longer stitch the seam's column to the first,
   which made a ring of slivers.

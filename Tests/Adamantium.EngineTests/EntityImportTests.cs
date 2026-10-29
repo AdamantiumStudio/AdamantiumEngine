@@ -290,7 +290,7 @@ public class EntityImportTests
         Entity found = null;
         root.TraverseInDepth(current =>
         {
-            if (current.Name == node.ToString())
+            if (current.Name == node.Name)
             {
                 found = current;
             }
