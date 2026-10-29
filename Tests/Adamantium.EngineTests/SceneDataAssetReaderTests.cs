@@ -61,6 +61,28 @@ public class SceneDataAssetReaderTests
         }
     }
 
+    [Test]
+    public void AModelOpenedByItsAssetFile_IsNamedByItsSource()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".dae.aemf");
+        using (var stream = File.Create(path))
+        {
+            new AssetFile { Body = SceneDataSerializer.Serialize(new SceneData()) }.WriteTo(stream);
+        }
+
+        try
+        {
+            var scene = (SceneData)new SceneDataAssetReader().ReadAssetAsync(null,
+                new AssetReaderParameters { AssetName = path, AssetPath = path }).GetAwaiter().GetResult();
+
+            Assert.That(scene.Name, Is.EqualTo(Path.GetFileName(path)[..^AssetFile.FileExtension.Length]));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public void ABakedModelThisEngineDoesNotRead_AsksToBeImportedAgain(bool withHeader)

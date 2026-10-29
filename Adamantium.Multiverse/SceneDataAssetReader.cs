@@ -28,7 +28,10 @@ public class SceneDataAssetReader : IAssetReader
 
         if (scene != null)
         {
-            scene.Name = Path.GetFileName(parameters.AssetName);
+            var name = Path.GetFileName(parameters.AssetName);
+            scene.Name = name.EndsWith(AssetFile.FileExtension, StringComparison.OrdinalIgnoreCase)
+                ? name[..^AssetFile.FileExtension.Length]
+                : name;
             scene.Source = parameters.AssetName;
             PointImagesAtTheModel(scene, parameters.AssetPath);
         }

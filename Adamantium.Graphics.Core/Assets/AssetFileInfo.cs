@@ -49,21 +49,23 @@ public sealed class AssetFileInfo
     /// <summary>Where a model was imported from; null for any other kind or an asset file that does not say.</summary>
     public AssetSource Source => source.Value;
 
-    /// <summary>The asset's picture, decoded anew on each call and kept by no one here - the view shrinks what it shows:
-    /// a model's from its asset file, an image's first frame. Null for a kind with none, an asset file with none yet,
+    /// <summary>The asset's picture, decoded anew on each call and kept by no one here: a model's from its asset file, an
+    /// image's first frame. Given <paramref name="maxPixelSize"/>, it is decoded no larger than that on a side when its
+    /// format can be shrunk - so nothing larger is held at all. Null for a kind with none, an asset file with none yet,
     /// or a file that cannot be read.</summary>
-    public IRawBitmap ReadThumbnail()
+    public IRawBitmap ReadThumbnail(uint maxPixelSize = 0)
     {
         try
         {
-            return Kind switch
+            var bitmap = Kind switch
             {
                 AssetKind.Model => AssetFile.Read(FilePath, AssetFileSection.Thumbnail).Thumbnail is { } png
-                    ? CopyFirstFrame(BitmapLoader.Load(new MemoryStream(png, false)))
+                    ? BitmapLoader.Load(new MemoryStream(png, false))
                     : null,
-                AssetKind.Image => CopyFirstFrame(BitmapLoader.Load(FilePath, ImageTypes[Path.GetExtension(FilePath)])),
+                AssetKind.Image => BitmapLoader.Load(FilePath, ImageTypes[Path.GetExtension(FilePath)]),
                 _ => null
             };
+            return bitmap == null ? null : CopyFirstFrame(bitmap, maxPixelSize);
         }
         catch (Exception)
         {
@@ -92,11 +94,18 @@ public sealed class AssetFileInfo
         return SoundExtensions.Contains(extension) ? AssetKind.Sound : AssetKind.Other;
     }
 
-    private static IRawBitmap CopyFirstFrame(IRawBitmap bitmap)
+    private static IRawBitmap CopyFirstFrame(IRawBitmap bitmap, uint maxPixelSize)
     {
-        return bitmap == null
-            ? null
-            : new FrameBitmap(bitmap.Width, bitmap.Height, bitmap.PixelFormat, [bitmap.GetRawPixels(0)]);
+        var pixels = bitmap.GetRawPixels(0);
+        if (maxPixelSize == 0 || (bitmap.Width <= maxPixelSize && bitmap.Height <= maxPixelSize)
+            || !ImageDownscaler.Supports(bitmap.PixelFormat))
+        {
+            return new FrameBitmap(bitmap.Width, bitmap.Height, bitmap.PixelFormat, [pixels]);
+        }
+
+        var shrunk = ImageDownscaler.FitWithin(pixels, bitmap.Width, bitmap.Height, bitmap.PixelFormat, maxPixelSize,
+            maxPixelSize, out var width, out var height);
+        return new FrameBitmap(width, height, bitmap.PixelFormat, [shrunk]);
     }
 
     private AssetSource ReadSource()

@@ -9,9 +9,11 @@ All packages share one version.
 
 - `IAssetService.GetAssets(folder)`: the assets of a folder, ordered by name, as `AssetFileInfo`s - name, file,
   `AssetKind` (model, image, font, sound, other) and, read on the first ask, the `AssetSource` - without loading any.
-  A model's asset file stands for its source beside it. `AssetFileInfo.ReadThumbnail()` decodes its picture on each
-  call and keeps none: a model's from its asset file, an image's first frame. `IAssetService.Resolve(name)`: the full
-  path of the file an asset loads from. `AssetFile.FileExtension` is `.aemf`.
+  A model's asset file stands for its source beside it. `AssetFileInfo.ReadThumbnail(maxPixelSize)` decodes its
+  picture on each call and keeps none - a model's from its asset file, an image's first frame - no larger than asked,
+  so nothing larger is held at all. `IAssetService.Resolve(name)`: the full path of the file an asset loads from.
+  `AssetFile.FileExtension` is `.aemf`. A model loaded by its asset file is named by its source (`Ship.dae`, not
+  `Ship.dae.aemf`).
 - `BitmapLoader.Load(file, type)`: decodes with the decoder the file's signature names, or the given type's alone
   when it has none (a TGA) - never by handing the bytes to every decoder in turn.
 - `FrameBitmap` is public: frames of pixels already in memory, as an `IRawBitmap`; it needs a frame at least.

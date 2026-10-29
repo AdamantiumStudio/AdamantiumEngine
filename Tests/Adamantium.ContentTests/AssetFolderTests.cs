@@ -95,6 +95,16 @@ public class AssetFolderTests
     }
 
     [Test]
+    public void AnImageAskedSmall_IsDecodedShrunk()
+    {
+        File.WriteAllBytes(Path.Combine(_folder, "Wide.png"), CreatePng(1024, 512));
+
+        var thumbnail = CreateService().GetAssets(_folder).Single().ReadThumbnail(256);
+
+        Assert.That((thumbnail.Width, thumbnail.Height), Is.EqualTo((256u, 128u)));
+    }
+
+    [Test]
     public void AnAssetsName_OrdersTheList()
     {
         WriteAssetFile("Ship.dae.aemf", null);
