@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Adamantium.Core;
@@ -14,6 +15,11 @@ namespace Adamantium.Graphics.Core.Assets;
 /// it again.</summary>
 public class AssetService : DisposableObject, IAssetService
 {
+    private const string WritingExtension = ".writing";
+
+    private static readonly StringComparer FileNameComparer =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
     private readonly object sync = new();
     private readonly Dictionary<AssetKey, Task<object>> kept = new();
     private readonly Dictionary<string, byte[]> embedded = new(StringComparer.Ordinal);
@@ -62,6 +68,31 @@ public class AssetService : DisposableObject, IAssetService
         }
 
         return Find(PathOf(assetName, null)) != null;
+    }
+
+    public string Resolve(string assetName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(assetName);
+
+        return Find(PathOf(assetName, null)) is { } found ? Path.GetFullPath(found) : null;
+    }
+
+    public IReadOnlyList<AssetFileInfo> GetAssets(string folder)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+
+        var files = new DirectoryInfo(folder).EnumerateFiles()
+            .Where(file => !file.Name.StartsWith('.') && (file.Attributes & FileAttributes.Hidden) == 0
+                           && !file.Name.EndsWith(WritingExtension, StringComparison.OrdinalIgnoreCase))
+            .Select(file => file.FullName)
+            .ToList();
+        var paths = new HashSet<string>(files, FileNameComparer);
+
+        return files
+            .Where(file => !paths.Contains(file + AssetFile.FileExtension))
+            .Select(file => new AssetFileInfo(file))
+            .OrderBy(asset => asset.Name, FileNameComparer)
+            .ToList();
     }
 
     public T Load<T>(string assetName, object options = null) => (T)Load(typeof(T), assetName, options);

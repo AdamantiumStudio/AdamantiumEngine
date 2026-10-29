@@ -11,6 +11,9 @@ namespace Adamantium.Graphics.Core.Assets;
 /// <see cref="Thumbnail"/>, <see cref="Source"/> and <see cref="Body"/> - each read without the others.</summary>
 public sealed class AssetFile
 {
+    /// <summary>The extension of an asset file.</summary>
+    public const string FileExtension = ".aemf";
+
     /// <summary>The version of the format this engine writes.</summary>
     public const ushort FormatVersion = 1;
 

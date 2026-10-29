@@ -116,6 +116,27 @@ public static class BitmapLoader
         _ => ImageFileType.Unknown,
     };
 
+    /// <summary>Decodes the file <paramref name="fileName"/> with the decoder its signature names, or - when it has none,
+    /// as a TGA does - with <paramref name="unsignedType"/>'s alone: its bytes are never handed to every decoder in turn.
+    /// </summary>
+    public static unsafe IRawBitmap Load(string fileName, ImageFileType unsignedType)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(fileName);
+
+        var bytes = File.ReadAllBytes(fileName);
+        fixed (byte* pinned = bytes)
+        {
+            var type = bytes.Length >= 8 ? Detect(bytes.AsSpan(0, 8)) : ImageFileType.Unknown;
+            if (type == ImageFileType.Unknown)
+            {
+                type = unsignedType;
+            }
+
+            var owner = _loadSaveDelegates.FirstOrDefault(x => x.FileType == type);
+            return owner?.Loader?.Invoke((IntPtr)pinned, (ulong)bytes.Length);
+        }
+    }
+
     public static unsafe IRawBitmap Load(IntPtr dataPointer, ulong dataSize)
     {
         // Signature first: ask the ONE decoder that owns this format.

@@ -14,7 +14,7 @@ public class CookedAssetResolver : IAssetResolver
     private readonly string contentRoot;
     private readonly string cookedExtension;
 
-    public CookedAssetResolver(string contentRoot = null, string cookedExtension = ".aemf")
+    public CookedAssetResolver(string contentRoot = null, string cookedExtension = AssetFile.FileExtension)
     {
         this.contentRoot = contentRoot ?? AppContext.BaseDirectory;
         this.cookedExtension = cookedExtension;

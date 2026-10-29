@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- `IAssetService.GetAssets(folder)`: the assets of a folder, ordered by name, as `AssetFileInfo`s - name, file,
+  `AssetKind` (model, image, font, sound, other) and, read on the first ask, the `AssetSource` - without loading any.
+  A model's asset file stands for its source beside it. `AssetFileInfo.ReadThumbnail()` decodes its picture on each
+  call and keeps none: a model's from its asset file, an image's first frame. `IAssetService.Resolve(name)`: the full
+  path of the file an asset loads from. `AssetFile.FileExtension` is `.aemf`.
+- `BitmapLoader.Load(file, type)`: decodes with the decoder the file's signature names, or the given type's alone
+  when it has none (a TGA) - never by handing the bytes to every decoder in turn.
+- `FrameBitmap` is public: frames of pixels already in memory, as an `IRawBitmap`; it needs a frame at least.
+
 - A cooked model (`.aemf`) is an `AssetFile`: the signature `AEMF`, the format version and a table of sections, then
   the sections - a PNG thumbnail, the `AssetSource` it was imported from (its path, importer and settings) and the model
   itself - each read without the others (`AssetFile.Read(path, AssetFileSection.Thumbnail)`).

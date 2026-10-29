@@ -1,4 +1,5 @@
 using System.IO;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 
 namespace Adamantium.Content.Pipeline.Writers;
@@ -9,7 +10,7 @@ namespace Adamantium.Content.Pipeline.Writers;
 /// </summary>
 public sealed class SceneDataWriter : IContentWriter
 {
-    public string OutputExtension => ".aemf";
+    public string OutputExtension => AssetFile.FileExtension;
 
     public void Write(Stream stream, object content)
     {

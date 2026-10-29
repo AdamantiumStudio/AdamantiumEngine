@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
@@ -17,6 +18,16 @@ public interface IAssetService
 
    /// <summary>Whether the asset, named with its extension, is embedded or found by a resolver.</summary>
    bool Exists(string assetName);
+
+   /// <summary>The full path of the file the asset, named with its extension and taken from the root directory, loads
+   /// from - its asset file when it has one; null when no resolver finds it, an embedded asset included. Throws
+   /// <see cref="InvalidOperationException"/> when there is no resolver.</summary>
+   string Resolve(string assetName);
+
+   /// <summary>The assets of <paramref name="folder"/>, not of the folders in it, ordered by name: an asset file stands
+   /// for the source beside it, which is not listed itself; hidden files are left out. Nothing is loaded. Throws
+   /// <see cref="System.IO.DirectoryNotFoundException"/> for a folder that is not there.</summary>
+   IReadOnlyList<AssetFileInfo> GetAssets(string folder);
 
    /// <summary>Makes <paramref name="data"/> loadable as the asset <paramref name="assetName"/>, as an asset carried
    /// inside another (an image inside a model) is: it then loads, is kept and is loaded again for a new device like one
