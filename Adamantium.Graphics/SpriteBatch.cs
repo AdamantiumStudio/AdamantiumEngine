@@ -46,12 +46,8 @@ public class SpriteBatch : DisposableObject
     private Vector2F vector2Zero = Vector2F.Zero;
     private Vector2F currentScreenSize;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SpriteBatch"/> class
-    /// </summary>
-    /// <param name="graphicsDevice">The graphics device</param>
-    /// <param name="initialBatchSize">How many sprites a batch holds before it grows; 4096 by default, at least 1024.
-    /// </param>
+    /// <summary>A batch drawing on <paramref name="graphicsDevice"/>, holding <paramref name="initialBatchSize"/> sprites
+    /// before it grows - at least 1024.</summary>
     public SpriteBatch(IGraphicsDevice graphicsDevice, UInt32 initialBatchSize = 4096)
     {
         this.graphicsDevice = graphicsDevice;
@@ -124,37 +120,24 @@ public class SpriteBatch : DisposableObject
         beginCalled = false;
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain position and color
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="position">Sprite position in 2D space</param>
-    /// <param name="color">Color to apply to texture</param>
+    /// <summary>Adds <paramref name="texture"/> at its own size, its top left corner at <paramref name="position"/> in
+    /// pixels of the target, its texels multiplied by <paramref name="color"/>.</summary>
     public void Draw(Texture texture, Vector2F position, Color color)
     {
         var destination = new Vector4F(position.X, position.Y, 1f, 1f);
         DrawSprite(texture, ref destination, true, ref nullRect, color, 0, ref vector2Zero);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain destination and color
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="destination">A rectangle that specifies (in screen coordinates) the destination for drawing the sprite. If this rectangle is not the same size as the source rectangle, the sprite will be scaled to fit.</param>
-    /// <param name="color">Color to apply to texture</param>
+    /// <summary>Adds <paramref name="texture"/> stretched over <paramref name="destination"/>, in pixels of the target,
+    /// its texels multiplied by <paramref name="color"/>.</summary>
     public void Draw(Texture texture, RectangleF destination, Color color)
     {
         Vector4F dst = RectangleToVector4(destination);
         DrawSprite(texture, ref dst, false, ref nullRect, color, 0f, ref vector2Zero);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain position, source rectangle and color
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="position">Sprite position in 2D space</param>
-    /// <param name="sourceRectangle">A rectangle that specifies (in texels) the source texels from a texture. Use null to draw the entire texture.</param>
-    /// <param name="color">Color to apply to texture</param>
+    /// <summary>Adds the part of <paramref name="texture"/> in <paramref name="sourceRectangle"/> - in texels, the whole
+    /// texture for null - at its own size, its top left corner at <paramref name="position"/>.</summary>
     public void Draw(Texture texture, Vector2F position, RectangleF? sourceRectangle, Color color)
     {
         var destination = new Vector4F(position.X, position.Y, 1f, 1f);
@@ -162,26 +145,16 @@ public class SpriteBatch : DisposableObject
         DrawSprite(texture, ref destination, true, ref source, color, 0, ref vector2Zero);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain position color and scale
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="position">Sprite position in 2D space</param>
-    /// <param name="color">Color to apply to texture</param>
-    /// <param name="scale">Scale factor</param>
+    /// <summary>Adds <paramref name="texture"/> at <paramref name="position"/>, its size multiplied by
+    /// <paramref name="scale"/> along each axis.</summary>
     public void Draw(Texture texture, Vector2F position, Color color, Vector2F scale)
     {
         var destination = new Vector4F(position.X, position.Y, scale.X, scale.Y);
         DrawSprite(texture, ref destination, true, ref nullRect, color, 0f, ref vector2Zero);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain destination, source and color
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="destination">A rectangle that specifies (in screen coordinates) the destination for drawing the sprite. If this rectangle is not the same size as the source rectangle, the sprite will be scaled to fit.</param>
-    /// <param name="sourceRectangle">A rectangle that specifies (in texels) the source texels from a texture. Use null to draw the entire texture.</param>
-    /// <param name="color">Color to apply to texture</param>
+    /// <summary>Adds the part of <paramref name="texture"/> in <paramref name="sourceRectangle"/> - in texels, the whole
+    /// texture for null - stretched over <paramref name="destination"/>.</summary>
     public void Draw(Texture texture, RectangleF destination, RectangleF? sourceRectangle, Color color)
     {
         Vector4F dst = RectangleToVector4(destination);
@@ -189,17 +162,10 @@ public class SpriteBatch : DisposableObject
         DrawSprite(texture, ref dst, false, ref source, color, 0f, ref vector2Zero);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain destination, source rectangle, color, rotation, rotation origin, sprite effects and layer depth
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="destination">A rectangle that specifies (in screen coordinates) the destination for drawing the sprite. If this rectangle is not the same size as the source rectangle, the sprite will be scaled to fit.</param>
-    /// <param name="sourceRectangle">A rectangle that specifies (in texels) the source texels from a texture. Use null to draw the entire texture.</param>
-    /// <param name="color">Color to apply to texture</param>
-    /// <param name="rotation">Rotation angle</param>
-    /// <param name="origin">Origin for rotation</param>
-    /// <param name="effects"><see cref="SpriteEffects"/> to apply to texture</param>
-    /// <param name="layerDepth">Depth of the sprite</param>
+    /// <summary>Adds the part of <paramref name="texture"/> in <paramref name="sourceRectangle"/> stretched over
+    /// <paramref name="destination"/>, turned by <paramref name="rotation"/> radians about <paramref name="origin"/> -
+    /// a point measured from the sprite's top left corner, in pixels of the target - mirrored as
+    /// <paramref name="effects"/> says, at <paramref name="layerDepth"/>: 0 nearest, 1 deepest.</summary>
     public void Draw(
         Texture texture,
         RectangleF destination,
@@ -215,18 +181,9 @@ public class SpriteBatch : DisposableObject
         DrawSprite(texture, ref dst, false, ref source, color, rotation, ref origin, effects, layerDepth);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain position, source rectangle, color, rotation, rotation origin, scale, sprite effects and layer depth
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="position">Position of the sprite in 2D space</param>
-    /// <param name="sourceRectangle">A rectangle that specifies (in texels) the source texels from a texture. Use null to draw the entire texture.</param>
-    /// <param name="color">Color to apply to texture</param>
-    /// <param name="rotation">Rotation angle</param>
-    /// <param name="origin">Origin for rotation</param>
-    /// <param name="scale">Scale factor</param>
-    /// <param name="effects"><see cref="SpriteEffects"/> to apply to texture</param>
-    /// <param name="layerDepth">Depth of the sprite</param>
+    /// <summary>Adds the part of <paramref name="texture"/> in <paramref name="sourceRectangle"/> at
+    /// <paramref name="position"/>, its size multiplied by <paramref name="scale"/>, turned, mirrored and at a depth as
+    /// <see cref="Draw(Texture, RectangleF, RectangleF?, Color, float, Vector2F, SpriteEffects, float)"/> does.</summary>
     public void Draw(
         Texture texture,
         Vector2F position,
@@ -243,15 +200,9 @@ public class SpriteBatch : DisposableObject
         DrawSprite(texture, ref destination, true, ref sourceRect, color, rotation, ref origin, effects, layerDepth);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain position, source rectangle, color, rotation, rotation origin, scale, sprite effects and layer depth
-    /// </summary>
-    /// <param name="destination">A rectangle that specifies the size of the sprite</param>
-    /// <param name="color">Color to apply to texture</param>
-    /// <param name="rotation">Rotation angle</param>
-    /// <param name="origin">The sprite origin; the default is (0,0) which represents the upper-left corner</param>
-    /// <param name="effects"><see cref="SpriteEffects"/> to apply to texture</param>
-    /// <param name="layerDepth">Depth of the sprite</param>
+    /// <summary>Adds <paramref name="destination"/> filled with <paramref name="color"/>, no texture, turned and at a
+    /// depth as <see cref="Draw(Texture, RectangleF, RectangleF?, Color, float, Vector2F, SpriteEffects, float)"/>
+    /// does.</summary>
     public void Draw(
         RectangleF destination,
         Color color,
@@ -265,18 +216,8 @@ public class SpriteBatch : DisposableObject
         DrawSprite(null, ref dst, false, ref src, color, rotation, ref origin, effects, layerDepth);
     }
 
-    /// <summary>
-    /// Adds sprite to batch with certain position, source rectangle, color, rotation, rotation origin, scale, sprite effects and layer depth
-    /// </summary>
-    /// <param name="texture">The texture</param>
-    /// <param name="position">Position of the sprite in 2D space</param>
-    /// <param name="sourceRectangle">A rectangle that specifies (in texels) the source texels from a texture. Use null to draw the entire texture.</param>
-    /// <param name="color">Color to apply to texture</param>
-    /// <param name="rotation">Rotation angle</param>
-    /// <param name="origin">Origin for rotation</param>
-    /// <param name="scale">Scale factor</param>
-    /// <param name="effects"><see cref="SpriteEffects"/> to apply to texture</param>
-    /// <param name="layerDepth">Depth of the sprite</param>
+    /// <summary>As <see cref="Draw(Texture, Vector2F, RectangleF?, Color, float, Vector2F, float, SpriteEffects, float)"/>,
+    /// its size multiplied by <paramref name="scale"/> along each axis.</summary>
     public void Draw(
         Texture texture,
         Vector2F position,
