@@ -2,14 +2,15 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 
 namespace Adamantium.Imaging.Jpeg;
 
 /// <summary>The 8×8 inverse DCT of ITU-T T.81 (A.3.3) in two passes, coefficients dequantized, then level-shifted and
-/// clamped samples of 8 or 12 bits. Where the processor has AVX, an 8-bit block is eight rows of eight: each pass the
-/// even and odd halves of the 8-point transform, between them a transpose; elsewhere the passes multiply by the cosine
-/// matrix four samples a vector.</summary>
+/// clamped samples of 8 or 12 bits. An 8-bit block is eight rows of eight - with AVX a vector a row, with NEON or SSE
+/// two: each pass the even and odd halves of the 8-point transform, between them a transpose. Elsewhere, and for 12
+/// bits, the passes multiply by the cosine matrix four samples a vector.</summary>
 [SkipLocalsInit]
 internal static class JpegIdct
 {
@@ -71,10 +72,19 @@ internal static class JpegIdct
     public static void Transform(ReadOnlySpan<short> coefficients, ReadOnlySpan<ushort> quantization, int rows,
         int precision, Span<byte> output, int offset, int stride)
     {
-        if (Avx.IsSupported && Fma.IsSupported && rows != 0 && offset + 7L * stride + 8 <= output.Length)
+        if (rows != 0 && offset + 7L * stride + 8 <= output.Length)
         {
-            Butterflies(coefficients, quantization, output, offset, stride);
-            return;
+            if (Avx.IsSupported && Fma.IsSupported)
+            {
+                Butterflies(coefficients, quantization, output, offset, stride);
+                return;
+            }
+
+            if (AdvSimd.Arm64.IsSupported || Sse.IsSupported)
+            {
+                NarrowButterflies(coefficients, quantization, output, offset, stride);
+                return;
+            }
         }
 
         Span<float> samples = stackalloc float[64];
@@ -249,6 +259,132 @@ internal static class JpegIdct
         var samples = Vector256.ConvertToInt32(Vector256.Min(Vector256.Max(row + Vector256.Create(128.5f),
             Vector256<float>.Zero), Vector256.Create(255f)));
         var shorts = Vector128.Narrow(samples.GetLower(), samples.GetUpper());
+        Unsafe.WriteUnaligned(ref into, Vector128.Narrow(shorts, shorts).AsUInt64().ToScalar());
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void NarrowButterflies(ReadOnlySpan<short> coefficients, ReadOnlySpan<ushort> quantization,
+        Span<byte> output, int offset, int stride)
+    {
+        ref var coefficient = ref MemoryMarshal.GetReference(coefficients);
+        ref var step = ref MemoryMarshal.GetReference(quantization);
+        var (l0, r0) = DequantizeHalves(ref coefficient, ref step, 0);
+        var (l1, r1) = DequantizeHalves(ref coefficient, ref step, 8);
+        var (l2, r2) = DequantizeHalves(ref coefficient, ref step, 16);
+        var (l3, r3) = DequantizeHalves(ref coefficient, ref step, 24);
+        var (l4, r4) = DequantizeHalves(ref coefficient, ref step, 32);
+        var (l5, r5) = DequantizeHalves(ref coefficient, ref step, 40);
+        var (l6, r6) = DequantizeHalves(ref coefficient, ref step, 48);
+        var (l7, r7) = DequantizeHalves(ref coefficient, ref step, 56);
+        for (var pass = 0; pass < 2; pass++)
+        {
+            Transpose(ref l0, ref l1, ref l2, ref l3);
+            Transpose(ref r0, ref r1, ref r2, ref r3);
+            Transpose(ref l4, ref l5, ref l6, ref l7);
+            Transpose(ref r4, ref r5, ref r6, ref r7);
+            (l4, r0) = (r0, l4);
+            (l5, r1) = (r1, l5);
+            (l6, r2) = (r2, l6);
+            (l7, r3) = (r3, l7);
+            Butterfly(ref l0, ref l1, ref l2, ref l3, ref l4, ref l5, ref l6, ref l7);
+            Butterfly(ref r0, ref r1, ref r2, ref r3, ref r4, ref r5, ref r6, ref r7);
+        }
+
+        ref var into = ref output[offset];
+        WriteRow(l0, r0, ref into);
+        WriteRow(l1, r1, ref Unsafe.Add(ref into, stride));
+        WriteRow(l2, r2, ref Unsafe.Add(ref into, 2 * stride));
+        WriteRow(l3, r3, ref Unsafe.Add(ref into, 3 * stride));
+        WriteRow(l4, r4, ref Unsafe.Add(ref into, 4 * stride));
+        WriteRow(l5, r5, ref Unsafe.Add(ref into, 5 * stride));
+        WriteRow(l6, r6, ref Unsafe.Add(ref into, 6 * stride));
+        WriteRow(l7, r7, ref Unsafe.Add(ref into, 7 * stride));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static (Vector128<float> Left, Vector128<float> Right) DequantizeHalves(ref short coefficient,
+        ref ushort step, int at)
+    {
+        var values = Vector128.LoadUnsafe(ref coefficient, (nuint)at);
+        var steps = Vector128.LoadUnsafe(ref step, (nuint)at);
+        var (valuesLow, valuesHigh) = Vector128.Widen(values);
+        var (stepsLow, stepsHigh) = Vector128.Widen(steps);
+        return (Vector128.ConvertToSingle(valuesLow * stepsLow.AsInt32()),
+            Vector128.ConvertToSingle(valuesHigh * stepsHigh.AsInt32()));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Transpose(ref Vector128<float> r0, ref Vector128<float> r1, ref Vector128<float> r2,
+        ref Vector128<float> r3)
+    {
+        Vector128<float> t0, t1, t2, t3;
+        if (AdvSimd.Arm64.IsSupported)
+        {
+            (t0, t1) = (AdvSimd.Arm64.ZipLow(r0, r1), AdvSimd.Arm64.ZipHigh(r0, r1));
+            (t2, t3) = (AdvSimd.Arm64.ZipLow(r2, r3), AdvSimd.Arm64.ZipHigh(r2, r3));
+            r0 = AdvSimd.Arm64.ZipLow(t0.AsUInt64(), t2.AsUInt64()).AsSingle();
+            r1 = AdvSimd.Arm64.ZipHigh(t0.AsUInt64(), t2.AsUInt64()).AsSingle();
+            r2 = AdvSimd.Arm64.ZipLow(t1.AsUInt64(), t3.AsUInt64()).AsSingle();
+            r3 = AdvSimd.Arm64.ZipHigh(t1.AsUInt64(), t3.AsUInt64()).AsSingle();
+            return;
+        }
+
+        (t0, t1) = (Sse.UnpackLow(r0, r1), Sse.UnpackHigh(r0, r1));
+        (t2, t3) = (Sse.UnpackLow(r2, r3), Sse.UnpackHigh(r2, r3));
+        r0 = Sse.MoveLowToHigh(t0, t2);
+        r1 = Sse.MoveHighToLow(t2, t0);
+        r2 = Sse.MoveLowToHigh(t1, t3);
+        r3 = Sse.MoveHighToLow(t3, t1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Butterfly(ref Vector128<float> f0, ref Vector128<float> f1, ref Vector128<float> f2,
+        ref Vector128<float> f3, ref Vector128<float> f4, ref Vector128<float> f5, ref Vector128<float> f6,
+        ref Vector128<float> f7)
+    {
+        var half = Vector128.Create(HalfOverRootTwo);
+        var p0 = (f0 + f4) * half;
+        var p1 = (f0 - f4) * half;
+        var c2 = Vector128.Create(HalfCos2);
+        var c6 = Vector128.Create(HalfCos6);
+        var q0 = Vector128.MultiplyAddEstimate(f2, c2, f6 * c6);
+        var q1 = Vector128.MultiplyAddEstimate(f2, c6, -(f6 * c2));
+        var e0 = p0 + q0;
+        var e1 = p1 + q1;
+        var e2 = p1 - q1;
+        var e3 = p0 - q0;
+
+        var c1 = Vector128.Create(HalfCos1);
+        var c3 = Vector128.Create(HalfCos3);
+        var c5 = Vector128.Create(HalfCos5);
+        var c7 = Vector128.Create(HalfCos7);
+        var o0 = Vector128.MultiplyAddEstimate(f1, c1, Vector128.MultiplyAddEstimate(f3, c3,
+            Vector128.MultiplyAddEstimate(f5, c5, f7 * c7)));
+        var o1 = Vector128.MultiplyAddEstimate(f1, c3, -Vector128.MultiplyAddEstimate(f3, c7,
+            Vector128.MultiplyAddEstimate(f5, c1, f7 * c5)));
+        var o2 = Vector128.MultiplyAddEstimate(f1, c5, Vector128.MultiplyAddEstimate(f5, c7,
+            Vector128.MultiplyAddEstimate(f7, c3, -(f3 * c1))));
+        var o3 = Vector128.MultiplyAddEstimate(f1, c7, Vector128.MultiplyAddEstimate(f5, c3,
+            -Vector128.MultiplyAddEstimate(f3, c5, f7 * c1)));
+
+        f0 = e0 + o0;
+        f7 = e0 - o0;
+        f1 = e1 + o1;
+        f6 = e1 - o1;
+        f2 = e2 + o2;
+        f5 = e2 - o2;
+        f3 = e3 + o3;
+        f4 = e3 - o3;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void WriteRow(Vector128<float> left, Vector128<float> right, ref byte into)
+    {
+        var shift = Vector128.Create(128.5f);
+        var top = Vector128.Create(255f);
+        var low = Vector128.ConvertToInt32(Vector128.Min(Vector128.Max(left + shift, Vector128<float>.Zero), top));
+        var high = Vector128.ConvertToInt32(Vector128.Min(Vector128.Max(right + shift, Vector128<float>.Zero), top));
+        var shorts = Vector128.Narrow(low, high);
         Unsafe.WriteUnaligned(ref into, Vector128.Narrow(shorts, shorts).AsUInt64().ToScalar());
     }
 
