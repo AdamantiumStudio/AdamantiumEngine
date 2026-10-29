@@ -145,7 +145,7 @@ All packages share one version.
   41.7 to 44.8 dithered, where Pillow's median cut comes within 42.8 to 44.6 and ImageMagick 7 within 43.3 to 44.0.
   Its time goes with the colors a picture has: written as GIF, a 3840×1920 photograph takes 0.6 s undithered and
   1.0 dithered, a 3840×2160 one of a million colors 1.4 and 2.6 - Pillow 1.7 and 2.7, ImageMagick 3.1 and 3.9.
-- `ImageShrink.FitWithin`: pixels shrunk to fit a size, the aspect kept - each the average of the area it covers,
+- `ImageDownscaler.FitWithin`: pixels shrunk to fit a size, the aspect kept - each the average of the area it covers,
   colors weighted by alpha so transparent pixels lend them none, sRGB ones averaged as light - for 8- and 16-bit
   gray, RGB and RGBA in either order; read a row at a time in bands on every core, nothing the source's size made.
 - `GifImage.Read`, `GifImage.Frames` (`GifFrame`: place, delay, `GifDisposal`) and `GifImage.Comments`;
