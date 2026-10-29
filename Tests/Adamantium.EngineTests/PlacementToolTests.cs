@@ -1,3 +1,4 @@
+using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine.Tools;
 using Adamantium.Mathematics;
 using NUnit.Framework;
@@ -59,30 +60,30 @@ public class PlacementToolTests
         Assert.That(point.Z, Is.EqualTo(10).Within(1e-2));
     }
 
-    // Looking along the ground, or up, the pointer meets it far off or never: the object goes onto the ground under
-    // what the pointer shows at the camera's focus depth.
+    // With no surface under the pointer - along the ground, above it - the ghost hangs on the pointer at the depth asked,
+    // along the view.
     [TestCase(0f)]
     [TestCase(-0.5f)]
-    public void ARayAlongTheGroundOrAbove_GoesOntoTheGroundUnderTheFocus(float up)
+    public void ARayMeetingNoSurface_HangsAtTheDepthAheadOfTheEye(float up)
     {
-        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = 12 };
+        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
         camera.Update(new Adamantium.Core.AppTime());
         var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0.2f, up, 1)));
 
-        var point = PlacementTool.UnderFocus(ray, camera, 0, camera.FocusDistance);
+        var point = PlacementTool.Along(ray, camera, 12);
 
         Assert.Multiple(() =>
         {
-            Assert.That(point.Y, Is.EqualTo(0), "on the ground");
-            Assert.That(point.Z, Is.EqualTo(12).Within(1e-3), "at the focus depth along the view");
+            Assert.That(point.Z, Is.EqualTo(12).Within(1e-3), "at the depth along the view");
             Assert.That(point.X, Is.EqualTo(2.4).Within(1e-3), "under the pointer");
+            Assert.That(point.Y, Is.EqualTo(up * 12).Within(1e-3), "on the pointer's ray, not dropped to the ground");
         });
     }
 
     // A flat view's ray starts far behind the eye: the depth still counts from the eye.
     [Test]
-    public void AFlatViewsRay_GoesOntoTheGroundAtTheDepthFromTheEye()
+    public void AFlatViewsRay_HangsAtTheDepthFromTheEye()
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
@@ -90,14 +91,36 @@ public class PlacementToolTests
         camera.Update(new Adamantium.Core.AppTime());
         var ray = new Ray<float>(new Vector3F(0.5f, 0, -10000), Vector3F.UnitZ);
 
-        var point = PlacementTool.UnderFocus(ray, camera, 0, 12);
+        var point = PlacementTool.Along(ray, camera, 12);
 
-        Assert.That(point, Is.EqualTo(new Vector3<double>(4.5, 0, 13)).Using<Vector3<double>>((a, b) => (a - b).Length() < 1e-2));
+        Assert.That(point, Is.EqualTo(new Vector3<double>(4.5, -3, 13)).Using<Vector3<double>>((a, b) => (a - b).Length() < 1e-2));
     }
 
-    // Where the ground under the pointer is as deep as the depth asked, the two points are one: no jump between them.
+    // A view along the ground - a flat side view, an eye on it - meets it ahead nowhere: the object goes onto the
+    // ground under what the pointer shows at the depth asked.
+    [TestCase(0f)]
+    [TestCase(-0.5f)]
+    public void AViewAlongTheGround_PutsTheObjectOnTheGroundUnderThePointer(float up)
+    {
+        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
+        new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
+        camera.Update(new Adamantium.Core.AppTime());
+        var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0.2f, up, 1)));
+
+        var point = PlacementTool.UnderFocus(ray, camera, 0, 12);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(point.Y, Is.EqualTo(0), "on the ground");
+            Assert.That(point.Z, Is.EqualTo(12).Within(1e-3), "at the depth along the view");
+            Assert.That(point.X, Is.EqualTo(2.4).Within(1e-3), "under the pointer");
+        });
+    }
+
+    // The ghost hangs at the depth it last touched a surface, so leaving the ground for the sky above it, it stays
+    // where it was under the pointer: the two points are one.
     [Test]
-    public void TheGroundAtTheDepth_IsTheVeryPointBeyondIt()
+    public void TheGroundAtADepth_IsWhereTheGhostHangsAtIt()
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
@@ -106,9 +129,49 @@ public class PlacementToolTests
         var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0, 3, 20)));
 
         PlacementTool.OnGround(ray, camera.WorldPosition, 0, 500, out var onGround);
-        var beyond = PlacementTool.UnderFocus(ray, camera, 0, 20);
+        var hanging = PlacementTool.Along(ray, camera, 20);
 
-        Assert.That((onGround - beyond).Length(), Is.LessThan(1e-3));
+        Assert.That((onGround - hanging).Length(), Is.LessThan(1e-3));
+    }
+
+    // Brought in over the sky, the ghost hangs as deep as the ground the pointer first meets going down the view: as
+    // small as it will be on landing there, not at the camera's focus right in front of the eye.
+    [Test]
+    public void OverTheSky_TheGroundFirstMetBelowIsFarOff()
+    {
+        var camera = RaisedCamera();
+        var sky = new Vector2F(400, 10);
+
+        var depth = PlacementTool.FirstGroundBelow(camera, sky, 0, 500);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(depth, Is.Not.Null);
+            Assert.That(depth, Is.GreaterThan(camera.FocusDistance * 10), "far off, not at the focus");
+            Assert.That(depth, Is.LessThanOrEqualTo(500.5), "no further than the ground reaches");
+        });
+    }
+
+    // Over the ground already, the first ground met is the ground under the pointer: no jump as the ghost lands.
+    [Test]
+    public void OverTheGround_TheGroundFirstMetBelowIsUnderThePointer()
+    {
+        var camera = RaisedCamera();
+        var pixel = new Vector2F(400, 500);
+        PlacementTool.OnGround(PickRay.FromCamera(camera, pixel).Ray, camera.WorldPosition, 0, 500, out var under);
+
+        var depth = PlacementTool.FirstGroundBelow(camera, pixel, 0, 500);
+
+        Assert.That(depth, Is.EqualTo(Vector3<double>.Dot(under - camera.WorldPosition, camera.Forward.As<double>())).Within(1e-3));
+    }
+
+    private static Adamantium.ECS.Components.Camera RaisedCamera()
+    {
+        var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = 2 };
+        new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
+        camera.Owner.Transform.Position = new Vector3<double>(0, -3, 0);
+        camera.Update(new Adamantium.Core.AppTime());
+        return camera;
     }
 
     [Test]
