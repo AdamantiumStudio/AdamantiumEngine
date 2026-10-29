@@ -1,20 +1,20 @@
 using System;
 using System.IO;
 
-namespace Adamantium.Graphics.Core.Content;
+namespace Adamantium.Graphics.Core.Assets;
 
 /// <summary>
 /// Resolves a logical asset name to a baked artifact (<c>&lt;contentRoot&gt;/&lt;name&gt;.aemf</c>) when one
 /// exists, so the runtime loads precompiled content instead of re-parsing the source file. Register this
-/// ahead of <see cref="FileSystemContentResolver"/> so cooked content wins, with raw source as fallback.
+/// ahead of <see cref="FileSystemAssetResolver"/> so cooked content wins, with raw source as fallback.
 /// The root defaults to the application's folder, where a content project puts its cooked files.
 /// </summary>
-public class CookedContentResolver : IContentResolver
+public class CookedAssetResolver : IAssetResolver
 {
     private readonly string contentRoot;
     private readonly string cookedExtension;
 
-    public CookedContentResolver(string contentRoot = null, string cookedExtension = ".aemf")
+    public CookedAssetResolver(string contentRoot = null, string cookedExtension = ".aemf")
     {
         this.contentRoot = contentRoot ?? AppContext.BaseDirectory;
         this.cookedExtension = cookedExtension;

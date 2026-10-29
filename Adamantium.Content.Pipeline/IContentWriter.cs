@@ -4,7 +4,7 @@ namespace Adamantium.Content.Pipeline;
 
 /// <summary>
 /// Serializes a cooked intermediate to the baked binary form. The runtime counterpart is
-/// <c>Adamantium.Graphics.Core.Content.IContentReader</c>.
+/// <c>Adamantium.Graphics.Core.Assets.IAssetReader</c>.
 /// </summary>
 public interface IContentWriter
 {

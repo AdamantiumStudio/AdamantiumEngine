@@ -4,24 +4,24 @@ using System.Threading;
 using System.Threading.Tasks;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using NUnit.Framework;
 
 namespace Adamantium.ContentTests;
 
-/// <summary>What the content manager keeps, how often it reads, and what it throws.</summary>
+/// <summary>What the asset service keeps, how often it reads, and what it throws.</summary>
 [TestFixture]
-public class ContentManagerTests
+public class AssetServiceTests
 {
-    private static readonly ContentLoadOptions Kept = new() { AllowDuplication = false, IgnoreRootDirectory = true };
+    private static readonly AssetLoadOptions Kept = new() { AllowDuplication = false, IgnoreRootDirectory = true };
 
     [Test]
     public void AKeptAsset_IsReadOnce_ThoughLoadedAtTheSameTimeFromManyThreads()
     {
         var reader = new CountingReader { Delay = TimeSpan.FromMilliseconds(50) };
-        var manager = Manager(reader);
+        var assets = CreateService(reader);
 
-        var loads = Enumerable.Range(0, 8).Select(_ => Task.Run(() => manager.Load<Asset>("a", Kept))).ToArray();
+        var loads = Enumerable.Range(0, 8).Select(_ => Task.Run(() => assets.Load<Asset>("a", Kept))).ToArray();
         Task.WaitAll(loads);
 
         Assert.Multiple(() =>
@@ -35,10 +35,10 @@ public class ContentManagerTests
     public void WithNoOptions_EachLoadReadsAnew()
     {
         var reader = new CountingReader();
-        var manager = Manager(reader);
+        var assets = CreateService(reader);
 
-        var first = manager.Load<Asset>("a");
-        var second = manager.Load<Asset>("a");
+        var first = assets.Load<Asset>("a");
+        var second = assets.Load<Asset>("a");
 
         Assert.Multiple(() =>
         {
@@ -50,50 +50,50 @@ public class ContentManagerTests
     [Test]
     public void UnloadingByName_ForgetsAndDisposesTheKeptAsset()
     {
-        var manager = Manager(new CountingReader());
-        var asset = manager.Load<Asset>("a", Kept);
+        var assets = CreateService(new CountingReader());
+        var asset = assets.Load<Asset>("a", Kept);
 
-        var unloaded = manager.Unload<Asset>("a");
+        var unloaded = assets.Unload<Asset>("a");
 
         Assert.Multiple(() =>
         {
             Assert.That(unloaded, Is.True);
             Assert.That(asset.IsDisposed, Is.True);
-            Assert.That(manager.Load<Asset>("a", Kept), Is.Not.SameAs(asset));
-            Assert.That(manager.Unload<Asset>("b"), Is.False);
+            Assert.That(assets.Load<Asset>("a", Kept), Is.Not.SameAs(asset));
+            Assert.That(assets.Unload<Asset>("b"), Is.False);
         });
     }
 
     [Test]
     public void ADisposedAsset_IsReadAgain()
     {
-        var manager = Manager(new CountingReader());
-        var asset = manager.Load<Asset>("a", Kept);
+        var assets = CreateService(new CountingReader());
+        var asset = assets.Load<Asset>("a", Kept);
 
         asset.Dispose();
 
-        Assert.That(manager.Load<Asset>("a", Kept), Is.Not.SameAs(asset));
+        Assert.That(assets.Load<Asset>("a", Kept), Is.Not.SameAs(asset));
     }
 
     [Test]
     public void AFailedLoad_IsNotKept()
     {
         var reader = new CountingReader { FailFirst = true };
-        var manager = Manager(reader);
+        var assets = CreateService(reader);
 
-        Assert.Throws<InvalidOperationException>(() => manager.Load<Asset>("a", Kept));
+        Assert.Throws<InvalidOperationException>(() => assets.Load<Asset>("a", Kept));
 
-        Assert.That(manager.Load<Asset>("a", Kept), Is.Not.Null);
+        Assert.That(assets.Load<Asset>("a", Kept), Is.Not.Null);
     }
 
     [Test]
     public void AnAssetBeingRead_IsDisposedOnceRead_WhenUnloaded()
     {
         var reader = new CountingReader { Delay = TimeSpan.FromMilliseconds(100) };
-        var manager = Manager(reader);
-        var load = manager.LoadAsync<Asset>("a", Kept);
+        var assets = CreateService(reader);
+        var load = assets.LoadAsync<Asset>("a", Kept);
 
-        manager.Unload();
+        assets.Unload();
         var asset = load.Result;
 
         Assert.That(SpinWait.SpinUntil(() => asset.IsDisposed, TimeSpan.FromSeconds(5)), Is.True);
@@ -102,12 +102,12 @@ public class ContentManagerTests
     [Test]
     public void TheMissingAndTheUnreadable_ThrowWhatTheySay()
     {
-        var manager = Manager(new CountingReader());
+        var assets = CreateService(new CountingReader());
 
         Assert.Multiple(() =>
         {
-            Assert.Throws<AssetNotFoundException>(() => manager.Load<Asset>("nowhere/missing.bin", Kept));
-            Assert.Throws<NotSupportedException>(() => manager.Load<string>("a", Kept));
+            Assert.Throws<AssetNotFoundException>(() => assets.Load<Asset>("nowhere/missing.bin", Kept));
+            Assert.Throws<NotSupportedException>(() => assets.Load<string>("a", Kept));
         });
     }
 
@@ -117,9 +117,9 @@ public class ContentManagerTests
     public void LoadAsync_ReadsOffTheCallersThread(bool kept)
     {
         var reader = new CountingReader { Blocking = TimeSpan.FromMilliseconds(300) };
-        var manager = Manager(reader);
+        var assets = CreateService(reader);
 
-        var load = manager.LoadAsync<Asset>("a", kept ? Kept : null);
+        var load = assets.LoadAsync<Asset>("a", kept ? Kept : null);
 
         Assert.Multiple(() =>
         {
@@ -132,25 +132,25 @@ public class ContentManagerTests
     public void TheReader_IsGivenTheLoadsOptions()
     {
         var reader = new CountingReader();
-        var manager = Manager(reader);
+        var assets = CreateService(reader);
 
-        manager.Load<Asset>("a", Kept);
+        assets.Load<Asset>("a", Kept);
 
         Assert.That(reader.LastOptions, Is.SameAs(Kept));
     }
 
-    private static ContentManager Manager(CountingReader reader)
+    private static AssetService CreateService(CountingReader reader)
     {
-        var manager = new ContentManager(new AdamantiumDependencyContainer(), new Satellites());
-        manager.Resolvers.Add(new FileSystemContentResolver());
-        manager.Readers[typeof(Asset)] = reader;
-        manager.Embed("a", [1]);
-        return manager;
+        var assets = new AssetService(new AdamantiumDependencyContainer(), new Satellites());
+        assets.Resolvers.Add(new FileSystemAssetResolver());
+        assets.Readers[typeof(Asset)] = reader;
+        assets.Embed("a", [1]);
+        return assets;
     }
 
     private sealed class Asset : DisposableObject;
 
-    private sealed class CountingReader : IContentReader
+    private sealed class CountingReader : IAssetReader
     {
         private int reads;
 
@@ -164,7 +164,7 @@ public class ContentManagerTests
 
         public object LastOptions { get; private set; }
 
-        public async Task<object> ReadContentAsync(IContentManager contentManager, ContentReaderParameters parameters)
+        public async Task<object> ReadAssetAsync(IAssetService assets, AssetReaderParameters parameters)
         {
             var count = Interlocked.Increment(ref reads);
             LastOptions = parameters.Options;

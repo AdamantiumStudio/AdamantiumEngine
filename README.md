@@ -114,10 +114,10 @@ references it, directly or through another, gets them in its output.
   project's name (`MyGame.ShipContent` gives `ShipContent`), or `AdamantiumContentName`. Two content projects an
   application references need different names.
 - **Finding it.** The class `{Name}Assets` has a constant for each file: its path from the application's folder.
-  `ContentManager` loads by it, taking the cooked model when there is one:
+  The universe's `AssetService` loads by it, taking the cooked model when there is one:
 
 ```csharp
-var scene = await universe.Content.LoadAsync<SceneData>(ShipContentAssets.Models.Ship.Ship_dae);
+var scene = await universe.Assets.LoadAsync<SceneData>(ShipContentAssets.Models.Ship.Ship_dae);
 ```
 
 `dotnet new adamantium-content` (from `Adamantium.Engine.Templates`) creates such a project; Rider and Visual Studio

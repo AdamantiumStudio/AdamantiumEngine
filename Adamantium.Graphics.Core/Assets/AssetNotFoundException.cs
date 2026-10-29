@@ -1,8 +1,8 @@
 ﻿using System;
 
-namespace Adamantium.Graphics.Core.Content;
+namespace Adamantium.Graphics.Core.Assets;
 
-/// <summary>No resolver of a content manager finds the asset, and it is not embedded.</summary>
+/// <summary>No resolver of an asset service finds the asset, and it is not embedded.</summary>
 public class AssetNotFoundException : Exception
 {
     public AssetNotFoundException() { }

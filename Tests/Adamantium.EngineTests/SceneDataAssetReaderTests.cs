@@ -1,7 +1,7 @@
 using System.IO;
 using Adamantium.ECS;
 using Adamantium.Engine.Templates;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse;
@@ -12,7 +12,7 @@ namespace Adamantium.EngineTests;
 /// <summary>A model is named by its file, and keeps the path it was asked for beside the name: a long path in the name
 /// filled the hierarchy's row.</summary>
 [TestFixture]
-public class SceneDataContentReaderTests
+public class SceneDataAssetReaderTests
 {
     [Test]
     public void AModel_IsNamedByItsFile_AndKeepsWhereItWasLoadedFrom()
@@ -24,8 +24,8 @@ public class SceneDataContentReaderTests
             var file = Path.Combine(folder, "box.obj");
             File.WriteAllText(file, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
 
-            var scene = (SceneData)new SceneDataContentReader().ReadContentAsync(null,
-                new ContentReaderParameters { AssetName = "Models/Box/box.obj", AssetPath = file }).GetAwaiter().GetResult();
+            var scene = (SceneData)new SceneDataAssetReader().ReadAssetAsync(null,
+                new AssetReaderParameters { AssetName = "Models/Box/box.obj", AssetPath = file }).GetAwaiter().GetResult();
 
             Assert.Multiple(() =>
             {

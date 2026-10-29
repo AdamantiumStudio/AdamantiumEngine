@@ -6,7 +6,7 @@ using Adamantium.Multiverse;
 using Adamantium.Multiverse.Input;
 using Adamantium.Multiverse.Payloads;
 using Adamantium.Graphics.Core;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using Keys = Adamantium.Multiverse.Input.Keys;
 
 namespace Adamantium.Engine.EntityServices;
@@ -21,7 +21,7 @@ public class RenderingService : EntityService
 
     // Present is a phase of its own that a skipped BeginDraw does not skip: a hidden output must not present its last frame.
     public override bool CanDisplayContent => Window.IsVisible;
-    protected IContentManager Content { get; }
+    protected IAssetService Assets { get; }
     public UniverseOutput Window { get; }
 
     protected InputWormhole InputManager => Window.Input;
@@ -35,7 +35,7 @@ public class RenderingService : EntityService
         GraphicsDeviceService.DeviceChangeBegin += DeviceChangeBegin;
         GraphicsDeviceService.DeviceChangeEnd += DeviceChangeEnd;
         GraphicsDevice = window.GraphicsDevice;
-        Content = world.Satellites.Get<IContentManager>();
+        Assets = world.Satellites.Get<IAssetService>();
         Window = window;
         Window.ParametersChanging += OnWindowParametersChanging;
         Window.ParametersChanged += OnWindowParametersChanged;

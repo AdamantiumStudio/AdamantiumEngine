@@ -3,15 +3,15 @@ using System.Threading.Tasks;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 
-namespace Adamantium.Graphics.Core.Content;
+namespace Adamantium.Graphics.Core.Assets;
 
 /// <summary>Loads assets by name, safe to call from several threads at once.</summary>
-public interface IContentManager
+public interface IAssetService
 {
-   /// <summary>The process-wide services, for a reader that needs one to build its content.</summary>
+   /// <summary>The process-wide services, for a reader that needs one to build its asset.</summary>
    IDependencyResolver ServiceProvider { get; }
 
-   /// <summary>The one-of-a-kind objects of the content's owner - its graphics device service, say - for a reader that
+   /// <summary>The one-of-a-kind objects of the service's owner - its graphics device service, say - for a reader that
    /// needs them.</summary>
    Satellites Satellites { get; }
 
@@ -24,7 +24,7 @@ public interface IContentManager
    /// should say what the bytes hold.</summary>
    void Embed(string assetName, byte[] data);
 
-   /// <summary>Loads an asset by its name with its extension; <see cref="ContentLoadOptions"/> say whether it is kept.
+   /// <summary>Loads an asset by its name with its extension; <see cref="AssetLoadOptions"/> say whether it is kept.
    /// Throws <see cref="AssetNotFoundException"/> when it is neither embedded nor found, and
    /// <see cref="NotSupportedException"/> when no reader reads its type.</summary>
    T Load<T>(string assetName, object options = null);

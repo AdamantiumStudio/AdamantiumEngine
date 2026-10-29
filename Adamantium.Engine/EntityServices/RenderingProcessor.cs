@@ -7,7 +7,7 @@ using Adamantium.Multiverse.Input;
 using Adamantium.Multiverse.Payloads;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 
 namespace Adamantium.Engine.EntityServices;
 
@@ -17,7 +17,7 @@ public class RenderingProcessor : EntityProcessor<RenderingService>, IDisposable
     protected IGraphicsDevice GraphicsDevice { get; set; }
     protected EntityWorld EntityWorld { get; set; }
 
-    protected IContentManager Content { get; set; }
+    protected IAssetService Assets { get; set; }
     protected UniverseOutput Window { get; set; }
 
     protected InputWormhole InputManager => Window.Input;
@@ -48,7 +48,7 @@ public class RenderingProcessor : EntityProcessor<RenderingService>, IDisposable
         EntityWorld = AssociatedService.EntityWorld;
         GraphicsDeviceService = AssociatedService.GraphicsDeviceService;
         GraphicsDevice = AssociatedService.GraphicsDevice;
-        Content = EntityWorld.Satellites.Get<IContentManager>();
+        Assets = EntityWorld.Satellites.Get<IAssetService>();
         Window = AssociatedService.Window;
         CreateDeviceResources();
     }

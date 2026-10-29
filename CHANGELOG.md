@@ -436,15 +436,15 @@ All packages share one version.
   scale, occlusion map and its strength, emissive map (`KHR_materials_emissive_strength` taken), `AlphaMode`,
   `AlphaCutoff` and `DoubleSided`. The forward renderer still draws the base color, its texture and emission.
 - `SceneData.Image.Data` and `MimeType`: an image a model carries inside - a `.glb`'s, a data URI's - as its bytes,
-  written to the `.aemf` with the model; `EntityImportTemplate` embeds them in the content manager under the model's
+  written to the `.aemf` with the model; `EntityImportTemplate` embeds them in the asset service under the model's
   and the image's key and a hash of the bytes (`robot.glb#image0:1A2B3C…`), the material's image path, and loads the
   texture from there - the model saved again with another picture gets that picture. A picture
   that cannot be read leaves its part untextured instead of failing the whole model.
-- `IContentManager.Embed`: makes bytes loadable as an asset of a name, as an image inside a model is; the content
-  manager then loads it (`ContentReaderParameters.Data`), keeps it and loads it again for a new device like one read from
-  a file. `TextureContentReader` reads such a texture from its bytes.
+- `IAssetService.Embed`: makes bytes loadable as an asset of a name, as an image inside a model is; the asset service
+  then loads it (`AssetReaderParameters.Data`), keeps it and loads it again for a new device like one read from a file.
+  `TextureAssetReader` reads such a texture from its bytes.
 - `Entity.Source` and `SceneData.Source`: the file an entity was made from, as it was asked for. A model loaded through
-  the content manager is named by its file (`SceneDataContentReader`) and keeps the path here; it was named by the
+  the asset service is named by its file (`SceneDataAssetReader`) and keeps the path here; it was named by the
   whole path.
 - `Component.IsExpanded` and `Entity.IsExpanded`: whether an inspector shows the object's section open, each object its
   own; open to begin with.
@@ -693,7 +693,7 @@ All packages share one version.
   - **Where it goes.** Into `Content/{Name}/` of every project that references the content project, directly or
     through another. `{Name}` is the last segment of the project's name, or `AdamantiumContentName`.
   - **Finding it.** A generated class `{Name}Assets` has a constant for each file: its path from the application's
-    folder, which `ContentManager` loads by.
+    folder, which `AssetService` loads by.
 
 - `InputWormhole.TakesKeyboard`: whether keys typed into an output go to the game now - its keyboard is on and the
   simulation is not paused - for a host that also uses keys for its own interface.
@@ -1826,6 +1826,11 @@ All packages share one version.
 
 ### Changed
 
+- The content manager is the asset service: `ContentManager`/`IContentManager` are `AssetService`/`IAssetService`,
+  `Universe.Content` is `Universe.Assets`, and the loading types are named for assets too (`IAssetReader` with
+  `ReadAssetAsync`, `AssetReaderParameters`, `AssetLoadOptions`, `IAssetResolver`, `CookedAssetResolver`,
+  `FileSystemAssetResolver`, `SceneDataAssetReader`, `TextureAssetReader`, `ImageAssetReader`), in the namespace
+  `Adamantium.Graphics.Core.Assets`. Building content keeps its names.
 - PNG writes a picture of 256 colors or fewer as a palette in about half the time, others in four fifths, the files
   byte for byte the same: the rows are read whole, a palette is gathered and looked up in a small table of its own
   rather than a hash set and a dictionary, and gray and opacity are checked a vector at a time. A 5400×2700 photo is

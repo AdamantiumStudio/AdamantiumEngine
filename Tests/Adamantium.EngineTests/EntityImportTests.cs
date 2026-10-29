@@ -209,7 +209,7 @@ public class EntityImportTests
         });
     }
 
-    // The content manager keeps what it loaded by name: the model saved again with another picture inside must not get
+    // The asset service keeps what it loaded by name: the model saved again with another picture inside must not get
     // the old picture's texture.
     [Test]
     public void AnImageInside_SavedAgainOtherwise_IsNamedOtherwise()

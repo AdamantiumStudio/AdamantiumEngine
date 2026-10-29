@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Adamantium.Engine.Compiler.Models;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 
 namespace Adamantium.Multiverse;
@@ -11,9 +11,9 @@ namespace Adamantium.Multiverse;
 /// Loads a model into <see cref="SceneData"/>: a baked .aemf through <see cref="SceneDataSerializer"/>, a raw model
 /// through <see cref="ModelConverter"/>. The resolver picks the file; building an Entity from it is the caller's job.
 /// </summary>
-public class SceneDataContentReader : IContentReader
+public class SceneDataAssetReader : IAssetReader
 {
-    public Task<object> ReadContentAsync(IContentManager contentManager, ContentReaderParameters parameters)
+    public Task<object> ReadAssetAsync(IAssetService assets, AssetReaderParameters parameters)
     {
         SceneData scene;
         if (parameters.AssetPath != null &&

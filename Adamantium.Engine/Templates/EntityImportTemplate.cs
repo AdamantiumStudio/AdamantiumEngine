@@ -10,7 +10,7 @@ using Adamantium.ECS.Components.Extensions;
 using Adamantium.ECS.Templates;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Serilog;
@@ -20,25 +20,25 @@ namespace Adamantium.Engine.Templates;
 public class EntityImportTemplate : IEntityTemplate
 {
     private SceneData sceneData;
-    private IContentManager contentManager;
+    private IAssetService assets;
 
     private Vector3<double> initialPosition;
     //private EntityFramework.Components.Camera camera;
 
-    public EntityImportTemplate(SceneData sceneData, IContentManager manager, Camera camera)
+    public EntityImportTemplate(SceneData sceneData, IAssetService assetService, Camera camera)
     {
         this.sceneData = sceneData;
-        contentManager = manager;
+        assets = assetService;
         //this.camera = camera;
     }
         
     /// <param name="initialPosition">Where the model's own origin is placed, as the file has it: the root's position is
     /// its position in the file plus this, the model is not moved to put its center there, and it scales and turns about
     /// that origin. Each part below it turns about its own center.</param>
-    public EntityImportTemplate(SceneData sceneData, IContentManager manager, Vector3<double> initialPosition)
+    public EntityImportTemplate(SceneData sceneData, IAssetService assetService, Vector3<double> initialPosition)
     {
         this.sceneData = sceneData;
-        contentManager = manager;
+        assets = assetService;
         this.initialPosition = initialPosition;
         //this.camera = camera;
     }
@@ -326,24 +326,27 @@ public class EntityImportTemplate : IEntityTemplate
         return $"{sceneData.Source ?? sceneData.Name}#{image.ID ?? imageKey}{content}";
     }
 
-    // An image carried inside the model is embedded under its path, so the content manager owns its texture as it owns
+    // An image carried inside the model is embedded under its path, so the asset service owns its texture as it owns
     // one read from a file, and loads it again for a new device. A picture that cannot be read leaves the part untextured.
     private Texture LoadTexture(SceneData.Image image, string path)
     {
-        if (contentManager == null) return null;
+        if (assets == null)
+        {
+            return null;
+        }
 
         try
         {
-            var options = new ContentLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
+            var options = new AssetLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
             if (File.Exists(image.FilePath))
             {
-                return contentManager.Load<Texture>(image.FilePath, options);
+                return assets.Load<Texture>(image.FilePath, options);
             }
 
             if (image.Data is not { Length: > 0 } data) return null;
 
-            contentManager.Embed(path, data);
-            return contentManager.Load<Texture>(path, options);
+            assets.Embed(path, data);
+            return assets.Load<Texture>(path, options);
         }
         catch (Exception exception)
         {
