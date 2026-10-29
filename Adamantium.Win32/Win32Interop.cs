@@ -343,6 +343,16 @@ namespace Adamantium.Win32
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        /// <summary>For <see cref="AllowSetForegroundWindow"/>: every process may.</summary>
+        public const int AsfwAny = -1;
+
+        /// <summary>Lets the process <paramref name="processId"/> (or every one, <see cref="AsfwAny"/>) bring its window to
+        /// the front, as this process could until the user's next input; works only while this process is the foreground
+        /// one.</summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AllowSetForegroundWindow(int processId);
+
         /// <summary>Lets a window take mouse and keyboard input, or refuses it all; returns whether it was disabled before.</summary>
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
