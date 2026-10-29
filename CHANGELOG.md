@@ -709,10 +709,10 @@ All packages share one version.
   copied to the output (`BuildResult.Copied`) instead of failing.
 
 - The content compiler cleans up after itself, building from a manifest as well: what it built from an asset no longer
-  listed is deleted, and a build by another version of the compiler cooks everything again. It deletes only what its
+  listed is deleted, and a build by another version of the compiler copies everything again. It deletes only what its
   cache says it wrote, inside the output folder. A model's texture outside the model's folder is left behind with a
   warning instead of being copied out of the output folder; an absolute reference to one inside it is made relative.
-  Its warnings and errors are in MSBuild's form (`ACB001`-`ACB008`), so an IDE lists them.
+  Its warnings and errors are in MSBuild's form (`ACB001`-`ACB010`), so an IDE lists them.
 
 - `IGraphicsDevice.TargetOrigin`: where the target being drawn into lies in the coordinates viewports and scissors are
   given in, for a target that holds one region of the surface. Callers keep setting viewports and scissors in the
@@ -1108,7 +1108,7 @@ All packages share one version.
   (joint -1) is left out and reported; a matrix node moved by its parts stood at the origin at rest.
 - A Z_UP model - Collada from Blender or Max, 3DS - stood on its head with its back to the camera: its up comes in as
   the engine's, -Y, and its front, -Y in the file, as -Z, where a glTF model's goes.
-- Content is cooked again when any assembly of the compiler changes - an importer, the scene format - not only when
+- Content is copied again when any assembly of the compiler changes - an importer, the scene format - not only when
   its own does.
 - `MSDFGenerator.GenerateMSDFForExistingTextureData` filled the space away from a glyph with a distance that changed
   with where the glyph sat in its em square; it is half the em now, for every glyph.
@@ -1830,11 +1830,19 @@ All packages share one version.
 
 ### Changed
 
-- Every file the content build cooks is an `AssetFile`: an `IContentWriter` writes its body, and the build adds the
-  header and the `AssetSource`. A model cooked before the header, a file of another format version, or a model whose
-  body this engine no longer reads is refused with `AssetFormatException`, which asks to import its source again; the
-  content build cooks such files again by itself. Content projects built with the published `Adamantium.Content.Build`
-  package cook the old format until the next package release.
+- The content build imports a model into its asset file BESIDE its source in the project folder - `Ship.dae.aemf`
+  beside `Ship.dae` - and copies that file to the output under the name the cooked model had there before, with the
+  textures it reads. A source linked in from outside the project gets its asset file in the intermediate folder:
+  nothing is written outside the project. It imports only when there is no asset file yet, the one there cannot be read, or the source (by
+  its hash) or its settings changed: not when only the engine, its format or its importer did. A file of a format
+  version this engine does not read is kept as it is with warning ACB009; one of an older version it reads, with
+  warning ACB010; both stay warnings where warnings are errors. An asset file is written whole or not at all. Every
+  file the build imports is an `AssetFile`: an `IContentWriter` writes its body, and the build adds the header and the
+  `AssetSource` - the source's path and hash, the importer, the settings, the engine's version and the files beside it
+  the asset reads. A model cooked before the header, or one this engine no longer reads, is refused with
+  `AssetFormatException` (its `WrittenVersion` says when the version is why), which asks to import its source again.
+  `{Name}Assets` names an asset file by its source: `Ship.dae.aemf` and `Ship.dae` are one constant. Content projects
+  built with the published `Adamantium.Content.Build` package cook the old way until the next package release.
 - The content manager is the asset service: `ContentManager`/`IContentManager` are `AssetService`/`IAssetService`,
   `Universe.Content` is `Universe.Assets`, and the loading types are named for assets too (`IAssetReader` with
   `ReadAssetAsync`, `AssetReaderParameters`, `AssetLoadOptions`, `IAssetResolver`, `CookedAssetResolver`,
@@ -2126,7 +2134,7 @@ All packages share one version.
   `Adamantium.Imaging`, `Adamantium.Fonts`, `Adamantium.Engine.Compiler` - carry `NOTICE` and `THIRD-PARTY-NOTICES.md`;
   the other packages have none in them and carry neither.
 - A baked mesh is format version 2 (its extra data, attributes, morph targets and material variants): a `.aemf` baked
-  before is refused and baked again.
+  before is refused.
 - A glTF light's `Color` is its color alone, its brightness in `Intensity`; it was the two multiplied.
 - A content project keeps `ACB005` - what an import does not read, such as morph targets - a warning where warnings are
   errors: it tells about the asset, not a fault of the build.

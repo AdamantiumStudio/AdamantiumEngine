@@ -20,6 +20,9 @@ public sealed class ContentBuilder
     private readonly Dictionary<string, IContentImporter> importersByExtension = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IContentWriter> writersByImporter = new(StringComparer.OrdinalIgnoreCase);
 
+    private static readonly string EngineVersion =
+        typeof(AssetFile).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
     /// <summary>Builds a content builder with the built-in importers/writers registered.</summary>
     public ContentBuilder()
     {
@@ -80,8 +83,11 @@ public sealed class ContentBuilder
         }
     }
 
-    /// <summary>Cooks every asset in the manifest that is stale, writing artifacts under the output directory. An asset
-    /// no importer takes is copied there as it is. What was built from an asset no longer listed is deleted.</summary>
+    /// <summary>Imports each asset an importer takes into its asset file beside it (<c>Ship.dae.aemf</c> beside
+    /// <c>Ship.dae</c>; for a source outside the project, in the intermediate directory) when there is none yet, it
+    /// cannot be read, or the source or its settings changed - not when only the format or the importer did - and
+    /// copies the asset file to the output directory. An asset no importer takes is copied there as it
+    /// is. What was built from an asset no longer listed is deleted from the output.</summary>
     public BuildResult Build(ContentManifest manifest, string projectDirectory, Action<string> log = null)
     {
         log ??= _ => { };
@@ -94,10 +100,16 @@ public sealed class ContentBuilder
         var cachePath = Path.Combine(intermediateDirectory, ".acache");
         var cache = BuildCache.LoadFor(cachePath, outputDirectory);
         var result = new BuildResult();
+        var importTargets = GetImportTargets(manifest, projectDirectory);
 
         foreach (var asset in manifest.Assets)
         {
             var sourceFull = Path.GetFullPath(Path.Combine(projectDirectory, asset.Source));
+            if (importTargets.Contains(sourceFull))
+            {
+                continue;
+            }
+
             if (!File.Exists(sourceFull))
             {
                 log($"{sourceFull} : error ACB001: the source file is missing");
@@ -135,67 +147,66 @@ public sealed class ContentBuilder
 
             var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
             var writer = writersByImporter[importerName];
+            var assetFull = BuildCache.IsInside(projectDirectory, sourceFull)
+                ? sourceFull + writer.OutputExtension
+                : Path.Combine(intermediateDirectory, "assets", logicalName + writer.OutputExtension);
             var cookedRelative = logicalName + writer.OutputExtension;
             var cookedFull = Path.Combine(outputDirectory, cookedRelative);
-
-            if (!cache.IsStale(asset.Source, sourceFull, asset.Parameters, cookedFull))
-            {
-                log($"  [up-to-date] {asset.Source}");
-                result.Skipped++;
-                continue;
-            }
-
-            log($"  [cook] {asset.Source} -> {cookedRelative}");
-            var companions = new List<(string From, string To)>();
-            var context = new ContentBuildContext
-            {
-                ProjectDirectory = projectDirectory,
-                OutputDirectory = outputDirectory,
-                IntermediateDirectory = intermediateDirectory,
-                Parameters = asset.Parameters,
-                Log = log,
-                CopyAlongside = (from, to) => companions.Add((from, to))
-            };
+            var cookedDirectory = Path.GetDirectoryName(cookedFull);
 
             try
             {
-                var content = importer.Import(sourceFull, context);
-
-                var cookedDirectory = Path.GetDirectoryName(cookedFull);
-                Directory.CreateDirectory(cookedDirectory);
-                WriteAssetFile(cookedFull, writer, content, new AssetSource
+                var hash = AssetSource.ComputeHash(sourceFull);
+                var reason = GetImportReason(assetFull, sourceFull, hash, importerName, asset.Parameters, log);
+                if (reason == null && !cache.IsStale(asset.Source, assetFull, asset.Parameters, cookedFull))
                 {
-                    Path = Normalize(Path.GetRelativePath(
-                        Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
-                    Importer = importerName,
-                    Parameters = asset.Parameters == null ? new() : new(asset.Parameters)
-                });
-
-                List<string> written = [];
-                foreach (var (from, to) in companions)
-                {
-                    var destination = Path.GetFullPath(Path.Combine(cookedDirectory, to));
-                    if (!BuildCache.IsInside(outputDirectory, destination))
-                    {
-                        log($"{sourceFull} : warning ACB003: the texture {to} lies outside the model's folder and is not carried with it");
-                        continue;
-                    }
-
-                    Directory.CreateDirectory(Path.GetDirectoryName(destination));
-                    File.Copy(from, destination, true);
-                    written.Add(Normalize(Path.GetRelativePath(outputDirectory, destination)));
+                    log($"  [up-to-date] {asset.Source}");
+                    result.Skipped++;
+                    continue;
                 }
 
-                cache.Update(asset.Source, sourceFull, asset.Parameters, cookedRelative, written);
-                result.Cooked++;
+                if (reason != null)
+                {
+                    log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({reason})");
+                    List<(string From, string To)> companions = [];
+                    var context = new ContentBuildContext
+                    {
+                        ProjectDirectory = projectDirectory,
+                        OutputDirectory = outputDirectory,
+                        IntermediateDirectory = intermediateDirectory,
+                        Parameters = asset.Parameters,
+                        Log = log,
+                        CopyAlongside = (from, to) => companions.Add((from, to))
+                    };
+
+                    var content = importer.Import(sourceFull, context);
+                    WriteAssetFile(assetFull, writer, content, new AssetSource
+                    {
+                        Path = Normalize(Path.GetRelativePath(
+                            Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
+                        Hash = hash,
+                        Importer = importerName,
+                        Parameters = asset.Parameters == null ? new() : new(asset.Parameters),
+                        EngineVersion = EngineVersion,
+                        Companions = companions.Select(companion => Normalize(companion.To)).Distinct().ToList()
+                    });
+                }
+
+                Directory.CreateDirectory(cookedDirectory);
+                File.Copy(assetFull, cookedFull, true);
+                var written = CopyCompanions(assetFull, cookedDirectory, outputDirectory, sourceFull, log);
+                cache.Update(asset.Source, assetFull, asset.Parameters, cookedRelative, written);
+                if (reason != null)
+                {
+                    result.Cooked++;
+                }
+                else
+                {
+                    result.Copied++;
+                }
             }
             catch (Exception ex)
             {
-                if (File.Exists(cookedFull))
-                {
-                    File.Delete(cookedFull);
-                }
-
                 log($"{sourceFull} : error ACB004: {ex.Message}");
                 result.Failed++;
             }
@@ -206,13 +217,130 @@ public sealed class ContentBuilder
         return result;
     }
 
+    private HashSet<string> GetImportTargets(ContentManifest manifest, string projectDirectory)
+    {
+        HashSet<string> targets = new(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+        foreach (var asset in manifest.Assets)
+        {
+            var sourceFull = Path.GetFullPath(Path.Combine(projectDirectory, asset.Source));
+            if (BuildCache.IsInside(projectDirectory, sourceFull) && ResolveImporter(asset, sourceFull) is { } importer)
+            {
+                var name = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
+                targets.Add(sourceFull + writersByImporter[name].OutputExtension);
+            }
+        }
+
+        return targets;
+    }
+
+    private static string GetImportReason(string assetFull, string sourceFull, string sourceHash, string importerName,
+        IReadOnlyDictionary<string, string> parameters, Action<string> log)
+    {
+        if (!File.Exists(assetFull))
+        {
+            return "new";
+        }
+
+        AssetFile file;
+        try
+        {
+            file = AssetFile.Read(assetFull, AssetFileSection.Source);
+        }
+        catch (AssetFormatException exception) when (exception.WrittenVersion != null)
+        {
+            log($"{sourceFull} : warning ACB009: {exception.Message}");
+            return null;
+        }
+        catch (AssetFormatException)
+        {
+            return "unreadable";
+        }
+
+        if (file.Version != AssetFile.FormatVersion)
+        {
+            log($"{sourceFull} : warning ACB010: {Path.GetFileName(assetFull)} is in format version {file.Version}, " +
+                $"this engine writes {AssetFile.FormatVersion}; import its source again to bring it up to date");
+        }
+
+        var source = file.Source;
+        if (source == null || source.Hash != sourceHash)
+        {
+            return "source changed";
+        }
+
+        return string.Equals(source.Importer, importerName, StringComparison.OrdinalIgnoreCase)
+               && HaveSameParameters(source.Parameters, parameters)
+            ? null
+            : "settings changed";
+    }
+
+    private static bool HaveSameParameters(IReadOnlyDictionary<string, string> recorded,
+        IReadOnlyDictionary<string, string> wanted)
+    {
+        var count = wanted?.Count ?? 0;
+        return recorded.Count == count
+               && (count == 0 || wanted.All(pair => recorded.TryGetValue(pair.Key, out var value) && value == pair.Value));
+    }
+
+    private static List<string> CopyCompanions(string assetFull, string cookedDirectory, string outputDirectory,
+        string sourceFull, Action<string> log)
+    {
+        List<string> written = [];
+        List<string> companions;
+        try
+        {
+            companions = AssetFile.Read(assetFull, AssetFileSection.Source).Source?.Companions ?? [];
+        }
+        catch (AssetFormatException)
+        {
+            return written;
+        }
+
+        var sourceDirectory = Path.GetDirectoryName(sourceFull);
+        foreach (var to in companions)
+        {
+            var destination = Path.GetFullPath(Path.Combine(cookedDirectory, to));
+            if (!BuildCache.IsInside(outputDirectory, destination))
+            {
+                log($"{sourceFull} : warning ACB003: the texture {to} lies outside the model's folder and is not carried with it");
+                continue;
+            }
+
+            var from = Path.GetFullPath(Path.Combine(sourceDirectory, to));
+            if (!File.Exists(from))
+            {
+                log($"{sourceFull} : warning ACB006: the texture {to} is not found");
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination));
+            File.Copy(from, destination, true);
+            written.Add(Normalize(Path.GetRelativePath(outputDirectory, destination)));
+        }
+
+        return written;
+    }
+
     private static void WriteAssetFile(string path, IContentWriter writer, object content, AssetSource source)
     {
         using var body = new MemoryStream();
         writer.Write(body, content);
 
-        using var stream = File.Create(path);
-        new AssetFile { Source = source, Body = body.ToArray() }.WriteTo(stream);
+        var writing = path + ".writing";
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        try
+        {
+            using (var stream = File.Create(writing))
+            {
+                new AssetFile { Source = source, Body = body.ToArray() }.WriteTo(stream);
+            }
+
+            File.Move(writing, path, true);
+        }
+        finally
+        {
+            File.Delete(writing);
+        }
     }
 
     private static void Copy(ContentAsset asset, string sourceFull, string logicalName, string outputDirectory,

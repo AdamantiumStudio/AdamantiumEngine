@@ -44,15 +44,142 @@ public class ContentBuilderTests
     }
 
     [Test]
-    public void AModel_IsCookedUnderItsSourceNamePlusTheArtifactExtension()
+    public void AModel_IsImportedBesideItsSource_AndOnlyTheAssetFileGoesToTheOutput()
     {
         Write("Models/triangle.obj", Triangle);
 
         var result = Build("Models/triangle.obj");
 
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
+            Assert.That(File.Exists(Path.Combine(_project, "Models", "triangle.obj.aemf")), Is.True);
+            Assert.That(File.ReadAllBytes(Path.Combine(_output, "Models", "triangle.obj.aemf")),
+                Is.EqualTo(File.ReadAllBytes(Path.Combine(_project, "Models", "triangle.obj.aemf"))));
+            Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj")), Is.False);
+        });
+    }
+
+    [Test]
+    public void AnUnchangedModel_IsNotImportedAgain()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        var asset = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        var written = File.GetLastWriteTimeUtc(asset);
+
+        var result = Build("Models/triangle.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(0), result.ToString());
+            Assert.That(result.Skipped, Is.EqualTo(1));
+            Assert.That(File.GetLastWriteTimeUtc(asset), Is.EqualTo(written));
+        });
+    }
+
+    [Test]
+    public void AChangedSource_IsImportedAgain()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        Write("Models/triangle.obj", Triangle + "v 1 1 0\n");
+
+        var result = Build("Models/triangle.obj");
+
         Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
-        Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj.aemf")), Is.True);
-        Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj")), Is.False);
+    }
+
+    [Test]
+    public void ChangedSettings_AreImportedAgain()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        manifest.Assets[0].Parameters["Scale"] = "2";
+
+        var result = new ContentBuilder().Build(manifest, _project);
+
+        Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
+    }
+
+    [Test]
+    public void AnAssetFileOfAnotherFormatVersion_IsKeptAsItIs_WithAWarning()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        var asset = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        var bytes = File.ReadAllBytes(asset);
+        bytes[4] = AssetFile.FormatVersion + 1;
+        File.WriteAllBytes(asset, bytes);
+        List<string> log = [];
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = new ContentBuilder().Build(manifest, _project, log.Add);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(0), result.ToString());
+            Assert.That(log, Has.Some.Contains("warning ACB009"));
+            Assert.That(File.ReadAllBytes(asset), Is.EqualTo(bytes));
+            Assert.That(File.ReadAllBytes(Path.Combine(_output, "Models", "triangle.obj.aemf")), Is.EqualTo(bytes));
+        });
+    }
+
+    [TestCase(0)]
+    [TestCase(100)]
+    public void AnAssetFileCutShort_IsImportedAgain(int length)
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        var asset = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        File.WriteAllBytes(asset, File.ReadAllBytes(asset)[..length]);
+
+        var result = Build("Models/triangle.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
+            Assert.That(AssetFile.Read(asset, AssetFileSection.Body).Body, Is.Not.Empty);
+        });
+    }
+
+    [Test]
+    public void ATextureThatIsNotContent_GoesToTheOutputAgain_AfterTheOutputIsWiped()
+    {
+        var texture = Path.Combine(_project, "Models", "tex.png");
+        Write("Models/tex.png", "png");
+        Write("Models/tri.mtl", "newmtl m\nmap_Kd " + texture + "\n");
+        Write("Models/tri.obj", "mtllib tri.mtl\nusemtl m\n" + Triangle);
+        Build("Models/tri.obj");
+        Directory.Delete(_output, true);
+
+        var result = Build("Models/tri.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(0), result.ToString());
+            Assert.That(File.Exists(Path.Combine(_output, "Models", "tri.obj.aemf")), Is.True);
+            Assert.That(File.Exists(Path.Combine(_output, "Models", "tex.png")), Is.True);
+        });
+    }
+
+    [Test]
+    public void AnAssetFileListedBesideItsSource_GoesToTheOutputOnce()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+
+        var result = Build("Models/triangle.obj", "Models/triangle.obj.aemf");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Failed, Is.EqualTo(0), result.ToString());
+            Assert.That(result.Copied, Is.EqualTo(0));
+            Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj.aemf.aemf")), Is.False);
+        });
     }
 
     [Test]
@@ -69,8 +196,10 @@ public class ContentBuilderTests
         Assert.Multiple(() =>
         {
             Assert.That(source.Path, Is.EqualTo("triangle.obj"));
+            Assert.That(source.Hash, Is.EqualTo(AssetSource.ComputeHash(Path.Combine(_project, "Models", "triangle.obj"))));
             Assert.That(source.Importer, Is.EqualTo("Model"));
             Assert.That(source.Parameters, Is.EqualTo(new Dictionary<string, string> { ["Scale"] = "2" }));
+            Assert.That(source.EngineVersion, Is.Not.Empty);
         });
     }
 
@@ -92,7 +221,12 @@ public class ContentBuilderTests
             new ContentBuilder().Build(manifest, _project);
 
             var source = AssetFile.Read(Path.Combine(_output, "Models", "x.obj.aemf"), AssetFileSection.Source).Source;
-            Assert.That(source.Path, Is.EqualTo("../../" + Path.GetFileName(shared) + "/x.obj"));
+            Assert.Multiple(() =>
+            {
+                Assert.That(source.Path, Is.EqualTo("../../" + Path.GetFileName(shared) + "/x.obj"));
+                Assert.That(File.Exists(Path.Combine(shared, "x.obj.aemf")), Is.False, "nothing written outside the project");
+                Assert.That(File.Exists(Path.Combine(_project, "cache", "assets", "Models", "x.obj.aemf")), Is.True);
+            });
         }
         finally
         {
@@ -199,6 +333,26 @@ public class ContentBuilderTests
     }
 
     [Test]
+    public void ABuildByAnotherVersionOfTheCompiler_CopiesAModelAgain_WithoutImportingIt()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        var cachePath = Path.Combine(_project, "cache", ".acache");
+        var cache = BuildCache.Load(cachePath);
+        cache.Compiler = "another";
+        cache.Save(cachePath);
+
+        var result = Build("Models/triangle.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(0), result.ToString());
+            Assert.That(result.Copied, Is.EqualTo(1));
+            Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj.aemf")), Is.True);
+        });
+    }
+
+    [Test]
     public void AnArtifactTheWriterFailedHalfway_IsNotLeftBehind()
     {
         Write("a.companion", Path.Combine(_project, "a.companion") + "\nsame.companion");
@@ -211,6 +365,8 @@ public class ContentBuilderTests
 
         Assert.That(result.Failed, Is.EqualTo(1));
         Assert.That(File.Exists(Path.Combine(_output, "a.companion.bytes")), Is.False);
+        Assert.That(File.Exists(Path.Combine(_project, "a.companion.bytes")), Is.False);
+        Assert.That(File.Exists(Path.Combine(_project, "a.companion.bytes.writing")), Is.False);
     }
 
     [Test]

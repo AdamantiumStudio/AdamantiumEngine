@@ -11,9 +11,12 @@ namespace Adamantium.Graphics.Core.Assets;
 /// <see cref="Thumbnail"/>, <see cref="Source"/> and <see cref="Body"/> - each read without the others.</summary>
 public sealed class AssetFile
 {
-    /// <summary>The version of the format this engine writes and reads; a file of another version is imported
-    /// again.</summary>
+    /// <summary>The version of the format this engine writes.</summary>
     public const ushort FormatVersion = 1;
+
+    /// <summary>The oldest version this engine still reads: the one before <see cref="FormatVersion"/> once there is one.
+    /// A file of a version outside them is refused with <see cref="AssetFormatException.WrittenVersion"/> set.</summary>
+    public const ushort OldestReadableVersion = 1;
 
     private const int SectionEntrySize = sizeof(int) + sizeof(long) + sizeof(long);
 
@@ -21,6 +24,9 @@ public sealed class AssetFile
 
     private static readonly MessagePackSerializerOptions SourceOptions =
         MessagePackSerializerOptions.Standard.WithResolver(ContractlessStandardResolver.Instance);
+
+    /// <summary>The format version the file was read in; <see cref="FormatVersion"/> for one made here.</summary>
+    public ushort Version { get; private set; } = FormatVersion;
 
     /// <summary>A PNG picture of the asset; null when it has none.</summary>
     public byte[] Thumbnail { get; set; }
@@ -62,10 +68,13 @@ public sealed class AssetFile
         }
 
         var version = reader.ReadUInt16();
-        if (version != FormatVersion)
+        if (version is < OldestReadableVersion or > FormatVersion)
         {
+            var readable = OldestReadableVersion == FormatVersion
+                ? $"{FormatVersion}"
+                : $"{OldestReadableVersion} to {FormatVersion}";
             throw new AssetFormatException(
-                $"written in format version {version}, this engine reads {FormatVersion}; import its source again");
+                $"written in format version {version}, this engine reads {readable}; import its source again", version);
         }
 
         var count = reader.ReadUInt16();
@@ -80,7 +89,7 @@ public sealed class AssetFile
             entries.Add(((AssetFileSection)reader.ReadInt32(), reader.ReadInt64(), reader.ReadInt64()));
         }
 
-        var file = new AssetFile();
+        var file = new AssetFile { Version = version };
         var read = AssetFileSection.None;
         foreach (var (section, offset, length) in entries)
         {
@@ -189,6 +198,7 @@ public sealed class AssetFile
         if (source != null)
         {
             source.Parameters ??= new();
+            source.Companions ??= [];
         }
 
         return source;
