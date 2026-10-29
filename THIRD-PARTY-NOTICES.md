@@ -1,50 +1,9 @@
 # Third-party notices
 
-Parts of this engine are derived from other people's work. The code is under the MIT licence, and the Draco decoder
-under the Apache License 2.0 — the licence of this engine itself. Both permit use, modification and distribution —
-including inside a closed product — on the condition that the copyright notice and the licence text travel with the
-code; Apache 2.0 also asks that changed files say they were changed. The per-file headers in the sources are that
-notice and must not be removed; this file carries the licence texts they refer to.
-
-Listed here is code that was *taken in and edited*, not packages consumed as dependencies — those carry their own
-licences with them.
-
 **On modifications.** All of this has been changed, some of it heavily. That is what the licence allows, and it does not
 transfer anything: the original notice stays with a derived file for as long as any of the original remains in it, and
 the changes themselves belong to this project. Both statements are meant to be read together — the header says whose
 work it started as, this file says it did not stay that way.
-
----
-
-## meshoptimizer — glTF meshopt decoder
-
-**Where:** `Adamantium.Engine.Compiler/Models/Gltf/GltfMeshopt.cs`
-
-The decoder of `EXT_meshopt_compression` and `KHR_meshopt_compression`. The bitstream is the one the Khronos extension
-specifies; the decoding steps and the filters' arithmetic follow the scalar paths of meshoptimizer
-(`src/vertexcodec.cpp`, `src/indexcodec.cpp`, `src/vertexfilter.cpp`), rewritten in C#.
-
-```
-Copyright (c) 2016-2026 Arseny Kapoulkine
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
 
 ---
 
