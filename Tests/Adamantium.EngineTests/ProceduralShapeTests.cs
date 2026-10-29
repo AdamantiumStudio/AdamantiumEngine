@@ -5,6 +5,7 @@ using Adamantium.ECS.Components;
 using Adamantium.Engine.Templates;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.ProceduralGeometry;
 using Adamantium.ProceduralGeometry.Shapes;
 using NUnit.Framework;
 
@@ -26,6 +27,70 @@ public class ProceduralShapeTests
         yield return new TestCaseData(new CapsuleShape { Size = Size3 }).SetName("Capsule");
         yield return new TestCaseData(new TorusShape { Size = Size3, Thickness = 0.4 }).SetName("Torus");
         yield return new TestCaseData(new TubeShape { Size = Size3 }).SetName("Tube");
+    }
+
+    // The seam's column is the first one again, for the texture: a band stitched from it to the first column made a
+    // ring of slivers whose normals darkened the seam.
+    [Test]
+    public void ARoundSolid_HasNoSliversAtItsSeam()
+    {
+        Mesh[] meshes =
+        [
+            Shapes.Capsule.GenerateGeometry(GeometryType.Solid, 2.0, 1.0, 12),
+            Shapes.Sphere.GenerateGeometry(GeometryType.Solid, SphereType.UVSphere, 1.0, 12)
+        ];
+
+        foreach (var mesh in meshes)
+        {
+            for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
+            {
+                Vector3<double>[] corners = [mesh.Points[mesh.Indices[i]], mesh.Points[mesh.Indices[i + 1]], mesh.Points[mesh.Indices[i + 2]]];
+                for (int k = 0; k < 3; k++)
+                {
+                    var a = corners[k];
+                    var b = corners[(k + 1) % 3];
+                    var onAxis = a.X * a.X + a.Z * a.Z < 1e-12;
+                    Assert.That(onAxis || (a - b).Length() > 1e-6, Is.True, $"triangle {i / 3} has two corners in one place");
+                }
+            }
+        }
+    }
+
+    // Where a patch closes to a point the tangents vanish; rounding there once passed for a surface at some sizes, and
+    // the normals on the teapot's axis lay flat.
+    [TestCase(1.0, 8)]
+    [TestCase(5.0, 13)]
+    [TestCase(100.0, 13)]
+    public void TheTeapotsNormals_OnItsAxis_PointAlongIt(double size, int tessellation)
+    {
+        var mesh = Shapes.Teapot.GenerateGeometry(GeometryType.Solid, size, tessellation);
+
+        for (int i = 0; i < mesh.Points.Length; i++)
+        {
+            var point = mesh.Points[i];
+            if (point.X * point.X + point.Z * point.Z < 1e-10 * size * size)
+            {
+                Assert.That(Math.Abs(mesh.Normals[i].Y), Is.GreaterThan(0.9f), $"point {i} at {point}");
+            }
+        }
+    }
+
+    // Averaged on each side of the seam on its own, the normals of a capsule broke at it and the seam showed.
+    [Test]
+    public void ACapsulesSeam_HasOneNormal()
+    {
+        var mesh = Shapes.Capsule.GenerateGeometry(GeometryType.Solid, 2.0, 1.0, 8);
+
+        for (int i = 0; i < mesh.Points.Length; i++)
+        {
+            for (int j = i + 1; j < mesh.Points.Length; j++)
+            {
+                if ((mesh.Points[i] - mesh.Points[j]).Length() < 1e-5)
+                {
+                    Assert.That((mesh.Normals[i] - mesh.Normals[j]).Length(), Is.LessThan(1e-4f), $"points {i} and {j}");
+                }
+            }
+        }
     }
 
     [TestCaseSource(nameof(SolidsFillingTheirSize))]

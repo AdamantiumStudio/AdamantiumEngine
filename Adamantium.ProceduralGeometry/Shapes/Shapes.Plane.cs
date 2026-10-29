@@ -102,8 +102,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 {
                     for (int x = 0; x < tessellation; x++)
                     {
-                        // Six indices (two triangles) per face.
-                        //1st triangle 
+                        //1st triangle
                         int vbase = lineWidth * z + x;
                         indices[indexCount++] = vbase;
                         indices[indexCount++] = vbase + lineWidth;
