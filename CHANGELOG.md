@@ -1825,6 +1825,10 @@ All packages share one version.
 
 ### Changed
 
+- PNG writes a picture of 256 colors or fewer as a palette in about half the time, others in four fifths, the files
+  byte for byte the same: the rows are read whole, a palette is gathered and looked up in a small table of its own
+  rather than a hash set and a dictionary, and gray and opacity are checked a vector at a time. A 5400×2700 photo is
+  written about as fast as Pillow writes it, its RGBA form faster.
 - JPEG decodes 1.7 to 2.8 times as fast on one core, as fast as libjpeg-turbo for 4:2:0 and progressive pictures and
   within a fifth of it for 4:4:4; a TIFF of JPEG tiles reads within a sixth of GDAL. The inverse DCT runs as the even and
   odd halves of the 8-point transform on eight rows at once - a vector a row with AVX, two with NEON or SSE, where it
