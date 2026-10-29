@@ -4,6 +4,7 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Core.Vertices;
 
+/// <summary>A vertex of the UI's geometry: where it is, its normal and two texture coordinate sets.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct UIVertex : IEquatable<UIVertex>
 {
@@ -12,32 +13,19 @@ public struct UIVertex : IEquatable<UIVertex>
         Vector3F normal,
         Vector2F uv0,
         Vector2F uv1)
-        : this()
     {
         Position = position;
         Normal = normal;
         UV0 = uv0;
         UV1 = uv1;
     }
-    
-    /// <summary>
-    /// XYZ position.
-    /// </summary>
+
     [VertexInputElement("SV_POSITION")] public Vector3F Position;
 
-    /// <summary>
-    /// The vertex normal.
-    /// </summary>
     [VertexInputElement("NORMAL")] public Vector3F Normal;
-    
-    /// <summary>
-    /// UV texture coordinates.
-    /// </summary>
+
     [VertexInputElement("TEXCOORD0")] public Vector2F UV0;
 
-    /// <summary>
-    /// UV texture coordinates.
-    /// </summary>
     [VertexInputElement("TEXCOORD1")] public Vector2F UV1;
 
     public bool Equals(UIVertex other)
