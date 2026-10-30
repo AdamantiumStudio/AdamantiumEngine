@@ -802,7 +802,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         return img;
     }
 
-    private void ReadbackInto(Image destination, uint layer = 0, uint level = 0)
+    public void ReadbackInto(Image destination, uint layer = 0, uint level = 0)
     {
         if (GraphicsDevice.Adapter.SupportsHostImageCopy &&
             Description.Usage.HasFlag(ImageUsageFlagBits.HostTransferBit))

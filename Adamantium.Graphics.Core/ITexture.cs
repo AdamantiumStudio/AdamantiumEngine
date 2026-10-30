@@ -51,6 +51,10 @@ public interface ITexture : INamedObject
     /// file. <paramref name="layer"/> picks a layer of an array texture, <paramref name="level"/> a mip level.</summary>
     Adamantium.Imaging.Image ReadbackToImage(uint layer = 0, uint level = 0);
 
+    /// <summary>Reads this texture back into <paramref name="destination"/>, an image of its size and format the caller
+    /// keeps - for a read every frame, which a fresh image each time would only make slower.</summary>
+    void ReadbackInto(Adamantium.Imaging.Image destination, uint layer = 0, uint level = 0);
+
     ImageViewCreateInfo Info { get; }
 
     /// <summary>

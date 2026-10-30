@@ -478,6 +478,15 @@ namespace Adamantium.Win32
             IntPtr hdcSrc, ref NativePoint pptSrc,
             uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
 
+        // The same with no destination point: the window keeps the place it stands at.
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UpdateLayeredWindow(
+            IntPtr hwnd, IntPtr hdcDst,
+            IntPtr pptDst, ref NativeSize psize,
+            IntPtr hdcSrc, ref NativePoint pptSrc,
+            uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+
         [DllImport("gdi32.dll", SetLastError = true)]
         public static extern IntPtr CreateCompatibleDC(IntPtr hdc);
 

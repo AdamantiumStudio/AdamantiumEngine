@@ -197,6 +197,8 @@ public abstract partial class GraphicsPresenter : DisposableObject
                 return new RenderTargetGraphicsPresenter(graphicsDevice, parameters, name);
             case PresenterType.Headless:
                 return new HeadlessPresenter(graphicsDevice, parameters, name);
+            case PresenterType.Readback:
+                return new ReadbackGraphicsPresenter(graphicsDevice, parameters, name);
             default:
                 throw new NotSupportedException($"Presenter type: {parameters.PresenterType} is not supported");
         }
