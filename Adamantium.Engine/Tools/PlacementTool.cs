@@ -29,9 +29,9 @@ public sealed class PlacementTool : ToolProcessor
     private readonly float lowest;
     private bool finished;
     private bool onSurface;
-    private UniverseOutput guidedOutput;
-    private Vector2F guidedPixel;
-    private bool placeRequested;
+    private UniverseOutput _guidedOutput;
+    private Vector2F _guidedPixel;
+    private bool _placeRequested;
 
     /// <param name="ghost">What is placed, standing at its origin; it is only drawn and never joins the world. Null draws
     /// no ghost, only the <see cref="Icon"/> if there is one: the tool then picks what to place onto, <see cref="Under"/>,
@@ -81,9 +81,9 @@ public sealed class PlacementTool : ToolProcessor
         }
 
         Follow();
-        if (placeRequested && !finished)
+        if (_placeRequested && !finished)
         {
-            placeRequested = false;
+            _placeRequested = false;
             Finish();
         }
     }
@@ -101,15 +101,15 @@ public sealed class PlacementTool : ToolProcessor
         CameraBase camera;
         Vector2F pointer;
         InputWormhole input = null;
-        if (guidedOutput != null)
+        if (_guidedOutput != null)
         {
-            if (guidedOutput.Camera is not { } guidedCamera)
+            if (_guidedOutput.Camera is not { } guidedCamera)
             {
                 return;
             }
 
             camera = guidedCamera;
-            pointer = guidedPixel;
+            pointer = _guidedPixel;
         }
         else
         {
@@ -136,7 +136,7 @@ public sealed class PlacementTool : ToolProcessor
         }
 
         var ray = PickRay.FromCamera(camera, pointer);
-        if (OnSurface(Tools.EntityWorld.RootEntities, Ground(), camera, ray, out var point, out var hit))
+        if (TryFindSurface(Tools.EntityWorld.RootEntities, Ground(), camera, ray, out var point, out var hit))
         {
             onSurface = true;
             if (hit != null)
@@ -191,7 +191,7 @@ public sealed class PlacementTool : ToolProcessor
 
         if (input == null)
         {
-            if (placeRequested && CanPlace)
+            if (_placeRequested && CanPlace)
             {
                 Placed?.Invoke(this, EventArgs.Empty);
             }
@@ -218,8 +218,8 @@ public sealed class PlacementTool : ToolProcessor
     /// </summary>
     public void Guide(UniverseOutput output, Vector2F pixel)
     {
-        guidedOutput = output;
-        guidedPixel = pixel;
+        _guidedOutput = output;
+        _guidedPixel = pixel;
     }
 
     /// <summary>
@@ -228,7 +228,7 @@ public sealed class PlacementTool : ToolProcessor
     /// </summary>
     public void PlaceWhereGuided()
     {
-        placeRequested = true;
+        _placeRequested = true;
     }
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
@@ -247,7 +247,7 @@ public sealed class PlacementTool : ToolProcessor
         }
     }
 
-    private static bool OnSurface(IReadOnlyList<Entity> roots, GroundGrid ground, CameraBase camera, in PickRay ray,
+    private static bool TryFindSurface(IReadOnlyList<Entity> roots, GroundGrid ground, CameraBase camera, in PickRay ray,
         out Vector3<double> point, out Entity hit)
     {
         var picked = Picking.Pick(roots, ray, PickMode.Triangles, withDisabled: true);
@@ -260,7 +260,8 @@ public sealed class PlacementTool : ToolProcessor
 
         hit = null;
         point = default;
-        return ground != null && (OnTheGround(ground, ray.Ray, camera, out point) || AlongTheGround(ground, ray.Ray, camera, out point));
+        return ground != null
+               && (OnTheGround(ground, ray.Ray, camera, out point) || AlongTheGround(ground, ray.Ray, camera, out point));
     }
 
     /// <summary>
