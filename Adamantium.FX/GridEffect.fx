@@ -37,7 +37,10 @@ struct PS_INPUT
     float2 plane : TEXCOORD0;
 };
 
-// How far behind the ground the grid is drawn, in depth: a floor lying at y = 0 hides it instead of fighting it.
+// How far behind the ground the grid is drawn, in depth: a floor lying at y = 0 hides it instead of fighting it. Added
+// as a part of w, so the depth stays linear across the square. It used to be held to the far plane per vertex: with
+// the eye far off, a corner held there drew the whole grid nearer than it is, over what stands on it. The draw holds
+// each fragment's depth there instead (depth clamp), so the ground past the far plane still shows, behind everything.
 static const float BehindTheGround = 2e-5f;
 
 [shader("vertex")]
@@ -47,7 +50,7 @@ PS_INPUT Ground_VS(MESH_VERTEX input)
 
     float4 world = mul(float4(input.position.xyz, 1.0f), placement);
     output.position = mul(world, viewProjection);
-    output.position.z = min(output.position.z + BehindTheGround * output.position.w, output.position.w);
+    output.position.z += BehindTheGround * output.position.w;
     output.plane = world.xz;
     return output;
 }
