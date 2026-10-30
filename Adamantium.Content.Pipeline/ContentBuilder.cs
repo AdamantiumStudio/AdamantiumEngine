@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using Adamantium.Content.Pipeline.Importers;
 using Adamantium.Content.Pipeline.Writers;
 using Adamantium.Graphics.Core.Assets;
@@ -84,13 +87,15 @@ public sealed class ContentBuilder
     }
 
     /// <summary>Imports each asset an importer takes into its asset file beside it (<c>Ship.dae.aemf</c> beside
-    /// <c>Ship.dae</c>; for a source outside the project, in the intermediate directory) when there is none yet, it
-    /// cannot be read, or the source or its settings changed - not when only the format or the importer did - and
-    /// copies the asset file to the output directory. An asset no importer takes is copied there as it
-    /// is. What was built from an asset no longer listed is deleted from the output.</summary>
+    /// <c>Ship.dae</c>; for a source outside the project, under <c>obj/assets</c>) when there is none yet, it cannot be
+    /// read, or the source or its settings changed - not when only the format or the importer did - and copies the
+    /// asset file to the output directory. An asset no importer takes is copied there as it is. What was built from an
+    /// asset no longer listed is deleted from the output. One build or <see cref="Import"/> of a project runs at a time,
+    /// in all processes of the user: another waits for it.</summary>
     public BuildResult Build(ContentManifest manifest, string projectDirectory, Action<string> log = null)
     {
         log ??= _ => { };
+        using var projectLock = ProjectLock.Take(projectDirectory);
 
         var outputDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.OutputDirectory));
         var intermediateDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.IntermediateDirectory));
@@ -146,7 +151,7 @@ public sealed class ContentBuilder
             }
 
             var writer = writersByImporter[importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name];
-            var assetFull = GetAssetFilePath(projectDirectory, intermediateDirectory, sourceFull, logicalName, writer);
+            var assetFull = GetAssetFilePath(projectDirectory, sourceFull, logicalName, writer);
             var cookedRelative = logicalName + writer.OutputExtension;
             var cookedFull = Path.Combine(outputDirectory, cookedRelative);
             var cookedDirectory = Path.GetDirectoryName(cookedFull);
@@ -189,10 +194,13 @@ public sealed class ContentBuilder
 
     /// <summary>Imports each asset an importer takes into its asset file, as <see cref="Build"/> does, and nothing
     /// more: no output is written and no other asset is copied. In the result, <see cref="BuildResult.Cooked"/> counts
-    /// the assets imported and <see cref="BuildResult.Skipped"/> those whose asset file is up to date.</summary>
-    public BuildResult Import(ContentManifest manifest, string projectDirectory, Action<string> log = null)
+    /// the assets imported and <see cref="BuildResult.Skipped"/> those whose asset file is up to date. Stopped through
+    /// <paramref name="cancellation"/>, it ends between two assets, the asset files written so far kept.</summary>
+    public BuildResult Import(ContentManifest manifest, string projectDirectory, Action<string> log = null,
+        CancellationToken cancellation = default)
     {
         log ??= _ => { };
+        using var projectLock = ProjectLock.Take(projectDirectory);
 
         var outputDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.OutputDirectory));
         var intermediateDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.IntermediateDirectory));
@@ -201,8 +209,26 @@ public sealed class ContentBuilder
 
         foreach (var asset in manifest.Assets)
         {
+            if (cancellation.IsCancellationRequested)
+            {
+                break;
+            }
+
             var sourceFull = Path.GetFullPath(Path.Combine(projectDirectory, asset.Source));
-            if (importTargets.Contains(sourceFull) || ResolveImporter(asset, sourceFull) is not { } importer)
+            if (importTargets.Contains(sourceFull))
+            {
+                continue;
+            }
+
+            var importer = ResolveImporter(asset, sourceFull);
+            if (importer == null && !string.IsNullOrEmpty(asset.Importer))
+            {
+                log($"{sourceFull} : error ACB002: no importer is named '{asset.Importer}'");
+                result.Failed++;
+                continue;
+            }
+
+            if (importer == null)
             {
                 continue;
             }
@@ -223,7 +249,7 @@ public sealed class ContentBuilder
             }
 
             var writer = writersByImporter[importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name];
-            var assetFull = GetAssetFilePath(projectDirectory, intermediateDirectory, sourceFull, logicalName, writer);
+            var assetFull = GetAssetFilePath(projectDirectory, sourceFull, logicalName, writer);
             try
             {
                 if (ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory, outputDirectory,
@@ -246,11 +272,13 @@ public sealed class ContentBuilder
         return result;
     }
 
-    private static string GetAssetFilePath(string projectDirectory, string intermediateDirectory, string sourceFull,
-        string logicalName, IContentWriter writer) =>
+    // Beside the source; for a source outside the project, in one place under obj whatever the build's cache is, so the
+    // editor's imports and every configuration's build share it.
+    private static string GetAssetFilePath(string projectDirectory, string sourceFull, string logicalName,
+        IContentWriter writer) =>
         BuildCache.IsInside(projectDirectory, sourceFull)
             ? sourceFull + writer.OutputExtension
-            : Path.Combine(intermediateDirectory, "assets", logicalName + writer.OutputExtension);
+            : Path.Combine(projectDirectory, "obj", "assets", logicalName + writer.OutputExtension);
 
     // Imports the source into its asset file when it needs it and says why; null when the asset file is up to date.
     private string ImportIfNeeded(ContentAsset asset, IContentImporter importer, string sourceFull, string logicalName,
@@ -400,7 +428,9 @@ public sealed class ContentBuilder
         using var body = new MemoryStream();
         writer.Write(body, content);
 
-        var writing = path + ".writing";
+        // Hidden and named afresh, so no content glob lists it and no other writer meets it.
+        var writing = Path.Combine(Path.GetDirectoryName(path),
+            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.writing");
         Directory.CreateDirectory(Path.GetDirectoryName(path));
         try
         {
@@ -446,4 +476,42 @@ public sealed class ContentBuilder
     }
 
     private static string Normalize(string path) => path.Replace('\\', '/');
+
+    // The user's one lock on a project's content, across processes: an editor's import and a build wait for each other
+    // instead of writing the same asset files at once.
+    private sealed class ProjectLock : IDisposable
+    {
+        private readonly Mutex _mutex;
+
+        private ProjectLock(Mutex mutex) => _mutex = mutex;
+
+        public static ProjectLock Take(string projectDirectory)
+        {
+            var key = Path.GetFullPath(projectDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!OperatingSystem.IsLinux())
+            {
+                key = key.ToUpperInvariant();
+            }
+
+            var name = "adamantium-content-" +
+                       Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)), 0, 12).ToLowerInvariant();
+            var mutex = new Mutex(false, name, new NamedWaitHandleOptions { CurrentUserOnly = true, CurrentSessionOnly = false },
+                out _);
+            try
+            {
+                mutex.WaitOne();
+            }
+            catch (AbandonedMutexException)
+            {
+            }
+
+            return new ProjectLock(mutex);
+        }
+
+        public void Dispose()
+        {
+            _mutex.ReleaseMutex();
+            _mutex.Dispose();
+        }
+    }
 }

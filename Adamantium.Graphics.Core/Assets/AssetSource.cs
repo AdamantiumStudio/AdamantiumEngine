@@ -28,10 +28,12 @@ public sealed class AssetSource
     /// they go wherever the asset goes.</summary>
     public List<string> Companions { get; set; } = [];
 
-    /// <summary>The SHA-256 of the file's bytes, in hexadecimal.</summary>
+    /// <summary>The SHA-256 of the file's bytes, in hexadecimal. The file is read without keeping others from writing,
+    /// renaming or deleting it meanwhile.</summary>
     public static string ComputeHash(string path)
     {
-        using var stream = File.OpenRead(path);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 }

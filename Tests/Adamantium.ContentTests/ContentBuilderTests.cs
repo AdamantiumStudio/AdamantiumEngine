@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Adamantium.Content.Pipeline;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
@@ -225,7 +227,7 @@ public class ContentBuilderTests
             {
                 Assert.That(source.Path, Is.EqualTo("../../" + Path.GetFileName(shared) + "/x.obj"));
                 Assert.That(File.Exists(Path.Combine(shared, "x.obj.aemf")), Is.False, "nothing written outside the project");
-                Assert.That(File.Exists(Path.Combine(_project, "cache", "assets", "Models", "x.obj.aemf")), Is.True);
+                Assert.That(File.Exists(Path.Combine(_project, "obj", "assets", "Models", "x.obj.aemf")), Is.True);
             });
         }
         finally
@@ -512,6 +514,46 @@ public class ContentBuilderTests
             Assert.That(File.GetLastWriteTimeUtc(asset), Is.EqualTo(written));
             Assert.That(built.Cooked, Is.EqualTo(0), built.ToString());
             Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj.aemf")), Is.True);
+        });
+    }
+
+    [Test]
+    public void Import_StoppedBeforeItStarts_ImportsNothing()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = new ContentBuilder().Import(manifest, _project, cancellation: new CancellationToken(true));
+
+        Assert.That(result.Cooked + result.Skipped + result.Failed, Is.EqualTo(0), result.ToString());
+        Assert.That(File.Exists(Path.Combine(_project, "Models", "triangle.obj.aemf")), Is.False);
+    }
+
+    [Test]
+    public void AnImportAndABuildOfOneProjectAtOnce_BothSucceed()
+    {
+        for (var index = 0; index < 8; index++)
+        {
+            Write($"Models/m{index}.obj", Triangle + $"v {index} 1 0\n");
+        }
+
+        var sources = Enumerable.Range(0, 8).Select(index => $"Models/m{index}.obj").ToList();
+        var importing = Manifest();
+        importing.SetSources(sources);
+        var building = Manifest();
+        building.SetSources(sources);
+
+        var import = Task.Run(() => new ContentBuilder().Import(importing, _project));
+        var build = Task.Run(() => new ContentBuilder().Build(building, _project));
+        Task.WaitAll(import, build);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(import.Result.Failed, Is.EqualTo(0), import.Result.ToString());
+            Assert.That(build.Result.Failed, Is.EqualTo(0), build.Result.ToString());
+            Assert.That(import.Result.Cooked + build.Result.Cooked, Is.EqualTo(8));
+            Assert.That(Directory.EnumerateFiles(Path.Combine(_project, "Models"), "*.writing"), Is.Empty);
         });
     }
 
