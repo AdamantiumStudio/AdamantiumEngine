@@ -156,7 +156,9 @@ public class NativeLibraryLoader
         LoadedLibraries.TryGetValue(libraryName, out var handle) ? handle : IntPtr.Zero;
 
     /// <summary>Beside the generator assembly when it has a location; a compiler that loads analyzers from memory (as on
-    /// Linux) gives none, and then a folder of this generator's version in the temp directory.</summary>
+    /// Linux) gives none, and then a folder of this generator's version in the user's own local data - not the temp
+    /// directory, which on Linux every user shares, so the first user's folder would keep the others from building.
+    /// </summary>
     private static string ExtractionDirectory()
     {
         var assembly = Assembly.GetExecutingAssembly();
@@ -168,7 +170,9 @@ public class NativeLibraryLoader
 
         var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
                       ?? assembly.GetName().Version.ToString();
-        var directory = Path.Combine(Path.GetTempPath(), "Adamantium.Engine.Generators", version);
+        var data = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var directory = Path.Combine(string.IsNullOrEmpty(data) ? Path.GetTempPath() : data,
+            "Adamantium.Engine.Generators", version);
         Directory.CreateDirectory(directory);
         return directory;
     }
