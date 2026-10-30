@@ -14,16 +14,16 @@ public class ReadbackGraphicsPresenter : RenderTargetGraphicsPresenter
     public ReadbackGraphicsPresenter(IGraphicsDevice graphicsDevice, PresentationParameters description,
         string name = "") : base(graphicsDevice, description, name)
     {
-        // There is no image to acquire: every frame drawn can be presented.
-        CanPresent = true;
     }
 
     public override PresenterState Present()
     {
-        if (Description.FrameSink is not { } sink)
+        if (!CanPresent || Description.FrameSink is not { } sink)
         {
             return PresenterState.Success;
         }
+
+        CanPresent = false;
 
         if (_frame == null || _frame.Description.Width != Width || _frame.Description.Height != Height)
         {

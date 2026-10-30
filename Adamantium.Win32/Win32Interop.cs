@@ -478,7 +478,7 @@ namespace Adamantium.Win32
             IntPtr hdcSrc, ref NativePoint pptSrc,
             uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
 
-        // The same with no destination point: the window keeps the place it stands at.
+        /// <summary>Gives a layered window new pixels with no destination point: it keeps the place it stands at.</summary>
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool UpdateLayeredWindow(

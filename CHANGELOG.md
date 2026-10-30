@@ -7,6 +7,17 @@ All packages share one version.
 
 ### Added
 
+- `PresenterType.Readback` (`ReadbackGraphicsPresenter`): each frame drawn into the presenter is read back to host
+  memory and handed to `PresentationParameters.FrameSink` (`IFrameSink`) - for a window the desktop composes from its
+  pixels with their alpha, where the surface offers no swapchain that keeps it. `ITexture.ReadbackInto` reads into an
+  image the caller keeps; a texture's readback keeps its staging buffer, mapped, between reads and runs as one submit.
+  `TextureExtensions.RecordLayoutTransition` records a layout transition into a command buffer of the caller's; the
+  copy is made visible to the host by a barrier before it is read. `SwapChainGraphicsPresenter.ComposesWithAlpha` says
+  whether the surface took the transparency asked for.
+  `Win32Interop.UpdateLayeredWindow` gains an overload that leaves the window where it stands.
+- `Color.ToPremultiplied` and `ColorBGRA.ToPremultiplied`: the color with red, green and blue times its alpha, rounded;
+  `Color.Premultiply` and `ColorBGRA.Premultiply` do a row of them, blocks wholly clear or wholly opaque copied as they
+  are with the processor's vectors. The color glyph atlas premultiplies with them.
 - `PlacementTool.Guide` and `PlaceWhereGuided`: the ghost follows a point given from outside instead of the pointer -
   as a drag carried over the scene gives it, the pointer being the drag's - and goes down where it was led, as a click
   there would put it, nothing where it could not go; an editor's model dragged into the scene shows its ghost as it
@@ -1873,6 +1884,9 @@ All packages share one version.
 
 ### Changed
 
+- A frame drawn into a presenter that is no swapchain asks it for its image (`GraphicsPresenter.AcquireNextImage`), as
+  a swapchain's does, so its `CanPresent` says whether a frame of its own waits to be presented; it was never set, or,
+  for a read-back presenter, set for every frame the device drew into any window.
 - The content build imports a model into its asset file BESIDE its source in the project folder - `Ship.dae.aemf`
   beside `Ship.dae` - and copies that file to the output under the name the cooked model had there before, with the
   textures it reads. A source linked in from outside the project gets its asset file in the intermediate folder:

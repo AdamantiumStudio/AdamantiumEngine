@@ -8,7 +8,14 @@ public static class TextureExtensions
     public static void TransitionImageLayout(this ITexture texture, ImageLayout newLayout)
     {
         var commandBuffer = texture.GraphicsDevice.BeginSingleTimeCommand();
+        texture.RecordLayoutTransition(commandBuffer, newLayout);
+        texture.GraphicsDevice.EndSingleTimeCommand(commandBuffer);
+    }
 
+    /// <summary>Records into <paramref name="commandBuffer"/> the barrier that takes the texture to
+    /// <paramref name="newLayout"/>, so it runs with the rest of that buffer's work rather than in a submit of its own.</summary>
+    public static void RecordLayoutTransition(this ITexture texture, CommandBuffer commandBuffer, ImageLayout newLayout)
+    {
         var imageMemoryBarrier = new ImageMemoryBarrier2
         {
             OldLayout = texture.ImageLayout,
@@ -166,8 +173,6 @@ public static class TextureExtensions
         });
 
         texture.ImageLayout = newLayout;
-
-        texture.GraphicsDevice.EndSingleTimeCommand(commandBuffer);
     }
 
     public static void BlitImage(this IGraphicsDevice graphicsDevice, CommandBuffer commandBuffer, ITexture srcTexture, ITexture dstTexture)
