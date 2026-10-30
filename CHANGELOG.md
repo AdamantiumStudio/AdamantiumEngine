@@ -1099,6 +1099,10 @@ All packages share one version.
 
 ### Fixed
 
+- A click in the editor's scene selects the whole model first - the top of its tree - and the part under the pointer
+  once the model is selected (`Selection.ChosenByClick`); a frame selects the whole models its parts belong to
+  (`Selection.WholeOf`). A click or a frame took the parts, so moving "the model" moved its parts and left its root,
+  and the root's handles stood where the model had been.
 - Every Collada node is a model known by its own ID, not by the geometry it draws: a clip moving a node that is no
   joint now plays, a geometry drawn by several nodes is on each of them - a copy each - and nodes of one name no longer
   merge into one. A node takes the materials its binding names for each part's symbol, a skinned one too; they went

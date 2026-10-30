@@ -77,6 +77,33 @@ public class ToolsServiceTests
         Assert.That(tools.Hovered, Is.Null);
     }
 
+    // A click on a model's part takes the model first - moved, it is the model that moves, and its handles stay on it -
+    // and the part once the model is selected; a frame takes the model.
+    [Test]
+    public void AClickOnAPart_ChoosesTheWholeModelFirst_ThenThePart()
+    {
+        var selection = new Selection();
+        var model = new Entity(null, "Model");
+        var body = new Entity(model, "Body");
+        var glass = new Entity(body, "Glass");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(selection.ChosenByClick(glass), Is.SameAs(model), "nothing selected: the model");
+            Assert.That(Selection.WholeOf(glass), Is.SameAs(model), "a frame: the model");
+            Assert.That(selection.ChosenByClick(null), Is.Null);
+        });
+
+        selection.Current = model;
+        Assert.That(selection.ChosenByClick(glass), Is.SameAs(glass), "the model selected: the part under the pointer");
+
+        selection.Current = glass;
+        Assert.That(selection.ChosenByClick(glass), Is.SameAs(glass), "the part selected stays chosen");
+
+        selection.Current = new Entity(null, "Another");
+        Assert.That(selection.ChosenByClick(glass), Is.SameAs(model), "another model selected: this one whole");
+    }
+
     [Test]
     public void Selection_MarksWhatItHolds_AndOnlyThat()
     {

@@ -12,10 +12,13 @@ using Adamantium.Multiverse.Input;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Selects what a click lands on - with Shift held adding it to the selection, with Control taking it out; an entity
+/// Selects what a click lands on - the whole model, the top of its tree, first, and the part under the pointer once the
+/// model is selected (<see cref="Selection.ChosenByClick"/>) - with Shift held adding it to the selection, with
+/// Control taking it out; an entity
 /// with a <see cref="Marker"/> - its icon or, if it has one, its form - is also dragged in the plane facing the eye. A
 /// drag from nothing draws a frame across the screen that selects, CAD style, what lies wholly inside it when drawn to
-/// the right and whatever it touches when drawn to the left (<see cref="ScreenFrame"/>), as a click would select it; a
+/// the right and whatever it touches when drawn to the left (<see cref="ScreenFrame"/>), each the whole model it is part
+/// of; a
 /// click on nothing selects nothing.
 /// </summary>
 public class SelectTool : ToolProcessor
@@ -118,8 +121,24 @@ public class SelectTool : ToolProcessor
         framing = false;
         framed.Clear();
         Tools.PickEntities(camera, new ScreenFrame(frameFrom, frameTo), framed);
-        Framed(framed);
+        Framed(WholesOf(framed));
         return true;
+    }
+
+    // A frame takes the wholes its parts belong to, each once, in the order first met.
+    private static List<Entity> WholesOf(List<Entity> parts)
+    {
+        List<Entity> wholes = [];
+        foreach (var part in parts)
+        {
+            var whole = Selection.WholeOf(part);
+            if (!wholes.Contains(whole))
+            {
+                wholes.Add(whole);
+            }
+        }
+
+        return wholes;
     }
 
     /// <summary>What a frame drawn across the screen took: selects it - with Shift adding it to the selection, with

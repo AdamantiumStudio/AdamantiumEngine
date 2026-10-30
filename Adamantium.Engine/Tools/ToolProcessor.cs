@@ -119,8 +119,8 @@ public abstract class ToolProcessor : EditorProcessor
 
         var hit = PickHandles(ray, PickAperture * camera.PixelsPerPoint, out var owner);
         Highlight(owner, hit.Entity);
-        var under = hit.IsHit ? default : Tools.PickEntity(ray);
-        Tools.Hovered = under.Entity;
+        var under = hit.IsHit ? null : Tools.Selection.ChosenByClick(Tools.PickEntity(ray).Entity);
+        Tools.Hovered = under;
 
         if (!input.IsMouseButtonPressed(MouseButton.Left))
         {
@@ -143,16 +143,16 @@ public abstract class ToolProcessor : EditorProcessor
             return;
         }
 
-        if (under.Entity == null ? PressedOnNothing(input, camera) : PressedOn(under.Entity, input, camera))
+        if (under == null ? PressedOnNothing(input, camera) : PressedOn(under, input, camera))
         {
             return;
         }
 
-        Clicked(under.Entity);
-        if (!Modifier(Keys.Shift) && !Modifier(Keys.Control) && DragsClicked(under.Entity) is { } mover)
+        Clicked(under);
+        if (!Modifier(Keys.Shift) && !Modifier(Keys.Control) && DragsClicked(under) is { } mover)
         {
             dragged = mover;
-            dragTarget = under.Entity;
+            dragTarget = under;
             dragCamera = camera;
             dragEye = camera.WorldPosition;
             dragBegun = false;

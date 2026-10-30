@@ -26,6 +26,39 @@ public class Selection
 
     public bool Contains(Entity entity) => Array.IndexOf(items, entity) >= 0;
 
+    /// <summary>What a click on <paramref name="picked"/> selects: the whole it is a part of
+    /// (<see cref="WholeOf"/>) first; once that whole, another of its owners or the part itself is selected, the part
+    /// itself. Null for null.</summary>
+    public Entity ChosenByClick(Entity picked)
+    {
+        if (picked == null || Contains(picked))
+        {
+            return picked;
+        }
+
+        for (var owner = picked.Owner; owner != null; owner = owner.Owner)
+        {
+            if (Contains(owner))
+            {
+                return picked;
+            }
+        }
+
+        return WholeOf(picked);
+    }
+
+    /// <summary>The whole <paramref name="part"/> belongs to: the top of its tree, as a frame selects it.</summary>
+    public static Entity WholeOf(Entity part)
+    {
+        var whole = part;
+        while (whole.Owner != null)
+        {
+            whole = whole.Owner;
+        }
+
+        return whole;
+    }
+
     /// <summary>Selects these and nothing else; the last becomes current.</summary>
     public void Select(IReadOnlyList<Entity> entities)
     {
