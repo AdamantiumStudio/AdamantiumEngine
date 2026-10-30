@@ -1,3 +1,4 @@
+using System;
 using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine;
 using Adamantium.Engine.EntityServices;
@@ -191,10 +192,7 @@ public class PlacementToolTests
     {
         var (tools, output, scene) = GuidedScene();
         var placement = new PlacementTool(new Adamantium.ECS.Entity(null, "Dropped"));
-        var placed = false;
-        var finished = false;
-        placement.Placed += (_, _) => placed = true;
-        placement.Finished += (_, _) => finished = true;
+        var outcome = new Outcome(placement);
         tools.Tool = placement;
 
         placement.Guide(output, scene.PixelOf(new Vector3<double>(3, 0, 4)));
@@ -208,8 +206,8 @@ public class PlacementToolTests
             Assert.That(led, Is.Not.Null);
             Assert.That(led.Value.X, Is.EqualTo(3).Within(1e-2));
             Assert.That(led.Value.Z, Is.EqualTo(4).Within(1e-2));
-            Assert.That(placed, Is.True);
-            Assert.That(finished, Is.True);
+            Assert.That(outcome.Placed, Is.True);
+            Assert.That(outcome.Finished, Is.True);
         });
     }
 
@@ -220,10 +218,7 @@ public class PlacementToolTests
         var (tools, output, scene) = GuidedScene();
         scene.LookFrom(new Vector3<double>(0, -10, -20), new Vector3<double>(0, -10, 0));
         var placement = new PlacementTool(new Adamantium.ECS.Entity(null, "Dropped"));
-        var placed = false;
-        var finished = false;
-        placement.Placed += (_, _) => placed = true;
-        placement.Finished += (_, _) => finished = true;
+        var outcome = new Outcome(placement);
         tools.Tool = placement;
 
         placement.Guide(output, new Vector2F(400, 10));
@@ -232,9 +227,26 @@ public class PlacementToolTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(placed, Is.False);
-            Assert.That(finished, Is.True);
+            Assert.That(outcome.Placed, Is.False);
+            Assert.That(outcome.Finished, Is.True);
         });
+    }
+
+    private sealed class Outcome
+    {
+        public Outcome(PlacementTool placement)
+        {
+            placement.Placed += OnPlaced;
+            placement.Finished += OnFinished;
+        }
+
+        public bool Placed { get; private set; }
+
+        public bool Finished { get; private set; }
+
+        private void OnPlaced(object sender, EventArgs e) => Placed = true;
+
+        private void OnFinished(object sender, EventArgs e) => Finished = true;
     }
 
     private static (ToolsService Tools, TestOutput Output, ToolScene Scene) GuidedScene()
