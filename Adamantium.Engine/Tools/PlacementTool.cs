@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
 using Adamantium.Engine.EntityServices;
 using Adamantium.Mathematics;
+using Adamantium.Multiverse;
 using Adamantium.Multiverse.Input;
 
 namespace Adamantium.Engine.Tools;
@@ -27,6 +29,9 @@ public sealed class PlacementTool : ToolProcessor
     private readonly float lowest;
     private bool finished;
     private bool onSurface;
+    private UniverseOutput guidedOutput;
+    private Vector2F guidedPixel;
+    private bool placeRequested;
 
     /// <param name="ghost">What is placed, standing at its origin; it is only drawn and never joins the world. Null draws
     /// no ghost, only the <see cref="Icon"/> if there is one: the tool then picks what to place onto, <see cref="Under"/>,
@@ -75,6 +80,16 @@ public sealed class PlacementTool : ToolProcessor
             return;
         }
 
+        Follow();
+        if (placeRequested && !finished)
+        {
+            placeRequested = false;
+            Finish();
+        }
+    }
+
+    private void Follow()
+    {
         // The keys come from whichever output has the keyboard, the pointer may be elsewhere.
         var keyboard = Tools.Observatory.KeyboardInput;
         if (keyboard != null && keyboard.IsKeyPressed(Keys.Escape))
@@ -83,40 +98,55 @@ public sealed class PlacementTool : ToolProcessor
             return;
         }
 
-        if (Tools.Observatory.PointerOutput is not { Camera: { } camera, Input: { CanLocatePointer: true } input })
+        CameraBase camera;
+        Vector2F pointer;
+        InputWormhole input = null;
+        if (guidedOutput != null)
         {
-            return;
-        }
+            if (guidedOutput.Camera is not { } guidedCamera)
+            {
+                return;
+            }
 
-        if (Tools.IsPointerTaken || input.IsMouseButtonDown(MouseButton.Right))
+            camera = guidedCamera;
+            pointer = guidedPixel;
+        }
+        else
         {
-            return;
+            if (Tools.Observatory.PointerOutput is not { Camera: { } pointerCamera, Input: { CanLocatePointer: true } pointerInput })
+            {
+                return;
+            }
+
+            if (Tools.IsPointerTaken || pointerInput.IsMouseButtonDown(MouseButton.Right))
+            {
+                return;
+            }
+
+            camera = pointerCamera;
+            input = pointerInput;
+            pointer = input.RelativePosition;
         }
 
         // Off the scene - over the ribbon it was picked from, say - there is nothing to hang it on, so nothing is drawn,
         // and it comes in under the pointer instead of waiting somewhere in the scene for it.
-        var pointer = input.RelativePosition;
         if (pointer.X < 0 || pointer.Y < 0 || pointer.X > camera.Width || pointer.Y > camera.Height)
         {
             return;
         }
 
         var ray = PickRay.FromCamera(camera, pointer);
-        var hit = Picking.Pick(Tools.EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: true);
-        Vector3<double> point;
-        if (hit.IsHit)
+        if (OnSurface(Tools.EntityWorld.RootEntities, Ground(), camera, ray, out var point, out var hit))
         {
-            point = hit.Point.As<double>() + camera.WorldPosition;
             onSurface = true;
-            Under = Modifier(Keys.Alt) ? RootOf(hit.Entity) : hit.Entity;
-            if (NeedsSomethingUnder)
+            if (hit != null)
             {
-                Tools.Hovered = Under;
+                Under = Modifier(Keys.Alt) ? RootOf(hit) : hit;
+                if (NeedsSomethingUnder)
+                {
+                    Tools.Hovered = Under;
+                }
             }
-        }
-        else if (Ground() is { } grid && (OnTheGround(grid, ray.Ray, camera, out point) || AlongTheGround(grid, ray.Ray, camera, out point)))
-        {
-            onSurface = true;
         }
         else
         {
@@ -159,6 +189,16 @@ public sealed class PlacementTool : ToolProcessor
             }
         }
 
+        if (input == null)
+        {
+            if (placeRequested && CanPlace)
+            {
+                Placed?.Invoke(this, EventArgs.Empty);
+            }
+
+            return;
+        }
+
         if (!input.IsMouseButtonPressed(MouseButton.Left) || !CanPlace)
         {
             return;
@@ -169,6 +209,26 @@ public sealed class PlacementTool : ToolProcessor
         {
             Finish();
         }
+    }
+
+    /// <summary>
+    /// Has the ghost follow a point given from outside instead of the pointer - <paramref name="pixel"/>, in pixels of
+    /// <paramref name="output"/>'s surface, as a drag carried over the scene gives it, the pointer being the drag's
+    /// meanwhile. A click then places nothing: <see cref="PlaceWhereGuided"/> does. Called on the universe's thread.
+    /// </summary>
+    public void Guide(UniverseOutput output, Vector2F pixel)
+    {
+        guidedOutput = output;
+        guidedPixel = pixel;
+    }
+
+    /// <summary>
+    /// With the next frame, places the ghost where <see cref="Guide"/> last led it - as a click there would, nothing
+    /// where it could not go - and the tool is done. Called on the universe's thread.
+    /// </summary>
+    public void PlaceWhereGuided()
+    {
+        placeRequested = true;
     }
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
@@ -185,6 +245,22 @@ public sealed class PlacementTool : ToolProcessor
                 overlay.DrawFlatInScene(Icon);
             }
         }
+    }
+
+    private static bool OnSurface(IReadOnlyList<Entity> roots, GroundGrid ground, CameraBase camera, in PickRay ray,
+        out Vector3<double> point, out Entity hit)
+    {
+        var picked = Picking.Pick(roots, ray, PickMode.Triangles, withDisabled: true);
+        if (picked.IsHit)
+        {
+            point = picked.Point.As<double>() + camera.WorldPosition;
+            hit = picked.Entity;
+            return true;
+        }
+
+        hit = null;
+        point = default;
+        return ground != null && (OnTheGround(ground, ray.Ray, camera, out point) || AlongTheGround(ground, ray.Ray, camera, out point));
     }
 
     /// <summary>
