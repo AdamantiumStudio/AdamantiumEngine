@@ -28,6 +28,7 @@ public sealed unsafe class SharedSurface : Texture
     // it is disposed and the last of them let go - not while one still reads its timelines or copies its image.
     private readonly object _shareLock = new();
     private int _takers;
+    private bool _gone;
     private bool _freeWhenLetGo;
     private SharedSurface _producer;
     private bool _useFd;
@@ -199,19 +200,40 @@ public sealed unsafe class SharedSurface : Texture
     {
     }
 
-    // The consumer's side of a surface of its own logical device: the producer's image and timelines, owned by it.
-    private SharedSurface(IGraphicsDevice device, SharedSurface producer, string name)
+    // The consumer's side of a surface of its own logical device: the producer's image and timelines, owned by it, held
+    // for it already (Take). Named as the producer's: a debug name set here would rename the producer's image.
+    private SharedSurface(IGraphicsDevice device, SharedSurface producer)
         : base(device, producer.VulkanImage, BuildDescription(producer.Width, producer.Height, producer.Description.Format),
-            ImageUsageFlagBits.SampledBit, name)
+            ImageUsageFlagBits.SampledBit, producer.Name)
     {
         _produceSemaphore = producer._produceSemaphore;
         _consumeSemaphore = producer._consumeSemaphore;
         _ownsSemaphores = false;
         Descriptor = producer.Descriptor;
         _producer = producer;
+    }
+
+    // Holds producer for a taker made of it - refused once it is disposed, checked under the lock its Dispose takes.
+    private static SharedSurface Take(IGraphicsDevice device, SharedSurface producer)
+    {
         lock (producer._shareLock)
         {
+            if (producer._gone)
+            {
+                throw new NotSupportedException("The surface is disposed; it is not taken again.");
+            }
+
             producer._takers++;
+        }
+
+        try
+        {
+            return new SharedSurface(device, producer);
+        }
+        catch
+        {
+            producer.LetGo();
+            throw;
         }
     }
 
@@ -394,7 +416,7 @@ public sealed unsafe class SharedSurface : Texture
     {
         if (descriptor.DeviceSurface != null)
         {
-            return TakeFromDevice(device, descriptor, name);
+            return TakeFromDevice(device, descriptor);
         }
 
         var surface = ImportSingle(device, descriptor, name);
@@ -418,22 +440,30 @@ public sealed unsafe class SharedSurface : Texture
         return surface;
     }
 
-    private static SharedSurface TakeFromDevice(IGraphicsDevice device, SharedSurfaceDescriptor descriptor, string name)
+    private static SharedSurface TakeFromDevice(IGraphicsDevice device, SharedSurfaceDescriptor descriptor)
     {
-        if (descriptor.DeviceSurface is not SharedSurface { IsDisposed: false } producer
+        if (descriptor.DeviceSurface is not SharedSurface producer
             || !ReferenceEquals(producer.GraphicsDevice.MainDevice, device.MainDevice))
         {
-            throw new NotSupportedException("The surface was made on another logical device, or is gone; a surface " +
-                                            "shared across devices goes through handles (CreateExportable).");
+            throw new NotSupportedException("The surface was made on another logical device; a surface shared across " +
+                                            "devices goes through handles (CreateExportable).");
         }
 
-        var surface = new SharedSurface(device, producer, name);
+        var surface = Take(device, producer);
         if (producer._others.Length > 0)
         {
             surface._others = new SharedSurface[producer._others.Length];
-            for (var i = 0; i < producer._others.Length; i++)
+            try
             {
-                surface._others[i] = new SharedSurface(device, producer._others[i], name);
+                for (var i = 0; i < producer._others.Length; i++)
+                {
+                    surface._others[i] = Take(device, producer._others[i]);
+                }
+            }
+            catch
+            {
+                surface.Dispose();
+                throw;
             }
         }
 
@@ -678,6 +708,7 @@ public sealed unsafe class SharedSurface : Texture
     {
         lock (_shareLock)
         {
+            _gone = true;
             if (_takers > 0)
             {
                 _freeWhenLetGo = true;
