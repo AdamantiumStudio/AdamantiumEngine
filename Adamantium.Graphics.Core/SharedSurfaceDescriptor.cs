@@ -24,10 +24,16 @@ public enum SharedHandleType
 }
 
 /// <summary>Describes an externally produced surface - exported memory and semaphores - so a consumer such as
-/// <c>RenderTargetPanel</c> can import it zero-copy.</summary>
+/// <c>RenderTargetPanel</c> can import it zero-copy; or a surface of the consumer's own logical device, shared as it is
+/// (<see cref="DeviceSurface"/>).</summary>
 public sealed class SharedSurfaceDescriptor
 {
     private long _submitted;
+
+    /// <summary>The producer's surface itself, for a consumer on the same logical device: its image and timelines are
+    /// used as they are, with no OS handle - the handles here are empty. Null for a surface shared through handles.
+    /// </summary>
+    public ITexture DeviceSurface { get; set; }
 
     /// <summary>The kind of handle in <see cref="MemoryHandle"/> (decides the Vulkan handle type on import).</summary>
     public SharedHandleType HandleType { get; set; } = SharedHandleType.OpaqueWin32;

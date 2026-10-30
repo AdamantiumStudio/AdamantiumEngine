@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `SharedSurface.CreateInDevice`: a shared surface for a consumer on the producer's own logical device - a plain image
+  and plain timeline semaphores, taken by `SharedSurface.Import` as they are (`SharedSurfaceDescriptor.DeviceSurface`),
+  with no OS handle, so it shares on a device that exports none (llvmpipe) as well. The producer's surface lasts until the
+  last consumer that took it lets go. A surface of another logical device is refused.
+
 - `ContentBuilder.Import(manifest, projectDirectory)`: imports what needs it into the asset files beside the sources,
   as a build does, and writes no output - what an editor keeps its content current with; it can be stopped between
   two assets. A build and an import of one project wait for each other, in every process of the user. An asset file

@@ -12,7 +12,8 @@ using VulkanImage = Adamantium.Vulkan.Core.Image;
 namespace Adamantium.Graphics;
 
 /// <summary>A GPU surface shared across processes and APIs through an OS handle: <see cref="CreateExportable"/> exports one,
-/// <see cref="Import"/> binds a producer's zero-copy. Owners dispose it explicitly.</summary>
+/// <see cref="Import"/> binds a producer's zero-copy. Within one logical device <see cref="CreateInDevice"/> shares it
+/// as it is, with no handle. Owners dispose it explicitly.</summary>
 public sealed unsafe class SharedSurface : Texture
 {
     private static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
@@ -20,7 +21,16 @@ public sealed unsafe class SharedSurface : Texture
     private Semaphore _produceSemaphore;
     private Semaphore _consumeSemaphore;
 
+    private bool _ownsSemaphores = true;
     private bool _ownsHandles;
+
+    // A surface of its own device's consumer (CreateInDevice) is used by its takers as it is: the producer frees it once
+    // it is disposed and the last of them let go - not while one still reads its timelines or copies its image.
+    private readonly object _shareLock = new();
+    private int _takers;
+    private bool _gone;
+    private bool _freeWhenLetGo;
+    private SharedSurface _producer;
     private bool _useFd;
     private IntPtr _memoryHandle;
     private IntPtr _produceHandle;
@@ -190,6 +200,58 @@ public sealed unsafe class SharedSurface : Texture
     {
     }
 
+    // The consumer's side of a surface of its own logical device: the producer's image and timelines, owned by it, held
+    // for it already (Take). Named as the producer's: a debug name set here would rename the producer's image.
+    private SharedSurface(IGraphicsDevice device, SharedSurface producer)
+        : base(device, producer.VulkanImage, BuildDescription(producer.Width, producer.Height, producer.Description.Format),
+            ImageUsageFlagBits.SampledBit, producer.Name)
+    {
+        _produceSemaphore = producer._produceSemaphore;
+        _consumeSemaphore = producer._consumeSemaphore;
+        _ownsSemaphores = false;
+        Descriptor = producer.Descriptor;
+        _producer = producer;
+    }
+
+    // Holds producer for a taker made of it - refused once it is disposed, checked under the lock its Dispose takes.
+    private static SharedSurface Take(IGraphicsDevice device, SharedSurface producer)
+    {
+        lock (producer._shareLock)
+        {
+            if (producer._gone)
+            {
+                throw new NotSupportedException("The surface is disposed; it is not taken again.");
+            }
+
+            producer._takers++;
+        }
+
+        try
+        {
+            return new SharedSurface(device, producer);
+        }
+        catch
+        {
+            producer.LetGo();
+            throw;
+        }
+    }
+
+    private void LetGo()
+    {
+        bool free;
+        lock (_shareLock)
+        {
+            _takers--;
+            free = _takers == 0 && _freeWhenLetGo;
+        }
+
+        if (free)
+        {
+            Free(true);
+        }
+    }
+
     /// <summary>
     /// Allocates an exportable surface: a dedicated image whose memory and semaphores can be shared with another
     /// process/API. The returned <see cref="Descriptor"/> carries the OS handles to hand off to the consumer.
@@ -199,9 +261,21 @@ public sealed unsafe class SharedSurface : Texture
     /// <see cref="SharedSurfaceDescriptor.Others"/>.
     /// </summary>
     public static SharedSurface CreateExportable(IGraphicsDevice device, uint width, uint height, SurfaceFormat format,
-        SharedHandleType? handleType = null, string name = "SharedSurface(export)", uint bufferCount = 1)
+        SharedHandleType? handleType = null, string name = "SharedSurface(export)", uint bufferCount = 1) =>
+        CreateRing(bufferCount, () => CreateExportableSingle(device, width, height, format, handleType, name));
+
+    /// <summary>A surface for a consumer on the same logical device as <paramref name="device"/>: as
+    /// <see cref="CreateExportable"/>, but its image and timeline semaphores are plain ones, used by the consumer as
+    /// they are - no OS handle, so a device that exports none shares it as well, and nothing goes through the system.
+    /// Its <see cref="Descriptor"/> carries the surface in <see cref="SharedSurfaceDescriptor.DeviceSurface"/>.</summary>
+    public static SharedSurface CreateInDevice(IGraphicsDevice device, uint width, uint height, SurfaceFormat format,
+        string name = "SharedSurface(device)", uint bufferCount = 1) =>
+        CreateRing(bufferCount, () => CreateInDeviceSingle(device, width, height, format, name));
+
+    // The first surface of the ring made by createSingle, holding the others; its descriptor names theirs.
+    private static SharedSurface CreateRing(uint bufferCount, Func<SharedSurface> createSingle)
     {
-        var surface = CreateExportableSingle(device, width, height, format, handleType, name);
+        var surface = createSingle();
         if (bufferCount <= 1) return surface;
 
         surface._others = new SharedSurface[bufferCount - 1];
@@ -210,7 +284,7 @@ public sealed unsafe class SharedSurface : Texture
         {
             for (var i = 0; i < others.Length; i++)
             {
-                surface._others[i] = CreateExportableSingle(device, width, height, format, handleType, name);
+                surface._others[i] = createSingle();
                 others[i] = surface._others[i].Descriptor;
             }
         }
@@ -224,6 +298,40 @@ public sealed unsafe class SharedSurface : Texture
         surface.Descriptor.BufferCount = bufferCount;
         return surface;
     }
+
+    private static SharedSurface CreateInDeviceSingle(IGraphicsDevice device, uint width, uint height, SurfaceFormat format,
+        string name)
+    {
+        var description = BuildDescription(width, height, format);
+        var surface = new SharedSurface(device, description, null, null, name);
+        try
+        {
+            surface.TransitionImageLayout(description.DesiredImageLayout);
+            surface._produceSemaphore = surface.CreateTimelineSemaphore();
+            surface._consumeSemaphore = surface.CreateTimelineSemaphore();
+        }
+        catch
+        {
+            surface.Dispose();
+            throw;
+        }
+
+        surface.Descriptor = new SharedSurfaceDescriptor
+        {
+            Width = width,
+            Height = height,
+            Format = format,
+            BufferCount = 1,
+            DeviceSurface = surface
+        };
+        return surface;
+    }
+
+    private Semaphore CreateTimelineSemaphore() =>
+        GraphicsDevice.LogicalDevice.CreateSemaphore(new SemaphoreCreateInfo
+        {
+            PNext = new SemaphoreTypeCreateInfo { SemaphoreType = SemaphoreType.Timeline, InitialValue = 0 }
+        });
 
     /// <summary>Whether the device exports the timeline semaphores a surface shared through handles of this type
     /// signals its frames with - the platform's opaque type when none is given. The memory is checked as it is made.
@@ -299,11 +407,18 @@ public sealed unsafe class SharedSurface : Texture
 
     /// <summary>
     /// Imports an externally produced surface zero-copy: allocates a local image bound to the producer's shared
-    /// memory and imports its produce/consume semaphores. The image samples the producer's frames directly.
+    /// memory and imports its produce/consume semaphores. The image samples the producer's frames directly. A surface of
+    /// <paramref name="device"/>'s own logical device (<see cref="CreateInDevice"/>) is taken as it is - its image and
+    /// timelines, still the producer's; one of another device cannot be.
     /// </summary>
     public static SharedSurface Import(IGraphicsDevice device, SharedSurfaceDescriptor descriptor,
         string name = "SharedSurface(import)")
     {
+        if (descriptor.DeviceSurface != null)
+        {
+            return TakeFromDevice(device, descriptor);
+        }
+
         var surface = ImportSingle(device, descriptor, name);
         if (descriptor.Others is { Length: > 0 } others)
         {
@@ -313,6 +428,36 @@ public sealed unsafe class SharedSurface : Texture
                 for (var i = 0; i < others.Length; i++)
                 {
                     surface._others[i] = ImportSingle(device, others[i], name);
+                }
+            }
+            catch
+            {
+                surface.Dispose();
+                throw;
+            }
+        }
+
+        return surface;
+    }
+
+    private static SharedSurface TakeFromDevice(IGraphicsDevice device, SharedSurfaceDescriptor descriptor)
+    {
+        if (descriptor.DeviceSurface is not SharedSurface producer
+            || !ReferenceEquals(producer.GraphicsDevice.MainDevice, device.MainDevice))
+        {
+            throw new NotSupportedException("The surface was made on another logical device; a surface shared across " +
+                                            "devices goes through handles (CreateExportable).");
+        }
+
+        var surface = Take(device, producer);
+        if (producer._others.Length > 0)
+        {
+            surface._others = new SharedSurface[producer._others.Length];
+            try
+            {
+                for (var i = 0; i < producer._others.Length; i++)
+                {
+                    surface._others[i] = Take(device, producer._others[i]);
                 }
             }
             catch
@@ -561,6 +706,21 @@ public sealed unsafe class SharedSurface : Texture
 
     protected override void Dispose(bool disposeManaged)
     {
+        lock (_shareLock)
+        {
+            _gone = true;
+            if (_takers > 0)
+            {
+                _freeWhenLetGo = true;
+                return;
+            }
+        }
+
+        Free(disposeManaged);
+    }
+
+    private void Free(bool disposeManaged)
+    {
         foreach (var other in _others)
         {
             other?.Dispose();
@@ -570,8 +730,14 @@ public sealed unsafe class SharedSurface : Texture
         _copy?.Dispose();
         _copy = null;
         var logical = GraphicsDevice.LogicalDevice;
-        if (_produceSemaphore != null) { logical.DestroySemaphore(_produceSemaphore); _produceSemaphore = null; }
-        if (_consumeSemaphore != null) { logical.DestroySemaphore(_consumeSemaphore); _consumeSemaphore = null; }
+        if (_ownsSemaphores)
+        {
+            if (_produceSemaphore != null) logical.DestroySemaphore(_produceSemaphore);
+            if (_consumeSemaphore != null) logical.DestroySemaphore(_consumeSemaphore);
+        }
+
+        _produceSemaphore = null;
+        _consumeSemaphore = null;
 
         if (_ownsHandles)
         {
@@ -581,5 +747,8 @@ public sealed unsafe class SharedSurface : Texture
         }
 
         base.Dispose(disposeManaged);
+        var producer = _producer;
+        _producer = null;
+        producer?.LetGo();
     }
 }

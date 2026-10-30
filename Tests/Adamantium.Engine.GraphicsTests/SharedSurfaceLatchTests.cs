@@ -120,6 +120,64 @@ public class SharedSurfaceLatchTests
         Assert.That(surface.SurfaceAt(0).ConsumeValue, Is.EqualTo(3ul), "the next frame, written over the older one, comes through");
     }
 
+    // A panel on the producer's own logical device: the surface is taken as it is, with no handles - also on a device
+    // that exports none - and the frame comes through and goes back as through an import.
+    [Test]
+    public void ASurfaceOfTheSameDevice_IsTakenAsItIs_CopiedAndGivenBack()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        var gd = (GraphicsDevice)device;
+        var prms = new PresentationParameters(PresenterType.RenderTarget, 4, 4, IntPtr.Zero);
+        using var presenter = GraphicsPresenter.Create(device, prms, "shared_surface_in_device");
+        using var surface = SharedSurface.CreateInDevice(device, 4, 4, SurfaceFormat.B8G8R8A8.UNorm, bufferCount: 2);
+        using var taken = SharedSurface.Import(device, surface.Descriptor);
+        device.SetRenderTargets(presenter.RenderTarget);
+        device.SetDepthBuffer(presenter.DepthBuffer);
+        device.Presenter = presenter;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(surface.Descriptor.MemoryHandle, Is.EqualTo(IntPtr.Zero), "no handle is made");
+            Assert.That(taken.BufferCount, Is.EqualTo(2));
+            Assert.That(taken.SurfaceAt(1).ProduceSemaphore, Is.SameAs(surface.SurfaceAt(1).ProduceSemaphore));
+        });
+
+        Produce(gd, surface.SurfaceAt(0), 1);
+        Produce(gd, surface.SurfaceAt(1), 2);
+        Frame(device, presenter, taken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(taken.LatchedCopy, Is.Not.Null);
+            Assert.That(surface.SurfaceAt(1).ConsumeValue, Is.EqualTo(2ul), "the newest frame is the one copied");
+            Assert.That(surface.SurfaceAt(0).ConsumeValue, Is.EqualTo(1ul), "the older frame is given back unread");
+        });
+    }
+
+    // The producer retires a surface while the panel still holds what it took: what it took stays alive until it lets go.
+    [Test]
+    public void ASurfaceOfTheSameDevice_DisposedByItsProducer_LastsUntilTheTakerLetsGo()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        var gd = (GraphicsDevice)device;
+        var surface = SharedSurface.CreateInDevice(device, 4, 4, SurfaceFormat.B8G8R8A8.UNorm);
+        var taken = SharedSurface.Import(device, surface.Descriptor);
+        Produce(gd, surface, 1);
+
+        surface.Dispose();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(surface.IsDisposed, Is.True);
+            Assert.That(taken.ProduceValue, Is.EqualTo(1ul), "the timeline is still there to read");
+            Assert.Throws<NotSupportedException>(() => SharedSurface.Import(device, surface.Descriptor),
+                "a disposed surface is not taken again");
+        });
+
+        taken.Dispose();
+        device.DeviceWaitIdle();
+    }
+
     private static IGraphicsDevice CreateSharingDevice()
     {
         var device = GpuFixture.CreateRenderDevice();
