@@ -15,7 +15,9 @@ public sealed class ModelImporter : IContentImporter
     public object Import(string sourcePath, ContentBuildContext context)
     {
         var converter = new ModelConverter();
-        var scene = converter.ImportFile(sourcePath);
+        // Null when the file could not be read as a model at all; written on, it made an empty asset file in silence.
+        var scene = converter.ImportFile(sourcePath)
+                    ?? throw new InvalidDataException("the file could not be read as a model: it is damaged or not of its kind");
 
         // Otherwise part of the model goes missing in silence, and the file looks whole until it is seen in engine.
         foreach (var unsupported in converter.UnsupportedFeatures)

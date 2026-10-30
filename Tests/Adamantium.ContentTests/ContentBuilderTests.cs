@@ -544,6 +544,24 @@ public class ContentBuilderTests
     }
 
     [Test]
+    public void AModelThatCannotBeRead_FailsAndWritesNoAssetFile()
+    {
+        Write("Models/broken.dae", "this is not a Collada document");
+        List<string> log = [];
+        var manifest = Manifest();
+        manifest.SetSources(["Models/broken.dae"]);
+
+        var result = new ContentBuilder().Import(manifest, _project, log.Add);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Failed, Is.EqualTo(1), result.ToString());
+            Assert.That(log, Has.One.Contains("error ACB004"));
+            Assert.That(File.Exists(Path.Combine(_project, "Models", "broken.dae.aemf")), Is.False);
+        });
+    }
+
+    [Test]
     public void Import_StoppedBeforeItStarts_ImportsNothing()
     {
         Write("Models/triangle.obj", Triangle);
