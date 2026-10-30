@@ -16,8 +16,8 @@ namespace Adamantium.Engine.Tools;
 /// axis runs red along it and the Z axis blue. The grid fades out towards its edge, and what stands or lies on it hides
 /// it. The axes are drawn as lines too, seen from any side, and so are the grid's lines while a perspective's eye is in
 /// the plane, where its pixels have nothing to rule. Under the lines lies a floor of <see cref="FloorColor"/>, which
-/// hides what is below the ground; the lines (<see cref="ShowsGrid"/>) and the floor (<see cref="ShowsFloor"/>) are each
-/// shown or not.
+/// hides what is below the ground. The grid is shown or not (<see cref="ShowsGrid"/>), and with it the floor
+/// (<see cref="ShowsFloor"/>): the floor is only ever the grid's, never without its lines.
 /// </summary>
 public class GroundGrid : EditorProcessor
 {
@@ -57,10 +57,11 @@ public class GroundGrid : EditorProcessor
     /// <summary>The lines of the cells ten times bigger and up.</summary>
     public Vector4F MajorColor { get; set; } = new(0.7f, 0.7f, 0.7f, 0.5f);
 
-    /// <summary>Whether the lines of the cells and the axes are drawn.</summary>
+    /// <summary>Whether the grid is drawn: the lines of the cells, the axes and, with <see cref="ShowsFloor"/>, the floor
+    /// under them.</summary>
     public bool ShowsGrid { get; set; } = true;
 
-    /// <summary>Whether the floor is drawn under the lines.</summary>
+    /// <summary>Whether the grid has its floor under its lines; nothing while the grid is not shown.</summary>
     public bool ShowsFloor { get; set; } = true;
 
     /// <summary>The floor's color, an even gray by default; its alpha is how much it hides of what is below the ground.
@@ -91,16 +92,14 @@ public class GroundGrid : EditorProcessor
     // before a camera moved later in the frame, and showed beside the cells the shader drew from the eye of now.
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
-        if (ShowsGrid || ShowsFloor)
+        if (!ShowsGrid)
         {
-            overlay.DrawGrid(this);
+            return;
         }
 
-        if (ShowsGrid)
-        {
-            PlaceLines(overlay.Camera);
-            overlay.DrawFlatBehindScene(edges);
-        }
+        overlay.DrawGrid(this);
+        PlaceLines(overlay.Camera);
+        overlay.DrawFlatBehindScene(edges);
     }
 
     private void PlaceLines(CameraBase camera)

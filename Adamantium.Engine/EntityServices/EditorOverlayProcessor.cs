@@ -202,7 +202,6 @@ public class EditorOverlayProcessor : RenderingProcessor
         gridEffect.AxisXColor.SetValue(grid.AxisXColor);
         gridEffect.AxisZColor.SetValue(grid.AxisZColor);
         gridEffect.FloorColor.SetValue(grid.ShowsFloor ? grid.FloorColor : Vector4F.Zero);
-        gridEffect.Shown.SetValue(new Vector4F(grid.ShowsGrid ? 1 : 0, 0, 0, 0));
         gridEffect.GridGroundPass.Apply();
 
         // Clamped, not clipped, at the far plane: with the eye far off the ground runs on past it, drawn at the farthest
