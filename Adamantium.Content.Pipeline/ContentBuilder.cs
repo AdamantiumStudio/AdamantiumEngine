@@ -491,6 +491,8 @@ public sealed class ContentBuilder
     // instead of writing the same asset files at once.
     private sealed class ProjectLock : IDisposable
     {
+        private static readonly TimeSpan WaitStep = TimeSpan.FromMilliseconds(100);
+
         private readonly Mutex _mutex;
 
         private ProjectLock(Mutex mutex) => _mutex = mutex;
@@ -508,12 +510,17 @@ public sealed class ContentBuilder
                        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)), 0, 12).ToLowerInvariant();
             var mutex = new Mutex(false, name, new NamedWaitHandleOptions { CurrentUserOnly = true, CurrentSessionOnly = false },
                 out _);
+            // A named mutex cannot be waited on together with another handle on every platform: wait on it alone, a
+            // little at a time.
             try
             {
-                if (WaitHandle.WaitAny([mutex, cancellation.WaitHandle]) != 0)
+                while (!mutex.WaitOne(WaitStep))
                 {
-                    mutex.Dispose();
-                    return null;
+                    if (cancellation.IsCancellationRequested)
+                    {
+                        mutex.Dispose();
+                        return null;
+                    }
                 }
             }
             catch (AbandonedMutexException)
