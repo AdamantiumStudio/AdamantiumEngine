@@ -1108,7 +1108,9 @@ All packages share one version.
   plane per vertex, and with the square's corners past it the whole grid was drawn nearer than it is. Each fragment's
   depth is held there now (`IGraphicsDevice.DepthClampEnable`, where `MainGraphicsDevice.IsDepthClampEnabled` - the
   device's depthClamp feature, enabled where there is one), so the ground past the far plane still shows, behind
-  everything.
+  everything. And the grid lies behind the ground by a few steps of the depth buffer, no more: it was a fixed depth
+  that grew with the square of the eye's distance - metres a hundred away - and from below what stood on the ground
+  showed through the floor.
 - Every Collada node is a model known by its own ID, not by the geometry it draws: a clip moving a node that is no
   joint now plays, a geometry drawn by several nodes is on each of them - a copy each - and nodes of one name no longer
   merge into one. A node takes the materials its binding names for each part's symbol, a skinned one too; they went

@@ -39,11 +39,13 @@ struct PS_INPUT
     float2 plane : TEXCOORD0;
 };
 
-// How far behind the ground the grid is drawn, in depth: a floor lying at y = 0 hides it instead of fighting it. Added
-// as a part of w, so the depth stays linear across the square. It used to be held to the far plane per vertex: with
-// the eye far off, a corner held there drew the whole grid nearer than it is, over what stands on it. The draw holds
-// each fragment's depth there instead (depth clamp), so the ground past the far plane still shows, behind everything.
-static const float BehindTheGround = 2e-5f;
+// How far behind the ground the grid is drawn, in depth: a few steps of a 32-bit depth buffer by 1.0, so a floor lying
+// at y = 0 hides it instead of fighting it, and nothing nearer than that - nothing the buffer can tell from the ground -
+// shows through it. Added as a part of w, so the depth stays linear across the square. A fixed depth is a distance that
+// grows with the square of the eye's: 2e-5 was metres a hundred away, and from below what stood on the ground showed
+// through the floor. The draw holds each fragment's depth at the far plane (depth clamp), so the ground past it still
+// shows, behind everything.
+static const float BehindTheGround = 4.0f / 16777216.0f;
 
 [shader("vertex")]
 PS_INPUT Ground_VS(MESH_VERTEX input)
