@@ -119,7 +119,7 @@ public abstract class ToolProcessor : EditorProcessor
 
         var hit = PickHandles(ray, PickAperture * camera.PixelsPerPoint, out var owner);
         Highlight(owner, hit.Entity);
-        var under = hit.IsHit ? null : Tools.Selection.ChosenByClick(Tools.PickEntity(ray).Entity);
+        var under = hit.IsHit ? null : Tools.ChosenAt(ray, removing: Modifier(Keys.Control));
         Tools.Hovered = under;
 
         if (!input.IsMouseButtonPressed(MouseButton.Left))
