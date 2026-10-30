@@ -145,51 +145,21 @@ public sealed class ContentBuilder
                 continue;
             }
 
-            var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
-            var writer = writersByImporter[importerName];
-            var assetFull = BuildCache.IsInside(projectDirectory, sourceFull)
-                ? sourceFull + writer.OutputExtension
-                : Path.Combine(intermediateDirectory, "assets", logicalName + writer.OutputExtension);
+            var writer = writersByImporter[importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name];
+            var assetFull = GetAssetFilePath(projectDirectory, intermediateDirectory, sourceFull, logicalName, writer);
             var cookedRelative = logicalName + writer.OutputExtension;
             var cookedFull = Path.Combine(outputDirectory, cookedRelative);
             var cookedDirectory = Path.GetDirectoryName(cookedFull);
 
             try
             {
-                var hash = AssetSource.ComputeHash(sourceFull);
-                var reason = GetImportReason(assetFull, sourceFull, hash, importerName, asset.Parameters, log);
+                var reason = ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory,
+                    outputDirectory, intermediateDirectory, log);
                 if (reason == null && !cache.IsStale(asset.Source, assetFull, asset.Parameters, cookedFull))
                 {
                     log($"  [up-to-date] {asset.Source}");
                     result.Skipped++;
                     continue;
-                }
-
-                if (reason != null)
-                {
-                    log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({reason})");
-                    List<(string From, string To)> companions = [];
-                    var context = new ContentBuildContext
-                    {
-                        ProjectDirectory = projectDirectory,
-                        OutputDirectory = outputDirectory,
-                        IntermediateDirectory = intermediateDirectory,
-                        Parameters = asset.Parameters,
-                        Log = log,
-                        CopyAlongside = (from, to) => companions.Add((from, to))
-                    };
-
-                    var content = importer.Import(sourceFull, context);
-                    WriteAssetFile(assetFull, writer, content, new AssetSource
-                    {
-                        Path = Normalize(Path.GetRelativePath(
-                            Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
-                        Hash = hash,
-                        Importer = importerName,
-                        Parameters = asset.Parameters == null ? new() : new(asset.Parameters),
-                        EngineVersion = EngineVersion,
-                        Companions = companions.Select(companion => Normalize(companion.To)).Distinct().ToList()
-                    });
                 }
 
                 Directory.CreateDirectory(cookedDirectory);
@@ -215,6 +185,110 @@ public sealed class ContentBuilder
         cache.Prune(manifest.Assets.Select(asset => asset.Source), outputDirectory);
         cache.Save(cachePath);
         return result;
+    }
+
+    /// <summary>Imports each asset an importer takes into its asset file, as <see cref="Build"/> does, and nothing
+    /// more: no output is written and no other asset is copied. In the result, <see cref="BuildResult.Cooked"/> counts
+    /// the assets imported and <see cref="BuildResult.Skipped"/> those whose asset file is up to date.</summary>
+    public BuildResult Import(ContentManifest manifest, string projectDirectory, Action<string> log = null)
+    {
+        log ??= _ => { };
+
+        var outputDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.OutputDirectory));
+        var intermediateDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.IntermediateDirectory));
+        var result = new BuildResult();
+        var importTargets = GetImportTargets(manifest, projectDirectory);
+
+        foreach (var asset in manifest.Assets)
+        {
+            var sourceFull = Path.GetFullPath(Path.Combine(projectDirectory, asset.Source));
+            if (importTargets.Contains(sourceFull) || ResolveImporter(asset, sourceFull) is not { } importer)
+            {
+                continue;
+            }
+
+            if (!File.Exists(sourceFull))
+            {
+                log($"{sourceFull} : error ACB001: the source file is missing");
+                result.Failed++;
+                continue;
+            }
+
+            var logicalName = string.IsNullOrEmpty(asset.LogicalName) ? Normalize(asset.Source) : Normalize(asset.LogicalName);
+            if (!BuildCache.IsInside(outputDirectory, Path.Combine(outputDirectory, logicalName)))
+            {
+                log($"{sourceFull} : error ACB008: the file lies outside the project; link it under a path inside");
+                result.Failed++;
+                continue;
+            }
+
+            var writer = writersByImporter[importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name];
+            var assetFull = GetAssetFilePath(projectDirectory, intermediateDirectory, sourceFull, logicalName, writer);
+            try
+            {
+                if (ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory, outputDirectory,
+                        intermediateDirectory, log) == null)
+                {
+                    result.Skipped++;
+                }
+                else
+                {
+                    result.Cooked++;
+                }
+            }
+            catch (Exception ex)
+            {
+                log($"{sourceFull} : error ACB004: {ex.Message}");
+                result.Failed++;
+            }
+        }
+
+        return result;
+    }
+
+    private static string GetAssetFilePath(string projectDirectory, string intermediateDirectory, string sourceFull,
+        string logicalName, IContentWriter writer) =>
+        BuildCache.IsInside(projectDirectory, sourceFull)
+            ? sourceFull + writer.OutputExtension
+            : Path.Combine(intermediateDirectory, "assets", logicalName + writer.OutputExtension);
+
+    // Imports the source into its asset file when it needs it and says why; null when the asset file is up to date.
+    private string ImportIfNeeded(ContentAsset asset, IContentImporter importer, string sourceFull, string logicalName,
+        string assetFull, string projectDirectory, string outputDirectory, string intermediateDirectory,
+        Action<string> log)
+    {
+        var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
+        var hash = AssetSource.ComputeHash(sourceFull);
+        var reason = GetImportReason(assetFull, sourceFull, hash, importerName, asset.Parameters, log);
+        if (reason == null)
+        {
+            return null;
+        }
+
+        log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({reason})");
+        List<(string From, string To)> companions = [];
+        var context = new ContentBuildContext
+        {
+            ProjectDirectory = projectDirectory,
+            OutputDirectory = outputDirectory,
+            IntermediateDirectory = intermediateDirectory,
+            Parameters = asset.Parameters,
+            Log = log,
+            CopyAlongside = (from, to) => companions.Add((from, to))
+        };
+
+        var content = importer.Import(sourceFull, context);
+        WriteAssetFile(assetFull, writersByImporter[importerName], content, new AssetSource
+        {
+            Path = Normalize(Path.GetRelativePath(
+                Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
+            Hash = hash,
+            Importer = importerName,
+            Parameters = asset.Parameters == null ? new() : new(asset.Parameters),
+            EngineVersion = EngineVersion,
+            Companions = companions.Select(companion => Normalize(companion.To)).Distinct().ToList()
+        });
+        return reason;
     }
 
     private HashSet<string> GetImportTargets(ContentManifest manifest, string projectDirectory)

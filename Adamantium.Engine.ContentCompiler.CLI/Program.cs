@@ -69,29 +69,8 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                         var listed = File.ReadAllLines(files)
                             .Where(line => line.Length > 0)
                             .Select(line => line.Split('\t'))
-                            .Select(parts => (
-                                Source: Path.GetRelativePath(projectDirectory, parts[0]).Replace('\\', '/'),
-                                Link: parts.Length > 1 ? parts[1].Replace('\\', '/') : string.Empty))
-                            .ToList();
-                        manifest.SetSources(listed.Select(file => file.Source));
-
-                        foreach (var asset in manifest.Assets.Where(asset => !string.IsNullOrEmpty(asset.LogicalName)))
-                        {
-                            Console.WriteLine($"{manifestPath} : warning ACB007: the LogicalName '{asset.LogicalName}' of {asset.Source} is ignored, a listed file keeps its path");
-                            asset.LogicalName = null;
-                        }
-
-                        var links = listed
-                            .Where(file => file.Link.Length > 0)
-                            .DistinctBy(file => file.Source, StringComparer.OrdinalIgnoreCase)
-                            .ToDictionary(file => file.Source, file => file.Link, StringComparer.OrdinalIgnoreCase);
-                        foreach (var asset in manifest.Assets)
-                        {
-                            if (links.TryGetValue(asset.Source, out var link))
-                            {
-                                asset.LogicalName = link;
-                            }
-                        }
+                            .Select(parts => (Path: parts[0], Link: parts.Length > 1 ? parts[1] : string.Empty));
+                        manifest.SetListedFiles(projectDirectory, listed, manifestPath, Console.WriteLine);
                     }
 
                     manifest.OutputDirectory = GetOption(args, "--out") ?? manifest.OutputDirectory;

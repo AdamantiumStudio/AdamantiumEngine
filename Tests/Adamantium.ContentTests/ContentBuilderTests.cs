@@ -474,6 +474,67 @@ public class ContentBuilderTests
         Assert.That(manifest.Assets[1].Source, Is.EqualTo("b.txt"));
     }
 
+    [Test]
+    public void Import_WritesTheAssetFileBesideItsSource_AndNothingToTheOutput()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Write("Notes/readme.txt", "hello");
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj", "Notes/readme.txt"]);
+
+        var result = new ContentBuilder().Import(manifest, _project);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
+            Assert.That(result.Copied, Is.EqualTo(0));
+            Assert.That(File.Exists(Path.Combine(_project, "Models", "triangle.obj.aemf")), Is.True);
+            Assert.That(Directory.Exists(_output), Is.False);
+        });
+    }
+
+    [Test]
+    public void Import_LeavesAnUpToDateAssetFile_AndBuildStillCopiesIt()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        new ContentBuilder().Import(manifest, _project);
+        var asset = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        var written = File.GetLastWriteTimeUtc(asset);
+
+        var again = new ContentBuilder().Import(manifest, _project);
+        var built = new ContentBuilder().Build(manifest, _project);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(again.Skipped, Is.EqualTo(1), again.ToString());
+            Assert.That(File.GetLastWriteTimeUtc(asset), Is.EqualTo(written));
+            Assert.That(built.Cooked, Is.EqualTo(0), built.ToString());
+            Assert.That(File.Exists(Path.Combine(_output, "Models", "triangle.obj.aemf")), Is.True);
+        });
+    }
+
+    [Test]
+    public void ListedFiles_AreTheAssets_ALinkedOneUnderItsLink()
+    {
+        var manifest = Manifest();
+        manifest.Assets.Add(new ContentAsset { Source = "Models/a.obj", LogicalName = "Other/a.obj", Parameters = new() { ["Scale"] = "2" } });
+        List<string> log = [];
+
+        manifest.SetListedFiles(_project,
+            [(Path.Combine(_project, "Models", "a.obj"), ""), (Path.Combine(_project, "..", "Shared", "b.obj"), @"Models\b.obj")],
+            "Content.acontent", log.Add);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(manifest.Assets.Select(asset => asset.Source), Is.EqualTo((string[])["Models/a.obj", "../Shared/b.obj"]));
+            Assert.That(manifest.Assets.Select(asset => asset.LogicalName), Is.EqualTo((string[])[null, "Models/b.obj"]));
+            Assert.That(manifest.Assets[0].Parameters["Scale"], Is.EqualTo("2"));
+            Assert.That(log, Has.One.StartsWith("Content.acontent : warning ACB007"));
+        });
+    }
+
     private BuildResult Build(params string[] sources)
     {
         var manifest = Manifest();

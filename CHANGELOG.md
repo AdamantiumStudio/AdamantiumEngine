@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `ContentBuilder.Import(manifest, projectDirectory)`: imports what needs it into the asset files beside the sources,
+  as a build does, and writes no output - what an editor keeps its content current with.
+  `ContentManifest.SetListedFiles` makes the asset list the files a content project lists, a linked one under its link,
+  as the content build does.
+
 - `IAssetService.GetAssets(folder)`: the assets of a folder, ordered by name, as `AssetFileInfo`s - name, file,
   `AssetKind` (model, image, font, sound, other) and, read on the first ask, the `AssetSource` - without loading any.
   A model's asset file stands for its source beside it. `AssetFileInfo.ReadThumbnail(maxPixelSize)` decodes its
