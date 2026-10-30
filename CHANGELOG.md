@@ -8,7 +8,11 @@ All packages share one version.
 ### Added
 
 - `ContentBuilder.Import(manifest, projectDirectory)`: imports what needs it into the asset files beside the sources,
-  as a build does, and writes no output - what an editor keeps its content current with.
+  as a build does, and writes no output - what an editor keeps its content current with; it can be stopped between
+  two assets. A build and an import of one project wait for each other, in every process of the user. An asset file
+  is written through a hidden temporary file of its own, which no content glob lists. A linked source's asset file is
+  under the project's `obj/assets`, whatever the build's cache directory. `AssetSource.ComputeHash` reads the source
+  without keeping others from writing it.
   `ContentManifest.SetListedFiles` makes the asset list the files a content project lists, a linked one under its link,
   as the content build does.
 
