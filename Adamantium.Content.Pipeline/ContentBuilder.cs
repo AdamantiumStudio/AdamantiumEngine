@@ -200,11 +200,15 @@ public sealed class ContentBuilder
         CancellationToken cancellation = default)
     {
         log ??= _ => { };
-        using var projectLock = ProjectLock.Take(projectDirectory);
+        var result = new BuildResult();
+        using var projectLock = ProjectLock.Take(projectDirectory, cancellation);
+        if (projectLock == null)
+        {
+            return result;
+        }
 
         var outputDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.OutputDirectory));
         var intermediateDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.IntermediateDirectory));
-        var result = new BuildResult();
         var importTargets = GetImportTargets(manifest, projectDirectory);
 
         foreach (var asset in manifest.Assets)
@@ -286,8 +290,12 @@ public sealed class ContentBuilder
         Action<string> log)
     {
         var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
-        var hash = AssetSource.ComputeHash(sourceFull);
-        var reason = GetImportReason(assetFull, sourceFull, hash, importerName, asset.Parameters, log);
+        var file = new FileInfo(sourceFull);
+        var written = file.LastWriteTimeUtc;
+        var length = file.Length;
+        string hash = null;
+        string Hash() => hash ??= AssetSource.ComputeHash(sourceFull);
+        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, asset.Parameters, log);
         if (reason == null)
         {
             return null;
@@ -310,7 +318,9 @@ public sealed class ContentBuilder
         {
             Path = Normalize(Path.GetRelativePath(
                 Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
-            Hash = hash,
+            Hash = Hash(),
+            Written = written,
+            Length = length,
             Importer = importerName,
             Parameters = asset.Parameters == null ? new() : new(asset.Parameters),
             EngineVersion = EngineVersion,
@@ -335,8 +345,8 @@ public sealed class ContentBuilder
         return targets;
     }
 
-    private static string GetImportReason(string assetFull, string sourceFull, string sourceHash, string importerName,
-        IReadOnlyDictionary<string, string> parameters, Action<string> log)
+    private static string GetImportReason(string assetFull, string sourceFull, DateTime sourceWritten, long sourceLength,
+        Func<string> sourceHash, string importerName, IReadOnlyDictionary<string, string> parameters, Action<string> log)
     {
         if (!File.Exists(assetFull))
         {
@@ -365,7 +375,7 @@ public sealed class ContentBuilder
         }
 
         var source = file.Source;
-        if (source == null || source.Hash != sourceHash)
+        if (source == null || (source.Written != sourceWritten || source.Length != sourceLength) && source.Hash != sourceHash())
         {
             return "source changed";
         }
@@ -485,7 +495,8 @@ public sealed class ContentBuilder
 
         private ProjectLock(Mutex mutex) => _mutex = mutex;
 
-        public static ProjectLock Take(string projectDirectory)
+        // Null when stopped through the token before it was free.
+        public static ProjectLock Take(string projectDirectory, CancellationToken cancellation = default)
         {
             var key = Path.GetFullPath(projectDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             if (!OperatingSystem.IsLinux())
@@ -499,7 +510,11 @@ public sealed class ContentBuilder
                 out _);
             try
             {
-                mutex.WaitOne();
+                if (WaitHandle.WaitAny([mutex, cancellation.WaitHandle]) != 0)
+                {
+                    mutex.Dispose();
+                    return null;
+                }
             }
             catch (AbandonedMutexException)
             {

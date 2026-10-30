@@ -11,8 +11,10 @@ All packages share one version.
   as a build does, and writes no output - what an editor keeps its content current with; it can be stopped between
   two assets. A build and an import of one project wait for each other, in every process of the user. An asset file
   is written through a hidden temporary file of its own, which no content glob lists. A linked source's asset file is
-  under the project's `obj/assets`, whatever the build's cache directory. `AssetSource.ComputeHash` reads the source
-  without keeping others from writing it.
+  under the project's `obj/assets`, whatever the build's cache directory, and left out of the content and removed on
+  Clean. `AssetSource` records when its source was written and its length (`Written`, `Length`): while they match, the
+  source's hash is not computed again. `AssetSource.ComputeHash` reads the source without keeping others from writing
+  it.
   `ContentManifest.SetListedFiles` makes the asset list the files a content project lists, a linked one under its link,
   as the content build does.
 

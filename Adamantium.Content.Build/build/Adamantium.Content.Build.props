@@ -17,7 +17,7 @@
        settings. Here, before the project's own items, so the project can Remove what it does not want. -->
   <ItemGroup>
     <AdamantiumContent Include="**\*"
-                       Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);**\*.cs;**\*.acontent;**\.*" />
+                       Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);**\*.cs;**\*.acontent;**\.*;obj\**" />
   </ItemGroup>
 
 </Project>

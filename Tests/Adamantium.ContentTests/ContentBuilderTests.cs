@@ -518,6 +518,32 @@ public class ContentBuilderTests
     }
 
     [Test]
+    public void ASourceWrittenWithTheSameBytes_IsNotImportedAgain()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Build("Models/triangle.obj");
+        var source = Path.Combine(_project, "Models", "triangle.obj");
+        File.SetLastWriteTimeUtc(source, File.GetLastWriteTimeUtc(source).AddMinutes(1));
+
+        var result = Build("Models/triangle.obj");
+
+        Assert.That(result.Cooked, Is.EqualTo(0), result.ToString());
+    }
+
+    [Test]
+    public void TheAssetFile_RecordsWhenItsSourceWasWrittenAndItsLength()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var source = Path.Combine(_project, "Models", "triangle.obj");
+
+        Build("Models/triangle.obj");
+
+        var recorded = AssetFile.Read(source + ".aemf", AssetFileSection.Source).Source;
+        Assert.That(recorded.Written, Is.EqualTo(File.GetLastWriteTimeUtc(source)));
+        Assert.That(recorded.Length, Is.EqualTo(new FileInfo(source).Length));
+    }
+
+    [Test]
     public void Import_StoppedBeforeItStarts_ImportsNothing()
     {
         Write("Models/triangle.obj", Triangle);

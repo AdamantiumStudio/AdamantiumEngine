@@ -15,6 +15,13 @@ public sealed class AssetSource
     /// <summary>The source file's <see cref="ComputeHash">hash</see> when it was imported.</summary>
     public string Hash { get; set; }
 
+    /// <summary>When the source file was last written, in UTC, as it was read for the import: while it and
+    /// <see cref="Length"/> still match the file, its <see cref="Hash"/> is not computed again.</summary>
+    public DateTime Written { get; set; }
+
+    /// <summary>The source file's length in bytes as it was read for the import.</summary>
+    public long Length { get; set; }
+
     /// <summary>The name of the importer that read it.</summary>
     public string Importer { get; set; }
 
