@@ -50,6 +50,38 @@ public sealed class ContentManifest
             .ToList();
     }
 
+    /// <summary>Makes the asset list exactly the <paramref name="files"/> a content project lists - full paths, each
+    /// with the <c>Link</c> it is given or an empty one - keeping the settings of those already listed: a linked file
+    /// is built under its link, and a listed file under its own path, its <see cref="ContentAsset.LogicalName"/> left
+    /// out with warning ACB007, said of <paramref name="manifestPath"/>.</summary>
+    public void SetListedFiles(string projectDirectory, IEnumerable<(string Path, string Link)> files,
+        string manifestPath, Action<string> log = null)
+    {
+        var listed = files
+            .Select(file => (Source: Normalize(System.IO.Path.GetRelativePath(projectDirectory, file.Path)),
+                Link: Normalize(file.Link ?? string.Empty)))
+            .ToList();
+        SetSources(listed.Select(file => file.Source));
+
+        foreach (var asset in Assets.Where(asset => !string.IsNullOrEmpty(asset.LogicalName)))
+        {
+            log?.Invoke($"{manifestPath} : warning ACB007: the LogicalName '{asset.LogicalName}' of {asset.Source} is ignored, a listed file keeps its path");
+            asset.LogicalName = null;
+        }
+
+        var links = listed
+            .Where(file => file.Link.Length > 0)
+            .DistinctBy(file => file.Source, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(file => file.Source, file => file.Link, StringComparer.OrdinalIgnoreCase);
+        foreach (var asset in Assets)
+        {
+            if (links.TryGetValue(asset.Source, out var link))
+            {
+                asset.LogicalName = link;
+            }
+        }
+    }
+
     public static ContentManifest Load(string path)
     {
         return JsonSerializer.Deserialize<ContentManifest>(File.ReadAllText(path), JsonOptions)

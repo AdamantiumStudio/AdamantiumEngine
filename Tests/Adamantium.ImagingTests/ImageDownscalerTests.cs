@@ -7,14 +7,14 @@ namespace Adamantium.ImagingTests;
 
 /// <summary>Pixels shrunk to fit: each the average of the area it covers, colors by their alpha, the aspect kept.</summary>
 [TestFixture]
-public class ImageShrinkTests
+public class ImageDownscalerTests
 {
     [Test]
     public void PixelsThatFit_AreThemselves()
     {
         var pixels = new byte[4 * 3 * 4];
 
-        Assert.That(ImageShrink.FitWithin(pixels, 4, 3, Format.R8G8B8A8_UNORM, 4, 3, out var w, out var h),
+        Assert.That(ImageDownscaler.FitWithin(pixels, 4, 3, Format.R8G8B8A8_UNORM, 4, 3, out var w, out var h),
             Is.SameAs(pixels));
         Assert.That((w, h), Is.EqualTo((4u, 3u)));
     }
@@ -29,7 +29,7 @@ public class ImageShrinkTests
             100, 0, 0, 255, 0, 0, 0, 0, 50, 60, 70, 255, 70, 80, 90, 255
         ];
 
-        var shrunk = ImageShrink.FitWithin(pixels, 4, 2, Format.R8G8B8A8_UNORM, 2, 2, out var w, out var h);
+        var shrunk = ImageDownscaler.FitWithin(pixels, 4, 2, Format.R8G8B8A8_UNORM, 2, 2, out var w, out var h);
 
         Assert.That((w, h), Is.EqualTo((2u, 1u)));
         Assert.That(shrunk, Is.EqualTo(new byte[] { 150, 0, 0, 128, 40, 50, 60, 255 }));
@@ -41,7 +41,7 @@ public class ImageShrinkTests
     {
         byte[] pixels = [0, 90, 180];
 
-        var shrunk = ImageShrink.FitWithin(pixels, 3, 1, Format.R8_UNORM, 2, 1, out var w, out _);
+        var shrunk = ImageDownscaler.FitWithin(pixels, 3, 1, Format.R8_UNORM, 2, 1, out var w, out _);
 
         Assert.That(w, Is.EqualTo(2));
         Assert.That(shrunk, Is.EqualTo(new byte[] { 30, 150 }));
@@ -52,7 +52,7 @@ public class ImageShrinkTests
     {
         byte[] pixels = [0x00, 0x10, 0x00, 0x20, 0x00, 0x30, 0xFF, 0xFF, 0x00, 0x30, 0x00, 0x40, 0x00, 0x50, 0xFF, 0xFF];
 
-        var shrunk = ImageShrink.FitWithin(pixels, 2, 1, Format.R16G16B16A16_UNORM, 1, 1, out _, out _);
+        var shrunk = ImageDownscaler.FitWithin(pixels, 2, 1, Format.R16G16B16A16_UNORM, 1, 1, out _, out _);
 
         Assert.That(shrunk, Is.EqualTo(new byte[] { 0x00, 0x20, 0x00, 0x30, 0x00, 0x40, 0xFF, 0xFF }));
     }
@@ -64,7 +64,7 @@ public class ImageShrinkTests
         var pixels = new byte[1000 * 10 * 3];
         new Random(1).NextBytes(pixels);
 
-        var shrunk = ImageShrink.FitWithin(pixels, 1000, 10, Format.B8G8R8_UNORM, 100, 100, out var w, out var h);
+        var shrunk = ImageDownscaler.FitWithin(pixels, 1000, 10, Format.B8G8R8_UNORM, 100, 100, out var w, out var h);
 
         Assert.That((w, h), Is.EqualTo((100u, 1u)));
         Assert.That(shrunk, Has.Length.EqualTo(100 * 3));
@@ -76,7 +76,7 @@ public class ImageShrinkTests
     {
         byte[] pixels = [0, 0, 0, 255, 255, 255, 255, 255];
 
-        var shrunk = ImageShrink.FitWithin(pixels, 2, 1, Format.R8G8B8A8_SRGB, 1, 1, out _, out _);
+        var shrunk = ImageDownscaler.FitWithin(pixels, 2, 1, Format.R8G8B8A8_SRGB, 1, 1, out _, out _);
 
         Assert.That(shrunk, Is.EqualTo(new byte[] { 188, 188, 188, 255 }));
     }
@@ -91,7 +91,7 @@ public class ImageShrinkTests
         var pixels = new byte[width * height];
         new Random((int)height).NextBytes(pixels);
 
-        var shrunk = ImageShrink.FitWithin(pixels, width, height, Format.R8_UNORM, width, fitted, out var w, out var h);
+        var shrunk = ImageDownscaler.FitWithin(pixels, width, height, Format.R8_UNORM, width, fitted, out var w, out var h);
 
         var scaleX = (double)width / w;
         var scaleY = (double)height / h;
@@ -120,7 +120,7 @@ public class ImageShrinkTests
     {
         var pixels = Array.Empty<byte>();
 
-        Assert.That(ImageShrink.FitWithin(pixels, 0, 9000, Format.R8_UNORM, 100, 100, out var w, out var h),
+        Assert.That(ImageDownscaler.FitWithin(pixels, 0, 9000, Format.R8_UNORM, 100, 100, out var w, out var h),
             Is.SameAs(pixels));
         Assert.That((w, h), Is.EqualTo((0u, 9000u)));
     }
@@ -128,8 +128,8 @@ public class ImageShrinkTests
     [Test]
     public void ACompressedFormat_IsNotShrunk()
     {
-        Assert.That(ImageShrink.Supports(Format.BC1_RGBA_UNORM_BLOCK), Is.False);
-        Assert.That(() => ImageShrink.FitWithin(new byte[8], 8, 8, Format.BC1_RGBA_UNORM_BLOCK, 4, 4, out _, out _),
+        Assert.That(ImageDownscaler.Supports(Format.BC1_RGBA_UNORM_BLOCK), Is.False);
+        Assert.That(() => ImageDownscaler.FitWithin(new byte[8], 8, 8, Format.BC1_RGBA_UNORM_BLOCK, 4, 4, out _, out _),
             Throws.InstanceOf<NotSupportedException>());
     }
 }

@@ -9,16 +9,18 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Adamantium.Content.Build;
 
-/// <summary>Emits <c>{RootNamespace}.{Name}Assets</c> for a content project: a <c>const string</c> per content file, in
-/// nested classes mirroring its folders, so an asset loads by a checked member instead of a hand-typed path. Each
-/// constant is the file's path from the application's folder, <c>Content/{Name}/...</c>, where the build puts it. A file
-/// linked in from outside the project goes under its <c>Link</c>.
+/// <summary>Emits <c>{RootNamespace}.{Name}Assets</c> for a content project: a <c>const string</c> per asset, in nested
+/// classes mirroring its folders, so an asset loads by a checked member instead of a hand-typed path. Each constant is the
+/// asset's name: its path from the application's folder, <c>Content/{Name}/...</c>, where the build puts it - for an
+/// asset file the path of the source it is made from (<c>Ship.dae.aemf</c> is <c>Ship.dae</c>), one constant for the two.
+/// A file linked in from outside the project goes under its <c>Link</c>.
 /// </summary>
 [Generator]
 public class ContentAssetsGenerator : IIncrementalGenerator
 {
     private const string ContentMetadata = "build_metadata.AdditionalFiles.AdamantiumContent";
     private const string LinkMetadata = "build_metadata.AdditionalFiles.Link";
+    private const string AssetFileExtension = ".aemf";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -61,10 +63,21 @@ public class ContentAssetsGenerator : IIncrementalGenerator
     private static FolderNode BuildTree(IEnumerable<(string Path, string Link)> files, string projectDir, string prefix)
     {
         var root = new FolderNode(string.Empty);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
             var relative = file.Link?.Replace('\\', '/') ?? ToRelative(file.Path, projectDir);
             if (relative == null)
+            {
+                continue;
+            }
+
+            if (relative.EndsWith(AssetFileExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                relative = relative.Substring(0, relative.Length - AssetFileExtension.Length);
+            }
+
+            if (!seen.Add(relative))
             {
                 continue;
             }
@@ -96,7 +109,7 @@ public class ContentAssetsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>The content of this project: each file's path from the application's folder.</summary>");
+        sb.AppendLine("/// <summary>The content of this project: each asset's path from the application's folder.</summary>");
         sb.AppendLine($"public static class {className}");
         sb.AppendLine("{");
         EmitBody(sb, root, className, 1);

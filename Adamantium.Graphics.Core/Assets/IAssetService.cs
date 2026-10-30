@@ -1,22 +1,33 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 
-namespace Adamantium.Graphics.Core.Content;
+namespace Adamantium.Graphics.Core.Assets;
 
 /// <summary>Loads assets by name, safe to call from several threads at once.</summary>
-public interface IContentManager
+public interface IAssetService
 {
-   /// <summary>The process-wide services, for a reader that needs one to build its content.</summary>
+   /// <summary>The process-wide services, for a reader that needs one to build its asset.</summary>
    IDependencyResolver ServiceProvider { get; }
 
-   /// <summary>The one-of-a-kind objects of the content's owner - its graphics device service, say - for a reader that
+   /// <summary>The one-of-a-kind objects of the service's owner - its graphics device service, say - for a reader that
    /// needs them.</summary>
    Satellites Satellites { get; }
 
    /// <summary>Whether the asset, named with its extension, is embedded or found by a resolver.</summary>
    bool Exists(string assetName);
+
+   /// <summary>The full path of the file the asset, named with its extension and taken from the root directory, loads
+   /// from - its asset file when it has one; null when no resolver finds it, an embedded asset included. Throws
+   /// <see cref="InvalidOperationException"/> when there is no resolver.</summary>
+   string Resolve(string assetName);
+
+   /// <summary>The assets of <paramref name="folder"/>, not of the folders in it, ordered by name: an asset file stands
+   /// for the source beside it, which is not listed itself; hidden files are left out. Nothing is loaded. Throws
+   /// <see cref="System.IO.DirectoryNotFoundException"/> for a folder that is not there.</summary>
+   IReadOnlyList<AssetFileInfo> GetAssets(string folder);
 
    /// <summary>Makes <paramref name="data"/> loadable as the asset <paramref name="assetName"/>, as an asset carried
    /// inside another (an image inside a model) is: it then loads, is kept and is loaded again for a new device like one
@@ -24,7 +35,7 @@ public interface IContentManager
    /// should say what the bytes hold.</summary>
    void Embed(string assetName, byte[] data);
 
-   /// <summary>Loads an asset by its name with its extension; <see cref="ContentLoadOptions"/> say whether it is kept.
+   /// <summary>Loads an asset by its name with its extension; <see cref="AssetLoadOptions"/> say whether it is kept.
    /// Throws <see cref="AssetNotFoundException"/> when it is neither embedded nor found, and
    /// <see cref="NotSupportedException"/> when no reader reads its type.</summary>
    T Load<T>(string assetName, object options = null);

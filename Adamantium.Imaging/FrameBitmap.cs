@@ -1,14 +1,21 @@
+using System;
 using System.Collections.Generic;
 
 namespace Adamantium.Imaging;
 
-/// <summary>Frames of pixels already in memory, as a bitmap to save.</summary>
-internal sealed class FrameBitmap : IRawBitmap
+/// <summary>Frames of pixels already in memory, as a bitmap.</summary>
+public sealed class FrameBitmap : IRawBitmap
 {
     private readonly IReadOnlyList<byte[]> _frames;
 
     public FrameBitmap(uint width, uint height, SurfaceFormat format, IReadOnlyList<byte[]> frames)
     {
+        ArgumentNullException.ThrowIfNull(frames);
+        if (frames.Count == 0)
+        {
+            throw new ArgumentException("A bitmap has a frame at least.", nameof(frames));
+        }
+
         Width = width;
         Height = height;
         PixelFormat = format;

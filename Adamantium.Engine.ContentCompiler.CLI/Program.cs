@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Adamantium.Content.Pipeline;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 
 namespace Adamantium.Engine.ContentCompiler.CLI
@@ -68,29 +69,8 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                         var listed = File.ReadAllLines(files)
                             .Where(line => line.Length > 0)
                             .Select(line => line.Split('\t'))
-                            .Select(parts => (
-                                Source: Path.GetRelativePath(projectDirectory, parts[0]).Replace('\\', '/'),
-                                Link: parts.Length > 1 ? parts[1].Replace('\\', '/') : string.Empty))
-                            .ToList();
-                        manifest.SetSources(listed.Select(file => file.Source));
-
-                        foreach (var asset in manifest.Assets.Where(asset => !string.IsNullOrEmpty(asset.LogicalName)))
-                        {
-                            Console.WriteLine($"{manifestPath} : warning ACB007: the LogicalName '{asset.LogicalName}' of {asset.Source} is ignored, a listed file keeps its path");
-                            asset.LogicalName = null;
-                        }
-
-                        var links = listed
-                            .Where(file => file.Link.Length > 0)
-                            .DistinctBy(file => file.Source, StringComparer.OrdinalIgnoreCase)
-                            .ToDictionary(file => file.Source, file => file.Link, StringComparer.OrdinalIgnoreCase);
-                        foreach (var asset in manifest.Assets)
-                        {
-                            if (links.TryGetValue(asset.Source, out var link))
-                            {
-                                asset.LogicalName = link;
-                            }
-                        }
+                            .Select(parts => (Path: parts[0], Link: parts.Length > 1 ? parts[1] : string.Empty));
+                        manifest.SetListedFiles(projectDirectory, listed, manifestPath, Console.WriteLine);
                     }
 
                     manifest.OutputDirectory = GetOption(args, "--out") ?? manifest.OutputDirectory;
@@ -115,7 +95,19 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                 return 1;
             }
 
-            var scene = SceneDataSerializer.Deserialize(File.ReadAllBytes(aemfPath));
+            AssetFile file;
+            SceneData scene;
+            try
+            {
+                file = AssetFile.Read(aemfPath, AssetFileSection.Thumbnail | AssetFileSection.Source);
+                scene = SceneDataSerializer.ReadAssetFile(aemfPath);
+            }
+            catch (AssetFormatException exception)
+            {
+                Console.WriteLine(exception.Message);
+                return 2;
+            }
+
             if (scene?.Models == null)
             {
                 Console.WriteLine("Deserialized to null scene.");
@@ -149,7 +141,8 @@ namespace Adamantium.Engine.ContentCompiler.CLI
             }
 
             Console.WriteLine($"OK: '{scene.Name}'  models={models}  meshes={meshes}  vertices={vertices}  indices={indices}  " +
-                              $"materials={scene.Materials.Count}  skins={scene.Controllers.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}");
+                              $"materials={scene.Materials.Count}  skins={scene.Controllers.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}  " +
+                              $"source={file.Source?.Path ?? "-"}  thumbnail={(file.Thumbnail == null ? "none" : $"{file.Thumbnail.Length} bytes")}");
             return brokenParents == 0 ? 0 : 3;
         }
 

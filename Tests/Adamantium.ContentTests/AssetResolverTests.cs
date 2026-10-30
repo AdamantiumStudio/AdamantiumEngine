@@ -2,13 +2,13 @@ using System;
 using System.IO;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using NUnit.Framework;
 
 namespace Adamantium.ContentTests;
 
 [TestFixture]
-public class ContentResolverTests
+public class AssetResolverTests
 {
     private string _folder;
 
@@ -31,7 +31,7 @@ public class ContentResolverTests
         var full = Path.Combine(AppContext.BaseDirectory, _folder, "a.png");
         File.WriteAllText(full, "png");
 
-        Assert.That(new FileSystemContentResolver().Resolve(_folder + "/a.png"), Is.EqualTo(full));
+        Assert.That(new FileSystemAssetResolver().Resolve(_folder + "/a.png"), Is.EqualTo(full));
     }
 
     [Test]
@@ -40,7 +40,7 @@ public class ContentResolverTests
         var full = Path.Combine(AppContext.BaseDirectory, _folder, "a.png");
         File.WriteAllText(full, "png");
 
-        Assert.That(new FileSystemContentResolver().Resolve(full), Is.EqualTo(full));
+        Assert.That(new FileSystemAssetResolver().Resolve(full), Is.EqualTo(full));
     }
 
     [Test]
@@ -49,42 +49,42 @@ public class ContentResolverTests
         var cooked = Path.Combine(AppContext.BaseDirectory, _folder, "m.dae.aemf");
         File.WriteAllText(cooked, "aemf");
 
-        Assert.That(new CookedContentResolver().Resolve(_folder + "/m.dae"), Is.EqualTo(cooked));
+        Assert.That(new CookedAssetResolver().Resolve(_folder + "/m.dae"), Is.EqualTo(cooked));
     }
 
     [Test]
-    public void TheContentManager_FindsAnAssetByItsPathFromTheApplicationsFolder()
+    public void TheAssetService_FindsAnAssetByItsPathFromTheApplicationsFolder()
     {
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, _folder, "a.png"), "png");
-        var manager = new ContentManager(new AdamantiumDependencyContainer(), new Satellites());
-        manager.Resolvers.Add(new FileSystemContentResolver());
+        var assets = new AssetService(new AdamantiumDependencyContainer(), new Satellites());
+        assets.Resolvers.Add(new FileSystemAssetResolver());
 
-        Assert.That(manager.Exists(_folder + "/a.png"), Is.True);
+        Assert.That(assets.Exists(_folder + "/a.png"), Is.True);
     }
 
     [Test]
     public void AModelNotCooked_IsNotFoundCooked()
     {
-        Assert.That(new CookedContentResolver().Exists(_folder + "/m.dae"), Is.False);
+        Assert.That(new CookedAssetResolver().Exists(_folder + "/m.dae"), Is.False);
     }
 
     // An image carried inside a model has no file: it is embedded under a name, and loads and is kept like a file.
     [Test]
     public void AnEmbeddedAsset_IsReadFromItsBytes_AndKept()
     {
-        var manager = new ContentManager(new AdamantiumDependencyContainer(), new Satellites());
-        manager.Resolvers.Add(new FileSystemContentResolver());
-        manager.Readers[typeof(Blob)] = new BlobReader();
+        var assets = new AssetService(new AdamantiumDependencyContainer(), new Satellites());
+        assets.Resolvers.Add(new FileSystemAssetResolver());
+        assets.Readers[typeof(Blob)] = new BlobReader();
         var bytes = new byte[] { 1, 2, 3 };
-        var options = new ContentLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
+        var options = new AssetLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
 
-        manager.Embed("model.glb#image0", bytes);
-        var first = manager.Load<Blob>("model.glb#image0", options);
-        var again = manager.Load<Blob>("model.glb#image0", options);
+        assets.Embed("model.glb#image0", bytes);
+        var first = assets.Load<Blob>("model.glb#image0", options);
+        var again = assets.Load<Blob>("model.glb#image0", options);
 
         Assert.Multiple(() =>
         {
-            Assert.That(manager.Exists("model.glb#image0"), Is.True);
+            Assert.That(assets.Exists("model.glb#image0"), Is.True);
             Assert.That(first.Bytes, Is.SameAs(bytes));
             Assert.That(again, Is.SameAs(first), "kept");
         });
@@ -92,9 +92,9 @@ public class ContentResolverTests
 
     private sealed record Blob(byte[] Bytes);
 
-    private sealed class BlobReader : IContentReader
+    private sealed class BlobReader : IAssetReader
     {
-        public System.Threading.Tasks.Task<object> ReadContentAsync(IContentManager contentManager,
-            ContentReaderParameters parameters) => System.Threading.Tasks.Task.FromResult<object>(new Blob(parameters.Data));
+        public System.Threading.Tasks.Task<object> ReadAssetAsync(IAssetService assets,
+            AssetReaderParameters parameters) => System.Threading.Tasks.Task.FromResult<object>(new Blob(parameters.Data));
     }
 }

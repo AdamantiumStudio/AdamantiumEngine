@@ -82,7 +82,7 @@
   </Target>
 
   <Target Name="CleanAdamantiumContent" AfterTargets="Clean" DependsOnTargets="_AdamantiumContentPaths">
-    <RemoveDir Directories="$(_AdamantiumContentOutput);$(_AdamantiumContentCache)" />
+    <RemoveDir Directories="$(_AdamantiumContentOutput);$(_AdamantiumContentCache);$(MSBuildProjectDirectory)\obj\assets" />
   </Target>
 
 </Project>

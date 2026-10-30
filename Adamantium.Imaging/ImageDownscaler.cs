@@ -8,7 +8,7 @@ namespace Adamantium.Imaging;
 /// their alpha so transparent pixels lend them nothing, sRGB ones averaged as light. The source is read a row at a time,
 /// in bands on every core, and nothing the size of it is made, so a picture too large for a device can be brought to
 /// what the device holds.</summary>
-public static class ImageShrink
+public static class ImageDownscaler
 {
     /// <summary>Whether <see cref="FitWithin"/> shrinks pixels of <paramref name="format"/>: unsigned normalized ones of
     /// 8 or 16 bits a channel, gray to RGBA in either order.</summary>

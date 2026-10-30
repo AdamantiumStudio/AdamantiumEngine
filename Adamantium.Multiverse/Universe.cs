@@ -12,7 +12,7 @@ using Adamantium.Multiverse.Events;
 using Adamantium.Multiverse.Input;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
-using Adamantium.Graphics.Core.Content;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Imaging;
 using Adamantium.Mathematics;
@@ -93,13 +93,13 @@ public class Universe : IUniverse
         IsFixedTimeStep = false;
         DesiredFPS = 60;
         Satellites = new Satellites();
-        Content = new ContentManager(Container, Satellites);
+        Assets = new AssetService(Container, Satellites);
         // Cooked artifacts win over raw source.
-        Content.Resolvers.Add(new CookedContentResolver());
-        Content.Resolvers.Add(new FileSystemContentResolver());
+        Assets.Resolvers.Add(new CookedAssetResolver());
+        Assets.Resolvers.Add(new FileSystemAssetResolver());
         // The texture reader takes its device from the Satellites at load time, when it exists.
-        Content.Readers.Add(typeof(SceneData), new SceneDataContentReader());
-        Content.Readers.Add(typeof(Texture), new TextureContentReader());
+        Assets.Readers.Add(typeof(SceneData), new SceneDataAssetReader());
+        Assets.Readers.Add(typeof(Texture), new TextureAssetReader());
             
         ModelConverter = new ModelConverter();
         unloadContentCollector = new DisposeCollector();
@@ -134,7 +134,7 @@ public class Universe : IUniverse
         Satellites.Add<IUniverse>(this);
         Satellites.Add<IAdamantiumApplication>(this);
         Satellites.Add<IUniversePlatform>(platform);
-        Satellites.Add<IContentManager>(Content);
+        Satellites.Add<IAssetService>(Assets);
         Satellites.Add(ModelConverter);
         Satellites.Add<IGraphicsDeviceService>(GraphicsDeviceService);
         Satellites.Add(InputActions);
@@ -277,10 +277,8 @@ public class Universe : IUniverse
     /// </summary>
     public IDependencyContainer Container { get; }
         
-    /// <summary>
-    /// Represents a Content Manager, which can load all needed resources as Textures, Effects, Entity
-    /// </summary>
-    public ContentManager Content { get; set; }
+    /// <summary>Loads this universe's assets.</summary>
+    public AssetService Assets { get; set; }
 
     /// <summary>
     /// Built-in model converter to import model directly in engine
@@ -972,7 +970,7 @@ public class Universe : IUniverse
     // Textures died with the old device and are loaded again; the scene itself stays.
     private void ReloadMaterialTextures()
     {
-        var options = new ContentLoadOptions
+        var options = new AssetLoadOptions
         {
             AllowDuplication = false,
             IgnoreRootDirectory = true
@@ -986,7 +984,7 @@ public class Universe : IUniverse
                 var material = entity.GetComponent<Material>();
                 if (material?.Texture is { IsDisposed: true } && !string.IsNullOrEmpty(material.TexturePath))
                 {
-                    material.Texture = Content.Load<Texture>(material.TexturePath, options);
+                    material.Texture = Assets.Load<Texture>(material.TexturePath, options);
                 }
             });
         }
@@ -1106,7 +1104,7 @@ public class Universe : IUniverse
             GraphicsDeviceService?.MainGraphicsDevice?.DeviceWaitIdle();
             contextsMapping.Clear();
             platform?.Dispose();
-            Content.Unload();
+            Assets.Unload();
             DisposeGraphicsDeviceEvents();
 
             // Only a service this universe made is its to dispose; a hosted universe shares its host's.

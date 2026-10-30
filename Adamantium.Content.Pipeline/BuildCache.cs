@@ -6,20 +6,22 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Adamantium.Engine.Compiler.Models;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 
 namespace Adamantium.Content.Pipeline;
 
 /// <summary>
-/// Incremental build cache (the <c>.acache</c> file). Records, per asset source, a content hash of the
-/// source plus a hash of its import parameters and the cooked output path, so the builder can skip assets
-/// whose source/params are unchanged and whose output still exists.
+/// Incremental build cache (the <c>.acache</c> file). Records, per asset, a content hash of the file copied to the
+/// output - the asset file for a model, the source for the rest - plus a hash of its import parameters and the output
+/// path, so the builder can skip assets whose file and parameters are unchanged and whose output still exists.
 /// </summary>
 public sealed class BuildCache
 {
     public Dictionary<string, CacheEntry> Entries { get; set; } = new();
 
-    /// <summary>The version of the pipeline that built what the cache records. Another version cooks it all again.</summary>
+    /// <summary>The version of the pipeline that built what the cache records. Another version copies it all to the output
+    /// again; it imports nothing again for that.</summary>
     public string Compiler { get; set; }
 
     /// <summary>The pipeline's own version, which <see cref="Compiler"/> is compared with: the identities of the
@@ -28,7 +30,7 @@ public sealed class BuildCache
     public static string CurrentCompiler { get; } = Identity([typeof(BuildCache), typeof(ModelConverter), typeof(SceneData)]);
 
     /// <summary>Loads the cache for a build into <paramref name="outputDirectory"/>. One written by another version of the
-    /// pipeline is dropped together with everything it recorded, so all is cooked again.</summary>
+    /// pipeline is dropped together with everything it recorded, so all is copied again.</summary>
     public static BuildCache LoadFor(string path, string outputDirectory)
     {
         var cache = Load(path);
@@ -74,7 +76,7 @@ public sealed class BuildCache
             return true;
         }
 
-        return entry.SourceHash != HashFile(sourceFullPath) || entry.ParametersHash != HashParameters(parameters);
+        return entry.SourceHash != AssetSource.ComputeHash(sourceFullPath) || entry.ParametersHash != HashParameters(parameters);
     }
 
     public void Update(string sourceKey, string sourceFullPath, IReadOnlyDictionary<string, string> parameters,
@@ -82,7 +84,7 @@ public sealed class BuildCache
     {
         Entries[sourceKey] = new CacheEntry
         {
-            SourceHash = HashFile(sourceFullPath),
+            SourceHash = AssetSource.ComputeHash(sourceFullPath),
             ParametersHash = HashParameters(parameters),
             Output = outputRelativePath,
             Companions = companions?.ToList() ?? []
@@ -134,13 +136,6 @@ public sealed class BuildCache
     private static IEnumerable<string> Files(CacheEntry entry)
     {
         return entry.Companions.Prepend(entry.Output).Where(file => !string.IsNullOrEmpty(file));
-    }
-
-    private static string HashFile(string path)
-    {
-        using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
-        return Convert.ToHexString(sha.ComputeHash(stream));
     }
 
     private static string HashParameters(IReadOnlyDictionary<string, string> parameters)

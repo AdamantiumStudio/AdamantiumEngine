@@ -7,6 +7,32 @@ All packages share one version.
 
 ### Added
 
+- `ContentBuilder.Import(manifest, projectDirectory)`: imports what needs it into the asset files beside the sources,
+  as a build does, and writes no output - what an editor keeps its content current with; it can be stopped between
+  two assets. A build and an import of one project wait for each other, in every process of the user. An asset file
+  is written through a hidden temporary file of its own, which no content glob lists. A linked source's asset file is
+  under the project's `obj/assets`, whatever the build's cache directory, and left out of the content and removed on
+  Clean. `AssetSource` records when its source was written and its length (`Written`, `Length`): while they match, the
+  source's hash is not computed again. `AssetSource.ComputeHash` reads the source without keeping others from writing
+  it.
+  `ContentManifest.SetListedFiles` makes the asset list the files a content project lists, a linked one under its link,
+  as the content build does.
+
+- `IAssetService.GetAssets(folder)`: the assets of a folder, ordered by name, as `AssetFileInfo`s - name, file,
+  `AssetKind` (model, image, font, sound, other) and, read on the first ask, the `AssetSource` - without loading any.
+  A model's asset file stands for its source beside it. `AssetFileInfo.ReadThumbnail(maxPixelSize)` decodes its
+  picture on each call and keeps none - a model's from its asset file, an image's first frame - no larger than asked,
+  so nothing larger is held at all. `IAssetService.Resolve(name)`: the full path of the file an asset loads from.
+  `AssetFile.FileExtension` is `.aemf`. A model loaded by its asset file is named by its source (`Ship.dae`, not
+  `Ship.dae.aemf`).
+- `BitmapLoader.Load(file, type)`: decodes with the decoder the file's signature names, or the given type's alone
+  when it has none (a TGA) - never by handing the bytes to every decoder in turn.
+- `FrameBitmap` is public: frames of pixels already in memory, as an `IRawBitmap`; it needs a frame at least.
+
+- A cooked model (`.aemf`) is an `AssetFile`: the signature `AEMF`, the format version and a table of sections, then
+  the sections - a PNG thumbnail, the `AssetSource` it was imported from (its path, importer and settings) and the model
+  itself - each read without the others (`AssetFile.Read(path, AssetFileSection.Thumbnail)`).
+  `SceneDataSerializer.ReadAssetFile` reads the model of one.
 - `Win32Interop.SHFileOperation` with `SHFILEOPSTRUCT` and `ShellFileOperation`: the shell's own file operations,
   deleting into the Recycle Bin among them.
 - `Win32Interop.AllowSetForegroundWindow` with `AsfwAny`: the foreground process lets another bring its window to the
@@ -141,7 +167,7 @@ All packages share one version.
   41.7 to 44.8 dithered, where Pillow's median cut comes within 42.8 to 44.6 and ImageMagick 7 within 43.3 to 44.0.
   Its time goes with the colors a picture has: written as GIF, a 3840×1920 photograph takes 0.6 s undithered and
   1.0 dithered, a 3840×2160 one of a million colors 1.4 and 2.6 - Pillow 1.7 and 2.7, ImageMagick 3.1 and 3.9.
-- `ImageShrink.FitWithin`: pixels shrunk to fit a size, the aspect kept - each the average of the area it covers,
+- `ImageDownscaler.FitWithin`: pixels shrunk to fit a size, the aspect kept - each the average of the area it covers,
   colors weighted by alpha so transparent pixels lend them none, sRGB ones averaged as light - for 8- and 16-bit
   gray, RGB and RGBA in either order; read a row at a time in bands on every core, nothing the source's size made.
 - `GifImage.Read`, `GifImage.Frames` (`GifFrame`: place, delay, `GifDisposal`) and `GifImage.Comments`;
@@ -436,15 +462,15 @@ All packages share one version.
   scale, occlusion map and its strength, emissive map (`KHR_materials_emissive_strength` taken), `AlphaMode`,
   `AlphaCutoff` and `DoubleSided`. The forward renderer still draws the base color, its texture and emission.
 - `SceneData.Image.Data` and `MimeType`: an image a model carries inside - a `.glb`'s, a data URI's - as its bytes,
-  written to the `.aemf` with the model; `EntityImportTemplate` embeds them in the content manager under the model's
+  written to the `.aemf` with the model; `EntityImportTemplate` embeds them in the asset service under the model's
   and the image's key and a hash of the bytes (`robot.glb#image0:1A2B3C…`), the material's image path, and loads the
   texture from there - the model saved again with another picture gets that picture. A picture
   that cannot be read leaves its part untextured instead of failing the whole model.
-- `IContentManager.Embed`: makes bytes loadable as an asset of a name, as an image inside a model is; the content
-  manager then loads it (`ContentReaderParameters.Data`), keeps it and loads it again for a new device like one read from
-  a file. `TextureContentReader` reads such a texture from its bytes.
+- `IAssetService.Embed`: makes bytes loadable as an asset of a name, as an image inside a model is; the asset service
+  then loads it (`AssetReaderParameters.Data`), keeps it and loads it again for a new device like one read from a file.
+  `TextureAssetReader` reads such a texture from its bytes.
 - `Entity.Source` and `SceneData.Source`: the file an entity was made from, as it was asked for. A model loaded through
-  the content manager is named by its file (`SceneDataContentReader`) and keeps the path here; it was named by the
+  the asset service is named by its file (`SceneDataAssetReader`) and keeps the path here; it was named by the
   whole path.
 - `Component.IsExpanded` and `Entity.IsExpanded`: whether an inspector shows the object's section open, each object its
   own; open to begin with.
@@ -693,7 +719,7 @@ All packages share one version.
   - **Where it goes.** Into `Content/{Name}/` of every project that references the content project, directly or
     through another. `{Name}` is the last segment of the project's name, or `AdamantiumContentName`.
   - **Finding it.** A generated class `{Name}Assets` has a constant for each file: its path from the application's
-    folder, which `ContentManager` loads by.
+    folder, which `AssetService` loads by.
 
 - `InputWormhole.TakesKeyboard`: whether keys typed into an output go to the game now - its keyboard is on and the
   simulation is not paused - for a host that also uses keys for its own interface.
@@ -705,10 +731,10 @@ All packages share one version.
   copied to the output (`BuildResult.Copied`) instead of failing.
 
 - The content compiler cleans up after itself, building from a manifest as well: what it built from an asset no longer
-  listed is deleted, and a build by another version of the compiler cooks everything again. It deletes only what its
+  listed is deleted, and a build by another version of the compiler copies everything again. It deletes only what its
   cache says it wrote, inside the output folder. A model's texture outside the model's folder is left behind with a
   warning instead of being copied out of the output folder; an absolute reference to one inside it is made relative.
-  Its warnings and errors are in MSBuild's form (`ACB001`-`ACB008`), so an IDE lists them.
+  Its warnings and errors are in MSBuild's form (`ACB001`-`ACB010`), so an IDE lists them.
 
 - `IGraphicsDevice.TargetOrigin`: where the target being drawn into lies in the coordinates viewports and scissors are
   given in, for a target that holds one region of the surface. Callers keep setting viewports and scissors in the
@@ -1104,7 +1130,7 @@ All packages share one version.
   (joint -1) is left out and reported; a matrix node moved by its parts stood at the origin at rest.
 - A Z_UP model - Collada from Blender or Max, 3DS - stood on its head with its back to the camera: its up comes in as
   the engine's, -Y, and its front, -Y in the file, as -Z, where a glTF model's goes.
-- Content is cooked again when any assembly of the compiler changes - an importer, the scene format - not only when
+- Content is copied again when any assembly of the compiler changes - an importer, the scene format - not only when
   its own does.
 - `MSDFGenerator.GenerateMSDFForExistingTextureData` filled the space away from a glyph with a distance that changed
   with where the glyph sat in its em square; it is half the em now, for every glyph.
@@ -1826,6 +1852,24 @@ All packages share one version.
 
 ### Changed
 
+- The content build imports a model into its asset file BESIDE its source in the project folder - `Ship.dae.aemf`
+  beside `Ship.dae` - and copies that file to the output under the name the cooked model had there before, with the
+  textures it reads. A source linked in from outside the project gets its asset file in the intermediate folder:
+  nothing is written outside the project. It imports only when there is no asset file yet, the one there cannot be read, or the source (by
+  its hash) or its settings changed: not when only the engine, its format or its importer did. A file of a format
+  version this engine does not read is kept as it is with warning ACB009; one of an older version it reads, with
+  warning ACB010; both stay warnings where warnings are errors. An asset file is written whole or not at all. Every
+  file the build imports is an `AssetFile`: an `IContentWriter` writes its body, and the build adds the header and the
+  `AssetSource` - the source's path and hash, the importer, the settings, the engine's version and the files beside it
+  the asset reads. A model cooked before the header, or one this engine no longer reads, is refused with
+  `AssetFormatException` (its `WrittenVersion` says when the version is why), which asks to import its source again.
+  `{Name}Assets` names an asset file by its source: `Ship.dae.aemf` and `Ship.dae` are one constant. Content projects
+  built with the published `Adamantium.Content.Build` package cook the old way until the next package release.
+- The content manager is the asset service: `ContentManager`/`IContentManager` are `AssetService`/`IAssetService`,
+  `Universe.Content` is `Universe.Assets`, and the loading types are named for assets too (`IAssetReader` with
+  `ReadAssetAsync`, `AssetReaderParameters`, `AssetLoadOptions`, `IAssetResolver`, `CookedAssetResolver`,
+  `FileSystemAssetResolver`, `SceneDataAssetReader`, `TextureAssetReader`, `ImageAssetReader`), in the namespace
+  `Adamantium.Graphics.Core.Assets`. Building content keeps its names.
 - PNG writes a picture of 256 colors or fewer as a palette in about half the time, others in four fifths, the files
   byte for byte the same: the rows are read whole, a palette is gathered and looked up in a small table of its own
   rather than a hash set and a dictionary, and gray and opacity are checked a vector at a time. A 5400×2700 photo is
@@ -2112,7 +2156,7 @@ All packages share one version.
   `Adamantium.Imaging`, `Adamantium.Fonts`, `Adamantium.Engine.Compiler` - carry `NOTICE` and `THIRD-PARTY-NOTICES.md`;
   the other packages have none in them and carry neither.
 - A baked mesh is format version 2 (its extra data, attributes, morph targets and material variants): a `.aemf` baked
-  before is refused and baked again.
+  before is refused.
 - A glTF light's `Color` is its color alone, its brightness in `Intensity`; it was the two multiplied.
 - A content project keeps `ACB005` - what an import does not read, such as morph targets - a warning where warnings are
   errors: it tells about the asset, not a fault of the build.

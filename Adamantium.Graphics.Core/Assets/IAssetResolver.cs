@@ -1,9 +1,9 @@
 ﻿using System;
 
-namespace Adamantium.Graphics.Core.Content;
+namespace Adamantium.Graphics.Core.Assets;
 
 /// <summary>Finds the file an asset's path stands for.</summary>
-public interface IContentResolver
+public interface IAssetResolver
 {
     bool Exists(String assetPath);
 

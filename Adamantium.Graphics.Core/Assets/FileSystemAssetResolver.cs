@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 
-namespace Adamantium.Graphics.Core.Content;
+namespace Adamantium.Graphics.Core.Assets;
 
 /// <summary>Resolves an asset to its file: an absolute path as it is, a relative one from the application's folder,
 /// where a content project's files are copied.</summary>
-public class FileSystemContentResolver : IContentResolver
+public class FileSystemAssetResolver : IAssetResolver
 {
     public bool Exists(string assetPath)
     {

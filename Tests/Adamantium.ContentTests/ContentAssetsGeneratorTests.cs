@@ -24,6 +24,27 @@ public class ContentAssetsGeneratorTests
     }
 
     [Test]
+    public void AnAssetFileBesideItsSource_IsOneConstantNamedAsTheSource()
+    {
+        var code = Generate("Demo", ["Models/Ship.dae", "Models/Ship.dae.aemf"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(code, Does.Contain("public const string Ship = \"Content/Demo/Models/Ship.dae\";"));
+            Assert.That(code, Does.Not.Contain("aemf"));
+            Assert.That(code, Does.Not.Contain("Ship_"));
+        });
+    }
+
+    [Test]
+    public void AnAssetFileWithoutItsSource_IsNamedAsTheSource()
+    {
+        var code = Generate("Demo", ["Models/Ship.dae.aemf"]);
+
+        Assert.That(code, Does.Contain("public const string Ship = \"Content/Demo/Models/Ship.dae\";"));
+    }
+
+    [Test]
     public void AFileNamedAsItsFolder_TakesItsFormatToo()
     {
         var code = Generate("Demo", ["Models/monkey/monkey.dae"]);

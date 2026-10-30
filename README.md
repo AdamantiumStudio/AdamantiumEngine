@@ -108,16 +108,18 @@ references it, directly or through another, gets them in its output.
 - **What is content.** Every file of the project but its code, its build files and hidden files. Leave one out with
   `<AdamantiumContent Remove="..." />`; bring one in from elsewhere with
   `<AdamantiumContent Include="..\Shared\logo.png" Link="Textures\logo.png" />`.
-- **The build.** Models (Collada, OBJ, 3DS) are cooked into the engine's own format, with their textures beside them;
-  the rest is copied as it is. Only what changed is built again.
+- **The build.** A model (Collada, OBJ, 3DS, glTF) is imported into the engine's own format beside its source -
+  `Ship.dae.aemf` beside `Ship.dae` - when it has none yet, or its source or its settings changed; that file goes to the
+  output, the source does not. A new engine never rewrites them on its own. The rest is copied as it is. Only what
+  changed is built again.
 - **Where it goes.** To `Content/{Name}/` of the application's folder, where `{Name}` is the last segment of the
   project's name (`MyGame.ShipContent` gives `ShipContent`), or `AdamantiumContentName`. Two content projects an
   application references need different names.
-- **Finding it.** The class `{Name}Assets` has a constant for each file: its path from the application's folder.
-  `ContentManager` loads by it, taking the cooked model when there is one:
+- **Finding it.** The class `{Name}Assets` has a constant for each asset: its path from the application's folder,
+  a model's being its source's path. The universe's `AssetService` loads by it, taking the `.aemf` when there is one:
 
 ```csharp
-var scene = await universe.Content.LoadAsync<SceneData>(ShipContentAssets.Models.Ship.Ship_dae);
+var scene = await universe.Assets.LoadAsync<SceneData>(ShipContentAssets.Models.Ship.Ship_dae);
 ```
 
 `dotnet new adamantium-content` (from `Adamantium.Engine.Templates`) creates such a project; Rider and Visual Studio
