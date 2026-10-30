@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- The editor's ground has a floor: a solid plane of `GroundGrid.FloorColor` - an even gray by default - under the grid's
+  lines, hiding what is below the ground, ready for physics to stand things on. `GroundGrid.ShowsFloor` and
+  `GroundGrid.ShowsGrid` (the lines and the axes) turn each off.
+
 - `SharedSurface.CreateInDevice`: a shared surface for a consumer on the producer's own logical device - a plain image
   and plain timeline semaphores, taken by `SharedSurface.Import` as they are (`SharedSurfaceDescriptor.DeviceSurface`),
   with no OS handle, so it shares on a device that exports none (llvmpipe) as well. The producer's surface lasts until the

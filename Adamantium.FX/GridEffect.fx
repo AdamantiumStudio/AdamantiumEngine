@@ -17,6 +17,10 @@ float4 minorColor;
 float4 majorColor;
 float4 axisXColor;
 float4 axisZColor;
+// The floor under the lines; alpha 0 leaves none.
+float4 floorColor;
+// x: 1 while the lines and the axes are drawn, 0 for the floor alone.
+float4 shown;
 
 struct MESH_VERTEX
 {
@@ -110,12 +114,14 @@ float4 Ground_PS(PS_INPUT input) : SV_TARGET
         cell *= 10.0f;
     }
 
-    // Premultiplied, each axis laid over what is under it: an axis' smoothed edge keeps its own hue.
+    // Premultiplied, the lines over the floor and each axis over what is under it: an axis' smoothed edge keeps its own
+    // hue.
+    ruled *= shown.x;
     float3 lineColor = lerp(minorColor.rgb, majorColor.rgb, ruled > 0.0f ? major / ruled : 0.0f);
-    float4 shade = float4(lineColor * ruled, ruled);
+    float4 shade = float4(lineColor * ruled, ruled) + float4(floorColor.rgb * floorColor.a, floorColor.a) * (1.0f - ruled);
 
-    float alongX = saturate(halfWidth + 0.5f - abs(input.plane.y - lines.y) / perPixel.y) * axisXColor.a;
-    float alongZ = saturate(halfWidth + 0.5f - abs(input.plane.x - lines.x) / perPixel.x) * axisZColor.a;
+    float alongX = saturate(halfWidth + 0.5f - abs(input.plane.y - lines.y) / perPixel.y) * axisXColor.a * shown.x;
+    float alongZ = saturate(halfWidth + 0.5f - abs(input.plane.x - lines.x) / perPixel.x) * axisZColor.a * shown.x;
     shade = float4(axisXColor.rgb * alongX, alongX) + shade * (1.0f - alongX);
     shade = float4(axisZColor.rgb * alongZ, alongZ) + shade * (1.0f - alongZ);
 
