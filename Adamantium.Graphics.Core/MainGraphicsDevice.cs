@@ -41,6 +41,10 @@ public class MainGraphicsDevice : DisposableBase
     /// graphics pass binds those stages, empty when it has none.</summary>
     public bool IsTessellationEnabled { get; private set; }
 
+    /// <summary>True when the depthClamp feature was enabled, so a draw may set
+    /// <c>DepthClampEnable</c>: drawn past the far plane, held at the farthest depth.</summary>
+    public bool IsDepthClampEnabled { get; private set; }
+
     /// <summary>True when VK_EXT_mesh_shader's meshShader feature was enabled: passes may run mesh shaders, and every
     /// graphics pass binds the mesh stage, empty when it has none.</summary>
     public bool IsMeshShaderEnabled { get; private set; }
@@ -496,6 +500,8 @@ public class MainGraphicsDevice : DisposableBase
         deviceFeatures2.Features.ImageCubeArray = GraphicsAdapter.SupportsImageCubeArray;
         IsTessellationEnabled = GraphicsAdapter.SupportsTessellationShaders;
         deviceFeatures2.Features.TessellationShader = IsTessellationEnabled;
+        IsDepthClampEnabled = GraphicsAdapter.SupportsDepthClamp;
+        deviceFeatures2.Features.DepthClamp = IsDepthClampEnabled;
         // The stroke expander's compute shader dereferences BDA pointers (uint64_t).
         deviceFeatures2.Features.ShaderInt64 = true;
 

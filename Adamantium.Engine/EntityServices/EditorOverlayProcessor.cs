@@ -201,13 +201,19 @@ public class EditorOverlayProcessor : RenderingProcessor
         gridEffect.MajorColor.SetValue(grid.MajorColor);
         gridEffect.AxisXColor.SetValue(grid.AxisXColor);
         gridEffect.AxisZColor.SetValue(grid.AxisZColor);
+        gridEffect.FloorColor.SetValue(grid.ShowsFloor ? grid.FloorColor : Vector4F.Zero);
         gridEffect.GridGroundPass.Apply();
 
+        // Clamped, not clipped, at the far plane: with the eye far off the ground runs on past it, drawn at the farthest
+        // depth, behind everything. Without the feature the grid ends at the far plane.
         var blend = GraphicsDevice.ColorBlendEquation;
+        var clamp = GraphicsDevice.DepthClampEnable;
         GraphicsDevice.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
+        GraphicsDevice.DepthClampEnable = GraphicsDevice.MainDevice.IsDepthClampEnabled;
         geometry.GetOrCreate(RingSquare, typeof(MeshVertex))
             .Draw(GraphicsDevice, new RenderState(false, CullModeFlagBits.None, true, false, null), 1);
         GraphicsDevice.ColorBlendEquation = blend;
+        GraphicsDevice.DepthClampEnable = clamp;
     }
 
     /// <summary>Draws an entity laid out in the output's pixels.</summary>
