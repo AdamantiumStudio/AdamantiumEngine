@@ -32,7 +32,7 @@ public class CompositorPresenter : RenderTargetGraphicsPresenter
             _frame = Image.New2D(Width, Height, SurfaceFormat);
         }
 
-        ResolveTexture.ReadbackInto(_frame);
+        ResolveTexture.CopyTo(_frame);
         var pixels = _frame.PixelBuffer[0];
         sink.Show(pixels.DataPointer, Width, Height, (uint)pixels.RowStride);
         return PresenterState.Success;

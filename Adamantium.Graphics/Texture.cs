@@ -779,7 +779,7 @@ public unsafe class Texture : GraphicsResource, ITexture
     public void Save(string path, ImageFileType fileType)
     {
         var img = Image.New2D(Width, Height, 1, Description.Format);
-        ReadbackInto(img);
+        CopyTo(img);
         img.Save(path, fileType);
     }
 
@@ -793,7 +793,7 @@ public unsafe class Texture : GraphicsResource, ITexture
             _rawReadback?.Dispose();
             _rawReadback = ToDispose(Image.New2D(Width, Height, 1, Description.Format));
         }
-        ReadbackInto(_rawReadback);
+        CopyTo(_rawReadback);
 
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
         fs.Write(new ReadOnlySpan<byte>((void*)_rawReadback.DataPointer, (int)_rawReadback.TotalSizeInBytes));
@@ -808,7 +808,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
 
         var img = Image.New2D(Math.Max(1, Width >> (int)level), Math.Max(1, Height >> (int)level), 1, Description.Format);
-        ReadbackInto(img, layer, level);
+        CopyTo(img, layer, level);
         lock (_readbackLock)
         {
             ReleaseReadbackBuffer();
@@ -817,7 +817,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         return img;
     }
 
-    public void ReadbackInto(Image destination, uint layer = 0, uint level = 0)
+    public void CopyTo(Image destination, uint layer = 0, uint level = 0)
     {
         if (GraphicsDevice.Adapter.SupportsHostImageCopy &&
             Description.Usage.HasFlag(ImageUsageFlagBits.HostTransferBit))
