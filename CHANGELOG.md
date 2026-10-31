@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `PlacementTool.Guide` and `PlaceWhereGuided`: the ghost follows a point given from outside instead of the pointer -
+  as a drag carried over the scene gives it, the pointer being the drag's - and goes down where it was led, as a click
+  there would put it, nothing where it could not go; an editor's model dragged into the scene shows its ghost as it
+  does when placed with the mouse.
 - The editor's ground has a floor: a solid plane of `GroundGrid.FloorColor` - an even gray by default - under the grid's
   lines, hiding what is below the ground, ready for physics to stand things on. `GroundGrid.ShowsGrid` shows the grid or
   not, and with it its floor; `GroundGrid.ShowsFloor` takes the floor from under the lines - there is no floor without
