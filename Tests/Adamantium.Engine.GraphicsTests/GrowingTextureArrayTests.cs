@@ -71,7 +71,7 @@ public class GrowingTextureArrayTests
 
     private static byte[] FirstPixel(Texture texture, uint layer)
     {
-        using var image = texture.ReadbackToImage(layer);
+        using var image = texture.ToImage(layer);
         var pixel = new byte[4];
         Marshal.Copy(image.DataPointer, pixel, 0, 4);
         return pixel;

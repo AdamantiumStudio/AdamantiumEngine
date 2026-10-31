@@ -16,11 +16,11 @@ public unsafe class Texture : GraphicsResource, ITexture
 {
     private VulkanImage vulkanImage;
     private DeviceMemory vulkanImageMemory;
-    private readonly object _readbackLock = new();
-    private VkBuffer _readbackBuffer;
-    private DeviceMemory _readbackMemory;
-    private ulong _readbackSize;
-    private nuint _readbackData;
+    private readonly object _stagingLock = new();
+    private VkBuffer _stagingBuffer;
+    private DeviceMemory _stagingMemory;
+    private ulong _stagingSize;
+    private nuint _stagingData;
 
     public TextureDescription Description;
 
@@ -783,23 +783,23 @@ public unsafe class Texture : GraphicsResource, ITexture
         img.Save(path, fileType);
     }
 
-    private Image _rawReadback;
+    private Image _rawImage;
 
     /// <summary>Writes the texture's bytes as they are to <paramref name="path"/>, no swap, no encoding.</summary>
     public void SaveRaw(string path)
     {
-        if (_rawReadback == null || _rawReadback.Description.Width != Width || _rawReadback.Description.Height != Height)
+        if (_rawImage == null || _rawImage.Description.Width != Width || _rawImage.Description.Height != Height)
         {
-            _rawReadback?.Dispose();
-            _rawReadback = ToDispose(Image.New2D(Width, Height, 1, Description.Format));
+            _rawImage?.Dispose();
+            _rawImage = ToDispose(Image.New2D(Width, Height, 1, Description.Format));
         }
-        CopyTo(_rawReadback);
+        CopyTo(_rawImage);
 
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-        fs.Write(new ReadOnlySpan<byte>((void*)_rawReadback.DataPointer, (int)_rawReadback.TotalSizeInBytes));
+        fs.Write(new ReadOnlySpan<byte>((void*)_rawImage.DataPointer, (int)_rawImage.TotalSizeInBytes));
     }
 
-    public Image ReadbackToImage(uint layer = 0, uint level = 0)
+    public Image ToImage(uint layer = 0, uint level = 0)
     {
         if (level >= Description.MipLevels)
         {
@@ -809,9 +809,9 @@ public unsafe class Texture : GraphicsResource, ITexture
 
         var img = Image.New2D(Math.Max(1, Width >> (int)level), Math.Max(1, Height >> (int)level), 1, Description.Format);
         CopyTo(img, layer, level);
-        lock (_readbackLock)
+        lock (_stagingLock)
         {
-            ReleaseReadbackBuffer();
+            ReleaseStagingBuffer();
         }
 
         return img;
@@ -865,7 +865,7 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     private void CopyImageThroughStagingBuffer(Image destination, uint layer, uint level)
     {
-        lock (_readbackLock)
+        lock (_stagingLock)
         {
             CopyThroughKeptStagingBuffer(destination, layer, level);
         }
@@ -874,18 +874,18 @@ public unsafe class Texture : GraphicsResource, ITexture
     private void CopyThroughKeptStagingBuffer(Image destination, uint layer, uint level)
     {
         var size = destination.TotalSizeInBytes;
-        if (_readbackBuffer == null || _readbackSize < size)
+        if (_stagingBuffer == null || _stagingSize < size)
         {
-            ReleaseReadbackBuffer();
-            CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, ReadbackMemory(),
-                out _readbackBuffer, out _readbackMemory);
-            _readbackSize = size;
-            _readbackData = GraphicsDevice.MapMemory(_readbackMemory, 0, size, 0);
+            ReleaseStagingBuffer();
+            CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, GetStagingMemory(),
+                out _stagingBuffer, out _stagingMemory);
+            _stagingSize = size;
+            _stagingData = GraphicsDevice.MapMemory(_stagingMemory, 0, size, 0);
         }
 
         var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
         this.RecordLayoutTransition(commandBuffer, ImageLayout.TransferSrcOptimal);
-        RecordCopyToBuffer(commandBuffer, _readbackBuffer, layer, level, destination.Description.Width,
+        RecordCopyToBuffer(commandBuffer, _stagingBuffer, layer, level, destination.Description.Width,
             destination.Description.Height);
         commandBuffer.PipelineBarrier2(new DependencyInfo
         {
@@ -903,26 +903,26 @@ public unsafe class Texture : GraphicsResource, ITexture
         });
         this.RecordLayoutTransition(commandBuffer, Description.DesiredImageLayout);
         GraphicsDevice.EndSingleTimeCommand(commandBuffer);
-        System.Buffer.MemoryCopy((void*)_readbackData, destination.DataPointer.ToPointer(), size, size);
+        System.Buffer.MemoryCopy((void*)_stagingData, destination.DataPointer.ToPointer(), size, size);
     }
 
-    private void ReleaseReadbackBuffer()
+    private void ReleaseStagingBuffer()
     {
-        if (_readbackBuffer == null)
+        if (_stagingBuffer == null)
         {
             return;
         }
 
-        GraphicsDevice.UnmapMemory(_readbackMemory);
-        GraphicsDevice.Destroy(_readbackBuffer);
-        GraphicsDevice.Destroy(_readbackMemory);
-        _readbackBuffer = null;
-        _readbackMemory = null;
-        _readbackData = 0;
-        _readbackSize = 0;
+        GraphicsDevice.UnmapMemory(_stagingMemory);
+        GraphicsDevice.Destroy(_stagingBuffer);
+        GraphicsDevice.Destroy(_stagingMemory);
+        _stagingBuffer = null;
+        _stagingMemory = null;
+        _stagingData = 0;
+        _stagingSize = 0;
     }
 
-    private MemoryPropertyFlags ReadbackMemory()
+    private MemoryPropertyFlags GetStagingMemory()
     {
         const MemoryPropertyFlags cached = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent | MemoryPropertyFlags.HostCached;
         var types = GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceMemoryProperties();
@@ -977,9 +977,9 @@ public unsafe class Texture : GraphicsResource, ITexture
             GraphicsDevice.Destroy(VulkanImage);
         }
 
-        lock (_readbackLock)
+        lock (_stagingLock)
         {
-            ReleaseReadbackBuffer();
+            ReleaseStagingBuffer();
         }
 
         GraphicsDevice.Destroy(ImageView);

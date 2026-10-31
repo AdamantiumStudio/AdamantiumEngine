@@ -8,10 +8,10 @@ All packages share one version.
 ### Added
 
 - `PresenterType.Compositor` (`CompositorPresenter`): presents through the system's compositor rather than a swapchain
-  of its own - each frame drawn into it is read back to host memory and handed to `PresentationParameters.FrameSink`
+  of its own - each frame drawn into it is copied to host memory and handed to `PresentationParameters.FrameSink`
   (`IFrameSink`), for a window the desktop composes from its pixels with their alpha, where the surface offers no
   swapchain that keeps it. `ITexture.CopyTo` copies into an
-  image the caller keeps; a texture's readback keeps its staging buffer, mapped, between reads and runs as one submit.
+  image the caller keeps; a texture copied to host memory keeps its staging buffer, mapped, between copies, each one submit.
   `TextureExtensions.RecordLayoutTransition` records a layout transition into a command buffer of the caller's; the
   copy is made visible to the host by a barrier before it is read. `SwapChainGraphicsPresenter.ComposesWithAlpha` says
   whether the surface took the transparency asked for.
@@ -143,7 +143,7 @@ All packages share one version.
   and disposes of one it leaves unused.
 - `BitmapLoader.MaxPixels`: the most pixels a picture whose data does not bound its size - a run-length BMP - is read
   at, 2^28 unless set. `GraphicsAdapter.SupportsImageCubeArray`: whether the device takes an array of cubes.
-  `ITexture.ReadbackToImage` reads any mip level back, not only the first. `IDescriptorManager.FallbackTextureIndex`:
+  `ITexture.ToImage` copies any mip level, not only the first. `IDescriptorManager.FallbackTextureIndex`:
   where the stand-in for a disposed texture is in a shader's texture array of no length.
 - `GraphicsSettings.TextEdges` (`TextEdgeSettings`): how text's edges blend - the gammas of light ink, of small and
   of large dark ink, the sizes dark ink goes from the small curve to the large one between, and how wide a crisp edge
@@ -1007,7 +1007,7 @@ All packages share one version.
 - `GrowingTextureArray`: a 2D texture array that grows as its layers are taken, the way a list does: `Count`,
   `Capacity`, `MaxCapacity` (the device's limit), `TryAdd`, `EnsureCapacity`; a full array is replaced by one twice as
   deep with the layers in use copied on the GPU, and the old texture is retired once no frame in flight reads it.
-  `ITexture.ReadbackToImage` takes the layer to read.
+  `ITexture.ToImage` takes the layer to copy.
 - `Win32Interop.LoadImage` and `GetModuleHandle`, with `LoadImageType` and `LoadImageFlags`: an icon loaded from a
   module's resources, such as the application's own.
 - `Win32Interop.EnumDisplayMonitors`, `GetMonitorInfo` and `GetWindowPlacement`, with `MONITORINFOEX`,
@@ -1894,7 +1894,7 @@ All packages share one version.
 
 - A frame drawn into a presenter that is no swapchain asks it for its image (`GraphicsPresenter.AcquireNextImage`), as
   a swapchain's does, so its `CanPresent` says whether a frame of its own waits to be presented; it was never set, or,
-  for a read-back presenter, set for every frame the device drew into any window.
+  for a compositor presenter, set for every frame the device drew into any window.
 - The content build imports a model into its asset file BESIDE its source in the project folder - `Ship.dae.aemf`
   beside `Ship.dae` - and copies that file to the output under the name the cooked model had there before, with the
   textures it reads. A source linked in from outside the project gets its asset file in the intermediate folder:

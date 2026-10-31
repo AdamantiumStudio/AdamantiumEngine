@@ -17,7 +17,7 @@ namespace Adamantium.Engine.GraphicsTests;
 [TestFixture]
 public class DdsTextureTests
 {
-    private const ImageUsageFlagBits ReadBack = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferSrcBit;
+    private const ImageUsageFlagBits CopyableUsage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferSrcBit;
 
     private static GraphicsDevice Device => (GraphicsDevice)GpuFixture.Main.ResourceLoaderDevice;
 
@@ -36,7 +36,7 @@ public class DdsTextureTests
     [Test]
     public void EveryFaceOfACube_AtEveryLevel_GoesUpWhereItBelongs()
     {
-        using var cube = Texture.Load(Device, Asset("dds/cube-rgba.dds"), ReadBack);
+        using var cube = Texture.Load(Device, Asset("dds/cube-rgba.dds"), CopyableUsage);
 
         Assert.That(cube.Description.MipLevels, Is.EqualTo(2));
         for (uint face = 0; face < 6; face++)
@@ -54,7 +54,7 @@ public class DdsTextureTests
     public void ACubeOfARealFile_GoesUpAsTheFileHasIt(string name)
     {
         using var file = Image.Load(Asset(name));
-        using var cube = Texture.Load(Device, Asset(name), ReadBack);
+        using var cube = Texture.Load(Device, Asset(name), CopyableUsage);
 
         Assert.That(file.Description.Dimension, Is.EqualTo(TextureDimension.TextureCube));
         for (var face = 0; face < 6; face++)
@@ -84,12 +84,12 @@ public class DdsTextureTests
 
         if (!Device.Adapter.SupportsImageCubeArray)
         {
-            Assert.That(() => Texture.Load(Device, new MemoryStream(stream.ToArray()), ReadBack),
+            Assert.That(() => Texture.Load(Device, new MemoryStream(stream.ToArray()), CopyableUsage),
                 Throws.InstanceOf<NotSupportedException>());
             return;
         }
 
-        using var texture = Texture.Load(Device, new MemoryStream(stream.ToArray()), ReadBack);
+        using var texture = Texture.Load(Device, new MemoryStream(stream.ToArray()), CopyableUsage);
         Assert.That(texture.Description.ArrayLayers, Is.EqualTo(12));
         for (uint layer = 0; layer < 12; layer++)
         {
@@ -106,7 +106,7 @@ public class DdsTextureTests
 
     private static byte[] Bytes(Texture texture, uint layer, uint level)
     {
-        using var read = texture.ReadbackToImage(layer, level);
+        using var read = texture.ToImage(layer, level);
         var bytes = new byte[read.TotalSizeInBytes];
         Marshal.Copy(read.DataPointer, bytes, 0, bytes.Length);
         return bytes;
