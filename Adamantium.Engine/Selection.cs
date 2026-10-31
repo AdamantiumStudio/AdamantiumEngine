@@ -26,6 +26,65 @@ public class Selection
 
     public bool Contains(Entity entity) => Array.IndexOf(items, entity) >= 0;
 
+    /// <summary>What a click or a frame on <paramref name="part"/> of a model's form selects: the model it belongs to
+    /// (<see cref="ModelOf"/>) first; once anything of that model - the model itself or a part of it - is selected,
+    /// the part itself, so the parts are reached one click further. Null for null.</summary>
+    public Entity ChosenByClick(Entity part)
+    {
+        var model = ModelOf(part);
+        return model == null || ReferenceEquals(model, part) || HoldsAnyOf(model) ? part : model;
+    }
+
+    /// <summary>What a click taking something out of the selection on <paramref name="part"/> of a model's form takes
+    /// out: the part when it is selected, else the nearest selected entity it is a part of, else what a click would
+    /// select. Null for null.</summary>
+    public Entity ChosenToRemove(Entity part)
+    {
+        for (var owner = part; owner != null; owner = owner.Owner)
+        {
+            if (Contains(owner))
+            {
+                return owner;
+            }
+        }
+
+        return ChosenByClick(part);
+    }
+
+    /// <summary>The model <paramref name="part"/> belongs to: the nearest of it and its owners made from a file (with a
+    /// <see cref="Entity.Source"/>), as an import makes a model's root; null for one in no such model - made in the scene,
+    /// or a group of them.</summary>
+    public static Entity ModelOf(Entity part)
+    {
+        for (var owner = part; owner != null; owner = owner.Owner)
+        {
+            if (owner.Source != null)
+            {
+                return owner;
+            }
+        }
+
+        return null;
+    }
+
+    // Whether the model or anything under it is selected.
+    private bool HoldsAnyOf(Entity model)
+    {
+        var held = items;
+        for (int i = 0; i < held.Length; i++)
+        {
+            for (var owner = held[i]; owner != null; owner = owner.Owner)
+            {
+                if (ReferenceEquals(owner, model))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Selects these and nothing else; the last becomes current.</summary>
     public void Select(IReadOnlyList<Entity> entities)
     {
