@@ -344,6 +344,11 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// destroys it.</summary>
     void ReleaseSurface(IntPtr outputHandle);
 
+    /// <summary>Whether the surface of this window can be composed with its alpha: it offers pre-multiplied composite
+    /// alpha. Asked before a presenter is chosen, so a see-through window whose surface cannot keeps its alpha through
+    /// <see cref="PresenterType.Compositor"/> instead.</summary>
+    bool SurfaceComposesWithAlpha(PresentationParameters parameters);
+
     void InsertImageMemoryBarrier(CommandBuffer commandBuffer,
         ITexture texture,
         AccessFlagBits2 sourceAccessMask,

@@ -461,6 +461,21 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         VulkanInstance.ReleaseSurface(outputHandle);
     }
 
+    public bool SurfaceComposesWithAlpha(PresentationParameters parameters)
+    {
+        var surface = GetOrCreateSurface(parameters);
+        try
+        {
+            PhysicalDevice physicalDevice = MainDevice;
+            return physicalDevice.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface).SupportedCompositeAlpha
+                .HasFlag(CompositeAlphaFlagBitsKHR.PreMultipliedBitKhr);
+        }
+        finally
+        {
+            ReleaseSurface(parameters.OutputHandle);
+        }
+    }
+
     public bool CanPresent { get; private set; }
         
     public Color ClearColor { get; set; }
