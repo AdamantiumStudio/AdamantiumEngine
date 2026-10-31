@@ -58,6 +58,7 @@ public unsafe class GraphicsAdapter
 
         SupportsImageCubeArray = features2.Features != null && (bool)features2.Features.ImageCubeArray;
         SupportsTessellationShaders = features2.Features != null && (bool)features2.Features.TessellationShader;
+        SupportsDepthClamp = features2.Features != null && (bool)features2.Features.DepthClamp;
         SupportsMeshShaders = hasMeshShaderExtension && meshShader.MeshShader;
         SupportsTaskShaders = SupportsMeshShaders && meshShader.TaskShader;
         SupportsHostImageCopy = hostCopy.HostImageCopy;
@@ -119,6 +120,10 @@ public unsafe class GraphicsAdapter
 
     /// <summary>Whether the device runs hull and domain shaders: the tessellationShader feature.</summary>
     public bool SupportsTessellationShaders { get; private set; }
+
+    /// <summary>Whether the device can clamp each fragment's depth to the depth range instead of clipping at the near
+    /// and far planes: the depthClamp feature.</summary>
+    public bool SupportsDepthClamp { get; private set; }
 
     /// <summary>Whether the device runs mesh shaders: VK_EXT_mesh_shader and its meshShader feature.</summary>
     public bool SupportsMeshShaders { get; private set; }

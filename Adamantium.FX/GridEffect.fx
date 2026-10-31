@@ -17,6 +17,8 @@ float4 minorColor;
 float4 majorColor;
 float4 axisXColor;
 float4 axisZColor;
+// The floor under the lines; alpha 0 leaves none.
+float4 floorColor;
 
 struct MESH_VERTEX
 {
@@ -37,8 +39,13 @@ struct PS_INPUT
     float2 plane : TEXCOORD0;
 };
 
-// How far behind the ground the grid is drawn, in depth: a floor lying at y = 0 hides it instead of fighting it.
-static const float BehindTheGround = 2e-5f;
+// How far behind the ground the grid is drawn, in depth: a few steps of a 32-bit depth buffer by 1.0, so a floor lying
+// at y = 0 hides it instead of fighting it, and nothing nearer than that - nothing the buffer can tell from the ground -
+// shows through it. Added as a part of w, so the depth stays linear across the square. A fixed depth is a distance that
+// grows with the square of the eye's: 2e-5 was metres a hundred away, and from below what stood on the ground showed
+// through the floor. The draw holds each fragment's depth at the far plane (depth clamp), so the ground past it still
+// shows, behind everything.
+static const float BehindTheGround = 4.0f / 16777216.0f;
 
 [shader("vertex")]
 PS_INPUT Ground_VS(MESH_VERTEX input)
@@ -47,7 +54,7 @@ PS_INPUT Ground_VS(MESH_VERTEX input)
 
     float4 world = mul(float4(input.position.xyz, 1.0f), placement);
     output.position = mul(world, viewProjection);
-    output.position.z = min(output.position.z + BehindTheGround * output.position.w, output.position.w);
+    output.position.z += BehindTheGround * output.position.w;
     output.plane = world.xz;
     return output;
 }
@@ -107,9 +114,10 @@ float4 Ground_PS(PS_INPUT input) : SV_TARGET
         cell *= 10.0f;
     }
 
-    // Premultiplied, each axis laid over what is under it: an axis' smoothed edge keeps its own hue.
+    // Premultiplied, the lines over the floor and each axis over what is under it: an axis' smoothed edge keeps its own
+    // hue.
     float3 lineColor = lerp(minorColor.rgb, majorColor.rgb, ruled > 0.0f ? major / ruled : 0.0f);
-    float4 shade = float4(lineColor * ruled, ruled);
+    float4 shade = float4(lineColor * ruled, ruled) + float4(floorColor.rgb * floorColor.a, floorColor.a) * (1.0f - ruled);
 
     float alongX = saturate(halfWidth + 0.5f - abs(input.plane.y - lines.y) / perPixel.y) * axisXColor.a;
     float alongZ = saturate(halfWidth + 0.5f - abs(input.plane.x - lines.x) / perPixel.x) * axisZColor.a;

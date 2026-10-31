@@ -108,6 +108,10 @@ public interface IDynamicStateDevice
     /// <summary>The depth added per unit of the polygon's depth slope while <see cref="DepthBiasEnabled"/>.</summary>
     float DepthBiasSlopeFactor { get; set; }
 
+    /// <summary>Whether draws hold each fragment's depth to the depth range instead of clipping at the near and far
+    /// planes; only where <see cref="MainGraphicsDevice.IsDepthClampEnabled"/>.</summary>
+    bool DepthClampEnable { get; set; }
+
     bool StencilTestEnabled { get; set; }
 
     /// <summary>Stencil comparison, the value compared against, and what a passing fragment writes back - for marking

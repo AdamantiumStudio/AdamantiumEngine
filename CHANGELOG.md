@@ -14,6 +14,11 @@ All packages share one version.
   before anything reaches the GPU. `TextureRegionUpdate` describes one rectangle. The font atlases upload their glyphs
   and color glyphs through it.
 
+- The editor's ground has a floor: a solid plane of `GroundGrid.FloorColor` - an even gray by default - under the grid's
+  lines, hiding what is below the ground, ready for physics to stand things on. `GroundGrid.ShowsGrid` shows the grid or
+  not, and with it its floor; `GroundGrid.ShowsFloor` takes the floor from under the lines - there is no floor without
+  them.
+
 - `SharedSurface.CreateInDevice`: a shared surface for a consumer on the producer's own logical device - a plain image
   and plain timeline semaphores, taken by `SharedSurface.Import` as they are (`SharedSurfaceDescriptor.DeviceSurface`),
   with no OS handle, so it shares on a device that exports none (llvmpipe) as well. The producer's surface lasts until the
@@ -1106,6 +1111,13 @@ All packages share one version.
 
 ### Fixed
 
+- The editor's ground grid no longer shows over what stands on it with the camera far off: its depth was held to the far
+  plane per vertex, and with the square's corners past it the whole grid was drawn nearer than it is. Each fragment's
+  depth is held there now (`IGraphicsDevice.DepthClampEnable`, where `MainGraphicsDevice.IsDepthClampEnabled` - the
+  device's depthClamp feature, enabled where there is one), so the ground past the far plane still shows, behind
+  everything. And the grid lies behind the ground by a few steps of the depth buffer, no more: it was a fixed depth
+  that grew with the square of the eye's distance - metres a hundred away - and from below what stood on the ground
+  showed through the floor.
 - Every Collada node is a model known by its own ID, not by the geometry it draws: a clip moving a node that is no
   joint now plays, a geometry drawn by several nodes is on each of them - a copy each - and nodes of one name no longer
   merge into one. A node takes the materials its binding names for each part's symbol, a skinned one too; they went
