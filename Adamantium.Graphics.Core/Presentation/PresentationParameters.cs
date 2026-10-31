@@ -47,7 +47,7 @@ public class PresentationParameters
         FrameSink = parameters.FrameSink;
     }
 
-    /// <summary>What a <see cref="PresenterType.Readback"/> presenter hands its frames to.</summary>
+    /// <summary>What a <see cref="PresenterType.Compositor"/> presenter hands its frames to.</summary>
     public IFrameSink FrameSink { get; set; }
 
     /// <summary>How this surface's frames should reach the screen. An intent, not a Vulkan mode - the presenter maps

@@ -7,9 +7,10 @@ All packages share one version.
 
 ### Added
 
-- `PresenterType.Readback` (`ReadbackGraphicsPresenter`): each frame drawn into the presenter is read back to host
-  memory and handed to `PresentationParameters.FrameSink` (`IFrameSink`) - for a window the desktop composes from its
-  pixels with their alpha, where the surface offers no swapchain that keeps it. `ITexture.ReadbackInto` reads into an
+- `PresenterType.Compositor` (`CompositorPresenter`): presents through the system's compositor rather than a swapchain
+  of its own - each frame drawn into it is read back to host memory and handed to `PresentationParameters.FrameSink`
+  (`IFrameSink`), for a window the desktop composes from its pixels with their alpha, where the surface offers no
+  swapchain that keeps it. `ITexture.ReadbackInto` reads into an
   image the caller keeps; a texture's readback keeps its staging buffer, mapped, between reads and runs as one submit.
   `TextureExtensions.RecordLayoutTransition` records a layout transition into a command buffer of the caller's; the
   copy is made visible to the host by a barrier before it is read. `SwapChainGraphicsPresenter.ComposesWithAlpha` says

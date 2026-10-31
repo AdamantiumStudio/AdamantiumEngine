@@ -2,7 +2,8 @@ using System;
 
 namespace Adamantium.Graphics.Core.Presentation;
 
-/// <summary>Takes the frames a <see cref="PresenterType.Readback"/> presenter reads back, to put them on screen itself.</summary>
+/// <summary>Takes the frames a <see cref="PresenterType.Compositor"/> presenter hands over, and gives them to the system's
+/// compositor.</summary>
 public interface IFrameSink
 {
     /// <summary>Shows a frame: <paramref name="height"/> rows of <paramref name="stride"/> bytes from
