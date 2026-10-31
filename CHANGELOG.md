@@ -7,11 +7,17 @@ All packages share one version.
 
 ### Added
 
+- `IGraphicsDevice.UpdateTextureRegions`: writes new pixels into rectangles of an existing texture - any layer, any mip
+  level - in one staging buffer and one copy, leaving the rest of it as it was. The texture goes back to the layout it
+  was in; one never written before ends ready to sample. A region that does not fit its level, a layer or level the
+  texture lacks, a byte count that does not match the rectangle, a depth texture or a view of one mip level is refused
+  before anything reaches the GPU. `TextureRegionUpdate` describes one rectangle. The font atlases upload their glyphs
+  and color glyphs through it.
 - `PresenterType.Compositor` (`CompositorPresenter`): presents through the system's compositor rather than a swapchain
   of its own - each frame drawn into it is copied to host memory and handed to `PresentationParameters.FrameSink`
   (`IFrameSink`), for a window the desktop composes from its pixels with their alpha, where the surface offers no
-  swapchain that keeps it. `ITexture.CopyTo` copies into an
-  image the caller keeps; a texture copied to host memory keeps its staging buffer, mapped, between copies, each one submit.
+  swapchain that keeps it. `ITexture.CopyTo` copies into an image the caller keeps; a texture copied to host memory
+  keeps its staging buffer, mapped, between copies, each one submit.
   `TextureExtensions.RecordLayoutTransition` records a layout transition into a command buffer of the caller's; the
   copy is made visible to the host by a barrier before it is read. `SwapChainGraphicsPresenter.ComposesWithAlpha` says
   whether the surface took the transparency asked for.

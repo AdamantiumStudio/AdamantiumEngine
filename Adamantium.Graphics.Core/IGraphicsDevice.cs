@@ -330,6 +330,10 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// staging buffer and a single copy - an animation's frames, selected in the shader by layer.</summary>
     ITexture CreateTextureArray(TextureDescription description, IReadOnlyList<byte[]> layers);
 
+    /// <summary>Writes <paramref name="regions"/> into an existing texture in one staging buffer and one copy, leaving
+    /// the rest of it as it was - atlas cells, map tiles.</summary>
+    void UpdateTextureRegions(ITexture texture, IReadOnlyList<TextureRegionUpdate> regions);
+
     /// <summary>Imports an externally produced shared surface zero-copy and returns it as a sampleable texture.
     /// The producer hands off the <paramref name="descriptor"/> after exporting its memory/semaphores.</summary>
     ITexture ImportSharedSurface(SharedSurfaceDescriptor descriptor);

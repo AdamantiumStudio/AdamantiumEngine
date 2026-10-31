@@ -180,55 +180,24 @@ internal sealed class ColorBitmapAtlas : DisposableObject
             return uploaded;
         }
 
-        var total = 0;
-        foreach (var (_, levels) in pending)
-        {
-            total += levels.Length;
-        }
-
-        var data = new byte[total];
-        var regions = new List<BufferImageCopy>();
-        var offset = 0;
+        var regions = new List<TextureRegionUpdate>();
         foreach (var (cell, levels) in pending)
         {
-            Array.Copy(levels, 0, data, offset, levels.Length);
+            var offset = 0;
             for (var level = 0; level < cell.Levels; level++)
             {
                 var width = (uint)(cell.CellWidth >> level);
                 var height = (uint)(cell.CellHeight >> level);
-                regions.Add(new BufferImageCopy
-                {
-                    BufferOffset = (ulong)offset,
-                    BufferRowLength = width,
-                    BufferImageHeight = height,
-                    ImageSubresource = new ImageSubresourceLayers
-                    {
-                        AspectMask = ImageAspectFlagBits.ColorBit,
-                        MipLevel = (uint)level,
-                        BaseArrayLayer = cell.Layer,
-                        LayerCount = 1,
-                    },
-                    ImageOffset = new Offset3D { X = cell.X >> level, Y = cell.Y >> level, Z = 0 },
-                    ImageExtent = new Extent3D { Width = width, Height = height, Depth = 1 },
-                });
-                offset += (int)(width * height * 4);
+                var size = (int)(width * height * 4);
+                regions.Add(new TextureRegionUpdate(cell.Layer, (uint)level, cell.X >> level, cell.Y >> level, width,
+                    height, levels.AsMemory(offset, size)));
+                offset += size;
             }
 
             uploaded.Add(cell);
         }
 
-        using var buffer = Buffer.New(_device, data, BufferUsageFlags.TransferSrc,
-            MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
-        var commandBuffer = _device.BeginSingleTimeCommand();
-        _device.InsertImageMemoryBarrier(commandBuffer, Texture, AccessFlagBits2.ShaderReadBit,
-            AccessFlagBits2.TransferWriteBit, Texture.ImageLayout, ImageLayout.TransferDstOptimal,
-            PipelineStageFlagBits2.FragmentShaderBit, PipelineStageFlagBits2.AllTransferBit);
-        commandBuffer.CopyBufferToImage(buffer, Texture, ImageLayout.TransferDstOptimal, (uint)regions.Count,
-            regions.ToArray());
-        _device.InsertImageMemoryBarrier(commandBuffer, Texture, AccessFlagBits2.TransferWriteBit,
-            AccessFlagBits2.ShaderReadBit, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal,
-            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.FragmentShaderBit);
-        _device.EndSingleTimeCommand(commandBuffer);
+        _device.UpdateTextureRegions(Texture, regions);
         return uploaded;
     }
 

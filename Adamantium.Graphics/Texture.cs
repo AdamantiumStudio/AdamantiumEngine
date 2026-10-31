@@ -606,8 +606,13 @@ public unsafe class Texture : GraphicsResource, ITexture
         return _levelTextures[level];
     }
 
+    /// <summary>Whether this texture is a view onto another texture's image rather than the owner of one.</summary>
+    internal virtual bool SharesItsImage => false;
+
     private sealed class LevelTexture : Texture
     {
+        internal override bool SharesItsImage => true;
+
         public LevelTexture(Texture image, uint level)
             : base(image.GraphicsDevice, image.GetImage(), LevelDescription(image.Description, level), 0, image.Name)
         {

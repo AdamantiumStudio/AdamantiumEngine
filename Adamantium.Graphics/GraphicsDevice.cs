@@ -320,6 +320,103 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         return Texture.CreateArrayFrom(this, description, layers);
     }
 
+    public void UpdateTextureRegions(ITexture texture, IReadOnlyList<TextureRegionUpdate> regions)
+    {
+        if (regions.Count == 0)
+        {
+            return;
+        }
+
+        var pixelSize = texture.SurfaceFormat.SizeInBytes;
+        var total = 0;
+        foreach (var region in regions)
+        {
+            CheckRegion(texture, region, pixelSize);
+            total += region.Pixels.Length;
+        }
+
+        var data = new byte[total];
+        var copies = new BufferImageCopy[regions.Count];
+        var offset = 0;
+        for (var i = 0; i < regions.Count; i++)
+        {
+            var region = regions[i];
+            region.Pixels.Span.CopyTo(data.AsSpan(offset));
+            copies[i] = new BufferImageCopy
+            {
+                BufferOffset = (ulong)offset,
+                BufferRowLength = region.Width,
+                BufferImageHeight = region.Height,
+                ImageSubresource = new ImageSubresourceLayers
+                {
+                    AspectMask = ImageAspectFlagBits.ColorBit,
+                    MipLevel = region.Level,
+                    BaseArrayLayer = region.Layer,
+                    LayerCount = 1,
+                },
+                ImageOffset = new Offset3D { X = region.X, Y = region.Y, Z = 0 },
+                ImageExtent = new Extent3D { Width = region.Width, Height = region.Height, Depth = 1 },
+            };
+            offset += region.Pixels.Length;
+        }
+
+        using var staging = Buffer.New(this, data, BufferUsageFlags.TransferSrc,
+            MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+        var commandBuffer = BeginSingleTimeCommand();
+        var before = texture.ImageLayout;
+        var restored = before is ImageLayout.Undefined or ImageLayout.Preinitialized
+            ? ImageLayout.ShaderReadOnlyOptimal
+            : before;
+        RecordImageMemoryBarrier(commandBuffer, texture, AccessFlagBits2.MemoryWriteBit,
+            AccessFlagBits2.TransferWriteBit, before, ImageLayout.TransferDstOptimal,
+            PipelineStageFlagBits2.AllCommandsBit, PipelineStageFlagBits2.AllTransferBit, 0, ~0U);
+        commandBuffer.CopyBufferToImage(staging, texture.GetImage(), ImageLayout.TransferDstOptimal,
+            (uint)copies.Length, copies);
+        RecordImageMemoryBarrier(commandBuffer, texture, AccessFlagBits2.TransferWriteBit,
+            AccessFlagBits2.MemoryReadBit | AccessFlagBits2.MemoryWriteBit, ImageLayout.TransferDstOptimal, restored,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllCommandsBit, 0, ~0U);
+        EndSingleTimeCommand(commandBuffer);
+    }
+
+    private static void CheckRegion(ITexture texture, TextureRegionUpdate region, int pixelSize)
+    {
+        if (texture.ImageAspect != ImageAspectFlagBits.ColorBit)
+        {
+            throw new NotSupportedException($"Only color textures take regions; this one is {texture.ImageAspect}.");
+        }
+
+        if (texture is Texture { SharesItsImage: true })
+        {
+            throw new ArgumentException("A view of one level shares its image; write through the texture that owns it.",
+                nameof(texture));
+        }
+
+        var range = texture.Info.SubresourceRange;
+        var layers = Math.Max(1u, range.LayerCount);
+        var levels = Math.Max(1u, range.LevelCount);
+        if (region.Layer >= layers || region.Level >= levels)
+        {
+            throw new ArgumentOutOfRangeException(nameof(region),
+                $"Layer {region.Layer}, level {region.Level} is not in a texture of {layers} layers and {levels} levels.");
+        }
+
+        var levelWidth = Math.Max(1u, texture.Width >> (int)region.Level);
+        var levelHeight = Math.Max(1u, texture.Height >> (int)region.Level);
+        if (region.X < 0 || region.Y < 0 || region.Width == 0 || region.Height == 0 ||
+            region.X + region.Width > levelWidth || region.Y + region.Height > levelHeight)
+        {
+            throw new ArgumentOutOfRangeException(nameof(region),
+                $"{region.Width}x{region.Height} at ({region.X}, {region.Y}) does not fit level {region.Level} ({levelWidth}x{levelHeight}).");
+        }
+
+        if (region.Pixels.Length != (long)region.Width * region.Height * pixelSize)
+        {
+            throw new ArgumentException(
+                $"{region.Pixels.Length} bytes given for {region.Width}x{region.Height} pixels of {pixelSize} bytes.",
+                nameof(region));
+        }
+    }
+
     public ITexture ImportSharedSurface(SharedSurfaceDescriptor descriptor)
     {
         return SharedSurface.Import(this, descriptor);
@@ -824,6 +921,22 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         if (texture == null) return;
 
         RefuseWhileIssuingAside(nameof(InsertImageMemoryBarrier));
+        RecordImageMemoryBarrier(commandBuffer, texture, sourceAccessMask, destinationAccessMask, oldLayout, newLayout,
+            sourceStageMask, destinationStageMask, baseMipLevel, levelCount);
+    }
+
+    private static void RecordImageMemoryBarrier(
+        CommandBuffer commandBuffer,
+        ITexture texture,
+        AccessFlagBits2 sourceAccessMask,
+        AccessFlagBits2 destinationAccessMask,
+        ImageLayout oldLayout,
+        ImageLayout newLayout,
+        PipelineStageFlagBits2 sourceStageMask,
+        PipelineStageFlagBits2 destinationStageMask,
+        uint baseMipLevel,
+        uint levelCount)
+    {
         var range = new ImageSubresourceRange
         {
             AspectMask = texture.ImageAspect,
