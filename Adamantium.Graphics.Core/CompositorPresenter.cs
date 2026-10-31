@@ -4,10 +4,10 @@ using Adamantium.Imaging;
 namespace Adamantium.Graphics.Core;
 
 /// <summary>Presents through the system's compositor rather than a swapchain of its own: it draws into a render target,
-/// as <see cref="RenderTargetGraphicsPresenter"/> does, and hands each frame drawn to
-/// <see cref="PresentationParameters.FrameSink"/>, which gives it to the compositor - a layered window on Windows, for a
-/// see-through window whose surface offers no swapchain that keeps its alpha. The frame is copied to host memory
-/// and the copy waits for it, so it suits a window drawn now and then - an overlay - not one drawn every frame.</summary>
+/// as <see cref="RenderTargetGraphicsPresenter"/> does, and copies each frame drawn to <see cref="Frame"/>, which the
+/// window gives to the compositor - a layered window on Windows, for a see-through window whose surface offers no
+/// swapchain that keeps its alpha. The copy waits for the frame, so it suits a window drawn now and then - an
+/// overlay - not one drawn every frame.</summary>
 public class CompositorPresenter : RenderTargetGraphicsPresenter
 {
     private Image _frame;
@@ -17,9 +17,13 @@ public class CompositorPresenter : RenderTargetGraphicsPresenter
     {
     }
 
+    /// <summary>The last frame presented, in host memory: B8G8R8A8 as drawn, top row first. Null until one is; reused
+    /// for the next, so it is read before the next <see cref="Present"/>.</summary>
+    public Image Frame => _frame;
+
     public override PresenterState Present()
     {
-        if (!CanPresent || Description.FrameSink is not { } sink)
+        if (!CanPresent)
         {
             return PresenterState.Success;
         }
@@ -33,8 +37,6 @@ public class CompositorPresenter : RenderTargetGraphicsPresenter
         }
 
         ResolveTexture.CopyTo(_frame);
-        var pixels = _frame.PixelBuffer[0];
-        sink.Show(pixels.DataPointer, Width, Height, (uint)pixels.RowStride);
         return PresenterState.Success;
     }
 

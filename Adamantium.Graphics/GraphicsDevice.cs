@@ -1165,40 +1165,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         return "\nValidation layer messages leading up to it:\n  - " + string.Join("\n  - ", messages);
     }
 
-    // After a device-lost, VK_EXT_device_fault returns the driver's REAL fault description (and how many faulting
-    // address regions / vendor records there are) - the diagnostic that works without validation layers. Best-effort:
-    // only when the extension was enabled, and never throws back into the caller.
-    private string DescribeDeviceFault()
-    {
-        try
-        {
-            // Each of these used to return "" - indistinguishable from "the driver reported no fault", which is the one
-            // answer that would let a reader stop looking. Say which it was.
-            if (MainDevice is not { DeviceFaultSupported: true }) return "\nGPU device fault: VK_EXT_device_fault was NOT enabled on this device";
-            // Incomplete means the driver filled what we asked for and held back the vendor blob we opted out of.
-            var faultResult = LogicalDevice.GetDeviceFaultInfoEXT(out var fault);
-            if (faultResult != Result.Success && faultResult != Result.Incomplete)
-                return $"\nGPU device fault: GetDeviceFaultInfoEXT returned {faultResult}";
-            if (fault == null) return "\nGPU device fault: GetDeviceFaultInfoEXT succeeded but reported nothing";
-
-            var sb = new System.Text.StringBuilder($"\nGPU device fault (VK_EXT_device_fault): \"{fault.Description}\"");
-            var addresses = fault.PAddressInfos.Span;
-            for (var i = 0; i < addresses.Length; i++)
-            {
-                var a = addresses[i];
-                sb.Append($"\n  - {a.AddressType}: address 0x{(ulong)a.ReportedAddress:X} (precision 0x{(ulong)a.AddressPrecision:X})");
-            }
-            var vendors = fault.PVendorInfos.Span;
-            for (var i = 0; i < vendors.Length; i++)
-            {
-                var v = vendors[i];
-                sb.Append($"\n  - vendor \"{v.Description}\": code=0x{v.VendorFaultCode:X} data=0x{v.VendorFaultData:X}");
-            }
-            return sb.ToString();
-        }
-        catch (Exception e) { return $"\nGPU device fault: querying it threw {e.GetType().Name}: {e.Message}"; }
-    }
-
     public bool BeginDraw(float depth = 1.0f, uint stencil = 0, Action<CommandBuffer> beforeRenderPass = null)
     {
         _recordingFrame = true;
@@ -1206,6 +1172,12 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         LastFrameError = null;
         _withheld = false;
         FrameWithheld = false;
+        if (MainDevice.IsLost)
+        {
+            LastFrameError = "the device is lost";
+            return false;
+        }
+
         var renderFence = InFlightFences[CurrentFrame];
         var measuring = Volatile.Read(ref _fenceWaitMeasurers) > 0;
         var fenceStart = measuring ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
@@ -1225,7 +1197,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (result != _lastFenceWaitError)
             {
                 _lastFenceWaitError = result;
-                LastFrameError = $"WaitForFences returned {result}{DescribeDeviceFault()}{DescribeRecentValidation()}";
+                LastFrameError = $"WaitForFences returned {result}{MainDevice.DescribeFault()}{DescribeRecentValidation()}";
                 Log.Logger.Information($"Wait for fences result: {result}. DETAIL: {LastFrameError}");
             }
             return false;
@@ -2247,7 +2219,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
         }
 
-        var waited = LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue);
+        var waited = submitted == Result.Success
+            ? LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue)
+            : submitted;
         LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
         LogicalDevice.DestroyFence(fence);
         _submissionSync?.Release();

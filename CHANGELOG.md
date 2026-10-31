@@ -14,9 +14,10 @@ All packages share one version.
   before anything reaches the GPU. `TextureRegionUpdate` describes one rectangle. The font atlases upload their glyphs
   and color glyphs through it.
 - `PresenterType.Compositor` (`CompositorPresenter`): presents through the system's compositor rather than a swapchain
-  of its own - each frame drawn into it is copied to host memory and handed to `PresentationParameters.FrameSink`
-  (`IFrameSink`), for a window the desktop composes from its pixels with their alpha, where the surface offers no
-  swapchain that keeps it. `ITexture.CopyTo` copies into an image the caller keeps; a texture copied to host memory
+  of its own - each frame drawn into it is copied to host memory, its `Frame`, for a window the desktop composes from
+  its pixels with their alpha, where the surface offers no swapchain that keeps it.
+  `SurfaceExtensions.ComposesWithAlpha` asks the surface of a window whether it offers that, before a presenter is
+  chosen. `ITexture.CopyTo` copies into an image the caller keeps; a texture copied to host memory
   keeps its staging buffer, mapped, between copies, each one submit.
   `TextureExtensions.RecordLayoutTransition` records a layout transition into a command buffer of the caller's; the
   copy is made visible to the host by a barrier before it is read. `SwapChainGraphicsPresenter.ComposesWithAlpha` says
@@ -1126,6 +1127,10 @@ All packages share one version.
 
 ### Fixed
 
+- A lost device no longer hangs the threads drawing on it: `BeginDraw` waited without end for a fence whose submit had
+  failed, and a single-time command for one never submitted; a frame on a lost device is refused at once, so the
+  device can be made anew. What the driver says made it lost (`MainGraphicsDevice.DescribeFault`, VK_EXT_device_fault)
+  is logged the moment it is lost; it was logged only by a wait for a fence, which never came.
 - A click in the editor's scene selects the whole model first - the root an import made, with a `Source`
   (`Selection.ModelOf`) - and its parts once anything of the model is selected, a part next to the one selected too
   (`Selection.ChosenByClick`); a frame chooses each part it takes the same way. With Control, the selected entity a
