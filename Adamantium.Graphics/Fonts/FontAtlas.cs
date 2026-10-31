@@ -359,57 +359,24 @@ namespace Adamantium.Graphics.Fonts
                 }
             }
 
-            Atlas.TransitionImageLayout(ImageLayout.TransferDstOptimal);
-            var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
-            var buffers = new List<Buffer>();
-
+            var regions = new List<TextureRegionUpdate>(textureDataArray.Count);
             foreach (var textureData in textureDataArray)
             {
-                if (textureData.IsEmpty) continue;
-
-                var buffer = Buffer.New(
-                    GraphicsDevice,
-                    textureData.Pixels,
-                    BufferUsageFlags.TransferSrc,
-                    MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
-                buffers.Add(buffer);
-
-                var region = new BufferImageCopy();
-                region.BufferOffset = 0;
-                region.BufferRowLength = (uint)textureData.FullGlyphSize.Width;
-                region.BufferImageHeight = (uint)textureData.FullGlyphSize.Height;
-                region.ImageSubresource = new ImageSubresourceLayers();
-                region.ImageSubresource.AspectMask = ImageAspectFlagBits.ColorBit;
-                region.ImageSubresource.MipLevel = 0;
-                region.ImageSubresource.BaseArrayLayer = textureData.DepthLayer;
-                region.ImageSubresource.LayerCount = 1;
-                region.ImageOffset = new Offset3D()
+                if (textureData.IsEmpty)
                 {
-                    X = textureData.BoundingRect.Left,
-                    Y = textureData.BoundingRect.Top,
-                    Z = 0
-                };
-                region.ImageExtent = new Extent3D()
-                {
-                    Width = (uint)textureData.FullGlyphSize.Width,
-                    Height = (uint)textureData.FullGlyphSize.Height,
-                    Depth = 1
-                };
+                    continue;
+                }
 
-                commandBuffer.CopyBufferToImage(buffer, Atlas, ImageLayout.TransferDstOptimal, 1, region);
+                regions.Add(new TextureRegionUpdate(textureData.DepthLayer, 0, textureData.BoundingRect.Left,
+                    textureData.BoundingRect.Top, (uint)textureData.FullGlyphSize.Width,
+                    (uint)textureData.FullGlyphSize.Height, textureData.Pixels));
             }
 
-            GraphicsDevice.EndSingleTimeCommand(commandBuffer);
-            Atlas.TransitionImageLayout(Atlas.Description.DesiredImageLayout);
+            GraphicsDevice.UpdateTextureRegions(Atlas, regions);
 
             foreach (var textureData in textureDataArray)
             {
                 textureData.Pixels = [];
-            }
-            
-            foreach (var buffer in buffers)
-            {
-                buffer?.Dispose();
             }
 
             if (probing)

@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- `IGraphicsDevice.UpdateTextureRegions`: writes new pixels into rectangles of an existing texture - any layer, any mip
+  level - in one staging buffer and one copy, leaving the rest of it as it was. The texture goes back to the layout it
+  was in; one never written before ends ready to sample. A region that does not fit its level, a layer or level the
+  texture lacks, a byte count that does not match the rectangle, a depth texture or a view of one mip level is refused
+  before anything reaches the GPU. `TextureRegionUpdate` describes one rectangle. The font atlases upload their glyphs
+  and color glyphs through it.
+
 - `SharedSurface.CreateInDevice`: a shared surface for a consumer on the producer's own logical device - a plain image
   and plain timeline semaphores, taken by `SharedSurface.Import` as they are (`SharedSurfaceDescriptor.DeviceSurface`),
   with no OS handle, so it shares on a device that exports none (llvmpipe) as well. The producer's surface lasts until the
