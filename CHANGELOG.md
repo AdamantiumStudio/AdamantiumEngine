@@ -16,7 +16,7 @@ All packages share one version.
 - `PresenterType.Compositor` (`CompositorPresenter`): presents through the system's compositor rather than a swapchain
   of its own - each frame drawn into it is copied to host memory, its `Frame`, for a window the desktop composes from
   its pixels with their alpha, where the surface offers no swapchain that keeps it.
-  `IGraphicsDevice.SurfaceComposesWithAlpha` asks the surface of a window whether it offers that, before a presenter is
+  `SurfaceExtensions.ComposesWithAlpha` asks the surface of a window whether it offers that, before a presenter is
   chosen. `ITexture.CopyTo` copies into an image the caller keeps; a texture copied to host memory
   keeps its staging buffer, mapped, between copies, each one submit.
   `TextureExtensions.RecordLayoutTransition` records a layout transition into a command buffer of the caller's; the

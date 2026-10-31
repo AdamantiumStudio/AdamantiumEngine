@@ -180,7 +180,7 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
         // other opaque only. So it is asked for, checked, and fallen back on out loud.
         var supportedAlpha = swapChainSupport.Capabilities.SupportedCompositeAlpha;
         var wantsAlpha = Description.TransparentComposition;
-        var canDoAlpha = supportedAlpha.HasFlag(CompositeAlphaFlagBitsKHR.PreMultipliedBitKhr);
+        var canDoAlpha = surface.ComposesWithAlpha(physicalDevice);
 
         ComposesWithAlpha = wantsAlpha && canDoAlpha;
         createInfo.CompositeAlpha = ComposesWithAlpha
