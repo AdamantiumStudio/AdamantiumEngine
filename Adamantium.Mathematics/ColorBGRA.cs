@@ -43,6 +43,15 @@ public struct ColorBGRA : IEquatable<ColorBGRA>, IFormattable
     /// <summary>The color packed blue, green, red, alpha from the lowest byte up: 0xAARRGGBB.</summary>
     public readonly uint ToBgra() => ((Color)this).ToBgra();
 
+    /// <summary>The color premultiplied by its alpha: red, green and blue each times alpha over 255, rounded.</summary>
+    public readonly ColorBGRA ToPremultiplied() => ((Color)this).ToPremultiplied();
+
+    /// <summary>Writes <paramref name="straight"/> premultiplied by their alpha into <paramref name="premultiplied"/>,
+    /// which is as long - a row of pixels at a time, as a compositor takes them.</summary>
+    public static void Premultiply(ReadOnlySpan<ColorBGRA> straight, Span<ColorBGRA> premultiplied) =>
+        AlphaPremultiplication.Convert(MemoryMarshal.Cast<ColorBGRA, uint>(straight),
+            MemoryMarshal.Cast<ColorBGRA, uint>(premultiplied));
+
     /// <summary>The color packed red, green, blue, alpha from the lowest byte up.</summary>
     public readonly uint ToRgba() => ((Color)this).ToRgba();
 

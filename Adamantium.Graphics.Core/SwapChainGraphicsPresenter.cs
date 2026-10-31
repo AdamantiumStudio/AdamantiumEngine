@@ -74,6 +74,10 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
         public PresentModeKHR[] PresentModes;
     };
         
+    /// <summary>Whether the desktop composes the swapchain with its alpha: transparency was asked for
+    /// (<see cref="PresentationParameters.TransparentComposition"/>) and the surface offers it.</summary>
+    public bool ComposesWithAlpha { get; private set; }
+
     public Semaphore CurrentRenderFinishedSemaphore => renderFinishedSemaphores[currentImageIndex];
     public Semaphore CurrentImageAvailableSemaphore => imageAvailableSemaphores[currentImageIndex];
 
@@ -178,7 +182,8 @@ public class SwapChainGraphicsPresenter : GraphicsPresenter
         var wantsAlpha = Description.TransparentComposition;
         var canDoAlpha = supportedAlpha.HasFlag(CompositeAlphaFlagBitsKHR.PreMultipliedBitKhr);
 
-        createInfo.CompositeAlpha = wantsAlpha && canDoAlpha
+        ComposesWithAlpha = wantsAlpha && canDoAlpha;
+        createInfo.CompositeAlpha = ComposesWithAlpha
             ? CompositeAlphaFlagBitsKHR.PreMultipliedBitKhr
             : CompositeAlphaFlagBitsKHR.OpaqueBitKhr;
 

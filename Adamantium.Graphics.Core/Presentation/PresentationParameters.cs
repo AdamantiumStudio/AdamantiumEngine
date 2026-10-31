@@ -44,7 +44,11 @@ public class PresentationParameters
         Clipped = parameters.Clipped;
         TransparentComposition = parameters.TransparentComposition;
         PresentPolicy = parameters.PresentPolicy;
+        FrameSink = parameters.FrameSink;
     }
+
+    /// <summary>What a <see cref="PresenterType.Compositor"/> presenter hands its frames to.</summary>
+    public IFrameSink FrameSink { get; set; }
 
     /// <summary>How this surface's frames should reach the screen. An intent, not a Vulkan mode - the presenter maps
     /// it onto whatever the surface actually offers, and Fifo is always there as the floor.</summary>

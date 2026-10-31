@@ -14,7 +14,7 @@ using NUnit.Framework;
 namespace Adamantium.Engine.GraphicsTests
 {
     // Line-rendering Step A3b: drives the full compute path on the GPU end to end. A compute shader writes a known
-    // pattern (index+1) to a buffer via a BDA device address; a CPU readback verifies it. Compute is recorded in
+    // pattern (index+1) to a buffer via a BDA device address; a copy to the CPU verifies it. Compute is recorded in
     // BeginDraw's beforeRenderPass hook - outside the render pass, on the graphics queue - the only valid place to
     // dispatch (the render pass hasn't begun yet there).
     [TestFixture]
@@ -264,7 +264,7 @@ namespace Adamantium.Engine.GraphicsTests
         }
 
         // Render the GPU-expanded stroke. Compute writes the quad vertices, then the
-        // SAME frame binds that buffer as a vertex buffer and draws it (white on black). A pixel readback proves the
+        // SAME frame binds that buffer as a vertex buffer and draws it (white on black). A pixel copied to the CPU proves the
         // rasterizer consumes the compute output: pixels on the stroke differ from the background and match each other.
         [Test]
         public void StrokeExpand_RendersToTarget()
