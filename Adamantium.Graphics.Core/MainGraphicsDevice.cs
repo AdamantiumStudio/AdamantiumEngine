@@ -555,11 +555,57 @@ public class MainGraphicsDevice : DisposableBase
     {
         if (result == Result.ErrorDeviceLost && Interlocked.Exchange(ref _lost, 1) == 0)
         {
-            Log.Logger.Error("The GPU lost the device; a new one has to be made.");
+            Log.Logger.Error($"The GPU lost the device; a new one has to be made.{DescribeFault()}");
             Lost?.Invoke();
         }
 
         return result;
+    }
+
+    /// <summary>What the driver says made the device lost (VK_EXT_device_fault): its description, the faulting
+    /// addresses and the vendor's records; or why it cannot say. Never throws.</summary>
+    public string DescribeFault()
+    {
+        try
+        {
+            if (!DeviceFaultSupported)
+            {
+                return "\nGPU device fault: VK_EXT_device_fault was NOT enabled on this device";
+            }
+
+            // Incomplete: the driver filled what was asked for and held back the vendor blob not asked for.
+            var faultResult = LogicalDevice.GetDeviceFaultInfoEXT(out var fault);
+            if (faultResult != Result.Success && faultResult != Result.Incomplete)
+            {
+                return $"\nGPU device fault: GetDeviceFaultInfoEXT returned {faultResult}";
+            }
+
+            if (fault == null)
+            {
+                return "\nGPU device fault: GetDeviceFaultInfoEXT succeeded but reported nothing";
+            }
+
+            var sb = new System.Text.StringBuilder($"\nGPU device fault (VK_EXT_device_fault): \"{fault.Description}\"");
+            var addresses = fault.PAddressInfos.Span;
+            for (var i = 0; i < addresses.Length; i++)
+            {
+                var a = addresses[i];
+                sb.Append($"\n  - {a.AddressType}: address 0x{(ulong)a.ReportedAddress:X} (precision 0x{(ulong)a.AddressPrecision:X})");
+            }
+
+            var vendors = fault.PVendorInfos.Span;
+            for (var i = 0; i < vendors.Length; i++)
+            {
+                var v = vendors[i];
+                sb.Append($"\n  - vendor \"{v.Description}\": code=0x{v.VendorFaultCode:X} data=0x{v.VendorFaultData:X}");
+            }
+
+            return sb.ToString();
+        }
+        catch (Exception e)
+        {
+            return $"\nGPU device fault: querying it threw {e.GetType().Name}: {e.Message}";
+        }
     }
 
     /// <summary>Waits until the device has finished all its work. Vulkan has every queue of the device externally

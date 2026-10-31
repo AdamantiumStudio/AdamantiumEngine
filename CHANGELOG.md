@@ -1129,7 +1129,8 @@ All packages share one version.
 
 - A lost device no longer hangs the threads drawing on it: `BeginDraw` waited without end for a fence whose submit had
   failed, and a single-time command for one never submitted; a frame on a lost device is refused at once, so the
-  device can be made anew.
+  device can be made anew. What the driver says made it lost (`MainGraphicsDevice.DescribeFault`, VK_EXT_device_fault)
+  is logged the moment it is lost; it was logged only by a wait for a fence, which never came.
 - A click in the editor's scene selects the whole model first - the root an import made, with a `Source`
   (`Selection.ModelOf`) - and its parts once anything of the model is selected, a part next to the one selected too
   (`Selection.ChosenByClick`); a frame chooses each part it takes the same way. With Control, the selected entity a
