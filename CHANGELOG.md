@@ -1104,6 +1104,13 @@ All packages share one version.
 
 ### Fixed
 
+- A click in the editor's scene selects the whole model first - the root an import made, with a `Source`
+  (`Selection.ModelOf`) - and its parts once anything of the model is selected, a part next to the one selected too
+  (`Selection.ChosenByClick`); a frame chooses each part it takes the same way. With Control, the selected entity a
+  part belongs to is taken out (`Selection.ChosenToRemove`). An icon - a light's, a camera's - selects its own entity as
+  it is, and a group the user made over models, or what was made in the scene, is not lifted to (`ToolsService.ChosenAt`,
+  `ToolsService.ChooseIn`). A click or a frame took the parts, so moving "the model" moved its parts and left its root,
+  and the root's handles stood where the model had been.
 - The editor's ground grid no longer shows over what stands on it with the camera far off: its depth was held to the far
   plane per vertex, and with the square's corners past it the whole grid was drawn nearer than it is. Each fragment's
   depth is held there now (`IGraphicsDevice.DepthClampEnable`, where `MainGraphicsDevice.IsDepthClampEnabled` - the

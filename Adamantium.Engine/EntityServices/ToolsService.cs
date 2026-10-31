@@ -58,12 +58,38 @@ public class ToolsService : EntityService, INotifyUniverse
         IsPointerTaken = true;
     }
 
-    /// <summary>What a click along <paramref name="ray"/> selects: the nearest part of the scene, or of what the editor shows over it.</summary>
-    public PickHit PickEntity(in PickRay ray)
+    /// <summary>What a click along <paramref name="ray"/> lands on: the nearest part of the scene, or of what the editor shows over it.</summary>
+    public PickHit PickEntity(in PickRay ray) => PickHit.Nearest(PickForm(ray), PickShown(ray));
+
+    /// <summary>What a click along <paramref name="ray"/> selects - or, <paramref name="removing"/>, takes out: what the
+    /// editor shows over the scene, as an icon, as it is - it stands for that one entity; a part of the scene's form as
+    /// the selection chooses it (<see cref="Selection.ChosenByClick"/>, <see cref="Selection.ChosenToRemove"/>). Null
+    /// for nothing.</summary>
+    public Entity ChosenAt(in PickRay ray, bool removing = false)
     {
-        var nearest = EntityWorld.Satellites.TryGet<SceneIndex>(out var index)
+        var form = PickForm(ray);
+        var shown = PickShown(ray);
+        if (shown.IsHit && (!form.IsHit || shown.Depth < form.Depth))
+        {
+            return shown.Entity;
+        }
+
+        if (!form.IsHit)
+        {
+            return null;
+        }
+
+        return removing ? Selection.ChosenToRemove(form.Entity) : Selection.ChosenByClick(form.Entity);
+    }
+
+    private PickHit PickForm(in PickRay ray) =>
+        EntityWorld.Satellites.TryGet<SceneIndex>(out var index)
             ? Picking.PickMeshes(index, ray, withDisabled: true)
             : Picking.Pick(EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: true);
+
+    private PickHit PickShown(in PickRay ray)
+    {
+        var nearest = default(PickHit);
         var processors = Processors;
         for (int i = 0; i < processors.Count; i++)
         {
@@ -76,10 +102,47 @@ public class ToolsService : EntityService, INotifyUniverse
         return nearest;
     }
 
-    /// <summary>What <paramref name="frame"/> on <paramref name="camera"/>'s output selects, as a click would select it:
-    /// the parts of the scene with a form - all their points inside the frame, or for a crossing one any of them or the
-    /// frame's middle on them - and what the editor shows over the scene, into <paramref name="into"/>.</summary>
+    /// <summary>What <paramref name="frame"/> on <paramref name="camera"/>'s output selects - or,
+    /// <paramref name="removing"/>, takes out - as a click on each would: the parts of the scene with a form it takes,
+    /// each as <see cref="ChosenAt"/> chooses it, and what the editor shows over the scene as it is; each once, into
+    /// <paramref name="into"/>.</summary>
+    public void ChooseIn(CameraBase camera, in ScreenFrame frame, List<Entity> into, bool removing = false)
+    {
+        framedParts.Clear();
+        FrameForm(camera, in frame, framedParts);
+        foreach (var part in framedParts)
+        {
+            var chosen = removing ? Selection.ChosenToRemove(part) : Selection.ChosenByClick(part);
+            if (!into.Contains(chosen))
+            {
+                into.Add(chosen);
+            }
+        }
+
+        framedParts.Clear();
+        FrameShown(camera, in frame, framedParts);
+        foreach (var entity in framedParts)
+        {
+            if (!into.Contains(entity))
+            {
+                into.Add(entity);
+            }
+        }
+    }
+
+    private readonly List<Entity> framedParts = [];
+
+    /// <summary>What <paramref name="frame"/> on <paramref name="camera"/>'s output takes, as <see cref="PickEntity"/> is
+    /// what a click lands on: the parts of the scene with a form - all their points inside the frame, or for a crossing
+    /// one any of them or the frame's middle on them - and what the editor shows over the scene, into
+    /// <paramref name="into"/>.</summary>
     public void PickEntities(CameraBase camera, in ScreenFrame frame, List<Entity> into)
+    {
+        FrameForm(camera, in frame, into);
+        FrameShown(camera, in frame, into);
+    }
+
+    private void FrameForm(CameraBase camera, in ScreenFrame frame, List<Entity> into)
     {
         var viewProjection = camera.ViewMatrix * camera.ProjectionMatrix;
         var middle = PickRay.FromCamera(camera, frame.Center);
@@ -88,7 +151,10 @@ public class ToolsService : EntityService, INotifyUniverse
         {
             FrameTree(roots[i], camera, in frame, in viewProjection, in middle, into);
         }
+    }
 
+    private void FrameShown(CameraBase camera, in ScreenFrame frame, List<Entity> into)
+    {
         var processors = Processors;
         for (int i = 0; i < processors.Count; i++)
         {
