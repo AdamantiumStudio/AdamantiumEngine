@@ -148,7 +148,7 @@ public class GizmoPassesTests
         device.FrameEnded();
         device.DeviceWaitIdle();
 
-        using var image = target.ReadbackToImage();
+        using var image = target.ToImage();
         var pixels = new byte[Size * Size * 4];
         Marshal.Copy(image.DataPointer, pixels, 0, pixels.Length);
         return pixels;

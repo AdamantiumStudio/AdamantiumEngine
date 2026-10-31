@@ -16,7 +16,12 @@ public unsafe class Texture : GraphicsResource, ITexture
 {
     private VulkanImage vulkanImage;
     private DeviceMemory vulkanImageMemory;
-        
+    private readonly object _stagingLock = new();
+    private VkBuffer _stagingBuffer;
+    private DeviceMemory _stagingMemory;
+    private ulong _stagingSize;
+    private nuint _stagingData;
+
     public TextureDescription Description;
 
     public uint Width => Description.Width;
@@ -346,7 +351,13 @@ public unsafe class Texture : GraphicsResource, ITexture
     private void CopyImageToBuffer(VkBuffer buffer, uint layer, uint level, uint width, uint height)
     {
         var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
+        RecordCopyToBuffer(commandBuffer, buffer, layer, level, width, height);
+        GraphicsDevice.EndSingleTimeCommand(commandBuffer);
+    }
 
+    private void RecordCopyToBuffer(CommandBuffer commandBuffer, VkBuffer buffer, uint layer, uint level, uint width,
+        uint height)
+    {
         var region = new BufferImageCopy();
         region.BufferOffset = 0;
         region.BufferRowLength = 0;
@@ -360,7 +371,6 @@ public unsafe class Texture : GraphicsResource, ITexture
         region.ImageExtent = new Extent3D() {Width = width, Height = height, Depth = 1};
             
         commandBuffer.CopyImageToBuffer(vulkanImage, ImageLayout, buffer, 1, region);
-        GraphicsDevice.EndSingleTimeCommand(commandBuffer);
     }
         
     protected void Initialize()
@@ -774,27 +784,27 @@ public unsafe class Texture : GraphicsResource, ITexture
     public void Save(string path, ImageFileType fileType)
     {
         var img = Image.New2D(Width, Height, 1, Description.Format);
-        ReadbackInto(img);
+        CopyTo(img);
         img.Save(path, fileType);
     }
 
-    private Image _rawReadback;
+    private Image _rawImage;
 
     /// <summary>Writes the texture's bytes as they are to <paramref name="path"/>, no swap, no encoding.</summary>
     public void SaveRaw(string path)
     {
-        if (_rawReadback == null || _rawReadback.Description.Width != Width || _rawReadback.Description.Height != Height)
+        if (_rawImage == null || _rawImage.Description.Width != Width || _rawImage.Description.Height != Height)
         {
-            _rawReadback?.Dispose();
-            _rawReadback = ToDispose(Image.New2D(Width, Height, 1, Description.Format));
+            _rawImage?.Dispose();
+            _rawImage = ToDispose(Image.New2D(Width, Height, 1, Description.Format));
         }
-        ReadbackInto(_rawReadback);
+        CopyTo(_rawImage);
 
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-        fs.Write(new ReadOnlySpan<byte>((void*)_rawReadback.DataPointer, (int)_rawReadback.TotalSizeInBytes));
+        fs.Write(new ReadOnlySpan<byte>((void*)_rawImage.DataPointer, (int)_rawImage.TotalSizeInBytes));
     }
 
-    public Image ReadbackToImage(uint layer = 0, uint level = 0)
+    public Image ToImage(uint layer = 0, uint level = 0)
     {
         if (level >= Description.MipLevels)
         {
@@ -803,11 +813,16 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
 
         var img = Image.New2D(Math.Max(1, Width >> (int)level), Math.Max(1, Height >> (int)level), 1, Description.Format);
-        ReadbackInto(img, layer, level);
+        CopyTo(img, layer, level);
+        lock (_stagingLock)
+        {
+            ReleaseStagingBuffer();
+        }
+
         return img;
     }
 
-    private void ReadbackInto(Image destination, uint layer = 0, uint level = 0)
+    public void CopyTo(Image destination, uint layer = 0, uint level = 0)
     {
         if (GraphicsDevice.Adapter.SupportsHostImageCopy &&
             Description.Usage.HasFlag(ImageUsageFlagBits.HostTransferBit))
@@ -855,22 +870,64 @@ public unsafe class Texture : GraphicsResource, ITexture
 
     private void CopyImageThroughStagingBuffer(Image destination, uint layer, uint level)
     {
-        CreateBuffer(destination.TotalSizeInBytes, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit,
-            ReadbackMemory(), out var stagingBuffer, out var stagingBufferMemory);
-        this.TransitionImageLayout(ImageLayout.TransferSrcOptimal);
-        CopyImageToBuffer(stagingBuffer, layer, level, destination.Description.Width, destination.Description.Height);
-        this.TransitionImageLayout(Description.DesiredImageLayout);
-
-        var data = GraphicsDevice.MapMemory(stagingBufferMemory, 0, destination.TotalSizeInBytes, 0);
-        System.Buffer.MemoryCopy((void*)data, destination.DataPointer.ToPointer(),
-            destination.TotalSizeInBytes, destination.TotalSizeInBytes);
-        GraphicsDevice.UnmapMemory(stagingBufferMemory);
-
-        GraphicsDevice.Destroy(stagingBuffer);
-        GraphicsDevice.Destroy(stagingBufferMemory);
+        lock (_stagingLock)
+        {
+            CopyThroughKeptStagingBuffer(destination, layer, level);
+        }
     }
 
-    private MemoryPropertyFlags ReadbackMemory()
+    private void CopyThroughKeptStagingBuffer(Image destination, uint layer, uint level)
+    {
+        var size = destination.TotalSizeInBytes;
+        if (_stagingBuffer == null || _stagingSize < size)
+        {
+            ReleaseStagingBuffer();
+            CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, GetStagingMemory(),
+                out _stagingBuffer, out _stagingMemory);
+            _stagingSize = size;
+            _stagingData = GraphicsDevice.MapMemory(_stagingMemory, 0, size, 0);
+        }
+
+        var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
+        this.RecordLayoutTransition(commandBuffer, ImageLayout.TransferSrcOptimal);
+        RecordCopyToBuffer(commandBuffer, _stagingBuffer, layer, level, destination.Description.Width,
+            destination.Description.Height);
+        commandBuffer.PipelineBarrier2(new DependencyInfo
+        {
+            MemoryBarrierCount = 1,
+            PMemoryBarriers = new[]
+            {
+                new MemoryBarrier2
+                {
+                    SrcStageMask = PipelineStageFlagBits2.AllTransferBit,
+                    SrcAccessMask = AccessFlagBits2.TransferWriteBit,
+                    DstStageMask = PipelineStageFlagBits2.HostBit,
+                    DstAccessMask = AccessFlagBits2.HostReadBit
+                }
+            }
+        });
+        this.RecordLayoutTransition(commandBuffer, Description.DesiredImageLayout);
+        GraphicsDevice.EndSingleTimeCommand(commandBuffer);
+        System.Buffer.MemoryCopy((void*)_stagingData, destination.DataPointer.ToPointer(), size, size);
+    }
+
+    private void ReleaseStagingBuffer()
+    {
+        if (_stagingBuffer == null)
+        {
+            return;
+        }
+
+        GraphicsDevice.UnmapMemory(_stagingMemory);
+        GraphicsDevice.Destroy(_stagingBuffer);
+        GraphicsDevice.Destroy(_stagingMemory);
+        _stagingBuffer = null;
+        _stagingMemory = null;
+        _stagingData = 0;
+        _stagingSize = 0;
+    }
+
+    private MemoryPropertyFlags GetStagingMemory()
     {
         const MemoryPropertyFlags cached = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent | MemoryPropertyFlags.HostCached;
         var types = GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceMemoryProperties();
@@ -923,6 +980,11 @@ public unsafe class Texture : GraphicsResource, ITexture
         if (_disposeImage)
         {
             GraphicsDevice.Destroy(VulkanImage);
+        }
+
+        lock (_stagingLock)
+        {
+            ReleaseStagingBuffer();
         }
 
         GraphicsDevice.Destroy(ImageView);

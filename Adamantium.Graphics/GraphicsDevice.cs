@@ -1454,7 +1454,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
         else if (Presenter is not SwapChainGraphicsPresenter)
         {
-            HasSwapchainImage = true;   // a render-target presenter owns its image outright
+            HasSwapchainImage = Presenter?.AcquireNextImage(null, null) ?? true;   // a render-target presenter owns its image outright
         }
 
         var commandBuffer = commandBuffers[CurrentFrame];

@@ -86,7 +86,7 @@ public class FrontFaceTests
         device.DeviceWaitIdle();
 
         // The triangle covers the pixels right of and below the middle of the target; BGRA, so green is byte 1.
-        using var image = target.ReadbackToImage();
+        using var image = target.ToImage();
         var pixel = new byte[4];
         Marshal.Copy(image.DataPointer + ((Size / 2 + 3) * Size + Size / 2 + 3) * 4, pixel, 0, 4);
         return pixel[1] > 128;

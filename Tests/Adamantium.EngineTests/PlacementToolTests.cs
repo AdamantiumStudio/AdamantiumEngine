@@ -1,4 +1,7 @@
+using System;
 using Adamantium.ECS.Components.Extensions;
+using Adamantium.Engine;
+using Adamantium.Engine.EntityServices;
 using Adamantium.Engine.Tools;
 using Adamantium.Mathematics;
 using NUnit.Framework;
@@ -180,5 +183,85 @@ public class PlacementToolTests
         var position = PlacementTool.RestOn(new Vector3<double>(3, 0, 4), 0.5f);
 
         Assert.That(position, Is.EqualTo(new Vector3<double>(3, -0.5, 4)));
+    }
+
+    // A drag carried over the scene leads the ghost, the pointer being the drag's; dropped, it goes down where it was
+    // led, as a click there would put it, and the tool is done.
+    [Test]
+    public void AGuidedGhost_FollowsTheLead_AndGoesDownWhereItWasLed()
+    {
+        var (tools, output, scene) = GuidedScene();
+        var placement = new PlacementTool(new Adamantium.ECS.Entity(null, "Dropped"));
+        var outcome = new Outcome(placement);
+        tools.Tool = placement;
+
+        placement.Guide(output, scene.PixelOf(new Vector3<double>(3, 0, 4)));
+        tools.Update(new Adamantium.Core.AppTime());
+        var led = placement.Position;
+        placement.PlaceWhereGuided();
+        tools.Update(new Adamantium.Core.AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(led, Is.Not.Null);
+            Assert.That(led.Value.X, Is.EqualTo(3).Within(1e-2));
+            Assert.That(led.Value.Z, Is.EqualTo(4).Within(1e-2));
+            Assert.That(outcome.Placed, Is.True);
+            Assert.That(outcome.Finished, Is.True);
+        });
+    }
+
+    // Led where there is nothing to stand on - above the horizon - it is not put down; the tool is done all the same.
+    [Test]
+    public void AGuidedGhostOverNothing_IsNotPutDown()
+    {
+        var (tools, output, scene) = GuidedScene();
+        scene.LookFrom(new Vector3<double>(0, -10, -20), new Vector3<double>(0, -10, 0));
+        var placement = new PlacementTool(new Adamantium.ECS.Entity(null, "Dropped"));
+        var outcome = new Outcome(placement);
+        tools.Tool = placement;
+
+        placement.Guide(output, new Vector2F(400, 10));
+        placement.PlaceWhereGuided();
+        tools.Update(new Adamantium.Core.AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome.Placed, Is.False);
+            Assert.That(outcome.Finished, Is.True);
+        });
+    }
+
+    private sealed class Outcome
+    {
+        public Outcome(PlacementTool placement)
+        {
+            placement.Placed += OnPlaced;
+            placement.Finished += OnFinished;
+        }
+
+        public bool Placed { get; private set; }
+
+        public bool Finished { get; private set; }
+
+        private void OnPlaced(object sender, EventArgs e) => Placed = true;
+
+        private void OnFinished(object sender, EventArgs e) => Finished = true;
+    }
+
+    private static (ToolsService Tools, TestOutput Output, ToolScene Scene) GuidedScene()
+    {
+        var universe = new TestUniverse();
+        var output = new TestOutput();
+        universe.Add(output);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        universe.Satellites.Add(new Selection());
+        var scene = new ToolScene();
+        scene.LookFrom(new Vector3<double>(0, -10, -20), Vector3<double>.Zero);
+        output.Camera = scene.Camera;
+        var tools = new ToolsService(universe.EntityWorld);
+        tools.Initialize();
+        tools.AttachProcessor(new GroundGrid());
+        return (tools, output, scene);
     }
 }

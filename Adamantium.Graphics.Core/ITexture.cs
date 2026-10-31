@@ -41,15 +41,19 @@ public interface ITexture : INamedObject
 
     void Save(string path, ImageFileType fileType);
 
-    /// <summary>Reads the texture back to host memory and writes its RAW pixels (native B8G8R8A8 layout, no color
-    /// swap and no image encoding) to <paramref name="path"/>. Far faster than <see cref="Save"/> for repeated
-    /// read-back (no per-frame PNG zlib) - used by the live designer's frame transport, which converts the bytes itself.</summary>
+    /// <summary>Copies the texture to host memory and writes its RAW pixels (native B8G8R8A8 layout, no color swap and
+    /// no image encoding) to <paramref name="path"/>. Far faster than <see cref="Save"/> for repeated copies (no
+    /// per-frame PNG zlib) - used by the live designer's frame transport, which converts the bytes itself.</summary>
     void SaveRaw(string path);
 
-    /// <summary>Reads this texture back into a fresh host-memory image (native B8G8R8A8, no color swap / encode); the
-    /// caller owns and disposes it. For off-screen bakes that need CPU pixels (the drag ghost, thumbnails) rather than a
-    /// file. <paramref name="layer"/> picks a layer of an array texture, <paramref name="level"/> a mip level.</summary>
-    Adamantium.Imaging.Image ReadbackToImage(uint layer = 0, uint level = 0);
+    /// <summary>The texture as a fresh host-memory image (native B8G8R8A8, no color swap / encode); the caller owns and
+    /// disposes it. For off-screen bakes that need CPU pixels (the drag ghost, thumbnails) rather than a file.
+    /// <paramref name="layer"/> picks a layer of an array texture, <paramref name="level"/> a mip level.</summary>
+    Adamantium.Imaging.Image ToImage(uint layer = 0, uint level = 0);
+
+    /// <summary>Copies the texture into <paramref name="destination"/>, a host-memory image of its size and format the
+    /// caller keeps - for a copy every frame, which a fresh image each time would only make slower.</summary>
+    void CopyTo(Adamantium.Imaging.Image destination, uint layer = 0, uint level = 0);
 
     ImageViewCreateInfo Info { get; }
 

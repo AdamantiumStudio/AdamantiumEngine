@@ -54,7 +54,7 @@ public class TextureRegionUpdateTests
 
     private static byte[] PixelAt(ITexture texture, uint layer, uint level, int x, int y)
     {
-        using var image = texture.ReadbackToImage(layer, level);
+        using var image = texture.ToImage(layer, level);
         var width = Math.Max(1u, Size >> (int)level);
         var pixel = new byte[4];
         Marshal.Copy(image.DataPointer + (int)((y * width + x) * 4), pixel, 0, 4);

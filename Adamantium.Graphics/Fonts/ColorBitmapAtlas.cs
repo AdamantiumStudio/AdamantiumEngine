@@ -5,6 +5,7 @@ using Adamantium.Core;
 using Adamantium.Graphics.Core;
 using Adamantium.Imaging;
 using Adamantium.Imaging.Png;
+using Adamantium.Mathematics;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics.Fonts;
@@ -313,15 +314,8 @@ internal sealed class ColorBitmapAtlas : DisposableObject
     private static byte[] Premultiply(byte[] rgba, int width, int height)
     {
         var result = new byte[width * height * 4];
-        for (var i = 0; i < result.Length; i += 4)
-        {
-            var alpha = rgba[i + 3];
-            result[i] = (byte)((rgba[i] * alpha + 127) / 255);
-            result[i + 1] = (byte)((rgba[i + 1] * alpha + 127) / 255);
-            result[i + 2] = (byte)((rgba[i + 2] * alpha + 127) / 255);
-            result[i + 3] = alpha;
-        }
-
+        Color.Premultiply(MemoryMarshal.Cast<byte, Color>(rgba.AsSpan(0, result.Length)),
+            MemoryMarshal.Cast<byte, Color>(result.AsSpan()));
         return result;
     }
 

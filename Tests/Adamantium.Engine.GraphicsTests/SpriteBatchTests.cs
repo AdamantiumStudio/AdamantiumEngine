@@ -203,7 +203,7 @@ public class SpriteBatchTests
 
         device.DeviceWaitIdle();
 
-        using var image = target.ReadbackToImage();
+        using var image = target.ToImage();
         var bytes = new byte[image.TotalSizeInBytes];
         Marshal.Copy(image.DataPointer, bytes, 0, bytes.Length);
         return bytes;
