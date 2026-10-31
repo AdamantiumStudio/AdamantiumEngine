@@ -1206,6 +1206,12 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         LastFrameError = null;
         _withheld = false;
         FrameWithheld = false;
+        if (MainDevice.IsLost)
+        {
+            LastFrameError = "the device is lost";
+            return false;
+        }
+
         var renderFence = InFlightFences[CurrentFrame];
         var measuring = Volatile.Read(ref _fenceWaitMeasurers) > 0;
         var fenceStart = measuring ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
@@ -2247,7 +2253,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
         }
 
-        var waited = LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue);
+        var waited = submitted == Result.Success
+            ? LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue)
+            : submitted;
         LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
         LogicalDevice.DestroyFence(fence);
         _submissionSync?.Release();
