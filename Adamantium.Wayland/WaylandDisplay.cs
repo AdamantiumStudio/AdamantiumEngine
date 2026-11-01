@@ -68,7 +68,13 @@ public sealed unsafe class WaylandDisplay : IDisposable
     public bool PrepareRead() => WaylandClient.DisplayPrepareRead(Handle) == 0;
 
     /// <summary>Reads the events the socket has, after <see cref="PrepareRead"/> and a wait that found it readable.</summary>
-    public void ReadEvents() => Check(WaylandClient.DisplayReadEvents(Handle));
+    public void ReadEvents()
+    {
+        if (WaylandClient.DisplayReadEvents(Handle) < 0)
+        {
+            throw Failure();
+        }
+    }
 
     /// <summary>Gives up a read announced by <see cref="PrepareRead"/>.</summary>
     public void CancelRead() => WaylandClient.DisplayCancelRead(Handle);
@@ -87,7 +93,7 @@ public sealed unsafe class WaylandDisplay : IDisposable
 
     private int Check(int result)
     {
-        WaylandProxy.ThrowDispatchFailure();
+        Proxy.ThrowDispatchFailure();
         if (result < 0)
         {
             throw Failure();

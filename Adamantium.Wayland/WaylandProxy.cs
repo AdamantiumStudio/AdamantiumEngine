@@ -12,8 +12,7 @@ public abstract unsafe class WaylandProxy
 {
     private static readonly ConcurrentDictionary<nint, WaylandProxy> Proxies = new();
 
-    [ThreadStatic] private static ExceptionDispatchInfo dispatchFailure;
-
+    private ExceptionDispatchInfo dispatchFailure;
     private GCHandle self;
     private bool owned = true;
 
@@ -104,13 +103,9 @@ public abstract unsafe class WaylandProxy
         return proxy;
     }
 
-    /// <summary>Rethrows, on the thread that dispatched, what a handler threw while libwayland was calling it.</summary>
-    internal static void ThrowDispatchFailure()
-    {
-        var failure = dispatchFailure;
-        dispatchFailure = null;
-        failure?.Throw();
-    }
+    /// <summary>Rethrows what a handler threw while libwayland was calling it during a dispatch of the connection this
+    /// proxy - the display's own - stands for.</summary>
+    internal void ThrowDispatchFailure() => Interlocked.Exchange(ref dispatchFailure, null)?.Throw();
 
     private void Attach()
     {
@@ -154,7 +149,14 @@ public abstract unsafe class WaylandProxy
         }
         catch (Exception e)
         {
-            dispatchFailure ??= ExceptionDispatchInfo.Capture(e);
+            if (Proxies.TryGetValue(WaylandClient.ProxyGetDisplay(target), out var display))
+            {
+                Interlocked.CompareExchange(ref display.dispatchFailure, ExceptionDispatchInfo.Capture(e), null);
+            }
+            else
+            {
+                Serilog.Log.Error(e, "A Wayland handler threw on a connection no WaylandDisplay holds");
+            }
         }
 
         return 0;

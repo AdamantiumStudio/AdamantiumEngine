@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.CoreTests.Services;
 using NUnit.Framework;
@@ -93,6 +96,50 @@ namespace Adamantium.CoreTests
             
             Assert.IsTrue(string.IsNullOrEmpty(named1.Name));
             Assert.IsTrue(named2.Name == "ContactsService2");
+        }
+
+        [Test]
+        public void ACircularDependency_IsReported_AndTheContainerResolvesOnAfterIt()
+        {
+            Assert.Throws<ArgumentException>(() => container.Resolve<CircularFirst>());
+            Assert.That(container.Resolve<IItemsService>(), Is.Not.Null, "the failed chain left nothing behind");
+        }
+
+        // A loop through a constructor that resolves from the container itself is an error to catch, not a crash.
+        [Test]
+        public void ACircularDependencyThroughAConstructorThatResolvesItself_IsAnErrorNotACrash()
+        {
+            var registry = (IContainerRegistry)container;
+            registry.RegisterInstance<IDependencyResolver>(container);
+
+            var thrown = Assert.Catch(() => container.Resolve<LocatingFirst>());
+            var inner = thrown;
+            while (inner.InnerException != null && inner is not ArgumentException)
+            {
+                inner = inner.InnerException;
+            }
+
+            Assert.That(inner, Is.TypeOf<ArgumentException>().And.Message.Contains("Circular dependency"));
+        }
+
+        // Each resolution is a chain of its own: many at once on many threads never read one another as a loop.
+        [Test]
+        public void ResolvingAtOnceOnManyThreads_IsNeverTakenForACircularDependency()
+        {
+            var failures = 0;
+            Parallel.For(0, 2000, new ParallelOptions { MaxDegreeOfParallelism = 8 }, _ =>
+            {
+                try
+                {
+                    container.Resolve<IItemsService>();
+                }
+                catch (ArgumentException)
+                {
+                    Interlocked.Increment(ref failures);
+                }
+            });
+
+            Assert.That(failures, Is.Zero);
         }
     }
 }

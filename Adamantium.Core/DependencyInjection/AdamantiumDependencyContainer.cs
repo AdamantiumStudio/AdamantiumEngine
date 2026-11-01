@@ -17,12 +17,6 @@ namespace Adamantium.Core.DependencyInjection
         // single registration of its implementation (keeps a singleton shared across interface and concrete resolves).
         private readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Type> _aliases = new();
 
-        // The in-flight resolution CHAIN, to fail fast on a circular dependency instead of stack-overflowing. It belongs
-        // to the call stack that is resolving, not to the container: two threads resolving at once are two independent
-        // chains, and sharing one set makes the second one read "already resolving" - a circular dependency reported for
-        // a type that has none. That is what a view built off the loop thread ran into while another was still building.
-        [ThreadStatic] private static HashSet<Type> _resolving;
-
         /// <summary>
         /// When true, resolving an unregistered type throws instead of auto-registering it as Transient. Turn this on
         /// to surface a forgotten registration (e.g. a type meant to be a singleton) rather than silently getting a
@@ -103,8 +97,15 @@ namespace Adamantium.Core.DependencyInjection
             return (T)Resolve(typeof(T), name);
         }
 
-        public object Resolve(Type type, string name = "")
+        public object Resolve(Type type, string name = "") => Resolve(type, name, null);
+
+        /// <summary>Resolves <paramref name="type"/> as one link of a chain: <paramref name="resolving"/> holds the types
+        /// the chain is resolving, to fail fast on a circular dependency; null starts a chain. A chain is one call
+        /// stack's, so two resolving at once never read each other's; a constructor given the container resolves on the
+        /// chain while it runs (<see cref="ConstructionResolver"/>).</summary>
+        internal object Resolve(Type type, string name, HashSet<Type> resolving)
         {
+
             // Redirect an interface/base service to its concrete implementation (AutoRegister alias), unless the type
             // itself has an explicit registration.
             if (!_registrations.ContainsKey(type) && _aliases.TryGetValue(type, out var impl))
@@ -132,7 +133,7 @@ namespace Adamantium.Core.DependencyInjection
                 info = _registrations[type];
             }
 
-            var resolving = _resolving ??= new HashSet<Type>();
+            resolving ??= new HashSet<Type>();
             if (!resolving.Add(type))
             {
                 throw new ArgumentException($"Circular dependency detected while resolving '{type.FullName}'.");
@@ -140,7 +141,7 @@ namespace Adamantium.Core.DependencyInjection
 
             try
             {
-                return info.GetDependency(this, type, name);
+                return info.GetDependency(this, type, name, resolving);
             }
             finally
             {
