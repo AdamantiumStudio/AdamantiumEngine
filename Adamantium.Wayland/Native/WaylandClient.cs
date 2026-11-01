@@ -58,6 +58,9 @@ internal static unsafe class WaylandClient
     [DllImport(Library, EntryPoint = "wl_proxy_destroy")]
     public static extern void ProxyDestroy(nint proxy);
 
+    [DllImport(Library, EntryPoint = "wl_proxy_get_display")]
+    public static extern nint ProxyGetDisplay(nint proxy);
+
     [DllImport(Library, EntryPoint = "wl_proxy_get_id")]
     public static extern uint ProxyGetId(nint proxy);
 }

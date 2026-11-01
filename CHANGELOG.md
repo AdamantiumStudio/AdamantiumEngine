@@ -1903,6 +1903,10 @@ All packages share one version.
 
 ### Changed
 
+- No state is kept per thread. `AdamantiumDependencyContainer` carries the chain it is resolving down the resolution,
+  so a circular dependency is still found and two resolving at once never read each other's; a constructor given the
+  container resolves on that chain while it runs, so a loop through it is found too. A Wayland connection keeps what
+  one of its handlers threw, and that connection's dispatch rethrows it; reading the socket does not.
 - A frame drawn into a presenter that is no swapchain asks it for its image (`GraphicsPresenter.AcquireNextImage`), as
   a swapchain's does, so its `CanPresent` says whether a frame of its own waits to be presented; it was never set, or,
   for a compositor presenter, set for every frame the device drew into any window.

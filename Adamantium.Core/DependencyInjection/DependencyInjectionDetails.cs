@@ -55,7 +55,8 @@ namespace Adamantium.Core.DependencyInjection
             DependencyItems.Add(item);
         }
 
-        public object GetDependency(IDependencyContainer container, Type type, string name = "")
+        public object GetDependency(AdamantiumDependencyContainer container, Type type, string name,
+            HashSet<Type> resolving)
         {
             var service = type;
             DependencyItem item = DependencyItems.FirstOrDefault(x => x.RegistryName == name);
@@ -65,20 +66,35 @@ namespace Adamantium.Core.DependencyInjection
             if (LifeTimeVariant is LifeTimeVariant.Transient or LifeTimeVariant.Singleton)
             {
                 var parameters = new List<object>();
+                ConstructionResolver given = null;
                 if (item.Ctor != null)
                 {
                     foreach (var parameter in item.Ctor.GetParameters())
                     {
                         // The container resolves the dependency, handling an alias redirect, the auto-register
                         // fallback, or a strict-mode throw - see AdamantiumDependencyContainer.Resolve.
-                        parameters.Add(container.Resolve(parameter.ParameterType));
+                        var resolved = container.Resolve(parameter.ParameterType, "", resolving);
+                        if (ReferenceEquals(resolved, container) && parameter.ParameterType.IsInterface)
+                        {
+                            resolved = given ??= new ConstructionResolver(container, resolving);
+                        }
+
+                        parameters.Add(resolved);
                     }
                 }
 
                 object instance = null;
                 if (LifeTimeVariant == LifeTimeVariant.Transient || (LifeTimeVariant == LifeTimeVariant.Singleton && item.Instance == null))
                 {
-                    instance = Activator.CreateInstance(item.ImplementationType, parameters.ToArray());
+                    try
+                    {
+                        instance = Activator.CreateInstance(item.ImplementationType, parameters.ToArray());
+                    }
+                    finally
+                    {
+                        given?.Close();
+                    }
+
                     if (LifeTimeVariant == LifeTimeVariant.Singleton)
                     {
                         item.Instance = instance;
