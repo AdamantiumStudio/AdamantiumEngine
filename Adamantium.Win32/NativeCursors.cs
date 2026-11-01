@@ -63,7 +63,7 @@
       /// <summary>
       /// Double-pointed arrow pointing west and east
       /// </summary>
-      SizeEWE = 32644,
+      SizeWE = 32644,
 
       /// <summary>
       /// Vertical arrow

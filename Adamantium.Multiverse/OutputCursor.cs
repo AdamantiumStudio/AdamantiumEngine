@@ -38,13 +38,13 @@
       /// </summary>
       None,
       /// <summary>
-      /// Double-pointed arrow pointing northwest and southeast
+      /// Four-pointed arrow pointing north, south, east and west
       /// </summary>
       SizeAll,
       /// <summary>
       /// Double-pointed arrow pointing west and east
       /// </summary>
-      SizeEWE,
+      SizeWE,
       /// <summary>
       /// Double-pointed arrow pointing northeast and southwest
       /// </summary>
