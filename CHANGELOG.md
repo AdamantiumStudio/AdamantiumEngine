@@ -1903,7 +1903,7 @@ All packages share one version.
 
 ### Changed
 
-- `OutputCursor.SizeEWE` and `NativeCursors.SizeEWE` are `SizeWE`, the west-east resize arrow, as `SizeNS` is the
+- `OutputCursor.SizeEWE` and `NativeCursors.SizeEWE` are renamed `SizeWE`, the west-east resize arrow, as `SizeNS` is the
   north-south one.
 - No state is kept per thread. `AdamantiumDependencyContainer` carries the chain it is resolving down the resolution,
   so a circular dependency is still found and two resolving at once never read each other's; a constructor given the
