@@ -125,6 +125,19 @@ public class TextLayout : DisposableObject
     /// </summary>
     public IReadOnlyList<RectangleF> Exclusions { get; set; }
 
+    /// <summary>
+    /// A shape the text is set inside, in the units of <see cref="Frames"/>: a row holds a line in each stretch of its
+    /// frame that is inside the shape all the way down the row and wide enough, in the order the text reads - a circle
+    /// fills with lines short at its top and bottom, long across its middle; a ring's hole is left empty. Without
+    /// <see cref="Frames"/> the shape's bounds are the frame; what does not fit it is overset. Text wrapped by words,
+    /// in horizontal lines; text otherwise laid out stays in the shape's bounds. Null, the default, for none.
+    /// </summary>
+    public TextShape Shape { get; set; }
+
+    /// <summary>Shapes the text of <see cref="Frames"/> flows round, as it flows round <see cref="Exclusions"/>: a row
+    /// keeps out of every stretch any of them reaches down the row. Horizontal lines only.</summary>
+    public IReadOnlyList<TextShape> ExclusionShapes { get; set; }
+
     /// <summary>The index of the first character <see cref="Frames"/> had no room for; the text's length when all of
     /// it was laid out.</summary>
     public int OversetIndex { get; private set; }
@@ -659,6 +672,11 @@ public class TextLayout : DisposableObject
         };
     }
 
+    private RectangleF[] ShapeFrame() => Shape != null && WritingMode != WritingMode.VerticalRightToLeft &&
+                                         Shape.TryGetBounds(out var min, out var max)
+        ? [new RectangleF((float)min.X, (float)min.Y, (float)(max.X - min.X), (float)(max.Y - min.Y))]
+        : null;
+
     private TextLayoutOptions Snapshot() => new()
     {
         TabSize = TabSize,
@@ -666,8 +684,10 @@ public class TextLayout : DisposableObject
         Direction = Direction,
         Composition = _composition,
         DropCap = DropCap,
-        Frames = Frames?.ToArray(),
+        Frames = Frames?.ToArray() ?? ShapeFrame(),
         Exclusions = Exclusions?.ToArray(),
+        Shape = Shape,
+        ExclusionShapes = ExclusionShapes?.ToArray(),
         WritingMode = WritingMode,
         Tracking = Tracking,
         Kerning = Kerning,

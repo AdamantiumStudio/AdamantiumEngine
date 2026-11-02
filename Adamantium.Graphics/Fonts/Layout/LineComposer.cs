@@ -352,6 +352,22 @@ internal sealed class LineComposer
         var slotBases = new List<(double Gap, double Height, bool Gridded, bool RightToLeft)>();
         List<(double Left, double Right)> rowSpans = [];
         List<(double Left, double Right)> spansLeft = [];
+        List<(double Left, double Right)> shapeSpans = [];
+        var shape = vertical ? null : options.Shape;
+        var exclusionShapes = vertical ? null : options.ExclusionShapes;
+        var rowsSplit = exclusions is { Count: > 0 } || shape != null || exclusionShapes is { Length: > 0 };
+        var shapeBottom = shape != null && shape.TryGetBounds(out _, out var shapeMax) ? shapeMax.Y : double.PositiveInfinity;
+        var shapesReach = double.IsFinite(shapeBottom) ? shapeBottom : 0;
+        foreach (var around in exclusionShapes ?? [])
+        {
+            if (around.TryGetBounds(out _, out var aroundMax))
+            {
+                shapesReach = Math.Max(shapesReach, aroundMax.Y);
+            }
+        }
+
+        // Rows a shape leaves no room in are not what the guard against a frame too narrow for text counts.
+        var shapeRows = (int)Math.Min(int.MaxValue / 2, Math.Ceiling(Math.Max(0, shapesReach) / Math.Max(1, fontSize / 2)));
         List<bool> lineReads = [];
         var frameRects = slots != null ? frames.ToArray() : null;
         if (slots != null && !HasSlot(0))
@@ -1794,7 +1810,7 @@ internal sealed class LineComposer
                 : slotCursors[line - 1];
             var from = -1;
             var pushedOn = pushed != null && pushed.TryGetValue(line, out from) && f < from;
-            if (exclusions is { Count: > 0 } && !double.IsNaN(beside) && besideRightToLeft == rightToLeft && gap <= 0 &&
+            if (rowsSplit && !double.IsNaN(beside) && besideRightToLeft == rightToLeft && gap <= 0 &&
                 !pushedOn && !(dropEnd > 0 && line < options.DropCap.Lines) &&
                 Math.Abs(OnGrid(rowUnsnapped, RowBaseline(line), line) - rowAt) < 1e-6 &&
                 rowAt + rowHeight <= frames[f].Bottom + 1e-6 &&
@@ -1825,7 +1841,7 @@ internal sealed class LineComposer
                 var frame = frames[f];
                 var rowTop = OnGrid(top, RowBaseline(line), line);
                 if (((rows > 0 || (rowTop > top + 1e-6 && f + 1 < frames.Count)) && rowTop + rowHeight > frame.Bottom + 1e-6)
-                    || rows >= 4 * (text.Length + 1))
+                    || rows >= 4 * (text.Length + 1) + shapeRows || rowTop >= shapeBottom)
                 {
                     f++;
                     rows = 0;
@@ -1899,32 +1915,60 @@ internal sealed class LineComposer
         List<(double Left, double Right)> Spans(RectangleF frame, double top, double rowHeight)
         {
             rowSpans.Clear();
-            rowSpans.Add((frame.Left, frame.Right));
+            if (shape == null)
+            {
+                rowSpans.Add((frame.Left, frame.Right));
+            }
+            else
+            {
+                shape.Inside(top, top + rowHeight, shapeSpans);
+                foreach (var (left, right) in shapeSpans)
+                {
+                    var (from, to) = (Math.Max(left, frame.Left), Math.Min(right, frame.Right));
+                    if (to > from)
+                    {
+                        rowSpans.Add((from, to));
+                    }
+                }
+            }
+
             foreach (var exclusion in exclusions ?? [])
             {
-                if (exclusion.Top >= top + rowHeight || exclusion.Bottom <= top)
+                if (exclusion.Top < top + rowHeight && exclusion.Bottom > top)
                 {
-                    continue;
+                    CutOut(exclusion.Left, exclusion.Right);
                 }
+            }
 
-                spansLeft.Clear();
-                foreach (var (left, right) in rowSpans)
+            foreach (var around in exclusionShapes ?? [])
+            {
+                around.Covered(top, top + rowHeight, shapeSpans);
+                foreach (var (left, right) in shapeSpans)
                 {
-                    if (exclusion.Left > left)
-                    {
-                        spansLeft.Add((left, Math.Min(right, exclusion.Left)));
-                    }
-
-                    if (exclusion.Right < right)
-                    {
-                        spansLeft.Add((Math.Max(left, exclusion.Right), right));
-                    }
+                    CutOut(left, right);
                 }
-
-                (rowSpans, spansLeft) = (spansLeft, rowSpans);
             }
 
             return rowSpans;
+        }
+
+        void CutOut(double cutLeft, double cutRight)
+        {
+            spansLeft.Clear();
+            foreach (var (left, right) in rowSpans)
+            {
+                if (cutLeft > left)
+                {
+                    spansLeft.Add((left, Math.Min(right, cutLeft)));
+                }
+
+                if (cutRight < right)
+                {
+                    spansLeft.Add((Math.Max(left, cutRight), right));
+                }
+            }
+
+            (rowSpans, spansLeft) = (spansLeft, rowSpans);
         }
 
         (ParagraphAttributes Paragraph, bool Opens, bool RightToLeft) LineState(int line) => line < lineStates.Count
