@@ -4,10 +4,6 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Fonts;
 
-/// <summary>A cluster of text put on a path: where its middle stands and the way the path runs there, in radians from
-/// the X axis toward Y.</summary>
-public readonly record struct GlyphOnPath(Vector2<double> Point, double Angle);
-
 /// <summary>
 /// Text of one line laid along a polyline - a street's name along the street, a caption round a curve: each cluster of
 /// the laid out text (<see cref="TextLayout.GetClusters"/>) stood on the path where its share of the text's width falls,
@@ -38,7 +34,8 @@ public static class TextAlongPath
 
         var total = MathHelper.Polyline.Length(path);
         var half = textWidth * scale / 2;
-        if (middle - half < 0 || middle + half > total)
+        var slack = total * 1e-9;
+        if (middle - half < -slack || middle + half > total + slack)
         {
             return false;
         }

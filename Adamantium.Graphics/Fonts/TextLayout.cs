@@ -344,6 +344,48 @@ public class TextLayout : DisposableObject
         return GlyphCluster.Of(laid?.Glyphs ?? [], laid?.Text?.Length ?? 0);
     }
 
+    /// <summary>Takes how <paramref name="other"/> lays and draws its text - spacing, lines, language, fallback, glyph
+    /// effects and the rest of its settings, not its text, frames, exclusions or drop cap - for another text laid out
+    /// alike: a part of it, cut short.</summary>
+    public void CopySettingsFrom(TextLayout other)
+    {
+        EmitNewlineCarets = other.EmitNewlineCarets;
+        TabSize = other.TabSize;
+        TabStops = other.TabStops;
+        Direction = other.Direction;
+        Composition = other.Composition;
+        Hyphens = other.Hyphens;
+        HyphenLimit = other.HyphenLimit;
+        LineBreaking = other.LineBreaking;
+        OpticalMarginAlignment = other.OpticalMarginAlignment;
+        WritingMode = other.WritingMode;
+        WordSpacing = other.WordSpacing;
+        LetterSpacing = other.LetterSpacing;
+        GlyphScaling = other.GlyphScaling;
+        JustificationAlternates = other.JustificationAlternates;
+        Kashidas = other.Kashidas;
+        SpacingTrim = other.SpacingTrim;
+        HangingPunctuation = other.HangingPunctuation;
+        LastLineAlignment = other.LastLineAlignment;
+        SingleWordJustification = other.SingleWordJustification;
+        Tracking = other.Tracking;
+        Kerning = other.Kerning;
+        BaselineGrid = other.BaselineGrid;
+        LineHeight = other.LineHeight;
+        LineStacking = other.LineStacking;
+        LineSpacing = other.LineSpacing;
+        LineBounds = other.LineBounds;
+        MaxLines = other.MaxLines;
+        BalanceLines = other.BalanceLines;
+        Language = other.Language;
+        Fallback = other.Fallback;
+        LoadFontsInBackground = other.LoadFontsInBackground;
+        GlyphOutline = other.GlyphOutline;
+        GlyphShadow = other.GlyphShadow;
+        GlyphGlow = other.GlyphGlow;
+        GlyphReflection = other.GlyphReflection;
+    }
+
     public Size<double> ProcessText(string text,
         double fontSize,
         Size<double> textArea,

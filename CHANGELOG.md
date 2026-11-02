@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- `TextPath`: a line of laid out text along a path with all that drawing it takes in one place, for a UI element, a
+  map's label or a control in a 3D scene alike (`TextPathOptions`): where it stands (`TextPathAlignment`, an offset
+  along and across), kept upright on a path running left, round a closed path across its seam - a path ending where it
+  starts, to within a thousandth of its length, is closed too - at a scale; text longer than the path clipped to the
+  letters on it as SVG's `textPath` does, going on past its ends straight the way they run, cut with an ellipsis
+  where it leaves the path at either end (the cut text laid out as the whole was, the ellipsis styled as the letter
+  beside it), shrunk to fit, or left out whole, as a map's label is and as a path bending too sharply leaves it
+  (`TextPathOverflow`). It gives the letters (`TextPathGlyph`, drawn or not), the `GlyphEffect`s that draw them,
+  their bounds and which letter a point is on. `TextLayout.CopySettingsFrom` lays another text out alike.
 - Text along a polyline (`TextAlongPath`): the clusters of a line of laid out text (`TextLayout.GetClusters`,
   `GlyphCluster` - a glyph with the marks over it, so a ligature or a letter with its accents moves as one, in text of
   either direction) stood on the path where their share of the text's width falls, turned the way it runs there,
