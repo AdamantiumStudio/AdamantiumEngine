@@ -78,7 +78,7 @@ namespace Adamantium.Core.Collections
         /// Constructs <see cref="AdamantiumCollection{T}"/> using params T[] collection (without need to create array)
         /// </summary>
         /// <param name="items"></param>
-        public AdamantiumCollection(params T[] items)
+        public AdamantiumCollection(params T[] items) : this()
         {
             AddRange(items);
         }

@@ -16,6 +16,17 @@ public class AdamantiumCollectionTests
         return c;
     }
 
+    // Regression: the params constructor never made its storage, so handing it an array threw on the first item.
+    [Test]
+    public void MadeFromAnArray_HoldsItsItems()
+    {
+        double[] items = [1, 2, 3];
+
+        var c = new AdamantiumCollection<double>(items);
+
+        Assert.That(c, Is.EqualTo(items));
+    }
+
     [Test]
     public void Insert_InTheMiddle_PutsItemAtIndex_NotAtTheEnd()
     {

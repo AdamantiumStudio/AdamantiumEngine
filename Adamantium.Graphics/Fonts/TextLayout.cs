@@ -636,7 +636,6 @@ public class TextLayout : DisposableObject
 
     private Size<double> Lay(string text, double fontSize, TextRenderingParameters renderingParameters, TextLayoutOptions options)
     {
-        Revision++;
         // Empty text clears the previous glyphs, or a recycled row keeps drawing its old text.
         if (string.IsNullOrEmpty(text))
         {
@@ -683,6 +682,8 @@ public class TextLayout : DisposableObject
     {
         _laid = laid;
         _navigator = new TextNavigator(laid);
+        // After the glyphs: whoever sees the new revision sees them.
+        Revision++;
     }
 }
 
