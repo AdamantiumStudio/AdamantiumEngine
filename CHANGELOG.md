@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Text along a polyline (`TextAlongPath`): the clusters of a line of laid out text (`TextLayout.GetClusters`,
+  `GlyphCluster` - a glyph with the marks over it, so a ligature or a letter with its accents moves as one, in text of
+  either direction) stood on the path where their share of the text's width falls, turned the way it runs there,
+  about a middle along it, at a scale; read from its end where it runs left, so the text stays upright; refused where
+  the path is too short, or bends between two neighboring clusters by more than allowed, all its bends there added
+  up. `TextAlongPath.Effect` makes the `GlyphEffect` that draws a cluster there. The path is walked once for all the
+  clusters. `MathHelper.Polyline.PointAt` gives the point a distance along a polyline and the way it runs there.
 - `IGraphicsDevice.UpdateTextureRegions`: writes new pixels into rectangles of an existing texture - any layer, any mip
   level - in one staging buffer and one copy, leaving the rest of it as it was. The texture goes back to the layout it
   was in; one never written before ends ready to sample. A region that does not fit its level, a layer or level the
