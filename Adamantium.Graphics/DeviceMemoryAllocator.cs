@@ -101,6 +101,17 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
             }
         }
 
+        foreach (var block in _retiring)
+        {
+            if (block.Group == blocks && !block.IsDedicated && TryCarve(block, size, alignment, out var offset))
+            {
+                // Taken back before the driver got it: a load that swings by a block does not allocate one each time.
+                _retiring.Remove(block);
+                blocks.Add(block);
+                return MakeAllocation(block, offset, size);
+            }
+        }
+
         var heapCap = Math.Max(MinBlockSize, _heapSizeByType[memoryTypeIndex] / HeapShareOfBlock);
         var sharedSize = Math.Min(DefaultBlockSize, heapCap);
         var blockSize = Math.Max(sharedSize, size);
@@ -157,9 +168,10 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
             wanted, _heapIndexByType[wanted], taken, _heapIndexByType[taken]);
     }
 
-    /// <summary>Returns a sub-allocation's range to its block's free list (coalescing neighbors). A shared block is
-    /// retained for reuse until <see cref="Dispose"/>; a block made for one allocation larger than a shared block goes
-    /// back to the driver once that allocation is freed and no frame in flight can still read it.</summary>
+    /// <summary>Returns a sub-allocation's range to its block's free list (coalescing neighbors). A block made for one
+    /// allocation larger than a shared block goes back to the driver once that allocation is freed and no frame in
+    /// flight can still read it; so does a shared block left empty, but one empty block of each kind is kept for
+    /// reuse, and a shared block waiting to go back is taken back by an allocation that needs a new one.</summary>
     public void Free(MemoryAllocation allocation)
     {
         if (allocation?.Block == null) return;
@@ -174,18 +186,34 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
 
             InsertFree(block, allocation.Offset, allocation.Size);
             allocation.Block = null;
-            if (block.IsDedicated && block.Free.Count == 1 && block.Free[0].Size == block.Size)
+            if (IsEmpty(block) && (block.IsDedicated || HasOtherEmpty(block)))
             {
                 block.Group.Remove(block);
                 _retiring.Add(block);
+                block.Retirements++;
                 retired = block;
             }
         }
 
         if (retired != null)
         {
-            _device.MainDevice.RetireResource(new RetiredBlock(this, retired));
+            _device.MainDevice.RetireResource(new RetiredBlock(this, retired, retired.Retirements));
         }
+    }
+
+    private static bool IsEmpty(Block block) => block.Free.Count == 1 && block.Free[0].Size == block.Size;
+
+    private static bool HasOtherEmpty(Block block)
+    {
+        foreach (var other in block.Group)
+        {
+            if (other != block && !other.IsDedicated && IsEmpty(other))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public void Dispose()
@@ -225,11 +253,12 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         }
     }
 
-    private void Release(Block block)
+    private void Release(Block block, int retirement)
     {
         lock (_lock)
         {
-            if (!_retiring.Remove(block))
+            // Taken back since, or retired again later: that retirement's turn comes.
+            if (block.Retirements != retirement || !_retiring.Remove(block))
             {
                 return;
             }
@@ -341,11 +370,12 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         public List<Block> Group;
         public uint TypeIndex;
         public bool IsDedicated;
+        public int Retirements;
     }
 
-    private sealed class RetiredBlock(DeviceMemoryAllocator allocator, Block block) : IDisposable
+    private sealed class RetiredBlock(DeviceMemoryAllocator allocator, Block block, int retirement) : IDisposable
     {
-        public void Dispose() => allocator.Release(block);
+        public void Dispose() => allocator.Release(block, retirement);
     }
 
     internal readonly record struct FreeRange(ulong Offset, ulong Size);

@@ -1127,6 +1127,9 @@ All packages share one version.
 
 ### Fixed
 
+- `AdamantiumCollection(params T[])` made no storage for its items and threw on the first one.
+- `TextLayout.Revision` moved on before the new glyphs were in place, so whoever read it then kept the old glyphs as
+  the new revision's.
 - On .NET Standard 2.0, writing a generic struct - a `Matrix4x4<float>` - into a `DataBuffer` threw "The specified Type
   must not be a generic type": its native size was always asked of marshaling. It is measured as on .NET 6 and later:
   as it lies in memory, when marshaling has nothing to change in it.
@@ -1905,6 +1908,11 @@ All packages share one version.
 - 32-bit deltas of an item variation store (long words) were read as 16-bit ones.
 
 ### Changed
+
+- `DeviceMemoryAllocator` gives a shared block left empty back to the driver, once no frame in flight can read it,
+  while another empty one of its kind stays for the next allocation, and one still waiting to go back is taken back by
+  an allocation that needs a new block: the memory a peak took - a map zoomed through its levels - was held for the
+  life of the device.
 
 - `OutputCursor.SizeEWE` and `NativeCursors.SizeEWE` are renamed `SizeWE`, the west-east resize arrow, as `SizeNS` is the
   north-south one.

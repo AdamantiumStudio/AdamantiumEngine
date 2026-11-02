@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
@@ -95,6 +96,87 @@ public class MemoryFallbackTests
             Assert.That(whileFramesMayReadIt, Is.EqualTo(withLarge), "kept until the frames in flight are done");
             Assert.That(allocator.BytesInBlocks, Is.EqualTo(withShared), "the large one's block went back");
         });
+    }
+
+    /// <summary>Shared blocks left empty go back to the driver once the frames in flight are done with them, but one,
+    /// kept for the next allocation: a peak would otherwise hold its memory for the life of the device.</summary>
+    [Test]
+    public void SharedBlocksLeftEmpty_GoBackToTheDriver_ButOne()
+    {
+        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        using var allocator = new DeviceMemoryAllocator(device);
+        var type = FindSystemType(device);
+        Assume.That(type, Is.Not.Null, "the GPU has no host-visible memory");
+
+        var before = allocator.BytesInBlocks;
+        var allocations = FillBlocks(allocator, type.Value, 3, out var oneBlock);
+        foreach (var allocation in allocations)
+        {
+            allocator.Free(allocation);
+        }
+
+        GpuFixture.Main.OnFrameStarted();
+
+        Assert.That(allocator.BytesInBlocks - before, Is.EqualTo(oneBlock), "one empty block of the three stays");
+    }
+
+    /// <summary>A shared block left empty and waiting to go back is taken back by an allocation that would otherwise
+    /// make a new one, and then stays: a load swinging by a block does not allocate one each time.</summary>
+    [Test]
+    public void ASharedBlockWaitingToGoBack_IsTakenBackByTheNextThatNeedsOne()
+    {
+        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        using var allocator = new DeviceMemoryAllocator(device);
+        var type = FindSystemType(device);
+        Assume.That(type, Is.Not.Null, "the GPU has no host-visible memory");
+
+        var before = allocator.BytesInBlocks;
+        var allocations = FillBlocks(allocator, type.Value, 2, out var oneBlock);
+        foreach (var allocation in allocations)
+        {
+            allocator.Free(allocation);
+        }
+
+        var again = Allocate(allocator, type.Value, allocations.Count);
+        var whileRetiring = allocator.BytesInBlocks - before;
+        GpuFixture.Main.OnFrameStarted();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(whileRetiring, Is.EqualTo(2 * oneBlock), "no third block made");
+            Assert.That(allocator.BytesInBlocks - before, Is.EqualTo(2 * oneBlock), "the block taken back stays");
+        });
+
+        foreach (var allocation in again)
+        {
+            allocator.Free(allocation);
+        }
+    }
+
+    // Allocations of a shared block's smallest size until `blocks` blocks hold them; oneBlock is a block's size.
+    private static List<DeviceMemoryAllocator.MemoryAllocation> FillBlocks(DeviceMemoryAllocator allocator, uint type,
+        int blocks, out ulong oneBlock)
+    {
+        var before = allocator.BytesInBlocks;
+        var allocations = new List<DeviceMemoryAllocator.MemoryAllocation>
+        {
+            allocator.Allocate(Chunk, 256, type, 1u << (int)type, false),
+        };
+        oneBlock = Math.Max(allocator.BytesInBlocks - before, Chunk);
+        allocations.AddRange(Allocate(allocator, type, (int)(oneBlock / Chunk) * blocks - 1));
+        return allocations;
+    }
+
+    private static List<DeviceMemoryAllocator.MemoryAllocation> Allocate(DeviceMemoryAllocator allocator, uint type,
+        int count)
+    {
+        var allocations = new List<DeviceMemoryAllocator.MemoryAllocation>();
+        while (allocations.Count < count)
+        {
+            allocations.Add(allocator.Allocate(Chunk, 256, type, 1u << (int)type, false));
+        }
+
+        return allocations;
     }
 
     private static uint? FindSystemType(GraphicsDevice device)
