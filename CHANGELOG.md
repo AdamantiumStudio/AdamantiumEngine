@@ -1127,6 +1127,9 @@ All packages share one version.
 
 ### Fixed
 
+- On .NET Standard 2.0, writing a generic struct - a `Matrix4x4<float>` - into a `DataBuffer` threw "The specified Type
+  must not be a generic type": its native size was always asked of marshaling. It is measured as on .NET 6 and later:
+  as it lies in memory, when marshaling has nothing to change in it.
 - A lost device no longer hangs the threads drawing on it: `BeginDraw` waited without end for a fence whose submit had
   failed, and a single-time command for one never submitted; a frame on a lost device is refused at once, so the
   device can be made anew. What the driver says made it lost (`MainGraphicsDevice.DescribeFault`, VK_EXT_device_fault)

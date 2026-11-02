@@ -31,6 +31,7 @@ internal static class NativeLayout<T> where T : struct
         {
             return false;
         }
+#endif
 
         try
         {
@@ -40,9 +41,6 @@ internal static class NativeLayout<T> where T : struct
         {
             return !Marshaled(typeof(T));
         }
-#else
-        return false;
-#endif
     }
 
     private static bool Marshaled(Type type) =>
