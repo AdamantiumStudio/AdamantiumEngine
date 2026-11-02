@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- Text set inside any shape, and flowing round one (`TextShape`: closed contours, even-odd, crossing or not, kept
+  `Padding` from; a row's stretches are exact - the slice across its middle, less or with every edge it crosses):
+  `TextLayout.Shape` fills the shape with lines - each row takes the stretches inside it all the way down the row,
+  short at a circle's top and bottom, long across its middle, on both sides of a ring's hole; without frames the
+  shape's bounds are the frame and what does not fit is overset. `TextLayout.ExclusionShapes` are shapes the text of
+  frames flows round as it does round rectangles. Horizontal lines.
 - `TextPath`: a line of laid out text along a path with all that drawing it takes in one place, for a UI element, a
   map's label or a control in a 3D scene alike (`TextPathOptions`): where it stands (`TextPathAlignment`, an offset
   along and across), kept upright on a path running left, round a closed path across its seam - a path ending where it

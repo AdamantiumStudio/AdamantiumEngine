@@ -28,6 +28,10 @@ internal sealed class TextLayoutOptions
 
     public RectangleF[] Exclusions { get; init; }
 
+    public TextShape Shape { get; init; }
+
+    public TextShape[] ExclusionShapes { get; init; }
+
     public WritingMode WritingMode { get; init; }
 
     public SpacingRange WordSpacing => Composition.WordSpacing;
@@ -85,6 +89,7 @@ internal sealed class TextLayoutOptions
                && Equals(BaselineGrid, other.BaselineGrid)
                && LineHeight.Equals(other.LineHeight) && LineStacking == other.LineStacking
                && LineSpacing.Equals(other.LineSpacing) && LineBounds == other.LineBounds && MaxLines == other.MaxLines
-               && BalanceLines == other.BalanceLines && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? []);
+               && BalanceLines == other.BalanceLines && (Frames ?? []).SequenceEqual(other.Frames ?? []) && (Exclusions ?? []).SequenceEqual(other.Exclusions ?? [])
+               && ReferenceEquals(Shape, other.Shape) && (ExclusionShapes ?? []).SequenceEqual(other.ExclusionShapes ?? []);
     }
 }
