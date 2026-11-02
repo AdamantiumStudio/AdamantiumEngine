@@ -336,6 +336,14 @@ public class TextLayout : DisposableObject
         return (_laid?.Glyphs ?? []).ToArray();
     }
 
+    /// <summary>The glyphs laid out last, with the marks over each, as <see cref="GlyphCluster"/>s, line by line and in
+    /// their order on each - what text put along a path moves one by one (<see cref="TextAlongPath"/>).</summary>
+    public GlyphCluster[] GetClusters()
+    {
+        var laid = _laid;
+        return GlyphCluster.Of(laid?.Glyphs ?? [], laid?.Text?.Length ?? 0);
+    }
+
     public Size<double> ProcessText(string text,
         double fontSize,
         Size<double> textArea,

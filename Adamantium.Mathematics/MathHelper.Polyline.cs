@@ -67,6 +67,43 @@ public static partial class MathHelper
             }
         }
 
+        /// <summary>The point <paramref name="distance"/> along <paramref name="points"/> from the first, and the unit
+        /// <paramref name="direction"/> the polyline runs there. Short of the start it is the first point, past the end the
+        /// last, with the first or last segment's direction; segments of no length are passed over. A polyline of no
+        /// length gives its first point and a direction of nothing.</summary>
+        /// <exception cref="ArgumentException"><paramref name="points"/> is empty.</exception>
+        public static Vector2<T> PointAt<T>(ReadOnlySpan<Vector2<T>> points, T distance, out Vector2<T> direction)
+            where T : unmanaged, IFloatingPointIeee754<T>
+        {
+            if (points.IsEmpty)
+            {
+                throw new ArgumentException("There are no points to walk.", nameof(points));
+            }
+
+            direction = default;
+            var last = -1;
+            for (var i = 1; i < points.Length; i++)
+            {
+                var step = points[i] - points[i - 1];
+                var length = step.Length();
+                if (!(length > T.Zero))
+                {
+                    continue;
+                }
+
+                direction = step / length;
+                last = i;
+                if (distance <= length)
+                {
+                    return points[i - 1] + direction * T.Max(distance, T.Zero);
+                }
+
+                distance -= length;
+            }
+
+            return last < 0 ? points[0] : points[last];
+        }
+
         /// <summary>Whether <paramref name="first"/>, <paramref name="second"/>, <paramref name="third"/> turn clockwise on
         /// a screen, Y down - counterclockwise with Y up; points in a line turn neither way.</summary>
         public static bool IsClockwise<T>(Vector2<T> first, Vector2<T> second, Vector2<T> third) where T : unmanaged, IFloatingPointIeee754<T> =>
