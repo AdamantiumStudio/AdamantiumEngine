@@ -38,7 +38,8 @@ public static class TextAlongPath
 
         var total = MathHelper.Polyline.Length(path);
         var half = textWidth * scale / 2;
-        if (middle - half < 0 || middle + half > total)
+        var slack = total * 1e-9;
+        if (middle - half < -slack || middle + half > total + slack)
         {
             return false;
         }
