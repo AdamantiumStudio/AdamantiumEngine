@@ -5,10 +5,6 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Fonts;
 
-/// <summary>A letter of a <see cref="TextPath"/>: its cluster, where its middle stands and the way it is turned, and
-/// whether it is drawn.</summary>
-public readonly record struct TextPathGlyph(GlyphCluster Cluster, Vector2<double> Point, double Angle, bool IsShown);
-
 /// <summary>
 /// A line of laid out text along a path, all of what drawing it takes in one place - for a UI element, a map's label, a
 /// control in a 3D scene alike: the letters stood on the path where <see cref="TextPathOptions"/> say (alignment, an
