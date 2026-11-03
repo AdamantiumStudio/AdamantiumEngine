@@ -73,15 +73,15 @@ beside it.
 ### Your own effects
 
 Every `.fx` file in a project becomes a class at build time, in the assembly's name and the folders the file sits in:
-`Effects/Glow.fx` in an assembly named `MyApp` gives `MyApp.Effects.Glow`, derived from `Effect`. The generator needs to see the files and to know where the
-Slang compiler is:
+`Effects/Glow.fx` in an assembly named `MyApp` gives `MyApp.Effects.Glow`, derived from `Effect`. The generator needs
+to see the files, the project's folder to find those folders, and where the Slang compiler is:
 
 ```xml
 <ItemGroup>
   <PackageReference Include="Adamantium.Engine.Generators" Version="0.1.0-alpha.5" PrivateAssets="all" />
   <PackageReference Include="Adamantium.Vulkan.Slang" Version="1.1.0" GeneratePathProperty="true" PrivateAssets="all" />
   <AdditionalFiles Include="**\*.fx;**\*.fxh" />
-  <CompilerVisibleProperty Include="RootNamespace;ProjectDir;AdamantiumSlangPath" />
+  <CompilerVisibleProperty Include="ProjectDir;AdamantiumSlangPath" />
 </ItemGroup>
 
 <PropertyGroup>
