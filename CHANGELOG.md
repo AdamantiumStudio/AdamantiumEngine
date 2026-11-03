@@ -10,6 +10,8 @@ All packages share one version.
 - Wayland's `wp_alpha_modifier_v1` (staging `alpha-modifier-v1`): `WpAlphaModifierV1.GetSurface` and
   `WpAlphaModifierSurfaceV1.SetMultiplier` have the compositor lay a surface down with its alpha times a factor, as
   a window's opacity.
+- `ColorBlendEquations.TimesSourceAlpha`: what is drawn already, color and alpha alike, times the source alpha - a
+  premultiplied target faded as a whole.
 - Text set inside any shape, and flowing round one (`TextShape`: closed contours, even-odd, crossing or not, kept
   `Padding` from; a row's stretches are exact - the slice across its middle, less or with every edge it crosses):
   `TextLayout.Shape` fills the shape with lines - each row takes the stretches inside it all the way down the row,
