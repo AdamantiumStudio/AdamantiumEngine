@@ -27,6 +27,8 @@ drawn by one renderer in one process.
 | `Adamantium.MVVM` | View models with validation, sync and async commands |
 | `Adamantium.Win32` | Windows, messages, system metrics, cursors, Shell dialogs |
 | `Adamantium.MacOS` | Application, windows and cursors through a native app wrapper (not yet verified, see below) |
+| `Adamantium.Wayland` | Wayland client bindings: the protocols generated from their XML, over libwayland-client |
+| `Adamantium.DBus` | A D-Bus client: the session bus, method calls and signals, served objects |
 | `Adamantium.XInput` | XInput gamepads |
 | `Adamantium.GameInput` | Microsoft GameInput gamepads, with the native shim they need |
 | `Adamantium.Engine.Generators` | Source generator: a typed class for every `.fx` in the project |
@@ -76,8 +78,8 @@ Slang compiler is:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Adamantium.Engine.Generators" Version="0.1.0-alpha" PrivateAssets="all" />
-  <PackageReference Include="Adamantium.Vulkan.Slang" Version="1.0.11" GeneratePathProperty="true" PrivateAssets="all" />
+  <PackageReference Include="Adamantium.Engine.Generators" Version="0.1.0-alpha.5" PrivateAssets="all" />
+  <PackageReference Include="Adamantium.Vulkan.Slang" Version="1.1.0" GeneratePathProperty="true" PrivateAssets="all" />
   <AdditionalFiles Include="**\*.fx;**\*.fxh" />
   <CompilerVisibleProperty Include="RootNamespace;ProjectDir;AdamantiumSlangPath" />
 </ItemGroup>
@@ -100,7 +102,7 @@ references it, directly or through another, gets them in its output.
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Adamantium.Content.Build" Version="0.1.0-alpha" />
+    <PackageReference Include="Adamantium.Content.Build" Version="0.1.0-alpha.5" />
   </ItemGroup>
 </Project>
 ```
