@@ -41,11 +41,9 @@ public class EffectsGenerator : IIncrementalGenerator
             .Select((pair, _) =>
             {
                 pair.Right.GlobalOptions.TryGetValue("build_property.projectdir", out var projectDir);
-                pair.Right.GlobalOptions.TryGetValue("build_property.rootnamespace", out var rootNamespace);
                 pair.Right.GlobalOptions.TryGetValue("build_property.adamantiumslangpath", out var slangPath);
                 pair.Right.GlobalOptions.TryGetValue("build_property.adamantiumshaderhotreload", out var hotReload);
-                return (RootNamespace: string.IsNullOrEmpty(rootNamespace) ? pair.Left.AssemblyName : rootNamespace,
-                    ProjectDir: projectDir, SlangPath: slangPath,
+                return (AssemblyName: pair.Left.AssemblyName, ProjectDir: projectDir, SlangPath: slangPath,
                     HotReload: string.Equals(hotReload, "true", System.StringComparison.OrdinalIgnoreCase),
                     Inherited: GetInheritedMembers(pair.Left));
             });
@@ -95,7 +93,7 @@ public class EffectsGenerator : IIncrementalGenerator
                         compilerResult.EffectData.Description.Arguments = SourceOf(file.path, includes, compilerResult.Includes);
                     }
 
-                    var @namespace = ComposeNamespace(place.RootNamespace, place.ProjectDir, file.path);
+                    var @namespace = ComposeNamespace(place.AssemblyName, place.ProjectDir, file.path);
                     var result = GenerateEffect(compilerResult, parameterNames, file.fxName, @namespace);
                     spc.AddSource($"{file.fxName}.g.cs", result);
                 }
@@ -123,11 +121,11 @@ public class EffectsGenerator : IIncrementalGenerator
         };
     }
 
-    /// <summary>The project's root namespace, then the folders the .fx sits in - the rule a .cs file already follows.
-    /// The class name is the file name, so a flat namespace could not hold two effects named alike.</summary>
-    private static string ComposeNamespace(string rootNamespace, string projectDir, string effectPath)
+    /// <summary>The assembly, then the folders the .fx sits in - the rule a .cs file already follows. The class name
+    /// is the file name, so a flat namespace could not hold two effects named alike.</summary>
+    private static string ComposeNamespace(string assemblyName, string projectDir, string effectPath)
     {
-        if (string.IsNullOrEmpty(projectDir)) return rootNamespace;
+        if (string.IsNullOrEmpty(projectDir)) return assemblyName;
 
         var directory = Path.GetDirectoryName(effectPath) ?? string.Empty;
         var relative = directory.StartsWith(projectDir, System.StringComparison.OrdinalIgnoreCase)
@@ -139,7 +137,7 @@ public class EffectsGenerator : IIncrementalGenerator
             .Select(Sanitize)
             .Where(part => part.Length > 0);
 
-        return string.Join(".", new[] { rootNamespace }.Concat(folders));
+        return string.Join(".", new[] { assemblyName }.Concat(folders));
     }
 
     // A folder may be named anything the file system allows; an identifier may not.

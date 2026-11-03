@@ -72,8 +72,8 @@ beside it.
 
 ### Your own effects
 
-Every `.fx` file in a project becomes a class at build time: `Effects/Glow.fx` in a project with the root namespace
-`MyApp` gives `MyApp.Effects.Glow`, derived from `Effect`. The generator needs to see the files and to know where the
+Every `.fx` file in a project becomes a class at build time, in the assembly's name and the folders the file sits in:
+`Effects/Glow.fx` in an assembly named `MyApp` gives `MyApp.Effects.Glow`, derived from `Effect`. The generator needs to see the files and to know where the
 Slang compiler is:
 
 ```xml

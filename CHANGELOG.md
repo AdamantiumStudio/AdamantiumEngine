@@ -1162,8 +1162,8 @@ All packages share one version.
 
 ### Fixed
 
-- An effect's class is in the project's root namespace and the folders its `.fx` sits in, as a `.cs` file is; it was in
-  the assembly's name, so a project whose `RootNamespace` differs from its `AssemblyName` found its effects elsewhere.
+- The README says where an effect's class is: in the assembly's name and the folders its `.fx` sits in, not in the
+  project's root namespace.
 - The README's examples name packages that exist: `Adamantium.Engine.Generators` and `Adamantium.Content.Build`
   0.1.0-alpha.5 and `Adamantium.Vulkan.Slang` 1.1.0, which the generator loads; `Adamantium.Wayland` and
   `Adamantium.DBus` are in its list of packages.
