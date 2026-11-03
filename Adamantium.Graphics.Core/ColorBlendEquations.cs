@@ -23,6 +23,10 @@ public static class ColorBlendEquations
     // (SrcAlpha,...) on premultiplied output multiplies by alpha a second time -> dark rim around glyphs.
     public static ColorBlendEquationEXT Premultiplied {get; private set;}
 
+    /// <summary>What is drawn already, color and alpha alike, times the source alpha: rgb = dst*srcA, a = dstA*srcA. Fades
+    /// a premultiplied target as a whole.</summary>
+    public static ColorBlendEquationEXT TimesSourceAlpha {get; private set;}
+
     public static ColorBlendEquationEXT Default => Opaque;
 
     static ColorBlendEquations()
@@ -41,6 +45,8 @@ public static class ColorBlendEquations
         NonPremultiplied = New(BlendFactor.SrcAlpha, BlendFactor.OneMinusSrcAlpha, BlendOp.Add, BlendOp.Add);
         Premultiplied = New(BlendFactor.One, BlendFactor.OneMinusSrcAlpha, BlendOp.Add, BlendOp.Add,
             BlendFactor.One, BlendFactor.OneMinusSrcAlpha);
+        TimesSourceAlpha = New(BlendFactor.Zero, BlendFactor.SrcAlpha, BlendOp.Add, BlendOp.Add,
+            BlendFactor.Zero, BlendFactor.SrcAlpha);
     }
 
     private static ColorBlendEquationEXT New(
