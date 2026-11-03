@@ -1162,6 +1162,9 @@ All packages share one version.
 
 ### Fixed
 
+- Packing `Adamantium.Content.Build` no longer builds the content compiler and all it references a second time, beside
+  the solution's build and into the same folders - which could fail the pack on a file the other build held. The
+  compiler is a build dependency of the package, and packing only publishes it.
 - The README says where an effect's class is: in the assembly's name and the folders its `.fx` sits in, not in the
   project's root namespace; its example makes visible only what the generator reads, `ProjectDir` and
   `AdamantiumSlangPath`.

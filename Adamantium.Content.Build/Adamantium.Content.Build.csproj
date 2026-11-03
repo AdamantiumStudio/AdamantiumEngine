@@ -30,6 +30,14 @@
         <None Include="build\**" Pack="true" PackagePath="build\" />
     </ItemGroup>
 
+    <!-- The compiler is built before this project, as the solution builds it, so packing only publishes what is built:
+         a publish that built it again, with its own PublishDir, built it and everything it references a second time,
+         beside the solution's build and into the same folders. -->
+    <ItemGroup>
+        <ProjectReference Include="..\Adamantium.Engine.ContentCompiler.CLI\Adamantium.Engine.ContentCompiler.CLI.csproj"
+                          ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" PrivateAssets="all" />
+    </ItemGroup>
+
     <!-- The compiler is published beside the rules that run it: framework-dependent, with everything it loads. -->
     <Target Name="PackContentBuild">
         <PropertyGroup>
@@ -37,7 +45,7 @@
         </PropertyGroup>
         <MSBuild Projects="..\Adamantium.Engine.ContentCompiler.CLI\Adamantium.Engine.ContentCompiler.CLI.csproj"
                  Targets="Publish"
-                 Properties="Configuration=$(Configuration);PublishDir=$(_ContentCompilerDir)"
+                 Properties="Configuration=$(Configuration);PublishDir=$(_ContentCompilerDir);NoBuild=true"
                  RemoveProperties="TargetFramework;RuntimeIdentifier" />
         <ItemGroup>
             <_ContentCompilerFile Include="$(_ContentCompilerDir)**\*" />
