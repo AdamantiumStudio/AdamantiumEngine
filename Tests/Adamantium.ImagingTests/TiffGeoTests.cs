@@ -101,6 +101,67 @@ public class TiffGeoTests
     }
 
     [Test]
+    public void AProjectionTheFileDescribesItself_GivesItsMethodAndParameters()
+    {
+        (ushort, ushort, ulong[]) keys = (34735, Short, [1, 1, 0, 5, 1024, 0, 1, 1, 3072, 0, 1, 32767,
+            3075, 0, 1, 1, 3080, 34736, 1, 0, 3092, 34736, 1, 1]);
+        using var reader = Open(keys, Doubles(34736, 39, 0.9996));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(reader.GeoReference.ProjectedCrs, Is.EqualTo(32767));
+            Assert.That(reader.GeoReference.ProjectionMethod, Is.EqualTo(TiffProjectionMethod.TransverseMercator));
+            Assert.That(reader.GeoReference.Numbers[TiffGeoKey.NaturalOriginLongitude],
+                Is.EqualTo(new double[] { 39 }));
+            Assert.That(reader.GeoReference.Numbers[TiffGeoKey.ScaleAtNaturalOrigin],
+                Is.EqualTo(new double[] { 0.9996 }));
+        });
+    }
+
+    [Test]
+    public void TheLastMethodGeoTiffDefines_IsKnown()
+    {
+        (ushort, ushort, ulong[]) keys = (34735, Short, [1, 1, 0, 1, 3075, 0, 1, 27]);
+        using var reader = Open(keys);
+
+        Assert.That(reader.GeoReference.ProjectionMethod,
+            Is.EqualTo(TiffProjectionMethod.TransverseMercatorSouthOriented));
+    }
+
+    // Past the last code GeoTIFF defines, its "user-defined" code and the private range.
+    [TestCase(28UL)]
+    [TestCase(32767UL)]
+    [TestCase(32768UL)]
+    public void AMethodGeoTiffDoesNotDefine_IsUnknown(ulong method)
+    {
+        (ushort, ushort, ulong[]) keys = (34735, Short, [1, 1, 0, 1, 3075, 0, 1, method]);
+        using var reader = Open(keys);
+
+        Assert.That(reader.GeoReference.ProjectionMethod, Is.EqualTo(TiffProjectionMethod.Unknown));
+    }
+
+    [Test]
+    public void WithoutTheMethodKey_TheMethodIsUnknown()
+    {
+        using var reader = Open(Utm33);
+
+        Assert.That(reader.GeoReference.ProjectionMethod, Is.EqualTo(TiffProjectionMethod.Unknown));
+    }
+
+    [Test]
+    public void AFractionalCode_IsNoCode()
+    {
+        (ushort, ushort, ulong[]) keys = (34735, Short, [1, 1, 0, 2, 1024, 34736, 1, 0, 3075, 34736, 1, 1]);
+        using var reader = Open(keys, Doubles(34736, 1.5, 1.9));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(reader.GeoReference.ModelType, Is.EqualTo(TiffModelType.Unknown));
+            Assert.That(reader.GeoReference.ProjectionMethod, Is.EqualTo(TiffProjectionMethod.Unknown));
+        });
+    }
+
+    [Test]
     public void AReducedCopy_CoversMoreOfTheModelAPixel()
     {
         using var reader = Open(Doubles(33922, 0, 0, 0, 1000, 2000, 0), Doubles(33550, 10, 10, 0), Utm33);

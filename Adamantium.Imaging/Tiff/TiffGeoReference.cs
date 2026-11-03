@@ -60,6 +60,12 @@ public sealed class TiffGeoReference
     /// <summary>The projected system's EPSG code; 0 when none, 32767 when the file describes it itself.</summary>
     public int ProjectedCrs => Code(TiffGeoKey.ProjectedType);
 
+    /// <summary>The method of a projection the file describes itself.</summary>
+    public TiffProjectionMethod ProjectionMethod =>
+        (TiffProjectionMethod)Code(TiffGeoKey.ProjectionMethod) is var method && Enum.IsDefined(method)
+            ? method
+            : TiffProjectionMethod.Unknown;
+
     /// <summary>The geographic system's EPSG code; 0 when none, 32767 when the file describes it itself.</summary>
     public int GeographicCrs => Code(TiffGeoKey.GeographicType);
 
@@ -175,7 +181,7 @@ public sealed class TiffGeoReference
         start <= (ulong)size && length <= (ulong)size - start;
 
     private int Code(ushort key) => Numbers.TryGetValue(key, out var values) && values.Count > 0
-                                    && double.IsFinite(values[0])
+                                    && double.IsInteger(values[0])
         ? (int)Math.Clamp(values[0], int.MinValue, int.MaxValue)
         : 0;
 }

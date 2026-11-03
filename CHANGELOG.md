@@ -5,6 +5,17 @@ All packages share one version.
 
 ## Unreleased
 
+### Added
+
+- GeoTIFF: every key of OGC GeoTIFF 1.1 by name in `TiffGeoKey` - the parameters of a projection a file describes
+  itself (origin, standard parallels, false easting and northing, scale factor…), units and citations; the method of
+  such a projection as `TiffGeoReference.ProjectionMethod` (`TiffProjectionMethod`, annex C).
+
+### Changed
+
+- `TiffGeoKey.CoordinateTransformation` is `TiffGeoKey.ProjectionMethod`, as GeoTIFF 1.1 names the key.
+- A GeoTIFF code key holding a fraction (a malformed file) reads as no code, not as the code truncated.
+
 ## 0.1.0-alpha.5 - 2026-11-03
 
 ### Added
