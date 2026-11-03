@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Imaging.Tiff;
@@ -24,6 +25,11 @@ public static class TiffEncoder
             or TiffCompression.Deflate))
         {
             throw new NotSupportedException($"Writing TIFF compressed with {options.Compression}.");
+        }
+
+        if (options.GeoReference is { HasTransform: false })
+        {
+            throw new ArgumentException("A georeference by control points alone is not written.", nameof(options));
         }
 
         if (options.TileSize < 0 || options.TileSize % 16 != 0)
@@ -317,9 +323,100 @@ public static class TiffEncoder
             entries.Add(new(TiffTag.SampleFormat, TiffFieldType.Short, Repeat((ulong)pixel.Kind, pixel.Samples)));
         }
 
+        if (index == 0 && options.GeoReference is { HasTransform: true } geo)
+        {
+            entries.AddRange(GeoEntries(geo));
+        }
+
         entries.Sort((a, b) => a.Tag.CompareTo(b.Tag));
         return entries;
     }
+
+    private static List<Entry> GeoEntries(TiffGeoReference geo)
+    {
+        var t = geo.Transform;
+        var (c, f) = (t[2], t[5]);
+        if (geo.RasterType == TiffRasterType.PixelIsPoint)
+        {
+            c += 0.5 * (t[0] + t[1]);
+            f += 0.5 * (t[3] + t[4]);
+        }
+
+        List<Entry> entries = t[1] == 0 && t[3] == 0 && t[0] > 0 && t[4] < 0
+            ?
+            [
+                new(TiffTag.ModelPixelScale, TiffFieldType.Double, Doubles(t[0], -t[4], 0)),
+                new(TiffTag.ModelTiepoint, TiffFieldType.Double, Doubles(0, 0, 0, c, f, 0))
+            ]
+            :
+            [
+                new(TiffTag.ModelTransformation, TiffFieldType.Double,
+                    Doubles(t[0], t[1], 0, c, t[3], t[4], 0, f, 0, 0, 0, 0, 0, 0, 0, 1))
+            ];
+
+        var keys = new List<(ushort Key, TiffTag Location, int Count, IReadOnlyList<double> Values, int Text)>();
+        var texts = new StringBuilder();
+        foreach (var (key, values) in geo.Numbers)
+        {
+            var shorts = TiffGeoKey.TypeOf(key) == TiffFieldType.Short ||
+                         TiffGeoKey.TypeOf(key) == null && values.All(TiffGeoReference.IsShort);
+            keys.Add((key, shorts ? TiffTag.GeoKeyDirectory : TiffTag.GeoDoubleParams, values.Count, values, 0));
+        }
+
+        foreach (var (key, text) in geo.Texts.Where(pair => !geo.Numbers.ContainsKey(pair.Key)))
+        {
+            keys.Add((key, TiffTag.GeoAsciiParams, text.Length + 1, null, texts.Length));
+            texts.Append(text).Append('|');
+        }
+
+        keys.Sort((a, b) => a.Key.CompareTo(b.Key));
+        var directory = new List<ulong> { 1, 1, 1, (ulong)keys.Count };
+        var extraShorts = new List<ulong>();
+        var doubles = new List<double>();
+        foreach (var (key, location, count, values, text) in keys)
+        {
+            var (where, value) = location switch
+            {
+                TiffTag.GeoKeyDirectory when count == 1 => (0UL, (ulong)values[0]),
+                TiffTag.GeoKeyDirectory =>
+                    ((ulong)TiffTag.GeoKeyDirectory, (ulong)(4 + 4 * keys.Count + extraShorts.Count)),
+                TiffTag.GeoDoubleParams => ((ulong)TiffTag.GeoDoubleParams, (ulong)doubles.Count),
+                _ => ((ulong)TiffTag.GeoAsciiParams, (ulong)text)
+            };
+            if (location == TiffTag.GeoKeyDirectory && count > 1)
+            {
+                extraShorts.AddRange(values.Select(v => (ulong)v));
+            }
+            else if (location == TiffTag.GeoDoubleParams)
+            {
+                doubles.AddRange(values);
+            }
+
+            if (count > ushort.MaxValue || value > ushort.MaxValue)
+            {
+                throw new ArgumentException($"GeoTIFF key {key} does not fit in the key directory.");
+            }
+
+            directory.AddRange([key, where, (ulong)count, value]);
+        }
+
+        directory.AddRange(extraShorts);
+        entries.Add(new(TiffTag.GeoKeyDirectory, TiffFieldType.Short, [.. directory]));
+        if (doubles.Count > 0)
+        {
+            entries.Add(new(TiffTag.GeoDoubleParams, TiffFieldType.Double, Doubles([.. doubles])));
+        }
+
+        if (texts.Length > 0)
+        {
+            entries.Add(new(TiffTag.GeoAsciiParams, TiffFieldType.Ascii,
+                [.. Encoding.ASCII.GetBytes(texts.Append('\0').ToString()).Select(b => (ulong)b)]));
+        }
+
+        return entries;
+    }
+
+    private static ulong[] Doubles(params double[] values) => [.. values.Select(BitConverter.DoubleToUInt64Bits)];
 
     private static byte[] Directory(List<Entry> entries, long at, bool bigTiff)
     {
@@ -399,6 +496,9 @@ public static class TiffEncoder
             var at = bytes.AsSpan(i * size);
             switch (size)
             {
+                case 1:
+                    at[0] = (byte)entry.Values[i];
+                    break;
                 case 2:
                     BinaryPrimitives.WriteUInt16LittleEndian(at, (ushort)entry.Values[i]);
                     break;

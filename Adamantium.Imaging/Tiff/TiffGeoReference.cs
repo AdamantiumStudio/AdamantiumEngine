@@ -25,6 +25,69 @@ public sealed class TiffGeoReference
         Texts = texts;
     }
 
+    /// <summary>A reference to write with <see cref="TiffSaveOptions.GeoReference"/>: the affine
+    /// <paramref name="transform"/> (a, b, c, d, e, f) from pixel corners to the model, as <see cref="Transform"/>
+    /// gives it, and the keys - numbers and texts by key number (<see cref="TiffGeoKey"/>), each of the type GeoTIFF
+    /// gives it: whole numbers for a short key, printable ASCII without '|' for a text. <see cref="TiffGeoKey.ModelType"/>
+    /// is required. Anything else throws <see cref="ArgumentException"/>.</summary>
+    public static TiffGeoReference Create(IReadOnlyList<double> transform,
+        IReadOnlyDictionary<ushort, IReadOnlyList<double>> numbers, IReadOnlyDictionary<ushort, string> texts = null)
+    {
+        if (transform is not { Count: 6 } || transform.Any(value => !double.IsFinite(value)) ||
+            !HasInverse(transform))
+        {
+            throw new ArgumentException("The transformation takes six finite numbers and has an inverse.",
+                nameof(transform));
+        }
+
+        numbers ??= new Dictionary<ushort, IReadOnlyList<double>>();
+        texts ??= new Dictionary<ushort, string>();
+        if (!numbers.ContainsKey(TiffGeoKey.ModelType))
+        {
+            throw new ArgumentException("A GeoTIFF names its model type.", nameof(numbers));
+        }
+
+        foreach (var (key, values) in numbers)
+        {
+            var type = TiffGeoKey.TypeOf(key);
+            if (values is not { Count: > 0 } || values.Any(value => !double.IsFinite(value)) ||
+                type == TiffFieldType.Ascii ||
+                type == TiffFieldType.Short && values.Any(value => !IsShort(value)))
+            {
+                throw new ArgumentException($"Key {key} takes {type?.ToString() ?? "numbers"} it cannot hold.",
+                    nameof(numbers));
+            }
+        }
+
+        foreach (var (key, text) in texts)
+        {
+            if (text == null || TiffGeoKey.TypeOf(key) is { } type && type != TiffFieldType.Ascii ||
+                numbers.ContainsKey(key) || text.Any(character => character is < ' ' or > '~' or '|'))
+            {
+                throw new ArgumentException($"Key {key} takes no such text.", nameof(texts));
+            }
+        }
+
+        return new TiffGeoReference([.. transform], Array.Empty<TiffTiePoint>(),
+            numbers.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<double>)Array.AsReadOnly(pair.Value.ToArray()))
+                .AsReadOnly(),
+            texts.ToDictionary(pair => pair.Key, pair => pair.Value).AsReadOnly());
+    }
+
+    /// <summary>Whether <paramref name="value"/> fits a GeoTIFF short.</summary>
+    internal static bool IsShort(double value) => double.IsInteger(value) && value is >= 0 and <= ushort.MaxValue;
+
+    private static bool HasInverse(IReadOnlyList<double> t)
+    {
+        var scale = Math.Max(Math.Max(Math.Abs(t[0]), Math.Abs(t[1])), Math.Max(Math.Abs(t[3]), Math.Abs(t[4])));
+        if (!(scale > 0))
+        {
+            return false;
+        }
+
+        return Math.Abs(t[0] / scale * (t[4] / scale) - t[1] / scale * (t[3] / scale)) > 1e-12;
+    }
+
     /// <summary>Whether the raster maps to the model by one affine transformation; false when the file gives only
     /// control points.</summary>
     public bool HasTransform => _transform != null;

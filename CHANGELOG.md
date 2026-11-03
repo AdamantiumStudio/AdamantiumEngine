@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- GeoTIFF written: `TiffSaveOptions.GeoReference` puts a georeference into the first page - a tie point and pixel scale,
+  or the matrix for a transformation that turns, and the keys in the directory, in doubles and in text - which
+  `TiffGeoReference.Create` makes from a transformation and keys, as reading gives them back.
+
 - GeoTIFF: every key of OGC GeoTIFF 1.1 by name in `TiffGeoKey` - the parameters of a projection a file describes
   itself (origin, standard parallels, false easting and northing, scale factor…), units and citations; the method of
   such a projection as `TiffGeoReference.ProjectionMethod` (`TiffProjectionMethod`, annex C).
