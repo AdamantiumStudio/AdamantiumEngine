@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Security.Cryptography;
+using Adamantium.Graphics.Core;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics;
@@ -14,7 +15,7 @@ public static class ShaderBinaryCache
 
     private const int Format = 2;
 
-    private static string DeviceDir(GraphicsDevice device)
+    private static string DeviceDir(IGraphicsDevice device)
     {
         var props = device.MainDevice.GraphicsAdapter.AdapterProperties;
         var key = $"{props.DeviceName}|{props.VendorID:X}|{props.DeviceID:X}|{props.DriverVersion:X}|" +
@@ -28,9 +29,9 @@ public static class ShaderBinaryCache
     /// <summary>The per-device cache folder. Public so <see cref="ShaderPrecompiler"/> can stamp it as complete: the
     /// stamp then shares this folder's key (GPU, driver version, descriptor model) and so expires by itself when one
     /// changes.</summary>
-    public static string DirectoryFor(GraphicsDevice device) => DeviceDir(device);
+    public static string DirectoryFor(IGraphicsDevice device) => DeviceDir(device);
 
-    private static string FileFor(GraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout)
+    private static string FileFor(IGraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout)
     {
         using var sha = SHA256.Create();
         var buf = new MemoryStream();
@@ -60,7 +61,7 @@ public static class ShaderBinaryCache
     /// <summary>Try to read a cached driver binary for this shader. False = miss (compile from SPIR-V and then Save).
     /// <paramref name="layout"/> stands for how the shader reaches its resources (set layouts, heap mappings): a binary is
     /// only good for the layout it was made with.</summary>
-    public static bool TryLoad(GraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout, out byte[] binary)
+    public static bool TryLoad(IGraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout, out byte[] binary)
     {
         binary = null;
         if (!Enabled) return false;
@@ -76,7 +77,7 @@ public static class ShaderBinaryCache
 
     /// <summary>Persist the driver-compiled binary of a freshly created shader object, so later launches skip compiling
     /// from SPIR-V.</summary>
-    public static void Save(GraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout, ShaderEXT shader)
+    public static void Save(IGraphicsDevice device, ShaderCreateInfoEXT info, string name, ulong layout, ShaderEXT shader)
     {
         if (!Enabled) return;
         try
