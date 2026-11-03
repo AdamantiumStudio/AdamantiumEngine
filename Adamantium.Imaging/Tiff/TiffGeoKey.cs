@@ -141,4 +141,25 @@ public static class TiffGeoKey
 
     /// <summary>The unit of heights, an EPSG unit code.</summary>
     public const ushort VerticalUnits = 4099;
+
+    /// <summary>The seven parameters to WGS 84 libgeotiff writes beside GeoTIFF's keys (GeogTOWGS84GeoKey).</summary>
+    internal const ushort ToWgs84 = 2062;
+
+    /// <summary>The rectified grid angle GeoTIFF 1.0 had (ProjRectifiedGridAngleGeoKey).</summary>
+    internal const ushort RectifiedGridAngle = 3096;
+
+    /// <summary>The type GeoTIFF 1.1 gives <paramref name="key"/>'s value - short, double or ASCII - and doubles for
+    /// the keys files carry beside them; null for a key it does not define.</summary>
+    internal static TiffFieldType? TypeOf(ushort key) => key switch
+    {
+        ToWgs84 or RectifiedGridAngle => TiffFieldType.Double,
+        Citation or GeographicCitation or ProjectedCitation or VerticalCitation => TiffFieldType.Ascii,
+        GeographicLinearUnitSize or AngularUnitSize or SemiMajorAxis or SemiMinorAxis or InverseFlattening
+            or PrimeMeridianLongitude or LinearUnitSize or (>= StandardParallel1 and <= StraightVerticalPoleLongitude)
+            => TiffFieldType.Double,
+        ModelType or RasterType or GeographicType or GeodeticDatum or PrimeMeridian or GeographicLinearUnits
+            or AngularUnits or Ellipsoid or AzimuthUnits or ProjectedType or Projection or ProjectionMethod
+            or LinearUnits or VerticalType or VerticalDatum or VerticalUnits => TiffFieldType.Short,
+        _ => null
+    };
 }
