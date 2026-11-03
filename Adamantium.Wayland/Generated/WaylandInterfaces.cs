@@ -11,6 +11,8 @@ namespace Adamantium.Wayland;
 /// signatures libwayland marshals requests and reads events by.</summary>
 public static unsafe partial class WaylandInterfaces
 {
+    public static readonly WlInterface* WpAlphaModifierV1 = WaylandInterfaceBuilder.Allocate();
+    public static readonly WlInterface* WpAlphaModifierSurfaceV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* WpCursorShapeManagerV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* WpCursorShapeDeviceV1 = WaylandInterfaceBuilder.Allocate();
     public static readonly WlInterface* WpFractionalScaleManagerV1 = WaylandInterfaceBuilder.Allocate();
@@ -91,6 +93,18 @@ public static unsafe partial class WaylandInterfaces
 
     static WaylandInterfaces()
     {
+        WaylandInterfaceBuilder.Fill(WpAlphaModifierV1, "wp_alpha_modifier_v1", 1,
+            [
+                new("destroy", "", []),
+                new("get_surface", "no", [WpAlphaModifierSurfaceV1, WlSurface]),
+            ],
+            []);
+        WaylandInterfaceBuilder.Fill(WpAlphaModifierSurfaceV1, "wp_alpha_modifier_surface_v1", 1,
+            [
+                new("destroy", "", []),
+                new("set_multiplier", "u", [null]),
+            ],
+            []);
         WaylandInterfaceBuilder.Fill(WpCursorShapeManagerV1, "wp_cursor_shape_manager_v1", 2,
             [
                 new("destroy", "", []),
