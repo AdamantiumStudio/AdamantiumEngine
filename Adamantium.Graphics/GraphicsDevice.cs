@@ -1666,8 +1666,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     // The most recently set viewport/scissor, so code that interrupts the pass to render to another target (the font
     // renderer's offscreen text target) can save and restore the exact clip that was active rather than resetting it
     // to the full attachment (which left the resumed pass drawing unclipped).
-    public Rect2D[] CurrentScissors => scissorsArray;
-    public Viewport[] CurrentViewports => viewportsArray;
+    public ReadOnlySpan<Rect2D> CurrentScissors => scissorsArray;
+    public ReadOnlySpan<Viewport> CurrentViewports => viewportsArray;
 
     /// <summary>Where the top-left corner of the target being drawn into lies in the coordinates viewports and scissors
     /// are given in. Zero for a target that is the whole surface; a target that holds one region of it (a layer) sets the

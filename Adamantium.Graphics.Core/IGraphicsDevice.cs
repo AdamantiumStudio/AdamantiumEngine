@@ -131,8 +131,43 @@ public interface IDynamicStateDevice
     LogicOp LogicOperation { get; set; }
     
     public void SetViewports(params System.ReadOnlySpan<Viewport> viewports);
-    
+
     public void SetScissors(params System.ReadOnlySpan<Rect2D> scissors);
+
+    /// <summary>The viewports set last, in the coordinates they were given in: a view of the device's own, not a copy,
+    /// valid until they are set again.</summary>
+    System.ReadOnlySpan<Viewport> CurrentViewports { get; }
+
+    /// <summary>The scissors set last, in the coordinates they were given in: a view of the device's own, not a copy,
+    /// valid until they are set again.</summary>
+    System.ReadOnlySpan<Rect2D> CurrentScissors { get; }
+
+    bool RasterizerDiscardEnabled { get; set; }
+
+    /// <summary>Whether there is a depth attachment to borrow at all.</summary>
+    bool HasDepthAttachment { get; }
+
+    /// <summary>Resets depth only, not stencil, inside one rectangle of the attachment, mid-pass; the rectangle is in
+    /// the coordinates scissors are given in.</summary>
+    void ClearDepthInRect(Rect2D rect);
+
+    /// <summary>Suspends the render pass mid-frame, so transfer work goes into the same command buffer. Pair with
+    /// <see cref="ResumeRendering"/>.</summary>
+    void SuspendRendering();
+
+    /// <summary>Re-opens the pass <see cref="SuspendRendering"/> suspended, keeping what the target holds.</summary>
+    void ResumeRendering();
+
+    /// <summary>Dispatches the bound compute shader; recorded outside a rendering pass.</summary>
+    void Dispatch(uint groupCountX, uint groupCountY = 1, uint groupCountZ = 1);
+
+    /// <summary>A draw whose counts come from <paramref name="indirectBuffer"/> (VkDrawIndirectCommand, 16 bytes each).
+    /// </summary>
+    void DrawIndirect(IBuffer vertexBuffer, IBuffer indirectBuffer, uint drawCount = 1, uint stride = 16);
+
+    /// <summary>A buffer memory barrier on the current frame's command buffer.</summary>
+    void BufferBarrier(IBuffer buffer, PipelineStageFlagBits2 srcStage, AccessFlagBits2 srcAccess,
+        PipelineStageFlagBits2 dstStage, AccessFlagBits2 dstAccess);
 
     /// <summary>Where the top-left corner of the target being drawn into lies in the coordinates viewports and scissors
     /// are given in; zero unless the target holds one region of the surface.</summary>
@@ -352,6 +387,18 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
         ImageLayout newLayout,
         PipelineStageFlagBits2 sourceStageMask,
         PipelineStageFlagBits2 destinationStageMask);
+
+    /// <summary>The same barrier over one range of mip levels.</summary>
+    void InsertImageMemoryBarrier(CommandBuffer commandBuffer,
+        ITexture texture,
+        AccessFlagBits2 sourceAccessMask,
+        AccessFlagBits2 destinationAccessMask,
+        ImageLayout oldLayout,
+        ImageLayout newLayout,
+        PipelineStageFlagBits2 sourceStageMask,
+        PipelineStageFlagBits2 destinationStageMask,
+        uint baseMipLevel,
+        uint levelCount);
 
     void SetObjectDebugName(ulong objectHandle, ObjectType objectType, string name);
 }

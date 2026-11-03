@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `IGraphicsDevice` gives all a renderer needs of the device, so none has to reach for `GraphicsDevice`:
+  `CurrentViewports`, `CurrentScissors`, `RasterizerDiscardEnabled`, `HasDepthAttachment`, `ClearDepthInRect`,
+  `SuspendRendering` / `ResumeRendering`, `Dispatch`, `DrawIndirect`, `BufferBarrier`, and `InsertImageMemoryBarrier`
+  over a range of mip levels. `ShaderPrecompiler.EnsureCompiled` takes an `IGraphicsDevice`.
+  `GraphicsDevice.CurrentViewports` and `CurrentScissors` are `ReadOnlySpan`s over the device's own arrays: no copy,
+  and nothing written into them behind `SetViewports` / `SetScissors`.
 - Wayland's `wp_alpha_modifier_v1` (staging `alpha-modifier-v1`): `WpAlphaModifierV1.GetSurface` and
   `WpAlphaModifierSurfaceV1.SetMultiplier` have the compositor lay a surface down with its alpha times a factor, as
   a window's opacity.

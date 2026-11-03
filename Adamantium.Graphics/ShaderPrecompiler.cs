@@ -51,7 +51,7 @@ public static class ShaderPrecompiler
 
     /// <summary>Called once the graphics device exists and BEFORE anything is shown. In the child this compiles and
     /// terminates the process; in a normal launch it returns as soon as the cache is known complete.</summary>
-    public static void EnsureCompiled(GraphicsDevice device)
+    public static void EnsureCompiled(IGraphicsDevice device)
     {
         if (device == null || !Enabled || !ShaderBinaryCache.Enabled) return;
 
@@ -106,7 +106,7 @@ public static class ShaderPrecompiler
     /// <summary>The child: create every effect there is, so every shader object it holds is compiled and persisted.
     /// Exit code 0 means this process REACHED THE END of the list - which is the whole question, since the fault we are
     /// working around kills the process outright rather than throwing.</summary>
-    private static void RunCompilePass(GraphicsDevice device)
+    private static void RunCompilePass(IGraphicsDevice device)
     {
         var created = 0;
         var skipped = 0;
@@ -192,7 +192,7 @@ public static class ShaderPrecompiler
 
     /// <summary>Builds ONE effect in a child process while the application keeps running - the fault being recovered
     /// from kills whatever process attempts it, so the attempt cannot be made here. Once per effect per run.</summary>
-    public static void TryCompileInBackground(GraphicsDevice device, string shaderName)
+    public static void TryCompileInBackground(IGraphicsDevice device, string shaderName)
     {
         if (IsCompilePass || device == null || !Enabled || !ShaderBinaryCache.Enabled) return;
 
@@ -323,11 +323,11 @@ public static class ShaderPrecompiler
         }
     }
 
-    private static string StampFile(GraphicsDevice device) => SideFile(device, "precompiled.stamp");
+    private static string StampFile(IGraphicsDevice device) => SideFile(device, "precompiled.stamp");
 
     // What the child is building right now. It survives the process that wrote it, which is the point: a fault leaves
     // no exception to catch, so this is the only thing that says what was being built.
-    private static string InFlightFile(GraphicsDevice device) => SideFile(device, "compiling.txt");
+    private static string InFlightFile(IGraphicsDevice device) => SideFile(device, "compiling.txt");
 
     /// <summary>Called by the device just before a shader is created. Writes only inside the compile pass.</summary>
     internal static void NoteShaderInFlight(string shaderName)
@@ -336,7 +336,7 @@ public static class ShaderPrecompiler
         TryWrite(_inFlightPath, _inFlightEffect + Environment.NewLine + shaderName);
     }
 
-    private static string SideFile(GraphicsDevice device, string name)
+    private static string SideFile(IGraphicsDevice device, string name)
     {
         try
         {
@@ -350,7 +350,7 @@ public static class ShaderPrecompiler
 
     /// <summary>Writes whatever the dead child was building into the statistics as a death, and returns it. Null when
     /// the child died somewhere other than a constructor - there is nothing to blame then.</summary>
-    private static string TakePoisoned(GraphicsDevice device)
+    private static string TakePoisoned(IGraphicsDevice device)
     {
         var inFlight = InFlightFile(device);
         if (inFlight == null || !File.Exists(inFlight)) return null;

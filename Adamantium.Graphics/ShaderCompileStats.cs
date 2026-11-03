@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using Adamantium.Graphics.Core;
 using Serilog;
 
 namespace Adamantium.Graphics;
@@ -31,13 +32,13 @@ public sealed class ShaderCompileStats
 
     private ShaderCompileStats(string path) => _path = path;
 
-    public static ShaderCompileStats ForDevice(GraphicsDevice device) => _current ??= Load(device);
+    public static ShaderCompileStats ForDevice(IGraphicsDevice device) => _current ??= Load(device);
 
     /// <summary>Bumped when the verdicts are re-read, so anything that gave up on an effect can tell, for the price
     /// of an int compare, that it is worth asking again.</summary>
     public static int Generation { get; private set; }
 
-    public static void Refresh(GraphicsDevice device)
+    public static void Refresh(IGraphicsDevice device)
     {
         _current = Load(device);
         Generation++;
@@ -88,7 +89,7 @@ public sealed class ShaderCompileStats
         };
     }
 
-    public static ShaderCompileStats Load(GraphicsDevice device)
+    public static ShaderCompileStats Load(IGraphicsDevice device)
     {
         var folder = SafeFolder(device);
         var stats = new ShaderCompileStats(folder == null ? null : Path.Combine(folder, FileName));
@@ -244,7 +245,7 @@ public sealed class ShaderCompileStats
         return element;
     }
 
-    private static string SafeFolder(GraphicsDevice device)
+    private static string SafeFolder(IGraphicsDevice device)
     {
         try
         {
