@@ -134,11 +134,13 @@ public interface IDynamicStateDevice
 
     public void SetScissors(params System.ReadOnlySpan<Rect2D> scissors);
 
-    /// <summary>The viewports set last, in the coordinates they were given in.</summary>
-    Viewport[] CurrentViewports { get; }
+    /// <summary>The viewports set last, in the coordinates they were given in: a view of the device's own, not a copy,
+    /// valid until they are set again.</summary>
+    System.ReadOnlySpan<Viewport> CurrentViewports { get; }
 
-    /// <summary>The scissors set last, in the coordinates they were given in.</summary>
-    Rect2D[] CurrentScissors { get; }
+    /// <summary>The scissors set last, in the coordinates they were given in: a view of the device's own, not a copy,
+    /// valid until they are set again.</summary>
+    System.ReadOnlySpan<Rect2D> CurrentScissors { get; }
 
     bool RasterizerDiscardEnabled { get; set; }
 
