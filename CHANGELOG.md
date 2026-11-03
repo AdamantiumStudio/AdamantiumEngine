@@ -5,6 +5,8 @@ All packages share one version.
 
 ## Unreleased
 
+## 0.1.0-alpha.5 - 2026-11-03
+
 ### Added
 
 - `IGraphicsDevice` gives all a renderer needs of the device, so none has to reach for `GraphicsDevice`:
@@ -1160,6 +1162,12 @@ All packages share one version.
 
 ### Fixed
 
+- The README says where an effect's class is: in the assembly's name and the folders its `.fx` sits in, not in the
+  project's root namespace; its example makes visible only what the generator reads, `ProjectDir` and
+  `AdamantiumSlangPath`.
+- The README's examples name packages that exist: `Adamantium.Engine.Generators` and `Adamantium.Content.Build`
+  0.1.0-alpha.5 and `Adamantium.Vulkan.Slang` 1.1.0, which the generator loads; `Adamantium.Wayland` and
+  `Adamantium.DBus` are in its list of packages.
 - `AdamantiumCollection(params T[])` made no storage for its items and threw on the first one.
 - `TextLayout.Revision` moved on before the new glyphs were in place, so whoever read it then kept the old glyphs as
   the new revision's.
