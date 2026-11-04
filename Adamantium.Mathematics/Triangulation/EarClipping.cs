@@ -89,6 +89,15 @@ public static class EarClipping
     private static double Cross(Vector2<double> a, Vector2<double> b, Vector2<double> c) =>
         (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
 
+    private static bool InTriangle(Vector2<double> a, Vector2<double> b, Vector2<double> c, Vector2<double> p) =>
+        Cross(a, b, p) >= 0 && Cross(b, c, p) >= 0 && Cross(c, a, p) >= 0;
+
+    private static bool InTriangleEitherWay(Vector2<double> a, Vector2<double> b, Vector2<double> c, Vector2<double> p) =>
+        Cross(a, b, c) >= 0 ? InTriangle(a, b, c, p) : InTriangle(a, c, b, p);
+
+    private static bool InCorner(Vector2<double> corner, Vector2<double> next, Vector2<double> last, Vector2<double> p) =>
+        Cross(corner, next, p) > 0 && Cross(corner, p, last) > 0;
+
     private ref struct Ring
     {
         private readonly ReadOnlySpan<Vector2<double>> _points;
@@ -116,7 +125,13 @@ public static class EarClipping
 
         public bool IsClean => !_forced;
 
-        private Vector2<double> At(int node) => _points[_point[node]];
+        public int Count => _count;
+
+        public Vector2<double> At(int node) => _points[_point[node]];
+
+        public int Next(int node) => _next[node];
+
+        public bool IsConvex(int node) => Cross(At(_previous[node]), At(node), At(_next[node])) > 0;
 
         public int Link(int from, int to, bool counterclockwise)
         {
@@ -201,6 +216,142 @@ public static class EarClipping
             }
 
             return start;
+        }
+
+        public void Clip(int start, List<int> triangles, bool bridged)
+        {
+            var left = 1;
+            var convex = IsConvex(start);
+            for (var node = _next[start]; node != start; node = _next[node])
+            {
+                left++;
+                convex &= IsConvex(node);
+            }
+
+            if (convex && !bridged)
+            {
+                if (!TurnsOnce(start))
+                {
+                    _forced = true;
+                }
+
+                for (var node = _next[start]; _next[node] != start; node = _next[node])
+                {
+                    triangles.Add(_point[start]);
+                    triangles.Add(_point[node]);
+                    triangles.Add(_point[_next[node]]);
+                }
+
+                return;
+            }
+
+            var grid = left >= LeastForGrid ? new Grid(this, start, left, Shared(start, left)) : default;
+            var gone = new bool[_count];
+            var queued = new bool[_count];
+            var queue = new List<int>(left * 2);
+            var head = 0;
+            var live = start;
+            Enqueue(start, queue, queued);
+            for (var node = _next[start]; node != start; node = _next[node])
+            {
+                Enqueue(node, queue, queued);
+            }
+
+            var preferred = -1;
+            var askedAgain = false;
+            while (left > 3)
+            {
+                int ear;
+                if (preferred >= 0 && queued[preferred] && !gone[preferred])
+                {
+                    ear = preferred;
+                }
+                else
+                {
+                    ear = -1;
+                    while (head < queue.Count)
+                    {
+                        var node = queue[head++];
+                        if (queued[node] && !gone[node])
+                        {
+                            ear = node;
+                            break;
+                        }
+                    }
+                }
+
+                preferred = -1;
+                if (ear < 0)
+                {
+                    if (!askedAgain)
+                    {
+                        askedAgain = true;
+                        queue.Clear();
+                        head = 0;
+                        Enqueue(live, queue, queued);
+                        for (var node = _next[live]; node != live; node = _next[node])
+                        {
+                            Enqueue(node, queue, queued);
+                        }
+
+                        continue;
+                    }
+
+                    _forced = true;
+                    ear = LeastHarm(live);
+                    Cut(ear, triangles, grid, gone, queue, queued);
+                    live = _next[ear];
+                    left--;
+                    askedAgain = false;
+                    continue;
+                }
+
+                queued[ear] = false;
+                var a = _previous[ear];
+                var c = _next[ear];
+                var turn = Cross(At(a), At(ear), At(c));
+                if (turn == 0 || turn > 0 && Opens(a, At(c)) && Opens(c, At(a)) && Empty(a, ear, c, grid))
+                {
+                    Cut(ear, triangles, grid, gone, queue, queued);
+                    live = c;
+                    left--;
+                    preferred = _next[c];
+                    askedAgain = false;
+                }
+            }
+
+            var x = _previous[live];
+            var z = _next[live];
+            if (left == 3 && Cross(At(x), At(live), At(z)) > 0)
+            {
+                triangles.Add(_point[x]);
+                triangles.Add(_point[live]);
+                triangles.Add(_point[z]);
+            }
+        }
+
+        public bool Blocks(int node, int a, int b, int c)
+        {
+            var p = At(node);
+            var pa = At(a);
+            var pb = At(b);
+            var pc = At(c);
+            if (p == pa)
+            {
+                return CornerBlocked(node, pa, pb, pc);
+            }
+
+            if (p == pb)
+            {
+                return CornerBlocked(node, pb, pc, pa);
+            }
+
+            if (p == pc)
+            {
+                return CornerBlocked(node, pc, pa, pb);
+            }
+
+            return Cross(At(_previous[node]), p, At(_next[node])) <= 0 && InTriangle(pa, pb, pc, p);
         }
 
         private void Index(int start)
@@ -394,52 +545,6 @@ public static class EarClipping
             return node;
         }
 
-        private struct Ray(Vector2<double> m)
-        {
-            public double Nearest = double.PositiveInfinity;
-            public int Candidate = -1;
-            public int Crossings = 0;
-
-            public bool Meets(Ring ring, int node)
-            {
-                var a = ring.At(node);
-                var b = ring.At(ring._next[node]);
-                if (a.Y > m.Y != b.Y > m.Y && a.X + (m.Y - a.Y) * (b.X - a.X) / (b.Y - a.Y) > m.X)
-                {
-                    Crossings++;
-                }
-
-                if (!(a.Y > m.Y != b.Y > m.Y || a.Y == m.Y && b.Y == m.Y))
-                {
-                    return false;
-                }
-
-                var x = a.Y == b.Y ? Math.Min(a.X, b.X) : a.X + (m.Y - a.Y) * (b.X - a.X) / (b.Y - a.Y);
-                if (x < m.X || x >= Nearest)
-                {
-                    return false;
-                }
-
-                Nearest = x;
-                Candidate = a.Y == m.Y && a.X == x ? node
-                    : b.Y == m.Y && b.X == x ? ring._next[node]
-                    : a.X >= b.X ? node : ring._next[node];
-                return x == m.X;
-            }
-        }
-
-        private bool Opens(int node, Vector2<double> m)
-        {
-            var a = At(_previous[node]);
-            var b = At(node);
-            var c = At(_next[node]);
-            return Cross(a, b, c) >= 0
-                ? Cross(b, c, m) >= 0 && Cross(a, b, m) >= 0
-                : Cross(b, c, m) >= 0 || Cross(a, b, m) >= 0;
-        }
-
-        private bool IsReflex(int node) => Cross(At(_previous[node]), At(node), At(_next[node])) < 0;
-
         private void Splice(int bridge, int hole)
         {
             var bridgeAgain = _count++;
@@ -478,202 +583,6 @@ public static class EarClipping
             _rows.Insert(this, bridge);
             _rows.Insert(this, holeAgain);
             _rows.Insert(this, bridgeAgain);
-        }
-
-        private struct EdgeRows
-        {
-            private readonly double _top;
-            private readonly double _height;
-            private readonly int _count;
-            private readonly int[] _first;
-            private readonly List<int> _node;
-            private readonly List<int> _after;
-            private readonly int[] _seen;
-            private int _now;
-
-            public EdgeRows(Ring ring, int capacity)
-            {
-                double top = double.MaxValue, bottom = double.MinValue;
-                for (var node = 0; node < ring._count; node++)
-                {
-                    top = Math.Min(top, ring.At(node).Y);
-                    bottom = Math.Max(bottom, ring.At(node).Y);
-                }
-
-                _count = Math.Max(1, (int)Math.Sqrt(ring._count) * 2);
-                _top = top;
-                _height = Math.Max((bottom - top) / _count, double.Epsilon);
-                _first = new int[_count];
-                Array.Fill(_first, -1);
-                _node = new List<int>(ring._count * 2);
-                _after = new List<int>(ring._count * 2);
-                _seen = new int[capacity];
-                _now = 0;
-                for (var node = 0; node < ring._count; node++)
-                {
-                    Insert(ring, node);
-                }
-            }
-
-            public bool IsMade => _first != null;
-
-            public int RowOf(double y) => Math.Clamp((int)((y - _top) / _height), 0, _count - 1);
-
-            public void Insert(Ring ring, int node)
-            {
-                var a = ring.At(node).Y;
-                var b = ring.At(ring._next[node]).Y;
-                for (var row = RowOf(Math.Min(a, b)); row <= RowOf(Math.Max(a, b)); row++)
-                {
-                    _node.Add(node);
-                    _after.Add(_first[row]);
-                    _first[row] = _node.Count - 1;
-                }
-            }
-
-            public void Begin() => _now++;
-
-            public bool Visit(int node)
-            {
-                if (_seen[node] == _now)
-                {
-                    return false;
-                }
-
-                _seen[node] = _now;
-                return true;
-            }
-
-            public Entries Row(double y) => Row(RowOf(y));
-
-            public Entries Row(int row) => new(_node, _after, _first[row]);
-
-            public struct Entries(List<int> nodes, List<int> after, int first)
-            {
-                private int _entry = -2;
-
-                public Entries GetEnumerator() => this;
-
-                public int Current => nodes[_entry];
-
-                public bool MoveNext()
-                {
-                    _entry = _entry == -2 ? first : after[_entry];
-                    return _entry >= 0;
-                }
-            }
-        }
-
-        public void Clip(int start, List<int> triangles, bool bridged)
-        {
-            var left = 1;
-            var convex = IsConvex(start);
-            for (var node = _next[start]; node != start; node = _next[node])
-            {
-                left++;
-                convex &= IsConvex(node);
-            }
-
-            if (convex && !bridged)
-            {
-                if (!TurnsOnce(start))
-                {
-                    _forced = true;
-                }
-
-                for (var node = _next[start]; _next[node] != start; node = _next[node])
-                {
-                    triangles.Add(_point[start]);
-                    triangles.Add(_point[node]);
-                    triangles.Add(_point[_next[node]]);
-                }
-
-                return;
-            }
-
-            var grid = left >= LeastForGrid ? new Grid(this, start, left, Shared(start, left)) : default;
-            var gone = new bool[_count];
-            var queued = new bool[_count];
-            var queue = new List<int>(left * 2);
-            var head = 0;
-            var live = start;
-            Enqueue(start, queue, queued);
-            for (var node = _next[start]; node != start; node = _next[node])
-            {
-                Enqueue(node, queue, queued);
-            }
-
-            var preferred = -1;
-            var askedAgain = false;
-            while (left > 3)
-            {
-                int ear;
-                if (preferred >= 0 && queued[preferred] && !gone[preferred])
-                {
-                    ear = preferred;
-                }
-                else
-                {
-                    ear = -1;
-                    while (head < queue.Count)
-                    {
-                        var node = queue[head++];
-                        if (queued[node] && !gone[node])
-                        {
-                            ear = node;
-                            break;
-                        }
-                    }
-                }
-
-                preferred = -1;
-                if (ear < 0)
-                {
-                    if (!askedAgain)
-                    {
-                        askedAgain = true;
-                        queue.Clear();
-                        head = 0;
-                        Enqueue(live, queue, queued);
-                        for (var node = _next[live]; node != live; node = _next[node])
-                        {
-                            Enqueue(node, queue, queued);
-                        }
-
-                        continue;
-                    }
-
-                    _forced = true;
-                    ear = LeastHarm(live);
-                    Cut(ear, triangles, grid, gone, queue, queued);
-                    live = _next[ear];
-                    left--;
-                    askedAgain = false;
-                    continue;
-                }
-
-                queued[ear] = false;
-                var a = _previous[ear];
-                var c = _next[ear];
-                var turn = Cross(At(a), At(ear), At(c));
-                if (turn == 0 || turn > 0 && Opens(a, At(c)) && Opens(c, At(a)) && Empty(a, ear, c, grid))
-                {
-                    Cut(ear, triangles, grid, gone, queue, queued);
-                    live = c;
-                    left--;
-                    preferred = _next[c];
-                    askedAgain = false;
-                }
-            }
-
-            var x = _previous[live];
-            var z = _next[live];
-            if (left == 3 && Cross(At(x), At(live), At(z)) > 0)
-            {
-                triangles.Add(_point[x]);
-                triangles.Add(_point[live]);
-                triangles.Add(_point[z]);
-            }
         }
 
         private void Cut(int ear, List<int> triangles, Grid grid, bool[] gone, List<int> queue, bool[] queued)
@@ -776,8 +685,6 @@ public static class EarClipping
             return shared;
         }
 
-        private bool IsConvex(int node) => Cross(At(_previous[node]), At(node), At(_next[node])) > 0;
-
         private int LeastHarm(int start)
         {
             var best = start;
@@ -828,187 +735,283 @@ public static class EarClipping
             return true;
         }
 
-        private bool Blocks(int node, int a, int b, int c)
+        private bool Opens(int node, Vector2<double> m)
         {
-            var p = At(node);
-            var pa = At(a);
-            var pb = At(b);
-            var pc = At(c);
-            if (p == pa)
-            {
-                return CornerBlocked(node, pa, pb, pc);
-            }
-
-            if (p == pb)
-            {
-                return CornerBlocked(node, pb, pc, pa);
-            }
-
-            if (p == pc)
-            {
-                return CornerBlocked(node, pc, pa, pb);
-            }
-
-            return Cross(At(_previous[node]), p, At(_next[node])) <= 0 && InTriangle(pa, pb, pc, p);
+            var a = At(_previous[node]);
+            var b = At(node);
+            var c = At(_next[node]);
+            return Cross(a, b, c) >= 0
+                ? Cross(b, c, m) >= 0 && Cross(a, b, m) >= 0
+                : Cross(b, c, m) >= 0 || Cross(a, b, m) >= 0;
         }
+
+        private bool IsReflex(int node) => Cross(At(_previous[node]), At(node), At(_next[node])) < 0;
 
         private bool CornerBlocked(int node, Vector2<double> corner, Vector2<double> next, Vector2<double> last) =>
             InCorner(corner, next, last, At(_previous[node])) || InCorner(corner, next, last, At(_next[node]));
+    }
 
-        private static bool InCorner(Vector2<double> corner, Vector2<double> next, Vector2<double> last,
-            Vector2<double> p) =>
-            Cross(corner, next, p) > 0 && Cross(corner, p, last) > 0;
+    private struct Ray(Vector2<double> m)
+    {
+        public double Nearest = double.PositiveInfinity;
+        public int Candidate = -1;
+        public int Crossings = 0;
 
-        private readonly struct Grid
+        public bool Meets(Ring ring, int node)
         {
-            private readonly double _left;
-            private readonly double _top;
-            private readonly double _cellWidth;
-            private readonly double _cellHeight;
-            private readonly int _columns;
-            private readonly int _rows;
-            private readonly int[] _first;
-            private readonly int[] _after;
-            private readonly int[] _before;
-            private readonly int[] _cellOf;
-            private readonly bool[] _shared;
-
-            public Grid(Ring ring, int start, int count, bool[] shared)
+            var a = ring.At(node);
+            var b = ring.At(ring.Next(node));
+            if (a.Y > m.Y != b.Y > m.Y && a.X + (m.Y - a.Y) * (b.X - a.X) / (b.Y - a.Y) > m.X)
             {
-                _shared = shared;
-                double left = double.MaxValue, top = double.MaxValue, right = double.MinValue, bottom = double.MinValue;
-                var blockers = 0;
-                var node = start;
-                do
-                {
-                    if (shared[node] || !ring.IsConvex(node))
-                    {
-                        var p = ring.At(node);
-                        left = Math.Min(left, p.X);
-                        top = Math.Min(top, p.Y);
-                        right = Math.Max(right, p.X);
-                        bottom = Math.Max(bottom, p.Y);
-                        blockers++;
-                    }
-
-                    node = ring._next[node];
-                }
-                while (node != start);
-
-                if (blockers == 0)
-                {
-                    left = top = right = bottom = 0;
-                }
-
-                var side = Math.Max(1, (int)Math.Sqrt(blockers / 2.0));
-                _left = left;
-                _top = top;
-                _columns = side;
-                _rows = side;
-                _cellWidth = Math.Max((right - left) / side, double.Epsilon);
-                _cellHeight = Math.Max((bottom - top) / side, double.Epsilon);
-                _first = new int[side * side];
-                _after = new int[ring._count];
-                _before = new int[ring._count];
-                _cellOf = new int[ring._count];
-                Array.Fill(_first, -1);
-                Array.Fill(_cellOf, -1);
-
-                node = start;
-                do
-                {
-                    if (!shared[node] && ring.IsConvex(node))
-                    {
-                        node = ring._next[node];
-                        continue;
-                    }
-
-                    var cell = CellOf(ring.At(node));
-                    _cellOf[node] = cell;
-                    _before[node] = -1;
-                    _after[node] = _first[cell];
-                    if (_first[cell] >= 0)
-                    {
-                        _before[_first[cell]] = node;
-                    }
-
-                    _first[cell] = node;
-                    node = ring._next[node];
-                }
-                while (node != start);
+                Crossings++;
             }
 
-            public bool IsMade => _first != null;
-
-            private int Column(double x) => Math.Clamp((int)((x - _left) / _cellWidth), 0, _columns - 1);
-
-            private int Row(double y) => Math.Clamp((int)((y - _top) / _cellHeight), 0, _rows - 1);
-
-            private int CellOf(Vector2<double> p) => Row(p.Y) * _columns + Column(p.X);
-
-            public void Settle(Ring ring, int node)
+            if (!(a.Y > m.Y != b.Y > m.Y || a.Y == m.Y && b.Y == m.Y))
             {
-                if (_cellOf[node] >= 0 && !_shared[node] && ring.IsConvex(node))
-                {
-                    Remove(node);
-                }
+                return false;
             }
 
-            public void Remove(int node)
+            var x = a.Y == b.Y ? Math.Min(a.X, b.X) : a.X + (m.Y - a.Y) * (b.X - a.X) / (b.Y - a.Y);
+            if (x < m.X || x >= Nearest)
             {
-                if (_cellOf[node] < 0)
-                {
-                    return;
-                }
-
-                if (_before[node] >= 0)
-                {
-                    _after[_before[node]] = _after[node];
-                }
-                else
-                {
-                    _first[_cellOf[node]] = _after[node];
-                }
-
-                if (_after[node] >= 0)
-                {
-                    _before[_after[node]] = _before[node];
-                }
-
-                _cellOf[node] = -1;
+                return false;
             }
 
-            public bool Empty(Ring ring, int na, int nb, int nc)
-            {
-                var a = ring.At(na);
-                var b = ring.At(nb);
-                var c = ring.At(nc);
-                var firstColumn = Column(Math.Min(a.X, Math.Min(b.X, c.X)));
-                var lastColumn = Column(Math.Max(a.X, Math.Max(b.X, c.X)));
-                var firstRow = Row(Math.Min(a.Y, Math.Min(b.Y, c.Y)));
-                var lastRow = Row(Math.Max(a.Y, Math.Max(b.Y, c.Y)));
-                for (var row = firstRow; row <= lastRow; row++)
-                {
-                    for (var column = firstColumn; column <= lastColumn; column++)
-                    {
-                        for (var node = _first[row * _columns + column]; node >= 0; node = _after[node])
-                        {
-                            if (node != na && node != nb && node != nc && ring.Blocks(node, na, nb, nc))
-                            {
-                                return false;
-                            }
-                        }
-                    }
-                }
-
-                return true;
-            }
+            Nearest = x;
+            Candidate = a.Y == m.Y && a.X == x ? node
+                : b.Y == m.Y && b.X == x ? ring.Next(node)
+                : a.X >= b.X ? node : ring.Next(node);
+            return x == m.X;
         }
     }
 
-    private static bool InTriangle(Vector2<double> a, Vector2<double> b, Vector2<double> c, Vector2<double> p) =>
-        Cross(a, b, p) >= 0 && Cross(b, c, p) >= 0 && Cross(c, a, p) >= 0;
+    private struct EdgeRows
+    {
+        private readonly double _top;
+        private readonly double _height;
+        private readonly int _count;
+        private readonly int[] _first;
+        private readonly List<int> _node;
+        private readonly List<int> _after;
+        private readonly int[] _seen;
+        private int _now;
 
-    private static bool InTriangleEitherWay(Vector2<double> a, Vector2<double> b, Vector2<double> c, Vector2<double> p) =>
-        Cross(a, b, c) >= 0 ? InTriangle(a, b, c, p) : InTriangle(a, c, b, p);
+        public EdgeRows(Ring ring, int capacity)
+        {
+            double top = double.MaxValue, bottom = double.MinValue;
+            for (var node = 0; node < ring.Count; node++)
+            {
+                top = Math.Min(top, ring.At(node).Y);
+                bottom = Math.Max(bottom, ring.At(node).Y);
+            }
+
+            _count = Math.Max(1, (int)Math.Sqrt(ring.Count) * 2);
+            _top = top;
+            _height = Math.Max((bottom - top) / _count, double.Epsilon);
+            _first = new int[_count];
+            Array.Fill(_first, -1);
+            _node = new List<int>(ring.Count * 2);
+            _after = new List<int>(ring.Count * 2);
+            _seen = new int[capacity];
+            _now = 0;
+            for (var node = 0; node < ring.Count; node++)
+            {
+                Insert(ring, node);
+            }
+        }
+
+        public bool IsMade => _first != null;
+
+        public int RowOf(double y) => Math.Clamp((int)((y - _top) / _height), 0, _count - 1);
+
+        public void Insert(Ring ring, int node)
+        {
+            var a = ring.At(node).Y;
+            var b = ring.At(ring.Next(node)).Y;
+            for (var row = RowOf(Math.Min(a, b)); row <= RowOf(Math.Max(a, b)); row++)
+            {
+                _node.Add(node);
+                _after.Add(_first[row]);
+                _first[row] = _node.Count - 1;
+            }
+        }
+
+        public void Begin() => _now++;
+
+        public bool Visit(int node)
+        {
+            if (_seen[node] == _now)
+            {
+                return false;
+            }
+
+            _seen[node] = _now;
+            return true;
+        }
+
+        public RowEntries Row(double y) => Row(RowOf(y));
+
+        public RowEntries Row(int row) => new(_node, _after, _first[row]);
+    }
+
+    private struct RowEntries(List<int> nodes, List<int> after, int first)
+    {
+        private int _entry = -2;
+
+        public RowEntries GetEnumerator() => this;
+
+        public int Current => nodes[_entry];
+
+        public bool MoveNext()
+        {
+            _entry = _entry == -2 ? first : after[_entry];
+            return _entry >= 0;
+        }
+    }
+
+    private readonly struct Grid
+    {
+        private readonly double _left;
+        private readonly double _top;
+        private readonly double _cellWidth;
+        private readonly double _cellHeight;
+        private readonly int _columns;
+        private readonly int _rows;
+        private readonly int[] _first;
+        private readonly int[] _after;
+        private readonly int[] _before;
+        private readonly int[] _cellOf;
+        private readonly bool[] _shared;
+
+        public Grid(Ring ring, int start, int count, bool[] shared)
+        {
+            _shared = shared;
+            double left = double.MaxValue, top = double.MaxValue, right = double.MinValue, bottom = double.MinValue;
+            var blockers = 0;
+            var node = start;
+            do
+            {
+                if (shared[node] || !ring.IsConvex(node))
+                {
+                    var p = ring.At(node);
+                    left = Math.Min(left, p.X);
+                    top = Math.Min(top, p.Y);
+                    right = Math.Max(right, p.X);
+                    bottom = Math.Max(bottom, p.Y);
+                    blockers++;
+                }
+
+                node = ring.Next(node);
+            }
+            while (node != start);
+
+            if (blockers == 0)
+            {
+                left = top = right = bottom = 0;
+            }
+
+            var side = Math.Max(1, (int)Math.Sqrt(blockers / 2.0));
+            _left = left;
+            _top = top;
+            _columns = side;
+            _rows = side;
+            _cellWidth = Math.Max((right - left) / side, double.Epsilon);
+            _cellHeight = Math.Max((bottom - top) / side, double.Epsilon);
+            _first = new int[side * side];
+            _after = new int[ring.Count];
+            _before = new int[ring.Count];
+            _cellOf = new int[ring.Count];
+            Array.Fill(_first, -1);
+            Array.Fill(_cellOf, -1);
+
+            node = start;
+            do
+            {
+                if (!shared[node] && ring.IsConvex(node))
+                {
+                    node = ring.Next(node);
+                    continue;
+                }
+
+                var cell = CellOf(ring.At(node));
+                _cellOf[node] = cell;
+                _before[node] = -1;
+                _after[node] = _first[cell];
+                if (_first[cell] >= 0)
+                {
+                    _before[_first[cell]] = node;
+                }
+
+                _first[cell] = node;
+                node = ring.Next(node);
+            }
+            while (node != start);
+        }
+
+        public bool IsMade => _first != null;
+
+        public void Settle(Ring ring, int node)
+        {
+            if (_cellOf[node] >= 0 && !_shared[node] && ring.IsConvex(node))
+            {
+                Remove(node);
+            }
+        }
+
+        public void Remove(int node)
+        {
+            if (_cellOf[node] < 0)
+            {
+                return;
+            }
+
+            if (_before[node] >= 0)
+            {
+                _after[_before[node]] = _after[node];
+            }
+            else
+            {
+                _first[_cellOf[node]] = _after[node];
+            }
+
+            if (_after[node] >= 0)
+            {
+                _before[_after[node]] = _before[node];
+            }
+
+            _cellOf[node] = -1;
+        }
+
+        public bool Empty(Ring ring, int na, int nb, int nc)
+        {
+            var a = ring.At(na);
+            var b = ring.At(nb);
+            var c = ring.At(nc);
+            var firstColumn = Column(Math.Min(a.X, Math.Min(b.X, c.X)));
+            var lastColumn = Column(Math.Max(a.X, Math.Max(b.X, c.X)));
+            var firstRow = Row(Math.Min(a.Y, Math.Min(b.Y, c.Y)));
+            var lastRow = Row(Math.Max(a.Y, Math.Max(b.Y, c.Y)));
+            for (var row = firstRow; row <= lastRow; row++)
+            {
+                for (var column = firstColumn; column <= lastColumn; column++)
+                {
+                    for (var node = _first[row * _columns + column]; node >= 0; node = _after[node])
+                    {
+                        if (node != na && node != nb && node != nc && ring.Blocks(node, na, nb, nc))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private int Column(double x) => Math.Clamp((int)((x - _left) / _cellWidth), 0, _columns - 1);
+
+        private int Row(double y) => Math.Clamp((int)((y - _top) / _cellHeight), 0, _rows - 1);
+
+        private int CellOf(Vector2<double> p) => Row(p.Y) * _columns + Column(p.X);
+    }
 }
