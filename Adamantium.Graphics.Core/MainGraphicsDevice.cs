@@ -28,6 +28,22 @@ public class MainGraphicsDevice : DisposableBase
 
     public uint BuffersCount { get; }
 
+    private long _imageBytes;
+    private long _stagingBytes;
+
+    /// <summary>The bytes the images of textures made on this device hold now, counted where they are allocated and freed -
+    /// whichever wrapper made them, and whether or not it still lists them.</summary>
+    public long ImageBytes => Interlocked.Read(ref _imageBytes);
+
+    /// <summary>The bytes the staging buffers textures keep for reading back hold now, counted like <see cref="ImageBytes"/>.</summary>
+    public long StagingBytes => Interlocked.Read(ref _stagingBytes);
+
+    /// <summary>Counts <paramref name="bytes"/> of image memory allocated, or freed when negative; for the texture code.</summary>
+    public void CountImageBytes(long bytes) => Interlocked.Add(ref _imageBytes, bytes);
+
+    /// <summary>Counts <paramref name="bytes"/> of staging memory allocated, or freed when negative; for the texture code.</summary>
+    public void CountStagingBytes(long bytes) => Interlocked.Add(ref _stagingBytes, bytes);
+
     public bool EnableDynamicRendering { get; }
 
     /// <summary>True when VK_EXT_device_fault was enabled, so a device-lost can be queried for its real cause.</summary>
@@ -91,8 +107,23 @@ public class MainGraphicsDevice : DisposableBase
         }
     }
 
+    /// <summary>Adds the drawing wrappers made on this device to <paramref name="into"/>, as they are at this moment -
+    /// safe while another thread makes or disposes one.</summary>
+    public void CollectDevices(List<IGraphicsDevice> into)
+    {
+        lock (_retireSync)
+        {
+            into.AddRange(graphicsDevices);
+        }
+    }
+
     /// <summary>Called by a drawing wrapper as it begins a frame, once its own fence wait has returned.</summary>
-    public void OnFrameStarted()
+    public void OnFrameStarted() => ReleaseRetired();
+
+    /// <summary>Disposes what was retired and no frame can read any more: every wrapper has begun the frames it owed, or
+    /// has none in flight. Called as frames begin, and between them by whoever draws while nothing does - what was
+    /// retired just before a scene went still is otherwise held until something draws again.</summary>
+    public void ReleaseRetired()
     {
         List<IDisposable> due = null;
         lock (_retireSync)
@@ -128,9 +159,17 @@ public class MainGraphicsDevice : DisposableBase
             return;
         }
 
+        // One that fails to go must not keep the rest: they are off the list already.
         foreach (var resource in due)
         {
-            resource.Dispose();
+            try
+            {
+                resource.Dispose();
+            }
+            catch (Exception e)
+            {
+                Log.Logger.Error(e, "A retired {Resource} failed to dispose", resource.GetType().Name);
+            }
         }
     }
 

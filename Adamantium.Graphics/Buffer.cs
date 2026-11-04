@@ -31,6 +31,8 @@ namespace Adamantium.Graphics
 
         private DeviceMemoryAllocator Allocator => ((GraphicsDevice)GraphicsDevice).MemoryAllocator;
 
+        public override ulong DeviceMemoryBytes => _allocation?.Block == null ? 0 : _allocation.Size;
+
         public BufferUsageFlags Usage { get; private set; }
 
         public SharingMode SharingMode { get; private set; }

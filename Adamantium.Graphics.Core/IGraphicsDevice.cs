@@ -214,7 +214,10 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
 
     /// <summary>Unregisters a resource (called from its Dispose) so it stops being rooted by the device.</summary>
     void RemoveResource(GraphicsResource resource);
-    
+
+    /// <summary>Adds the resources registered with this device and not yet disposed to <paramref name="into"/>.</summary>
+    void CollectResources(List<GraphicsResource> into);
+
     void AddToDeferDisposeQueue(IDisposable obj);
 
     /// <summary>Copies <paramref name="data"/> into this frame's upload pages and gives the copy's device address, for a
