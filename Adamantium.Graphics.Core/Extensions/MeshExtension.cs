@@ -127,6 +127,7 @@ public static class MeshExtension
         return vertices;
     }
     
+    /// <summary>The mesh's points on the plane, as the UI's flat geometry draws them; null for a mesh without points.</summary>
     public static UIVertex[] ToUIVertices(this Mesh mesh)
     {
         if (!mesh.Semantic.HasFlag(VertexSemantic.Position))
@@ -134,32 +135,32 @@ public static class MeshExtension
             return null;
         }
 
-        int length = mesh.Points.Length;
-
-        var normals = mesh.Semantic & VertexSemantic.Normal;
-        var texcoords0 = mesh.Semantic & VertexSemantic.UV0;
-        var texcoords1 = mesh.Semantic & VertexSemantic.UV1;
-        
-        var vertices = new UIVertex[length];
-
-        for (int i = 0; i < length; i++)
+        var points = mesh.Points;
+        var vertices = new UIVertex[points.Length];
+        for (var i = 0; i < points.Length; i++)
         {
-            var vertex = new UIVertex() { Position = mesh.Points[i].As<float>() };
-            if (normals > 0)
-            {
-                vertex.Normal = mesh.Normals[i];
-            }
-            if (texcoords0 > 0)
-            {
-                vertex.UV0 = mesh.UV0[i];
-            }
-            if (texcoords1 > 0)
-            {
-                vertex.UV1 = mesh.UV1[i];
-            }
-            
+            vertices[i] = new UIVertex(new Vector2F((float)points[i].X, (float)points[i].Y));
+        }
 
-            vertices[i] = vertex;
+        return vertices;
+    }
+
+    /// <summary>The mesh's points on the plane with its first texture coordinates, as a UI picture draws them - zero
+    /// where it has none; null for a mesh without points.</summary>
+    public static UITexturedVertex[] ToUITexturedVertices(this Mesh mesh)
+    {
+        if (!mesh.Semantic.HasFlag(VertexSemantic.Position))
+        {
+            return null;
+        }
+
+        var points = mesh.Points;
+        var uvs = mesh.Semantic.HasFlag(VertexSemantic.UV0) ? mesh.UV0 : null;
+        var vertices = new UITexturedVertex[points.Length];
+        for (var i = 0; i < points.Length; i++)
+        {
+            vertices[i] = new UITexturedVertex(new Vector2F((float)points[i].X, (float)points[i].Y),
+                uvs != null && i < uvs.Length ? uvs[i] : default);
         }
 
         return vertices;

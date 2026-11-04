@@ -47,6 +47,10 @@ All packages share one version.
 - `TiffGeoKey.CoordinateTransformation` is `TiffGeoKey.ProjectionMethod`, as GeoTIFF 1.1 names the key.
 - A GeoTIFF code key holding a fraction (a malformed file) reads as no code, not as the code truncated.
 
+- `UIVertex` is a point on the plane and nothing else - 8 bytes, from 40: a normal, a third coordinate and two sets of
+  texture coordinates no UI shader read. A picture's vertex, which names where it samples its source, is
+  `UITexturedVertex` (position and texture coordinates, 16 bytes), made by `Mesh.ToUITexturedVertices`.
+
 ### Fixed
 
 - A frame that could not begin - the device lost, the fence wait failed, the presenter not ready - no longer leaves its
