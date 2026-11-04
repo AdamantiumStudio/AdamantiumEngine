@@ -161,6 +161,59 @@ public class EarClippingTests
         }
     }
 
+    // So many holes that they are joined through an index of the edges rather than by walking the ring.
+    [Test]
+    public void AThousandHoles_AreLeftOut()
+    {
+        var points = new List<Vector2<double>>(Square(0, 0, 1000));
+        var holes = new List<int>();
+        var holesArea = 0.0;
+        for (var i = 0; i < 1000; i++)
+        {
+            var hole = Circle(12, 10, 20 + i % 32 * 30, 20 + i / 32 * 30, clockwise: true);
+            holes.Add(points.Count);
+            points.AddRange(hole);
+            holesArea += Area(hole);
+        }
+
+        var all = points.ToArray();
+        var starts = holes.ToArray();
+        var triangles = new List<int>();
+
+        var clean = EarClipping.Triangulate(all, starts, triangles);
+
+        Assert.That(clean, Is.True);
+        AssertCovers(all, triangles, 1_000_000 + holesArea);
+        AssertCoversExactly(all, starts, triangles);
+    }
+
+    [Test]
+    public void ManyHolesTouching_AreLeftOutThroughTheIndex()
+    {
+        var points = new List<Vector2<double>>(Square(0, 0, 200));
+        var holes = new List<int>();
+        for (var row = 0; row < 40; row++)
+        {
+            for (var column = 0; column < 40; column++)
+            {
+                if ((row + column) % 2 == 0)
+                {
+                    holes.Add(points.Count);
+                    points.AddRange(Square(20 + column * 4, 20 + row * 4, 4));
+                }
+            }
+        }
+
+        var all = points.ToArray();
+        var starts = holes.ToArray();
+        var triangles = new List<int>();
+
+        EarClipping.Triangulate(all, starts, triangles);
+
+        AssertCovers(all, triangles, 200 * 200 - holes.Count * 16);
+        AssertCoversExactly(all, starts, triangles);
+    }
+
     [Test]
     public void AHoleOutsideTheRing_IsDroppedAndSaid()
     {

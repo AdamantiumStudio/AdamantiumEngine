@@ -9,7 +9,10 @@ All packages share one version.
 
 - `EarClipping.Triangulate`: a polygon - an outer ring and its holes, given as points and where each hole starts - cut
   into triangles by clipping ears, as indices into the points: holes joined by bridges to vertices they see, rings that
-  touch at a point or along a side cut as they are, a grid over a large ring so an ear asks only the vertices near it.
+  touch at a point or along a side cut as they are. Only corners next to a cut are asked again; a grid of the vertices
+  that can spoil an ear - reflex ones and ones sharing a point - answers on a large ring; a convex ring is a fan at
+  once; many holes find what they see through an index of the edges by rows - so a spiral, a comb, a million-point
+  circle or thousands of holes are cut in milliseconds.
   Rings that cross, a hole outside or no area still end in triangles, and the call answers false so the caller can
   fill them by a fill rule instead. The fills of simple rings - glyphs, shapes, nested contours - are cut by it.
 
