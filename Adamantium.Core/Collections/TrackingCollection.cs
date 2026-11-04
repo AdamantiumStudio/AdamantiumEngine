@@ -33,10 +33,9 @@ namespace Adamantium.Core.Collections
         /// <param name="index">The starting index.</param>
         protected void NotifyAdd(IList items, int index)
         {
-            if (CollectionChanged != null)
+            if (CollectionChanged is { } changed)
             {
-                var e = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, items, index);
-                CollectionChanged(this, e);
+                changed(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, items, index));
             }
 
             NotifyCountChanged();
@@ -50,10 +49,10 @@ namespace Adamantium.Core.Collections
         /// <param name="index">The starting index.</param>
         private void NotifyReplace(T oldItem, T newItem, int index)
         {
-            if (CollectionChanged != null)
+            if (CollectionChanged is { } changed)
             {
-                var e = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, newItem, oldItem, index);
-                CollectionChanged(this, e);
+                changed(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, newItem, oldItem,
+                    index));
             }
 
             NotifyCountChanged();
@@ -75,10 +74,9 @@ namespace Adamantium.Core.Collections
         /// <param name="index">The starting index.</param>
         protected void NotifyRemove(IList items, int index)
         {
-            if (CollectionChanged != null)
+            if (CollectionChanged is { } changed)
             {
-                var e = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, items, index);
-                CollectionChanged.Invoke(this, e);
+                changed(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, items, index));
             }
 
             NotifyCountChanged();
@@ -89,11 +87,9 @@ namespace Adamantium.Core.Collections
         /// </summary>
         protected void NotifyReset()
         {
-            if (CollectionChanged != null)
+            if (CollectionChanged is { } changed)
             {
-                var e = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset);
-
-                CollectionChanged(this, e);
+                changed(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
             }
 
             NotifyCountChanged();
@@ -107,12 +103,24 @@ namespace Adamantium.Core.Collections
 
         protected override void OnInsert(int index, T item)
         {
-            NotifyAdd(new List<T>() { item }, index);
+            if (CollectionChanged is { } changed)
+            {
+                changed(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add,
+                    new List<T>() { item }, index));
+            }
+
+            NotifyCountChanged();
         }
 
         protected override void OnRemoveItem(int index, T item)
         {
-            NotifyRemove(new List<T>() { item }, index);
+            if (CollectionChanged is { } changed)
+            {
+                changed(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove,
+                    new List<T>() { item }, index));
+            }
+
+            NotifyCountChanged();
         }
 
         protected override void OnSet(int index, T oldItem, T newItem)

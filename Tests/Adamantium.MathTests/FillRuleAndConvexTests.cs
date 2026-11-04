@@ -8,7 +8,7 @@ namespace Adamantium.MathTests
 {
     /// <summary>
     /// Locks the triangulator's fill-rule behavior (truth table) and the convex fast-path,
-    /// so perf work (convex fan, earcut later) can't silently change rendered results.
+    /// so perf work (convex fan, ear clipping later) can't silently change rendered results.
     /// </summary>
     public class FillRuleAndConvexTests
     {
@@ -74,7 +74,7 @@ namespace Adamantium.MathTests
         }
 
         [Test]
-        public void ConcaveSimple_EarcutFillsCorrectly()
+        public void ConcaveSimple_EarClippingFillsCorrectly()
         {
             // L-shape: bottom bar [0,20]x[0,10] + right bar [10,20]x[10,20]; top-left is a notch.
             var l = new[] { V(0, 0), V(20, 0), V(20, 20), V(10, 20), V(10, 10), V(0, 10) };
@@ -84,14 +84,14 @@ namespace Adamantium.MathTests
             Assert.IsTrue(Covered(tris, V(5, 5)), "bottom bar filled");
             Assert.IsTrue(Covered(tris, V(15, 15)), "right bar filled");
             Assert.IsFalse(Covered(tris, V(5, 15)), "notch empty");
-            Assert.AreEqual(4, tris.Count / 3, "L (6 verts) => n-2 = 4 triangles (earcut)");
+            Assert.AreEqual(4, tris.Count / 3, "L (6 verts) => n-2 = 4 triangles (ear clipping)");
         }
 
         [Test]
-        public void MultiContour_HoleViaEarcut()
+        public void MultiContour_HoleViaEarClipping()
         {
-            // Donut (outer 0..100, inner 25..75): clean nesting -> earcut-with-holes path.
-            // EvenOdd: ring filled, center hole; quad + quad-hole earcuts to 8 triangles.
+            // Donut (outer 0..100, inner 25..75): clean nesting -> ear clipping with holes path.
+            // EvenOdd: ring filled, center hole; quad + quad-hole ear-clips to 8 triangles.
             var even = FillDonut(FillRule.EvenOdd);
             Assert.IsTrue(Covered(even, V(10, 10)), "ring filled");
             Assert.IsFalse(Covered(even, V(50, 50)), "center hole");

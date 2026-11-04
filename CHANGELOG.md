@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- `EarClipping.Triangulate`: a polygon - an outer ring and its holes, given as points and where each hole starts - cut
+  into triangles by clipping ears, as indices into the points: holes joined by bridges to vertices they see, rings that
+  touch at a point or along a side cut as they are, a grid over a large ring so an ear asks only the vertices near it.
+  Rings that cross, a hole outside or no area still end in triangles, and the call answers false so the caller can
+  fill them by a fill rule instead. The fills of simple rings - glyphs, shapes, nested contours - are cut by it.
+
 - GeoTIFF written: `TiffSaveOptions.GeoReference` puts a georeference into the first page - a tie point and pixel scale,
   or the matrix for a transformation that turns, and the keys in the directory, in doubles and in text - which
   `TiffGeoReference.Create` makes from a transformation and keys, as reading gives them back.
@@ -17,6 +23,13 @@ All packages share one version.
 
 ### Changed
 
+- A `TrackingCollection` nobody watches is changed without allocating: an announcement was made for nobody - a list per
+  item added or removed; the last handler taken off from another thread meanwhile no longer makes the change throw.
+  `AddRange` makes room for all the items at once, still doubling the room as adding one by one does.
+  `MeshContour.SetPoints` rounds the points in one copy of them rather than three, and `Mesh.AddContour` hands it a list
+  as it is. A map tile's mesh paid hundreds of megabytes for it.
+- `Mesh.AddContour` does what its `generateSegments` asks - it was never passed on, so no contour was split into
+  segments whatever was asked. It is false by default now, as every contour was made so far.
 - `TiffGeoKey.CoordinateTransformation` is `TiffGeoKey.ProjectionMethod`, as GeoTIFF 1.1 names the key.
 - A GeoTIFF code key holding a fraction (a malformed file) reads as no code, not as the code truncated.
 

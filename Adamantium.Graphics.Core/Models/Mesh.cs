@@ -204,17 +204,21 @@ public class Mesh
         return this;
     }
     
-    public void AddContour(IEnumerable<Vector3<double>> inPoints, bool isGeometryClosed, bool generateSegments = true)
+    /// <summary>Adds a contour through <paramref name="inPoints"/>; with <paramref name="generateSegments"/>, split into
+    /// the segments the triangulator meets crossings on.</summary>
+    public void AddContour(IEnumerable<Vector3<double>> inPoints, bool isGeometryClosed, bool generateSegments = false)
     {
-        Contours.Add(new MeshContour(inPoints, isGeometryClosed));
+        Contours.Add(new MeshContour(inPoints, isGeometryClosed, generateSegments));
     }
 
-    public void AddContour(IEnumerable<Vector2<double>> inPoints, bool isGeometryClosed, bool generateSegments = true)
+    /// <summary>Adds a contour through <paramref name="inPoints"/>, none for no points; with
+    /// <paramref name="generateSegments"/>, split into the segments the triangulator meets crossings on.</summary>
+    public void AddContour(IEnumerable<Vector2<double>> inPoints, bool isGeometryClosed, bool generateSegments = false)
     {
-        var points = inPoints as Vector2<double>[] ?? inPoints?.ToArray();
-        if (points == null || points.Length == 0) return;
+        var points = inPoints as IReadOnlyList<Vector2<double>> ?? inPoints?.ToArray();
+        if (points == null || points.Count == 0) return;
 
-        Contours.Add(new MeshContour(points, isGeometryClosed));
+        Contours.Add(new MeshContour(points, isGeometryClosed, generateSegments));
     }
 
     public void AddContour(IEnumerable<GeometrySegment> segments)

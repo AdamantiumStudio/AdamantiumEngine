@@ -22,7 +22,7 @@ public class MeshContour
     public bool IsGeometryClosed { get; set; }
 
     /// <summary>True once <see cref="RemoveSelfIntersections"/> has split this contour at a self-crossing. A simple
-    /// (false) contour can be triangulated by earcut; a self-intersecting one must use the scanline (which resolves
+    /// (false) contour can be triangulated by clipping ears; a self-intersecting one must use the scanline (which resolves
     /// crossings per fill rule).</summary>
     public bool HadSelfIntersections { get; private set; }
 
@@ -78,27 +78,37 @@ public class MeshContour
 
     public void SetPoints(IEnumerable<Vector2<double>> points, bool generateSegments = true)
     {
-        var tmpList = new List<Vector2<double>>();
         // Snap to CoordinatePrecision first so floating-point-noise-equal coordinates become exactly equal for the
         // triangulator's exact point comparisons (and the dedup below collapses the now-coincident points).
-        var pts = points.Select(p => Vector2<double>.Round(p, CoordinatePrecision)).ToArray();
-        // Check for duplicating points going together and remove them
-        for (int i = 0; i < pts.Length - 1; i++)
+        var kept = points is Vector2<double>[] given ? (Vector2<double>[])given.Clone() : points.ToArray();
+        for (var i = 0; i < kept.Length; i++)
         {
-            var p1 = pts[i];
-            var p2 = pts[i + 1];
+            kept[i] = Vector2<double>.Round(kept[i], CoordinatePrecision);
+        }
+
+        var count = 0;
+        // Check for duplicating points going together and remove them
+        for (int i = 0; i < kept.Length - 1; i++)
+        {
+            var p1 = kept[i];
+            var p2 = kept[i + 1];
             if (p1 != p2)
             {
-                tmpList.Add(p1);
+                kept[count++] = p1;
             }
-            
-            if (i + 1 == pts.Length - 1 && tmpList.Count > 0 && p2 != tmpList[0])
+
+            if (i + 1 == kept.Length - 1 && count > 0 && p2 != kept[0])
             {
-                tmpList.Add(p2);
+                kept[count++] = p2;
             }
         }
-        
-        Points = tmpList.ToArray();
+
+        if (count != kept.Length)
+        {
+            Array.Resize(ref kept, count);
+        }
+
+        Points = kept;
         Segments?.Clear();
         if (generateSegments)
         {

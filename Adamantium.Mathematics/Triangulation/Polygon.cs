@@ -88,7 +88,7 @@ namespace Adamantium.Mathematics.Triangulation
         public List<Vector3<double>> FillIndirect(bool triangulate = true)
         {
             // Fast-path: when every contour is a simple, closed ring and no two edges cross (pure nesting), resolve
-            // holes by containment + fill rule and earcut. O(n log n) detection + ~O(n) triangulation, bypassing
+            // holes by containment + fill rule and ear clipping. O(n log n) detection + ~O(n) triangulation, bypassing
             // both the O(n^2) self-intersection scan and the O(n^2) MergeContours. Crossings / self-intersections
             // fall through to the full pipeline below.
             if (TryFastTriangulate(triangulate, out var fast)) return fast;
@@ -159,7 +159,7 @@ namespace Adamantium.Mathematics.Triangulation
 
         /// <summary>
         /// Fast path for clean geometry: every contour is a simple, closed ring and no two edges cross (pure
-        /// nesting). Resolves holes by containment + <see cref="FillRule"/> and triangulates with earcut, bypassing
+        /// nesting). Resolves holes by containment + <see cref="FillRule"/> and triangulates by clipping ears, bypassing
         /// the O(n^2) self-intersection scan and the O(n^2) MergeContours. Returns false (caller uses the full
         /// pipeline) for anything with crossings or self-intersections.
         /// </summary>
@@ -207,7 +207,7 @@ namespace Adamantium.Mathematics.Triangulation
         }
 
         /// <summary>Triangulates rings that do not cross, by the fill rule: which ring is solid and which is a hole is
-        /// decided here, and earcut is handed the answer.</summary>
+        /// decided here, and ear clipping is handed the answer.</summary>
         private List<Vector3<double>> FillRings(List<Vector2<double>[]> rings, FillRule rule)
         {
             var result = new List<Vector3<double>>();
@@ -259,9 +259,9 @@ namespace Adamantium.Mathematics.Triangulation
                 }
 
                 if (holes == null)
-                    result.AddRange(MathHelper.Polyline.IsConvex<double>(rings[i]) ? Triangulator.FanTriangulate(rings[i]) : Triangulator.EarcutTriangulate(rings[i]));
+                    result.AddRange(MathHelper.Polyline.IsConvex<double>(rings[i]) ? Triangulator.FanTriangulate(rings[i]) : Triangulator.EarClipTriangulate(rings[i]));
                 else
-                    result.AddRange(Triangulator.EarcutWithHoles(rings[i], holes));
+                    result.AddRange(Triangulator.EarClipWithHoles(rings[i], holes));
 
             }
 
@@ -385,12 +385,12 @@ namespace Adamantium.Mathematics.Triangulation
 
         private List<Vector3<double>> TriangulateContour(MeshContour item)
         {
-            // A simple (non-self-intersecting) contour triangulates with earcut in ~O(n), ~n-2 triangles (no
+            // A simple (non-self-intersecting) contour triangulates by clipping ears in ~O(n), ~n-2 triangles (no
             // slivers). Self-intersecting contours fall back to the scanline, which resolves the crossings per
-            // fill rule (earcut would mis-handle a non-simple ring).
+            // fill rule (ear clipping would mis-handle a non-simple ring).
             if (!item.HadSelfIntersections)
             {
-                return Triangulator.EarcutTriangulate(item.Points);
+                return Triangulator.EarClipTriangulate(item.Points);
             }
 
             var polygon = new Polygon

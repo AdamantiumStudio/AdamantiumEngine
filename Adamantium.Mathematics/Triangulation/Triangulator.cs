@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Adamantium.Mathematics.Triangulation
 {
@@ -242,61 +243,35 @@ namespace Adamantium.Mathematics.Triangulation
         }
 
         /// <summary>
-        /// Triangulates a single SIMPLE (non-self-intersecting) closed contour via earcut in ~O(n), producing
-        /// ~n-2 triangles (no slivers). Triangles are emitted clockwise (same convention as the scanline path).
+        /// Triangulates a single SIMPLE (non-self-intersecting) closed contour by clipping ears in ~O(n), producing
+        /// ~n-2 triangles. Triangles are emitted clockwise (same convention as the scanline path).
         /// </summary>
-        public static List<Vector3<double>> EarcutTriangulate(IReadOnlyList<Vector2<double>> ring)
-        {
-            var triangles = new List<Vector3<double>>();
-            int n = ring.Count;
-            if (n < 3) return triangles;
-
-            var data = new double[n * 2];
-            for (var i = 0; i < n; i++)
-            {
-                data[i * 2] = ring[i].X;
-                data[i * 2 + 1] = ring[i].Y;
-            }
-
-            var indices = Earcut.Tessellate(data, null, 2);
-            for (var t = 0; t + 2 < indices.Count; t += 3)
-            {
-                AddTriangleClockwise(triangles, ring[indices[t]], ring[indices[t + 1]], ring[indices[t + 2]]);
-            }
-            return triangles;
-        }
+        public static List<Vector3<double>> EarClipTriangulate(IReadOnlyList<Vector2<double>> ring) =>
+            EarClipWithHoles(ring, null);
 
         /// <summary>
-        /// Triangulates an outer ring with holes via earcut (holes cut out). All rings must be simple and
+        /// Triangulates an outer ring with holes by clipping ears (holes cut out). All rings must be simple and
         /// non-crossing (caller guarantees). Triangles are emitted clockwise.
         /// </summary>
-        public static List<Vector3<double>> EarcutWithHoles(IReadOnlyList<Vector2<double>> outer, IReadOnlyList<IReadOnlyList<Vector2<double>>> holes)
+        public static List<Vector3<double>> EarClipWithHoles(IReadOnlyList<Vector2<double>> outer, IReadOnlyList<IReadOnlyList<Vector2<double>>> holes)
         {
             var triangles = new List<Vector3<double>>();
             if (outer.Count < 3) return triangles;
 
             var all = new List<Vector2<double>>(outer);
-            int[] holeIndices = null;
-            if (holes != null && holes.Count > 0)
+            var starts = new List<int>();
+            if (holes != null)
             {
-                var starts = new List<int>();
                 foreach (var hole in holes)
                 {
                     if (hole.Count < 3) continue;
                     starts.Add(all.Count);
                     all.AddRange(hole);
                 }
-                if (starts.Count > 0) holeIndices = starts.ToArray();
             }
 
-            var data = new double[all.Count * 2];
-            for (var i = 0; i < all.Count; i++)
-            {
-                data[i * 2] = all[i].X;
-                data[i * 2 + 1] = all[i].Y;
-            }
-
-            var indices = Earcut.Tessellate(data, holeIndices, 2);
+            var indices = new List<int>();
+            EarClipping.Triangulate(CollectionsMarshal.AsSpan(all), CollectionsMarshal.AsSpan(starts), indices);
             for (var t = 0; t + 2 < indices.Count; t += 3)
             {
                 AddTriangleClockwise(triangles, all[indices[t]], all[indices[t + 1]], all[indices[t + 2]]);
