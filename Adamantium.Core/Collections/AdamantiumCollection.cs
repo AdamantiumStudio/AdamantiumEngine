@@ -319,6 +319,11 @@ namespace Adamantium.Core.Collections
             lock (SyncRoot)
             {
                 var itemsToAdd = range.ToArray();
+                if (currentIndex + itemsToAdd.Length > Capacity)
+                {
+                    Capacity = Math.Max(currentIndex + itemsToAdd.Length, Capacity * 2);
+                }
+
                 for (var i = 0; i < itemsToAdd.Length; ++i)
                 {
                     Insert(currentIndex, itemsToAdd[i]);

@@ -43,7 +43,7 @@ namespace Adamantium.MathTests
             }
 
             sb.AppendLine();
-            sb.AppendLine("== Annulus (outer ring + inner hole, multi-contour merge -> earcut-with-holes) ==");
+            sb.AppendLine("== Annulus (outer ring + inner hole, multi-contour merge -> ear clipping with holes) ==");
             foreach (var n in new[] { 64, 256, 1024 })
             {
                 var (ms, min, tris) = Measure(() => Annulus(n), 2, n <= 256 ? 10 : 5);
@@ -97,7 +97,7 @@ namespace Adamantium.MathTests
                 sb.AppendLine($"  tess={tess,3}  median={ms,9:F3} ms  min={min,9:F3} ms  tris={tris,4}");
             }
 
-            // For contrast: the SAME ring fed to the fast nesting path (FillIndirect -> earcut-with-holes). This is
+            // For contrast: the SAME ring fed to the fast nesting path (FillIndirect -> ear clipping with holes). This is
             // what the border WOULD cost if CombinedGeometry routed clean (non-crossing) nesting through it.
             sb.AppendLine();
             sb.AppendLine("== Border ring (same shape -> fast nesting / FillIndirect) ==");

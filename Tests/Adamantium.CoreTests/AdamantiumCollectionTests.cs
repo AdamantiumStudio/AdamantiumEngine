@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Adamantium.Core.Collections;
 using NUnit.Framework;
 
@@ -83,6 +86,101 @@ public class AdamantiumCollectionTests
         c.RemoveRange(1, 10);
         Assert.That(c.Count, Is.EqualTo(1));
         Assert.That(c[0], Is.EqualTo("A"));
+    }
+
+    [Test]
+    public void AddRange_OfItself_DoublesItsItems()
+    {
+        var c = Of("A", "B");
+
+        c.AddRange(c);
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "B", "A", "B" }));
+    }
+
+    [Test]
+    public void AddRange_OfAQueryOverItself_AddsWhatItHeldBefore()
+    {
+        var c = Of("A", "B", "C");
+
+        c.AddRange(c.Where(item => item != "B"));
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "B", "C", "A", "C" }));
+    }
+
+    [Test]
+    public void AddRange_OfAViewOfItself_AddsWhatItHeldBefore()
+    {
+        var c = Of("A", "B");
+
+        c.AddRange(new ReadOnlyTrackingCollection<string>(c));
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "B", "A", "B" }));
+    }
+
+    [Test]
+    public void AddRange_OfItemsAHandlerTakesFromTheirList_AddsThemAll()
+    {
+        var from = Of("B", "C", "D");
+        var to = Of("A");
+        to.CollectionChanged += (_, e) => from.Remove((string)e.NewItems![0]);
+
+        to.AddRange(from);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(to, Is.EqualTo(new[] { "A", "B", "C", "D" }));
+            Assert.That(from, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void ARemoveWatched_TellsTheItemRemoved()
+    {
+        var c = Of("A", "B");
+        object removed = null;
+        c.CollectionChanged += (_, e) => removed = e.OldItems![0];
+
+        c.RemoveAt(1);
+
+        Assert.That(removed, Is.EqualTo("B"));
+    }
+
+    [Test]
+    public void AddRange_StillTellsEachItemAdded()
+    {
+        var c = Of("A");
+        var told = new List<(object Item, int Index)>();
+        c.CollectionChanged += (_, e) => told.Add((e.NewItems![0], e.NewStartingIndex));
+
+        c.AddRange(new List<string> { "B", "C" });
+
+        Assert.That(told, Is.EqualTo(new List<(object, int)> { ("B", 1), ("C", 2) }));
+    }
+
+    // Unwatched, a collection filled with many items costs about their storage: an announcement of each was made for
+    // nobody - a list per item - and a mesh of a map tile's areas paid megabytes for it.
+    [Test]
+    public void Filling_AnUnwatchedCollection_AllocatesAboutItsStorage()
+    {
+        var items = new double[10_000];
+        _ = new TrackingCollection<double>(items);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var c = new TrackingCollection<double>(items);
+        var filled = GC.GetAllocatedBytesForCurrentThread() - before;
+        c.Capacity = items.Length + 10;
+        before = GC.GetAllocatedBytesForCurrentThread();
+        c.Add(1);
+        c.Insert(0, 2);
+        c.RemoveAt(0);
+        var changed = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(filled, Is.LessThan(items.Length * sizeof(double) * 3), "its storage and a snapshot of the items");
+            Assert.That(changed, Is.Zero, "an item added or removed with room to spare");
+        });
     }
 
     // A view on another thread reads the items under the lock their changes are announced under - through the read-only

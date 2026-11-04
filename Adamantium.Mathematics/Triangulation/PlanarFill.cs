@@ -62,11 +62,11 @@ namespace Adamantium.Mathematics.Triangulation
                 {
                     result.AddRange(MathHelper.Polyline.IsConvex<double>(faces[i])
                         ? Triangulator.FanTriangulate(faces[i])
-                        : Triangulator.EarcutTriangulate(faces[i]));
+                        : Triangulator.EarClipTriangulate(faces[i]));
                 }
                 else
                 {
-                    result.AddRange(Triangulator.EarcutWithHoles(faces[i], holes));
+                    result.AddRange(Triangulator.EarClipWithHoles(faces[i], holes));
                 }
             }
 
