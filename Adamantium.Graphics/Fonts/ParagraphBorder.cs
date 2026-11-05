@@ -15,11 +15,13 @@ public sealed record ParagraphBorder
     public static ParagraphBorder None { get; } = new(0, 0);
 
     /// <exception cref="ArgumentOutOfRangeException">The width or the space is below 0 or no number.</exception>
-    public ParagraphBorder(double width, double space, Color? color = null)
+    public ParagraphBorder(double width, double space, Color? color = null,
+        ParagraphBorderStyle style = ParagraphBorderStyle.Solid)
     {
         Width = width;
         Space = space;
         Color = color;
+        Style = style;
     }
 
     /// <summary>How thick the line is; 0 draws none.</summary>
@@ -45,9 +47,16 @@ public sealed record ParagraphBorder
     /// <summary>The line's color; null is the color of the text.</summary>
     public Color? Color { get; init; }
 
+    /// <summary>How the line is drawn: solid, dotted or dashed, or double - two lines of <see cref="Width"/>, as far
+    /// apart, as Word's.</summary>
+    public ParagraphBorderStyle Style { get; init; }
+
     /// <summary>Whether a line is drawn.</summary>
     public bool IsVisible => Width > 0;
 
+    /// <summary>How thick the line is drawn: <see cref="Width"/>, three times it for a double line.</summary>
+    public double Thickness => Style == ParagraphBorderStyle.Double ? 3 * Width : Width;
+
     /// <summary>The room the side takes beside the text: the line and its space; none for no line.</summary>
-    public double Room => IsVisible ? Width + Space : 0;
+    public double Room => IsVisible ? Thickness + Space : 0;
 }

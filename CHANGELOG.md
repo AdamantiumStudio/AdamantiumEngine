@@ -15,7 +15,10 @@ All packages share one version.
   `BordersContinueAbove` and `BordersContinueBelow` carry a frame on from or to paragraphs laid out in other layouts,
   its side lines reaching across the room between them. In frames, a paragraph's last line whose line below would leave
   its frame goes on in the next. No frame crosses a drop cap: where one ends or starts between paragraphs beside the
-  cap, the next paragraph starts below it; without frames, paragraphs still go on beside it.
+  cap, the next paragraph starts below it; without frames, paragraphs still go on beside it. A border line is solid,
+  dotted, dashed or double (`ParagraphBorder.Style`, `ParagraphBorderStyle`): dots and dashes come as the adornment's
+  `Dashes`, measured by the line's width; a double line, as Word's, is two bands of the width as far apart
+  (`ParagraphBorder.Thickness`, three times the width, and its room).
 
 - A count of device memory: `DeviceMemoryCensus.Take(main)` - what the live resources of every device on a logical
   device hold, by kind and by the largest groups alike in name and shape, with the pooled blocks;
