@@ -309,6 +309,11 @@ public class TextLayout : DisposableObject
     /// the drop cap cannot start (<see cref="Fonts.DropCap.Length"/>) or one laid out where it has no place.</summary>
     public int DropCapLength => _laid?.DropCapEnd ?? 0;
 
+    /// <summary>Where the text last laid out ends down the layout, not rounded: below its last line, the lines its
+    /// <see cref="DropCap"/> stands across and the room its last paragraph's <see cref="ParagraphAttributes.BorderBottom"/>
+    /// takes; 0 before any layout.</summary>
+    public double TextBottom => _laid?.TextBottom ?? 0;
+
     public TextRenderingParameters RenderingParameters { get; private set; }
 
     public FontAtlas FontAtlas => _quads.FontAtlas;
@@ -583,8 +588,8 @@ public class TextLayout : DisposableObject
     /// the drop cap's characters as high as all the lines it spans: for selection, search hits, backgrounds.</summary>
     public IReadOnlyList<RectangleF> GetRangeRects(int start, int end) => _navigator.GetRangeRects(start, end);
 
-    /// <summary>Backgrounds and lines of the attributed text last laid out: draw the backgrounds under the glyphs and the
-    /// lines over them.</summary>
+    /// <summary>Backgrounds and lines of the attributed text last laid out, its paragraphs' borders among them: draw the
+    /// backgrounds under the glyphs and the lines over them.</summary>
     public IReadOnlyList<TextAdornment> GetAdornments() => _navigator.GetAdornments();
 
     /// <summary>The objects of the text last laid out, in text order; one trimmed away or past the last line is left

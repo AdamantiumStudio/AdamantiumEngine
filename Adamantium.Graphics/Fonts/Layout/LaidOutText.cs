@@ -46,6 +46,9 @@ internal sealed record LaidOutText
 
     public int[] LineFrames { get; init; }
 
+    /// <summary>In frames, the room below each line for the bottom border of the frame it closes; null for none.</summary>
+    public double[] LineClosingRooms { get; init; }
+
     /// <summary>Where each line in frames may run across, from its stretch's left edge to its right: lines that share a
     /// row stand side by side in it.</summary>
     public (double Left, double Right)[] LineSpans { get; init; }
@@ -65,6 +68,13 @@ internal sealed record LaidOutText
     public int DropCapLines { get; init; }
 
     public Size<double> Size { get; init; }
+
+    /// <summary>Where the text ends down the layout, not rounded: the last line's bottom, a drop cap's, and the room of
+    /// the last paragraph's line below.</summary>
+    public double TextBottom { get; init; }
+
+    /// <summary>The lines of the paragraphs' borders; null for none.</summary>
+    public List<TextAdornment> BorderLines { get; init; }
 
     public Size<double>? RealTextDimensions { get; init; }
 

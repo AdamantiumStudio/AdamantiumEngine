@@ -214,7 +214,8 @@ internal sealed class LineComposer
         for (var i = 1; i < tops.Length && i < lineFrames.Length; i++)
         {
             var frame = frames[lineFrames[i]];
-            if (tops[i] + laid.LineHeights[i] > frame.Bottom + 0.5 && lineFrames[i - 1] == lineFrames[i])
+            var below = laid.LineClosingRooms?[i] ?? 0;
+            if (tops[i] + laid.LineHeights[i] + below > frame.Bottom + 0.5 && lineFrames[i - 1] == lineFrames[i])
             {
                 return (i, lineFrames[i]);
             }
@@ -331,7 +332,9 @@ internal sealed class LineComposer
         var lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
         var plainRightToLeft = text.Length > 0 && IsRightToLeftParagraph(0);
         double pendingGap = 0;
-        var lineStates = new List<(ParagraphAttributes Paragraph, bool Opens, bool RightToLeft, double Gap)>();
+        var pendingRoom = OpeningRoom(lineParagraph);
+        var lineStates =
+            new List<(ParagraphAttributes Paragraph, bool Opens, bool RightToLeft, double Gap, double Room)>();
         HashSet<int> linesAfterBreaks = null;
         double verticalShift = 0;
         Size<double>? realTextDimensions = null;
@@ -349,7 +352,7 @@ internal sealed class LineComposer
         var slotCursors =
             new List<(int Frame, double Top, int Rows, double Beside, bool RightToLeft, double RowTop,
                 double RowUnsnapped)>();
-        var slotBases = new List<(double Gap, double Height, bool Gridded, bool RightToLeft)>();
+        var slotBases = new List<(double Gap, double Room, double Height, bool Gridded, bool RightToLeft)>();
         List<(double Left, double Right)> rowSpans = [];
         List<(double Left, double Right)> spansLeft = [];
         List<(double Left, double Right)> shapeSpans = [];
@@ -455,7 +458,13 @@ internal sealed class LineComposer
             pendingGap = 0;
         }
 
-        NoteLine(0, 0);
+        NoteLine(0, 0, OpeningRoom(lineParagraph));
+        pendingRoom = 0;
+        if (slots == null)
+        {
+            height += LineGap(0);
+        }
+
         lineRawTop = height;
         height = OnGrid(height, RowBaseline(0), 0);
         var wordStart = dropItems;
@@ -573,11 +582,15 @@ internal sealed class LineComposer
                 lineAxes[i] = lineBaselines[i] + (lineCoreBelow[i] - lineCoreAbove[i]) / 2;
             }
         }
+        var lastRoom = ClosingRoom(lineCount - 1);
         height = lineTops[lineCount - 1] + lineHeights[lineCount - 1];
         if (dropGlyphs != null)
         {
             height = Math.Max(height, DropBottom());
         }
+
+        height += lastRoom;
+        var textBottom = height;
 
         var _b3 = System.GC.GetAllocatedBytesForCurrentThread();
 
@@ -636,19 +649,28 @@ internal sealed class LineComposer
             lineTops[i] += verticalShift;
         }
 
+        textBottom += verticalShift;
         (int Line, double Height)? lineOverAnExclusion = null;
         if (slots != null)
         {
             PlaceInFrames();
             lineOverAnExclusion = LineOverAnExclusion();
+            var last = lineCount - 1;
+            var lastBottom = lineTops[last] + lineHeights[last];
+            if (dropGlyphs != null)
+            {
+                lastBottom = Math.Max(lastBottom, DropBaseline() + lineHeight - baseLine);
+            }
+
+            var bottom = lastBottom + lastRoom;
+            for (var i = 0; i < last; i++)
+            {
+                bottom = Math.Max(bottom, lineTops[i] + lineHeights[i] + ClosingRoom(i));
+            }
+
+            textBottom = bottom;
             if (renderingParameters.TextArea.Height == Int32.MaxValue)
             {
-                var bottom = dropGlyphs != null ? DropBaseline() + lineHeight - baseLine : 0.0;
-                for (var i = 0; i < lineCount; i++)
-                {
-                    bottom = Math.Max(bottom, lineTops[i] + lineHeights[i]);
-                }
-
                 finalRect.Height = Math.Ceiling(bottom);
             }
         }
@@ -683,6 +705,9 @@ internal sealed class LineComposer
             TurnIntoColumns();
         }
 
+        var borderLines = vertical || paragraphRuns == null ? null : BorderLines(finalRect.Width);
+        var closingRooms = slots != null && borderLines != null ? ClosingRooms() : null;
+
         var _b4 = System.GC.GetAllocatedBytesForCurrentThread();
 
         TextLayout.TranslateBytes += _b1 - _b0;
@@ -704,6 +729,7 @@ internal sealed class LineComposer
             Glyphs = glyphsData,
             LineTops = lineTops,
             LineHeights = lineHeights,
+            LineClosingRooms = closingRooms,
             LineBaselines = lineBaselines,
             LineAxes = lineAxes,
             VerticalShift = verticalShift,
@@ -719,12 +745,122 @@ internal sealed class LineComposer
             DropCapEnd = dropGlyphs != null ? dropEnd : 0,
             DropCapLines = dropGlyphs != null ? dropLines : 0,
             Size = finalRect,
+            TextBottom = textBottom,
+            BorderLines = borderLines,
             RealTextDimensions = realTextDimensions,
             HasPendingFonts = hasPendingFonts,
             Overflows = overflows,
             InkOverflows = inkOverflows,
             DotGlyph = _dotGlyph,
         };
+
+        List<TextAdornment> BorderLines(double laidWidth)
+        {
+            List<TextAdornment> found = null;
+            var line = 0;
+            while (line < lineCount)
+            {
+                var paragraph = LineState(line).Paragraph;
+                if (paragraph is not { HasBorders: true })
+                {
+                    line++;
+                    continue;
+                }
+
+                var first = line;
+                var frame = laidOutLineFrames?[line] ?? -1;
+                while (line + 1 < lineCount && (laidOutLineFrames?[line + 1] ?? -1) == frame &&
+                       (!LineState(line + 1).Opens || paragraph.SharesBordersWith(LineState(line + 1).Paragraph)))
+                {
+                    line++;
+                }
+
+                var lastParagraph = LineState(line).Paragraph;
+                var opensFrame = LineState(first).Opens && (first == 0
+                    ? paragraph.BordersContinueAbove == null
+                    : LineState(first - 1).Paragraph?.SharesBordersWith(paragraph) != true);
+                var closesFrame = line + 1 >= lineCount
+                    ? !GoesOnBelow(lastParagraph)
+                    : LineState(line + 1).Opens && !paragraph.SharesBordersWith(LineState(line + 1).Paragraph);
+                var reachAbove = first == 0 ? paragraph.BordersContinueAbove ?? 0 : 0;
+                var reachBelow = line + 1 >= lineCount && oversetIndex >= text.Length
+                    ? lastParagraph.BordersContinueBelow ?? 0
+                    : 0;
+                AddFrame(found ??= [], paragraph, first, line, opensFrame, closesFrame, reachAbove, reachBelow, frame,
+                    laidWidth);
+                line++;
+            }
+
+            return found;
+        }
+
+        double[] ClosingRooms()
+        {
+            double[] rooms = null;
+            for (var i = 0; i < lineCount; i++)
+            {
+                if (ClosingRoom(i) is > 0 and var room)
+                {
+                    (rooms ??= new double[lineCount])[i] = room;
+                }
+            }
+
+            return rooms;
+        }
+
+        void AddFrame(List<TextAdornment> into, ParagraphAttributes paragraph, int first, int last, bool opens,
+            bool closes, double reachAbove, double reachBelow, int frame, double laidWidth)
+        {
+            var (areaLeft, areaRight) = frame >= 0
+                ? ((double)frames[frame].Left, (double)frames[frame].Right)
+                : (0.0, textArea.Width < Int32.MaxValue ? textArea.Width : laidWidth);
+            var top = paragraph.BorderTop is { IsVisible: true } above && opens ? above : null;
+            var bottom = paragraph.BorderBottom is { IsVisible: true } below && closes ? below : null;
+            var left = paragraph.BorderLeft is { IsVisible: true } leftLine ? leftLine : null;
+            var right = paragraph.BorderRight is { IsVisible: true } rightLine ? rightLine : null;
+            var x0 = areaLeft + Finite(paragraph.MarginLeft) - (left?.Room ?? 0);
+            var x1 = areaRight - Finite(paragraph.MarginRight) + (right?.Room ?? 0);
+            var textBottom = lineTops[last] + lineHeights[last];
+            if (dropGlyphs != null && first == 0 && last == lineCount - 1)
+            {
+                textBottom = Math.Max(textBottom, DropBottom());
+            }
+
+            var y0 = reachAbove > 0
+                ? Math.Min(lineTops[first], textArea.Y + verticalShift) - reachAbove
+                : lineTops[first] - (top?.Room ?? 0);
+            var y1 = textBottom + (bottom?.Room ?? 0) + reachBelow;
+            if (x1 <= x0 || y1 <= y0)
+            {
+                return;
+            }
+
+            if (top != null)
+            {
+                into.Add(new TextAdornment(TextAdornmentKind.Border,
+                    new RectangleF((float)x0, (float)y0, (float)(x1 - x0), (float)top.Width), top.Color));
+            }
+
+            if (bottom != null)
+            {
+                into.Add(new TextAdornment(TextAdornmentKind.Border,
+                    new RectangleF((float)x0, (float)(y1 - bottom.Width), (float)(x1 - x0), (float)bottom.Width),
+                    bottom.Color));
+            }
+
+            if (left != null)
+            {
+                into.Add(new TextAdornment(TextAdornmentKind.Border,
+                    new RectangleF((float)x0, (float)y0, (float)left.Width, (float)(y1 - y0)), left.Color));
+            }
+
+            if (right != null)
+            {
+                into.Add(new TextAdornment(TextAdornmentKind.Border,
+                    new RectangleF((float)(x1 - right.Width), (float)y0, (float)right.Width, (float)(y1 - y0)),
+                    right.Color));
+            }
+        }
 
         double Raise(TextAttributes attributes, IFont font, double size, double baseSize) =>
             TextGeometry.Raise(_font, options.WritingMode, attributes, font, size, baseSize);
@@ -1561,25 +1697,50 @@ internal sealed class LineComposer
         void NewLine()
         {
             SettleLine(lineIndex);
-            (lineRawTop, height) = NextTop(pendingGap);
+            (lineRawTop, height) = NextTop(pendingGap + pendingRoom);
             lineIndex++;
-            NoteLine(lineIndex, pendingGap);
+            NoteLine(lineIndex, pendingGap, pendingRoom);
             pendingGap = 0;
+            pendingRoom = 0;
             cursorPosition = LineIndent(lineIndex);
         }
 
         ParagraphAttributes ParagraphOf(int index) => AttributedText.ParagraphIn(paragraphRuns, index, text.Length)?.Attributes;
 
-        void NoteLine(int line, double gap)
+        void NoteLine(int line, double gap, double room = 0)
         {
             while (lineStates.Count <= line)
             {
+                var noted = lineStates.Count == line;
                 lineStates.Add((lineParagraph, lineStates.Count == paragraphOpenLine, lineRightToLeft,
-                    lineStates.Count == line ? gap : 0));
+                    noted ? gap : 0, noted ? room : 0));
                 lineReads.Add(plainRightToLeft);
             }
 
-            ForgetSlotsFrom(line, gap);
+            ForgetSlotsFrom(line, gap, room);
+        }
+
+        double TopRoom(ParagraphAttributes paragraph) => vertical ? 0 : paragraph?.BorderTop?.Room ?? 0;
+
+        double BottomRoom(ParagraphAttributes paragraph) => vertical ? 0 : paragraph?.BorderBottom?.Room ?? 0;
+
+        double OpeningRoom(ParagraphAttributes paragraph) =>
+            paragraph?.BordersContinueAbove != null ? 0 : TopRoom(paragraph);
+
+        bool GoesOnBelow(ParagraphAttributes paragraph) =>
+            oversetIndex < text.Length || paragraph?.BordersContinueBelow != null;
+
+        double ClosingRoom(int line)
+        {
+            var paragraph = LineState(line).Paragraph;
+            if (line + 1 < lineCount)
+            {
+                return LineState(line + 1).Opens && paragraph?.SharesBordersWith(LineState(line + 1).Paragraph) != true
+                    ? BottomRoom(paragraph)
+                    : 0;
+            }
+
+            return GoesOnBelow(paragraph) ? 0 : BottomRoom(paragraph);
         }
 
         // A line in a frame turns out as tall as its text: the slots after it are found again below it.
@@ -1687,10 +1848,10 @@ internal sealed class LineComposer
         }
 
         // Slots found ahead for a line that turns out to keep other room above it or other heights are found again.
-        void ForgetSlotsFrom(int line, double gap)
+        void ForgetSlotsFrom(int line, double gap, double room)
         {
             if (slots != null && line < slots.Count &&
-                slotBases[line] != (gap, SlotHeight(line), GridsLine(line), ReadsRightToLeft(line)))
+                slotBases[line] != (gap, room, SlotHeight(line), GridsLine(line), ReadsRightToLeft(line)))
             {
                 slots.RemoveRange(line, slots.Count - line);
                 slotCursors.RemoveRange(line, slotCursors.Count - line);
@@ -1782,7 +1943,8 @@ internal sealed class LineComposer
         {
             if (line >= lineStates.Count)
             {
-                ForgetSlotsFrom(line, line == paragraphOpenLine ? pendingGap : 0);
+                var opens = line == paragraphOpenLine;
+                ForgetSlotsFrom(line, opens ? pendingGap : 0, opens ? pendingRoom : 0);
             }
 
             while (slots.Count <= line)
@@ -1802,7 +1964,10 @@ internal sealed class LineComposer
         bool AddSlot()
         {
             var line = slots.Count;
-            var gap = line < lineStates.Count ? lineStates[line].Gap : line == paragraphOpenLine ? pendingGap : 0;
+            var opens = line == paragraphOpenLine;
+            var gap = line < lineStates.Count ? lineStates[line].Gap : opens ? pendingGap : 0;
+            var room = line < lineStates.Count ? lineStates[line].Room : opens ? pendingRoom : 0;
+            var roomAtTop = room > 0 ? Math.Min(room, TopRoom(LineState(line).Paragraph)) : 0;
             var rowHeight = SlotHeight(line);
             var rightToLeft = ReadsRightToLeft(line);
             var (f, top, rows, beside, besideRightToLeft, rowAt, rowUnsnapped) = line == 0
@@ -1810,7 +1975,7 @@ internal sealed class LineComposer
                 : slotCursors[line - 1];
             var from = -1;
             var pushedOn = pushed != null && pushed.TryGetValue(line, out from) && f < from;
-            if (rowsSplit && !double.IsNaN(beside) && besideRightToLeft == rightToLeft && gap <= 0 &&
+            if (rowsSplit && !double.IsNaN(beside) && besideRightToLeft == rightToLeft && gap <= 0 && room <= 0 &&
                 !pushedOn && !(dropEnd > 0 && line < options.DropCap.Lines) &&
                 Math.Abs(OnGrid(rowUnsnapped, RowBaseline(line), line) - rowAt) < 1e-6 &&
                 rowAt + rowHeight <= frames[f].Bottom + 1e-6 &&
@@ -1819,7 +1984,7 @@ internal sealed class LineComposer
                 slots.Add((f, next.Left - frames[f].Left, next.Right - frames[f].Left, rowAt, rowUnsnapped));
                 slotCursors.Add((f, Math.Max(top, rowAt + rowHeight + SpacingAfter(line)), rows,
                     rightToLeft ? next.Left : next.Right, rightToLeft, rowAt, rowUnsnapped));
-                slotBases.Add((gap, rowHeight, GridsLine(line), rightToLeft));
+                slotBases.Add((gap, room, rowHeight, GridsLine(line), rightToLeft));
                 return true;
             }
 
@@ -1836,6 +2001,7 @@ internal sealed class LineComposer
                 top = f < frames.Count ? frames[f].Top : 0;
             }
 
+            top += rows > 0 ? room : roomAtTop;
             while (f < frames.Count)
             {
                 var frame = frames[f];
@@ -1845,7 +2011,7 @@ internal sealed class LineComposer
                 {
                     f++;
                     rows = 0;
-                    top = f < frames.Count ? frames[f].Top : 0;
+                    top = f < frames.Count ? frames[f].Top + roomAtTop : 0;
                     continue;
                 }
 
@@ -1858,7 +2024,7 @@ internal sealed class LineComposer
                     slots.Add((f, first.Left - frame.Left, first.Right - frame.Left, rowTop, unsnapped));
                     slotCursors.Add((f, top, rows, rightToLeft ? first.Left : first.Right, rightToLeft, rowTop,
                         unsnapped));
-                    slotBases.Add((gap, rowHeight, GridsLine(line), rightToLeft));
+                    slotBases.Add((gap, room, rowHeight, GridsLine(line), rightToLeft));
                     return true;
                 }
 
@@ -1975,7 +2141,7 @@ internal sealed class LineComposer
             ? (lineStates[line].Paragraph, lineStates[line].Opens, lineStates[line].RightToLeft)
             : (lineParagraph, line == paragraphOpenLine, lineRightToLeft);
 
-        double LineGap(int line) => line < lineStates.Count ? lineStates[line].Gap : 0;
+        double LineGap(int line) => line < lineStates.Count ? lineStates[line].Gap + lineStates[line].Room : 0;
 
         HorizontalTextAlignment AlignmentOf(int line) =>
             LineState(line).Paragraph?.Alignment ?? renderingParameters.HorizontalTextAlignment;
@@ -2000,10 +2166,13 @@ internal sealed class LineComposer
 
             pendingGap = Math.Max(Math.Max(0, Finite(lineParagraph?.SpaceAfter ?? 0)),
                 Finite(paragraph?.SpaceBefore ?? 0));
+            pendingRoom = lineParagraph != null && lineParagraph.SharesBordersWith(paragraph)
+                ? 0
+                : BottomRoom(lineParagraph) + TopRoom(paragraph);
             lineParagraph = paragraph;
             paragraphOpenLine = openLine;
             lineRightToLeft = next < text.Length ? IsRightToLeftParagraph(next) : lineRightToLeft;
-            ForgetSlotsFrom(openLine, pendingGap);
+            ForgetSlotsFrom(openLine, pendingGap, pendingRoom);
         }
 
         // The margins stand at their own sides; the first line's indent at the side its lines start from, unless a drop
@@ -2042,7 +2211,7 @@ internal sealed class LineComposer
 
             if (slots == null)
             {
-                var top = NextTop(pendingGap).Top;
+                var top = NextTop(pendingGap + pendingRoom).Top;
                 return renderingParameters.TextTrimming == TextTrimming.None
                     ? top < textArea.Height
                     : top + OwnLineHeight(lineIndex + 1) < textArea.Height + 1.0;
@@ -3852,8 +4021,9 @@ internal sealed class LineComposer
                 {
                     // Vertical lines centered across the block leave out an empty last column.
                     var lastInk = glyphsData.Max(x => x.LineIndex);
-                    var blockTop = lineTops[0] - textArea.Y;
-                    var blockHeight = (vertical ? lineTops[lastInk] + lineHeights[lastInk] : height) - lineTops[0];
+                    var framedTop = lineTops[0] - LineGap(0);
+                    var blockTop = framedTop - textArea.Y;
+                    var blockHeight = (vertical ? lineTops[lastInk] + lineHeights[lastInk] : height) - framedTop;
                     var diff = GridSteps((finalRect.Height - blockHeight) / 2 - blockTop);
                     verticalShift = diff;
                     foreach (var glyphWordData in glyphsData)
@@ -4353,7 +4523,9 @@ internal sealed class LineComposer
 
             for (var i = 0; i < lineCount; i++)
             {
-                var top = i == 0 ? textArea.Y : lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i);
+                var top = i == 0
+                    ? textArea.Y + LineGap(0)
+                    : lineTops[i - 1] + lineHeights[i - 1] + SpacingAfter(i - 1) + LineGap(i);
                 lineTops[i] = OnGrid(top, lineBaselines[i], i);
             }
 

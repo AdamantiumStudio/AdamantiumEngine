@@ -14,6 +14,12 @@ public sealed record ParagraphAttributes
     private double? _spaceAfter;
     private double? _textIndent;
     private double? _lineHeight;
+    private ParagraphBorder _borderTop;
+    private ParagraphBorder _borderBottom;
+    private ParagraphBorder _borderLeft;
+    private ParagraphBorder _borderRight;
+    private double? _bordersContinueAbove;
+    private double? _bordersContinueBelow;
 
     /// <summary>How its lines stand between its edges; null keeps the layout's alignment.</summary>
     public HorizontalTextAlignment? Alignment { get => _alignment; init => _alignment = value; }
@@ -39,15 +45,73 @@ public sealed record ParagraphAttributes
     /// layout's.</summary>
     public double LineHeight { get => _lineHeight ?? double.NaN; init => _lineHeight = value; }
 
+    /// <summary>The line above it: the room it takes is kept above the first line, at the top of a frame too, unlike
+    /// <see cref="SpaceBefore"/>. Horizontal text only.</summary>
+    public ParagraphBorder BorderTop { get => _borderTop; init => _borderTop = value; }
+
+    /// <summary>The line below it, its room kept below the last line.</summary>
+    public ParagraphBorder BorderBottom { get => _borderBottom; init => _borderBottom = value; }
+
+    /// <summary>The line left of it, in its left margin: it does not move the text.</summary>
+    public ParagraphBorder BorderLeft { get => _borderLeft; init => _borderLeft = value; }
+
+    /// <summary>The line right of it, in its right margin.</summary>
+    public ParagraphBorder BorderRight { get => _borderRight; init => _borderRight = value; }
+
+    /// <summary>For the layout's first paragraph: its frame goes on from a paragraph laid out elsewhere above, as one
+    /// it shares with the paragraph before it, its side lines reaching this far above its first line. It draws no line
+    /// above nor keeps room for one. Null closes the frame at its top.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is below 0 or no number.</exception>
+    public double? BordersContinueAbove
+    {
+        get => _bordersContinueAbove;
+        init => _bordersContinueAbove = Reach(value);
+    }
+
+    /// <summary>For the layout's last paragraph, laid out to its end: its frame goes on to a paragraph laid out
+    /// elsewhere below, its side lines reaching this far below its last line. It draws no line below nor keeps room for
+    /// one. Null closes the frame at its bottom.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is below 0 or no number.</exception>
+    public double? BordersContinueBelow
+    {
+        get => _bordersContinueBelow;
+        init => _bordersContinueBelow = Reach(value);
+    }
+
+    private static double? Reach(double? value) =>
+        value is not { } reach || (double.IsFinite(reach) && reach >= 0)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "A frame goes on 0 or more.");
+
+    /// <summary>Whether it draws a line on any side.</summary>
+    public bool HasBorders => _borderTop is { IsVisible: true } || _borderBottom is { IsVisible: true } ||
+                              _borderLeft is { IsVisible: true } || _borderRight is { IsVisible: true };
+
+    /// <summary>Whether it and <paramref name="other"/>, one after the other, share one frame: both draw lines, the
+    /// same ones, between the same margins.</summary>
+    public bool SharesBordersWith(ParagraphAttributes other) =>
+        other != null && HasBorders && SameLine(_borderTop, other._borderTop) &&
+        SameLine(_borderBottom, other._borderBottom) && SameLine(_borderLeft, other._borderLeft) &&
+        SameLine(_borderRight, other._borderRight) && MarginLeft.Equals(other.MarginLeft) &&
+        MarginRight.Equals(other.MarginRight);
+
+    private static bool SameLine(ParagraphBorder one, ParagraphBorder other) =>
+        one is { IsVisible: true } ? one.Equals(other) : other is not { IsVisible: true };
+
     /// <summary>Whether the paragraphs stand alike: the fields' values, whether set or not.</summary>
     public bool Equals(ParagraphAttributes other) =>
         other != null && Alignment == other.Alignment && MarginLeft.Equals(other.MarginLeft)
         && MarginRight.Equals(other.MarginRight) && SpaceBefore.Equals(other.SpaceBefore)
         && SpaceAfter.Equals(other.SpaceAfter) && TextIndent.Equals(other.TextIndent)
-        && LineHeight.Equals(other.LineHeight);
+        && LineHeight.Equals(other.LineHeight) && Equals(_borderTop, other._borderTop)
+        && Equals(_borderBottom, other._borderBottom) && Equals(_borderLeft, other._borderLeft)
+        && Equals(_borderRight, other._borderRight) && _bordersContinueAbove == other._bordersContinueAbove
+        && _bordersContinueBelow == other._bordersContinueBelow;
 
     public override int GetHashCode() =>
-        HashCode.Combine(Alignment, MarginLeft, MarginRight, SpaceBefore, SpaceAfter, TextIndent, LineHeight);
+        HashCode.Combine(HashCode.Combine(Alignment, MarginLeft, MarginRight, SpaceBefore, SpaceAfter, TextIndent,
+            LineHeight), _borderTop, _borderBottom, _borderLeft, _borderRight, _bordersContinueAbove,
+            _bordersContinueBelow);
 
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public ParagraphAttributes With(ParagraphAttributes over)
@@ -66,6 +130,12 @@ public sealed record ParagraphAttributes
             _spaceAfter = over._spaceAfter ?? _spaceAfter,
             _textIndent = over._textIndent ?? _textIndent,
             _lineHeight = over._lineHeight ?? _lineHeight,
+            _borderTop = over._borderTop ?? _borderTop,
+            _borderBottom = over._borderBottom ?? _borderBottom,
+            _borderLeft = over._borderLeft ?? _borderLeft,
+            _borderRight = over._borderRight ?? _borderRight,
+            _bordersContinueAbove = over._bordersContinueAbove ?? _bordersContinueAbove,
+            _bordersContinueBelow = over._bordersContinueBelow ?? _bordersContinueBelow,
         };
     }
 }

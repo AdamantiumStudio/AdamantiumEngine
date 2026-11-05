@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- Paragraph borders, as Word's (`ParagraphAttributes.BorderTop`, `BorderBottom`, `BorderLeft`, `BorderRight`,
+  `ParagraphBorder`): the room a line above or below takes is kept round the text - at the top of a frame too, where
+  the spacing is not - the side lines stand in the margins, and paragraphs one after another with the same borders and
+  margins share one frame. The lines come as `TextAdornmentKind.Border` adornments, drawn as the text's other lines;
+  `TextLayout.TextBottom` is where the text ends, the last line's room below it counted. Horizontal text only.
+  `BordersContinueAbove` and `BordersContinueBelow` carry a frame on from or to paragraphs laid out in other layouts,
+  its side lines reaching across the room between them. In frames, a paragraph's last line whose line below would leave
+  its frame goes on in the next.
+
 - A count of device memory: `DeviceMemoryCensus.Take(main)` - what the live resources of every device on a logical
   device hold, by kind and by the largest groups alike in name and shape, with the pooled blocks;
   `GraphicsResource.DeviceMemoryBytes` for each resource, `IGraphicsDevice.CollectResources`;
