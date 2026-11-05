@@ -339,6 +339,11 @@ public class TextLayout : DisposableObject
     /// shadow put on.</summary>
     public int Revision { get; private set; }
 
+    /// <summary>The atlas and the <see cref="Revision"/> the layout's glyphs were last asked of: a renderer that put them
+    /// there marks it, and asks again only when either changed - a text redrawn each frame where it moved costs a
+    /// comparison, not a lookup.</summary>
+    public (FontAtlas Atlas, int Revision) GlyphsAsked { get; set; }
+
     public TextLayout(Typeface typeface, IFont font)
     {
         Guid = Guid.NewGuid();

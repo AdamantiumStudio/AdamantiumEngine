@@ -16,6 +16,21 @@ All packages share one version.
   its side lines reaching across the room between them. In frames, a paragraph's last line whose line below would leave
   its frame goes on in the next.
 
+- A count of device memory: `DeviceMemoryCensus.Take(main)` - what the live resources of every device on a logical
+  device hold, by kind and by the largest groups alike in name and shape, with the pooled blocks;
+  `GraphicsResource.DeviceMemoryBytes` for each resource, `IGraphicsDevice.CollectResources`;
+  `MainGraphicsDevice.ImageBytes` and `StagingBytes`, counted where images and staging buffers are allocated and freed,
+  so textures no device lists any more show as the difference. A texture of 16 MB or more is named in the log as it is
+  made, and one the device refuses is logged as an error with its name and size - a window that could not get its
+  render target drew nothing and said nothing.
+
+- `MainGraphicsDevice.ReleaseRetired`: what was retired and no frame can read any more is disposed between frames too;
+  what was retired just before a scene went still was held until something drew again.
+
+- `TextLayout.GlyphsAsked`: the atlas and the revision a layout's glyphs were last asked of, kept by the layout itself -
+  a renderer marks it once it has asked the atlas for them and asks again only when either changed. A label redrawn
+  every frame where it moved costs a comparison, not a table lookup.
+
 - `EarClipping.Triangulate`: a polygon - an outer ring and its holes, given as points and where each hole starts - cut
   into triangles by clipping ears, as indices into the points: holes joined by bridges to vertices they see, rings that
   touch at a point or along a side cut as they are. Only corners next to a cut are asked again; a grid of the vertices
@@ -44,6 +59,16 @@ All packages share one version.
   segments whatever was asked. It is false by default now, as every contour was made so far.
 - `TiffGeoKey.CoordinateTransformation` is `TiffGeoKey.ProjectionMethod`, as GeoTIFF 1.1 names the key.
 - A GeoTIFF code key holding a fraction (a malformed file) reads as no code, not as the code truncated.
+
+- `UIVertex` is a point in 3D and nothing else - 12 bytes, from 40: a normal and two sets of texture coordinates no fill
+  shader read. A picture's vertex, which names where it samples its source, is `UITexturedVertex` (position and
+  texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
+
+### Fixed
+
+- A frame that could not begin - the device lost, the fence wait failed, the presenter not ready - no longer leaves its
+  device counted as drawing: everything retired after it waited on that device for good.
+- A retired resource that fails to dispose no longer keeps the others retired with it from being disposed.
 
 ## 0.1.0-alpha.5 - 2026-11-03
 

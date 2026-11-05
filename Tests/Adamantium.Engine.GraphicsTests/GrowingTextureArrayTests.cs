@@ -115,6 +115,39 @@ public class GrowingTextureArrayTests
     }
 
     [Test]
+    public void LayersWrittenAsRegions_SurviveTheGrowth()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        using var array = NewArray(device, 2);
+        array.TryAdd(out _);
+        array.TryAdd(out _);
+        device.UpdateTextureRegions(array.Texture,
+        [
+            new TextureRegionUpdate(0, 0, 0, 0, Size, Size, Solid(255, 0, 0)),
+            new TextureRegionUpdate(1, 0, 0, 0, Size, Size, Solid(0, 0, 255)),
+        ]);
+
+        array.TryAdd(out _);
+
+        Assert.That(FirstPixel(array.Texture, 0), Is.EqualTo(new byte[] { 255, 0, 0, 255 }));
+        Assert.That(FirstPixel(array.Texture, 1), Is.EqualTo(new byte[] { 0, 0, 255, 255 }));
+    }
+
+    private static byte[] Solid(byte r, byte g, byte b)
+    {
+        var pixels = new byte[Size * Size * 4];
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = r;
+            pixels[i + 1] = g;
+            pixels[i + 2] = b;
+            pixels[i + 3] = 255;
+        }
+
+        return pixels;
+    }
+
+    [Test]
     public void EveryLevel_SurvivesTheGrowth()
     {
         var device = GpuFixture.CreateRenderDevice();
