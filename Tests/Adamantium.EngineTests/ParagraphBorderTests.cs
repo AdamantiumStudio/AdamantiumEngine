@@ -174,8 +174,9 @@ public class ParagraphBorderTests
     }
 
     [Test]
-    public void TheLineBelowAParagraphEndingBesideItsDropCap_StandsUnderItsText()
+    public void AFramedParagraphEndingBesideItsDropCap_PutsTheNextOneBelowTheCap()
     {
+        var alone = Lay(Paragraphs(("Once", Boxed())), 300, set => set.DropCap = new DropCap(3));
         var layout = Lay(Paragraphs(("Once", Boxed()), ("then", new ParagraphAttributes())), 300,
             set => set.DropCap = new DropCap(3));
         var bottom = Borders(layout).Max(rect => rect.Bottom);
@@ -183,8 +184,111 @@ public class ParagraphBorderTests
         Assert.Multiple(() =>
         {
             Assert.That(layout.DropCapLength, Is.GreaterThan(0));
-            Assert.That(bottom, Is.EqualTo(Bottom(layout, 0) + Line.Room).Within(1e-3),
-                "not across the next paragraph's lines beside the cap");
+            Assert.That(bottom, Is.EqualTo(alone.TextBottom).Within(1e-3), "the line below the cap");
+            Assert.That(layout.GetLine(1).Top, Is.GreaterThanOrEqualTo(bottom - 1e-3), "the next one below the line");
+            Assert.That(layout.GetCaretRect(new CaretPosition(5), 1).X, Is.EqualTo(0).Within(1), "not beside the cap");
+        });
+    }
+
+    [Test]
+    public void InAFrame_AParagraphEndingBesideItsDropCap_PutsTheNextOneBelowTheCap()
+    {
+        RectangleF[] frames = [new RectangleF(0, 0, 300, 400)];
+        var alone = Lay(Paragraphs(("Once", Boxed())), 300, set =>
+        {
+            set.DropCap = new DropCap(3);
+            set.Frames = frames;
+        });
+        var layout = Lay(Paragraphs(("Once", Boxed()), ("then", new ParagraphAttributes())), 300, set =>
+        {
+            set.DropCap = new DropCap(3);
+            set.Frames = frames;
+        });
+        var bottom = Borders(layout).Max(rect => rect.Bottom);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.DropCapLength, Is.GreaterThan(0));
+            Assert.That(bottom, Is.EqualTo(alone.TextBottom).Within(1e-3));
+            Assert.That(layout.GetLine(1).Top, Is.GreaterThanOrEqualTo(bottom - 1e-3));
+            Assert.That(layout.GetCaretRect(new CaretPosition(5), 1).X, Is.EqualTo(0).Within(1));
+        });
+    }
+
+    [Test]
+    public void AFramedParagraphAfterADropCapsShortParagraph_StartsBelowTheCap()
+    {
+        var alone = Lay(Paragraphs(("Once", new ParagraphAttributes())), 300, set => set.DropCap = new DropCap(3));
+        var layout = Lay(Paragraphs(("Once", new ParagraphAttributes()), ("then", Boxed())), 300,
+            set => set.DropCap = new DropCap(3));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.DropCapLength, Is.GreaterThan(0));
+            Assert.That(Borders(layout).Min(rect => rect.Top), Is.GreaterThanOrEqualTo(alone.TextBottom - 1e-3));
+            Assert.That(layout.GetCaretRect(new CaretPosition(5), 1).X, Is.EqualTo(0).Within(1));
+        });
+    }
+
+    [Test]
+    public void ParagraphsAfterOneBelowTheCap_TakeNoMoreRoomForIt()
+    {
+        var plain = new ParagraphAttributes();
+        var layout = Lay(Paragraphs(("Once", plain), ("then", plain), ("boxed", Boxed() with { Alignment = HorizontalTextAlignment.Center }),
+            ("fourth", plain)), 300, set => set.DropCap = new DropCap(4));
+        var box = Borders(layout);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.DropCapLength, Is.GreaterThan(0));
+            Assert.That(layout.GetLine(3).Top, Is.EqualTo(box.Max(rect => rect.Bottom)).Within(1e-3), "right below the box");
+            Assert.That(layout.GetCaretRect(new CaretPosition(10), 2).X + layout.GetCaretRect(new CaretPosition(15), 2).X,
+                Is.EqualTo(300).Within(1), "centered in the whole width");
+        });
+    }
+
+    [Test]
+    public void BelowTheCap_ClicksAndTheCapsSelection_StayOffTheCap()
+    {
+        var layout = Lay(Paragraphs(("Once", Boxed()), ("then and more words", new ParagraphAttributes())), 300,
+            set => set.DropCap = new DropCap(3));
+        var line = layout.GetLine(1);
+        var cap = layout.GetRangeRects(0, 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.HitTest(2, line.Top + line.Height / 2).Index, Is.EqualTo(5));
+            Assert.That(cap.Max(rect => rect.Bottom), Is.LessThan(line.Top + 1e-3), "the cap's selection ends at the cap");
+        });
+    }
+
+    [Test]
+    public void WithoutAFrame_TheNextParagraphGoesOnBesideTheCap()
+    {
+        var single = Lay(Paragraphs(("Once", new ParagraphAttributes())), 300);
+        var layout = Lay(Paragraphs(("Once", new ParagraphAttributes()), ("then", new ParagraphAttributes())), 300,
+            set => set.DropCap = new DropCap(3));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.DropCapLength, Is.GreaterThan(0));
+            Assert.That(layout.GetLine(1).Top, Is.EqualTo(Bottom(single, 0)).Within(1e-3));
+            Assert.That(layout.GetCaretRect(new CaretPosition(5), 1).X, Is.GreaterThan(5), "beside the cap");
+        });
+    }
+
+    [Test]
+    public void ParagraphsSharingAFrameBesideADropCap_GoOnBesideIt_TheFrameRoundTheCap()
+    {
+        var alone = Lay(Paragraphs(("Once", Boxed())), 300, set => set.DropCap = new DropCap(3));
+        var layout = Lay(Paragraphs(("Once", Boxed()), ("then", Boxed()), ("after", new ParagraphAttributes())),
+            300, set => set.DropCap = new DropCap(3));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.GetCaretRect(new CaretPosition(5), 1).X, Is.GreaterThan(5), "beside the cap");
+            Assert.That(Borders(layout).Max(rect => rect.Bottom), Is.EqualTo(alone.TextBottom).Within(1e-3));
+            Assert.That(layout.GetCaretRect(new CaretPosition(10), 2).X, Is.EqualTo(0).Within(1), "below it");
         });
     }
 

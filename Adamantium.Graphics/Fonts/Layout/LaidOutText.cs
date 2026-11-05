@@ -62,10 +62,14 @@ internal sealed record LaidOutText
 
     public int OversetIndex { get; init; }
 
-    // The characters a drop cap took and the lines it stands across; 0 without one.
+    // The characters a drop cap took and the lines beside it - fewer than it spans where a paragraph after it went below
+    // it; 0 without one.
     public int DropCapEnd { get; init; }
 
     public int DropCapLines { get; init; }
+
+    /// <summary>The bottom of a drop cap's last line, down the layout.</summary>
+    public double DropCapBottom { get; init; }
 
     public Size<double> Size { get; init; }
 

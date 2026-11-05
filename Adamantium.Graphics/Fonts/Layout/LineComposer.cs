@@ -426,6 +426,7 @@ internal sealed class LineComposer
         var composedLines = 0;
         double dropIndent = 0;
         var dropLines = 0;
+        var dropBeside = 0;
         var dropItems = 0;
         IFont dropFont = null;
         double dropScale = 0;
@@ -456,6 +457,7 @@ internal sealed class LineComposer
             lineRightToLeft = paragraphRuns != null && IsRightToLeftParagraph(0);
             plainRightToLeft = text.Length > 0 && IsRightToLeftParagraph(0);
             pendingGap = 0;
+            dropBeside = dropLines;
         }
 
         NoteLine(0, 0, OpeningRoom(lineParagraph));
@@ -665,7 +667,7 @@ internal sealed class LineComposer
             var bottom = lastBottom + lastRoom;
             for (var i = 0; i < last; i++)
             {
-                bottom = Math.Max(bottom, lineTops[i] + lineHeights[i] + ClosingRoom(i));
+                bottom = Math.Max(bottom, lineTops[i] + lineHeights[i] + ClosingRoom(i) + CapBelow(i));
             }
 
             textBottom = bottom;
@@ -743,7 +745,8 @@ internal sealed class LineComposer
             Graphemes = graphemes,
             OversetIndex = oversetIndex,
             DropCapEnd = dropGlyphs != null ? dropEnd : 0,
-            DropCapLines = dropGlyphs != null ? dropLines : 0,
+            DropCapLines = dropGlyphs != null ? dropBeside : 0,
+            DropCapBottom = dropGlyphs != null ? DropBottom() : 0,
             Size = finalRect,
             TextBottom = textBottom,
             BorderLines = borderLines,
@@ -821,7 +824,7 @@ internal sealed class LineComposer
             var x0 = areaLeft + Finite(paragraph.MarginLeft) - (left?.Room ?? 0);
             var x1 = areaRight - Finite(paragraph.MarginRight) + (right?.Room ?? 0);
             var textBottom = lineTops[last] + lineHeights[last];
-            if (dropGlyphs != null && first == 0 && last == lineCount - 1)
+            if (dropGlyphs != null && first == 0)
             {
                 textBottom = Math.Max(textBottom, DropBottom());
             }
@@ -1575,6 +1578,7 @@ internal sealed class LineComposer
             dropGlyphs = shaped;
             dropIndent = indent;
             dropLines = dropCap.Lines;
+            dropBeside = dropLines;
             while (dropItems < items.Count && items[dropItems].Cluster < dropEnd)
             {
                 dropItems++;
@@ -1727,6 +1731,10 @@ internal sealed class LineComposer
         double OpeningRoom(ParagraphAttributes paragraph) =>
             paragraph?.BordersContinueAbove != null ? 0 : TopRoom(paragraph);
 
+        // A frame ends or starts between the paragraphs: no frame crosses a drop cap, the next paragraph goes below it.
+        static bool FrameEnds(ParagraphAttributes above, ParagraphAttributes below) =>
+            (above?.HasBorders == true || below?.HasBorders == true) && above?.SharesBordersWith(below) != true;
+
         bool GoesOnBelow(ParagraphAttributes paragraph) =>
             oversetIndex < text.Length || paragraph?.BordersContinueBelow != null;
 
@@ -1742,6 +1750,12 @@ internal sealed class LineComposer
 
             return GoesOnBelow(paragraph) ? 0 : BottomRoom(paragraph);
         }
+
+        // How far a drop cap reaches below the last line beside it, where its paragraphs end before it does.
+        double CapBelow(int line) =>
+            dropGlyphs != null && line == Math.Min(dropBeside, lineCount) - 1 && line < dropLines - 1
+                ? Math.Max(0, DropBottom() - lineTops[line] - lineHeights[line])
+                : 0;
 
         // A line in a frame turns out as tall as its text: the slots after it are found again below it.
         void SettleLine(int line)
@@ -2169,6 +2183,13 @@ internal sealed class LineComposer
             pendingRoom = lineParagraph != null && lineParagraph.SharesBordersWith(paragraph)
                 ? 0
                 : BottomRoom(lineParagraph) + TopRoom(paragraph);
+            if (dropGlyphs != null && !vertical && openLine > 0 && openLine < dropBeside &&
+                FrameEnds(lineParagraph, paragraph))
+            {
+                pendingGap += (dropLines - openLine) * DropPitch();
+                dropBeside = openLine;
+            }
+
             lineParagraph = paragraph;
             paragraphOpenLine = openLine;
             lineRightToLeft = next < text.Length ? IsRightToLeftParagraph(next) : lineRightToLeft;
@@ -2185,14 +2206,14 @@ internal sealed class LineComposer
                 return 0;
             }
 
-            var indent = opens && rightToLeft == right && line >= dropLines ? Finite(paragraph.TextIndent) : 0;
+            var indent = opens && rightToLeft == right && line >= dropBeside ? Finite(paragraph.TextIndent) : 0;
             return Math.Max(0, Finite(right ? paragraph.MarginRight : paragraph.MarginLeft) + indent);
         }
 
-        double RightReserve(int line) => EdgeReserve(line, true) + (line < dropLines && dropRightToLeft ? dropIndent : 0);
+        double RightReserve(int line) => EdgeReserve(line, true) + (line < dropBeside && dropRightToLeft ? dropIndent : 0);
 
         double LineIndent(int line) => (slots != null ? SlotOf(line).Left : 0)
-                                       + EdgeReserve(line, false) + (line < dropLines && !dropRightToLeft ? dropIndent : 0);
+                                       + EdgeReserve(line, false) + (line < dropBeside && !dropRightToLeft ? dropIndent : 0);
 
         double LineRight(int line) => (slots != null ? SlotOf(line).Right : textArea.Width) - RightReserve(line);
 

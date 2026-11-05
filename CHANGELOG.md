@@ -14,7 +14,8 @@ All packages share one version.
   `TextLayout.TextBottom` is where the text ends, the last line's room below it counted. Horizontal text only.
   `BordersContinueAbove` and `BordersContinueBelow` carry a frame on from or to paragraphs laid out in other layouts,
   its side lines reaching across the room between them. In frames, a paragraph's last line whose line below would leave
-  its frame goes on in the next.
+  its frame goes on in the next. No frame crosses a drop cap: where one ends or starts between paragraphs beside the
+  cap, the next paragraph starts below it; without frames, paragraphs still go on beside it.
 
 - A count of device memory: `DeviceMemoryCensus.Take(main)` - what the live resources of every device on a logical
   device hold, by kind and by the largest groups alike in name and shape, with the pooled blocks;

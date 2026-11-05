@@ -178,13 +178,13 @@ internal sealed class GlyphQuadBuilder
 
         var perPixel = (float)(FontAtlas.MSDFTextureSize / (FontAtlas.PixelRange * word.FontSize));
         var horizontal = (text.Options?.WritingMode ?? WritingMode.Horizontal) == WritingMode.Horizontal;
-        var line = word.PositionInString >= 0 && word.PositionInString < text.DropCapEnd
-            ? Math.Max(word.LineIndex, text.DropCapLines - 1)
-            : word.LineIndex;
+        var line = word.LineIndex;
         var lines = Math.Min(text.LineTops?.Length ?? 0, text.LineHeights?.Length ?? 0);
-        var lineBottom = Math.Max(word.Rect.Bottom, line >= 0 && lines > 0
-            ? text.LineTops[Math.Min(line, lines - 1)] + text.LineHeights[Math.Min(line, lines - 1)]
-            : word.Rect.Bottom);
+        var lineBottom = Math.Max(word.Rect.Bottom, word.PositionInString >= 0 && word.PositionInString < text.DropCapEnd
+            ? text.DropCapBottom
+            : line >= 0 && lines > 0
+                ? text.LineTops[Math.Min(line, lines - 1)] + text.LineHeights[Math.Min(line, lines - 1)]
+                : word.Rect.Bottom);
         var last = ElementsCount;
         for (var k = first; k < last; k++)
         {
@@ -295,10 +295,8 @@ internal sealed class GlyphQuadBuilder
             && (text.Options?.WritingMode ?? WritingMode.Horizontal) == WritingMode.Horizontal)
         {
             var cap = word.PositionInString >= 0 && word.PositionInString < text.DropCapEnd;
-            var last = cap
-                ? Math.Clamp(text.DropCapLines - 1, word.LineIndex, Math.Min(tops.Length, heights.Length) - 1)
-                : word.LineIndex;
-            var bottom = cap ? Math.Max(tops[last] + heights[last], drawn.Bottom) : tops[last] + heights[last];
+            var own = tops[word.LineIndex] + heights[word.LineIndex];
+            var bottom = cap ? Math.Max(Math.Max(own, text.DropCapBottom), drawn.Bottom) : own;
             return bottom > window.Top + LineTolerance && tops[word.LineIndex] < window.Bottom - LineTolerance;
         }
 
