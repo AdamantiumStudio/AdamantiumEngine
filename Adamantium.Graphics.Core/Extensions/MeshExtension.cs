@@ -127,7 +127,7 @@ public static class MeshExtension
         return vertices;
     }
     
-    /// <summary>The mesh's points on the plane, as the UI's flat geometry draws them; null for a mesh without points.</summary>
+    /// <summary>The mesh's points, as the UI's geometry draws them; null for a mesh without points.</summary>
     public static UIVertex[] ToUIVertices(this Mesh mesh)
     {
         if (!mesh.Semantic.HasFlag(VertexSemantic.Position))
@@ -139,14 +139,14 @@ public static class MeshExtension
         var vertices = new UIVertex[points.Length];
         for (var i = 0; i < points.Length; i++)
         {
-            vertices[i] = new UIVertex(new Vector2F((float)points[i].X, (float)points[i].Y));
+            vertices[i] = new UIVertex(points[i].As<float>());
         }
 
         return vertices;
     }
 
-    /// <summary>The mesh's points on the plane with its first texture coordinates, as a UI picture draws them - zero
-    /// where it has none; null for a mesh without points.</summary>
+    /// <summary>The mesh's points with its first texture coordinates, as a UI picture draws them - zero where it has
+    /// none; null for a mesh without points.</summary>
     public static UITexturedVertex[] ToUITexturedVertices(this Mesh mesh)
     {
         if (!mesh.Semantic.HasFlag(VertexSemantic.Position))
@@ -159,7 +159,7 @@ public static class MeshExtension
         var vertices = new UITexturedVertex[points.Length];
         for (var i = 0; i < points.Length; i++)
         {
-            vertices[i] = new UITexturedVertex(new Vector2F((float)points[i].X, (float)points[i].Y),
+            vertices[i] = new UITexturedVertex(points[i].As<float>(),
                 uvs != null && i < uvs.Length ? uvs[i] : default);
         }
 

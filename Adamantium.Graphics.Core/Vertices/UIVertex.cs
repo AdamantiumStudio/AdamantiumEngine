@@ -4,17 +4,17 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Core.Vertices;
 
-/// <summary>A vertex of the UI's flat geometry: where it is and nothing else - a fill's brush maps itself from the shape's
-/// box, not from the vertex. 8 bytes.</summary>
+/// <summary>A vertex of the UI's geometry: where it is, in 3D, and nothing else - a fill's brush maps itself from the
+/// shape's box, not from the vertex. 12 bytes.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct UIVertex : IEquatable<UIVertex>
 {
-    public UIVertex(Vector2F position)
+    public UIVertex(Vector3F position)
     {
         Position = position;
     }
 
-    [VertexInputElement("SV_POSITION")] public Vector2F Position;
+    [VertexInputElement("SV_POSITION")] public Vector3F Position;
 
     public bool Equals(UIVertex other) => Position.Equals(other.Position);
 
