@@ -51,6 +51,9 @@ All packages share one version.
 
 ### Changed
 
+- In frames a drop cap that does not fit in its frame - with the line below its paragraphs' frame, where that frame
+  closes beside it - takes its paragraph to the first frame after where it is set and fits, as Word does; it was left
+  out. Where no frame after takes it, the text is laid as before.
 - A `TrackingCollection` nobody watches is changed without allocating: an announcement was made for nobody - a list per
   item added or removed; the last handler taken off from another thread meanwhile no longer makes the change throw.
   `AddRange` makes room for all the items at once, still doubling the room as adding one by one does.

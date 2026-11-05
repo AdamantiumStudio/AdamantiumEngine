@@ -215,6 +215,116 @@ public class ParagraphBorderTests
         });
     }
 
+    private static TextLayout InColumns(AttributedText text, double firstHeight, bool second = true)
+    {
+        RectangleF[] frames = second
+            ? [new RectangleF(0, 0, 160, (float)firstHeight), new RectangleF(200, 0, 160, 400)]
+            : [new RectangleF(0, 0, 160, (float)firstHeight)];
+        return Lay(text, 400, set =>
+        {
+            set.DropCap = new DropCap(3);
+            set.Frames = frames;
+        });
+    }
+
+    [Test]
+    public void ADropCapNotFittingItsColumn_TakesItsParagraphToTheNext()
+    {
+        var line = Lay(new AttributedText("x")).GetLine(0).Height;
+        var moved = InColumns(Paragraphs(("Once upon a time", new ParagraphAttributes())), 2 * line + 1);
+        var stays = InColumns(Paragraphs(("Once upon a time", new ParagraphAttributes())), 3 * line + 1);
+        var nowhere = InColumns(Paragraphs(("Once upon a time", new ParagraphAttributes())), 2 * line + 1, false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(moved.DropCapLength, Is.GreaterThan(0), "the cap kept");
+            Assert.That(moved.GetCaretRect(new CaretPosition(0), 0).X, Is.GreaterThanOrEqualTo(200), "in the next");
+            Assert.That(stays.DropCapLength, Is.GreaterThan(0));
+            Assert.That(stays.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(160), "fitting, it stays");
+            Assert.That(nowhere.DropCapLength, Is.EqualTo(0), "no column to go to: no cap, as before");
+        });
+    }
+
+    [Test]
+    public void ADropCapWhoseFramesLineBelowLeavesItsColumn_TakesItsParagraphToTheNext()
+    {
+        var line = Lay(new AttributedText("x")).GetLine(0).Height;
+        var layout = InColumns(Paragraphs(("Once", Boxed()), ("then", new ParagraphAttributes())),
+            3 * line + Line.Room + 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.DropCapLength, Is.GreaterThan(0));
+            Assert.That(Borders(layout).Min(rect => rect.Left), Is.GreaterThanOrEqualTo(200 - Line.Room - 1e-3));
+            Assert.That(Borders(layout).Max(rect => rect.Bottom), Is.LessThanOrEqualTo(400));
+        });
+    }
+
+    private const string Prose = "Once upon a time there lived a king who had three daughters, and the youngest was " +
+                                 "so beautiful that the sun itself was astonished whenever it shone on her face.";
+
+    private static TextLayout InFrames(AttributedText text, params RectangleF[] frames) =>
+        Lay(text, 1000, set =>
+        {
+            set.DropCap = new DropCap(3);
+            set.Frames = frames;
+        });
+
+    [Test]
+    public void ADropCapFittingNoFrameAfter_LeavesTheTextWhereItWas()
+    {
+        var line = (float)Lay(new AttributedText("x")).GetLine(0).Height;
+        var plain = Paragraphs((Prose, new ParagraphAttributes()));
+        var shorts = InFrames(plain, new RectangleF(0, 0, 200, 2 * line + 1), new RectangleF(220, 0, 200, 2 * line + 1),
+            new RectangleF(440, 0, 200, 2 * line + 1));
+        var narrow = InFrames(plain, new RectangleF(0, 0, 200, 2 * line + 1), new RectangleF(220, 0, 55, 400));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shorts.DropCapLength, Is.EqualTo(0));
+            Assert.That(shorts.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(200), "from the first frame");
+            Assert.That(narrow.DropCapLength, Is.EqualTo(0));
+            Assert.That(narrow.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(200));
+        });
+    }
+
+    [Test]
+    public void TextLeftOutAfterTheParagraph_DoesNotLetItMoveWhereItsLineBelowDoesNotFit()
+    {
+        var line = (float)Lay(new AttributedText("x")).GetLine(0).Height;
+        var height = 3 * line + (float)Line.Room + 2;
+        var text = Paragraphs(("Once", Boxed()), ("then", new ParagraphAttributes()));
+        var two = InFrames(text, new RectangleF(0, 0, 200, height), new RectangleF(220, 0, 200, height));
+        var three = InFrames(text, new RectangleF(0, 0, 200, height), new RectangleF(220, 0, 200, height),
+            new RectangleF(440, 0, 200, 400));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(two.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(200), "no frame after fits it");
+            Assert.That(three.GetCaretRect(new CaretPosition(0), 0).X, Is.GreaterThanOrEqualTo(440), "the one that fits");
+            Assert.That(three.DropCapLength, Is.GreaterThan(0));
+        });
+    }
+
+    [Test]
+    public void OnlyAFrameClosingBesideTheCap_TakesItsLineBelowIntoAccount()
+    {
+        var line = (float)Lay(new AttributedText("x")).GetLine(0).Height;
+        var first = new RectangleF(0, 0, 200, 3 * line + (float)Line.Room + 1);
+        var second = new RectangleF(220, 0, 200, 400);
+        var goingOn = InFrames(Paragraphs((Prose, Boxed())), first, second);
+        var continued = InFrames(Paragraphs(("Once", Boxed() with { BordersContinueBelow = 0 })), first, second);
+        var shared = InFrames(Paragraphs(("Once", Boxed()), (Prose, Boxed())), first, second);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(goingOn.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(200), "it goes on past the cap");
+            Assert.That(continued.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(200), "its frame goes on below");
+            Assert.That(shared.GetCaretRect(new CaretPosition(0), 0).X, Is.LessThan(200), "it shares its frame");
+            Assert.That(goingOn.DropCapLength, Is.GreaterThan(0));
+        });
+    }
+
     [Test]
     public void AFramedParagraphAfterADropCapsShortParagraph_StartsBelowTheCap()
     {
