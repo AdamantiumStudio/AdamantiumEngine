@@ -595,4 +595,60 @@ public class ParagraphBorderTests
             Assert.That(borders[0].Bottom, Is.EqualTo(layout.TextBottom).Within(1e-4));
         });
     }
+
+    private static List<TextAdornment> BorderLines(TextLayout layout) =>
+        layout.GetAdornments().Where(adornment => adornment.Kind == TextAdornmentKind.Border).ToList();
+
+    [Test]
+    public void DottedAndDashedLines_ComeWithDashesMeasuredByTheirWidth()
+    {
+        var dotted = new ParagraphBorder(2, 3, null, ParagraphBorderStyle.Dotted);
+        var dashed = new ParagraphBorder(2, 3, null, ParagraphBorderStyle.Dashed);
+        var layout = Lay(Paragraphs(("one", new ParagraphAttributes { BorderTop = dotted, BorderLeft = dashed })));
+        var lines = BorderLines(layout);
+        var top = lines.Single(line => line.Rect.Width > line.Rect.Height);
+        var left = lines.Single(line => line.Rect.Height > line.Rect.Width);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(top.Dashes, Is.EqualTo(new double[] { 2, 2 }));
+            Assert.That(left.Dashes, Is.EqualTo(new double[] { 6, 4 }));
+            Assert.That(top.Rect.Height, Is.EqualTo(2).Within(1e-4), "as thick as a solid one");
+            Assert.That(layout.GetLine(0).Top, Is.EqualTo(5).Within(1e-4), "taking the same room");
+        });
+    }
+
+    [Test]
+    public void ADoubleLine_IsTwoBandsOfItsWidth_AsFarApart_AsWords()
+    {
+        var plain = Lay(Paragraphs(("one", new ParagraphAttributes())));
+        var line = new ParagraphBorder(2, 3, null, ParagraphBorderStyle.Double);
+        var layout = Lay(Paragraphs(("one", new ParagraphAttributes { BorderBottom = line, BorderRight = line })));
+        var lines = BorderLines(layout);
+        var across = lines.Where(band => band.Rect.Width > band.Rect.Height).OrderBy(band => band.Rect.Top).ToList();
+        var down = lines.Where(band => band.Rect.Height > band.Rect.Width).OrderBy(band => band.Rect.Left).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(line.Thickness, Is.EqualTo(6));
+            Assert.That(line.Room, Is.EqualTo(9));
+            Assert.That(across, Has.Count.EqualTo(2));
+            Assert.That(across.Select(band => band.Rect.Height), Is.All.EqualTo(2).Within(1e-4));
+            Assert.That(across[1].Rect.Top - across[0].Rect.Bottom, Is.EqualTo(2).Within(1e-4), "as far apart");
+            Assert.That(across[1].Rect.Bottom, Is.EqualTo(layout.TextBottom).Within(1e-4));
+            Assert.That(layout.TextBottom - Bottom(plain, 0), Is.EqualTo(9).Within(1e-4), "the room it takes");
+            Assert.That(down, Has.Count.EqualTo(2));
+            Assert.That(down[1].Rect.Right, Is.EqualTo(300 + 9).Within(1e-4), "the outer band at the line's edge");
+            Assert.That(lines.All(band => band.Dashes == null));
+        });
+    }
+
+    [Test]
+    public void LinesOfOtherStyles_DoNotShareAFrame()
+    {
+        var solid = Boxed();
+        var dotted = Boxed() with { BorderTop = Line with { Style = ParagraphBorderStyle.Dotted } };
+
+        Assert.That(solid.SharesBordersWith(dotted), Is.False);
+    }
 }

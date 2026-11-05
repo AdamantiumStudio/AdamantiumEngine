@@ -879,29 +879,60 @@ internal sealed class LineComposer
 
             if (top != null)
             {
-                into.Add(new TextAdornment(TextAdornmentKind.Border,
-                    new RectangleF((float)x0, (float)y0, (float)(x1 - x0), (float)top.Width), top.Color));
+                AddBorderLine(into, top, x0, y0, x1 - x0, top.Thickness, true);
             }
 
             if (bottom != null)
             {
-                into.Add(new TextAdornment(TextAdornmentKind.Border,
-                    new RectangleF((float)x0, (float)(y1 - bottom.Width), (float)(x1 - x0), (float)bottom.Width),
-                    bottom.Color));
+                AddBorderLine(into, bottom, x0, y1 - bottom.Thickness, x1 - x0, bottom.Thickness, true);
             }
 
             if (left != null)
             {
-                into.Add(new TextAdornment(TextAdornmentKind.Border,
-                    new RectangleF((float)x0, (float)y0, (float)left.Width, (float)(y1 - y0)), left.Color));
+                AddBorderLine(into, left, x0, y0, left.Thickness, y1 - y0, false);
             }
 
             if (right != null)
             {
-                into.Add(new TextAdornment(TextAdornmentKind.Border,
-                    new RectangleF((float)(x1 - right.Width), (float)y0, (float)right.Width, (float)(y1 - y0)),
-                    right.Color));
+                AddBorderLine(into, right, x1 - right.Thickness, y0, right.Thickness, y1 - y0, false);
             }
+        }
+
+        // A double line is two bands of its width at the edges of its thickness; dots and dashes are measured by its
+        // width.
+        static void AddBorderLine(List<TextAdornment> into, ParagraphBorder line, double x, double y, double width,
+            double height, bool across)
+        {
+            if (line.Style == ParagraphBorderStyle.Double)
+            {
+                var band = line.Width;
+                if (across)
+                {
+                    into.Add(Band(x, y, width, band));
+                    into.Add(Band(x, y + height - band, width, band));
+                }
+                else
+                {
+                    into.Add(Band(x, y, band, height));
+                    into.Add(Band(x + width - band, y, band, height));
+                }
+
+                return;
+            }
+
+            var unit = Math.Max(line.Width, 1);
+            IReadOnlyList<double> dashes = line.Style switch
+            {
+                ParagraphBorderStyle.Dotted => [unit, unit],
+                ParagraphBorderStyle.Dashed => [3 * unit, 2 * unit],
+                _ => null,
+            };
+            into.Add(new TextAdornment(TextAdornmentKind.Border,
+                new RectangleF((float)x, (float)y, (float)width, (float)height), line.Color, dashes));
+
+            TextAdornment Band(double bandX, double bandY, double bandWidth, double bandHeight) =>
+                new(TextAdornmentKind.Border,
+                    new RectangleF((float)bandX, (float)bandY, (float)bandWidth, (float)bandHeight), line.Color);
         }
 
         double Raise(TextAttributes attributes, IFont font, double size, double baseSize) =>
