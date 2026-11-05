@@ -35,7 +35,7 @@ public struct SkinnedMeshVertex : IEquatable<SkinnedMeshVertex>
         JointWeights = jointWeights;
     }
 
-    [VertexInputElement("SV_Position")] public Vector3F Position;
+    [VertexInputElement("POSITION")] public Vector3F Position;
 
     [VertexInputElement("COLOR")] public Vector4F Color;
 
