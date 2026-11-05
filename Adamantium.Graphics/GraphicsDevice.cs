@@ -640,6 +640,14 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
     }
 
+    public void CollectResources(List<GraphicsResource> into)
+    {
+        lock (_graphicsResourcesLock)
+        {
+            into.AddRange(_graphicsResources);
+        }
+    }
+
     /// <summary>Number of live (registered) graphics resources. Used by leak regression tests.</summary>
     public int RegisteredResourceCount
     {
@@ -1175,6 +1183,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         if (MainDevice.IsLost)
         {
             LastFrameError = "the device is lost";
+            _recordingFrame = false;
             return false;
         }
 
@@ -1200,11 +1209,15 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
                 LastFrameError = $"WaitForFences returned {result}{MainDevice.DescribeFault()}{DescribeRecentValidation()}";
                 Log.Logger.Information($"Wait for fences result: {result}. DETAIL: {LastFrameError}");
             }
+            // Nothing was recorded: a frame that never began must not leave the device counted as drawing, or what is
+            // retired waits on it for good.
+            _recordingFrame = false;
             return false;
         }
         _lastFenceWaitError = Result.Success;   // recovered - re-arm the log for the next new error
         if (Presenter is { IsReady: false })
         {
+            _recordingFrame = false;
             return false;
         }
 

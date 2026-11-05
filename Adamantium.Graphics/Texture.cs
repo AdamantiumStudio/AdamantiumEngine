@@ -500,6 +500,8 @@ public unsafe class Texture : GraphicsResource, ITexture
         {
             allocationRefused?.Invoke();
             var mb = memRequirements.Size / (1024.0 * 1024.0);
+            Serilog.Log.Logger.Error("[MEM] texture '{Name}' {Width}x{Height}x{Layers} {Format}: {Size:F1} MB refused ({Result})",
+                Name, description.Width, description.Height, description.ArrayLayers, description.Format, mb, allocResult);
             throw new Exception(
                 $"failed to allocate image memory: {allocResult}. Requested {mb:F1} MB " +
                 $"(memoryTypeIndex {allocInfo.MemoryTypeIndex}, typeBits 0x{memRequirements.MemoryTypeBits:X}); " +
@@ -509,7 +511,22 @@ public unsafe class Texture : GraphicsResource, ITexture
 
         device.BindImageMemory(image, imageMemory, 0);
         ImageLayout = imageInfo.InitialLayout;
+        _imageMemoryBytes = memRequirements.Size;
+        GraphicsDevice.MainDevice.CountImageBytes((long)_imageMemoryBytes);
+        if (memRequirements.Size >= LoggedImageBytes)
+        {
+            Serilog.Log.Logger.Debug("[MEM] texture '{Name}' {Width}x{Height}x{Layers} {Format}: {Size:F1} MB",
+                Name, description.Width, description.Height, description.ArrayLayers, description.Format,
+                memRequirements.Size / (1024.0 * 1024.0));
+        }
     }
+
+    // An image this large is named in the log as it is made: the ones that add up to what the device holds.
+    private const ulong LoggedImageBytes = 16UL << 20;
+
+    private ulong _imageMemoryBytes;
+
+    public override ulong DeviceMemoryBytes => _imageMemoryBytes;
 
     protected void CreateImageView(TextureDescription description)
     {
@@ -885,6 +902,7 @@ public unsafe class Texture : GraphicsResource, ITexture
             CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, GetStagingMemory(),
                 out _stagingBuffer, out _stagingMemory);
             _stagingSize = size;
+            GraphicsDevice.MainDevice.CountStagingBytes((long)size);
             _stagingData = GraphicsDevice.MapMemory(_stagingMemory, 0, size, 0);
         }
 
@@ -918,6 +936,7 @@ public unsafe class Texture : GraphicsResource, ITexture
             return;
         }
 
+        GraphicsDevice.MainDevice.CountStagingBytes(-(long)_stagingSize);
         GraphicsDevice.UnmapMemory(_stagingMemory);
         GraphicsDevice.Destroy(_stagingBuffer);
         GraphicsDevice.Destroy(_stagingMemory);
@@ -988,6 +1007,12 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
 
         GraphicsDevice.Destroy(ImageView);
+        if (ImageMemory != null && _imageMemoryBytes > 0)
+        {
+            GraphicsDevice.MainDevice.CountImageBytes(-(long)_imageMemoryBytes);
+            _imageMemoryBytes = 0;
+        }
+
         GraphicsDevice.Destroy(ImageMemory);
 
         base.Dispose(disposeManaged);

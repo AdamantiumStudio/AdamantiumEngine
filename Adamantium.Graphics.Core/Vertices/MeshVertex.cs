@@ -31,7 +31,7 @@ public struct MeshVertex : IEquatable<MeshVertex>
         BiTangent = bitangent;
     }
 
-    [VertexInputElement("SV_POSITION")] public Vector3F Position;
+    [VertexInputElement("POSITION")] public Vector3F Position;
 
     [VertexInputElement("COLOR")] public Vector4F Color;
 

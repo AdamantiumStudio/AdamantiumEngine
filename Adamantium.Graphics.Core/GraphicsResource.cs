@@ -13,6 +13,10 @@ public abstract class GraphicsResource: DisposableObject
    /// </summary>
    public IGraphicsDevice GraphicsDevice { get; }
 
+   /// <summary>The device memory this resource holds: its own allocation, or its share of a pooled block; 0 when it
+   /// holds none.</summary>
+   public virtual ulong DeviceMemoryBytes => 0;
+
    internal GraphicsResource()
    {
          
