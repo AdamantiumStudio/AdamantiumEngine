@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `TextLayout.GlyphsAsked`: the atlas and the revision a layout's glyphs were last asked of, kept by the layout itself -
+  a renderer marks it once it has asked the atlas for them and asks again only when either changed. A label redrawn
+  every frame where it moved costs a comparison, not a table lookup.
+
 - `EarClipping.Triangulate`: a polygon - an outer ring and its holes, given as points and where each hole starts - cut
   into triangles by clipping ears, as indices into the points: holes joined by bridges to vertices they see, rings that
   touch at a point or along a side cut as they are. Only corners next to a cut are asked again; a grid of the vertices
