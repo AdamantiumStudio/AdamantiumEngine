@@ -14,7 +14,7 @@ public struct UIVertex : IEquatable<UIVertex>
         Position = position;
     }
 
-    [VertexInputElement("SV_POSITION")] public Vector3F Position;
+    [VertexInputElement("POSITION")] public Vector3F Position;
 
     public bool Equals(UIVertex other) => Position.Equals(other.Position);
 

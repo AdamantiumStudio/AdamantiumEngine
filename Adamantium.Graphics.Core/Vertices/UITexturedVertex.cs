@@ -15,7 +15,7 @@ public struct UITexturedVertex : IEquatable<UITexturedVertex>
         UV = uv;
     }
 
-    [VertexInputElement("SV_POSITION")] public Vector3F Position;
+    [VertexInputElement("POSITION")] public Vector3F Position;
 
     [VertexInputElement("TEXCOORD0")] public Vector2F UV;
 
