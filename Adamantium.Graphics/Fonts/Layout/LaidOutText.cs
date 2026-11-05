@@ -71,6 +71,10 @@ internal sealed record LaidOutText
     /// <summary>The bottom of a drop cap's last line, down the layout.</summary>
     public double DropCapBottom { get; init; }
 
+    // The frame a drop cap - with the line below its paragraphs' frame - did not fit in: its paragraph is tried in the
+    // frames after, as Word moves it, and kept where the cap is set and fits.
+    internal int? DropCapFrameOver { get; init; }
+
     public Size<double> Size { get; init; }
 
     /// <summary>Where the text ends down the layout, not rounded: the last line's bottom, a drop cap's, and the room of

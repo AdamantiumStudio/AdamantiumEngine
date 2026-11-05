@@ -67,6 +67,39 @@ internal sealed class LineComposer
         Dictionary<int, int> pushed = null;
         Dictionary<int, double> tall = null;
         var pushes = 0;
+
+        var frames = options.Frames;
+        for (var to = laid.DropCapFrameOver + 1 ?? int.MaxValue; frames != null && to < frames.Length;)
+        {
+            Dictionary<int, int> moved = new() { [0] = to };
+            var trial = Lay(text, attributed, fontSize, renderingParameters, options, options.DropCap.Lines, moved,
+                null, wrapWidth);
+            if (trial.DropCapEnd > 0 && trial.DropCapFrameOver == null)
+            {
+                var whole = Lay(text, attributed, fontSize, renderingParameters, options, 0, moved, null, wrapWidth);
+                if (whole.DropCapEnd > 0 && whole.DropCapFrameOver == null)
+                {
+                    laid = whole;
+                    pushed = moved;
+                }
+
+                break;
+            }
+
+            if (trial.DropCapFrameOver is not { } over)
+            {
+                break;
+            }
+
+            var tried = frames[to];
+            to = over + 1;
+            while (options.Exclusions is not { Length: > 0 } && to < frames.Length &&
+                   frames[to].Width == tried.Width && frames[to].Height <= tried.Height)
+            {
+                to++;
+            }
+        }
+
         for (var pass = 0; options.Frames is { Length: > 0 } && pass < MostFramePasses; pass++)
         {
             if (laid.LineOverAnExclusion is var (tallLine, height)
@@ -427,6 +460,7 @@ internal sealed class LineComposer
         double dropIndent = 0;
         var dropLines = 0;
         var dropBeside = 0;
+        int? dropFrameOver = null;
         var dropItems = 0;
         IFont dropFont = null;
         double dropScale = 0;
@@ -709,6 +743,10 @@ internal sealed class LineComposer
 
         var borderLines = vertical || paragraphRuns == null ? null : BorderLines(finalRect.Width);
         var closingRooms = slots != null && borderLines != null ? ClosingRooms() : null;
+        if (dropGlyphs != null && slots != null && borderLines != null && laidOutLineFrames != null)
+        {
+            dropFrameOver ??= FrameUnderTheCapOver();
+        }
 
         var _b4 = System.GC.GetAllocatedBytesForCurrentThread();
 
@@ -747,6 +785,7 @@ internal sealed class LineComposer
             DropCapEnd = dropGlyphs != null ? dropEnd : 0,
             DropCapLines = dropGlyphs != null ? dropBeside : 0,
             DropCapBottom = dropGlyphs != null ? DropBottom() : 0,
+            DropCapFrameOver = dropFrameOver,
             Size = finalRect,
             TextBottom = textBottom,
             BorderLines = borderLines,
@@ -1483,10 +1522,23 @@ internal sealed class LineComposer
                     return;
                 }
 
+                var frame = slots[0].Frame;
                 for (var line = 1; line < dropCap.Lines; line++)
                 {
-                    if (slots[line].Frame != slots[0].Frame
-                        || Math.Abs(slots[line].Top - slots[line - 1].Top - DropPitch()) > 0.5)
+                    if (slots[line].Frame != frame)
+                    {
+                        var over = frame;
+                        var tall = (dropCap.Lines - 1) * DropPitch() + SlotHeight(dropCap.Lines - 1);
+                        while (over + 1 < frames.Count && frames[over + 1].Height < tall - 1e-6)
+                        {
+                            over++;
+                        }
+
+                        dropFrameOver = over;
+                        return;
+                    }
+
+                    if (Math.Abs(slots[line].Top - slots[line - 1].Top - DropPitch()) > 0.5)
                     {
                         return;
                     }
@@ -1749,6 +1801,37 @@ internal sealed class LineComposer
             }
 
             return GoesOnBelow(paragraph) ? 0 : BottomRoom(paragraph);
+        }
+
+        // The frame of the cap whose paragraphs' frame closes beside it, its line below past the frame's bottom; null
+        // where it fits.
+        int? FrameUnderTheCapOver()
+        {
+            var frame = laidOutLineFrames[0];
+            for (var line = 0; line < Math.Min(dropLines, lineCount); line++)
+            {
+                var closing = line + 1 == lineCount && oversetIndex < text.Length ? RoomBeforeOverset(line) : ClosingRoom(line);
+                if (closing is > 0 and var room)
+                {
+                    return laidOutLineFrames[line] == frame && DropBottom() + room > frames[frame].Bottom + 1e-6
+                        ? frame
+                        : null;
+                }
+            }
+
+            return null;
+        }
+
+        // The room below the last line laid where the text left out starts a paragraph of its own: its frame closes
+        // there unless shared or going on.
+        double RoomBeforeOverset(int line)
+        {
+            var next = AttributedText.ParagraphIn(paragraphRuns, oversetIndex, text.Length);
+            var paragraph = LineState(line).Paragraph;
+            return next?.Start == oversetIndex && paragraph?.BordersContinueBelow == null &&
+                   paragraph?.SharesBordersWith(next.Value.Attributes) != true
+                ? BottomRoom(paragraph)
+                : 0;
         }
 
         // How far a drop cap reaches below the last line beside it, where its paragraphs end before it does.
