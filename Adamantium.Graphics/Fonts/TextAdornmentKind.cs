@@ -11,4 +11,7 @@ public enum TextAdornmentKind
 
     /// <summary>A line on the baseline.</summary>
     Baseline,
+
+    /// <summary>A line of a paragraph's border (<see cref="ParagraphAttributes.BorderTop"/> and the other sides).</summary>
+    Border,
 }

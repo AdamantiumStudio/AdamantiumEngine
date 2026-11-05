@@ -375,6 +375,11 @@ internal sealed class TextNavigator
             }
         }
 
+        if (_laid.BorderLines != null)
+        {
+            adornments.AddRange(_laid.BorderLines);
+        }
+
         return adornments;
     }
 
