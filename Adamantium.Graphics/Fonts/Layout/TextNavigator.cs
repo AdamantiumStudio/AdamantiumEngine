@@ -234,9 +234,8 @@ internal sealed class TextNavigator
 
     private (double Top, double Height) DropCapSpan()
     {
-        var last = Math.Max(0, _laid.DropCapLines - 1);
         var top = LineTop(0);
-        return (top, LineTop(last) + LineMetric(_laid.LineHeights, last) - top);
+        return (top, _laid.DropCapBottom - top);
     }
 
     public IReadOnlyList<TextAdornment> GetAdornments()
