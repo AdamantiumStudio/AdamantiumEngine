@@ -61,6 +61,13 @@ public class MainGraphicsDevice : DisposableBase
     /// <c>DepthClampEnable</c>: drawn past the far plane, held at the farthest depth.</summary>
     public bool IsDepthClampEnabled { get; private set; }
 
+    /// <summary>True when multiDrawIndirect and drawIndirectFirstInstance were enabled: one indirect draw may issue up to
+    /// <see cref="MaxDrawIndirectCount"/> draws, each naming its own first instance.</summary>
+    public bool IsMultiDrawIndirectEnabled { get; private set; }
+
+    /// <summary>The most draws one indirect draw may issue: the device's limit when multi-draw is enabled, else one.</summary>
+    public uint MaxDrawIndirectCount { get; private set; } = 1;
+
     /// <summary>True when VK_EXT_mesh_shader's meshShader feature was enabled: passes may run mesh shaders, and every
     /// graphics pass binds the mesh stage, empty when it has none.</summary>
     public bool IsMeshShaderEnabled { get; private set; }
@@ -541,6 +548,10 @@ public class MainGraphicsDevice : DisposableBase
         deviceFeatures2.Features.TessellationShader = IsTessellationEnabled;
         IsDepthClampEnabled = GraphicsAdapter.SupportsDepthClamp;
         deviceFeatures2.Features.DepthClamp = IsDepthClampEnabled;
+        IsMultiDrawIndirectEnabled = GraphicsAdapter.SupportsMultiDrawIndirect;
+        deviceFeatures2.Features.MultiDrawIndirect = IsMultiDrawIndirectEnabled;
+        deviceFeatures2.Features.DrawIndirectFirstInstance = IsMultiDrawIndirectEnabled;
+        MaxDrawIndirectCount = IsMultiDrawIndirectEnabled ? GraphicsAdapter.AdapterProperties.Limits.MaxDrawIndirectCount : 1u;
         // The stroke expander's compute shader dereferences BDA pointers (uint64_t).
         deviceFeatures2.Features.ShaderInt64 = true;
 

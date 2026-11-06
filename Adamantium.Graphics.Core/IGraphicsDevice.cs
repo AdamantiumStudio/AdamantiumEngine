@@ -165,6 +165,13 @@ public interface IDynamicStateDevice
     /// </summary>
     void DrawIndirect(IBuffer vertexBuffer, IBuffer indirectBuffer, uint drawCount = 1, uint stride = 16);
 
+    /// <summary><paramref name="drawCount"/> draws whose counts come from <paramref name="indirectBuffer"/> from
+    /// <paramref name="offset"/> on (VkDrawIndirectCommand, 16 bytes each), with no vertex buffer: for passes that read
+    /// their vertices by address. More than one draw, or a draw naming a first instance other than zero, needs
+    /// <see cref="MainGraphicsDevice.IsMultiDrawIndirectEnabled"/>; at most <see cref="MainGraphicsDevice.MaxDrawIndirectCount"/>
+    /// draws at once.</summary>
+    void DrawIndirect(IBuffer indirectBuffer, ulong offset, uint drawCount, uint stride = 16);
+
     /// <summary>A buffer memory barrier on the current frame's command buffer.</summary>
     void BufferBarrier(IBuffer buffer, PipelineStageFlagBits2 srcStage, AccessFlagBits2 srcAccess,
         PipelineStageFlagBits2 dstStage, AccessFlagBits2 dstAccess);
