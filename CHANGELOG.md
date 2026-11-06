@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- Many draws from one indirect command: `IGraphicsDevice.DrawIndirect(indirectBuffer, offset, drawCount)` issues them
+  with no vertex buffer, for passes that read their vertices by address, each draw naming its own first instance.
+  The device enables `multiDrawIndirect` and `drawIndirectFirstInstance` where the adapter has them
+  (`GraphicsAdapter.SupportsMultiDrawIndirect`, `MainGraphicsDevice.IsMultiDrawIndirectEnabled`); without them one
+  draw at a time is all it takes (`MainGraphicsDevice.MaxDrawIndirectCount`).
+
 - Paragraph borders, as Word's (`ParagraphAttributes.BorderTop`, `BorderBottom`, `BorderLeft`, `BorderRight`,
   `ParagraphBorder`): the room a line above or below takes is kept round the text - at the top of a frame too, where
   the spacing is not - the side lines stand in the margins, and paragraphs one after another with the same borders and

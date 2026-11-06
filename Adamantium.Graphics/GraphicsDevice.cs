@@ -2159,6 +2159,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     /// </summary>
     public void DrawIndirect(IBuffer vertexBuffer, IBuffer indirectBuffer, uint drawCount = 1, uint stride = 16)
     {
+        CheckIndirect(indirectBuffer, 0, drawCount, stride);
         CheckDrawKind(isMeshTaskDraw: false);
         if (_hashing)
         {
@@ -2178,6 +2179,56 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         SetDrawingState(commandBuffer);
         commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), 0UL);
         commandBuffer.DrawIndirect(indirectBuffer.GetBuffer(), 0, drawCount, stride);
+    }
+
+    // What Vulkan asks of an indirect draw, refused here with a reason rather than left to the driver: as many draws as the
+    // device takes at once, commands on four-byte boundaries, a stride a command fits in, and every command inside the
+    // buffer.
+    private void CheckIndirect(IBuffer indirectBuffer, ulong offset, uint drawCount, uint stride)
+    {
+        if (drawCount > MainDevice.MaxDrawIndirectCount)
+        {
+            throw new InvalidOperationException(
+                $"{drawCount} draws at once is past the device's {MainDevice.MaxDrawIndirectCount}" +
+                (MainDevice.IsMultiDrawIndirectEnabled ? "" : " - multiDrawIndirect is not enabled"));
+        }
+
+        if (offset % 4 != 0) throw new ArgumentException($"An indirect offset of {offset} is not a multiple of 4.", nameof(offset));
+        if (drawCount > 1 && (stride < 16 || stride % 4 != 0))
+            throw new ArgumentException($"A stride of {stride} holds no command of 16 bytes on a 4-byte boundary.", nameof(stride));
+        if (drawCount > 0 && offset + (drawCount - 1) * (ulong)stride + 16 > indirectBuffer.TotalSize)
+            throw new ArgumentException($"{drawCount} commands from {offset} reach past the buffer's {indirectBuffer.TotalSize} bytes.",
+                nameof(drawCount));
+    }
+
+    public void DrawIndirect(IBuffer indirectBuffer, ulong offset, uint drawCount, uint stride = 16)
+    {
+        if (CurrentEffectPass == null)
+        {
+            throw new ArgumentNullException("Effect pass should be applied before executing draw");
+        }
+
+        if (drawCount == 0) return;
+        CheckIndirect(indirectBuffer, offset, drawCount, stride);
+
+        CheckDrawKind(isMeshTaskDraw: false);
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD6);
+            HashBuffer(indirectBuffer);
+            Hash(offset);
+            Hash(((ulong)drawCount << 32) | stride);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
+        var commandBuffer = CurrentCommandBuffer;
+        SetDrawingState(commandBuffer);
+        commandBuffer.DrawIndirect(indirectBuffer.GetBuffer(), offset, drawCount, stride);
     }
 
     /// <summary>Buffer memory barrier on the current frame's command buffer (synchronization2). Used to make a compute
