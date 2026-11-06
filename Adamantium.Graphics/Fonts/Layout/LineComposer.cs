@@ -814,6 +814,7 @@ internal sealed class LineComposer
                 var first = line;
                 var frame = laidOutLineFrames?[line] ?? -1;
                 while (line + 1 < lineCount && (laidOutLineFrames?[line + 1] ?? -1) == frame &&
+                       SameArea(line, line + 1, frame, laidWidth) &&
                        (!LineState(line + 1).Opens || paragraph.SharesBordersWith(LineState(line + 1).Paragraph)))
                 {
                     line++;
@@ -858,7 +859,8 @@ internal sealed class LineComposer
                 var paragraph = LineState(line).Paragraph;
                 var frame = laidOutLineFrames?[line] ?? -1;
                 var first = line;
-                while (line + 1 < lineCount && (laidOutLineFrames?[line + 1] ?? -1) == frame && !LineState(line + 1).Opens)
+                while (line + 1 < lineCount && (laidOutLineFrames?[line + 1] ?? -1) == frame && !LineState(line + 1).Opens &&
+                       SameArea(line, line + 1, frame, laidWidth))
                 {
                     line++;
                 }
@@ -877,7 +879,7 @@ internal sealed class LineComposer
         void AddShading(List<TextAdornment> into, ParagraphAttributes paragraph, Color color, int first, int last,
             int frame, double laidWidth)
         {
-            var (boxLeft, boxRight) = ParagraphBox(paragraph, first, frame, laidWidth);
+            var (boxLeft, boxRight) = ParagraphBox(paragraph, first, last, frame, laidWidth);
             var x0 = boxLeft - (paragraph.BorderLeft is { IsVisible: true } left ? left.Space : 0);
             var x1 = boxRight + (paragraph.BorderRight is { IsVisible: true } right ? right.Space : 0);
             var y0 = lineTops[first] - (OpensFrameAt(first, paragraph) && paragraph.BorderTop is { IsVisible: true } top
@@ -900,7 +902,7 @@ internal sealed class LineComposer
                 {
                     y1 += paragraph.ShadingContinuesBelow ?? 0;
                 }
-                else if ((laidOutLineFrames?[next] ?? -1) == frame &&
+                else if ((laidOutLineFrames?[next] ?? -1) == frame && SameArea(last, next, frame, laidWidth) &&
                          paragraph.ShadesOnTo(LineState(next).Paragraph))
                 {
                     var below = LineState(next).Paragraph;
@@ -917,13 +919,42 @@ internal sealed class LineComposer
             }
         }
 
-        (double Left, double Right) ParagraphBox(ParagraphAttributes paragraph, int line, int frame, double laidWidth)
+        (double Left, double Right) AreaOf(int first, int last, int frame, double laidWidth)
         {
             var (areaLeft, areaRight) = frame >= 0
                 ? ((double)frames[frame].Left, (double)frames[frame].Right)
                 : (0.0, textArea.Width < Int32.MaxValue ? textArea.Width : laidWidth);
+            var top = lineTops[first];
+            var bottom = lineTops[last] + lineHeights[last];
+            foreach (var exclusion in vertical ? [] : exclusions ?? [])
+            {
+                if (exclusion.Top > top || exclusion.Bottom < bottom)
+                {
+                    continue;
+                }
+
+                if (exclusion.Left > areaLeft && exclusion.Left < areaRight && exclusion.Right >= areaRight)
+                {
+                    areaRight = exclusion.Left;
+                }
+                else if (exclusion.Right > areaLeft && exclusion.Right < areaRight && exclusion.Left <= areaLeft)
+                {
+                    areaLeft = exclusion.Right;
+                }
+            }
+
+            return (areaLeft, areaRight);
+        }
+
+        bool SameArea(int line, int other, int frame, double laidWidth) =>
+            exclusions is not { Count: > 0 } || AreaOf(line, line, frame, laidWidth) == AreaOf(other, other, frame, laidWidth);
+
+        (double Left, double Right) ParagraphBox(ParagraphAttributes paragraph, int first, int last, int frame,
+            double laidWidth)
+        {
+            var (areaLeft, areaRight) = AreaOf(first, last, frame, laidWidth);
             var lead = Math.Max(Math.Max(0, -Finite(paragraph.TextIndent)), paragraph.MarkRoom);
-            var rightToLeft = LineState(line).RightToLeft;
+            var rightToLeft = LineState(first).RightToLeft;
             var left = Finite(paragraph.MarginLeft) - (rightToLeft ? 0 : lead);
             var right = Finite(paragraph.MarginRight) - (rightToLeft ? lead : 0);
             return (areaLeft + Math.Max(0, left), areaRight - Math.Max(0, right));
@@ -956,7 +987,7 @@ internal sealed class LineComposer
         void AddFrame(List<TextAdornment> into, ParagraphAttributes paragraph, int first, int last, bool opens,
             bool closes, double reachAbove, double reachBelow, int frame, double laidWidth)
         {
-            var (boxLeft, boxRight) = ParagraphBox(paragraph, first, frame, laidWidth);
+            var (boxLeft, boxRight) = ParagraphBox(paragraph, first, last, frame, laidWidth);
             var top = paragraph.BorderTop is { IsVisible: true } above && opens ? above : null;
             var bottom = paragraph.BorderBottom is { IsVisible: true } below && closes ? below : null;
             var left = paragraph.BorderLeft is { IsVisible: true } leftLine ? leftLine : null;

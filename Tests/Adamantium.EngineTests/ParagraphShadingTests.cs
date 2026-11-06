@@ -199,6 +199,55 @@ public class ParagraphShadingTests
         });
     }
 
+    // A column narrower than the width its paragraphs are laid at is a strip kept out all the way down: the shading and
+    // the borders stop at it. One that keeps out part of the paragraph only - a picture the lines go round - does not.
+    [Test]
+    public void AStripKeptOutAllTheWayDown_IsTheColumnsEdge_APictureIsNot()
+    {
+        var text = Paragraphs(("Each paragraph keeps to the column it stands in, short or wide.", Shaded(Yellow) with
+        {
+            BorderRight = Line,
+        }));
+        var narrowed = Lay(text, 300, set => set.Exclusions = [new RectangleF(160, -10000, 10000, 20000)]);
+        var pictured = Lay(text, 300, set => set.Exclusions = [new RectangleF(200, 0, 100, 10)]);
+        var line = narrowed.GetAdornments().Single(adornment => adornment.Kind == TextAdornmentKind.Border).Rect;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Shadings(narrowed).Single().Rect.Right, Is.EqualTo(160 + Line.Space).Within(1e-3));
+            Assert.That(line.Right, Is.EqualTo(160 + Line.Room).Within(1e-3), "the border too");
+            Assert.That(Shadings(pictured).Single().Rect.Right, Is.EqualTo(300 + Line.Space).Within(1e-3),
+                "behind a picture, as Word's");
+        });
+    }
+
+    // A paragraph running on from a narrow column into a wide one: its lines in each are shaded and framed as wide as
+    // that column, the side lines going on with no line across where it widens.
+    [Test]
+    public void AParagraphRunningOnFromANarrowColumnIntoAWideOne_IsShadedAndFramedInEach()
+    {
+        var text = Paragraphs(("Each paragraph keeps to the column it stands in, short in the narrow one and long in " +
+                               "the wide one, as long as it is wide, whichever it stands in.", Shaded(Yellow) with
+        {
+            BorderTop = Line, BorderBottom = Line, BorderRight = Line,
+        }));
+        var line = Lay(new AttributedText("x")).GetLine(0).Height;
+        var layout = Lay(text, 300, set => set.Exclusions = [new RectangleF(160, -10000, 10000, (float)(10000 + 2 * line))]);
+        var shadings = Shadings(layout);
+        var borders = layout.GetAdornments().Where(adornment => adornment.Kind == TextAdornmentKind.Border)
+            .Select(adornment => adornment.Rect).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shadings, Has.Count.EqualTo(2));
+            Assert.That(shadings[0].Rect.Right, Is.EqualTo(160 + Line.Space).Within(1e-3), "in the narrow one");
+            Assert.That(shadings[1].Rect.Right, Is.EqualTo(300 + Line.Space).Within(1e-3), "in the wide one");
+            Assert.That(shadings[1].Rect.Top, Is.EqualTo(shadings[0].Rect.Bottom).Within(1e-3), "no gap where it widens");
+            Assert.That(borders.Count(rect => rect.Height < 2 * Line.Width + 1e-3), Is.EqualTo(2),
+                "one line above, one below - none where it widens");
+        });
+    }
+
     [Test]
     public void ANegativeMargin_ShadesNoFurtherOutThanTheTextGoes()
     {

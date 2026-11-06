@@ -87,6 +87,11 @@ All packages share one version.
 
 ### Fixed
 
+- A paragraph's shading and borders keep to a column narrower than the width it is laid at: a strip kept out down a
+  line's whole height, from an edge in, is that column's edge, and a paragraph running on from a narrow column into a
+  wide one is shaded and framed as wide as each, its side lines going on with no line across where it widens. The band
+  stood as wide as the widest column over the text beside it.
+
 - A frame that could not begin - the device lost, the fence wait failed, the presenter not ready - no longer leaves its
   device counted as drawing: everything retired after it waited on that device for good.
 - A retired resource that fails to dispose no longer keeps the others retired with it from being disposed.
