@@ -84,6 +84,9 @@ internal sealed record LaidOutText
     /// <summary>The lines of the paragraphs' borders; null for none.</summary>
     public List<TextAdornment> BorderLines { get; init; }
 
+    /// <summary>The paragraphs' shading, as backgrounds under everything else; null for none.</summary>
+    public List<TextAdornment> Shadings { get; init; }
+
     public Size<double>? RealTextDimensions { get; init; }
 
     public Glyph DotGlyph { get; init; }

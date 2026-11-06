@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- Paragraph shading, as Word's (`ParagraphAttributes.Shading`): from margin to margin down the paragraph's lines, all
+  inside its lines where it has borders; the room down to a next paragraph between the same margins, shaded too, takes
+  the upper one's color, and `ShadingContinuesBelow` carries it on through that room to a paragraph laid out
+  elsewhere, drawn with the upper one under its text. It comes as a `TextAdornmentKind.Background` adornment ahead of the text's own backgrounds, so it
+  is drawn under them. Horizontal text only. Shading and borders both go round a first line hung out by a negative
+  `TextIndent`, and round the room a list's mark drawn apart takes (`ParagraphAttributes.MarkRoom`), as Word's do; a
+  negative margin takes them no further out than the text goes.
+
 - Many draws from one indirect command: `IGraphicsDevice.DrawIndirect(indirectBuffer, offset, drawCount)` issues them
   with no vertex buffer, for passes that read their vertices by address, each draw naming its own first instance.
   The device enables `multiDrawIndirect` and `drawIndirectFirstInstance` where the adapter has them
