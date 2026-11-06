@@ -1,4 +1,5 @@
 using System;
+using Adamantium.Mathematics;
 
 namespace Adamantium.Graphics.Fonts;
 
@@ -20,6 +21,9 @@ public sealed record ParagraphAttributes
     private ParagraphBorder _borderRight;
     private double? _bordersContinueAbove;
     private double? _bordersContinueBelow;
+    private Color? _shading;
+    private double? _shadingContinuesBelow;
+    private double? _markRoom;
 
     /// <summary>How its lines stand between its edges; null keeps the layout's alignment.</summary>
     public HorizontalTextAlignment? Alignment { get => _alignment; init => _alignment = value; }
@@ -78,6 +82,38 @@ public sealed record ParagraphAttributes
         init => _bordersContinueBelow = Reach(value);
     }
 
+    /// <summary>The color it is shaded with, as Word's: from margin to margin down its lines, or all inside its lines
+    /// where it has borders. The room down to a next paragraph between the same margins, shaded too, takes this color,
+    /// whatever that one's. Null shades nothing. Horizontal text only.</summary>
+    public Color? Shading { get => _shading; init => _shading = value; }
+
+    /// <summary>For the layout's last paragraph, laid out to its end: its shading goes on this far below its last line,
+    /// through the room down to a shaded paragraph laid out elsewhere below between the same margins, as the room
+    /// between two paragraphs in one layout is shaded - drawn with it, under its text. Null stops it at the last line;
+    /// a line below closing its frame stops it there too.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is below 0 or no number.</exception>
+    public double? ShadingContinuesBelow
+    {
+        get => _shadingContinuesBelow;
+        init => _shadingContinuesBelow = Reach(value);
+    }
+
+    /// <summary>The room before its first line, at the side its lines start, that a mark drawn apart from the text - a
+    /// list's bullet or number - takes. Its borders and shading go round it, as round a first line hung out by a negative
+    /// <see cref="TextIndent"/>, as Word's do: from whichever starts further out.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is below 0 or no number.</exception>
+    public double MarkRoom
+    {
+        get => _markRoom ?? 0;
+        init => _markRoom = Reach(value);
+    }
+
+    /// <summary>Whether its shading goes on down to <paramref name="next"/>, the paragraph after it: both are shaded,
+    /// between the same margins.</summary>
+    public bool ShadesOnTo(ParagraphAttributes next) =>
+        _shading != null && next?._shading != null && MarginLeft.Equals(next.MarginLeft) &&
+        MarginRight.Equals(next.MarginRight);
+
     private static double? Reach(double? value) =>
         value is not { } reach || (double.IsFinite(reach) && reach >= 0)
             ? value
@@ -106,12 +142,13 @@ public sealed record ParagraphAttributes
         && LineHeight.Equals(other.LineHeight) && Equals(_borderTop, other._borderTop)
         && Equals(_borderBottom, other._borderBottom) && Equals(_borderLeft, other._borderLeft)
         && Equals(_borderRight, other._borderRight) && _bordersContinueAbove == other._bordersContinueAbove
-        && _bordersContinueBelow == other._bordersContinueBelow;
+        && _bordersContinueBelow == other._bordersContinueBelow && _shading == other._shading
+        && _shadingContinuesBelow == other._shadingContinuesBelow && MarkRoom.Equals(other.MarkRoom);
 
     public override int GetHashCode() =>
         HashCode.Combine(HashCode.Combine(Alignment, MarginLeft, MarginRight, SpaceBefore, SpaceAfter, TextIndent,
             LineHeight), _borderTop, _borderBottom, _borderLeft, _borderRight, _bordersContinueAbove,
-            _bordersContinueBelow);
+            _bordersContinueBelow, HashCode.Combine(_shading, _shadingContinuesBelow, MarkRoom));
 
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public ParagraphAttributes With(ParagraphAttributes over)
@@ -136,6 +173,9 @@ public sealed record ParagraphAttributes
             _borderRight = over._borderRight ?? _borderRight,
             _bordersContinueAbove = over._bordersContinueAbove ?? _bordersContinueAbove,
             _bordersContinueBelow = over._bordersContinueBelow ?? _bordersContinueBelow,
+            _shading = over._shading ?? _shading,
+            _shadingContinuesBelow = over._shadingContinuesBelow ?? _shadingContinuesBelow,
+            _markRoom = over._markRoom ?? _markRoom,
         };
     }
 }

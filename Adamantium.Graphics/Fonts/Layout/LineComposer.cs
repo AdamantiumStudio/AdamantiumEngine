@@ -742,6 +742,7 @@ internal sealed class LineComposer
         }
 
         var borderLines = vertical || paragraphRuns == null ? null : BorderLines(finalRect.Width);
+        var shadings = vertical || paragraphRuns == null ? null : Shadings(finalRect.Width);
         var closingRooms = slots != null && borderLines != null ? ClosingRooms() : null;
         if (dropGlyphs != null && slots != null && borderLines != null && laidOutLineFrames != null)
         {
@@ -789,6 +790,7 @@ internal sealed class LineComposer
             Size = finalRect,
             TextBottom = textBottom,
             BorderLines = borderLines,
+            Shadings = shadings,
             RealTextDimensions = realTextDimensions,
             HasPendingFonts = hasPendingFonts,
             Overflows = overflows,
@@ -836,6 +838,107 @@ internal sealed class LineComposer
             return found;
         }
 
+        List<TextAdornment> Shadings(double laidWidth)
+        {
+            var anyShaded = false;
+            foreach (var run in paragraphRuns)
+            {
+                anyShaded |= run.Attributes?.Shading != null;
+            }
+
+            if (!anyShaded)
+            {
+                return null;
+            }
+
+            List<TextAdornment> found = null;
+            var line = 0;
+            while (line < lineCount)
+            {
+                var paragraph = LineState(line).Paragraph;
+                var frame = laidOutLineFrames?[line] ?? -1;
+                var first = line;
+                while (line + 1 < lineCount && (laidOutLineFrames?[line + 1] ?? -1) == frame && !LineState(line + 1).Opens)
+                {
+                    line++;
+                }
+
+                if (paragraph?.Shading is { } color)
+                {
+                    AddShading(found ??= [], paragraph, color, first, line, frame, laidWidth);
+                }
+
+                line++;
+            }
+
+            return found;
+        }
+
+        void AddShading(List<TextAdornment> into, ParagraphAttributes paragraph, Color color, int first, int last,
+            int frame, double laidWidth)
+        {
+            var (boxLeft, boxRight) = ParagraphBox(paragraph, first, frame, laidWidth);
+            var x0 = boxLeft - (paragraph.BorderLeft is { IsVisible: true } left ? left.Space : 0);
+            var x1 = boxRight + (paragraph.BorderRight is { IsVisible: true } right ? right.Space : 0);
+            var y0 = lineTops[first] - (OpensFrameAt(first, paragraph) && paragraph.BorderTop is { IsVisible: true } top
+                ? top.Space
+                : 0);
+            var y1 = lineTops[last] + lineHeights[last];
+            var next = last + 1;
+            if (dropGlyphs != null && first == 0)
+            {
+                y1 = Math.Max(y1, next < lineCount ? Math.Min(DropBottom(), lineTops[next]) : DropBottom());
+            }
+
+            if (next >= lineCount ? oversetIndex >= text.Length : LineState(next).Opens)
+            {
+                if (ClosesFrameAt(last, paragraph) && paragraph.BorderBottom is { IsVisible: true } bottom)
+                {
+                    y1 += bottom.Space;
+                }
+                else if (next >= lineCount)
+                {
+                    y1 += paragraph.ShadingContinuesBelow ?? 0;
+                }
+                else if ((laidOutLineFrames?[next] ?? -1) == frame &&
+                         paragraph.ShadesOnTo(LineState(next).Paragraph))
+                {
+                    var below = LineState(next).Paragraph;
+                    y1 = Math.Max(y1, lineTops[next] - (OpensFrameAt(next, below) && below.BorderTop is { IsVisible: true } line
+                        ? line.Room
+                        : 0));
+                }
+            }
+
+            if (x1 > x0 && y1 > y0)
+            {
+                into.Add(new TextAdornment(TextAdornmentKind.Background,
+                    new RectangleF((float)x0, (float)y0, (float)(x1 - x0), (float)(y1 - y0)), color));
+            }
+        }
+
+        (double Left, double Right) ParagraphBox(ParagraphAttributes paragraph, int line, int frame, double laidWidth)
+        {
+            var (areaLeft, areaRight) = frame >= 0
+                ? ((double)frames[frame].Left, (double)frames[frame].Right)
+                : (0.0, textArea.Width < Int32.MaxValue ? textArea.Width : laidWidth);
+            var lead = Math.Max(Math.Max(0, -Finite(paragraph.TextIndent)), paragraph.MarkRoom);
+            var rightToLeft = LineState(line).RightToLeft;
+            var left = Finite(paragraph.MarginLeft) - (rightToLeft ? 0 : lead);
+            var right = Finite(paragraph.MarginRight) - (rightToLeft ? lead : 0);
+            return (areaLeft + Math.Max(0, left), areaRight - Math.Max(0, right));
+        }
+
+        bool OpensFrameAt(int line, ParagraphAttributes paragraph) =>
+            paragraph.HasBorders && LineState(line).Opens && (line == 0
+                ? paragraph.BordersContinueAbove == null
+                : LineState(line - 1).Paragraph?.SharesBordersWith(paragraph) != true);
+
+        bool ClosesFrameAt(int line, ParagraphAttributes paragraph) =>
+            paragraph.HasBorders && (line + 1 >= lineCount
+                ? !GoesOnBelow(paragraph)
+                : LineState(line + 1).Opens && !paragraph.SharesBordersWith(LineState(line + 1).Paragraph));
+
         double[] ClosingRooms()
         {
             double[] rooms = null;
@@ -853,15 +956,13 @@ internal sealed class LineComposer
         void AddFrame(List<TextAdornment> into, ParagraphAttributes paragraph, int first, int last, bool opens,
             bool closes, double reachAbove, double reachBelow, int frame, double laidWidth)
         {
-            var (areaLeft, areaRight) = frame >= 0
-                ? ((double)frames[frame].Left, (double)frames[frame].Right)
-                : (0.0, textArea.Width < Int32.MaxValue ? textArea.Width : laidWidth);
+            var (boxLeft, boxRight) = ParagraphBox(paragraph, first, frame, laidWidth);
             var top = paragraph.BorderTop is { IsVisible: true } above && opens ? above : null;
             var bottom = paragraph.BorderBottom is { IsVisible: true } below && closes ? below : null;
             var left = paragraph.BorderLeft is { IsVisible: true } leftLine ? leftLine : null;
             var right = paragraph.BorderRight is { IsVisible: true } rightLine ? rightLine : null;
-            var x0 = areaLeft + Finite(paragraph.MarginLeft) - (left?.Room ?? 0);
-            var x1 = areaRight - Finite(paragraph.MarginRight) + (right?.Room ?? 0);
+            var x0 = boxLeft - (left?.Room ?? 0);
+            var x1 = boxRight + (right?.Room ?? 0);
             var textBottom = lineTops[last] + lineHeights[last];
             if (dropGlyphs != null && first == 0)
             {

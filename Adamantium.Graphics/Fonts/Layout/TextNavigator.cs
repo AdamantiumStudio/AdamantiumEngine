@@ -246,6 +246,11 @@ internal sealed class TextNavigator
             return adornments;
         }
 
+        if (_laid.Shadings != null)
+        {
+            adornments.AddRange(_laid.Shadings);
+        }
+
         double fontSize = (float)_laid.FontSize;
         foreach (var run in _laid.AttributeRuns ?? _laid.Attributed.Runs)
         {
