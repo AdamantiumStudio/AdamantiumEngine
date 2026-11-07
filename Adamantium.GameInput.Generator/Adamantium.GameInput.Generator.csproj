@@ -7,6 +7,8 @@
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latestmajor</LangVersion>
     <RuntimeIdentifier>$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <!-- Its own folder: the generators carry libclang, which two builds copying into one folder at once collide on. -->
+    <OutputPath>$(MSBuildThisFileDirectory)..\artifacts\bin\$(MSBuildProjectName)\$(Configuration)\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
