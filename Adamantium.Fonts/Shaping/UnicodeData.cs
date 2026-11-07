@@ -27,6 +27,9 @@ internal static class UnicodeData
     private static readonly Lazy<RangeTable<bool>> EmojiByDefault =
         new(() => RangeTable<bool>.Load("EmojiPresentation.ucd", _ => true, false));
 
+    private static readonly Lazy<RangeTable<bool>> Wide =
+        new(() => RangeTable<bool>.Load("EastAsianWidth.ucd", v => v is "W" or "F", false));
+
     private static readonly Lazy<CanonicalDecompositions> Decompositions = new(CanonicalDecompositions.Load);
 
     public static string GetScript(int codepoint) => Scripts.Value[codepoint];
@@ -74,6 +77,9 @@ internal static class UnicodeData
     public static bool IsExtendedPictographic(int codepoint) => Pictographic.Value[codepoint];
 
     public static bool IsEmojiPresentation(int codepoint) => EmojiByDefault.Value[codepoint];
+
+    /// <summary>East_Asian_Width is Wide or Fullwidth.</summary>
+    public static bool IsWide(int codepoint) => Wide.Value[codepoint];
 
     public static UnicodeCategory GetCategory(int codepoint)
     {

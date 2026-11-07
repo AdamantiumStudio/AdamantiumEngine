@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `TextColumns`: the columns of a monospace font text takes, as terminals and code editors count them - a grapheme
+  two when it is East Asian Wide or Fullwidth or drawn as an emoji, one otherwise (`Count`, `OfGrapheme`).
+
 - Paragraph shading, as Word's (`ParagraphAttributes.Shading`): from margin to margin down the paragraph's lines, all
   inside its lines where it has borders; the room down to a next paragraph between the same margins, shaded too, takes
   the upper one's color, and `ShadingContinuesBelow` carries it on through that room to a paragraph laid out
