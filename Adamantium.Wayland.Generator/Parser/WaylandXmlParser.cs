@@ -1,11 +1,32 @@
 using System.Globalization;
 using System.Xml.Linq;
+using QuantumBinding.Generator;
+using QuantumBinding.Generator.AST;
+using QuantumBinding.Generator.Parser;
 
-namespace Adamantium.Wayland.Generator;
+namespace Adamantium.Wayland.Generator.Parser;
 
-public static class ProtocolReader
+/// <summary>Reads the Wayland protocol XML files - what wayland-scanner reads - into <see cref="Protocols"/>. The
+/// protocols are messages over a wire rather than C declarations, so the translation units stay empty and the code
+/// generation passes write from the protocols.</summary>
+public sealed class WaylandXmlParser : IMetadataProvider
 {
-    public static Protocol Read(string path)
+    private readonly List<Protocol> protocols = [];
+
+    /// <summary>The protocols read so far, in the order the module lists their files.</summary>
+    public IReadOnlyList<Protocol> Protocols => protocols;
+
+    public ParseResult Parse(TranslationUnit unit, string file)
+    {
+        protocols.Add(Read(file));
+        return ParseResult.Success;
+    }
+
+    public void Dispose()
+    {
+    }
+
+    private static Protocol Read(string path)
     {
         var root = XDocument.Load(path).Root ?? throw new InvalidDataException($"{path}: no root element");
         var name = Required(root, "name");
