@@ -303,7 +303,7 @@ is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 
 ## Wayland protocols
 
-**Where:** `Adamantium.Wayland.Generator/Protocols/` — `wayland.xml` from Wayland 1.26.0
+**Where:** `Adamantium.BindingGenerator/Wayland/Protocols/` — `wayland.xml` from Wayland 1.26.0
 (https://gitlab.freedesktop.org/wayland/wayland), and `xdg-shell.xml`, `viewporter.xml`, `tablet-v2.xml`,
 `fractional-scale-v1.xml`, `cursor-shape-v1.xml`, `xdg-activation-v1.xml`, `xdg-decoration-unstable-v1.xml`,
 `xdg-dialog-v1.xml`, `xdg-foreign-unstable-v2.xml`, `xdg-output-unstable-v1.xml`, `xdg-session-management-v1.xml`,
@@ -313,7 +313,7 @@ is `Tests/Adamantium.FontTests/source-sans-3v028R/LICENSE.md`.
 wayland-protocols (https://gitlab.freedesktop.org/wayland/wayland-protocols), unchanged; and
 `Adamantium.Wayland/Generated/`, generated from them.
 
-The protocols' descriptions, read by `Adamantium.Wayland.Generator` into C#: the interfaces, their messages and
+The protocols' descriptions, read by `Adamantium.BindingGenerator` into C#: the interfaces, their messages and
 enums, and the summaries that become the documentation comments. Each XML file names its authors in its own
 `<copyright>`, and each generated file repeats the notice of the protocol it was generated from. All but two are under
 the MIT licence below, with their own copyright lines; `text-input-unstable-v3.xml` and

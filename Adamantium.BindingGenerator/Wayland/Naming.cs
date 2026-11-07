@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Adamantium.Wayland.Generator;
+namespace Adamantium.BindingGenerator.Wayland;
 
 /// <summary>The protocols' snake_case names, as C# writes them.</summary>
 public static class Naming

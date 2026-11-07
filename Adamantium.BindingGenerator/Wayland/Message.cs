@@ -1,4 +1,4 @@
-namespace Adamantium.Wayland.Generator;
+namespace Adamantium.BindingGenerator.Wayland;
 
 public sealed record Message(string Name, bool IsDestructor, int Since, string Summary, IReadOnlyList<Argument> Arguments)
 {

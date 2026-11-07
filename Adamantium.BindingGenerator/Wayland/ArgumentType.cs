@@ -1,4 +1,4 @@
-namespace Adamantium.Wayland.Generator;
+namespace Adamantium.BindingGenerator.Wayland;
 
 public enum ArgumentType
 {
