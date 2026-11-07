@@ -162,6 +162,8 @@ namespace Adamantium.Fonts
 
         public Int16 UnderlineThickness { get; internal set; }
 
+        public bool IsMonospaced { get; internal set; }
+
         public Int16 StrikeoutPosition { get; internal set; }
 
         public Int16 StrikeoutSize { get; internal set; }

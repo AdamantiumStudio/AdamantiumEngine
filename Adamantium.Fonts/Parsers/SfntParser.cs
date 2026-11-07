@@ -560,6 +560,7 @@ namespace Adamantium.Fonts.Parsers
             CurrentFont.UnderlinePosition = underlinePosition;
             CurrentFont.UnderlineThickness = underlineThickness;
             var isFixedPitch = FontReader.ReadUInt32(); // 0 is proportionally spaced, non-zero - font is monospaced
+            CurrentFont.IsMonospaced = isFixedPitch != 0;
 
             // skip next 4 fields
             FontReader.Position += 16;

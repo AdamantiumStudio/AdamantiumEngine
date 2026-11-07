@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `IFont.IsMonospaced`: whether the font says every glyph is as wide as every other ('post' isFixedPitch), so a
+  writer can name a monospace fallback for it.
+
 - `TextColumns`: the columns of a monospace font text takes, as terminals and code editors count them - a grapheme
   two when it is East Asian Wide or Fullwidth or drawn as an emoji, one otherwise (`Count`, `OfGrapheme`).
 
