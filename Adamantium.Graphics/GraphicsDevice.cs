@@ -378,7 +378,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         EndSingleTimeCommand(commandBuffer);
     }
 
-    private static void CheckRegion(ITexture texture, TextureRegionUpdate region, int pixelSize)
+    /// <summary>Throws unless <paramref name="region"/> fits <paramref name="texture"/> with pixels of
+    /// <paramref name="pixelSize"/> bytes.</summary>
+    internal static void CheckRegion(ITexture texture, TextureRegionUpdate region, int pixelSize)
     {
         if (texture.ImageAspect != ImageAspectFlagBits.ColorBit)
         {

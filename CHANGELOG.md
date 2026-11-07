@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `SharedSurface.WriteRegions`: a producer whose frames are on the CPU writes the rectangles that changed into a surface
+  it shares with a consumer on the same device (`CreateInDevice`) - submitted on its own, once the consumer has given
+  the surface back from the frame written there before, and marked on its produce timeline as a GPU producer's frame
+  is. The pixels are copied before the call returns.
+
 - `IFont.IsMonospaced`: whether the font says every glyph is as wide as every other ('post' isFixedPitch), so a
   writer can name a monospace fallback for it.
 

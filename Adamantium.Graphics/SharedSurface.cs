@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.Graphics.Core;
@@ -38,6 +39,9 @@ public sealed unsafe class SharedSurface : Texture
     private ulong _latched;
     private ulong _consumeSignaled;
     private Texture _copy;
+    private const ulong MaxWriteBytes = int.MaxValue;
+    private Buffer _writeStaging;
+    private ulong _lastWritten;
     private SharedSurface[] _others = [];
 
     public SharedSurfaceDescriptor Descriptor { get; private set; }
@@ -153,6 +157,119 @@ public sealed unsafe class SharedSurface : Texture
         var copy = _copy;
         device.SubmitAside(commandBuffer => source.RecordCopy(device, commandBuffer, copy),
             source._produceSemaphore, PipelineStageFlagBits2.AllTransferBit, frame, released);
+    }
+
+    /// <summary>
+    /// For a producer whose frames are on the CPU: writes <paramref name="regions"/> into this surface as frame
+    /// <paramref name="frame"/> of its produce timeline, submitted on its own on <paramref name="device"/>; the pixels are
+    /// copied before the call returns. Only the producer's own surface is written, and only once the consumer has given
+    /// it back from the frame written to it before - test <see cref="ConsumeValue"/> first, as a producer picks a free
+    /// surface of its ring. Called on the thread that owns <paramref name="device"/>: a device of the producer's own on
+    /// the surface's main device, not the consumer's, whose render thread submits on it meanwhile. The rest is the
+    /// producer's, as for a frame drawn on the GPU: in a ring, the regions that changed since this surface was last
+    /// written - the frames written to the others meanwhile included; and <see cref="SharedSurfaceDescriptor.NoteSubmitted"/>
+    /// on the ring's descriptor.
+    /// </summary>
+    public void WriteRegions(IGraphicsDevice device, IReadOnlyList<TextureRegionUpdate> regions, ulong frame)
+    {
+        if (_producer != null)
+        {
+            throw new InvalidOperationException("A surface taken by a consumer is not written; its producer's is.");
+        }
+
+        if (!ReferenceEquals(device.MainDevice, GraphicsDevice.MainDevice))
+        {
+            throw new ArgumentException("The surface is on another main device.", nameof(device));
+        }
+
+        if (regions.Count == 0)
+        {
+            return;
+        }
+
+        if (frame <= _lastWritten)
+        {
+            throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is not past {_lastWritten}, written before.");
+        }
+
+        if (ConsumeValue < _lastWritten)
+        {
+            throw new InvalidOperationException($"Frame {_lastWritten} written to this surface is not given back yet.");
+        }
+
+        var pixelSize = SurfaceFormat.SizeInBytes;
+        ulong total = 0;
+        foreach (var region in regions)
+        {
+            Adamantium.Graphics.GraphicsDevice.CheckRegion(this, region, pixelSize);
+            total += (ulong)region.Pixels.Length;
+        }
+
+        if (total > MaxWriteBytes)
+        {
+            throw new ArgumentException($"{total} bytes at once is more than the {MaxWriteBytes} a write takes.",
+                nameof(regions));
+        }
+
+        if (_writeStaging == null || _writeStaging.TotalSize < total)
+        {
+            _writeStaging?.Dispose();
+            _writeStaging = Buffer.New(device, Math.Max(total, (ulong)Width * Height * (ulong)pixelSize),
+                BufferUsageFlags.TransferSrc, MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+        }
+
+        var copies = new BufferImageCopy[regions.Count];
+        ulong offset = 0;
+        for (var i = 0; i < regions.Count; i++)
+        {
+            var region = regions[i];
+            _writeStaging.SetData(region.Pixels.Span, (uint)offset);
+            copies[i] = new BufferImageCopy
+            {
+                BufferOffset = offset,
+                BufferRowLength = region.Width,
+                BufferImageHeight = region.Height,
+                ImageSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 },
+                ImageOffset = new Offset3D { X = region.X, Y = region.Y, Z = 0 },
+                ImageExtent = new Extent3D { Width = region.Width, Height = region.Height, Depth = 1 },
+            };
+            offset += (ulong)region.Pixels.Length;
+        }
+
+        var staging = _writeStaging;
+        device.SubmitAside(commandBuffer => RecordWrite(device, commandBuffer, staging, copies),
+            _consumeSemaphore, PipelineStageFlagBits2.AllTransferBit, _lastWritten, [(_produceSemaphore, frame)]);
+        _lastWritten = frame;
+    }
+
+    private void RecordWrite(IGraphicsDevice device, CommandBuffer commandBuffer, Buffer staging, BufferImageCopy[] copies)
+    {
+        device.InsertImageMemoryBarrier(commandBuffer, this,
+            AccessFlagBits2.None, AccessFlagBits2.TransferWriteBit,
+            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit);
+        commandBuffer.CopyBufferToImage(staging, this.GetImage(), ImageLayout.TransferDstOptimal, (uint)copies.Length,
+            copies);
+        device.InsertImageMemoryBarrier(commandBuffer, this,
+            AccessFlagBits2.TransferWriteBit, AccessFlagBits2.None,
+            ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit);
+    }
+
+    private void WaitForLastWrite()
+    {
+        if (_lastWritten == 0 || _produceSemaphore == null || ProduceValue >= _lastWritten)
+        {
+            return;
+        }
+
+        var wait = new SemaphoreWaitInfo
+        {
+            SemaphoreCount = 1,
+            PSemaphores = new[] { _produceSemaphore },
+            PValues = new[] { _lastWritten }
+        };
+        GraphicsDevice.LogicalDevice.WaitSemaphores(wait, (ulong)TimeSpan.FromSeconds(5).Ticks * 100);
     }
 
     private void RecordCopy(IGraphicsDevice device, CommandBuffer commandBuffer, ITexture copy)
@@ -729,6 +846,9 @@ public sealed unsafe class SharedSurface : Texture
         _others = [];
         _copy?.Dispose();
         _copy = null;
+        WaitForLastWrite();
+        _writeStaging?.Dispose();
+        _writeStaging = null;
         var logical = GraphicsDevice.LogicalDevice;
         if (_ownsSemaphores)
         {
