@@ -53,8 +53,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.MVVM.Generators"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameInput", "Adamantium.GameInput\Adamantium.GameInput.csproj", "{C22D1FB8-B5BD-4D00-BEE3-D76B83984844}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameInput.Generator", "Adamantium.GameInput.Generator\Adamantium.GameInput.Generator.csproj", "{00346E03-85BE-428A-8B14-589768F90843}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Content.Build", "Adamantium.Content.Build\Adamantium.Content.Build.csproj", "{66477FCB-61BB-4CD4-AF88-9F961FC85E24}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Engine.ContentCompiler.CLI", "Adamantium.Engine.ContentCompiler.CLI\Adamantium.Engine.ContentCompiler.CLI.csproj", "{01B6EA2B-4F72-4950-9F51-528D3E22ED3E}"
@@ -63,7 +61,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Engine.Templates
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Wayland", "Adamantium.Wayland\Adamantium.Wayland.csproj", "{AB347520-CAFA-485F-A3B5-8AB2F306F6DB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Wayland.Generator", "Adamantium.Wayland.Generator\Adamantium.Wayland.Generator.csproj", "{72F8BEF8-983B-4790-9FEA-DF52BA017E65}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.BindingGenerator", "Adamantium.BindingGenerator\Adamantium.BindingGenerator.csproj", "{72F8BEF8-983B-4790-9FEA-DF52BA017E65}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.DBus", "Adamantium.DBus\Adamantium.DBus.csproj", "{9ECEE739-750C-440E-9386-372FB4E9E3AF}"
 EndProject
@@ -161,10 +159,6 @@ Global
 		{C22D1FB8-B5BD-4D00-BEE3-D76B83984844}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C22D1FB8-B5BD-4D00-BEE3-D76B83984844}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C22D1FB8-B5BD-4D00-BEE3-D76B83984844}.Release|Any CPU.Build.0 = Release|Any CPU
-		{00346E03-85BE-428A-8B14-589768F90843}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{00346E03-85BE-428A-8B14-589768F90843}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{00346E03-85BE-428A-8B14-589768F90843}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{00346E03-85BE-428A-8B14-589768F90843}.Release|Any CPU.Build.0 = Release|Any CPU
 		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{66477FCB-61BB-4CD4-AF88-9F961FC85E24}.Release|Any CPU.ActiveCfg = Release|Any CPU

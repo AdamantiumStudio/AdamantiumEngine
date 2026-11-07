@@ -1,4 +1,4 @@
-namespace Adamantium.Wayland.Generator.CodeGeneration;
+namespace Adamantium.BindingGenerator.Wayland.CodeGeneration;
 
 /// <summary>The C# names of an interface's requests and events: one that meets a member of WaylandProxy, the class or
 /// one of its enums takes Request or Event after it.</summary>

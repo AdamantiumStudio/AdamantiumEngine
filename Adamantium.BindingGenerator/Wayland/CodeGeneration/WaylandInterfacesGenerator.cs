@@ -2,7 +2,7 @@ using System.Text;
 using QuantumBinding.Generator;
 using QuantumBinding.Generator.AST;
 
-namespace Adamantium.Wayland.Generator.CodeGeneration;
+namespace Adamantium.BindingGenerator.Wayland.CodeGeneration;
 
 /// <summary>Writes WaylandInterfaces.cs: the wl_interface of every interface - names, versions and the signatures
 /// libwayland marshals requests and reads events by.</summary>

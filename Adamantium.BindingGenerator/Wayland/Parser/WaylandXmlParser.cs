@@ -4,7 +4,7 @@ using QuantumBinding.Generator;
 using QuantumBinding.Generator.AST;
 using QuantumBinding.Generator.Parser;
 
-namespace Adamantium.Wayland.Generator.Parser;
+namespace Adamantium.BindingGenerator.Wayland.Parser;
 
 /// <summary>Reads the Wayland protocol XML files - what wayland-scanner reads - into <see cref="Protocols"/>. The
 /// protocols are messages over a wire rather than C declarations, so the translation units stay empty and the code

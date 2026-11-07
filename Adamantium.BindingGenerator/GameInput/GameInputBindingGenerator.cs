@@ -1,4 +1,3 @@
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using QuantumBinding.Generator;
@@ -7,12 +6,12 @@ using QuantumBinding.Generator.ProcessingFluentApi;
 using QuantumBinding.Generator.Processors;
 using QuantumBinding.Generator.Utils;
 
-namespace Adamantium.GameInput.Generator;
+namespace Adamantium.BindingGenerator.GameInput;
 
 /// <summary>
 /// Generates Adamantium.GameInput from the flat-C facade over Microsoft GameInput (native: gameinput-c-shared.dll).
 /// </summary>
-public class GameInputBindingGenerator : QuantumBindingGenerator
+public sealed class GameInputBindingGenerator : QuantumBindingGenerator
 {
     private Module module;
 
@@ -26,7 +25,7 @@ public class GameInputBindingGenerator : QuantumBindingGenerator
             </auto-generated>
             ----------------------------------------------------------------------------------------------";
 
-        var project = Path.GetFullPath(Path.Combine(SourceDirectory(), "..", "Adamantium.GameInput"));
+        var project = Path.GetFullPath(Path.Combine(SourceDirectory(), "..", "..", "Adamantium.GameInput"));
 
         options.GenerateSequentialLayout = true;
         options.PodTypesAsSimpleTypes = false;

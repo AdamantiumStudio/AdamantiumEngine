@@ -1,7 +1,7 @@
 using QuantumBinding.Generator;
 using QuantumBinding.Generator.AST;
 
-namespace Adamantium.Wayland.Generator.CodeGeneration;
+namespace Adamantium.BindingGenerator.Wayland.CodeGeneration;
 
 /// <summary>Writes one protocol's file: a class per interface with its enums, requests and events.</summary>
 public sealed class WaylandProtocolGenerator : WaylandCodeGenerator

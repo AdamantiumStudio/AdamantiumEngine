@@ -1,29 +1,26 @@
-using Adamantium.Wayland.Generator.CodeGeneration;
-using Adamantium.Wayland.Generator.Parser;
+using Adamantium.BindingGenerator.Wayland.CodeGeneration;
+using Adamantium.BindingGenerator.Wayland.Parser;
 using QuantumBinding.Generator.AST;
 using QuantumBinding.Generator.CodeGeneration;
 using QuantumBinding.Generator.Processors;
 
-namespace Adamantium.Wayland.Generator.Processors;
+namespace Adamantium.BindingGenerator.Wayland.Processors;
 
-/// <summary>Writes the file of the protocol read from <c>file</c>.</summary>
-public sealed class WaylandProtocolPass : CodeGeneratorPass
+/// <summary>Writes WaylandInterfaces.cs over every protocol read.</summary>
+public sealed class WaylandInterfacesPass : CodeGeneratorPass
 {
     private readonly WaylandXmlParser parser;
-    private readonly string fileName;
 
-    public WaylandProtocolPass(WaylandXmlParser parser, string file)
+    public WaylandInterfacesPass(WaylandXmlParser parser)
     {
         this.parser = parser;
-        fileName = Path.GetFileName(file);
         CodeGeneratorPassKind = ExecutionPassKind.Once;
         GeneratorSpecializations = GeneratorSpecializations.None;
     }
 
     protected override CodeGenerator OnCreateGenerator(GeneratorCategory category, params TranslationUnit[] units)
     {
-        var protocol = parser.Protocols.Single(p => p.FileName == fileName);
-        return new WaylandProtocolGenerator(ProcessingContext, units, parser.Protocols, protocol);
+        return new WaylandInterfacesGenerator(ProcessingContext, units, parser.Protocols);
     }
 
     protected override List<CodeGenerator> ProcessPerTypeCodeGeneration(TranslationUnit unit,
