@@ -25,6 +25,10 @@ internal sealed class PdfObjectParser
 
     public PdfLexer Lexer => _lexer;
 
+    /// <summary>Whether any keyword that is not a value closes what is open, as in a content stream, where an operator
+    /// inside an array means the array was never closed.</summary>
+    public bool KeywordsEndObjects { get; init; }
+
     /// <summary>Reads the object at the lexer's position, or returns null at the end of the data or at a keyword that
     /// is not a value (<c>endobj</c>, <c>stream</c> and the like), which is left unread.</summary>
     public PdfObject ReadObject()
@@ -81,7 +85,7 @@ internal sealed class PdfObjectParser
                         break;
                     }
 
-                    if (IsStructureKeyword(token.Text))
+                    if (KeywordsEndObjects || IsStructureKeyword(token.Text))
                     {
                         _lexer.Position = token.Start;
                         return Unwind();

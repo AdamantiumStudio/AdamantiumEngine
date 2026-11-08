@@ -44,6 +44,50 @@ public sealed class JpegDecoder
     /// and a progressive file's AC-only scans not decoded at all - a thumbnail, a preview, a backdrop to blur.</summary>
     public JpegImage DecodePreview() => Picture(true);
 
+    /// <summary>The picture as its own channels, 8 bits each, rows top to bottom with no padding: 1 for gray, 3 for
+    /// RGB (YCbCr converted), 4 for CMYK (YCCK converted) - for a reader that applies a color space of its own, as PDF
+    /// does. 12-bit samples keep their top 8 bits.</summary>
+    public byte[] DecodeChannels(out int width, out int height, out int channels)
+    {
+        var stream = JpegStream.Decode(_data, false);
+        try
+        {
+            var model = JpegColor.ModelOf(stream, ComponentsAreRgb);
+            (width, height) = JpegColor.SizeOf(stream);
+            channels = model switch
+            {
+                JpegColorModel.Gray => 1,
+                JpegColorModel.Cmyk or JpegColorModel.Ycck => 4,
+                _ => 3,
+            };
+            var sampleBytes = stream.Precision > 8 ? 2 : 1;
+            var rowBytes = (long)width * channels * sampleBytes;
+            if (rowBytes * height > Array.MaxLength)
+            {
+                throw new NotSupportedException($"A JPEG of {width}×{height} is more than one array holds.");
+            }
+
+            var samples = new byte[rowBytes * height];
+            JpegColor.Write(stream, model, false, samples, (int)rowBytes, height);
+            if (sampleBytes == 1)
+            {
+                return samples;
+            }
+
+            var narrow = new byte[samples.Length / 2];
+            for (var i = 0; i < narrow.Length; i++)
+            {
+                narrow[i] = samples[2 * i + 1];
+            }
+
+            return narrow;
+        }
+        finally
+        {
+            stream.Release();
+        }
+    }
+
     private JpegImage Picture(bool preview)
     {
         var stream = JpegStream.Decode(_data, preview);
