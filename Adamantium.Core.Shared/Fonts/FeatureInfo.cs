@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Adamantium.Core.Fonts
+namespace Adamantium.Core.Shared.Fonts
 {
     public class FeatureInfo
     {

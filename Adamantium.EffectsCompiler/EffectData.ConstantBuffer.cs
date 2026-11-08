@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using Adamantium.Core;
+using System.Linq;
 using MessagePack;
 
 namespace Adamantium.EffectsCompiler;
@@ -44,7 +44,8 @@ public partial class EffectData
             }
 
             return string.Equals(Name, other.Name) && Size == other.Size && Set == other.Set && Binding == other.Binding
-                   && Utilities.Compare(Parameters, other.Parameters);
+                   && (ReferenceEquals(Parameters, other.Parameters) ||
+                       (Parameters != null && other.Parameters != null && Parameters.SequenceEqual(other.Parameters)));
         }
 
         public override bool Equals(object obj) => obj is ConstantBuffer other && Equals(other);

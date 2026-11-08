@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Adamantium.Core
+namespace Adamantium.Core.Shared
 {
    public class Logger
    {

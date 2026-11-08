@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Managers;

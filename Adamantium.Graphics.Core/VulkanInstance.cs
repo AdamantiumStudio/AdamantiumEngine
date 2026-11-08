@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.Core.Collections;
 using Adamantium.Graphics.Core.Presentation;
 using Adamantium.Vulkan.Core;

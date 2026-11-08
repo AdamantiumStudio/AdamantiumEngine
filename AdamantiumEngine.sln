@@ -67,6 +67,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.DBus", "Adamanti
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Pdf", "Adamantium.Pdf\Adamantium.Pdf.csproj", "{8037F563-2F4E-4E53-B19B-2B0278B0AD2B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Core.Shared", "Adamantium.Core.Shared\Adamantium.Core.Shared.csproj", "{5C1E9A2B-7D34-4F60-9B8E-2A41C3D5E6F7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -189,6 +191,10 @@ Global
 		{8037F563-2F4E-4E53-B19B-2B0278B0AD2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8037F563-2F4E-4E53-B19B-2B0278B0AD2B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8037F563-2F4E-4E53-B19B-2B0278B0AD2B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5C1E9A2B-7D34-4F60-9B8E-2A41C3D5E6F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5C1E9A2B-7D34-4F60-9B8E-2A41C3D5E6F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5C1E9A2B-7D34-4F60-9B8E-2A41C3D5E6F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5C1E9A2B-7D34-4F60-9B8E-2A41C3D5E6F7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.EffectsCompiler;
 using Adamantium.Graphics.Core.EffectsFramework;
 using Adamantium.Graphics.Core.Presentation;

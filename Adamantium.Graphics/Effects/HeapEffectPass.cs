@@ -1,5 +1,6 @@
 using System;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.EffectsCompiler;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.EffectsFramework;

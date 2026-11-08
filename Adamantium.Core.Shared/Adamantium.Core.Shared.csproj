@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Platforms>AnyCPU</Platforms>
+    <Configurations>Debug;Release</Configurations>
+    <LangVersion>latest</LangVersion>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <Description>What the Adamantium engine's source generators share with the running application: the logger, the source text writer, font weights, stretches and OpenType feature settings.</Description>
+    <PackageTags>adamantium;engine;core;generators</PackageTags>
+  </PropertyGroup>
+
+</Project>

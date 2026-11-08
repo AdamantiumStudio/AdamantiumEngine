@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Adamantium.Core
+namespace Adamantium.Core.Shared
 {
     public class TextGenerator
     {

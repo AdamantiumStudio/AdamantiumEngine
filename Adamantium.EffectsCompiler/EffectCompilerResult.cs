@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using Adamantium.Core;
+using Adamantium.Core.Shared;
 
 namespace Adamantium.EffectsCompiler
 {

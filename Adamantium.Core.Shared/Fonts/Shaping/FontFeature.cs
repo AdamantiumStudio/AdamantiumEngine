@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace Adamantium.Core.Fonts.Shaping;
+namespace Adamantium.Core.Shared.Fonts.Shaping;
 
 /// <summary>An OpenType feature set to a value over a range of text, in UTF-16 offsets with an exclusive end.</summary>
 public readonly partial struct FontFeature : IEquatable<FontFeature>

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.Core.Collections;
 using Adamantium.EffectsCompiler;
 using Adamantium.Graphics.Core;

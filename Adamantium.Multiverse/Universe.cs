@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Channels;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.Engine.Compiler.Models;
 using Adamantium.ECS;

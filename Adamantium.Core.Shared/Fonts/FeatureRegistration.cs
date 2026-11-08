@@ -1,4 +1,4 @@
-namespace Adamantium.Core.Fonts
+namespace Adamantium.Core.Shared.Fonts
 {
     public enum FeatureRegistration
     {

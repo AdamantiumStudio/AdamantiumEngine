@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.EffectsCompiler;
 
 namespace Adamantium.Graphics.Core.EffectsFramework;

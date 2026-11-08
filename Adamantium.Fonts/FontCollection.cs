@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using Adamantium.Core.Fonts;
+using Adamantium.Core.Shared.Fonts;
 
 namespace Adamantium.Fonts;
 
