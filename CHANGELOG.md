@@ -117,6 +117,10 @@ All packages share one version.
 
 ### Fixed
 
+- Several compilers building effects at once no longer fail now and then with "Failed to load slang-c-shared.dll": the
+  effect generator wrote its native libraries over the same files in place, so one compiler could load a library
+  another was still writing. They are written aside and renamed into place, whole.
+
 - A device disposed right after work it handed in on the side - a producer's `SharedSurface.WriteRegions` - waits for
   that work before freeing its command buffers, its timeline and the buffer the work copies from; the GPU could still be
   running it.
