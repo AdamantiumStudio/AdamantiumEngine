@@ -89,6 +89,17 @@ public partial class GraphicsDevice
 
     private void FreeAsideBuffers()
     {
+        if (_asideTimeline != null)
+        {
+            var wait = new SemaphoreWaitInfo
+            {
+                SemaphoreCount = 1,
+                PSemaphores = new[] { _asideTimeline },
+                PValues = new[] { _asideSubmitted }
+            };
+            MainDevice.Observe(LogicalDevice.WaitSemaphores(wait, ulong.MaxValue));
+        }
+
         foreach (var (buffer, _) in _asideBuffers)
         {
             LogicalDevice.FreeCommandBuffers(GraphicsCommandPool, 1, buffer);

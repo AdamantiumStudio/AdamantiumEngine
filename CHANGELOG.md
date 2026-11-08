@@ -98,6 +98,9 @@ All packages share one version.
 
 ### Fixed
 
+- A device disposed right after work it handed in on the side - a producer's `SharedSurface.WriteRegions` - waits for
+  that work before freeing its command buffers, its timeline and the buffer the work copies from; the GPU could still be
+  running it.
 - A paragraph's shading and borders keep to a column narrower than the width it is laid at: a strip kept out down a
   line's whole height, from an edge in, is that column's edge, and a paragraph running on from a narrow column into a
   wide one is shaded and framed as wide as each, its side lines going on with no line across where it widens. The band
