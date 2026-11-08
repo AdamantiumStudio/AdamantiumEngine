@@ -10,7 +10,7 @@ public partial class GraphicsDevice
     private Semaphore _asideTimeline;
     private ulong _asideSubmitted;
 
-    public void SubmitAside(Action<CommandBuffer> record, Semaphore wait, PipelineStageFlagBits2 waitStage, ulong waitValue,
+    public Result SubmitAside(Action<CommandBuffer> record, Semaphore wait, PipelineStageFlagBits2 waitStage, ulong waitValue,
         IReadOnlyList<(Semaphore Semaphore, ulong Value)> signals)
     {
         RefuseWhileIssuingAside(nameof(SubmitAside));
@@ -55,8 +55,16 @@ public partial class GraphicsDevice
             result = GraphicsQueue.QueueSubmit2(1, submit, null);
         }
 
-        _asideBuffers.Add((buffer, _asideSubmitted));
         MainDevice.Observe(result);
+        if (result != Result.Success)
+        {
+            _asideSubmitted--;
+            _asideBuffers.Add((buffer, 0));
+            return result;
+        }
+
+        _asideBuffers.Add((buffer, _asideSubmitted));
+        return result;
     }
 
     private CommandBuffer TakeAsideBuffer()

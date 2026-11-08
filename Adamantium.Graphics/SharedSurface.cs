@@ -5,6 +5,7 @@ using Adamantium.Core;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Imaging;
+using Adamantium.Mathematics;
 using Adamantium.Win32;
 using Adamantium.Vulkan.Core;
 using Adamantium.Vulkan.Windows;
@@ -40,6 +41,7 @@ public sealed unsafe class SharedSurface : Texture
     private ulong _consumeSignaled;
     private Texture _copy;
     private const ulong MaxWriteBytes = int.MaxValue;
+    private const ImageUsageFlagBits ImportedTextureUsage = ImageUsageFlagBits.TransferSrcBit | ImageUsageFlagBits.SampledBit;
     private Buffer _writeStaging;
     private ulong _lastWritten;
     private SharedSurface[] _others = [];
@@ -168,33 +170,14 @@ public sealed unsafe class SharedSurface : Texture
     /// the surface's main device, not the consumer's, whose render thread submits on it meanwhile. The rest is the
     /// producer's, as for a frame drawn on the GPU: in a ring, the regions that changed since this surface was last
     /// written - the frames written to the others meanwhile included; and <see cref="SharedSurfaceDescriptor.NoteSubmitted"/>
-    /// on the ring's descriptor.
+    /// on the ring's descriptor - only for a frame written: false when there was nothing to write.
     /// </summary>
-    public void WriteRegions(IGraphicsDevice device, IReadOnlyList<TextureRegionUpdate> regions, ulong frame)
+    public bool WriteRegions(IGraphicsDevice device, IReadOnlyList<TextureRegionUpdate> regions, ulong frame)
     {
-        if (_producer != null)
-        {
-            throw new InvalidOperationException("A surface taken by a consumer is not written; its producer's is.");
-        }
-
-        if (!ReferenceEquals(device.MainDevice, GraphicsDevice.MainDevice))
-        {
-            throw new ArgumentException("The surface is on another main device.", nameof(device));
-        }
-
+        CheckWritable(device, frame);
         if (regions.Count == 0)
         {
-            return;
-        }
-
-        if (frame <= _lastWritten)
-        {
-            throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is not past {_lastWritten}, written before.");
-        }
-
-        if (ConsumeValue < _lastWritten)
-        {
-            throw new InvalidOperationException($"Frame {_lastWritten} written to this surface is not given back yet.");
+            return false;
         }
 
         var pixelSize = SurfaceFormat.SizeInBytes;
@@ -237,9 +220,170 @@ public sealed unsafe class SharedSurface : Texture
         }
 
         var staging = _writeStaging;
-        device.SubmitAside(commandBuffer => RecordWrite(device, commandBuffer, staging, copies),
-            _consumeSemaphore, PipelineStageFlagBits2.AllTransferBit, _lastWritten, [(_produceSemaphore, frame)]);
+        Submitted(device.SubmitAside(commandBuffer => RecordWrite(device, commandBuffer, staging, copies),
+            _consumeSemaphore, PipelineStageFlagBits2.AllTransferBit, _lastWritten, [(_produceSemaphore, frame)]), frame);
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="device"/> imports a texture of another API on its adapter, shared through a
+    /// handle of <paramref name="handleType"/>, in <paramref name="format"/> - what <see cref="CopyFrom"/> takes.</summary>
+    public static bool CanCopyFrom(IGraphicsDevice device, SharedHandleType handleType, SurfaceFormat format)
+    {
+        if (!IsWindows || handleType is not (SharedHandleType.D3D11Texture or SharedHandleType.D3D12Resource)
+            || !device.MainDevice.IsExtensionEnabled(Constants.VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME))
+        {
+            return false;
+        }
+
+        var features = device.Adapter.GetExternalImageMemoryFeatures(format, ImportedTextureUsage,
+            ToMemoryHandleType(handleType));
+        return (features & ExternalMemoryFeatureFlagBits.ImportableBit) != 0;
+    }
+
+    /// <summary>
+    /// For a producer whose frames are textures of another API on the same adapter - a D3D11 texture by its NT handle:
+    /// copies <paramref name="regions"/> of the texture behind <paramref name="handle"/>, <paramref name="width"/> ×
+    /// <paramref name="height"/> pixels in this surface's format and drawn to the end, into this surface as frame
+    /// <paramref name="frame"/>, and returns once the copy is done - the texture is its producer's again. Test
+    /// <see cref="CanCopyFrom"/> first; a handle the device does not take throws <see cref="NotSupportedException"/>.
+    /// Otherwise as <see cref="WriteRegions"/>: false when no region lies in both the texture and this surface.
+    /// </summary>
+    public bool CopyFrom(IGraphicsDevice device, IntPtr handle, SharedHandleType handleType, uint width, uint height,
+        IReadOnlyList<Rectangle<int>> regions, ulong frame)
+    {
+        CheckWritable(device, frame);
+        var right = (int)Math.Min(width, Width);
+        var bottom = (int)Math.Min(height, Height);
+        var count = 0;
+        var copies = new ImageCopy[regions.Count];
+        foreach (var region in regions)
+        {
+            var x = Math.Clamp(region.X, 0, right);
+            var y = Math.Clamp(region.Y, 0, bottom);
+            var w = Math.Clamp(region.X + region.Width, x, right) - x;
+            var h = Math.Clamp(region.Y + region.Height, y, bottom) - y;
+            if (w > 0 && h > 0)
+            {
+                copies[count++] = new ImageCopy
+                {
+                    SrcOffset = new Offset3D { X = x, Y = y },
+                    DstOffset = new Offset3D { X = x, Y = y },
+                    Extent = new Extent3D { Width = (uint)w, Height = (uint)h, Depth = 1 },
+                    SrcSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 },
+                    DstSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 }
+                };
+            }
+        }
+
+        if (count == 0)
+        {
+            return false;
+        }
+
+        using var source = ImportTexture(device, handle, handleType, width, height, Description.Format);
+        Submitted(device.SubmitAside(commandBuffer => RecordCopyFrom(device, commandBuffer, source, copies, count),
+            _consumeSemaphore, PipelineStageFlagBits2.AllTransferBit, _lastWritten, [(_produceSemaphore, frame)]), frame);
+        WaitForLastWrite();
+        return true;
+    }
+
+    private void Submitted(Result result, ulong frame)
+    {
+        if (result != Result.Success)
+        {
+            throw new InvalidOperationException($"Frame {frame} was not submitted: {result}.");
+        }
+
         _lastWritten = frame;
+    }
+
+    private void CheckWritable(IGraphicsDevice device, ulong frame)
+    {
+        if (_producer != null)
+        {
+            throw new InvalidOperationException("A surface taken by a consumer is not written; its producer's is.");
+        }
+
+        if (!ReferenceEquals(device.MainDevice, GraphicsDevice.MainDevice))
+        {
+            throw new ArgumentException("The surface is on another main device.", nameof(device));
+        }
+
+        if (frame <= _lastWritten)
+        {
+            throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is not past {_lastWritten}, written before.");
+        }
+
+        if (ConsumeValue < _lastWritten)
+        {
+            throw new InvalidOperationException($"Frame {_lastWritten} written to this surface is not given back yet.");
+        }
+    }
+
+    private static SharedSurface ImportTexture(IGraphicsDevice device, IntPtr handle, SharedHandleType handleType,
+        uint width, uint height, SurfaceFormat format)
+    {
+        var memHandleType = ToMemoryHandleType(handleType);
+        var result = device.MainDevice.LogicalDevice.GetMemoryWin32HandlePropertiesKHR(memHandleType, (nuint)handle,
+            out var handleProperties);
+        if (result != Result.Success)
+        {
+            throw new NotSupportedException($"The device does not take the {handleType} handle: {result}.");
+        }
+
+        var description = BuildDescription(width, height, format);
+        description.Usage = ImportedTextureUsage;
+        Func<VulkanImage, object> allocFactory = image => new ImportMemoryWin32HandleInfoKHR
+        {
+            HandleType = memHandleType,
+            Handle = (nuint)handle,
+            PNext = new MemoryDedicatedAllocateInfo { Image = image }
+        };
+        var surface = new SharedSurface(device, description, new ExternalMemoryImageCreateInfo { HandleTypes = memHandleType },
+            allocFactory, "SharedSurface(texture)", memoryTypeBits: handleProperties.MemoryTypeBits);
+        surface._ownsHandles = false;
+        return surface;
+    }
+
+    private void RecordCopyFrom(IGraphicsDevice device, CommandBuffer commandBuffer, SharedSurface source,
+        ImageCopy[] copies, int count)
+    {
+        var family = device.MainDevice.QueueFamilyContainer.GetFamilyInfo(QueueFlagBits.GraphicsBit).FamilyIndex;
+        commandBuffer.PipelineBarrier2(new DependencyInfo
+        {
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = new[]
+            {
+                new ImageMemoryBarrier2
+                {
+                    SrcStageMask = PipelineStageFlagBits2.TopOfPipeBit,
+                    DstStageMask = PipelineStageFlagBits2.AllTransferBit,
+                    SrcAccessMask = AccessFlagBits2.None,
+                    DstAccessMask = AccessFlagBits2.TransferReadBit,
+                    OldLayout = ImageLayout.Undefined,
+                    NewLayout = ImageLayout.TransferSrcOptimal,
+                    SrcQueueFamilyIndex = QueueFamilyExternal,
+                    DstQueueFamilyIndex = family,
+                    Image = source.GetImage(),
+                    SubresourceRange = new ImageSubresourceRange
+                    {
+                        AspectMask = ImageAspectFlagBits.ColorBit,
+                        LevelCount = 1,
+                        LayerCount = 1
+                    }
+                }
+            }
+        });
+        device.InsertImageMemoryBarrier(commandBuffer, this,
+            AccessFlagBits2.None, AccessFlagBits2.TransferWriteBit,
+            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit);
+        commandBuffer.CopyImage(source.GetImage(), ImageLayout.TransferSrcOptimal, this.GetImage(),
+            ImageLayout.TransferDstOptimal, (uint)count, copies);
+        device.InsertImageMemoryBarrier(commandBuffer, this,
+            AccessFlagBits2.TransferWriteBit, AccessFlagBits2.None,
+            ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit);
     }
 
     private void RecordWrite(IGraphicsDevice device, CommandBuffer commandBuffer, Buffer staging, BufferImageCopy[] copies)
@@ -269,7 +413,7 @@ public sealed unsafe class SharedSurface : Texture
             PSemaphores = new[] { _produceSemaphore },
             PValues = new[] { _lastWritten }
         };
-        GraphicsDevice.LogicalDevice.WaitSemaphores(wait, (ulong)TimeSpan.FromSeconds(5).Ticks * 100);
+        GraphicsDevice.MainDevice.Observe(GraphicsDevice.LogicalDevice.WaitSemaphores(wait, ulong.MaxValue));
     }
 
     private void RecordCopy(IGraphicsDevice device, CommandBuffer commandBuffer, ITexture copy)
@@ -312,8 +456,9 @@ public sealed unsafe class SharedSurface : Texture
     }
 
     private SharedSurface(IGraphicsDevice device, TextureDescription description, object imagePNext,
-        Func<VulkanImage, object> allocPNextFactory, string name, Action allocationRefused = null)
-        : base(device, description, imagePNext, allocPNextFactory, name, allocationRefused)
+        Func<VulkanImage, object> allocPNextFactory, string name, Action allocationRefused = null,
+        uint memoryTypeBits = uint.MaxValue)
+        : base(device, description, imagePNext, allocPNextFactory, name, allocationRefused, memoryTypeBits)
     {
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Presentation;
@@ -42,7 +43,7 @@ public class SharedSurfaceWriteTests
     [Test]
     public void TheNextFrame_WritesItsRegions_AndLeavesTheRestAsItWas()
     {
-        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        var device = GpuFixture.CreateRenderDevice();
         using var surface = SharedSurface.CreateInDevice(device, Size, Size, SurfaceFormat.B8G8R8A8.UNorm);
         surface.WriteRegions(device, [Whole(0, 0, 255)], 1);
         device.DeviceWaitIdle();
@@ -109,7 +110,7 @@ public class SharedSurfaceWriteTests
     [Test]
     public void AFrame_NotPastTheLastOneWritten_IsRefused()
     {
-        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        var device = GpuFixture.CreateRenderDevice();
         using var surface = SharedSurface.CreateInDevice(device, Size, Size, SurfaceFormat.B8G8R8A8.UNorm);
         surface.WriteRegions(device, [Whole(0, 0, 255)], 3);
         device.DeviceWaitIdle();
@@ -131,19 +132,38 @@ public class SharedSurfaceWriteTests
     }
 
     // A page closed right after its last frame was handed in: the producer's device goes while the GPU may still copy
-    // that frame, from a buffer the device frees, with a command buffer and a timeline the device frees too.
+    // that frame, with a command buffer and a timeline the device frees. The side work here waits on a gate the test
+    // opens, so the GPU is certainly still on it when the device is let go.
     [Test]
-    public void AProducersDevice_DisposedRightAfterAWrite_LetsTheWriteFinishFirst()
+    public void ADevice_LetGoWhileItsSideWorkWaits_FreesNothingUntilTheWorkIsDone()
     {
-        const uint large = 2048;
-        var consumer = GpuFixture.CreateRenderDevice();
         var producer = GpuFixture.CreateRenderDevice();
-        using var surface = SharedSurface.CreateInDevice(consumer, large, large, SurfaceFormat.B8G8R8A8.UNorm);
+        var logical = producer.LogicalDevice;
+        var gate = logical.CreateSemaphore(new SemaphoreCreateInfo
+        {
+            PNext = new SemaphoreTypeCreateInfo { SemaphoreType = SemaphoreType.Timeline, InitialValue = 0 }
+        });
+        try
+        {
+            producer.SubmitAside(_ => { }, gate, PipelineStageFlagBits2.AllCommandsBit, 1, null);
+            var disposing = Task.Run(producer.Dispose);
+            var heldBack = !disposing.Wait(300);
+            var opened = logical.SignalSemaphore(new SemaphoreSignalInfo { Semaphore = gate, Value = 1 });
+            var done = disposing.Wait(5000);
 
-        surface.WriteRegions(producer, [new TextureRegionUpdate(0, 0, 0, 0, large, large, Solid(large, large, 0, 0, 255))], 1);
-        producer.Dispose();
-
-        Assert.That(surface.ProduceValue, Is.EqualTo(1ul));
+            Assert.Multiple(() =>
+            {
+                Assert.That(heldBack, Is.True, "the device waited for the work instead of freeing what it uses");
+                Assert.That(opened, Is.EqualTo(Result.Success));
+                Assert.That(done, Is.True, "and went once the work was done");
+            });
+        }
+        finally
+        {
+            logical.SignalSemaphore(new SemaphoreSignalInfo { Semaphore = gate, Value = 1 });
+            logical.DeviceWaitIdle();
+            logical.DestroySemaphore(gate);
+        }
     }
 
     private static void Frame(IGraphicsDevice device, GraphicsPresenter presenter, SharedSurface surface)
@@ -156,7 +176,7 @@ public class SharedSurfaceWriteTests
         device.DeviceWaitIdle();
     }
 
-    private static void GiveBack(GraphicsDevice device, SharedSurface surface, ulong frame)
+    private static void GiveBack(IGraphicsDevice device, SharedSurface surface, ulong frame)
     {
         var result = device.LogicalDevice.SignalSemaphore(new SemaphoreSignalInfo
         {

@@ -43,6 +43,9 @@ public unsafe class GraphicsAdapter
         MaxPushDescriptors = vulkan14Properties.MaxPushDescriptors;
         Vulkan12Properties = vulkan12Properties;
         MaxMemoryAllocationSize = vulkan11Properties.MaxMemoryAllocationSize;
+        Luid = (bool)vulkan11Properties.DeviceLUIDValid && vulkan11Properties.DeviceLUID.Length == sizeof(long)
+            ? BitConverter.ToInt64(vulkan11Properties.DeviceLUID.Span)
+            : null;
 
         var meshShader = new PhysicalDeviceMeshShaderFeaturesEXT();
         var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR { PNext = meshShader };
@@ -89,6 +92,27 @@ public unsafe class GraphicsAdapter
         return (properties.CompatibleHandleTypes & handleType) == handleType ? properties.ExternalSemaphoreFeatures : 0;
     }
 
+    /// <summary>Whether the device imports, exports or both a 2D optimal image of <paramref name="format"/> used as
+    /// <paramref name="usage"/> through memory handles of <paramref name="handleType"/>; none where it takes no such
+    /// image.</summary>
+    public ExternalMemoryFeatureFlagBits GetExternalImageMemoryFeatures(Format format, ImageUsageFlagBits usage,
+        ExternalMemoryHandleTypeFlagBits handleType)
+    {
+        var external = new ExternalImageFormatProperties();
+        var properties = new ImageFormatProperties2 { PNext = external };
+        var info = new PhysicalDeviceImageFormatInfo2
+        {
+            Format = format,
+            Type = ImageType._2d,
+            Tiling = ImageTiling.Optimal,
+            Usage = usage,
+            PNext = new PhysicalDeviceExternalImageFormatInfo { HandleType = handleType }
+        };
+        return _physicalDevice.GetPhysicalDeviceImageFormatProperties2(info, ref properties) == Result.Success
+            ? external.ExternalMemoryProperties.ExternalMemoryFeatures
+            : 0;
+    }
+
     private bool HasExtension(string name)
     {
         uint count = 0;
@@ -114,6 +138,10 @@ public unsafe class GraphicsAdapter
 
     /// <summary>The most bytes one memory allocation may hold.</summary>
     public ulong MaxMemoryAllocationSize { get; private set; }
+
+    /// <summary>The adapter's LUID on Windows, as other APIs pick an adapter by: the low part in the low 32 bits, the
+    /// high part in the high ones. Null where the driver gives none.</summary>
+    public long? Luid { get; private set; }
 
     public bool SupportsHostImageCopy { get; private set; }
 
