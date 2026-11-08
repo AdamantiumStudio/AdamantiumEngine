@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;

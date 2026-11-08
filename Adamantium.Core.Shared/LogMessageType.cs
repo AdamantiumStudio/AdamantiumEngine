@@ -1,4 +1,4 @@
-﻿namespace Adamantium.Core
+﻿namespace Adamantium.Core.Shared
 {
    /// <summary>
    /// Type of a log message.

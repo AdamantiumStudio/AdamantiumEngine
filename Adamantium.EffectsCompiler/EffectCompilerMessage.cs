@@ -1,4 +1,4 @@
-﻿using Adamantium.Core;
+﻿using Adamantium.Core.Shared;
 
 namespace Adamantium.EffectsCompiler;
 

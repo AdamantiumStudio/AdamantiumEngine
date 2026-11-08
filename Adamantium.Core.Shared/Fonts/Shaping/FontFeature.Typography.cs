@@ -1,6 +1,6 @@
 using System;
 
-namespace Adamantium.Core.Fonts.Shaping;
+namespace Adamantium.Core.Shared.Fonts.Shaping;
 
 public readonly partial struct FontFeature
 {

@@ -1,4 +1,4 @@
-using Adamantium.Core.Fonts;
+using Adamantium.Core.Shared.Fonts;
 
 namespace Adamantium.Fonts;
 

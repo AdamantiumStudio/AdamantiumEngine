@@ -4,7 +4,7 @@
     <Platforms>AnyCPU</Platforms>
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latest</LangVersion>
-    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <Description>Foundation of the Adamantium engine: disposable and named objects, observable collections, commands, events, data buffers and pointers, dependency injection and type parsing.</Description>
     <PackageTags>adamantium;engine;core;collections</PackageTags>
@@ -20,7 +20,10 @@
 
   <ItemGroup>
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
-    <PackageReference Include="System.Memory" Version="4.5.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Adamantium.Core.Shared\Adamantium.Core.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

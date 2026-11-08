@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.Core.Fonts;
+using Adamantium.Core.Shared.Fonts;
 using Adamantium.Fonts.Common;
 using Adamantium.Mathematics;
 

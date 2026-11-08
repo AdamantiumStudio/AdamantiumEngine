@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Adamantium.Core.Fonts.Shaping;
+using Adamantium.Core.Shared.Fonts.Shaping;
 using Adamantium.Fonts.Tables.Layout;
 
 namespace Adamantium.Fonts.Shaping;

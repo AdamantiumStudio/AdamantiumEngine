@@ -18,7 +18,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+      <ProjectReference Include="..\Adamantium.Core.Shared\Adamantium.Core.Shared.csproj" />
     </ItemGroup>
 
 </Project>

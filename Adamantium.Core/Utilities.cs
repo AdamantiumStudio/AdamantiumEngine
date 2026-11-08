@@ -25,11 +25,7 @@ public static unsafe class Utilities
     /// free.</summary>
     public static IntPtr AllocateMemory(nuint sizeInBytes)
     {
-#if NET6_0_OR_GREATER
         return (IntPtr)NativeMemory.Alloc(sizeInBytes);
-#else
-        return Marshal.AllocHGlobal((IntPtr)(long)sizeInBytes);
-#endif
     }
 
     /// <summary>Frees a block of <see cref="AllocateMemory(nuint)"/>; nothing for a null pointer.</summary>
@@ -40,11 +36,7 @@ public static unsafe class Utilities
             return;
         }
 
-#if NET6_0_OR_GREATER
         NativeMemory.Free((void*)pointer);
-#else
-        Marshal.FreeHGlobal(pointer);
-#endif
     }
 
     /// <summary>Sets <paramref name="sizeInBytes"/> bytes at <paramref name="destination"/> to
