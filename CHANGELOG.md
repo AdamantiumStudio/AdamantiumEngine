@@ -12,6 +12,12 @@ All packages share one version.
   the surface back from the frame written there before, and marked on its produce timeline as a GPU producer's frame
   is. The pixels are copied before the call returns.
 
+- `SharedSurface.CopyFrom`: a producer whose frames are textures of another API on the same adapter - a D3D11 texture by
+  its NT handle, as Chromium hands it - has the rectangles that changed copied on the GPU into a surface it shares with
+  a consumer, done before the call returns, when the texture is its producer's again. `SharedSurface.CanCopyFrom` says
+  whether the device imports such a texture in a format; `GraphicsAdapter.GetExternalImageMemoryFeatures` answers it.
+- `GraphicsAdapter.Luid`: the adapter's LUID on Windows, as another API is told which adapter to use.
+
 - `IFont.IsMonospaced`: whether the font says every glyph is as wide as every other ('post' isFixedPitch), so a
   writer can name a monospace fallback for it.
 
@@ -92,6 +98,10 @@ All packages share one version.
 - `TiffGeoKey.CoordinateTransformation` is `TiffGeoKey.ProjectionMethod`, as GeoTIFF 1.1 names the key.
 - A GeoTIFF code key holding a fraction (a malformed file) reads as no code, not as the code truncated.
 
+- `IGraphicsDevice.SubmitAside` returns the submit's result; `SharedSurface.WriteRegions` returns whether it wrote,
+  false for no regions, and a write the queue refused throws instead of counting as a frame written.
+- Adamantium.Vulkan 1.3.0: a few outputs that take a chain of structures are passed by `ref`.
+
 - `UIVertex` is a point in 3D and nothing else - 12 bytes, from 40: a normal and two sets of texture coordinates no fill
   shader read. A picture's vertex, which names where it samples its source, is `UITexturedVertex` (position and
   texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
@@ -101,6 +111,11 @@ All packages share one version.
 - A device disposed right after work it handed in on the side - a producer's `SharedSurface.WriteRegions` - waits for
   that work before freeing its command buffers, its timeline and the buffer the work copies from; the GPU could still be
   running it.
+- A write into a shared surface, and a device let go, wait for the GPU to finish the work they free without a time
+  limit: after five seconds the buffer was freed while the GPU could still copy from it. A side submit the queue
+  refused no longer leaves a device waiting for it for good when it is let go.
+- A texture is never given memory of a type its image does not allow; where none of them has the properties asked
+  for, making it throws.
 - A paragraph's shading and borders keep to a column narrower than the width it is laid at: a strip kept out down a
   line's whole height, from an edge in, is that column's edge, and a paragraph running on from a narrow column into a
   wide one is shaded and framed as wide as each, its side lines going on with no line across where it widens. The band

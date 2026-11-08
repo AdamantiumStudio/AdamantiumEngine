@@ -66,6 +66,15 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Code changed: $code"
 
+      # Where Directory.Build.props looks for it: a binding change is built here once it is merged into master, with no
+      # package published for it.
+      - name: AdamantiumVulkan
+        if: steps.changes.outputs.code == 'true'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch master https://github.com/AdamantiumStudio/AdamantiumVulkan.git ../AdamantiumVulkan
+          git -C ../AdamantiumVulkan log -1 --format='AdamantiumVulkan at %h: %s'
+
       # Version comes from global.json, so CI and a developer's machine build with the same SDK.
       - uses: actions/setup-dotnet@v6
         if: steps.changes.outputs.code == 'true'

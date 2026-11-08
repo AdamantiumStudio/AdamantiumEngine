@@ -283,9 +283,10 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// <summary>
     /// Records a short piece of work with <paramref name="record"/> and submits it at once, ahead of the frame: it waits
     /// for <paramref name="wait"/> to reach <paramref name="waitValue"/> and signals each of <paramref name="signals"/> as
-    /// soon as it is done, not when the whole frame is. Outside a render pass.
+    /// soon as it is done, not when the whole frame is. Outside a render pass. Anything but Success means nothing was
+    /// submitted and nothing will be signaled.
     /// </summary>
-    void SubmitAside(Action<CommandBuffer> record, Semaphore wait, PipelineStageFlagBits2 waitStage, ulong waitValue,
+    Result SubmitAside(Action<CommandBuffer> record, Semaphore wait, PipelineStageFlagBits2 waitStage, ulong waitValue,
         IReadOnlyList<(Semaphore Semaphore, ulong Value)> signals);
 
     /// <summary>Register a semaphore the next <see cref="Submit"/> must wait on (timelineValue=0 for binary).</summary>

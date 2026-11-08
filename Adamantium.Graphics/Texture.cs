@@ -61,16 +61,18 @@ public unsafe class Texture : GraphicsResource, ITexture
     /// (export/import + dedicated allocation, given the created image) make the backing memory exportable or
     /// imported. The caller (see <see cref="SharedSurface"/>) owns layout transitions and handle export.
     /// <paramref name="allocationRefused"/> runs when the device refuses the allocation, so what the factory handed
-    /// over - and the device did not take - is the caller's to free.</summary>
+    /// over - and the device did not take - is the caller's to free. The memory is of one of
+    /// <paramref name="memoryTypeBits"/>: the types an imported handle allows.</summary>
     protected Texture(IGraphicsDevice device, TextureDescription description, object imagePNext,
-        Func<VulkanImage, object> allocPNextFactory, string name = "", Action allocationRefused = null) : base(device, name)
+        Func<VulkanImage, object> allocPNextFactory, string name = "", Action allocationRefused = null,
+        uint memoryTypeBits = uint.MaxValue) : base(device, name)
     {
         Description = description;
         ImageLayout = description.InitialLayout;
         Build(() =>
         {
             CreateImage(Description, MemoryPropertyFlags.DeviceLocal, out vulkanImage, out vulkanImageMemory, imagePNext,
-                allocPNextFactory, allocationRefused);
+                allocPNextFactory, allocationRefused, memoryTypeBits);
             CreateImageView(Description);
         });
         if (GraphicsDevice.MainDevice.IsInDebugMode)
@@ -445,7 +447,8 @@ public unsafe class Texture : GraphicsResource, ITexture
     }
 
     protected void CreateImage(TextureDescription description, MemoryPropertyFlags memoryProperties, out VulkanImage image, out DeviceMemory imageMemory,
-        object imagePNext = null, Func<VulkanImage, object> allocPNextFactory = null, Action allocationRefused = null)
+        object imagePNext = null, Func<VulkanImage, object> allocPNextFactory = null, Action allocationRefused = null,
+        uint memoryTypeBits = uint.MaxValue)
     {
         var maxResourceSize = CheckLimits(description);
         var device = GraphicsDevice.LogicalDevice;
@@ -461,6 +464,12 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
 
         device.GetImageMemoryRequirements(image, out var memRequirements);
+        var typeBits = memRequirements.MemoryTypeBits & memoryTypeBits;
+        if (typeBits == 0)
+        {
+            throw new NotSupportedException("No memory type the image takes is one the imported handle allows.");
+        }
+
         if (maxResourceSize != 0 && memRequirements.Size > maxResourceSize)
         {
             throw new NotSupportedException(
@@ -488,8 +497,14 @@ public unsafe class Texture : GraphicsResource, ITexture
         var allocInfo = new MemoryAllocateInfo
         {
             AllocationSize = memRequirements.Size,
-            MemoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(memRequirements.MemoryTypeBits, memoryProperties)
+            MemoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(typeBits, memoryProperties)
         };
+        if ((typeBits & (1u << (int)allocInfo.MemoryTypeIndex)) == 0)
+        {
+            throw new NotSupportedException(
+                $"None of the memory types the image may take (0x{typeBits:X}) is {memoryProperties}.");
+        }
+
         if (allocPNextFactory != null)
         {
             allocInfo.PNext = allocPNextFactory(image);
