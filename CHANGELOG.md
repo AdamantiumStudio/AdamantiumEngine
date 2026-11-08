@@ -85,6 +85,9 @@ All packages share one version.
 
 ### Changed
 
+- A line wider than its room - a picture wider than its table cell - stands at its start however it is aligned, the
+  rest past its end, as CSS has it; centered or aligned to its end it stood out on both sides or before its start,
+  where what holds it clips it and what is drawn and where it is hit no longer met.
 - In frames a drop cap that does not fit in its frame - with the line below its paragraphs' frame, where that frame
   closes beside it - takes its paragraph to the first frame after where it is set and fits, as Word does; it was left
   out. Where no frame after takes it, the text is laid as before.

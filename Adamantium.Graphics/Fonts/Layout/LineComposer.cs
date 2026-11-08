@@ -3957,7 +3957,9 @@ internal sealed class LineComposer
                         var maxX = ink.Max(RightOf);
                         var lineWidth = maxX - minX;
                         var roomLeft = double.IsFinite(from) ? from : LineIndent(i);
-                        var diff = PastTab(tab, roomLeft + (AlignRight(i) - roomLeft - lineWidth) / 2 - minX);
+                        var diff = tab == null && lineWidth > AlignRight(i) - roomLeft
+                            ? (LineState(i).RightToLeft ? AlignRight(i) - maxX : roomLeft - minX)
+                            : PastTab(tab, roomLeft + (AlignRight(i) - roomLeft - lineWidth) / 2 - minX);
                         foreach (var glyphWordData in glyphsForLine)
                         {
                             if (!Aligned(glyphWordData, from))
@@ -3995,7 +3997,10 @@ internal sealed class LineComposer
                         }
 
                         var maxX = ink.Max(RightOf);
-                        var diff = PastTab(tab, AlignRight(i) - maxX);
+                        var minX = ink.Min(LeftOf);
+                        var diff = tab == null && maxX - minX > AlignRight(i) - LineIndent(i)
+                            ? (LineState(i).RightToLeft ? AlignRight(i) - maxX : LineIndent(i) - minX)
+                            : PastTab(tab, AlignRight(i) - maxX);
                         foreach (var glyphWordData in glyphsForLine)
                         {
                             if (!Aligned(glyphWordData, from))
@@ -4701,7 +4706,11 @@ internal sealed class LineComposer
                 var from = AfterTab(tab);
                 var ink = Enumerable.Range(lineStart, lineEnd - lineStart).Select(k => glyphsData[k])
                     .Where(g => !IsBlank(g.Symbol) && Aligned(g, from)).ToArray();
-                if (toRight && ink.Length > 0 && AlignmentOf(line) == alignment && !PlacesWhatFollows(tab))
+
+                var overflows = tab == null && ink.Length > 0 &&
+                                ink.Max(RightOf) - ink.Min(LeftOf) > AlignRight(line) - LineIndent(line);
+                if ((toRight || (overflows && rightToLeft)) && ink.Length > 0 && AlignmentOf(line) == alignment &&
+                    !PlacesWhatFollows(tab) && !(overflows && !rightToLeft))
                 {
                     var right = ink.Max(RightOf);
                     if (rightToLeft)
