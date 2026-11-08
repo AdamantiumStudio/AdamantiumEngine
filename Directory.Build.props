@@ -60,4 +60,13 @@
     <None Include="$(MSBuildProjectDirectory)\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
+  <!-- The Vulkan bindings from AdamantiumVulkan's source when it is checked out beside this repository, so a binding
+       change is used before its package is published; from the package of this version when it is not - a clone of
+       this repository alone, a release. -p:UseVulkanSource=false takes the package even with the source beside. -->
+  <PropertyGroup>
+    <AdamantiumVulkanDir>$(MSBuildThisFileDirectory)..\AdamantiumVulkan\</AdamantiumVulkanDir>
+    <UseVulkanSource Condition="'$(UseVulkanSource)' == ''">$([System.IO.Directory]::Exists('$(AdamantiumVulkanDir)'))</UseVulkanSource>
+    <AdamantiumVulkanVersion>1.3.0</AdamantiumVulkanVersion>
+  </PropertyGroup>
+
 </Project>

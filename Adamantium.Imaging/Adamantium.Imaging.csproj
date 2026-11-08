@@ -20,7 +20,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Adamantium.Vulkan" Version="1.3.0" />
+		<AdamantiumVulkanReference Include="Adamantium.Vulkan" />
 		<ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
 		<ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
 	</ItemGroup>

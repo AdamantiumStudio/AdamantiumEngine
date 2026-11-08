@@ -10,6 +10,17 @@
     </ItemGroup>
   </Target>
 
+  <!-- A project names each AdamantiumVulkan assembly it needs once, as an AdamantiumVulkanReference, and here it becomes
+       a reference to that project when the source is beside this repository, or to its package of
+       AdamantiumVulkanVersion when it is not (see Directory.Build.props). -->
+  <ItemGroup Condition="'$(UseVulkanSource)' == 'true'">
+    <ProjectReference Include="@(AdamantiumVulkanReference->'$(AdamantiumVulkanDir)%(Identity)\%(Identity).csproj')" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseVulkanSource)' != 'true'">
+    <PackageReference Include="@(AdamantiumVulkanReference)" Version="$(AdamantiumVulkanVersion)" />
+  </ItemGroup>
+
   <Target Name="AdditionalFilesAreUpToDateInputs" BeforeTargets="CollectUpToDateCheckInputDesignTime">
     <ItemGroup>
       <UpToDateCheckInput Include="@(AdditionalFiles)" />
