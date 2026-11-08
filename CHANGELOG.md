@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.Pdf`, a new package that reads PDF files: objects, cross-reference tables and streams (hybrid files and
+  incremental updates included), object streams, the Flate, LZW, ASCIIHex, ASCII85 and RunLength filters with PNG and
+  TIFF predictors, the standard security handler from RC4 to AES-256, the page tree with inherited attributes and page
+  labels. A file whose cross-reference is broken is repaired by scanning; nesting, reference loops and decompression
+  bombs are refused rather than followed.
+- `Lzw` in `Adamantium.Core.Compression`: the LZW decoder TIFF reads with, now shared by TIFF and PDF, with or without
+  the early change of code width.
+
 - `SharedSurface.WriteRegions`: a producer whose frames are on the CPU writes the rectangles that changed into a surface
   it shares with a consumer on the same device (`CreateInDevice`) - submitted on its own, once the consumer has given
   the surface back from the frame written there before, and marked on its produce timeline as a GPU producer's frame
@@ -85,6 +93,12 @@ All packages share one version.
 
 ### Changed
 
+- `Adamantium.Core.Shared`, a new package, holds what the source generators share with the running application: the
+  logger (`Logger`, `LogMessage`, `LogMessageType`), `TextGenerator`, and `FontWeight`, `FontStretch`, `FontFeature`
+  with the OpenType feature registry. Their namespaces are now `Adamantium.Core.Shared`,
+  `Adamantium.Core.Shared.Fonts` and `Adamantium.Core.Shared.Fonts.Shaping`. It targets netstandard2.0, so
+  `Adamantium.Core` targets only net10.0; Core references it, so its users get these types as before.
+
 - A line wider than its room - a picture wider than its table cell - stands at its start however it is aligned, the
   rest past its end, as CSS has it; centered or aligned to its end it stood out on both sides or before its start,
   where what holds it clips it and what is drawn and where it is hit no longer met.
@@ -110,6 +124,10 @@ All packages share one version.
   texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
 
 ### Fixed
+
+- Several compilers building effects at once no longer fail now and then with "Failed to load slang-c-shared.dll": the
+  effect generator wrote its native libraries over the same files in place, so one compiler could load a library
+  another was still writing. They are written aside and renamed into place, whole.
 
 - A device disposed right after work it handed in on the side - a producer's `SharedSurface.WriteRegions` - waits for
   that work before freeing its command buffers, its timeline and the buffer the work copies from; the GPU could still be

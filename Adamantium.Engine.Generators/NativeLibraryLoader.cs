@@ -46,35 +46,6 @@ public class NativeLibraryLoader
     /// build would "succeed" with an empty assembly.</summary>
     public static string LoadNativeLibraries(string slangPackagePath = null)
     {
-        static string ExtractLibrary(string @namespace, string dstPath, string dllName)
-        {
-            using Stream sourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"{@namespace}.{dllName}");
-
-            if (sourceStream == null)
-            {
-                throw new FileNotFoundException($"{dllName} is not embedded for {RuntimeIdentifier}.");
-            }
-
-            string finalPath = Path.Combine(dstPath, dllName);
-
-            try
-            {
-                using Stream destinationStream = File.Open(finalPath, FileMode.OpenOrCreate, FileAccess.Write);
-
-                sourceStream.CopyTo(destinationStream);
-
-                sourceStream.Close();
-                sourceStream.Dispose();
-                destinationStream.Dispose();
-
-            }
-            catch (IOException)
-            {
-            }
-
-            return finalPath;
-        }
-
         if (IsLibraryLoaded)
         {
             return null;
@@ -108,6 +79,66 @@ public class NativeLibraryLoader
 
             IsLibraryLoaded = true;
             return null;
+        }
+    }
+
+    private static string ExtractLibrary(string @namespace, string directory, string fileName)
+    {
+        using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream($"{@namespace}.{fileName}");
+        if (source == null)
+        {
+            throw new FileNotFoundException($"{fileName} is not embedded for {RuntimeIdentifier}.");
+        }
+
+        var path = Path.Combine(directory, fileName);
+        if (File.Exists(path) && new FileInfo(path).Length == source.Length)
+        {
+            return path;
+        }
+
+        var aside = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var destination = File.Create(aside))
+            {
+                source.CopyTo(destination);
+            }
+
+            if (File.Exists(path) && new FileInfo(path).Length != source.Length)
+            {
+                TryDelete(path);
+            }
+
+            try
+            {
+                File.Move(aside, path);
+            }
+            catch (IOException) when (File.Exists(path) && new FileInfo(path).Length == source.Length)
+            {
+            }
+        }
+        finally
+        {
+            TryDelete(aside);
+        }
+
+        return path;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 

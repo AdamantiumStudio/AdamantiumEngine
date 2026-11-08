@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.EffectsCompiler;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;

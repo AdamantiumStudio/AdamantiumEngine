@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using Adamantium.Core.Fonts;
+using Adamantium.Core.Shared.Fonts;
 
 namespace Adamantium.Fonts;
 

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Platforms>AnyCPU</Platforms>
+        <Configurations>Debug;Release</Configurations>
+        <LangVersion>latest</LangVersion>
+        <IsPackable>true</IsPackable>
+        <Description>Reads PDF files - objects, cross-reference tables and streams, damaged-file repair, stream filters, the standard security handler and the page tree.</Description>
+        <PackageTags>adamantium;pdf;document</PackageTags>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Adamantium.PdfTests" />
+    </ItemGroup>
+
+</Project>

@@ -26,12 +26,10 @@ internal static class NativeLayout<T> where T : struct
             return true;
         }
 
-#if NET6_0_OR_GREATER
         if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
         {
             return false;
         }
-#endif
 
         try
         {

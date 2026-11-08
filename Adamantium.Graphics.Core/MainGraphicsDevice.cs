@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using Adamantium.Core;
+using Adamantium.Core.Shared;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Vulkan.Core;
 using Serilog;
