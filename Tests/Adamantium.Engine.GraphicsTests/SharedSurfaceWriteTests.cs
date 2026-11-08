@@ -130,6 +130,22 @@ public class SharedSurfaceWriteTests
         Assert.Throws<InvalidOperationException>(() => taken.WriteRegions(device, [Whole(0, 0, 255)], 1));
     }
 
+    // A page closed right after its last frame was handed in: the producer's device goes while the GPU may still copy
+    // that frame, from a buffer the device frees, with a command buffer and a timeline the device frees too.
+    [Test]
+    public void AProducersDevice_DisposedRightAfterAWrite_LetsTheWriteFinishFirst()
+    {
+        const uint large = 2048;
+        var consumer = GpuFixture.CreateRenderDevice();
+        var producer = GpuFixture.CreateRenderDevice();
+        using var surface = SharedSurface.CreateInDevice(consumer, large, large, SurfaceFormat.B8G8R8A8.UNorm);
+
+        surface.WriteRegions(producer, [new TextureRegionUpdate(0, 0, 0, 0, large, large, Solid(large, large, 0, 0, 255))], 1);
+        producer.Dispose();
+
+        Assert.That(surface.ProduceValue, Is.EqualTo(1ul));
+    }
+
     private static void Frame(IGraphicsDevice device, GraphicsPresenter presenter, SharedSurface surface)
     {
         Assert.That(device.BeginDraw(beforeRenderPass: _ => surface.LatchCopy(device)), Is.True);
