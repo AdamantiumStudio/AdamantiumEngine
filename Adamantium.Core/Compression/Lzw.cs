@@ -1,4 +1,3 @@
-#if NET6_0_OR_GREATER
 using System;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
@@ -176,4 +175,3 @@ public static class Lzw
         return count;
     }
 }
-#endif
