@@ -48,6 +48,21 @@ public class InlineObjectTests
         Assert.That(wide.GetInlineObjects().Single().Rect.Width, Is.EqualTo(40).Within(1e-3));
     }
 
+    [TestCase(HorizontalTextAlignment.Center)]
+    [TestCase(HorizontalTextAlignment.Right)]
+    public void OneWiderThanItsLine_StandsAtTheLinesStart_HoweverAligned_AsCssHasIt(HorizontalTextAlignment alignment)
+    {
+        var wide = Lay(Object.ToString(), new Size<double>(240, 20), width: 180, alignment: alignment);
+        var fitting = Lay(Object.ToString(), new Size<double>(100, 20), width: 180, alignment: alignment);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(wide.GetInlineObjects().Single().Rect.X, Is.EqualTo(0).Within(1e-3), "the rest past the end");
+            Assert.That(fitting.GetInlineObjects().Single().Rect.X,
+                Is.EqualTo(alignment == HorizontalTextAlignment.Center ? 40 : 80).Within(1e-3), "one that fits, aligned");
+        });
+    }
+
     [Test]
     public void ItStandsOnTheBaseline_ASmallOneLeavesTheLineAsItIs()
     {
