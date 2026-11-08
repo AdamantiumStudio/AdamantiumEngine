@@ -89,7 +89,7 @@ public partial class GraphicsDevice
 
     private void FreeAsideBuffers()
     {
-        if (_asideTimeline != null && _asideSubmitted > 0)
+        if (_asideTimeline != null)
         {
             var wait = new SemaphoreWaitInfo
             {
@@ -97,7 +97,7 @@ public partial class GraphicsDevice
                 PSemaphores = new[] { _asideTimeline },
                 PValues = new[] { _asideSubmitted }
             };
-            LogicalDevice.WaitSemaphores(wait, (ulong)TimeSpan.FromSeconds(5).Ticks * 100);
+            MainDevice.Observe(LogicalDevice.WaitSemaphores(wait, ulong.MaxValue));
         }
 
         foreach (var (buffer, _) in _asideBuffers)
