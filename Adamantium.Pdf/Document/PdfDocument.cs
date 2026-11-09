@@ -167,6 +167,9 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     internal void CacheFont(PdfObjectId id, PdfFont font) => _fonts[id] = font;
 
+    /// <summary>The predefined CMaps the document's fonts have named, by name; null for a name that is none.</summary>
+    internal Dictionary<string, PdfCMap> PredefinedCMaps { get; } = [];
+
     /// <summary>The indirect object with <paramref name="number"/>, or <see cref="PdfNull.Value"/>.</summary>
     public PdfObject GetObject(int number)
     {

@@ -26,6 +26,12 @@ All packages share one version.
   ToUnicode CMap, else by its glyph name. An embedded program draws as it is; a font the file does not embed takes the
   system font of its name, else one of the same metrics as the standard font it is or resembles, and names it in
   `PdfFont.Substitute`, while its widths stay the file's.
+- `Adamantium.Pdf` carries Adobe's glyph lists and CMap resources (BSD 3-Clause, notice in `THIRD-PARTY-NOTICES.md`):
+  composite fonts read the predefined CJK CMaps by name - Shift-JIS, EUC, Big Five, GBK, UHC and the Unicode ones -
+  with their notdef mappings and the collection they are of (`PdfCMap.Registry`, `PdfCMap.Ordering`); a font without
+  ToUnicode takes its text from a Unicode CMap's codes or from its CID in Adobe-Japan1, GB1, CNS1 or Korea1
+  (`PdfType0Font.Ordering`); and the glyph names of the Adobe Glyph List have their text in any font, those of the Zapf
+  Dingbats list in the ZapfDingbats font.
 - `JpegDecoder.DecodeChannels`: a JPEG's own channels - gray, RGB or CMYK, 8 bits each - for a reader that applies a
   color space of its own, as PDF does with an image's `/Decode` and color space.
 - `Lzw` in `Adamantium.Core.Compression`: the LZW decoder TIFF reads with, now shared by TIFF and PDF, with or without

@@ -37,10 +37,14 @@ internal static class PdfSimpleEncodings
         _ => null,
     };
 
-    /// <summary>The text a glyph name stands for: a name of the Latin character set, a <c>uniXXXX</c> or
-    /// <c>uXXXX</c> code, and ligatures of them joined by underscores; whatever follows a period is a variant and
-    /// ignored. Null when no part of it is known.</summary>
-    public static string TextOf(string glyphName)
+    /// <summary>The text a glyph name stands for: a name of the Latin character set or of the Adobe Glyph List, a
+    /// <c>uniXXXX</c> or <c>uXXXX</c> code, and ligatures of them joined by underscores; whatever follows a period is
+    /// a variant and ignored. Null when no part of it is known.</summary>
+    public static string TextOf(string glyphName) => TextOf(glyphName, false);
+
+    /// <summary>The text a glyph name stands for in a font, the names of the Zapf Dingbats list first when the font
+    /// is ZapfDingbats.</summary>
+    public static string TextOf(string glyphName, bool dingbats)
     {
         if (string.IsNullOrEmpty(glyphName))
         {
@@ -52,6 +56,12 @@ internal static class PdfSimpleEncodings
         var text = new StringBuilder();
         foreach (var part in name.Split('_'))
         {
+            if (dingbats && PdfGlyphList.DingbatTextOf(part) is { } dingbat)
+            {
+                text.Append(dingbat);
+                continue;
+            }
+
             AppendText(part, text);
         }
 
@@ -63,6 +73,12 @@ internal static class PdfSimpleEncodings
         if (LatinText.TryGetValue(part, out var latin))
         {
             text.Append(latin);
+            return;
+        }
+
+        if (PdfGlyphList.TextOf(part) is { } listed)
+        {
+            text.Append(listed);
             return;
         }
 

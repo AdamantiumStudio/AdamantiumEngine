@@ -9,6 +9,10 @@ internal static class CMapKeywords
     public const string EndCidRange = "endcidrange";
     public const string BeginCidChar = "begincidchar";
     public const string EndCidChar = "endcidchar";
+    public const string BeginNotDefRange = "beginnotdefrange";
+    public const string EndNotDefRange = "endnotdefrange";
+    public const string BeginNotDefChar = "beginnotdefchar";
+    public const string EndNotDefChar = "endnotdefchar";
     public const string BeginBfRange = "beginbfrange";
     public const string EndBfRange = "endbfrange";
     public const string BeginBfChar = "beginbfchar";

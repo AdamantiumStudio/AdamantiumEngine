@@ -7,14 +7,15 @@ using Adamantium.Pdf.Parsing;
 
 namespace Adamantium.Pdf.Fonts;
 
-/// <summary>Reads CMaps: Identity-H and Identity-V by name, embedded ones from their streams (ISO 32000-2, 9.7.5),
-/// ToUnicode ones too (9.10.3). A chain of <c>usecmap</c> is followed no deeper than <see cref="MaxChain"/>.</summary>
+/// <summary>Reads CMaps: the predefined ones by name (ISO 32000-1, table 118), from Adobe's CMap resources the
+/// assembly carries, embedded ones from their streams (ISO 32000-2, 9.7.5), ToUnicode ones too (9.10.3). A chain of
+/// <c>usecmap</c> is followed no deeper than <see cref="MaxChain"/>.</summary>
 public static class PdfCMapReader
 {
     public const int MaxChain = 8;
 
-    /// <summary>The CMap a font names or embeds; null for a predefined CMap other than the Identity ones, or one that
-    /// cannot be read.</summary>
+    /// <summary>The CMap a font names or embeds; null for a name that is no predefined CMap, or a stream that cannot be
+    /// read. A predefined CMap is read once per document.</summary>
     public static PdfCMap Read(PdfObject value, PdfDocument document)
     {
         var chain = new List<PdfCMap>();
@@ -23,13 +24,8 @@ public static class PdfCMapReader
         {
             if (current is PdfName name)
             {
-                var named = Predefined(name.Value);
-                if (named == null)
-                {
-                    return chain.Count == 0 ? null : Assemble(chain, null);
-                }
-
-                return Assemble(chain, named);
+                var named = Predefined(name.Value, document.PredefinedCMaps);
+                return chain.Count == 0 ? named : Assemble(chain, named);
             }
 
             if (current is not PdfStream stream)
@@ -63,7 +59,6 @@ public static class PdfCMapReader
     {
         if (chain.Count == 0)
         {
-            root?.Seal();
             return root;
         }
 
@@ -83,12 +78,58 @@ public static class PdfCMapReader
         return result;
     }
 
-    private static PdfCMap Predefined(string name) => name switch
+    /// <summary>The predefined CMap of <paramref name="name"/>, null when there is none; each CMap of its
+    /// <c>usecmap</c> chain is read once into <paramref name="known"/>, which keeps the names of none too.</summary>
+    internal static PdfCMap Predefined(string name, Dictionary<string, PdfCMap> known)
     {
-        PdfEncodingNames.IdentityH => PdfCMap.Identity(false),
-        PdfEncodingNames.IdentityV => PdfCMap.Identity(true),
-        _ => null,
-    };
+        var chain = new List<(string Name, PdfCMap Map)>();
+        PdfCMap root = null;
+        for (var current = name; current != null && chain.Count < MaxChain;)
+        {
+            if (known.TryGetValue(current, out root))
+            {
+                break;
+            }
+
+            if (current is PdfEncodingNames.IdentityH or PdfEncodingNames.IdentityV)
+            {
+                root = PdfCMap.Identity(current == PdfEncodingNames.IdentityV);
+                known[current] = root;
+                break;
+            }
+
+            var data = PdfPredefinedCMaps.Data(current);
+            if (data.IsEmpty)
+            {
+                break;
+            }
+
+            chain.Add((current, Parse(data, out var used)));
+            current = used;
+        }
+
+        if (chain.Count == 0)
+        {
+            known.TryAdd(name, root);
+            return root;
+        }
+
+        var result = root;
+        for (var i = chain.Count - 1; i >= 0; i--)
+        {
+            var map = chain[i].Map;
+            if (result != null)
+            {
+                map.Use(result);
+            }
+
+            map.Seal();
+            known[chain[i].Name] = map;
+            result = map;
+        }
+
+        return result;
+    }
 
     private static PdfCMap Parse(ReadOnlyMemory<byte> data, out string usedName)
     {
@@ -112,6 +153,14 @@ public static class PdfCMapReader
                     {
                         map.IsVertical = lexer.Next().Integer == 1;
                     }
+                    else if (token.Text == PdfFontKeys.Registry && lexer.Peek().Kind == PdfTokenKind.LiteralString)
+                    {
+                        map.Registry = Encoding.Latin1.GetString(lexer.Next().Bytes);
+                    }
+                    else if (token.Text == PdfFontKeys.Ordering && lexer.Peek().Kind == PdfTokenKind.LiteralString)
+                    {
+                        map.Ordering = Encoding.Latin1.GetString(lexer.Next().Bytes);
+                    }
                     else
                     {
                         lastName = token.Text;
@@ -130,16 +179,22 @@ public static class PdfCMapReader
                     ReadCodeSpaces(lexer, map);
                     break;
                 case CMapKeywords.BeginCidRange:
-                    ReadRanges(lexer, map, CMapKeywords.EndCidRange, cids: true);
+                    ReadRanges(lexer, map, CMapKeywords.EndCidRange, PdfCMapMapping.Cids);
                     break;
                 case CMapKeywords.BeginCidChar:
-                    ReadChars(lexer, map, CMapKeywords.EndCidChar, cids: true);
+                    ReadChars(lexer, map, CMapKeywords.EndCidChar, PdfCMapMapping.Cids);
+                    break;
+                case CMapKeywords.BeginNotDefRange:
+                    ReadRanges(lexer, map, CMapKeywords.EndNotDefRange, PdfCMapMapping.NotDef);
+                    break;
+                case CMapKeywords.BeginNotDefChar:
+                    ReadChars(lexer, map, CMapKeywords.EndNotDefChar, PdfCMapMapping.NotDef);
                     break;
                 case CMapKeywords.BeginBfRange:
-                    ReadRanges(lexer, map, CMapKeywords.EndBfRange, cids: false);
+                    ReadRanges(lexer, map, CMapKeywords.EndBfRange, PdfCMapMapping.Texts);
                     break;
                 case CMapKeywords.BeginBfChar:
-                    ReadChars(lexer, map, CMapKeywords.EndBfChar, cids: false);
+                    ReadChars(lexer, map, CMapKeywords.EndBfChar, PdfCMapMapping.Texts);
                     break;
                 case CMapKeywords.UseCMap:
                     usedName = lastName;
@@ -172,7 +227,7 @@ public static class PdfCMapReader
         }
     }
 
-    private static void ReadRanges(PdfLexer lexer, PdfCMap map, string end, bool cids)
+    private static void ReadRanges(PdfLexer lexer, PdfCMap map, string end, PdfCMapMapping mapping)
     {
         while (true)
         {
@@ -200,23 +255,23 @@ public static class PdfCMapReader
                 continue;
             }
 
-            if (cids)
+            if (mapping != PdfCMapMapping.Texts)
             {
-                if (target.Kind == PdfTokenKind.Integer && target.Integer >= 0 && target.Integer <= uint.MaxValue)
+                if (IsCid(target))
                 {
-                    map.AddCids(new PdfCodeRange(length, from, to, (uint)target.Integer));
+                    map.Add(mapping, new PdfCodeRange(length, from, to, (uint)target.Integer));
                 }
             }
             else if (target.Kind == PdfTokenKind.HexString)
             {
-                map.AddTexts(new PdfCodeRange(length, from, to, 0, Text(target.Bytes)));
+                map.Add(mapping, new PdfCodeRange(length, from, to, 0, Text(target.Bytes)));
             }
             else if (target.Kind == PdfTokenKind.ArrayStart)
             {
                 var texts = ReadTexts(lexer, (long)to - from + 1);
                 if (texts.Length > 0)
                 {
-                    map.AddTexts(new PdfCodeRange(length, from, from + (uint)texts.Length - 1, 0, Texts: texts));
+                    map.Add(mapping, new PdfCodeRange(length, from, from + (uint)texts.Length - 1, 0, Texts: texts));
                 }
             }
         }
@@ -240,7 +295,7 @@ public static class PdfCMapReader
         }
     }
 
-    private static void ReadChars(PdfLexer lexer, PdfCMap map, string end, bool cids)
+    private static void ReadChars(PdfLexer lexer, PdfCMap map, string end, PdfCMapMapping mapping)
     {
         while (true)
         {
@@ -261,20 +316,26 @@ public static class PdfCMapReader
                 continue;
             }
 
-            if (cids && target.Kind == PdfTokenKind.Integer && target.Integer >= 0 && target.Integer <= uint.MaxValue)
+            if (mapping != PdfCMapMapping.Texts)
             {
-                map.AddCids(new PdfCodeRange(length, code, code, (uint)target.Integer));
+                if (IsCid(target))
+                {
+                    map.Add(mapping, new PdfCodeRange(length, code, code, (uint)target.Integer));
+                }
             }
-            else if (!cids && target.Kind == PdfTokenKind.HexString)
+            else if (target.Kind == PdfTokenKind.HexString)
             {
-                map.AddTexts(new PdfCodeRange(length, code, code, 0, Text(target.Bytes)));
+                map.Add(mapping, new PdfCodeRange(length, code, code, 0, Text(target.Bytes)));
             }
-            else if (!cids && target.Kind == PdfTokenKind.Name)
+            else if (target.Kind == PdfTokenKind.Name)
             {
-                map.AddTexts(new PdfCodeRange(length, code, code, 0, PdfSimpleEncodings.TextOf(target.Text)));
+                map.Add(mapping, new PdfCodeRange(length, code, code, 0, PdfSimpleEncodings.TextOf(target.Text)));
             }
         }
     }
+
+    private static bool IsCid(PdfToken token) =>
+        token.Kind == PdfTokenKind.Integer && token.Integer >= 0 && token.Integer <= uint.MaxValue;
 
     private static bool Code(PdfToken token, out uint code, out int length)
     {
