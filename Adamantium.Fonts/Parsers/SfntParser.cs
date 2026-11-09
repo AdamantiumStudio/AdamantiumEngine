@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using Adamantium.Core.Shared.Fonts;
 using Adamantium.Fonts.Common;
+using Adamantium.Fonts.Exceptions;
 using Adamantium.Fonts.Extensions;
 using Adamantium.Fonts.Tables;
 using Adamantium.Fonts.Tables.CMAP;
@@ -477,70 +479,97 @@ namespace Adamantium.Fonts.Parsers
 
             foreach (var tableEntry in tableDirectory.Tables)
             {
-                if (!ReadTables.Add(tableEntry.Offset) && IsSharedGlyphData(tableEntry.Name))
+                if (!ReadsTable(tableEntry.Name) ||
+                    tableEntry.Length > 0 && !ReadTables.Add(tableEntry.Offset) && IsSharedGlyphData(tableEntry.Name))
                 {
                     continue;
                 }
 
-                switch (tableEntry.Name)
+                if (!CanDoWithout(tableEntry.Name))
                 {
-                    case TableNames.head:
-                        ReadHeadTable(tableEntry);
-                        break;
-                    case TableNames.maxp:
-                        ReadMaximumProfileTable(tableEntry);
-                        if (!HasOutlines(tableDirectory) && Typeface.GlyphCount == 0)
-                        {
-                            CreateGlyphsWithoutOutlines();
-                        }
-
-                        break;
-                    case TableNames.name:
-                        ReadNameTable(tableEntry);
-                        break;
-                    case TableNames.loca:
-                        ReadGlyphIndexToLocationTable(tableEntry);
-                        break;
-                    case TableNames.cmap:
-                        ReadCharToGlyphIndexTable(tableEntry);
-                        break;
-                    case TableNames.hhea:
-                        ReadHorizontalHeaderTable(tableEntry);
-                        break;
-                    case TableNames.vhea:
-                        ReadVerticalHeaderTable(tableEntry);
-                        break;
-                    case TableNames.hmtx:
-                        ReadHorizontalMetricsTable(tableEntry);
-                        break;
-                    case TableNames.vmtx:
-                        ReadVerticalMetricsTable(tableEntry);
-                        break;
-                    case TableNames.VORG:
-                        ReadVerticalOriginTable(tableEntry);
-                        break;
-                    case TableNames.JSTF:
-                        ReadJustificationTable(tableEntry);
-                        break;
-                    case TableNames.OS2:
-                        ReadOS2Table(tableEntry);
-                        break;
-                    case TableNames.glyf:
-                        ReadTTFGlyphs(tableEntry);
-                        break;
-                    case TableNames.post:
-                        ReadPostTable(tableEntry);
-                        break;
-                    case TableNames.kern:
-                        ReadKerningTable(tableEntry);
-                        break;
-                    case TableNames.GDEF:
-                        ReadGDEFTable(tableEntry);
-                        break;
-                    default:
-                        ReadTable(tableEntry);
-                        break;
+                    ReadTableEntry(tableDirectory, tableEntry);
+                    continue;
                 }
+
+                try
+                {
+                    ReadTableEntry(tableDirectory, tableEntry);
+                }
+                catch (Exception exception) when (exception is EndOfStreamException or InvalidDataException or
+                                                      ParserException)
+                {
+                    Typeface.AddErrorMessage($"[WARN] The {tableEntry.Name} table is damaged and left out: " +
+                                             exception.Message);
+                }
+            }
+        }
+
+        /// <summary>Whether the parser reads the table at all.</summary>
+        protected virtual bool ReadsTable(string name) => true;
+
+        /// <summary>Whether a damaged table is left out rather than failing the font.</summary>
+        protected virtual bool CanDoWithout(string name) => false;
+
+        private void ReadTableEntry(TableDirectory tableDirectory, TableEntry tableEntry)
+        {
+            switch (tableEntry.Name)
+            {
+                case TableNames.head:
+                    ReadHeadTable(tableEntry);
+                    break;
+                case TableNames.maxp:
+                    ReadMaximumProfileTable(tableEntry);
+                    if (maxp != null && !HasOutlines(tableDirectory) && Typeface.GlyphCount == 0)
+                    {
+                        CreateGlyphsWithoutOutlines();
+                    }
+
+                    break;
+                case TableNames.name:
+                    ReadNameTable(tableEntry);
+                    break;
+                case TableNames.loca:
+                    ReadGlyphIndexToLocationTable(tableEntry);
+                    break;
+                case TableNames.cmap:
+                    ReadCharToGlyphIndexTable(tableEntry);
+                    break;
+                case TableNames.hhea:
+                    ReadHorizontalHeaderTable(tableEntry);
+                    break;
+                case TableNames.vhea:
+                    ReadVerticalHeaderTable(tableEntry);
+                    break;
+                case TableNames.hmtx:
+                    ReadHorizontalMetricsTable(tableEntry);
+                    break;
+                case TableNames.vmtx:
+                    ReadVerticalMetricsTable(tableEntry);
+                    break;
+                case TableNames.VORG:
+                    ReadVerticalOriginTable(tableEntry);
+                    break;
+                case TableNames.JSTF:
+                    ReadJustificationTable(tableEntry);
+                    break;
+                case TableNames.OS2:
+                    ReadOS2Table(tableEntry);
+                    break;
+                case TableNames.glyf:
+                    ReadTTFGlyphs(tableEntry);
+                    break;
+                case TableNames.post:
+                    ReadPostTable(tableEntry);
+                    break;
+                case TableNames.kern:
+                    ReadKerningTable(tableEntry);
+                    break;
+                case TableNames.GDEF:
+                    ReadGDEFTable(tableEntry);
+                    break;
+                default:
+                    ReadTable(tableEntry);
+                    break;
             }
         }
 
@@ -607,8 +636,13 @@ namespace Adamantium.Fonts.Parsers
 
         protected virtual void ReadHeadTable(TableEntry entry)
         {
+            if (entry.Length < 54)
+            {
+                throw new ParserException("The head table is cut short.");
+            }
+
             head = new HeadTable();
-            
+
             FontReader.Position = entry.Offset;
 
             head.MajorVersion = FontReader.ReadUInt16();
@@ -633,15 +667,24 @@ namespace Adamantium.Fonts.Parsers
 
             CurrentFont.UnitsPerEm = head.UnitsPerEm;
             CurrentFont.LowestRecPPEM = head.LowestRecPPEM;
-            var originalDate = new DateTime(1904, 1, 1);
-            var delta = new TimeSpan(head.CreatedDate);
-            CurrentFont.Created = originalDate + delta;
-            delta = new TimeSpan(head.ModifiedDate);
-            CurrentFont.Modified = originalDate + delta;
+            CurrentFont.Created = FromLongDateTime(head.CreatedDate);
+            CurrentFont.Modified = FromLongDateTime(head.ModifiedDate);
+        }
+
+        private static DateTime FromLongDateTime(long seconds)
+        {
+            var epoch = new DateTime(1904, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var limit = (long)(DateTime.MaxValue - epoch).TotalSeconds;
+            return seconds >= 0 && seconds <= limit ? epoch.AddSeconds(seconds) : epoch;
         }
 
         protected virtual void ReadMaximumProfileTable(TableEntry entry)
         {
+            if (entry.Length < 6)
+            {
+                return;
+            }
+
             maxp = new MaximumProfileTable();
             
             FontReader.Position = entry.Offset;
@@ -649,6 +692,12 @@ namespace Adamantium.Fonts.Parsers
             maxp.MajorVersion = FontReader.ReadUInt16();
             maxp.MinorVersion = FontReader.ReadUInt16();
             maxp.NumGlyphs = FontReader.ReadUInt16();
+
+            if (maxp.MajorVersion < 1 || entry.Length < 32)
+            {
+                return;
+            }
+
             maxp.MaxPoints = FontReader.ReadUInt16();
             maxp.MaxContours = FontReader.ReadUInt16();
             maxp.MaxCompositePoints = FontReader.ReadUInt16();
@@ -806,21 +855,22 @@ namespace Adamantium.Fonts.Parsers
             
             FontReader.Position = entry.Offset;
 
+            var entrySize = head.IndexToLocFormat == 0 ? 2 : 4;
+            var entriesInTable = (int)Math.Min(entry.Length / entrySize, ushort.MaxValue + 1);
+
+            maxp ??= new MaximumProfileTable { NumGlyphs = (ushort)Math.Max(0, entriesInTable - 1) };
+
             loca.GlyphOffsets = new UInt32[maxp.NumGlyphs + 1]; // + 'end-of-glyphs' entry
 
-            if (head.IndexToLocFormat == 0)
+            for (var i = 0; i < maxp.NumGlyphs + 1; ++i)
             {
-                for (var i = 0; i < maxp.NumGlyphs + 1; ++i)
+                if (i >= entriesInTable)
                 {
-                    var glyphIndex = FontReader.ReadUInt16();
-                    loca.GlyphOffsets[i] = glyphIndex * 2u;
+                    loca.GlyphOffsets[i] = uint.MaxValue;
                 }
-            }
-            else
-            {
-                for (var i = 0; i < maxp.NumGlyphs + 1; ++i)
+                else
                 {
-                    loca.GlyphOffsets[i] = FontReader.ReadUInt32();
+                    loca.GlyphOffsets[i] = entrySize == 2 ? FontReader.ReadUInt16() * 2u : FontReader.ReadUInt32();
                 }
             }
         }
@@ -838,23 +888,29 @@ namespace Adamantium.Fonts.Parsers
                 encodings[index] = ReadEncodingRecord();
             }
 
-            cmap.CharacterMaps = new CharacterMap[numTables];
-
+            var maps = new List<CharacterMap>(numTables);
             for (var index = 0; index < encodings.Length; index++)
             {
                 var encoding = encodings[index];
                 FontReader.Position = entry.Offset + encoding.SubtableOffset;
                 var format = FontReader.ReadUInt16();
-                CharacterMap map = ReadCharacterMap(format);
+                var map = ReadCharacterMap(format);
+                if (map == null)
+                {
+                    Typeface.AddErrorMessage($"[WARN] cmap subtable format {format} is not read");
+                    continue;
+                }
+
                 map.PlatformId = encoding.PlatformId;
                 map.EncodingId = encoding.EncodingId;
-
-                cmap.CharacterMaps[index] = map;
+                maps.Add(map);
                 if (map is CharacterMapFormat14 sequences)
                 {
                     CurrentFont.VariationSequences = sequences;
                 }
             }
+
+            cmap.CharacterMaps = maps.ToArray();
             
             cmap.CollectUnicodeToGlyphMappings();
 
@@ -883,16 +939,10 @@ namespace Adamantium.Fonts.Parsers
             {
                 case 0:
                     return FontReader.ReadCharacterMapFormat0();
-                case 2:
-                    return FontReader.ReadCharacterMapFormat2();
                 case 4:
                     return FontReader.ReadCharacterMapFormat4();
                 case 6:
                     return FontReader.ReadCharacterMapFormat6();
-                case 8:
-                    return FontReader.ReadCharacterMapFormat8();
-                case 10:
-                    return FontReader.ReadCharacterMapFormat10();
                 case 12:
                     return FontReader.ReadCharacterMapFormat12();
                 case 13:
@@ -900,7 +950,7 @@ namespace Adamantium.Fonts.Parsers
                 case 14:
                     return FontReader.ReadCharacterMapFormat14();
                 default:
-                    throw new NotSupportedException($"Format {format} is not supported");
+                    return null;
             }
         }
 
@@ -915,6 +965,11 @@ namespace Adamantium.Fonts.Parsers
 
         protected virtual void ReadHorizontalHeaderTable(TableEntry entry)
         {
+            if (entry.Length < 36)
+            {
+                throw new ParserException("The hhea table is cut short.");
+            }
+
             hhea = new HorizontalHeaderTable();
 
             FontReader.Position = entry.Offset;
@@ -953,9 +1008,22 @@ namespace Adamantium.Fonts.Parsers
             var advanceWidths = new ushort[maxp.NumGlyphs];
             var leftSideBearings = new short[maxp.NumGlyphs];
 
+            var metricsCount = hhea?.NumberOfHMetrics ??
+                               (int)Math.Clamp((entry.Length - 2L * maxp.NumGlyphs) / 2, 0, maxp.NumGlyphs);
+            var end = entry.Offset + entry.Length;
             for (var i = 0; i < maxp.NumGlyphs; ++i)
             {
-                if (i < hhea.NumberOfHMetrics)
+                if (FontReader.Position + (i < metricsCount ? 4 : 2) > end)
+                {
+                    for (; i < maxp.NumGlyphs; ++i)
+                    {
+                        advanceWidths[i] = lastAdvanceWidth;
+                    }
+
+                    break;
+                }
+
+                if (i < metricsCount)
                 {
                     var advanceWidth = FontReader.ReadUInt16();
                     advanceWidths[i] = advanceWidth;
@@ -1228,7 +1296,7 @@ namespace Adamantium.Fonts.Parsers
             {
                 var glyph = new Glyph(i, OutlineType.TrueType);
                 glyphs[i] = glyph;
-                if (HasGlyphData(glyph))
+                if (HasGlyphData(glyph, entry.Length))
                 {
                     glyph.SetOutlineSource(source);
                 }
@@ -1255,9 +1323,17 @@ namespace Adamantium.Fonts.Parsers
             Typeface.SetGlyphs(glyphs);
         }
 
-        private bool HasGlyphData(Glyph glyph)
+        private bool HasGlyphData(Glyph glyph, long glyfLength)
         {
             var glyphIndex = glyph.Index;
+            if (loca.GlyphOffsets[glyphIndex] > loca.GlyphOffsets[glyphIndex + 1] ||
+                loca.GlyphOffsets[glyphIndex + 1] > glyfLength)
+            {
+                Typeface.AddErrorMessage($"[ERR] The data of glyph {glyphIndex} lies outside the glyf table");
+                glyph.IsInvalid = true;
+                return false;
+            }
+
             if (loca.GlyphOffsets[glyphIndex] == loca.GlyphOffsets[glyphIndex + 1])
             {
                 Typeface.AddErrorMessage($"[WARN] Offsets for indices {glyphIndex} and {glyphIndex + 1} are equal - current glyph has no outline");
@@ -1274,11 +1350,11 @@ namespace Adamantium.Fonts.Parsers
             return true;
         }
 
-        internal void ReadGlyphOutlines(FontStreamReader reader, Glyph glyph, Glyph[] fontGlyphs)
+        internal void ReadGlyphOutlines(FontStreamReader reader, Glyph glyph, Glyph[] fontGlyphs, FontWorkBudget budget)
         {
             if (ReadGlyphData(reader, glyph).NumberOfContours < 0)
             {
-                glyph.AddComponentOutlines(index => fontGlyphs[index]);
+                glyph.AddComponentOutlines(index => fontGlyphs[index], budget);
             }
         }
 

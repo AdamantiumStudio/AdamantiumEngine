@@ -482,7 +482,8 @@ namespace Adamantium.Fonts.Parsers
                 glyphs[i].SetInstructions(FontReader.ReadBytes(tempGlyph.InstructionsLength, true));
             }
 
-            var compositeSource = new CompositeGlyphOutlineSource(glyphs);
+            var compositeSource = new CompositeGlyphOutlineSource(glyphs,
+                FontWorkBudget.ForCompositePoints(FontReader.Length));
             foreach (var compositeGlyph in compositeGlyphs)
             {
                 glyphs[compositeGlyph.Index].SetOutlineSource(compositeSource);

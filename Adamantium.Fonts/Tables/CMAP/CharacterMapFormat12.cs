@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Adamantium.Fonts.Tables.CMAP
 {
@@ -43,31 +44,29 @@ namespace Adamantium.Fonts.Tables.CMAP
 
         public override void CollectUnicodeChars(List<uint> unicodes)
         {
-            foreach (var group in Groups)
+            var from = 0u;
+            foreach (var group in Groups.OrderBy(g => g.StartCharCode))
             {
-                var start = group.StartCharCode;
-                var stop = group.EndCharCode;
-                for (uint u = start; u <= stop; ++u)
+                foreach (var code in CodesOf(group.StartCharCode, group.EndCharCode, from))
                 {
-                    unicodes.Add(u);
+                    unicodes.Add(code);
                 }
+
+                from = After(group.EndCharCode, from);
             }
         }
 
         public override void GetUnicodeToGlyphMappings(Dictionary<uint, uint> unicodeToGlyph)
         {
-            int i = 0;
-            foreach (var group in Groups)
+            var from = 0u;
+            foreach (var group in Groups.OrderBy(g => g.StartCharCode))
             {
-                var start = group.StartCharCode;
-                var stop = group.EndCharCode;
-                for (uint u = start; u <= stop; ++u)
+                foreach (var code in CodesOf(group.StartCharCode, group.EndCharCode, from))
                 {
-                    var glyphId = GetGlyphIndex(u);
-                    unicodeToGlyph[u] = glyphId;
+                    unicodeToGlyph[code] = GetGlyphIndex(code);
                 }
 
-                i++;
+                from = After(group.EndCharCode, from);
             }
         }
     }

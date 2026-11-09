@@ -19,6 +19,7 @@ namespace Adamantium.Fonts.Extensions
 
         public static UInt16[] ReadUInt16Array(this FontStreamReader reader, int count)
         {
+            reader.EnsureAvailable(count, 2);
             var arr = new UInt16[count];
             for (int i = 0; i < count; i++)
             {
@@ -30,6 +31,7 @@ namespace Adamantium.Fonts.Extensions
 
         public static Int16[] ReadInt16Array(this FontStreamReader reader, int count)
         {
+            reader.EnsureAvailable(count, 2);
             var arr = new Int16[count];
             for (int i = 0; i < count; i++)
             {
@@ -41,6 +43,7 @@ namespace Adamantium.Fonts.Extensions
 
         public static UInt32[] ReadUInt24Array(this FontStreamReader reader, int count)
         {
+            reader.EnsureAvailable(count, 3);
             var arr = new UInt32[count];
             for (int i = 0; i < count; i++)
             {
@@ -52,6 +55,7 @@ namespace Adamantium.Fonts.Extensions
         
         public static UInt32[] ReadUInt32Array(this FontStreamReader reader, int count)
         {
+            reader.EnsureAvailable(count, 4);
             var arr = new UInt32[count];
             for (int i = 0; i < count; i++)
             {

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Tables.CFF;
 
@@ -149,21 +151,14 @@ namespace Adamantium.Fonts.Parsers.CFF
             FillOperatorsRawValues(font, rawData);
         }
         
-        // convert raw byte stream to GenericOperandResult (will always produce Number)
-        protected GenericOperandResult Number(List<byte> rawData)
+        protected GenericOperandResult Number(CffDictReader reader)
         {
-            if (rawData[0] == 30) // it's double
-            {
-                return Double(rawData);
-            }
-
-            // it's integer
-            return Integer(rawData);
+            return reader.Peek() == 30 ? Double(reader) : Integer(reader);
         }
 
-        protected GenericOperandResult Integer(List<byte> rawData) // store int as double for compatibility between integer and real numbers in CFF
+        protected GenericOperandResult Integer(CffDictReader reader)
         {
-            var b0 = GetFirstByteAndRemove(rawData);
+            var b0 = reader.Read();
 
             if (b0 >= 32 && b0 <= 246)
             {
@@ -171,86 +166,86 @@ namespace Adamantium.Fonts.Parsers.CFF
             }
             else if (b0 >= 247 && b0 <= 250)
             {
-                var b1 = GetFirstByteAndRemove(rawData);
+                var b1 = reader.Read();
 
                 return (b0 - 247) * 256 + b1 + 108;
             }
             else if (b0 >= 251 && b0 <= 254)
             {
-                var b1 = GetFirstByteAndRemove(rawData);
+                var b1 = reader.Read();
 
                 return -(b0 - 251) * 256 - b1 - 108;
             }
             else if (b0 == 28)
             {
-                var b1 = GetFirstByteAndRemove(rawData);
-                var b2 = GetFirstByteAndRemove(rawData);
+                var b1 = reader.Read();
+                var b2 = reader.Read();
 
-                return (b1 << 8) | b2;
+                return (short)((b1 << 8) | b2);
             }
             else if (b0 == 29)
             {
-                var b1 = GetFirstByteAndRemove(rawData);
-                var b2 = GetFirstByteAndRemove(rawData);
-                var b3 = GetFirstByteAndRemove(rawData);
-                var b4 = GetFirstByteAndRemove(rawData);
+                var b1 = reader.Read();
+                var b2 = reader.Read();
+                var b3 = reader.Read();
+                var b4 = reader.Read();
 
                 return (b1 << 24) | (b2 << 16) | (b3 << 8) | b4;
             }
             else
             {
-                throw new ArgumentException($"'b0' = {b0} is out of range!");
+                throw new InvalidDataException($"A CFF DICT holds byte {b0}, which is neither operand nor operator.");
             }
         }
 
-        protected GenericOperandResult Double(List<byte> rawData)
+        protected GenericOperandResult Double(CffDictReader reader)
         {
-            List<byte> nibbles = new List<byte>();
-            string stringRes = String.Empty;
+            var text = new StringBuilder();
+            reader.Read();
 
-            GetFirstByteAndRemove(rawData); // rawData[0] is 30 -> pointing that it is a double, skip it and remove
-
-            while(rawData.Count > 0)
+            var done = false;
+            while (!done)
             {
-                bool done = false;
-                var b = GetFirstByteAndRemove(rawData);
-                var ns = ParseNibbles(b);
-
-                nibbles.Add(ns.HiNibble);
-                nibbles.Add(ns.LoNibble);
-
-                foreach (var nibble in nibbles)
+                var ns = ParseNibbles(reader.Read());
+                foreach (var nibble in new[] { ns.HiNibble, ns.LoNibble })
                 {
-                    if (GetTokenFromNibble(nibble, out var token))
-                    {
-                        stringRes += token;
-                    }
-                    else
+                    if (!GetTokenFromNibble(nibble, out var token))
                     {
                         done = true;
                         break;
                     }
-                }
 
-                if (done)
-                {
-                    break;
+                    text.Append(token);
                 }
-
-                nibbles.Clear();
             }
 
-            return Convert.ToDouble(stringRes, CultureInfo.InvariantCulture);
+            if (!double.TryParse(text.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsInfinity(value))
+            {
+                throw new InvalidDataException($"A CFF DICT holds a real number that is not one: '{text}'.");
+            }
+
+            return value;
         }
 
         // convert raw Numbers to each operator's output type (e.g. calculate Deltas)
+        private static void Require(List<GenericOperandResult> rawOperands, int count)
+        {
+            if (rawOperands.Count < count)
+            {
+                throw new InvalidDataException("A CFF DICT operator lacks its operands.");
+            }
+        }
+
         protected GenericOperandResult Number(List<GenericOperandResult> rawOperands)
         {
+            Require(rawOperands, 1);
             return rawOperands[0];
         }
 
         protected GenericOperandResult NumberNumber(List<GenericOperandResult> rawOperands)
         {
+            Require(rawOperands, 2);
             var number1 = rawOperands[0];
             var number2 = rawOperands[1];
 
@@ -259,16 +254,19 @@ namespace Adamantium.Fonts.Parsers.CFF
 
         protected GenericOperandResult Boolean(List<GenericOperandResult> rawOperands)
         {
+            Require(rawOperands, 1);
             return rawOperands[0];
         }
 
         protected GenericOperandResult Sid(List<GenericOperandResult> rawOperands)
         {
+            Require(rawOperands, 1);
             return rawOperands[0];
         }
 
         protected GenericOperandResult SidSidNumber(List<GenericOperandResult> rawOperands)
         {
+            Require(rawOperands, 3);
             ushort sid1 = rawOperands[0].AsUShort();
             ushort sid2 = rawOperands[1].AsUShort();
             double number = rawOperands[2].AsDouble();
@@ -305,14 +303,6 @@ namespace Adamantium.Fonts.Parsers.CFF
         protected (byte HiNibble, byte LoNibble) ParseNibbles(byte raw)
         {
             return ( HiNibble: (byte)(raw >> 4), LoNibble: (byte)(raw & 0x0F) );
-        }
-
-        // used for processing number byte-by-byte with deletion of processed byte from raw byte array
-        protected byte GetFirstByteAndRemove(List<byte> rawData)
-        {
-            byte b = rawData[0];
-            rawData.RemoveAt(0);
-            return b;
         }
 
         protected bool GetTokenFromNibble(byte nibble, out string token)
@@ -353,7 +343,12 @@ namespace Adamantium.Fonts.Parsers.CFF
         
         private GenericOperandResult GetOperatorValue(DictOperatorsType opType)
         {
-            return operatorsActions[opType].Invoke(OperatorsRawValues[opType]);
+            if (!OperatorsRawValues.TryGetValue(opType, out var operands))
+            {
+                throw new InvalidDataException($"The CFF DICT lacks {opType}, which has no default.");
+            }
+
+            return operatorsActions[opType].Invoke(operands);
         }
 
         public GenericOperandResultSet GetAllAvailableOperands()
@@ -374,29 +369,34 @@ namespace Adamantium.Fonts.Parsers.CFF
         
         private void FillOperatorsRawValues(CFFFont font, byte[] rawData)
         {
-            var byteArray = new List<byte>(rawData);
+            var reader = new CffDictReader(rawData);
             var rawOperands = new List<GenericOperandResult>();
             var variationStoreIndex = 0;
 
-            while (byteArray.Count > 0)
+            while (!reader.AtEnd)
             {
-                ushort token = byteArray[0];
-
+                ushort token = reader.Peek();
+                var operatorLength = 1;
                 if (token == 12)
                 {
-                    token = (ushort)((12 << 8) | byteArray[1]);
-
-                    // remove additional byte beside from generic token case byte removal (see below)
-                    GetFirstByteAndRemove(byteArray);
+                    token = (ushort)((12 << 8) | reader.Peek(1));
+                    operatorLength = 2;
                 }
 
                 if (byteToOperatorMap.ContainsKey(token))
                 {
-                    // this is token - remove this byte from byte stream
-                    GetFirstByteAndRemove(byteArray);
+                    for (var i = 0; i < operatorLength; i++)
+                    {
+                        reader.Read();
+                    }
 
                     if ((DictOperatorsType)token == DictOperatorsType.blend)
                     {
+                        if (rawOperands.Count == 0 || font.VariationStore?.ItemVariationData == null ||
+                            variationStoreIndex < 0 || variationStoreIndex >= font.VariationStore.ItemVariationData.Length)
+                        {
+                            throw new InvalidDataException("A CFF DICT blends without variation data.");
+                        }
 
                         var blendedOperandsCount = rawOperands.Last().AsInt();
                         var variationData = font.VariationStore.ItemVariationData[variationStoreIndex];
@@ -404,6 +404,10 @@ namespace Adamantium.Fonts.Parsers.CFF
                         var overallBlendOperandsCount = blendedOperandsCount * (regionCount + 1) + 1;
 
                         var startIndexOfBlendOperands = rawOperands.Count - overallBlendOperandsCount;
+                        if (blendedOperandsCount < 0 || startIndexOfBlendOperands < 0)
+                        {
+                            throw new InvalidDataException("A CFF DICT blends more operands than it holds.");
+                        }
 
                         var blendOperands = rawOperands.Skip(startIndexOfBlendOperands).ToList();
 
@@ -434,6 +438,7 @@ namespace Adamantium.Fonts.Parsers.CFF
                     {
                         if ((DictOperatorsType)token == DictOperatorsType.vsindex)
                         {
+                            Require(rawOperands, 1);
                             variationStoreIndex = rawOperands.Last().AsInt();
                         }
 
@@ -441,9 +446,18 @@ namespace Adamantium.Fonts.Parsers.CFF
                         rawOperands = new List<GenericOperandResult>();
                     }
                 }
+                else if (reader.Peek() <= 21)
+                {
+                    for (var i = 0; i < operatorLength; i++)
+                    {
+                        reader.Read();
+                    }
+
+                    rawOperands = new List<GenericOperandResult>();
+                }
                 else
                 {
-                    rawOperands.Add(Number(byteArray));
+                    rawOperands.Add(Number(reader));
                 }
             }
         }
