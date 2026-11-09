@@ -1,6 +1,9 @@
 using System;
 using System.IO;
+using Adamantium.Imaging.Ccitt;
+using Adamantium.Imaging.Jbig2;
 using Adamantium.Imaging.Jpeg;
+using Adamantium.Imaging.Jpeg2000;
 using Adamantium.Pdf.ColorSpaces;
 using Adamantium.Pdf.Content;
 using Adamantium.Pdf.Document;
@@ -11,10 +14,9 @@ using Adamantium.Pdf.Resources;
 namespace Adamantium.Pdf.Images;
 
 /// <summary>Decodes images (ISO 32000-2, 8.9) to 8-bit RGBA: samples of 1 to 16 bits through <c>/Decode</c> and the
-/// color space, JPEG through the engine's decoder as channels the same way, stencil masks, soft masks, explicit masks
-/// and color-key masks. A color space with a tint transform is evaluated on a grid, not once a pixel; rows past the
-/// end of the data are the color of zero samples. CCITT, JPEG 2000 and JBIG2 images are not read yet and throw.
-/// </summary>
+/// color space; JPEG, JPEG 2000, CCITT fax and JBIG2 through the engine's decoders; stencil masks, soft masks,
+/// explicit masks and color-key masks. A color space with a tint transform is evaluated on a grid, not once a pixel;
+/// rows past the end of the data are the color of zero samples.</summary>
 public static class PdfImageDecoder
 {
     /// <summary>The widest or tallest an image may be.</summary>
@@ -38,19 +40,22 @@ public static class PdfImageDecoder
         if (decoded.ImageFilter == PdfFilterNames.DCTDecode)
         {
             var samples = JpegChannels(decoded.Data, document, out width, out height, out var channels);
-            bitmap = Samples(dictionary, samples, width, height, 8, channels, resources, document);
+            bitmap = Samples(dictionary, samples, width, height, 8, channels, resources, document, true);
         }
-        else if (decoded.ImageFilter != null)
+        else if (decoded.ImageFilter == PdfFilterNames.JPXDecode)
         {
-            throw new PdfException("/" + decoded.ImageFilter + " images are not read yet.");
+            bitmap = Jpx(dictionary, decoded, resources, document, withMasks);
         }
         else
         {
             CheckSize(width, height, document);
+            var data = Bilevel(decoded, width, height, document);
+            var bits = decoded.ImageFilter == null
+                ? PdfValues.Integer(dictionary[PdfKeys.BitsPerComponent], document, 8)
+                : 1;
             bitmap = imageMask
-                ? Stencil(dictionary, decoded.Data.Span, width, height, document)
-                : Samples(dictionary, decoded.Data.Span, width, height,
-                    PdfValues.Integer(dictionary[PdfKeys.BitsPerComponent], document, 8), 0, resources, document);
+                ? Stencil(dictionary, data.Span, width, height, document)
+                : Samples(dictionary, data.Span, width, height, bits, 0, resources, document, true);
         }
 
         if (withMasks && !bitmap.IsStencil)
@@ -131,8 +136,71 @@ public static class PdfImageDecoder
         return space;
     }
 
+    private static PdfImageBitmap Jpx(PdfDictionary dictionary, PdfDecodedStream decoded, PdfResources resources,
+        PdfDocument document, bool withMasks)
+    {
+        var declared = (long)PdfValues.Integer(dictionary[PdfKeys.Width], document) *
+                       PdfValues.Integer(dictionary[PdfKeys.Height], document);
+        var maxPixels = Math.Min(document.DecodeLimits.MaxDecodedLength / 4,
+            declared > 0 ? declared * 4 + (1 << 16) : long.MaxValue);
+        Jpeg2000Image image;
+        try
+        {
+            image = Jpeg2000Decoder.Decode(decoded.Data.Span, maxPixels);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
+        {
+            throw new PdfException("A JPEG 2000 image cannot be decoded: " + exception.Message, exception);
+        }
+
+        CheckSize(image.Width, image.Height, document);
+        var pixels = image.Width * image.Height;
+        var channels = image.Channels;
+        var inData = PdfValues.Integer(dictionary[PdfKeys.SMaskInData], document);
+        var colors = image.Samples;
+        if (image.HasAlpha)
+        {
+            var premultiplied = image.AlphaIsPremultiplied || inData == 2;
+            colors = new byte[pixels * image.ColorChannels];
+            for (var i = 0; i < pixels; i++)
+            {
+                var alpha = image.Samples[i * channels + channels - 1];
+                for (var c = 0; c < image.ColorChannels; c++)
+                {
+                    var value = image.Samples[i * channels + c];
+                    colors[i * image.ColorChannels + c] = !premultiplied ? value
+                        : alpha == 0 ? (byte)0
+                        : (byte)Math.Min(255, value * 255 / alpha);
+                }
+            }
+        }
+
+        if (image.ColorChannels == 1 && image.ChannelBits[0] < 8 &&
+            PdfColorSpaces.Create(dictionary[PdfKeys.ColorSpace], resources, document) is PdfIndexedColorSpace)
+        {
+            var max = (1 << image.ChannelBits[0]) - 1;
+            for (var i = 0; i < colors.Length; i++)
+            {
+                colors[i] = (byte)((colors[i] * max + 127) / 255);
+            }
+        }
+
+        var bitmap = Samples(dictionary, colors, image.Width, image.Height, 8, image.ColorChannels, resources,
+            document, false);
+        if (withMasks && image.HasAlpha && inData != 0 && dictionary[PdfKeys.SMask] == null)
+        {
+            for (var i = 0; i < pixels; i++)
+            {
+                var alpha = image.Samples[i * channels + channels - 1];
+                bitmap.Rgba[i * 4 + 3] = (byte)(bitmap.Rgba[i * 4 + 3] * alpha / 255);
+            }
+        }
+
+        return bitmap;
+    }
+
     private static PdfImageBitmap Samples(PdfDictionary dictionary, ReadOnlySpan<byte> data, int width, int height,
-        int bits, int channels, PdfResources resources, PdfDocument document)
+        int bits, int channels, PdfResources resources, PdfDocument document, bool readDecode)
     {
         var space = SpaceOf(dictionary, channels, resources, document);
         if (bits is not (1 or 2 or 4 or 8 or 16))
@@ -148,7 +216,7 @@ public static class PdfImageDecoder
         }
 
         var components = space.Components;
-        var decode = PdfValues.Numbers(dictionary[PdfKeys.Decode], document);
+        var decode = readDecode ? PdfValues.Numbers(dictionary[PdfKeys.Decode], document) : null;
         if (decode == null || decode.Length < 2 * components)
         {
             decode = space.DefaultDecode(bits);
@@ -356,15 +424,84 @@ public static class PdfImageDecoder
     private static PdfImageBitmap StencilMask(PdfStream stream, PdfDocument document)
     {
         var decoded = document.Decode(stream);
-        if (decoded.ImageFilter != null)
-        {
-            return null;
-        }
-
         var width = PdfValues.Integer(stream.Dictionary[PdfKeys.Width], document);
         var height = PdfValues.Integer(stream.Dictionary[PdfKeys.Height], document);
         CheckSize(width, height, document);
-        return Stencil(stream.Dictionary, decoded.Data.Span, width, height, document);
+        return Stencil(stream.Dictionary, Bilevel(decoded, width, height, document).Span, width, height, document);
+    }
+
+    private static ReadOnlyMemory<byte> Bilevel(PdfDecodedStream decoded, int width, int height,
+        PdfDocument document)
+    {
+        switch (decoded.ImageFilter)
+        {
+            case null:
+                return decoded.Data;
+            case PdfFilterNames.CCITTFaxDecode:
+                return Fax(decoded, height, document);
+            case PdfFilterNames.JBIG2Decode:
+                return Jbig2(decoded, width, height, document);
+            default:
+                throw new PdfException("/" + decoded.ImageFilter + " images are not read yet.");
+        }
+    }
+
+    private static byte[] Fax(PdfDecodedStream decoded, int height, PdfDocument document)
+    {
+        var parameters = decoded.ImageFilterParameters;
+        var options = new CcittOptions
+        {
+            K = PdfValues.Integer(parameters?[PdfKeys.K], document),
+            Columns = PdfValues.Integer(parameters?[PdfKeys.Columns], document, 1728),
+            EncodedByteAlign = PdfValues.Boolean(parameters?[PdfKeys.EncodedByteAlign], document),
+            BlackIs1 = PdfValues.Boolean(parameters?[PdfKeys.BlackIs1], document),
+        };
+        var rowBytes = (options.Columns + 7) / 8;
+        if (options.Columns is < 1 or > MaxSide || (long)rowBytes * height > document.DecodeLimits.MaxDecodedLength)
+        {
+            throw new PdfException("A fax image of " + options.Columns + " columns is not drawn.");
+        }
+
+        var rows = new byte[rowBytes * height];
+        CcittDecoder.Decode(decoded.Data.Span, rows, options);
+        return rows;
+    }
+
+    private static byte[] Jbig2(PdfDecodedStream decoded, int width, int height, PdfDocument document)
+    {
+        var globals = ReadOnlyMemory<byte>.Empty;
+        if (document.Resolve(decoded.ImageFilterParameters?[PdfKeys.JBIG2Globals]) is PdfStream shared)
+        {
+            globals = document.Decode(shared).Data;
+        }
+
+        byte[] page;
+        int pageWidth, pageHeight;
+        try
+        {
+            page = Jbig2Decoder.Decode(decoded.Data.Span, globals.Span,
+                Math.Min(document.DecodeLimits.MaxDecodedLength, (long)width * height * 4 + (1 << 16)),
+                out pageWidth, out pageHeight);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
+        {
+            throw new PdfException("A JBIG2 image cannot be decoded: " + exception.Message, exception);
+        }
+
+        var rowBytes = (width + 7) / 8;
+        var pageRowBytes = (pageWidth + 7) / 8;
+        var rows = new byte[rowBytes * height];
+        Array.Fill(rows, (byte)0xFF);
+        var copied = Math.Min(rowBytes, pageRowBytes);
+        for (var y = 0; y < Math.Min(height, pageHeight); y++)
+        {
+            for (var i = 0; i < copied; i++)
+            {
+                rows[y * rowBytes + i] = (byte)~page[y * pageRowBytes + i];
+            }
+        }
+
+        return rows;
     }
 
     private static byte Byte(double value) =>

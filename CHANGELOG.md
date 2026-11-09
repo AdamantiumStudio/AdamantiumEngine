@@ -16,8 +16,8 @@ All packages share one version.
   (`PdfContentReader`); page resources (`PdfResources`); functions of all four types, the PostScript calculator run on
   an explicit stack (`PdfFunctions`); color spaces from the device ones through CalGray, CalRGB and Lab to ICCBased,
   Indexed, Separation and DeviceN, each shown in sRGB (`PdfColorSpaces`); and images decoded to RGBA - samples of 1 to
-  16 bits, JPEG, stencil, soft, explicit and color-key masks (`PdfImageDecoder`). CCITT, JPEG 2000 and JBIG2 images
-  are not read yet.
+  16 bits, JPEG, JPEG 2000 (`/SMaskInData` included), CCITT fax and JBIG2 (`/JBIG2Globals` included), stencil, soft,
+  explicit and color-key masks (`PdfImageDecoder`).
 - `Adamantium.Pdf` reads the fonts pages show text with (`PdfFonts`): simple Type 1 and TrueType fonts with their
   encodings and `/Differences` (Standard, WinAnsi, MacRoman, MacExpert, and the Symbol and ZapfDingbats fonts' own, as
   annex D gives them), composite Type 0 fonts over CIDFontType0 and CIDFontType2 with Identity-H, Identity-V and
@@ -36,6 +36,14 @@ All packages share one version.
   color space of its own, as PDF does with an image's `/Decode` and color space.
 - `Lzw` in `Adamantium.Core.Compression`: the LZW decoder TIFF reads with, now shared by TIFF and PDF, with or without
   the early change of code width.
+- `Jpeg2000Decoder` in `Adamantium.Imaging`: JPEG 2000 part 1, JP2 files and bare codestreams - every progression and
+  POC, tiles, precincts, packed packet headers, every code-block style, both wavelets and component transforms, regions
+  of interest, subsampled components, palettes and channel definitions; a codestream that ends early draws what it has.
+- `Jbig2Decoder` in `Adamantium.Imaging`: JBIG2 - generic, refinement, text and halftone regions, symbol and pattern
+  dictionaries, standard and custom Huffman tables, pages of unknown height, embedded streams with their globals and
+  JBIG2 files.
+- `CcittDecoder` in `Adamantium.Imaging`: the CCITT fax decoder TIFF reads with, now public with the parameters of PDF's
+  `CCITTFaxDecode` (`CcittOptions`) and looking codes up by table rather than bit by bit.
 
 - `SharedSurface.WriteRegions`: a producer whose frames are on the CPU writes the rectangles that changed into a surface
   it shares with a consumer on the same device (`CreateInDevice`) - submitted on its own, once the consumer has given

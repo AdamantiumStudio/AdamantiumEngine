@@ -6,8 +6,8 @@
 		<Configurations>Debug;Release</Configurations>
 		<LangVersion>latest</LangVersion>
 		<IsPackable>true</IsPackable>
-		<Description>Image codecs of the Adamantium engine - PNG and APNG, JPEG, GIF, BMP, TGA, TIFF, ICO, DDS - with mipmaps, format conversion and palette quantizers.</Description>
-		<PackageTags>adamantium;imaging;png;jpeg;dds;codec</PackageTags>
+		<Description>Image codecs of the Adamantium engine - PNG and APNG, JPEG, GIF, BMP, TGA, TIFF, ICO, DDS, and the JPEG 2000, JBIG2 and CCITT fax decoders - with mipmaps, format conversion and palette quantizers.</Description>
+		<PackageTags>adamantium;imaging;png;jpeg;jpeg2000;jbig2;dds;codec</PackageTags>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)'=='Debug'">

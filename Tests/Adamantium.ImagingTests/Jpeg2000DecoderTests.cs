@@ -1,0 +1,220 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Adamantium.Imaging.Jpeg2000;
+using NUnit.Framework;
+
+namespace Adamantium.ImagingTests;
+
+/// <summary>JPEG 2000 files OpenJPEG wrote, read against what OpenJPEG reads from them (see make-assets.py): the
+/// reversible ones to the bit, the irreversible ones within the rounding of the 9-7 wavelet.</summary>
+[TestFixture]
+public class Jpeg2000DecoderTests
+{
+    private const long MaxPixels = 1 << 24;
+
+    private static string Folder() => TestAssets.Path("Jpeg2000");
+
+    private static IEnumerable<string> EightBit() =>
+        Directory.GetFiles(Folder(), "*.rgba8").Select(Path.GetFileNameWithoutExtension).Order();
+
+    [TestCaseSource(nameof(EightBit))]
+    public void ReadsAsOpenJpegReadsIt(string name)
+    {
+        var path = Path.Combine(Folder(), name + ".jp2");
+        if (!File.Exists(path))
+        {
+            path = Path.ChangeExtension(path, ".j2k");
+        }
+
+        var image = Jpeg2000Decoder.Decode(File.ReadAllBytes(path), MaxPixels);
+        var expected = File.ReadAllBytes(Path.Combine(Folder(), name + ".rgba8"));
+        var actual = Rgba(image);
+
+        Assert.That((image.Width, image.Height), Is.EqualTo((157, 93)));
+        var tolerance = name is "rgb-layers" or "rgb-all-modes-layers" || name.Contains("lossy") ? 1 : 0;
+        Assert.That(MaxDifference(actual, expected), Is.LessThanOrEqualTo(tolerance));
+    }
+
+    [Test]
+    public void SixteenBitGrayReadsToEightBits()
+    {
+        var image = Jpeg2000Decoder.Decode(File.ReadAllBytes(Path.Combine(Folder(), "gray16-lossless.jp2")),
+            MaxPixels);
+        var deep = File.ReadAllBytes(Path.Combine(Folder(), "gray16-lossless.gray16"));
+        var expected = new byte[deep.Length / 2];
+        for (var i = 0; i < expected.Length; i++)
+        {
+            var value = deep[2 * i] | (deep[2 * i + 1] << 8);
+            expected[i] = (byte)((value * 255 + 32767) / 65535);
+        }
+
+        Assert.That(image.Channels, Is.EqualTo(1));
+        Assert.That(image.Samples, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ColorSpaceAndOpacityComeFromTheFile()
+    {
+        var rgb = Jpeg2000Decoder.Decode(File.ReadAllBytes(Path.Combine(Folder(), "rgb-lossless.jp2")), MaxPixels);
+        var gray = Jpeg2000Decoder.Decode(File.ReadAllBytes(Path.Combine(Folder(), "gray-lossless.jp2")), MaxPixels);
+        var bare = Jpeg2000Decoder.Decode(File.ReadAllBytes(Path.Combine(Folder(), "rgb-codestream.j2k")),
+            MaxPixels);
+
+        Assert.That((rgb.ColorSpace, rgb.ColorChannels, rgb.HasAlpha), Is.EqualTo((Jpeg2000ColorSpace.Srgb, 3, false)));
+        Assert.That((gray.ColorSpace, gray.ColorChannels), Is.EqualTo((Jpeg2000ColorSpace.Gray, 1)));
+        Assert.That((bare.ColorSpace, bare.ColorChannels), Is.EqualTo((Jpeg2000ColorSpace.Unknown, 3)));
+    }
+
+    [Test]
+    public void ImageBiggerThanTheLimitIsRefused()
+    {
+        var data = File.ReadAllBytes(Path.Combine(Folder(), "rgb-lossless.jp2"));
+
+        Assert.Throws<InvalidDataException>(() => Jpeg2000Decoder.Decode(data, 1000));
+    }
+
+    [TestCase("rgb-lossless.jp2")]
+    [TestCase("rgb-layers.jp2")]
+    [TestCase("rgb-tiles-offset.jp2")]
+    [TestCase("rgb-rpcl.jp2")]
+    public void MutatedFilesFailOnlyAsPromised(string name)
+    {
+        var file = File.ReadAllBytes(Path.Combine(Folder(), name));
+        var random = new Random(name.Length);
+        for (var run = 0; run < 300; run++)
+        {
+            var mutated = (byte[])file.Clone();
+            for (var i = 0; i < 4; i++)
+            {
+                mutated[random.Next(mutated.Length)] = (byte)random.Next(256);
+            }
+
+            if (run % 10 == 0)
+            {
+                Array.Resize(ref mutated, random.Next(mutated.Length));
+            }
+
+            try
+            {
+                Jpeg2000Decoder.Decode(mutated, MaxPixels);
+            }
+            catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
+            {
+            }
+        }
+    }
+
+    [Test]
+    public void DeeplyNestedBoxesAreRefusedWithoutRecursion()
+    {
+        var file = new MemoryStream();
+        file.Write([0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20, 0x0D, 0x0A, 0x87, 0x0A]);
+        for (var i = 0; i < 300000; i++)
+        {
+            file.Write([0, 0, 0, 0, 0x6A, 0x70, 0x32, 0x68]);
+        }
+
+        Assert.Throws<InvalidDataException>(() => Jpeg2000Decoder.Decode(file.ToArray(), MaxPixels));
+    }
+
+    [TestCase(2000, 1, 1024, 32, 1)]
+    [TestCase(1, 1, 64, 0, 65535)]
+    public void TinyCodestreamsAskingForHugeWorkStopFast(int tiles, int height, int components, int levels,
+        int layers)
+    {
+        var data = Codestream(tiles, height, components, levels, layers);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            Jpeg2000Decoder.Decode(data, MaxPixels);
+        }
+        catch (InvalidDataException)
+        {
+        }
+
+        Assert.That(watch.Elapsed.TotalSeconds, Is.LessThan(5));
+    }
+
+    private static byte[] Codestream(int tiles, int height, int components, int levels, int layers)
+    {
+        var output = new MemoryStream();
+        void U16(int value) => output.Write([(byte)(value >> 8), (byte)value]);
+        void U32(long value) => output.Write([(byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value]);
+        U16(0xFF4F);
+        U16(0xFF51);
+        U16(38 + 3 * components);
+        U16(0);
+        U32(tiles);
+        U32(height);
+        U32(0);
+        U32(0);
+        U32(1);
+        U32(height);
+        U32(0);
+        U32(0);
+        U16(components);
+        for (var c = 0; c < components; c++)
+        {
+            output.Write([7, 1, 1]);
+        }
+
+        U16(0xFF52);
+        U16(12);
+        output.WriteByte(0);
+        output.WriteByte(0);
+        U16(layers);
+        output.WriteByte(0);
+        output.Write([(byte)levels, 4, 4, 0, 1]);
+        U16(0xFF5C);
+        U16(3 + 3 * levels + 1);
+        output.WriteByte(0x40);
+        for (var i = 0; i < 3 * levels + 1; i++)
+        {
+            output.WriteByte(8 << 3);
+        }
+
+        for (var t = 0; t < tiles; t++)
+        {
+            U16(0xFF90);
+            U16(10);
+            U16(t);
+            U32(14);
+            output.Write([0, 1]);
+            U16(0xFF93);
+        }
+
+        U16(0xFFD9);
+        return output.ToArray();
+    }
+
+    private static byte[] Rgba(Jpeg2000Image image)
+    {
+        var rgba = new byte[image.Width * image.Height * 4];
+        var channels = image.Channels;
+        for (var i = 0; i < image.Width * image.Height; i++)
+        {
+            for (var c = 0; c < 3; c++)
+            {
+                rgba[4 * i + c] = image.Samples[i * channels + (image.ColorChannels == 1 ? 0 : c)];
+            }
+
+            rgba[4 * i + 3] = image.HasAlpha ? image.Samples[i * channels + channels - 1] : (byte)255;
+        }
+
+        return rgba;
+    }
+
+    private static int MaxDifference(byte[] a, byte[] b)
+    {
+        var most = 0;
+        for (var i = 0; i < a.Length; i++)
+        {
+            most = Math.Max(most, Math.Abs(a[i] - b[i]));
+        }
+
+        return most;
+    }
+}

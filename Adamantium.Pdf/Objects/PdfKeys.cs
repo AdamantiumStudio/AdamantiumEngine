@@ -66,6 +66,12 @@ internal static class PdfKeys
     public const string Columns = "Columns";
     public const string EarlyChange = "EarlyChange";
 
+    public const string K = "K";
+    public const string EncodedByteAlign = "EncodedByteAlign";
+    public const string BlackIs1 = "BlackIs1";
+    public const string JBIG2Globals = "JBIG2Globals";
+    public const string SMaskInData = "SMaskInData";
+
     public const string FunctionType = "FunctionType";
     public const string Domain = "Domain";
     public const string C0 = "C0";
