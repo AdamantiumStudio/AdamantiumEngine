@@ -113,6 +113,36 @@ public sealed class PdfStandardSecurityHandler
         };
     }
 
+    /// <summary>Encrypts a string's or a stream's bytes of the object <paramref name="id"/> as the file does - for an
+    /// object written into it; AES behind a random initialization vector.</summary>
+    public byte[] Encrypt(PdfObjectId id, ReadOnlySpan<byte> data, PdfCryptMethod method)
+    {
+        if (_fileKey == null)
+        {
+            throw new PdfException("The file is encrypted and no password has opened it.");
+        }
+
+        return method switch
+        {
+            PdfCryptMethod.Rc4 => PdfRc4.Transform(ObjectKey(id, false), data),
+            PdfCryptMethod.Aes128 => EncryptAes(ObjectKey(id, true), data),
+            PdfCryptMethod.Aes256 => EncryptAes(_fileKey, data),
+            _ => data.ToArray(),
+        };
+    }
+
+    private static byte[] EncryptAes(byte[] key, ReadOnlySpan<byte> data)
+    {
+        using var aes = Aes.Create();
+        aes.Key = key;
+        var iv = RandomNumberGenerator.GetBytes(16);
+        var cipher = aes.EncryptCbc(data, iv, PaddingMode.PKCS7);
+        var result = new byte[16 + cipher.Length];
+        iv.CopyTo(result, 0);
+        cipher.CopyTo(result, 16);
+        return result;
+    }
+
     private PdfCryptMethod MethodOf(PdfObject filterName)
     {
         if (Version < 4)

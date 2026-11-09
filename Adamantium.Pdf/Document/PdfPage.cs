@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.Pdf.Annotations;
+using Adamantium.Pdf.Measurement;
 using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.Document;
@@ -35,6 +37,10 @@ public sealed class PdfPage
 
     /// <summary>Where the page stands in the document, from zero.</summary>
     public int Index { get; }
+
+    /// <summary>The page's object, through which it is changed (<see cref="Writing.PdfIncrementalUpdate"/>); null for
+    /// a page written directly into its parent, which a file should not do.</summary>
+    public PdfObjectId? Id { get; internal init; }
 
     public PdfDictionary Dictionary { get; }
 
@@ -91,18 +97,20 @@ public sealed class PdfPage
         }
     }
 
-    public IReadOnlyList<PdfDictionary> Annotations
+    /// <summary>The page's annotations (<c>/Annots</c>), in their order; entries that are not dictionaries left out.
+    /// </summary>
+    public IReadOnlyList<PdfAnnotation> Annotations
     {
         get
         {
-            var annotations = new List<PdfDictionary>();
+            var annotations = new List<PdfAnnotation>();
             if (_document.Resolve(Dictionary[PdfKeys.Annots]) is PdfArray array)
             {
                 foreach (var item in array)
                 {
                     if (_document.Resolve(item) is PdfDictionary annotation)
                     {
-                        annotations.Add(annotation);
+                        annotations.Add(new PdfAnnotation(annotation, (item as PdfReference)?.Id, _document));
                     }
                 }
             }
@@ -110,6 +118,9 @@ public sealed class PdfPage
             return annotations;
         }
     }
+
+    /// <summary>The regions of the page with a scale of their own (<c>/VP</c>), in their order.</summary>
+    public IReadOnlyList<PdfViewport> Viewports => PdfViewport.ListFrom(Dictionary[PdfKeys.Viewports], _document);
 
     /// <summary>The content streams decoded and joined, a line break between pieces so that a token cut at a seam
     /// stays two tokens. A piece that cannot be decoded is left out; one past the decode limit throws

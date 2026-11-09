@@ -62,6 +62,16 @@ All packages share one version.
   only when it cannot be read), device colors with no `Default` space through the document's output intent, and a
   JPEG 2000 image with no `/ColorSpace` through the profile it holds - relative colorimetric with black point
   compensation, as a reader shows a page.
+- `Adamantium.Pdf` writes changes after a file's bytes (`PdfIncrementalUpdate`): objects added, replaced and freed,
+  a cross-reference section of the kind the file's last one is, a whole one for a repaired file, new objects of an
+  encrypted file encrypted as its others (RC4, AES-128, AES-256). Annotations are added to a page, replaced and taken
+  off (`AddAnnotation`, `ReplaceAnnotation`, `RemoveAnnotation`, `PdfNewAnnotation`), with their appearance built by
+  `PdfContentBuilder` and a developer extension's data under its own key; the catalog declares the extension
+  (`DeclareExtension`). `PdfPage.Annotations` reads a page's annotations with their objects (`PdfAnnotation`), and
+  `PdfPage.Viewports` its scaled regions.
+- Measurement in `Adamantium.Pdf` (`PdfMeasure`, `PdfNumberFormat`, `PdfViewport`): rectilinear measure, number format
+  and viewport dictionaries read and written, a displacement or an area of user space turned into the drawing's units
+  and written through a chain of them - feet, then inches - and a scale from a calibration (`PdfMeasure.Scaled`).
 
 - `SharedSurface.WriteRegions`: a producer whose frames are on the CPU writes the rectangles that changed into a surface
   it shares with a consumer on the same device (`CreateInDevice`) - submitted on its own, once the consumer has given
@@ -179,6 +189,10 @@ All packages share one version.
 
 ### Fixed
 
+- `Adamantium.Pdf`: an object a later update deleted - its free entry's generation raised - reads as null, as
+  ISO 32000-2 says, rather than being found again by scanning the file; a free entry of generation 0 or 65535, as a
+  damaged table's misplaced line has, still lets the object be looked for. In a hybrid file the `/XRefStm` stream's
+  entries take the place of the table's free ones for the same objects.
 - A damaged font no longer hangs its reader, blows up its memory or is drawn from garbage: reading past the end of its
   data or before its start fails instead of giving 0xFF bytes (a composite glyph read on for ever); glyphs whose loca
   entries point outside glyf are invalid; a composite glyph nests at most 32 deep, holds at most 65535 points and skips

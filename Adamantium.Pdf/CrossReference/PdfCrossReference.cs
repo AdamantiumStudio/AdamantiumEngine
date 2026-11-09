@@ -26,8 +26,8 @@ public sealed class PdfCrossReference
 
     public bool TryGet(int number, out PdfCrossReferenceEntry entry) => _entries.TryGetValue(number, out entry);
 
-    /// <summary>Adds the entry unless a newer section gave one already.</summary>
-    internal void AddOlder(int number, PdfCrossReferenceEntry entry) => _entries.TryAdd(number, entry);
+    /// <summary>Adds the entry unless a newer section gave one already; whether it was added.</summary>
+    internal bool AddOlder(int number, PdfCrossReferenceEntry entry) => _entries.TryAdd(number, entry);
 
     internal void Set(int number, PdfCrossReferenceEntry entry) => _entries[number] = entry;
 

@@ -17,18 +17,18 @@ internal sealed class PdfPageTree
         }
 
         var visited = new HashSet<PdfDictionary>(ReferenceEqualityComparer.Instance);
-        var pending = new Stack<(PdfDictionary Node, PdfInheritedAttributes Inherited)>();
-        pending.Push((root, default));
+        var pending = new Stack<(PdfDictionary Node, PdfInheritedAttributes Inherited, PdfObjectId? Id)>();
+        pending.Push((root, default, (document.Catalog?[PdfKeys.Pages] as PdfReference)?.Id));
         visited.Add(root);
         while (pending.Count > 0)
         {
-            var (node, above) = pending.Pop();
+            var (node, above, id) = pending.Pop();
             var inherited = above.Below(node);
             var kids = document.Resolve(node[PdfKeys.Kids]) as PdfArray;
             var type = (document.Resolve(node[PdfKeys.Type]) as PdfName)?.Value;
             if (type == PdfObjectTypes.Page || kids == null)
             {
-                pages.Add(new PdfPage(document, pages.Count, node, inherited));
+                pages.Add(new PdfPage(document, pages.Count, node, inherited) { Id = id });
                 continue;
             }
 
@@ -36,7 +36,7 @@ internal sealed class PdfPageTree
             {
                 if (document.Resolve(kids[i]) is PdfDictionary kid && visited.Add(kid))
                 {
-                    pending.Push((kid, inherited));
+                    pending.Push((kid, inherited, (kids[i] as PdfReference)?.Id));
                 }
             }
         }

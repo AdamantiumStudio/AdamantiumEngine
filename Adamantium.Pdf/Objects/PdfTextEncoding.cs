@@ -42,6 +42,59 @@ public static class PdfTextEncoding
         return new string(chars);
     }
 
+    /// <summary>The bytes of <paramref name="text"/> as a text string: PDFDocEncoding when every character has a byte
+    /// there and the bytes do not begin as a byte order mark would, UTF-16BE after its byte order mark otherwise.
+    /// </summary>
+    public static byte[] Encode(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var bytes = new byte[text.Length];
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (!TryToDocEncoding(text[i], out bytes[i]))
+            {
+                return Unicode(text);
+            }
+        }
+
+        return bytes is [0xFE, 0xFF, ..] or [0xEF, 0xBB, 0xBF, ..] ? Unicode(text) : bytes;
+    }
+
+    private static byte[] Unicode(string text)
+    {
+        var unicode = new byte[2 + 2 * text.Length];
+        (unicode[0], unicode[1]) = (0xFE, 0xFF);
+        Encoding.BigEndianUnicode.GetBytes(text, unicode.AsSpan(2));
+        return unicode;
+    }
+
+    private static bool TryToDocEncoding(char character, out byte value)
+    {
+        value = 0;
+        if (character is (>= ' ' and < (char)0x7F) or '\t' or '\n' or '\r' ||
+            character is >= (char)0xA1 and <= (char)0xFF and not (char)0xAD)
+        {
+            value = (byte)character;
+            return true;
+        }
+
+        var high = Array.IndexOf(DocEncodingHigh, character);
+        if (high >= 0 && character != '�')
+        {
+            value = (byte)(0x80 + high);
+            return true;
+        }
+
+        var accent = Array.IndexOf(DocEncodingAccents, character);
+        if (accent >= 0)
+        {
+            value = (byte)(0x18 + accent);
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>The character a PDFDocEncoding byte stands for.</summary>
     public static char FromDocEncoding(byte value)
     {
