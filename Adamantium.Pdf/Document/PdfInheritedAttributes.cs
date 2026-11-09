@@ -11,8 +11,8 @@ internal readonly record struct PdfInheritedAttributes(
     PdfObject Rotate)
 {
     public PdfInheritedAttributes Below(PdfDictionary node) => new(
-        node["Resources"] ?? Resources,
-        node["MediaBox"] ?? MediaBox,
-        node["CropBox"] ?? CropBox,
-        node["Rotate"] ?? Rotate);
+        node[PdfKeys.Resources] ?? Resources,
+        node[PdfKeys.MediaBox] ?? MediaBox,
+        node[PdfKeys.CropBox] ?? CropBox,
+        node[PdfKeys.Rotate] ?? Rotate);
 }
