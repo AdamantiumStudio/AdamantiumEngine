@@ -4,6 +4,7 @@ using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Adamantium.Imaging.Ccitt;
 using Adamantium.Imaging.Jpeg;
 
 namespace Adamantium.Imaging.Tiff;
@@ -289,9 +290,7 @@ internal sealed class TiffChunkDecoder
             case TiffCompression.CcittRle:
             case TiffCompression.CcittGroup3:
             case TiffCompression.CcittGroup4:
-                output.Clear();
-                TiffCcitt.Decode(input, output, _layout.ChunkWidth, _layout.Compression,
-                    _layout.Directory.GetUnsigned(TiffTag.T4Options, 0));
+                CcittDecoder.Decode(input, output, CcittOptionsOf(_layout));
                 return output.Length;
             case TiffCompression.Jpeg:
                 output.Clear();
@@ -310,6 +309,19 @@ internal sealed class TiffChunkDecoder
                 throw new NotSupportedException($"TIFF compression {_layout.Compression} is not read.");
         }
     }
+
+    private static CcittOptions CcittOptionsOf(TiffLayout layout) => new()
+    {
+        K = layout.Compression switch
+        {
+            TiffCompression.CcittGroup4 => -1,
+            TiffCompression.CcittGroup3 => (layout.Directory.GetUnsigned(TiffTag.T4Options, 0) & 1) != 0 ? 1 : 0,
+            _ => 0,
+        },
+        Columns = layout.ChunkWidth,
+        EncodedByteAlign = layout.Compression == TiffCompression.CcittRle,
+        BlackIs1 = true,
+    };
 
     private void ToNative(Span<byte> packed, Span<byte> native, int count)
     {

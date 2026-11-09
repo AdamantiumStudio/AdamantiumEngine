@@ -3,3 +3,9 @@ Adamantium.Fonts/Data/*.ucd text eol=lf
 
 # Adobe's glyph lists and CMap resources, embedded byte for byte as Adobe publishes them.
 Adamantium.Pdf/Fonts/Data/** -text
+
+# JPEG 2000 test files and the pixels they decode to.
+Tests/TestAssets/Jpeg2000/*.jp2 binary
+Tests/TestAssets/Jpeg2000/*.j2k binary
+Tests/TestAssets/Jpeg2000/*.rgba8 binary
+Tests/TestAssets/Jpeg2000/*.gray16 binary

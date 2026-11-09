@@ -1,19 +1,21 @@
-using System.Collections.Generic;
-
-namespace Adamantium.Imaging.Tiff;
+namespace Adamantium.Imaging.Ccitt;
 
 /// <summary>The run-length codes of CCITT fax (ITU-T T.4, tables 1 to 3): terminating codes for runs of 0 to 63,
-/// make-up codes for multiples of 64, and the extended make-up codes both colors share.</summary>
-internal static class TiffCcittCodes
+/// make-up codes for multiples of 64, and the extended make-up codes both colors share. Each table is looked up by
+/// the next <see cref="Bits"/> bits; an entry is the run shifted left by 4 over the code's length, 0 for no code.
+/// </summary>
+internal static class CcittCodes
 {
+    /// <summary>The bits a run table is looked up by - the longest code.</summary>
+    public const int Bits = 13;
     private static readonly string[] Extended =
     [
         "00000001000", "00000001100", "00000001101", "000000010010", "000000010011", "000000010100", "000000010101",
         "000000010110", "000000010111", "000000011100", "000000011101", "000000011110", "000000011111"
     ];
 
-    /// <summary>White runs by code: the key is the code's bits with a leading 1 marking its length.</summary>
-    public static readonly Dictionary<int, int> White = Build(
+    /// <summary>White runs by the next <see cref="Bits"/> bits.</summary>
+    public static readonly ushort[] White = Build(
     [
         "00110101", "000111", "0111", "1000", "1011", "1100", "1110", "1111", "10011", "10100", "00111", "01000",
         "001000", "000011", "110100", "110101", "101010", "101011", "0100111", "0001100", "0001000", "0010111",
@@ -30,8 +32,8 @@ internal static class TiffCcittCodes
         "010011011"
     ]);
 
-    /// <summary>Black runs by code, keyed as <see cref="White"/>.</summary>
-    public static readonly Dictionary<int, int> Black = Build(
+    /// <summary>Black runs by the next <see cref="Bits"/> bits.</summary>
+    public static readonly ushort[] Black = Build(
     [
         "0000110111", "010", "11", "10", "011", "0011", "0010", "00011", "000101", "000100", "0000100", "0000101",
         "0000111", "00000100", "00000111", "000011000", "0000010111", "0000011000", "0000001000", "00001100111",
@@ -52,31 +54,28 @@ internal static class TiffCcittCodes
         "0000001011011", "0000001100100", "0000001100101"
     ]);
 
-    /// <summary>The key of the code <paramref name="bits"/>, <paramref name="length"/> bits long.</summary>
-    public static int Key(int bits, int length) => (1 << length) | bits;
-
-    private static Dictionary<int, int> Build(string[] terminating, string[] makeUp)
+    private static ushort[] Build(string[] terminating, string[] makeUp)
     {
-        var codes = new Dictionary<int, int>();
+        var table = new ushort[1 << Bits];
         for (var run = 0; run < terminating.Length; run++)
         {
-            codes[KeyOf(terminating[run])] = run;
+            Add(table, terminating[run], run);
         }
 
         for (var i = 0; i < makeUp.Length; i++)
         {
-            codes[KeyOf(makeUp[i])] = (i + 1) * 64;
+            Add(table, makeUp[i], (i + 1) * 64);
         }
 
         for (var i = 0; i < Extended.Length; i++)
         {
-            codes[KeyOf(Extended[i])] = 1792 + i * 64;
+            Add(table, Extended[i], 1792 + i * 64);
         }
 
-        return codes;
+        return table;
     }
 
-    private static int KeyOf(string code)
+    private static void Add(ushort[] table, string code, int run)
     {
         var bits = 0;
         foreach (var c in code)
@@ -84,6 +83,11 @@ internal static class TiffCcittCodes
             bits = (bits << 1) | (c - '0');
         }
 
-        return Key(bits, code.Length);
+        var first = bits << (Bits - code.Length);
+        var last = (bits + 1) << (Bits - code.Length);
+        for (var i = first; i < last; i++)
+        {
+            table[i] = (ushort)((run << 4) | code.Length);
+        }
     }
 }

@@ -25,6 +25,18 @@
         <Content Include="..\Adamantium.FontTests\OTFFonts\SourceSans3-Regular.otf" Link="Fonts\SourceSans3-Regular.otf">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="..\TestAssets\Jpeg2000\rgba-lossless.jp2" Link="Jpeg2000\rgba-lossless.jp2">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="..\TestAssets\Jpeg2000\rgba-lossless.rgba8" Link="Jpeg2000\rgba-lossless.rgba8">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <!-- The JBIG2 writer of the imaging tests makes the JBIG2 the image tests embed. -->
+    <ItemGroup>
+        <Compile Include="..\Adamantium.ImagingTests\MqEncoder.cs" Link="Jbig2\MqEncoder.cs" />
+        <Compile Include="..\Adamantium.ImagingTests\Jbig2Writer.cs" Link="Jbig2\Jbig2Writer.cs" />
     </ItemGroup>
 
 </Project>
