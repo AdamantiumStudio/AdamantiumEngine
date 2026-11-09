@@ -39,6 +39,12 @@ All packages share one version.
 - `Jpeg2000Decoder` in `Adamantium.Imaging`: JPEG 2000 part 1, JP2 files and bare codestreams - every progression and
   POC, tiles, precincts, packed packet headers, every code-block style, both wavelets and component transforms, regions
   of interest, subsampled components, palettes and channel definitions; a codestream that ends early draws what it has.
+- JPEG 2000 decodes a part of itself: fewer resolutions, fewer quality layers, or both
+  (`Jpeg2000Options.DiscardLevels`, `Jpeg2000Options.Layers`), reading and decoding only what they need; the image
+  says what it has (`Jpeg2000Image.Levels`, `Layers`, `CodedBytes`, `CodedBytesUsed`). `BitmapLoader` reads `.jp2` and
+  `.j2k` files as a `Jpeg2000Bitmap`, its resolutions as mip levels and its layers as quality levels.
+- `IRawBitmap.QualityLevelsCount` and `IRawBitmap.GetLevelData(mip, quality)`: the qualities a picture's data holds,
+  one for every format but JPEG 2000.
 - `Jbig2Decoder` in `Adamantium.Imaging`: JBIG2 - generic, refinement, text and halftone regions, symbol and pattern
   dictionaries, standard and custom Huffman tables, pages of unknown height, embedded streams with their globals and
   JBIG2 files.

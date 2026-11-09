@@ -17,6 +17,9 @@ internal sealed class J2kSegment
 
     public int Passes { get; set; }
 
+    /// <summary>The passes of the layers being decoded, the first ones of the segment.</summary>
+    public int KeptPasses { get; set; }
+
     public int Length => (int)_data.Length;
 
     public void Add(byte[] data, int start, int length) => _data.Write(data, start, length);

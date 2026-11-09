@@ -36,6 +36,9 @@ internal sealed class J2kCodeBlock
 
     public int Passes { get; set; }
 
+    /// <summary>The passes of the resolutions and layers being decoded.</summary>
+    public int KeptPasses { get; set; }
+
     public List<J2kSegment> Segments { get; } = [];
 
     /// <summary>Whether coding pass <paramref name="pass"/> starts a codeword segment under the block style

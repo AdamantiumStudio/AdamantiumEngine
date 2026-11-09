@@ -18,21 +18,32 @@ internal sealed class J2kTile
     private readonly J2kCodingStyle _coding;
     private readonly (int X0, int Y0, int X1, int Y1) _bounds;
     private readonly J2kLimits _limits;
+    private readonly int _layers;
 
     private J2kTile(J2kTileComponent[] components, J2kCodingStyle coding, (int, int, int, int) bounds,
-        J2kLimits limits)
+        J2kLimits limits, int layers)
     {
         _components = components;
         _coding = coding;
         _bounds = bounds;
         _limits = limits;
+        _layers = layers;
     }
 
     public (int X0, int Y0, int X1, int Y1) Bounds => _bounds;
 
     public J2kTileComponent[] Components => _components;
 
-    public static J2kTile Decode(J2kCodestream codestream, J2kTileData data, J2kLimits limits)
+    /// <summary>The bytes of code-block data the tile's packets hold.</summary>
+    public long CodedBytes { get; private set; }
+
+    /// <summary>The bytes of code-block data the decoded resolutions and layers took.</summary>
+    public long CodedBytesUsed { get; private set; }
+
+    /// <summary>Decodes a tile without its <paramref name="discard"/> highest resolutions and with its first
+    /// <paramref name="layers"/> quality layers, 0 for all.</summary>
+    public static J2kTile Decode(J2kCodestream codestream, J2kTileData data, J2kLimits limits, int discard,
+        int layers)
     {
         var size = codestream.SizeInfo;
         var main = codestream.Main;
@@ -44,9 +55,10 @@ internal sealed class J2kTile
         {
             components[c] = new J2kTileComponent(c, size.Components[c], data.Markers.ComponentStyle(c, main),
                 data.Markers.Quantization(c, main), data.Markers.RoiShift(c, main), bounds, limits);
+            components[c].Top = components[c].Style.Levels - Math.Min(discard, components[c].Style.Levels);
         }
 
-        var tile = new J2kTile(components, coding, bounds, limits);
+        var tile = new J2kTile(components, coding, bounds, limits, layers > 0 ? layers : int.MaxValue);
         tile.ReadPackets(data, data.Markers.ProgressionChanges(main));
         tile.Reconstruct();
         return tile;
@@ -86,6 +98,7 @@ internal sealed class J2kTile
             bodyBits.SkipMarker(StartOfPacket, 6);
         }
 
+        var keep = packet.Layer < _layers && packet.Resolution <= component.Top;
         var contributions = new List<(J2kSegment Segment, int Length)>();
         var bit = header.ReadBit();
         if (bit == 1)
@@ -94,7 +107,7 @@ internal sealed class J2kTile
             {
                 for (var i = 0; i < part.Blocks.Length; i++)
                 {
-                    ReadBlockHeader(part, i, packet.Layer, header, component.Style, contributions);
+                    ReadBlockHeader(part, i, packet.Layer, header, component.Style, keep, contributions);
                 }
             }
         }
@@ -109,9 +122,11 @@ internal sealed class J2kTile
         foreach (var (segment, length) in contributions)
         {
             var take = Math.Min(length, body.Length - at);
-            if (take > 0)
+            CodedBytes += Math.Max(0, take);
+            if (take > 0 && keep)
             {
                 segment.Add(body, at, take);
+                CodedBytesUsed += take;
             }
 
             at += Math.Max(0, take);
@@ -125,7 +140,7 @@ internal sealed class J2kTile
     }
 
     private static void ReadBlockHeader(J2kPrecinctBand part, int index, int layer, J2kHeaderBits header,
-        J2kComponentStyle style, List<(J2kSegment, int)> contributions)
+        J2kComponentStyle style, bool keep, List<(J2kSegment, int)> contributions)
     {
         var block = part.Blocks[index];
         bool included;
@@ -189,6 +204,12 @@ internal sealed class J2kTile
 
             var length = header.ReadBits(bits);
             segment.Passes += count;
+            if (keep)
+            {
+                segment.KeptPasses += count;
+                block.KeptPasses += count;
+            }
+
             contributions.Add((segment, length));
             pass += count;
             left -= count;
@@ -236,8 +257,9 @@ internal sealed class J2kTile
         var blocks = new List<(J2kCodeBlock Block, J2kBand Band, J2kTileComponent Component)>();
         foreach (var component in _components)
         {
-            foreach (var resolution in component.Resolutions)
+            for (var r = 0; r <= component.Top; r++)
             {
+                var resolution = component.Resolutions[r];
                 foreach (var band in resolution.Bands)
                 {
                     var count = (long)band.Width * band.Height;
@@ -263,7 +285,7 @@ internal sealed class J2kTile
                     {
                         foreach (var block in part.Blocks)
                         {
-                            if (block.Included)
+                            if (block.KeptPasses > 0)
                             {
                                 blocks.Add((block, part.Band, component));
                             }
@@ -292,7 +314,7 @@ internal sealed class J2kTile
 
         foreach (var component in _components)
         {
-            component.Samples = component.Width > 0 && component.Height > 0
+            component.Samples = component.OutputWidth > 0 && component.OutputHeight > 0
                 ? J2kWavelet.Inverse(component)
                 : [];
         }

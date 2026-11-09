@@ -8,6 +8,7 @@ using Adamantium.Imaging.Dds;
 using Adamantium.Imaging.Gif;
 using Adamantium.Imaging.Ico;
 using Adamantium.Imaging.Jpeg;
+using Adamantium.Imaging.Jpeg2000;
 using Adamantium.Imaging.Png;
 using Adamantium.Imaging.Tga;
 using Adamantium.Imaging.Tiff;
@@ -36,6 +37,7 @@ public static class BitmapLoader
         Register(ImageFileType.Jpg, JpegHelper.LoadFromMemory, JpegHelper.SaveToStream);
         Register(ImageFileType.Tga, TgaHelper.LoadFromMemory, TgaHelper.SaveToStream);
         Register(ImageFileType.Tiff, TiffHelper.LoadFromMemory, TiffHelper.SaveToStream);
+        Register(ImageFileType.Jpeg2000, Jpeg2000Helper.LoadFromMemory, null);
     }
 
     public static void Register(ImageFileType imageType, ImageLoadDelegate loadDelegate, ImageSaveDelegate saveDelegate)
@@ -112,6 +114,7 @@ public static class BitmapLoader
         [(byte)'D', (byte)'D', (byte)'S', (byte)' ', ..] => ImageFileType.Dds,
         [0xFF, 0xD8, 0xFF, ..] => ImageFileType.Jpg,
         _ when TiffFile.IsTiff(header) => ImageFileType.Tiff,
+        _ when Jpeg2000Helper.IsJpeg2000(header) => ImageFileType.Jpeg2000,
         [0x00, 0x00, 0x01, 0x00, ..] => ImageFileType.Ico,
         _ => ImageFileType.Unknown,
     };

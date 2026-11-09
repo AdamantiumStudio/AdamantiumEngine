@@ -18,7 +18,8 @@ internal static class J2kWavelet
     private const float Delta = 0.443506852043971f;
     private const float K = 1.230174104914001f;
 
-    /// <summary>The samples of the tile-component, row after row.</summary>
+    /// <summary>The samples of the tile-component at its <see cref="J2kTileComponent.Top"/> resolution, row after
+    /// row.</summary>
     public static float[] Inverse(J2kTileComponent component)
     {
         var low = component.Resolutions[0];
@@ -27,7 +28,7 @@ internal static class J2kWavelet
         if (component.Style.Reversible)
         {
             var image = (int[])low.Bands[0].Integers.Clone();
-            for (var r = 1; r < component.Resolutions.Length; r++)
+            for (var r = 1; r <= component.Top; r++)
             {
                 var resolution = component.Resolutions[r];
                 image = Interleave(image, width, resolution, band => band.Integers);
@@ -50,7 +51,7 @@ internal static class J2kWavelet
         }
 
         var reals = (float[])low.Bands[0].Values.Clone();
-        for (var r = 1; r < component.Resolutions.Length; r++)
+        for (var r = 1; r <= component.Top; r++)
         {
             var resolution = component.Resolutions[r];
             reals = Interleave(reals, width, resolution, band => band.Values);

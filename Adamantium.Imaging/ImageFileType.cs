@@ -48,7 +48,12 @@
         /// <summary>
         /// An ICO File.
         /// </summary>
-        Ico
+        Ico,
+
+        /// <summary>
+        /// A JPEG 2000 file or codestream, read only.
+        /// </summary>
+        Jpeg2000
 
     }
 }
