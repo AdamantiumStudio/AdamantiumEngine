@@ -19,7 +19,45 @@ namespace Adamantium.Fonts.Extensions
                     };
                     return format0;
                 }
-        
+
+                public static CharacterMapFormat2 ReadCharacterMapFormat2(this FontStreamReader reader)
+                {
+                    var format2 = new CharacterMapFormat2
+                    {
+                        Length = reader.ReadUInt16(),
+                        Language = reader.ReadUInt16(),
+                    };
+                    var highestKey = 0;
+                    for (var i = 0; i < format2.SubheaderKeys.Length; i++)
+                    {
+                        format2.SubheaderKeys[i] = reader.ReadUInt16();
+                        highestKey = Math.Max(highestKey, format2.SubheaderKeys[i]);
+                    }
+
+                    var subHeaderCount = highestKey / 8 + 1;
+                    reader.EnsureAvailable(subHeaderCount, 8);
+                    format2.SubHeaders = new CharacterMapSubHeader[subHeaderCount];
+                    for (var i = 0; i < subHeaderCount; i++)
+                    {
+                        format2.SubHeaders[i] = new CharacterMapSubHeader
+                        {
+                            FirstCode = reader.ReadUInt16(),
+                            EntryCount = reader.ReadUInt16(),
+                            IdDelta = reader.ReadInt16(),
+                            IdRangeOffset = reader.ReadUInt16(),
+                        };
+                    }
+
+                    var glyphBytes = format2.Length - (6 + 2 * 256 + 8 * subHeaderCount);
+                    if (glyphBytes < 0)
+                    {
+                        throw new InvalidDataException("A cmap format 2 subtable is shorter than its subheaders.");
+                    }
+
+                    format2.GlyphIdArray = reader.ReadUInt16Array(glyphBytes / 2);
+                    return format2;
+                }
+
                 public static CharacterMapFormat4 ReadCharacterMapFormat4(this FontStreamReader reader)
                 {
                     var format4 = new CharacterMapFormat4();
@@ -64,7 +102,44 @@ namespace Adamantium.Fonts.Extensions
         
                     return format6;
                 }
-        
+
+                public static CharacterMapFormat8 ReadCharacterMapFormat8(this FontStreamReader reader)
+                {
+                    var format8 = new CharacterMapFormat8
+                    {
+                        Reserved = reader.ReadUInt16(),
+                        Length = reader.ReadUInt32(),
+                        Language = reader.ReadUInt32(),
+                    };
+                    reader.ReadBytes(format8.Is32.Length, true).CopyTo(format8.Is32, 0);
+                    format8.NumGroups = reader.ReadUInt32();
+                    reader.EnsureAvailable(format8.NumGroups, 12);
+                    var groups = new SequentialMapGroup[format8.NumGroups];
+                    for (var i = 0; i < groups.Length; ++i)
+                    {
+                        groups[i].StartCharCode = reader.ReadUInt32();
+                        groups[i].EndCharCode = reader.ReadUInt32();
+                        groups[i].StartGlyphId = reader.ReadUInt32();
+                    }
+
+                    format8.Groups = groups.OrderBy(g => g.StartCharCode).ToArray();
+                    return format8;
+                }
+
+                public static CharacterMapFormat10 ReadCharacterMapFormat10(this FontStreamReader reader)
+                {
+                    var format10 = new CharacterMapFormat10
+                    {
+                        Reserved = reader.ReadUInt16(),
+                        Length = reader.ReadUInt32(),
+                        Language = reader.ReadUInt32(),
+                        StartCharCode = reader.ReadUInt32(),
+                        NumChars = reader.ReadUInt32(),
+                    };
+                    format10.GlyphIdArray = reader.ReadUInt16Array((int)Math.Min(format10.NumChars, int.MaxValue));
+                    return format10;
+                }
+
                 public static CharacterMapFormat12 ReadCharacterMapFormat12(this FontStreamReader reader)
                 {
                     var format12 = new CharacterMapFormat12();

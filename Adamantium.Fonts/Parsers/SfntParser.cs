@@ -939,10 +939,16 @@ namespace Adamantium.Fonts.Parsers
             {
                 case 0:
                     return FontReader.ReadCharacterMapFormat0();
+                case 2:
+                    return FontReader.ReadCharacterMapFormat2();
                 case 4:
                     return FontReader.ReadCharacterMapFormat4();
                 case 6:
                     return FontReader.ReadCharacterMapFormat6();
+                case 8:
+                    return FontReader.ReadCharacterMapFormat8();
+                case 10:
+                    return FontReader.ReadCharacterMapFormat10();
                 case 12:
                     return FontReader.ReadCharacterMapFormat12();
                 case 13:

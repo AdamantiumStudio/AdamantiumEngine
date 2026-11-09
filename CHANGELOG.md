@@ -138,8 +138,10 @@ All packages share one version.
   the font's size and glyph count, so a font whose every glyph is costly stays linear; arrays whose count the font gives
   are checked against its data before they are allocated; CFF DICTs and INDEXes are read in linear time, an INDEX
   whose offsets go back is refused and an operator short of operands is an error rather than a crash; a cmap range
-  ending at its type's maximum, or out of order, visits each code once; cmap subtables of formats 2, 8 and 10, which
-  were never mapped, and unknown formats are passed over instead of failing the font.
+  ending at its type's maximum, or out of order, visits each code once; a cmap subtable of an unknown format is passed
+  over instead of failing the font.
+- cmap subtables of formats 2 (the one- and two-byte codes of Japanese, Chinese and Korean encodings), 8 (mixed 16-
+  and 32-bit codes) and 10 (one run of codes) are read and mapped; a font with one used to fail to load.
 - A CFF font's predefined charsets (ISOAdobe, Expert, Expert Subset) and encodings (Standard, Expert) are read, and a
   DICT integer after byte 28 is signed, as the format says.
 - A cmap format 4 segment that maps through glyphIdArray adds its idDelta to the glyph found, as the format says.
