@@ -12,6 +12,14 @@ All packages share one version.
   TIFF predictors, the standard security handler from RC4 to AES-256, the page tree with inherited attributes and page
   labels. A file whose cross-reference is broken is repaired by scanning; nesting, reference loops and decompression
   bombs are refused rather than followed.
+- `Adamantium.Pdf` reads what pages are drawn with: content streams operation by operation, inline images included
+  (`PdfContentReader`); page resources (`PdfResources`); functions of all four types, the PostScript calculator run on
+  an explicit stack (`PdfFunctions`); color spaces from the device ones through CalGray, CalRGB and Lab to ICCBased,
+  Indexed, Separation and DeviceN, each shown in sRGB (`PdfColorSpaces`); and images decoded to RGBA - samples of 1 to
+  16 bits, JPEG, stencil, soft, explicit and color-key masks (`PdfImageDecoder`). CCITT, JPEG 2000 and JBIG2 images
+  are not read yet.
+- `JpegDecoder.DecodeChannels`: a JPEG's own channels - gray, RGB or CMYK, 8 bits each - for a reader that applies a
+  color space of its own, as PDF does with an image's `/Decode` and color space.
 - `Lzw` in `Adamantium.Core.Compression`: the LZW decoder TIFF reads with, now shared by TIFF and PDF, with or without
   the early change of code width.
 

@@ -13,7 +13,8 @@ internal sealed class PdfCrossReferenceReader
 {
     private static readonly HashSet<string> SectionKeys =
     [
-        "Prev", "XRefStm", "Type", "W", "Index", "Length", "Filter", "DecodeParms", "DL",
+        PdfKeys.Prev, PdfKeys.XRefStm, PdfKeys.Type, PdfKeys.W, PdfKeys.Index, PdfKeys.Length, PdfKeys.Filter,
+        PdfKeys.DecodeParms, PdfKeys.DecodedLength,
     ];
 
     private readonly ReadOnlyMemory<byte> _data;
@@ -36,14 +37,14 @@ internal sealed class PdfCrossReferenceReader
     public PdfCrossReference Read()
     {
         var span = _data.Span;
-        HeaderOffset = Math.Max(0, span[..Math.Min(span.Length, 1024)].IndexOf("%PDF-"u8));
-        var startXref = span.LastIndexOf("startxref"u8);
+        HeaderOffset = Math.Max(0, span[..Math.Min(span.Length, 1024)].IndexOf(PdfKeywords.FileHeaderBytes));
+        var startXref = span.LastIndexOf(PdfKeywords.StartXrefBytes);
         if (startXref < 0)
         {
             throw new PdfException("The file has no startxref.");
         }
 
-        _lexer.Position = startXref + "startxref".Length;
+        _lexer.Position = startXref + PdfKeywords.StartXref.Length;
         var offset = _lexer.Next();
         if (offset.Kind != PdfTokenKind.Integer)
         {
@@ -56,16 +57,16 @@ internal sealed class PdfCrossReferenceReader
         while (next >= 0 && visited.Add(next))
         {
             var trailer = ReadSectionAt(next, result);
-            if (trailer["XRefStm"] is PdfInteger hidden && visited.Add(hidden.Value))
+            if (trailer[PdfKeys.XRefStm] is PdfInteger hidden && visited.Add(hidden.Value))
             {
                 ReadSectionAt(hidden.Value, result);
             }
 
             MergeTrailer(result, trailer);
-            next = trailer["Prev"] is PdfInteger previous ? previous.Value : -1;
+            next = trailer[PdfKeys.Prev] is PdfInteger previous ? previous.Value : -1;
         }
 
-        if (result.Trailer["Root"] == null)
+        if (result.Trailer[PdfKeys.Root] == null)
         {
             throw new PdfException("The trailer has no /Root.");
         }
@@ -100,7 +101,7 @@ internal sealed class PdfCrossReferenceReader
 
         _lexer.Position = (int)offset;
         var first = _lexer.Peek();
-        if (first.IsKeyword("xref"))
+        if (first.IsKeyword(PdfKeywords.Xref))
         {
             _lexer.Position = first.End;
             return ReadTable(result);
@@ -109,7 +110,8 @@ internal sealed class PdfCrossReferenceReader
         if (first.Kind == PdfTokenKind.Integer)
         {
             var indirect = _parser.ReadIndirectObject((int)offset);
-            if (indirect?.Value is PdfStream stream && stream.Dictionary["Type"] is PdfName { Value: "XRef" })
+            if (indirect?.Value is PdfStream stream &&
+                stream.Dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.XRef })
             {
                 ReadStream(stream, result);
                 return stream.Dictionary;
@@ -124,7 +126,7 @@ internal sealed class PdfCrossReferenceReader
         while (true)
         {
             var token = _lexer.Next();
-            if (token.IsKeyword("trailer"))
+            if (token.IsKeyword(PdfKeywords.Trailer))
             {
                 return _parser.ReadObject() as PdfDictionary
                        ?? throw new PdfException("The trailer is not a dictionary.");
@@ -149,7 +151,7 @@ internal sealed class PdfCrossReferenceReader
                 }
 
                 var number = (int)(token.Integer + i);
-                var entry = kind.Text == "n"
+                var entry = kind.Text == PdfKeywords.InUse
                     ? new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.InFile, offset.Integer,
                         (int)Math.Clamp(generation.Integer, 0, ushort.MaxValue))
                     : PdfCrossReferenceEntry.Free;
@@ -161,7 +163,7 @@ internal sealed class PdfCrossReferenceReader
     private void ReadStream(PdfStream stream, PdfCrossReference result)
     {
         var dictionary = stream.Dictionary;
-        if (dictionary["W"] is not PdfArray { Count: 3 } widths)
+        if (dictionary[PdfKeys.W] is not PdfArray { Count: 3 } widths)
         {
             throw new PdfException("A cross-reference stream has no /W.");
         }
@@ -184,7 +186,7 @@ internal sealed class PdfCrossReferenceReader
 
         var data = PdfStreamDecoder.Decode(dictionary, stream.Data, PdfDirectResolver.Instance, _limits).Data;
         var ranges = new List<(long Start, long Count)>();
-        if (dictionary["Index"] is PdfArray index)
+        if (dictionary[PdfKeys.Index] is PdfArray index)
         {
             for (var i = 0; i + 1 < index.Count; i += 2)
             {
@@ -196,7 +198,7 @@ internal sealed class PdfCrossReferenceReader
         }
         else
         {
-            ranges.Add((0, dictionary["Size"] is PdfInteger size ? size.Value : data.Length / rowLength));
+            ranges.Add((0, dictionary[PdfKeys.Size] is PdfInteger size ? size.Value : data.Length / rowLength));
         }
 
         var row = 0;

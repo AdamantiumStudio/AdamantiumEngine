@@ -11,7 +11,7 @@ internal sealed class PdfPageTree
     {
         var pages = new List<PdfPage>();
         Pages = pages;
-        if (document.Resolve(document.Catalog?["Pages"]) is not PdfDictionary root)
+        if (document.Resolve(document.Catalog?[PdfKeys.Pages]) is not PdfDictionary root)
         {
             return;
         }
@@ -24,9 +24,9 @@ internal sealed class PdfPageTree
         {
             var (node, above) = pending.Pop();
             var inherited = above.Below(node);
-            var kids = document.Resolve(node["Kids"]) as PdfArray;
-            var type = (document.Resolve(node["Type"]) as PdfName)?.Value;
-            if (type == "Page" || kids == null)
+            var kids = document.Resolve(node[PdfKeys.Kids]) as PdfArray;
+            var type = (document.Resolve(node[PdfKeys.Type]) as PdfName)?.Value;
+            if (type == PdfObjectTypes.Page || kids == null)
             {
                 pages.Add(new PdfPage(document, pages.Count, node, inherited));
                 continue;
