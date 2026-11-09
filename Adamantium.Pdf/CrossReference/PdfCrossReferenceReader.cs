@@ -21,6 +21,8 @@ internal sealed class PdfCrossReferenceReader
     private readonly PdfLexer _lexer;
     private readonly PdfObjectParser _parser;
     private readonly PdfDecodeLimits _limits;
+    private readonly HashSet<int> _freeInSection = [];
+    private bool _readingHidden;
 
     public PdfCrossReferenceReader(ReadOnlyMemory<byte> data, PdfDecodeLimits limits)
     {
@@ -56,10 +58,19 @@ internal sealed class PdfCrossReferenceReader
         long next = offset.Integer;
         while (next >= 0 && visited.Add(next))
         {
+            _freeInSection.Clear();
             var trailer = ReadSectionAt(next, result);
             if (trailer[PdfKeys.XRefStm] is PdfInteger hidden && visited.Add(hidden.Value))
             {
-                ReadSectionAt(hidden.Value, result);
+                _readingHidden = true;
+                try
+                {
+                    ReadSectionAt(hidden.Value, result);
+                }
+                finally
+                {
+                    _readingHidden = false;
+                }
             }
 
             MergeTrailer(result, trailer);
@@ -151,11 +162,14 @@ internal sealed class PdfCrossReferenceReader
                 }
 
                 var number = (int)(token.Integer + i);
+                var kept = (int)Math.Clamp(generation.Integer, 0, ushort.MaxValue);
                 var entry = kind.Text == PdfKeywords.InUse
-                    ? new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.InFile, offset.Integer,
-                        (int)Math.Clamp(generation.Integer, 0, ushort.MaxValue))
-                    : PdfCrossReferenceEntry.Free;
-                result.AddOlder(number, entry);
+                    ? new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.InFile, offset.Integer, kept)
+                    : new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.Free, 0, kept);
+                if (result.AddOlder(number, entry) && entry.Kind == PdfCrossReferenceEntryKind.Free)
+                {
+                    _freeInSection.Add(number);
+                }
             }
         }
     }
@@ -222,9 +236,17 @@ internal sealed class PdfCrossReferenceReader
                         (int)Math.Clamp(third, 0, ushort.MaxValue)),
                     2 => new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.InObjectStream, 0, 0,
                         (int)Math.Clamp(second, 0, int.MaxValue), (int)Math.Clamp(third, 0, int.MaxValue)),
-                    _ => PdfCrossReferenceEntry.Free,
+                    _ => new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.Free, 0,
+                        (int)Math.Clamp(third, 0, ushort.MaxValue)),
                 };
-                result.AddOlder((int)number, entry);
+                if (_readingHidden && _freeInSection.Remove((int)number))
+                {
+                    result.Set((int)number, entry);
+                }
+                else
+                {
+                    result.AddOlder((int)number, entry);
+                }
             }
         }
     }

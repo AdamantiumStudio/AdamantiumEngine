@@ -84,6 +84,16 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     /// <summary>Whether the file's cross-reference was broken and rebuilt by scanning.</summary>
     public bool IsRepaired => _crossReference.IsRepaired;
 
+    /// <summary>The bytes of the file as it was opened.</summary>
+    internal ReadOnlyMemory<byte> Data => _data;
+
+    /// <summary>Where <c>%PDF-</c> starts in <see cref="Data"/>: offsets of a file with bytes before it count from
+    /// there.</summary>
+    internal int HeaderOffset => _headerOffset;
+
+    /// <summary>The cross-reference the objects are found by - the file's, or the one rebuilt by repair.</summary>
+    internal PdfCrossReference CrossReference => _crossReference;
+
     public bool IsEncrypted => _security != null;
 
     /// <summary>Whether the content can be read: the file is not encrypted, or a password has opened it.</summary>
@@ -283,6 +293,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     {
         if (_crossReference.TryGet(number, out var entry))
         {
+            if (IsDeleted(entry) && !_crossReference.IsRepaired)
+            {
+                return null;
+            }
+
             var value = LoadEntry(number, entry, _crossReference);
             if (value != null)
             {
@@ -297,6 +312,9 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
         return _repaired != null && _repaired.TryGet(number, out var found) ? LoadEntry(number, found, _repaired) : null;
     }
+
+    private static bool IsDeleted(PdfCrossReferenceEntry entry) =>
+        entry.Kind == PdfCrossReferenceEntryKind.Free && entry.Generation is > 0 and < ushort.MaxValue;
 
     private PdfObject LoadEntry(int number, PdfCrossReferenceEntry entry, PdfCrossReference crossReference)
     {
@@ -361,36 +379,48 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         return objectStream;
     }
 
-    private ReadOnlyMemory<byte> Decrypt(PdfStream stream)
+    /// <summary>The bytes of <paramref name="stream"/>, a stream of this file, decrypted when the file is encrypted.
+    /// </summary>
+    internal ReadOnlyMemory<byte> Decrypt(PdfStream stream)
     {
         if (_security == null || stream.Id.Number == _encryptNumber)
         {
             return stream.Data;
         }
 
-        var dictionary = stream.Dictionary;
-        if (dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.XRef })
-        {
-            return stream.Data;
-        }
-
-        if (!_security.EncryptsMetadata && dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.Metadata })
+        var method = StreamMethodOf(stream.Dictionary);
+        if (method == PdfCryptMethod.None)
         {
             return stream.Data;
         }
 
         EnsureAuthenticated();
-        var method = _security.StreamMethod;
-        if (FirstFilter(dictionary) == PdfFilterNames.Crypt)
+        return _security.Decrypt(stream.Id, stream.Data.Span, method);
+    }
+
+    /// <summary>How a stream of <paramref name="dictionary"/> is encrypted in this file: not at all for a file that is
+    /// not, a cross-reference stream, metadata the file keeps plain, or a stream whose crypt filter says so.</summary>
+    internal PdfCryptMethod StreamMethodOf(PdfDictionary dictionary)
+    {
+        if (_security == null || dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.XRef })
         {
-            var parameters = Resolve(dictionary[PdfKeys.DecodeParms]);
-            var options = parameters is PdfArray array && array.Count > 0 ? Resolve(array[0]) : parameters;
-            var name = (Resolve((options as PdfDictionary)?[PdfKeys.Name]) as PdfName)?.Value ??
-                       PdfCryptNames.Identity;
-            method = _security.MethodOf(name);
+            return PdfCryptMethod.None;
         }
 
-        return _security.Decrypt(stream.Id, stream.Data.Span, method);
+        if (!_security.EncryptsMetadata && dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.Metadata })
+        {
+            return PdfCryptMethod.None;
+        }
+
+        if (FirstFilter(dictionary) != PdfFilterNames.Crypt)
+        {
+            return _security.StreamMethod;
+        }
+
+        var parameters = Resolve(dictionary[PdfKeys.DecodeParms]);
+        var options = parameters is PdfArray array && array.Count > 0 ? Resolve(array[0]) : parameters;
+        var name = (Resolve((options as PdfDictionary)?[PdfKeys.Name]) as PdfName)?.Value ?? PdfCryptNames.Identity;
+        return _security.MethodOf(name);
     }
 
     private string FirstFilter(PdfDictionary dictionary)

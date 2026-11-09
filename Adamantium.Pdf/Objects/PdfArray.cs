@@ -24,6 +24,8 @@ public sealed class PdfArray : PdfObject, IReadOnlyList<PdfObject>
 
     public void Add(PdfObject item) => _items.Add(item);
 
+    public void RemoveAt(int index) => _items.RemoveAt(index);
+
     public List<PdfObject>.Enumerator GetEnumerator() => _items.GetEnumerator();
 
     IEnumerator<PdfObject> IEnumerable<PdfObject>.GetEnumerator() => _items.GetEnumerator();
