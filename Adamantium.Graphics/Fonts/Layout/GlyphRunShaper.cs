@@ -113,6 +113,20 @@ internal sealed class GlyphRunShaper
                 continue;
             }
 
+            // Hidden text is no glyph: an item of no width for each character, its tabs and line breaks none either.
+            if (IsHidden(attributes))
+            {
+                var hiddenFont = RunFont(_font, attributes, fontSize);
+                var nothing = hiddenFont.GetGlyphByCharacter(' ');
+                for (var c = start; c < end; c++)
+                {
+                    items.Add(new ShapedItem(nothing, HiddenSymbol, c, 0, 0, 0, attributes, hiddenFont,
+                        attributes.FontSize ?? fontSize));
+                }
+
+                continue;
+            }
+
             var language = attributes?.Language ?? options.Language;
             var kerning = attributes?.Kerning ?? options.Kerning;
             var unkerned = kerning == TextKerning.Metrics

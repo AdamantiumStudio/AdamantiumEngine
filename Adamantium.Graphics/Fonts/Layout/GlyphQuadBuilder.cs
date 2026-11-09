@@ -55,8 +55,8 @@ internal sealed class GlyphQuadBuilder
 
         foreach (var word in data)
         {
-            if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null
-                || !InWindow(text, word))
+            if (IsBlank(word.Symbol) || word.Symbol is '\n' or HiddenSymbol
+                || ObjectSizeOf(word.Symbol, word.Attributes) != null || !InWindow(text, word))
             {
                 continue;
             }
@@ -123,8 +123,8 @@ internal sealed class GlyphQuadBuilder
                 lastPosition = word.PositionInString;
             }
 
-            if (IsBlank(word.Symbol) || word.Symbol == '\n' || ObjectSizeOf(word.Symbol, word.Attributes) != null
-                || !InWindow(text, word))
+            if (IsBlank(word.Symbol) || word.Symbol is '\n' or HiddenSymbol
+                || ObjectSizeOf(word.Symbol, word.Attributes) != null || !InWindow(text, word))
             {
                 continue;
             }

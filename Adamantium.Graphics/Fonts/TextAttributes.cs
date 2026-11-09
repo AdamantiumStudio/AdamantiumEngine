@@ -84,6 +84,11 @@ public sealed class TextAttributes
     /// <summary>A reflection below the glyphs; unset takes the layout's <see cref="TextLayout.GlyphReflection"/>.</summary>
     public GlyphReflection Reflection { get; init; }
 
+    /// <summary>Whether the text is laid as nothing, as Word's hidden text: no glyph drawn, no width, no height in its
+    /// line, no tab or line break of its own. Its characters keep their places in the text - the caret before it and
+    /// after it stands at one spot, and steps over it with the character after it as one.</summary>
+    public bool? Hidden { get; init; }
+
     /// <summary>These attributes with every field <paramref name="over"/> sets taken from it.</summary>
     public TextAttributes With(TextAttributes over)
     {
@@ -119,6 +124,7 @@ public sealed class TextAttributes
             Shadow = over.Shadow ?? Shadow,
             Glow = over.Glow ?? Glow,
             Reflection = over.Reflection ?? Reflection,
+            Hidden = over.Hidden ?? Hidden,
         };
     }
 
@@ -133,8 +139,11 @@ public sealed class TextAttributes
                                           && BaselineShift == other.BaselineShift
                                           && BaselineAlignment == other.BaselineAlignment
                                           && Nullable.Equals(ObjectSize, other.ObjectSize)
+                                          && IsHidden == other.IsHidden
                                           && FeaturesEqual(Features, other.Features);
     }
+
+    internal bool IsHidden => Hidden == true;
 
     private static bool FeaturesEqual(IReadOnlyList<FontFeature> left, IReadOnlyList<FontFeature> right)
     {

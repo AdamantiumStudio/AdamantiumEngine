@@ -331,7 +331,8 @@ internal sealed class LineComposer
                                               && (lineLimit <= 0 || lineLimit >= options.DropCap.Lines)
             ? options.DropCap.Length(text)
             : 0;
-        var graphemes = options.Fallback == null ? null : TextBoundaries.Graphemes(text);
+        var graphemes = options.Fallback == null && !HasHidden(attributeRuns) ? null : TextBoundaries.Graphemes(text);
+        StepOverHidden(graphemes, attributeRuns, text.Length);
         var items = _shaper.Shape(text, attributed, attributeRuns, fontSize, dropEnd, vertical, options, paragraphs,
             graphemes, out var hasPendingFonts);
         var tabStop = _font.GetAdvanceWidth(_spaceGlyph.Index) * scale * Math.Max(options.TabSize, 1);
@@ -2054,6 +2055,12 @@ internal sealed class LineComposer
         (double Above, double Below) GlyphExtent(GlyphWordData glyph, bool setHeight, double ownBaseline,
             double ownHeight, bool withRuby = true)
         {
+            // Hidden text reaches nowhere: the line is as tall as the rest of it.
+            if (IsHidden(glyph.Attributes))
+            {
+                return (0, 0);
+            }
+
             var glyphScale = glyph.FontSize / glyph.Font.UnitsPerEm;
             var ownSize = setHeight && glyph.FontSize == fontSize;
             var above = ownSize ? ownBaseline : BaselineInLine(glyph.Font, glyphScale);
@@ -5073,6 +5080,38 @@ internal sealed class LineComposer
         {
             var (font, dot, size) = EllipsisFont(EllipsisStyle());
             return font.GetAdvanceWidth(dot.Index) * size / font.UnitsPerEm * 3 * options.GlyphScaling.Desired;
+        }
+    }
+
+    private static bool HasHidden(IReadOnlyList<AttributeRun> runs)
+    {
+        for (var i = 0; runs != null && i < runs.Count; i++)
+        {
+            if (IsHidden(runs[i].Attributes))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The caret steps over hidden text with the character after it, as one: no place inside it, nor between it and that
+    // character, is a stop - its start, before it, is.
+    private static void StepOverHidden(bool[] graphemes, IReadOnlyList<AttributeRun> runs, int length)
+    {
+        for (var i = 0; graphemes != null && runs != null && i < runs.Count; i++)
+        {
+            if (!IsHidden(runs[i].Attributes))
+            {
+                continue;
+            }
+
+            var end = Math.Min(runs[i].End, length);
+            for (var c = Math.Max(runs[i].Start + 1, 1); c <= end && c < length && c < graphemes.Length; c++)
+            {
+                graphemes[c] = false;
+            }
         }
     }
 
