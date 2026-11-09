@@ -55,6 +55,10 @@ public interface IRawBitmap
     /// than read from what the picture already holds.</summary>
     public bool DecodesLevelsOnDemand => false;
 
+    /// <summary>The ICC profile the pixels are in, as the file holds it; null when they are in sRGB - the file holds
+    /// none, or it was applied as the picture was read (<see cref="BitmapLoadOptions.ApplyColorProfile"/>).</summary>
+    public byte[] ColorProfile => null;
+
     public ImageDescription GetImageDescription();
 
     public FrameData GetFrameData(uint frameIndex);

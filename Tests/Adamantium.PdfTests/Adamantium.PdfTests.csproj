@@ -31,6 +31,12 @@
         <Content Include="..\TestAssets\Jpeg2000\rgba-lossless.rgba8" Link="Jpeg2000\rgba-lossless.rgba8">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Include="..\TestAssets\Icc\cmyk-ab.icc" Link="Icc\cmyk-ab.icc">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="..\TestAssets\Icc\rgb-gamma.icc" Link="Icc\rgb-gamma.icc">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <!-- The JBIG2 writer of the imaging tests makes the JBIG2 the image tests embed. -->

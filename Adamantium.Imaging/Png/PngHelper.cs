@@ -8,7 +8,12 @@ namespace Adamantium.Imaging.Png;
 public static class PngHelper
 {
     /// <summary>Reads the PNG of <paramref name="size"/> bytes at <paramref name="pSource"/>.</summary>
-    public static IRawBitmap LoadFromMemory(IntPtr pSource, ulong size)
+    public static IRawBitmap LoadFromMemory(IntPtr pSource, ulong size) =>
+        LoadFromMemory(pSource, size, BitmapLoadOptions.Default);
+
+    /// <summary>Reads the PNG of <paramref name="size"/> bytes at <paramref name="pSource"/> as
+    /// <paramref name="options"/> say.</summary>
+    public static IRawBitmap LoadFromMemory(IntPtr pSource, ulong size, BitmapLoadOptions options)
     {
         if (size > (ulong)Array.MaxLength)
         {
@@ -17,7 +22,7 @@ public static class PngHelper
 
         var data = new byte[size];
         Marshal.Copy(pSource, data, 0, (int)size);
-        return PngImage.Read(data);
+        return PngImage.Read(data, options);
     }
 
     /// <summary>Writes <paramref name="img"/> as PNG.</summary>

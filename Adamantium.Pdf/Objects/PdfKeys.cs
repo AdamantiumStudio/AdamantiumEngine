@@ -37,6 +37,8 @@ internal static class PdfKeys
     public const string Annots = "Annots";
 
     public const string PageLabels = "PageLabels";
+    public const string OutputIntents = "OutputIntents";
+    public const string DestOutputProfile = "DestOutputProfile";
 
     public const string Font = "Font";
     public const string XObject = "XObject";

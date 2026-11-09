@@ -17,7 +17,7 @@ namespace Adamantium.Imaging;
 
 public static class BitmapLoader
 {
-    public delegate IRawBitmap ImageLoadDelegate(IntPtr dataPointer, ulong dataSize);
+    public delegate IRawBitmap ImageLoadDelegate(IntPtr dataPointer, ulong dataSize, BitmapLoadOptions options);
     public delegate void ImageSaveDelegate(IRawBitmap image, Stream imageStream);
 
     /// <summary>The most pixels a picture whose size its data does not bound - a run-length BMP - is read at;
@@ -29,13 +29,13 @@ public static class BitmapLoader
     static BitmapLoader()
     {
         _loadSaveDelegates = new List<LoadSaveDelegates>();
-        Register(ImageFileType.Gif, GifHelper.LoadFromMemory, GifHelper.SaveToStream);
+        Register(ImageFileType.Gif, (data, size, _) => GifHelper.LoadFromMemory(data, size), GifHelper.SaveToStream);
         Register(ImageFileType.Png, PngHelper.LoadFromMemory, PngHelper.SaveToStream);
-        Register(ImageFileType.Bmp, BmpHelper.LoadFromMemory, BmpHelper.SaveToStream);
-        Register(ImageFileType.Dds, DdsHelper.LoadFromMemory, DdsHelper.SaveToStream);
-        Register(ImageFileType.Ico, IcoHelper.LoadFromMemory, IcoHelper.SaveToStream);
+        Register(ImageFileType.Bmp, (data, size, _) => BmpHelper.LoadFromMemory(data, size), BmpHelper.SaveToStream);
+        Register(ImageFileType.Dds, (data, size, _) => DdsHelper.LoadFromMemory(data, size), DdsHelper.SaveToStream);
+        Register(ImageFileType.Ico, (data, size, _) => IcoHelper.LoadFromMemory(data, size), IcoHelper.SaveToStream);
         Register(ImageFileType.Jpg, JpegHelper.LoadFromMemory, JpegHelper.SaveToStream);
-        Register(ImageFileType.Tga, TgaHelper.LoadFromMemory, TgaHelper.SaveToStream);
+        Register(ImageFileType.Tga, (data, size, _) => TgaHelper.LoadFromMemory(data, size), TgaHelper.SaveToStream);
         Register(ImageFileType.Tiff, TiffHelper.LoadFromMemory, TiffHelper.SaveToStream);
         Register(ImageFileType.Jpeg2000, Jpeg2000Helper.LoadFromMemory, null);
     }
@@ -46,7 +46,10 @@ public static class BitmapLoader
         _loadSaveDelegates.Add(loader);
     }
     
-    public static IRawBitmap Load(string fileName)
+    public static IRawBitmap Load(string fileName) => Load(fileName, BitmapLoadOptions.Default);
+
+    /// <summary>Decodes the file <paramref name="fileName"/> as <paramref name="options"/> say.</summary>
+    public static IRawBitmap Load(string fileName, BitmapLoadOptions options)
     {
         if (string.IsNullOrEmpty(fileName))
         {
@@ -55,7 +58,7 @@ public static class BitmapLoader
 
         using (var stream = new FileStream(fileName, FileMode.Open, FileAccess.Read))
         {
-            return Load(stream);
+            return Load(stream, options);
         }
     }
 
@@ -71,7 +74,11 @@ public static class BitmapLoader
     /// and nothing checked.
     /// </para>
     /// </summary>
-    public static unsafe IRawBitmap Load(Stream stream)
+    public static IRawBitmap Load(Stream stream) => Load(stream, BitmapLoadOptions.Default);
+
+    /// <summary>Decodes a picture from <paramref name="stream"/> as <paramref name="options"/> say, read as
+    /// <see cref="Load(Stream)"/> reads it.</summary>
+    public static unsafe IRawBitmap Load(Stream stream, BitmapLoadOptions options)
     {
         try
         {
@@ -86,7 +93,7 @@ public static class BitmapLoader
 
             fixed (byte* pinned = bytes)
             {
-                return Load((IntPtr)pinned, (ulong)read);
+                return Load((IntPtr)pinned, (ulong)read, options);
             }
         }
         finally
@@ -122,7 +129,12 @@ public static class BitmapLoader
     /// <summary>Decodes the file <paramref name="fileName"/> with the decoder its signature names, or - when it has none,
     /// as a TGA does - with <paramref name="unsignedType"/>'s alone: its bytes are never handed to every decoder in turn.
     /// </summary>
-    public static unsafe IRawBitmap Load(string fileName, ImageFileType unsignedType)
+    public static IRawBitmap Load(string fileName, ImageFileType unsignedType) =>
+        Load(fileName, unsignedType, BitmapLoadOptions.Default);
+
+    /// <summary>Decodes the file <paramref name="fileName"/> as <see cref="Load(string, ImageFileType)"/> does, and as
+    /// <paramref name="options"/> say.</summary>
+    public static unsafe IRawBitmap Load(string fileName, ImageFileType unsignedType, BitmapLoadOptions options)
     {
         ArgumentException.ThrowIfNullOrEmpty(fileName);
 
@@ -136,12 +148,18 @@ public static class BitmapLoader
             }
 
             var owner = _loadSaveDelegates.FirstOrDefault(x => x.FileType == type);
-            return owner?.Loader?.Invoke((IntPtr)pinned, (ulong)bytes.Length);
+            return owner?.Loader?.Invoke((IntPtr)pinned, (ulong)bytes.Length, options ?? BitmapLoadOptions.Default);
         }
     }
 
-    public static unsafe IRawBitmap Load(IntPtr dataPointer, ulong dataSize)
+    public static IRawBitmap Load(IntPtr dataPointer, ulong dataSize) =>
+        Load(dataPointer, dataSize, BitmapLoadOptions.Default);
+
+    /// <summary>Decodes the <paramref name="dataSize"/> bytes at <paramref name="dataPointer"/> as
+    /// <paramref name="options"/> say.</summary>
+    public static unsafe IRawBitmap Load(IntPtr dataPointer, ulong dataSize, BitmapLoadOptions options)
     {
+        options ??= BitmapLoadOptions.Default;
         // Signature first: ask the ONE decoder that owns this format.
         if (dataPointer != IntPtr.Zero && dataSize >= 8)
         {
@@ -151,20 +169,20 @@ public static class BitmapLoader
                 var owner = _loadSaveDelegates.FirstOrDefault(x => x.FileType == detected);
                 // A decoder that fails on a file whose signature IS its own means the file is broken or uses a variant
                 // we do not read - saying so beats silently handing the bytes to a decoder they do not belong to.
-                return owner?.Loader?.Invoke(dataPointer, dataSize);
+                return owner?.Loader?.Invoke(dataPointer, dataSize, options);
             }
         }
 
-        return LoadByTrying(dataPointer, dataSize);
+        return LoadByTrying(dataPointer, dataSize, options);
     }
 
-    private static IRawBitmap LoadByTrying(IntPtr dataPointer, ulong dataSize)
+    private static IRawBitmap LoadByTrying(IntPtr dataPointer, ulong dataSize, BitmapLoadOptions options)
     {
         foreach (var loader in _loadSaveDelegates)
         {
             try
             {
-                var img = loader.Loader?.Invoke(dataPointer, dataSize);
+                var img = loader.Loader?.Invoke(dataPointer, dataSize, options);
                 return img;
             }
             catch (Exception)

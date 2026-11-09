@@ -1,6 +1,8 @@
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Adamantium.Imaging.Icc;
 
 namespace Adamantium.Imaging.Jpeg;
 
@@ -38,11 +40,14 @@ public sealed class JpegDecoder
     }
 
     /// <summary>The picture.</summary>
-    public JpegImage Decode() => Picture(false);
+    public JpegImage Decode() => Picture(false, BitmapLoadOptions.Default);
+
+    /// <summary>The picture, read as <paramref name="options"/> say.</summary>
+    public JpegImage Decode(BitmapLoadOptions options) => Picture(false, options ?? BitmapLoadOptions.Default);
 
     /// <summary>The picture at an eighth of its size, rounded up, from each block's DC term alone: no inverse DCT,
     /// and a progressive file's AC-only scans not decoded at all - a thumbnail, a preview, a backdrop to blur.</summary>
-    public JpegImage DecodePreview() => Picture(true);
+    public JpegImage DecodePreview() => Picture(true, BitmapLoadOptions.Default);
 
     /// <summary>The picture as its own channels, 8 bits each, rows top to bottom with no padding: 1 for gray, 3 for
     /// RGB (YCbCr converted), 4 for CMYK (YCCK converted) - for a reader that applies a color space of its own, as PDF
@@ -88,7 +93,7 @@ public sealed class JpegDecoder
         }
     }
 
-    private JpegImage Picture(bool preview)
+    private JpegImage Picture(bool preview, BitmapLoadOptions options)
     {
         var stream = JpegStream.Decode(_data, preview);
         try
@@ -103,13 +108,62 @@ public sealed class JpegDecoder
             }
 
             var pixels = new byte[width * height * pixelBytes];
-            JpegColor.Write(stream, model, true, pixels, width * pixelBytes, height);
+            var profile = stream.IccProfile;
+            var channels = model switch
+            {
+                JpegColorModel.Gray => 1,
+                JpegColorModel.Cmyk or JpegColorModel.Ycck => 4,
+                _ => 3,
+            };
+            var converter = options.ApplyColorProfile
+                ? IccPixels.Converter(profile, channels, (long)width * height)
+                : null;
+            if (converter == null)
+            {
+                JpegColor.Write(stream, model, true, pixels, width * pixelBytes, height);
+            }
+            else
+            {
+                var samples = new byte[pixels.Length / 4 * channels];
+                JpegColor.Write(stream, model, false, samples, samples.Length / height, height);
+                ToDeviceValues(samples, wide, channels == 4 && stream.AdobeTransform >= 0);
+                IccPixels.ToRgba(converter, samples, wide, pixels);
+                profile = null;
+            }
+
             return new JpegImage((uint)width, (uint)height,
-                wide ? SurfaceFormat.R16G16B16A16.UNorm : SurfaceFormat.R8G8B8A8.UNorm, pixels);
+                wide ? SurfaceFormat.R16G16B16A16.UNorm : SurfaceFormat.R8G8B8A8.UNorm, pixels)
+            {
+                ColorProfile = profile,
+            };
         }
         finally
         {
             stream.Release();
+        }
+    }
+
+    private static void ToDeviceValues(byte[] samples, bool wide, bool invertedInks)
+    {
+        if (!wide)
+        {
+            if (invertedInks)
+            {
+                for (var i = 0; i < samples.Length; i++)
+                {
+                    samples[i] = (byte)(255 - samples[i]);
+                }
+            }
+
+            return;
+        }
+
+        for (var i = 0; i < samples.Length; i += 2)
+        {
+            var value = BinaryPrimitives.ReadUInt16LittleEndian(samples.AsSpan(i));
+            var widened = (value << 4) | (value >> 8);
+            BinaryPrimitives.WriteUInt16LittleEndian(samples.AsSpan(i),
+                (ushort)(invertedInks ? 65535 - widened : widened));
         }
     }
 

@@ -9,7 +9,8 @@ namespace Adamantium.Pdf.ColorSpaces;
 
 /// <summary>Reads color spaces out of a file (ISO 32000-2, 8.6): by name, from the resources, or from an array. Spaces
 /// nest - an Indexed base, a Separation alternate - no deeper than <see cref="MaxDepth"/>. A space that cannot be read
-/// is null, and the caller falls back to DeviceGray.</summary>
+/// is null, and the caller falls back to DeviceGray. A device space with no <c>Default</c> substitute is shown through
+/// the document's output intent profile when that has as many components.</summary>
 public static class PdfColorSpaces
 {
     public const int MaxDepth = 8;
@@ -75,12 +76,14 @@ public static class PdfColorSpaces
                 return defaulted;
             }
 
-            return device switch
+            PdfColorSpace plain = device switch
             {
                 PdfColorSpaceFamilies.DefaultGray => PdfDeviceGrayColorSpace.Instance,
                 PdfColorSpaceFamilies.DefaultRGB => PdfDeviceRgbColorSpace.Instance,
                 _ => PdfDeviceCmykColorSpace.Instance,
             };
+            var intent = document.IccProfiles.OutputIntent(plain.Components);
+            return intent != null ? new PdfIccBasedColorSpace(plain.Components, plain, null, intent) : plain;
         }
 
         if (name == PdfColorSpaceFamilies.Pattern)
@@ -156,7 +159,7 @@ public static class PdfColorSpaces
         }
 
         return new PdfIccBasedColorSpace(components, alternate,
-            PdfValues.Numbers(dictionary[PdfKeys.Range], document));
+            PdfValues.Numbers(dictionary[PdfKeys.Range], document), document.IccProfiles.Of(stream, components));
     }
 
     private static PdfColorSpace Indexed(PdfArray array, PdfResources resources, PdfDocument document, int depth)

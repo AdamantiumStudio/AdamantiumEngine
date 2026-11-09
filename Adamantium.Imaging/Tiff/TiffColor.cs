@@ -1,5 +1,6 @@
 using System;
 using System.Buffers.Binary;
+using Adamantium.Imaging.Icc;
 using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Imaging.Tiff;
@@ -54,21 +55,45 @@ internal static class TiffColor
     public static (int Width, int Height) SizeOf(TiffLayout layout) =>
         layout.Orientation >= 5 ? (layout.Height, layout.Width) : (layout.Width, layout.Height);
 
-    /// <summary>The picture of <paramref name="samples"/> laid out as <paramref name="layout"/> says.</summary>
-    public static TiffBitmap ToBitmap(TiffLayout layout, TiffSamples samples)
+    /// <summary>The ICC profile the page of <paramref name="layout"/> holds; null without one.</summary>
+    public static byte[] ProfileOf(TiffLayout layout) => layout.Directory[TiffTag.IccProfile]?.Bytes.ToArray();
+
+    /// <summary>The device channels an ICC profile of the page converts - 1 for gray, 3 for RGB, 4 for CMYK, of up to
+    /// 16 bits - or 0 when its colors are none of these.</summary>
+    public static int ProfileChannels(TiffLayout layout)
+    {
+        if (layout.SampleFormat != TiffSampleFormat.UnsignedInteger || layout.BitsPerSample > 16)
+        {
+            return 0;
+        }
+
+        return layout.DecodedPhotometric switch
+        {
+            TiffPhotometric.MinIsBlack or TiffPhotometric.MinIsWhite => 1,
+            TiffPhotometric.Rgb => 3,
+            TiffPhotometric.Separated when layout.ColorSamples == 4 => 4,
+            _ => 0,
+        };
+    }
+
+    /// <summary>The picture of <paramref name="samples"/> laid out as <paramref name="layout"/> says, its colors
+    /// through <paramref name="profile"/> when given - one of <see cref="ProfileChannels"/> channels.</summary>
+    public static TiffBitmap ToBitmap(TiffLayout layout, TiffSamples samples, IccPixelConverter profile = null)
     {
         var format = FormatOf(layout);
         var bitmap = layout.SampleFormat switch
         {
             TiffSampleFormat.Float => Floats(layout, samples),
-            TiffSampleFormat.UnsignedInteger when layout.BitsPerSample <= 16 => Colors(layout, samples, format),
+            TiffSampleFormat.UnsignedInteger when layout.BitsPerSample <= 16 =>
+                Colors(layout, samples, format, profile),
             _ => new TiffBitmap(format, samples.Width, samples.Height,
                 layout.SamplesPerPixel * samples.ContainerBytes, samples.Data)
         };
         return Orient(bitmap, layout.Orientation);
     }
 
-    private static TiffBitmap Colors(TiffLayout layout, TiffSamples samples, SurfaceFormat format)
+    private static TiffBitmap Colors(TiffLayout layout, TiffSamples samples, SurfaceFormat format,
+        IccPixelConverter profile)
     {
         var wide = layout.BitsPerSample > 8;
         var max = wide ? 65535UL : 255UL;
@@ -77,13 +102,15 @@ internal static class TiffColor
         var count = (long)samples.Width * samples.Height;
         var pixels = Allocate(count * pixelBytes);
         var (alpha, associated) = layout.Alpha;
-        var convert = Converter(layout, samples, max, inMax);
+        var convert = profile != null
+            ? Managed(layout, samples, profile, inMax, max, associated ? alpha : -1)
+            : Converter(layout, samples, max, inMax);
         Span<ulong> rgb = stackalloc ulong[3];
         for (long p = 0; p < count; p++)
         {
             convert(p, rgb);
             var a = alpha < 0 ? max : Scale(Read(samples, p, alpha), inMax, max);
-            if (associated)
+            if (associated && profile == null)
             {
                 for (var c = 0; c < 3; c++)
                 {
@@ -156,6 +183,30 @@ internal static class TiffColor
                 throw new NotSupportedException($"TIFF {layout.Photometric} of {layout.ColorSamples} samples is not "
                                                 + "read.");
         }
+    }
+
+    private static ColorConverter Managed(TiffLayout layout, TiffSamples samples, IccPixelConverter profile,
+        ulong inMax, ulong max, int associatedAlpha)
+    {
+        var device = new float[profile.Channels];
+        var srgb = new float[3];
+        var whiteIsZero = layout.DecodedPhotometric == TiffPhotometric.MinIsWhite;
+        return (p, rgb) =>
+        {
+            var opacity = associatedAlpha < 0 ? 1f : (float)Math.Min(Read(samples, p, associatedAlpha), inMax) / inMax;
+            for (var c = 0; c < device.Length; c++)
+            {
+                var value = (float)Math.Min(Read(samples, p, c), inMax) / inMax;
+                value = opacity <= 0 ? 0 : Math.Min(1, value / opacity);
+                device[c] = whiteIsZero ? 1 - value : value;
+            }
+
+            profile.Convert(device, srgb);
+            for (var c = 0; c < 3; c++)
+            {
+                rgb[c] = (ulong)(srgb[c] * max + 0.5f);
+            }
+        };
     }
 
     private static ColorConverter YCbCr(TiffLayout layout, TiffSamples samples, ulong max, ulong inMax)

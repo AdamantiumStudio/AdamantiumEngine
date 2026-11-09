@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Adamantium.Imaging.Icc;
 
 namespace Adamantium.Imaging.Png;
 
@@ -15,16 +16,27 @@ public sealed class PngImage : IRawBitmap
     private readonly byte[] _data;
     private readonly object _decodeLock = new();
     private readonly FrameComposer _composer;
+    private readonly IccPixelConverter _profile;
 
     // The pixels last handed out, by frame.
     private byte[] _last;
     private int _lastFrame = -1;
     private FrameData _firstFrame;
 
-    private PngImage(PngFile file, byte[] data)
+    private PngImage(PngFile file, byte[] data, BitmapLoadOptions options)
     {
         _file = file;
         _data = data;
+        if (options.ApplyColorProfile)
+        {
+            _profile = IccPixels.Converter(file.Metadata.IccProfile, file.ColorType is 0 or 4 ? 1 : 3,
+                (long)file.Width * file.Height);
+            if (_profile != null)
+            {
+                (file.Metadata.IccProfile, file.Metadata.IccProfileName) = (null, null);
+            }
+        }
+
         Frames = file.Frames.Select(frame => frame.Control).ToArray();
         _composer = new FrameComposer(file.Width, file.Height, file.Wide ? 8 : 4, Frames.Select(frame =>
                 new ComposedFrame((int)frame.X, (int)frame.Y, (int)frame.Width, (int)frame.Height, frame.Dispose switch
@@ -33,12 +45,16 @@ public sealed class PngImage : IRawBitmap
                     PngDispose.Previous => FrameDisposal.Previous,
                     _ => FrameDisposal.None
                 }, frame.Blend == PngBlend.Over)).ToArray(),
-            index => PngRaster.Decode(_file, _data, _file.Frames[index], (int)Frames[index].Width,
-                (int)Frames[index].Height));
+            index => Decode(index, (int)Frames[index].Width, (int)Frames[index].Height));
     }
 
     /// <summary>Reads the PNG in <paramref name="data"/>; the bytes are kept to decode its frames from.</summary>
-    public static PngImage Read(byte[] data) => new(PngFile.Read(data), data);
+    public static PngImage Read(byte[] data) => Read(data, BitmapLoadOptions.Default);
+
+    /// <summary>Reads the PNG in <paramref name="data"/> as <paramref name="options"/> say; the bytes are kept to
+    /// decode its frames from.</summary>
+    public static PngImage Read(byte[] data, BitmapLoadOptions options) =>
+        new(PngFile.Read(data), data, options ?? BitmapLoadOptions.Default);
 
     public uint Width => (uint)_file.Width;
 
@@ -64,6 +80,9 @@ public sealed class PngImage : IRawBitmap
     public int BitDepth => _file.BitDepth;
 
     public PngMetadata Metadata => _file.Metadata;
+
+    /// <inheritdoc/>
+    public byte[] ColorProfile => _file.Metadata.IccProfile;
 
     /// <summary>The canvas as frame <paramref name="frameIndex"/> leaves it shown.</summary>
     public byte[] GetRawPixels(uint frameIndex)
@@ -107,7 +126,18 @@ public sealed class PngImage : IRawBitmap
     {
         var only = Frames[0];
         return Frames.Count == 1 && only.X == 0 && only.Y == 0 && only.Width == Width && only.Height == Height
-            ? PngRaster.Decode(_file, _data, _file.Frames[0], _file.Width, _file.Height)
+            ? Decode(0, _file.Width, _file.Height)
             : _composer.Compose(index);
+    }
+
+    private byte[] Decode(int index, int width, int height)
+    {
+        var pixels = PngRaster.Decode(_file, _data, _file.Frames[index], width, height);
+        if (_profile != null)
+        {
+            IccPixels.InPlace(_profile, pixels, _file.Wide);
+        }
+
+        return pixels;
     }
 }

@@ -19,16 +19,7 @@ internal sealed class PdfColorGrid
     public PdfColorGrid(PdfColorSpace space, double[] decode, int components)
     {
         _components = components;
-        _nodes = components switch
-        {
-            1 => 257,
-            2 => 33,
-            3 => 17,
-            4 => 9,
-            5 => 5,
-            6 => 4,
-            _ => 3,
-        };
+        _nodes = NodesAlong(components);
         _low = new double[components];
         _high = new double[components];
         for (var c = 0; c < components; c++)
@@ -37,12 +28,7 @@ internal sealed class PdfColorGrid
             _high[c] = Math.Max(decode[2 * c], decode[2 * c + 1]);
         }
 
-        var count = 1;
-        for (var c = 0; c < components; c++)
-        {
-            count *= _nodes;
-        }
-
+        var count = NodeCount(components);
         _rgb = new float[3 * count];
         Span<double> color = stackalloc double[components];
         Span<double> rgb = stackalloc double[3];
@@ -62,6 +48,30 @@ internal sealed class PdfColorGrid
             _rgb[3 * node + 2] = (float)rgb[2];
         }
     }
+
+    /// <summary>How many times a grid over <paramref name="components"/> evaluates its space.</summary>
+    public static int NodeCount(int components)
+    {
+        var nodes = NodesAlong(components);
+        var count = 1;
+        for (var c = 0; c < components; c++)
+        {
+            count *= nodes;
+        }
+
+        return count;
+    }
+
+    private static int NodesAlong(int components) => components switch
+    {
+        1 => 257,
+        2 => 33,
+        3 => 17,
+        4 => 9,
+        5 => 5,
+        6 => 4,
+        _ => 3,
+    };
 
     public void ToRgb(ReadOnlySpan<double> components, Span<double> rgb)
     {
