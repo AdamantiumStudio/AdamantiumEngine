@@ -85,7 +85,18 @@ internal sealed class J2kTileComponent
 
     public J2kResolution[] Resolutions { get; }
 
-    /// <summary>The samples after the inverse wavelet, row after row.</summary>
+    /// <summary>The resolution decoded to: the highest one less those left out.</summary>
+    public int Top { get; set; }
+
+    public int OutputX0 => Resolutions[Top].X0;
+
+    public int OutputY0 => Resolutions[Top].Y0;
+
+    public int OutputWidth => Resolutions[Top].X1 - Resolutions[Top].X0;
+
+    public int OutputHeight => Resolutions[Top].Y1 - Resolutions[Top].Y0;
+
+    /// <summary>The samples of resolution <see cref="Top"/> after the inverse wavelet, row after row.</summary>
     public float[] Samples { get; set; }
 
     private J2kBand Band(int orientation, int level, int widthExponent, int heightExponent)

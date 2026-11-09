@@ -36,6 +36,28 @@ public sealed class Jpeg2000Image
     /// <summary>The ICC profile of an <see cref="Jpeg2000ColorSpace.Icc"/> image, or null.</summary>
     public byte[] IccProfile { get; }
 
+    /// <summary>The decomposition levels of the image: how many resolutions below the full one can be decoded.
+    /// </summary>
+    public int Levels { get; private set; }
+
+    /// <summary>The quality layers of the image.</summary>
+    public int Layers { get; private set; }
+
+    /// <summary>The bytes of code-block data the image holds.</summary>
+    public long CodedBytes { get; private set; }
+
+    /// <summary>The bytes of code-block data this picture was decoded from.</summary>
+    public long CodedBytesUsed { get; private set; }
+
+    internal Jpeg2000Image With(int levels, int layers, long codedBytes, long codedBytesUsed)
+    {
+        Levels = levels;
+        Layers = layers;
+        CodedBytes = codedBytes;
+        CodedBytesUsed = codedBytesUsed;
+        return this;
+    }
+
     /// <summary>The depth each channel had before it was scaled to 8 bits, in the order of <see cref="Samples"/>.
     /// </summary>
     public int[] ChannelBits { get; }

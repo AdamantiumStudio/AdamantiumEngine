@@ -4,6 +4,8 @@
 # <name>.gray16 for 16-bit gray, little-endian. Run from this folder with Python, Pillow, numpy and Glymur (which
 # sets what Pillow does not: code-block modes and packet markers; it can run on the OpenJPEG Pillow carries). Pillow
 # misreads subsampled components, so that file's pixels come from Glymur, each sample covering its 2 by 2 of the grid.
+# <name>@r<R>l<L>.rgba8 is the picture without the R highest resolutions and with the first L quality layers (0 for
+# all), from Glymur too: Pillow rounds a reduced size where OpenJPEG takes the ceiling.
 import os
 import glymur
 import numpy
@@ -38,6 +40,7 @@ cases = {
     "rgba-lossless": (rgba, {}),
     "gray16-lossless": (deep, {}),
     "rgb-codestream": (source, {"no_jp2": True}),
+    "rgba-codestream": (rgba, {"no_jp2": True}),
 }
 
 # Code-block style bits (T.800, table A.19): 1 bypass, 2 reset, 4 terminate all, 8 vertically causal,
@@ -81,8 +84,25 @@ for name, (image, options) in cases.items():
     extension = ".j2k" if options.get("no_jp2") else ".jp2"
     image.save(name + extension, **options)
 
+partial = {
+    "rgb-layers": [(1, 0), (2, 0), (0, 1), (0, 2), (1, 1)],
+    "rgb-lossless": [(1, 0), (3, 0), (5, 0)],
+    "gray-many-resolutions": [(4, 0), (6, 0)],
+}
+for name, steps in partial.items():
+    for reduce, layers in steps:
+        source_file = glymur.Jp2k(name + ".jp2")
+        source_file.layer = layers
+        step = 1 << reduce
+        pixels = source_file[::step, ::step]
+        mode = "L" if pixels.ndim == 2 else "RGB"
+        decoded = Image.fromarray(pixels, mode)
+        with open("%s@r%dl%d.rgba8" % (name, reduce, layers), "wb") as output:
+            output.write(decoded.convert("RGBA").tobytes())
+        print(name, "reduce", reduce, "layers", layers, decoded.size)
+
 for name in list(cases) + list(coded):
-    extension = ".j2k" if name == "rgb-codestream" else ".jp2"
+    extension = ".j2k" if name.endswith("-codestream") else ".jp2"
     if name == "rgb-subsampled":
         planes = glymur.Jp2k(name + extension)[:]
         grid = planes.repeat(2, axis=0).repeat(2, axis=1)[:93, :157]

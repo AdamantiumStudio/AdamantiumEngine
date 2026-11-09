@@ -42,6 +42,19 @@ public interface IRawBitmap
 
     public FrameData GetMipLevelData(uint mipLevel);
 
+    /// <summary>The quality levels the picture's data holds - JPEG 2000's quality layers; 1 for a picture of one
+    /// quality.</summary>
+    public uint QualityLevelsCount => 1;
+
+    /// <summary>The picture at <paramref name="mipLevel"/> and <paramref name="qualityLevel"/>: 0 the full quality,
+    /// each next one a quality layer less. Null for a quality level the picture does not have.</summary>
+    public FrameData GetLevelData(uint mipLevel, uint qualityLevel) =>
+        qualityLevel == 0 ? GetMipLevelData(mipLevel) : null;
+
+    /// <summary>Whether a level other than the full picture is decoded when asked for, which can take a while, rather
+    /// than read from what the picture already holds.</summary>
+    public bool DecodesLevelsOnDemand => false;
+
     public ImageDescription GetImageDescription();
 
     public FrameData GetFrameData(uint frameIndex);

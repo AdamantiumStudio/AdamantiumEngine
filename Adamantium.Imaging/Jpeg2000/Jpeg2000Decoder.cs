@@ -18,11 +18,18 @@ public static class Jpeg2000Decoder
     /// <exception cref="InvalidDataException">The data is not JPEG 2000 or asks for more than
     /// <paramref name="maxPixels"/> allow.</exception>
     /// <exception cref="NotSupportedException">The data is high-throughput JPEG 2000 or of a later part.</exception>
-    public static Jpeg2000Image Decode(ReadOnlySpan<byte> data, long maxPixels)
+    public static Jpeg2000Image Decode(ReadOnlySpan<byte> data, long maxPixels) => Decode(data, maxPixels, null);
+
+    /// <summary>Decodes as much of <paramref name="data"/> as <paramref name="options"/> say: the whole image when
+    /// they are null.</summary>
+    /// <exception cref="InvalidDataException">The data is not JPEG 2000 or asks for more than
+    /// <paramref name="maxPixels"/> allow.</exception>
+    /// <exception cref="NotSupportedException">The data is high-throughput JPEG 2000 or of a later part.</exception>
+    public static Jpeg2000Image Decode(ReadOnlySpan<byte> data, long maxPixels, Jpeg2000Options options)
     {
         try
         {
-            return Decode(data.ToArray(), maxPixels);
+            return Decode(data.ToArray(), maxPixels, options ?? new Jpeg2000Options());
         }
         catch (AggregateException aggregate)
         {
@@ -44,26 +51,33 @@ public static class Jpeg2000Decoder
             : new InvalidDataException("JPEG 2000 data is broken: " + inner.Message, inner);
     }
 
-    private static Jpeg2000Image Decode(byte[] data, long maxPixels)
+    private static Jpeg2000Image Decode(byte[] data, long maxPixels, Jpeg2000Options options)
     {
         var file = Jp2File.Read(data);
         var codestream = J2kCodestream.Read(data, file.CodestreamStart, file.CodestreamEnd, maxPixels);
         var size = codestream.SizeInfo;
+        var main = codestream.Main;
+        var (levels, layers) = LevelsAndLayers(codestream);
+        var discard = Math.Clamp(options.DiscardLevels, 0, levels);
+        var grid = (X0: Shrink(size.X0, discard), Y0: Shrink(size.Y0, discard), X1: Shrink(size.X1, discard),
+            Y1: Shrink(size.Y1, discard));
         var limits = new J2kLimits((long)size.Width * size.Height, size.Components.Length);
         var planes = new int[size.Components.Length][];
-        var planeBounds = new (int X0, int Y0, int Width, int Height)[planes.Length];
+        var planeBounds = new J2kPlane[planes.Length];
         for (var c = 0; c < planes.Length; c++)
         {
             var info = size.Components[c];
-            var x0 = Ceiling(size.X0, info.Dx);
-            var y0 = Ceiling(size.Y0, info.Dy);
-            var width = Ceiling(size.X1, info.Dx) - x0;
-            var height = Ceiling(size.Y1, info.Dy) - y0;
+            var scale = discard;
+            var x0 = Shrink(Ceiling(size.X0, info.Dx), scale);
+            var y0 = Shrink(Ceiling(size.Y0, info.Dy), scale);
+            var width = Shrink(Ceiling(size.X1, info.Dx), scale) - x0;
+            var height = Shrink(Ceiling(size.Y1, info.Dy), scale) - y0;
             limits.Spend((long)width * height);
             planes[c] = new int[(long)width * height];
-            planeBounds[c] = (x0, y0, width, height);
+            planeBounds[c] = new J2kPlane(x0, y0, width, height, scale);
         }
 
+        long coded = 0, used = 0;
         var decoded = 0;
         Exception failure = null;
         foreach (var tileData in codestream.Tiles)
@@ -76,7 +90,7 @@ public static class Jpeg2000Decoder
             J2kTile tile;
             try
             {
-                tile = J2kTile.Decode(codestream, tileData, limits);
+                tile = J2kTile.Decode(codestream, tileData, limits, discard, options.Layers);
             }
             catch (InvalidDataException exception)
             {
@@ -95,6 +109,8 @@ public static class Jpeg2000Decoder
             }
 
             decoded++;
+            coded += tile.CodedBytes;
+            used += tile.CodedBytesUsed;
             foreach (var component in tile.Components)
             {
                 Place(component, planes[component.Component], planeBounds[component.Component]);
@@ -106,40 +122,78 @@ public static class Jpeg2000Decoder
             throw failure ?? new InvalidDataException("A JPEG 2000 codestream has no tile-parts.");
         }
 
-        return Compose(size, planes, planeBounds, file, limits);
+        var image = Compose(size, discard, grid, planes, planeBounds, file, limits);
+        return image.With(levels, layers, coded, used);
     }
 
-    private static void Place(J2kTileComponent component, int[] plane, (int X0, int Y0, int Width, int Height) bounds)
+    private static int Shrink(int value, int levels) => (int)J2kResolution.Ceiling(value, levels);
+
+    private static (int Levels, int Layers) LevelsAndLayers(J2kCodestream codestream)
+    {
+        var size = codestream.SizeInfo;
+        var main = codestream.Main;
+        var layers = main.CodingStyle(null).Layers;
+        var levels = int.MaxValue;
+        for (var c = 0; c < size.Components.Length; c++)
+        {
+            levels = Math.Min(levels, main.ComponentStyle(c, null).Levels);
+        }
+
+        foreach (var tile in codestream.Tiles)
+        {
+            if (!tile.Seen)
+            {
+                continue;
+            }
+
+            layers = Math.Max(layers, tile.Markers.CodingStyle(main).Layers);
+            for (var c = 0; c < size.Components.Length; c++)
+            {
+                levels = Math.Min(levels, tile.Markers.ComponentStyle(c, main).Levels);
+            }
+        }
+
+        while (levels > 0 && (Shrink(size.X1, levels) - Shrink(size.X0, levels) < 1 ||
+                              Shrink(size.Y1, levels) - Shrink(size.Y0, levels) < 1))
+        {
+            levels--;
+        }
+
+        return (levels, layers);
+    }
+
+    private static void Place(J2kTileComponent component, int[] plane, J2kPlane bounds)
     {
         var info = component.Info;
         var shift = 1L << (info.Precision - 1);
         var drop = Math.Max(0, info.Precision - MaxPlaneBits);
         var max = (1L << (info.Precision - drop)) - 1;
         var samples = component.Samples;
-        for (var y = 0; y < component.Height; y++)
+        var width = component.OutputWidth;
+        for (var y = 0; y < component.OutputHeight; y++)
         {
-            var py = component.Y0 + y - bounds.Y0;
+            var py = component.OutputY0 + y - bounds.Y0;
             if ((uint)py >= (uint)bounds.Height)
             {
                 continue;
             }
 
-            for (var x = 0; x < component.Width; x++)
+            for (var x = 0; x < width; x++)
             {
-                var px = component.X0 + x - bounds.X0;
+                var px = component.OutputX0 + x - bounds.X0;
                 if ((uint)px >= (uint)bounds.Width)
                 {
                     continue;
                 }
 
-                var value = ((long)MathF.Round(samples[y * component.Width + x]) + shift) >> drop;
+                var value = ((long)MathF.Round(samples[y * width + x]) + shift) >> drop;
                 plane[py * bounds.Width + px] = (int)Math.Clamp(value, 0, max);
             }
         }
     }
 
-    private static Jpeg2000Image Compose(J2kSize size, int[][] planes,
-        (int X0, int Y0, int Width, int Height)[] bounds, Jp2File file, J2kLimits limits)
+    private static Jpeg2000Image Compose(J2kSize size, int discard, (int X0, int Y0, int X1, int Y1) grid,
+        int[][] planes, J2kPlane[] bounds, Jp2File file, J2kLimits limits)
     {
         var channels = new List<(int Component, int Column)>();
         if (file.Palette != null && file.Mapping != null)
@@ -197,6 +251,11 @@ public static class Jpeg2000Decoder
             Jpeg2000ColorSpace.Cmyk => 4,
             _ => color.Count,
         };
+        if (alpha < 0 && file.Channels.Count == 0 && wanted > 0 && color.Count == wanted + 1)
+        {
+            alpha = color[wanted];
+        }
+
         if (wanted > 0 && wanted < color.Count)
         {
             color.RemoveRange(wanted, color.Count - wanted);
@@ -207,8 +266,8 @@ public static class Jpeg2000Decoder
             throw new InvalidDataException("A JPEG 2000 image has no color channels.");
         }
 
-        var width = size.Width;
-        var height = size.Height;
+        var width = grid.X1 - grid.X0;
+        var height = grid.Y1 - grid.Y0;
         var order = new List<int>(color);
         if (alpha >= 0)
         {
@@ -222,24 +281,26 @@ public static class Jpeg2000Decoder
         for (var k = 0; k < order.Count; k++)
         {
             var (component, column) = channels[order[k]];
-            if (component >= planes.Length)
+            if (component >= planes.Length || bounds[component].Width < 1 || bounds[component].Height < 1)
             {
                 continue;
             }
 
             var plane = planes[component];
-            var (x0, y0, planeWidth, planeHeight) = bounds[component];
+            var (x0, y0, planeWidth, planeHeight, scale) = bounds[component];
             var info = size.Components[component];
+            var stepX = (long)info.Dx << scale;
+            var stepY = (long)info.Dy << scale;
             var palette = column >= 0 && column < file.Palette.Length ? file.Palette[column] : null;
             var bits = palette != null ? Math.Min(file.PaletteBits[column], 31) : Math.Min(info.Precision, MaxPlaneBits);
             var max = (1L << bits) - 1;
             depths[k] = bits;
             for (var y = 0; y < height; y++)
             {
-                var sy = Math.Clamp((size.Y0 + y) / info.Dy - y0, 0, planeHeight - 1);
+                var sy = (int)Math.Clamp((((long)grid.Y0 + y) << discard) / stepY - y0, 0, planeHeight - 1);
                 for (var x = 0; x < width; x++)
                 {
-                    var sx = Math.Clamp((size.X0 + x) / info.Dx - x0, 0, planeWidth - 1);
+                    var sx = (int)Math.Clamp((((long)grid.X0 + x) << discard) / stepX - x0, 0, planeWidth - 1);
                     long value = plane[sy * planeWidth + sx];
                     if (palette != null)
                     {

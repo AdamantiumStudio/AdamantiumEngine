@@ -14,7 +14,7 @@ public sealed class AssetFileInfo
         [".png"] = ImageFileType.Png, [".jpg"] = ImageFileType.Jpg, [".jpeg"] = ImageFileType.Jpg,
         [".gif"] = ImageFileType.Gif, [".bmp"] = ImageFileType.Bmp, [".tga"] = ImageFileType.Tga,
         [".tif"] = ImageFileType.Tiff, [".tiff"] = ImageFileType.Tiff, [".ico"] = ImageFileType.Ico,
-        [".dds"] = ImageFileType.Dds
+        [".dds"] = ImageFileType.Dds, [".jp2"] = ImageFileType.Jpeg2000, [".j2k"] = ImageFileType.Jpeg2000
     };
 
     private static readonly HashSet<string> FontExtensions = new(StringComparer.OrdinalIgnoreCase)

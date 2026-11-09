@@ -47,7 +47,7 @@ internal sealed class J2kBlockDecoder
         }
 
         var planes = band.Planes - block.ZeroPlanes;
-        var passes = Math.Min(block.Passes, 3 * planes - 2);
+        var passes = Math.Min(block.KeptPasses, 3 * planes - 2);
         if (planes <= 0 || passes <= 0 || planes > 31)
         {
             return;
@@ -90,7 +90,7 @@ internal sealed class J2kBlockDecoder
                 _mq = new MqDecoder(data, 0, data.Length);
             }
 
-            for (var i = 0; i < segment.Passes && pass < passes; i++, pass++)
+            for (var i = 0; i < segment.KeptPasses && pass < passes; i++, pass++)
             {
                 var plane = planes - 1 - (pass + 2) / 3;
                 var kind = pass == 0 ? 2 : (pass - 1) % 3;
