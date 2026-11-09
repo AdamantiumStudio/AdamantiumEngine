@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- Hidden text in `TextLayout`, as Word's: `TextAttributes.Hidden` lays a stretch as nothing - no glyph, no width, no
+  height in its line, no tab or line break of its own - its characters keeping their places, so the caret before and
+  after it stands at one spot and steps over it with the character after it.
+
 - `Adamantium.Pdf`, a new package that reads PDF files: objects, cross-reference tables and streams (hybrid files and
   incremental updates included), object streams, the Flate, LZW, ASCIIHex, ASCII85 and RunLength filters with PNG and
   TIFF predictors, the standard security handler from RC4 to AES-256, the page tree with inherited attributes and page

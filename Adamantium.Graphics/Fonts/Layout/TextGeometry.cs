@@ -16,6 +16,11 @@ internal static class TextGeometry
 
     public const char ObjectReplacement = (char)0xFFFC;
 
+    // What an item of hidden text stands for in the line: WORD JOINER - no width, no ink, no break of its own.
+    public const char HiddenSymbol = (char)0x2060;
+
+    public static bool IsHidden(TextAttributes attributes) => attributes?.Hidden == true;
+
     public static bool IsBlank(char symbol)
     {
         return symbol == ' ' || symbol == '\t';
