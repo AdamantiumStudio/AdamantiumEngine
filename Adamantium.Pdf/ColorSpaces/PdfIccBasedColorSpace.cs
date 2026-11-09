@@ -56,17 +56,20 @@ public sealed class PdfIccBasedColorSpace : PdfColorSpace
         rgb[2] = srgb[2];
     }
 
-    /// <summary>The color as linear sRGB, not clipped (see <see cref="IccTransform.ConvertToLinear"/>), when
-    /// <see cref="IsManaged"/>.</summary>
-    internal void ToLinearRgb(ReadOnlySpan<double> components, Span<double> linear)
+    /// <summary>A converter for about <paramref name="colors"/> colors of the space, when <see cref="IsManaged"/>;
+    /// colors go through it by <see cref="ToRgb(ReadOnlySpan{double}, Span{double}, IccPixelConverter)"/>.</summary>
+    internal IccPixelConverter Converter(long colors) => new(_transform, colors);
+
+    /// <summary>The color as sRGB through <paramref name="converter"/> (<see cref="Converter"/>).</summary>
+    internal void ToRgb(ReadOnlySpan<double> components, Span<double> rgb, IccPixelConverter converter)
     {
         Span<float> device = stackalloc float[Components];
         Normalize(components, device);
-        Span<float> values = stackalloc float[3];
-        _transform.ConvertToLinear(device, values);
-        linear[0] = values[0];
-        linear[1] = values[1];
-        linear[2] = values[2];
+        Span<float> srgb = stackalloc float[3];
+        converter.Convert(device, srgb);
+        rgb[0] = srgb[0];
+        rgb[1] = srgb[1];
+        rgb[2] = srgb[2];
     }
 
     private static bool IsRange(double[] range, int components)

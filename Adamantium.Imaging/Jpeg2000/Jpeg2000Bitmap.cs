@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.Imaging.Icc;
 
 namespace Adamantium.Imaging.Jpeg2000;
 
@@ -15,10 +16,17 @@ public sealed class Jpeg2000Bitmap : IRawBitmap
     private readonly object _levelsLock = new();
     private readonly byte[] _pixels;
     private readonly FrameData _frame;
+    private readonly IccPixelConverter _profile;
     private int _generation;
 
     /// <summary>Decodes the full picture of <paramref name="data"/>, a JP2 file or a codestream.</summary>
-    public Jpeg2000Bitmap(byte[] data, long maxPixels)
+    public Jpeg2000Bitmap(byte[] data, long maxPixels) : this(data, maxPixels, BitmapLoadOptions.Default)
+    {
+    }
+
+    /// <summary>Decodes the full picture of <paramref name="data"/>, a JP2 file or a codestream, as
+    /// <paramref name="options"/> say.</summary>
+    public Jpeg2000Bitmap(byte[] data, long maxPixels, BitmapLoadOptions options)
     {
         ArgumentNullException.ThrowIfNull(data);
         _data = data;
@@ -28,7 +36,14 @@ public sealed class Jpeg2000Bitmap : IRawBitmap
         Height = (uint)image.Height;
         Levels = image.Levels;
         Layers = image.Layers;
-        _pixels = Rgba(image);
+        if ((options ?? BitmapLoadOptions.Default).ApplyColorProfile && image.IccProfile != null)
+        {
+            _profile = IccPixels.Converter(image.IccProfile, Math.Min(image.ColorChannels, 4),
+                (long)image.Width * image.Height);
+        }
+
+        ColorProfile = _profile == null ? image.IccProfile : null;
+        _pixels = Rgba(image, _profile);
         _frame = new FrameData(_pixels, ImageDescription.Default2D(Width, Height, PixelFormat));
     }
 
@@ -57,6 +72,9 @@ public sealed class Jpeg2000Bitmap : IRawBitmap
     public uint NumberOfReplays => 0;
 
     public uint FramesCount => 1;
+
+    /// <inheritdoc/>
+    public byte[] ColorProfile { get; }
 
     public byte[] GetRawPixels(uint frameIndex) => _pixels;
 
@@ -118,15 +136,22 @@ public sealed class Jpeg2000Bitmap : IRawBitmap
             DiscardLevels = (int)mipLevel,
             Layers = qualityLevel == 0 ? 0 : Layers - (int)qualityLevel,
         });
-        return new FrameData(Rgba(image), ImageDescription.Default2D((uint)image.Width, (uint)image.Height,
+        return new FrameData(Rgba(image, _profile), ImageDescription.Default2D((uint)image.Width, (uint)image.Height,
             PixelFormat), mipLevel);
     }
 
     /// <summary>The picture's channels as RGBA: gray spread to the three colors, CMYK made RGB by its ink, a fourth
     /// channel of a picture that names no color space taken as opacity, the opacity unmultiplied from the colors when
     /// they carry it.</summary>
-    public static byte[] Rgba(Jpeg2000Image image)
+    public static byte[] Rgba(Jpeg2000Image image) => Rgba(image, null);
+
+    private static byte[] Rgba(Jpeg2000Image image, IccPixelConverter profile)
     {
+        if (profile != null)
+        {
+            return Managed(image, profile);
+        }
+
         var count = image.Width * image.Height;
         var rgba = new byte[count * 4];
         var channels = image.Channels;
@@ -166,6 +191,38 @@ public sealed class Jpeg2000Bitmap : IRawBitmap
             rgba[i * 4 + 1] = g;
             rgba[i * 4 + 2] = b;
             rgba[i * 4 + 3] = alpha;
+        }
+
+        return rgba;
+    }
+
+    private static byte[] Managed(Jpeg2000Image image, IccPixelConverter profile)
+    {
+        var count = image.Width * image.Height;
+        var channels = image.Channels;
+        var samples = image.Samples;
+        var device = new byte[count * profile.Channels];
+        var premultiplied = image.HasAlpha && image.AlphaIsPremultiplied;
+        for (var i = 0; i < count; i++)
+        {
+            var alpha = premultiplied ? samples[i * channels + channels - 1] : 255;
+            for (var c = 0; c < profile.Channels; c++)
+            {
+                var value = samples[i * channels + c];
+                device[i * profile.Channels + c] = alpha == 255 ? value
+                    : alpha == 0 ? (byte)0
+                    : (byte)Math.Min(255, value * 255 / alpha);
+            }
+        }
+
+        var rgba = new byte[count * 4];
+        IccPixels.ToRgba(profile, device, false, rgba);
+        if (image.HasAlpha)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                rgba[i * 4 + 3] = samples[i * channels + channels - 1];
+            }
         }
 
         return rgba;

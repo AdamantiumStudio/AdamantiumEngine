@@ -231,8 +231,11 @@ public static class PdfImageDecoder
         var rowsWithData = (int)Math.Min(height, ((long)data.Length + rowBytes - 1) / rowBytes);
         var max = (1 << bits) - 1;
         var table = components == 1 && bits <= 8 ? Table(space, decode, bits) : null;
-        var grid = table == null && ConvertsSlowly(space) && components <= PdfColorGrid.MaxComponents &&
-                   (long)width * rowsWithData > PdfColorGrid.NodeCount(space, components)
+        var managed = table == null && space is PdfIccBasedColorSpace { IsManaged: true } icc ? icc : null;
+        var converter = managed?.Converter((long)width * rowsWithData);
+        var grid = table == null && managed == null && IsTinted(space) &&
+                   components <= PdfColorGrid.MaxComponents &&
+                   (long)width * rowsWithData > PdfColorGrid.NodeCount(components)
             ? new PdfColorGrid(space, decode, components)
             : null;
         Span<double> color = stackalloc double[components];
@@ -259,7 +262,11 @@ public static class PdfImageDecoder
                     color[c] = decode[2 * c] + sample * (decode[2 * c + 1] - decode[2 * c]) / max;
                 }
 
-                if (grid != null)
+                if (converter != null)
+                {
+                    managed.ToRgb(color, rgb, converter);
+                }
+                else if (grid != null)
                 {
                     grid.ToRgb(color, rgb);
                 }
@@ -301,9 +308,9 @@ public static class PdfImageDecoder
         return bitmap;
     }
 
-    private static bool ConvertsSlowly(PdfColorSpace space) =>
+    private static bool IsTinted(PdfColorSpace space) =>
         space is PdfSeparationColorSpace or PdfDeviceNColorSpace ||
-        (space is PdfIccBasedColorSpace icc && (icc.IsManaged || ConvertsSlowly(icc.Alternate)));
+        (space is PdfIccBasedColorSpace { IsManaged: false } icc && IsTinted(icc.Alternate));
 
     private static byte[] Table(PdfColorSpace space, double[] decode, int bits)
     {

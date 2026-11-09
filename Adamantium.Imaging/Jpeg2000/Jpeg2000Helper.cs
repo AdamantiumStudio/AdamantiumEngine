@@ -6,11 +6,16 @@ namespace Adamantium.Imaging.Jpeg2000;
 /// <summary>Reads JPEG 2000 files for <see cref="BitmapLoader"/>.</summary>
 public static class Jpeg2000Helper
 {
-    public static Jpeg2000Bitmap LoadFromMemory(IntPtr source, ulong size)
+    public static Jpeg2000Bitmap LoadFromMemory(IntPtr source, ulong size) =>
+        LoadFromMemory(source, size, BitmapLoadOptions.Default);
+
+    /// <summary>Reads the JPEG 2000 of <paramref name="size"/> bytes at <paramref name="source"/> as
+    /// <paramref name="options"/> say.</summary>
+    public static Jpeg2000Bitmap LoadFromMemory(IntPtr source, ulong size, BitmapLoadOptions options)
     {
         var data = new byte[size];
         Marshal.Copy(source, data, 0, data.Length);
-        return new Jpeg2000Bitmap(data, BitmapLoader.MaxPixels);
+        return new Jpeg2000Bitmap(data, BitmapLoader.MaxPixels, options);
     }
 
     /// <summary>Whether <paramref name="header"/> starts a JP2 file or a bare codestream.</summary>

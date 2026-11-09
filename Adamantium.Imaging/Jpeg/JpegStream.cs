@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -49,6 +50,7 @@ internal sealed class JpegStream
     private int _maxHorizontal;
     private int _maxVertical;
     private int _eobRun;
+    private List<(int Sequence, int Count, byte[] Data)> _iccChunks;
 
     private JpegStream(bool preview, JpegStream tables)
     {
@@ -83,6 +85,33 @@ internal sealed class JpegStream
 
     /// <summary>Adobe's APP14 color transform - 0 none, 1 YCbCr, 2 YCCK; -1 without the segment.</summary>
     public int AdobeTransform { get; private set; } = -1;
+
+    /// <summary>The ICC profile the APP2 segments carry (ICC.1, B.4), put together from its chunks; null without
+    /// one, or with chunks missing.</summary>
+    public byte[] IccProfile
+    {
+        get
+        {
+            if (_iccChunks == null || _iccChunks.Count == 0 || _iccChunks.Count != _iccChunks[0].Count)
+            {
+                return null;
+            }
+
+            _iccChunks.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
+            var profile = new List<byte>();
+            for (var i = 0; i < _iccChunks.Count; i++)
+            {
+                if (_iccChunks[i].Sequence != i + 1 || _iccChunks[i].Count != _iccChunks.Count)
+                {
+                    return null;
+                }
+
+                profile.AddRange(_iccChunks[i].Data);
+            }
+
+            return profile.ToArray();
+        }
+    }
 
     public JpegComponent[] Components => _components;
 
@@ -318,6 +347,18 @@ internal sealed class JpegStream
                     break;
                 case 0xE0:
                     Jfif |= segment.StartsWith("JFIF\0"u8);
+                    break;
+                case 0xE2:
+                    if (segment.Length >= 14 && segment.StartsWith("ICC_PROFILE\0"u8) && segment[12] > 0 &&
+                        segment[13] > 0 && (_iccChunks?.Count ?? 0) < segment[13])
+                    {
+                        int sequence = segment[12];
+                        if (!(_iccChunks?.Exists(chunk => chunk.Sequence == sequence) ?? false))
+                        {
+                            (_iccChunks ??= []).Add((sequence, segment[13], segment[14..].ToArray()));
+                        }
+                    }
+
                     break;
                 case 0xEE:
                     if (segment.Length >= 12 && segment.StartsWith("Adobe"u8))

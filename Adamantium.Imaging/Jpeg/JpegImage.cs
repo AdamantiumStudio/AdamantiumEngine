@@ -32,6 +32,9 @@ public class JpegImage : IRawBitmap
 
     public uint FramesCount => 1;
 
+    /// <inheritdoc/>
+    public byte[] ColorProfile { get; init; }
+
     public byte[] GetRawPixels(uint frameIndex) => _pixels;
 
     public FrameData GetMipLevelData(uint mipLevel) => GetFrameData(0);

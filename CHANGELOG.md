@@ -52,7 +52,12 @@ All packages share one version.
   `CCITTFaxDecode` (`CcittOptions`) and looking codes up by table rather than bit by bit.
 - ICC color management in `Adamantium.Imaging` (`IccProfile`, `IccTransform`): profiles of version 2 and 4 -
   matrix and curves, `lut8`, `lut16`, `lutAtoB` and `lutBtoA` tables with tetrahedral lookup - shown as sRGB in all four
-  rendering intents, with black point compensation (ISO 18619).
+  rendering intents, with black point compensation (ISO 18619). `IccPixelConverter` converts many colors at once
+  through a grid of linear sRGB.
+- `BitmapLoadOptions.ApplyColorProfile`: `BitmapLoader.Load` applies the ICC profile a PNG (`iCCP`), JPEG (APP2, CMYK
+  and YCCK through the profile), TIFF (gray, RGB, CMYK) or JPEG 2000 file holds, its pixels then sRGB. Off by default;
+  `IRawBitmap.ColorProfile` gives the profile the pixels are still in, and a picture whose profile was applied is saved
+  without it. `BitmapLoader.ImageLoadDelegate` takes the options.
 - `Adamantium.Pdf` shows colors through ICC profiles: ICCBased spaces through their own profile (their `/Alternate`
   only when it cannot be read), device colors with no `Default` space through the document's output intent, and a
   JPEG 2000 image with no `/ColorSpace` through the profile it holds - relative colorimetric with black point

@@ -9,7 +9,12 @@ public static class TiffHelper
 {
     /// <summary>Reads the TIFF file of <paramref name="size"/> bytes at <paramref name="source"/>. The bytes are
     /// copied: pages after the first are decoded when asked for, after the caller's buffer is gone.</summary>
-    public static IRawBitmap LoadFromMemory(IntPtr source, ulong size)
+    public static IRawBitmap LoadFromMemory(IntPtr source, ulong size) =>
+        LoadFromMemory(source, size, BitmapLoadOptions.Default);
+
+    /// <summary>Reads the TIFF file of <paramref name="size"/> bytes at <paramref name="source"/> as
+    /// <paramref name="options"/> say; the bytes are copied, as above.</summary>
+    public static IRawBitmap LoadFromMemory(IntPtr source, ulong size, BitmapLoadOptions options)
     {
         if (size > (ulong)Array.MaxLength)
         {
@@ -18,7 +23,7 @@ public static class TiffHelper
 
         var bytes = new byte[size];
         Marshal.Copy(source, bytes, 0, bytes.Length);
-        return TiffImage.Load(bytes);
+        return TiffImage.Load(bytes, options);
     }
 
     /// <summary>Writes <paramref name="bitmap"/> to <paramref name="stream"/> as TIFF.</summary>
