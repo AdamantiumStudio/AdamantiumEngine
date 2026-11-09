@@ -40,6 +40,7 @@ cases = {
     "rgba-lossless": (rgba, {}),
     "gray16-lossless": (deep, {}),
     "rgb-codestream": (source, {"no_jp2": True}),
+    "rgba-codestream": (rgba, {"no_jp2": True}),
 }
 
 # Code-block style bits (T.800, table A.19): 1 bypass, 2 reset, 4 terminate all, 8 vertically causal,
@@ -101,7 +102,7 @@ for name, steps in partial.items():
         print(name, "reduce", reduce, "layers", layers, decoded.size)
 
 for name in list(cases) + list(coded):
-    extension = ".j2k" if name == "rgb-codestream" else ".jp2"
+    extension = ".j2k" if name.endswith("-codestream") else ".jp2"
     if name == "rgb-subsampled":
         planes = glymur.Jp2k(name + extension)[:]
         grid = planes.repeat(2, axis=0).repeat(2, axis=1)[:93, :157]

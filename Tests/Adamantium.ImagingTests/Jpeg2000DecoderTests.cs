@@ -275,21 +275,62 @@ public class Jpeg2000DecoderTests
         return output.ToArray();
     }
 
-    private static byte[] Rgba(Jpeg2000Image image)
-    {
-        var rgba = new byte[image.Width * image.Height * 4];
-        var channels = image.Channels;
-        for (var i = 0; i < image.Width * image.Height; i++)
-        {
-            for (var c = 0; c < 3; c++)
-            {
-                rgba[4 * i + c] = image.Samples[i * channels + (image.ColorChannels == 1 ? 0 : c)];
-            }
+    private static byte[] Rgba(Jpeg2000Image image) => Jpeg2000Bitmap.Rgba(image);
 
-            rgba[4 * i + 3] = image.HasAlpha ? image.Samples[i * channels + channels - 1] : (byte)255;
+    [Test]
+    public void ATileWithFewerLevelsBoundsWhatCanBeLeftOut()
+    {
+        var data = WithTileLevels(File.ReadAllBytes(Path.Combine(Folder(), "rgb-tiles.jp2")), 2);
+
+        var image = Jpeg2000Decoder.Decode(data, MaxPixels, new Jpeg2000Options { DiscardLevels = 4 });
+
+        Assert.That(image.Levels, Is.EqualTo(2));
+        Assert.That((image.Width, image.Height), Is.EqualTo((40, 24)), "ceil(157 / 4), ceil(93 / 4)");
+    }
+
+    private static byte[] WithTileLevels(byte[] file, byte levels)
+    {
+        var cod = IndexOf(file, [0xFF, 0x52], 0);
+        var codLength = (file[cod + 2] << 8) | file[cod + 3];
+        var marker = file[cod..(cod + 2 + codLength)];
+        marker[9] = levels;
+        var sot = IndexOf(file, [0xFF, 0x90], cod);
+        var at = sot + 12;
+        var length = (file[sot + 6] << 24) | (file[sot + 7] << 16) | (file[sot + 8] << 8) | file[sot + 9];
+        var spliced = new byte[file.Length + marker.Length];
+        Array.Copy(file, spliced, at);
+        Array.Copy(marker, 0, spliced, at, marker.Length);
+        Array.Copy(file, at, spliced, at + marker.Length, file.Length - at);
+        length += marker.Length;
+        spliced[sot + 6] = (byte)(length >> 24);
+        spliced[sot + 7] = (byte)(length >> 16);
+        spliced[sot + 8] = (byte)(length >> 8);
+        spliced[sot + 9] = (byte)length;
+        var box = IndexOf(spliced, "jp2c"u8.ToArray(), 0) - 4;
+        var boxLength = (spliced[box] << 24) | (spliced[box + 1] << 16) | (spliced[box + 2] << 8) | spliced[box + 3];
+        if (boxLength != 0)
+        {
+            boxLength += marker.Length;
+            spliced[box] = (byte)(boxLength >> 24);
+            spliced[box + 1] = (byte)(boxLength >> 16);
+            spliced[box + 2] = (byte)(boxLength >> 8);
+            spliced[box + 3] = (byte)boxLength;
         }
 
-        return rgba;
+        return spliced;
+    }
+
+    private static int IndexOf(byte[] data, byte[] pattern, int from)
+    {
+        for (var i = from; i <= data.Length - pattern.Length; i++)
+        {
+            if (data.AsSpan(i, pattern.Length).SequenceEqual(pattern))
+            {
+                return i;
+            }
+        }
+
+        throw new InvalidDataException("pattern not found");
     }
 
     private static int MaxDifference(byte[] a, byte[] b)

@@ -51,6 +51,10 @@ public interface IRawBitmap
     public FrameData GetLevelData(uint mipLevel, uint qualityLevel) =>
         qualityLevel == 0 ? GetMipLevelData(mipLevel) : null;
 
+    /// <summary>Whether a level other than the full picture is decoded when asked for, which can take a while, rather
+    /// than read from what the picture already holds.</summary>
+    public bool DecodesLevelsOnDemand => false;
+
     public ImageDescription GetImageDescription();
 
     public FrameData GetFrameData(uint frameIndex);

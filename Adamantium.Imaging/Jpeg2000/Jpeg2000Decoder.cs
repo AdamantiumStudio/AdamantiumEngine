@@ -57,13 +57,7 @@ public static class Jpeg2000Decoder
         var codestream = J2kCodestream.Read(data, file.CodestreamStart, file.CodestreamEnd, maxPixels);
         var size = codestream.SizeInfo;
         var main = codestream.Main;
-        var layers = main.CodingStyle(null).Layers;
-        var levels = int.MaxValue;
-        for (var c = 0; c < size.Components.Length; c++)
-        {
-            levels = Math.Min(levels, main.ComponentStyle(c, null).Levels);
-        }
-
+        var (levels, layers) = LevelsAndLayers(codestream);
         var discard = Math.Clamp(options.DiscardLevels, 0, levels);
         var grid = (X0: Shrink(size.X0, discard), Y0: Shrink(size.Y0, discard), X1: Shrink(size.X1, discard),
             Y1: Shrink(size.Y1, discard));
@@ -73,7 +67,7 @@ public static class Jpeg2000Decoder
         for (var c = 0; c < planes.Length; c++)
         {
             var info = size.Components[c];
-            var scale = Math.Min(discard, main.ComponentStyle(c, null).Levels);
+            var scale = discard;
             var x0 = Shrink(Ceiling(size.X0, info.Dx), scale);
             var y0 = Shrink(Ceiling(size.Y0, info.Dy), scale);
             var width = Shrink(Ceiling(size.X1, info.Dx), scale) - x0;
@@ -133,6 +127,40 @@ public static class Jpeg2000Decoder
     }
 
     private static int Shrink(int value, int levels) => (int)J2kResolution.Ceiling(value, levels);
+
+    private static (int Levels, int Layers) LevelsAndLayers(J2kCodestream codestream)
+    {
+        var size = codestream.SizeInfo;
+        var main = codestream.Main;
+        var layers = main.CodingStyle(null).Layers;
+        var levels = int.MaxValue;
+        for (var c = 0; c < size.Components.Length; c++)
+        {
+            levels = Math.Min(levels, main.ComponentStyle(c, null).Levels);
+        }
+
+        foreach (var tile in codestream.Tiles)
+        {
+            if (!tile.Seen)
+            {
+                continue;
+            }
+
+            layers = Math.Max(layers, tile.Markers.CodingStyle(main).Layers);
+            for (var c = 0; c < size.Components.Length; c++)
+            {
+                levels = Math.Min(levels, tile.Markers.ComponentStyle(c, main).Levels);
+            }
+        }
+
+        while (levels > 0 && (Shrink(size.X1, levels) - Shrink(size.X0, levels) < 1 ||
+                              Shrink(size.Y1, levels) - Shrink(size.Y0, levels) < 1))
+        {
+            levels--;
+        }
+
+        return (levels, layers);
+    }
 
     private static void Place(J2kTileComponent component, int[] plane, J2kPlane bounds)
     {
@@ -223,6 +251,11 @@ public static class Jpeg2000Decoder
             Jpeg2000ColorSpace.Cmyk => 4,
             _ => color.Count,
         };
+        if (alpha < 0 && file.Channels.Count == 0 && wanted > 0 && color.Count == wanted + 1)
+        {
+            alpha = color[wanted];
+        }
+
         if (wanted > 0 && wanted < color.Count)
         {
             color.RemoveRange(wanted, color.Count - wanted);
@@ -248,7 +281,7 @@ public static class Jpeg2000Decoder
         for (var k = 0; k < order.Count; k++)
         {
             var (component, column) = channels[order[k]];
-            if (component >= planes.Length)
+            if (component >= planes.Length || bounds[component].Width < 1 || bounds[component].Height < 1)
             {
                 continue;
             }

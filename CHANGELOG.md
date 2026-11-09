@@ -44,7 +44,7 @@ All packages share one version.
   says what it has (`Jpeg2000Image.Levels`, `Layers`, `CodedBytes`, `CodedBytesUsed`). `BitmapLoader` reads `.jp2` and
   `.j2k` files as a `Jpeg2000Bitmap`, its resolutions as mip levels and its layers as quality levels.
 - `IRawBitmap.QualityLevelsCount` and `IRawBitmap.GetLevelData(mip, quality)`: the qualities a picture's data holds,
-  one for every format but JPEG 2000.
+  one for every format but JPEG 2000; `IRawBitmap.DecodesLevelsOnDemand` says a level takes a decode to get.
 - `Jbig2Decoder` in `Adamantium.Imaging`: JBIG2 - generic, refinement, text and halftone regions, symbol and pattern
   dictionaries, standard and custom Huffman tables, pages of unknown height, embedded streams with their globals and
   JBIG2 files.
