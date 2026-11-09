@@ -168,6 +168,10 @@ internal static class PdfFontNames
             _ => null,
         };
 
+    /// <summary>Whether a name is the ZapfDingbats font's, whose glyph names are the Zapf Dingbats list's.</summary>
+    public static bool IsDingbats(string name) =>
+        FamilyOf(name).Replace(" ", string.Empty, StringComparison.Ordinal) == ZapfDingbats;
+
     private static string StyleWords(string name)
     {
         name = WithoutSubsetTag(name) ?? string.Empty;

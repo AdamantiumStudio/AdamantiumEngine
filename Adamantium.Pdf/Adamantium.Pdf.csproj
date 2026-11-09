@@ -20,4 +20,15 @@
         <InternalsVisibleTo Include="Adamantium.PdfTests" />
     </ItemGroup>
 
+    <ItemGroup>
+        <EmbeddedResource Include="Fonts\Data\CMaps\*" LogicalName="Adamantium.Pdf.CMaps.%(Filename)%(Extension)" />
+        <EmbeddedResource Include="Fonts\Data\GlyphList\*.txt" LogicalName="Adamantium.Pdf.GlyphList.%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <!-- Part of this package carries third-party data; the notices travel with it. -->
+    <ItemGroup>
+        <None Include="..\NOTICE" Pack="true" PackagePath="\" Visible="false" />
+        <None Include="..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+    </ItemGroup>
+
 </Project>

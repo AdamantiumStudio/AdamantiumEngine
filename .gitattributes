@@ -1,2 +1,5 @@
 # Unicode property tables, written with LF by Tests/Adamantium.UnicodeDataGenerator.
 Adamantium.Fonts/Data/*.ucd text eol=lf
+
+# Adobe's glyph lists and CMap resources, embedded byte for byte as Adobe publishes them.
+Adamantium.Pdf/Fonts/Data/** -text

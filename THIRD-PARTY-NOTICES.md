@@ -189,6 +189,51 @@ Oxford University Press that is not part of them and is not distributed.
 
 ---
 
+## Adobe Glyph List and CMap resources
+
+**Where:** `Adamantium.Pdf/Fonts/Data/GlyphList/` — `glyphlist.txt` and `zapfdingbats.txt` from
+https://github.com/adobe-type-tools/agl-aglfn (commit `4036a9ca80a62f64f9de4f7321a9a045ad0ecfd6`); and
+`Adamantium.Pdf/Fonts/Data/CMaps/` — the predefined CMaps ISO 32000 lists, the CMaps they use, and the UTF-16 CMaps of
+Adobe-Japan1, Adobe-GB1, Adobe-CNS1 and Adobe-Korea1, from https://github.com/adobe-type-tools/cmap-resources (commit
+`f5cf3bca7fdfeaceb77aa82847e974f2306c20b4`). All embedded in `Adamantium.Pdf`, unchanged.
+
+Data, not code: the text each standard glyph name stands for, and how the CJK encodings PDF names map codes to CIDs and
+CIDs to text. Each file keeps its own header, which carries the notice below and must stay with it; the CMaps are
+Copyright 1990-2019, 1990-2022 or 1990-2023 Adobe, the glyph lists Copyright 2002-2019 Adobe.
+
+```
+Copyright 1990-2023 Adobe. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+
+Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+Neither the name of Adobe nor the names of its contributors may be
+used to endorse or promote products derived from this software without
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+---
+
 ## Google color font test glyphs
 
 **Where:** `Tests/Adamantium.FontTests/ColorFonts/` — `test_glyphs-glyf_colr_1.ttf`,

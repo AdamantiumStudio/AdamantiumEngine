@@ -50,9 +50,6 @@ internal static class PdfFontPrograms
         return null;
     }
 
-    /// <summary>An OpenType program as PDF embeds one, often without the tables it does not need: its CFF outlines as
-    /// a bare CFF font, or its TrueType outlines as a TrueType program.</summary>
-    /// <exception cref="InvalidDataException">The data is not an OpenType font.</exception>
     private static Typeface OpenType(byte[] data)
     {
         if (data.Length < 12 || !data.AsSpan(0, 4).SequenceEqual("OTTO"u8))

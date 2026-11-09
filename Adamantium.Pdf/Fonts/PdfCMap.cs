@@ -12,6 +12,7 @@ public sealed class PdfCMap
 
     private readonly List<PdfCodeSpaceRange> _codeSpaces = [];
     private readonly List<PdfCodeRange> _cids = [];
+    private readonly List<PdfCodeRange> _notDefs = [];
     private readonly List<PdfCodeRange> _texts = [];
     private List<PdfCodeSpaceRange>[,] _codeSpacesByFirstByte;
 
@@ -34,6 +35,12 @@ public sealed class PdfCMap
     }
 
     public string Name { get; internal set; }
+
+    /// <summary>The registry of the character collection its CIDs are of (<c>/CIDSystemInfo</c>), or null.</summary>
+    public string Registry { get; internal set; }
+
+    /// <summary>The character collection its CIDs are of within <see cref="Registry"/>, or null.</summary>
+    public string Ordering { get; internal set; }
 
     /// <summary>Whether text in a font with this CMap is written top to bottom (<c>/WMode 1</c>).</summary>
     public bool IsVertical { get; internal set; }
@@ -103,11 +110,17 @@ public sealed class PdfCMap
         return fallback;
     }
 
-    /// <summary>The CID of a code; 0, the missing glyph, when the CMap maps it to none.</summary>
+    /// <summary>The CID of a code; for a code the CMap maps to none, the CID its notdef mapping gives, else 0, the
+    /// missing glyph (ISO 32000-2, 9.7.6.3).</summary>
     public uint CidOf(uint code, int length)
     {
-        var range = Find(_cids, code, length);
-        return range is { } found ? found.Start + (code - found.Origin) : 0;
+        if (Find(_cids, code, length) is { } found)
+        {
+            var cid = (ulong)found.Start + (code - found.Origin);
+            return cid <= uint.MaxValue ? (uint)cid : 0;
+        }
+
+        return Find(_notDefs, code, length)?.Start ?? 0;
     }
 
     /// <summary>The text a code stands for in a ToUnicode CMap, or null.</summary>
@@ -139,6 +152,9 @@ public sealed class PdfCMap
         return last > char.MaxValue ? null : range.Text[..^1] + (char)last;
     }
 
+    /// <summary>The ranges from codes to CIDs, once sealed: in order, none overlapping.</summary>
+    internal IReadOnlyList<PdfCodeRange> CidRanges => _cids;
+
     internal void AddCodeSpace(PdfCodeSpaceRange range)
     {
         if (_codeSpaces.Count < MaxCodeSpaceRanges)
@@ -147,9 +163,13 @@ public sealed class PdfCMap
         }
     }
 
-    internal void AddCids(PdfCodeRange range) => _cids.Add(range);
-
-    internal void AddTexts(PdfCodeRange range) => _texts.Add(range);
+    internal void Add(PdfCMapMapping mapping, PdfCodeRange range) =>
+        (mapping switch
+        {
+            PdfCMapMapping.Cids => _cids,
+            PdfCMapMapping.NotDef => _notDefs,
+            _ => _texts,
+        }).Add(range);
 
     /// <summary>Takes what <paramref name="parent"/> defines and this CMap does not (<c>usecmap</c>).</summary>
     internal void Use(PdfCMap parent)
@@ -160,8 +180,14 @@ public sealed class PdfCMap
         }
 
         _cids.InsertRange(0, parent._cids);
+        _notDefs.InsertRange(0, parent._notDefs);
         _texts.InsertRange(0, parent._texts);
         IsVertical |= parent.IsVertical;
+        if (Registry == null && Ordering == null)
+        {
+            Registry = parent.Registry;
+            Ordering = parent.Ordering;
+        }
     }
 
     /// <summary>Readies the CMap for lookup: codespace ranges indexed by length and first byte, and mappings cut into
@@ -187,6 +213,7 @@ public sealed class PdfCMap
         }
 
         Flatten(_cids);
+        Flatten(_notDefs);
         Flatten(_texts);
     }
 

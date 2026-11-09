@@ -13,6 +13,7 @@ public sealed class PdfType0Font : PdfFont
     private const double DefaultWidth = 1000;
     private const double DefaultVerticalOrigin = 880;
     private const double DefaultVerticalAdvance = -1000;
+    private const string AdobeRegistry = "Adobe";
 
     private readonly PdfCidMetrics _widths;
     private readonly PdfCidMetrics _verticalMetrics;
@@ -21,10 +22,17 @@ public sealed class PdfType0Font : PdfFont
     private readonly double _defaultVerticalOrigin = DefaultVerticalOrigin;
     private readonly byte[] _cidToGid;
     private readonly IFont _substitute;
+    private readonly bool _unicodeCodes;
 
     internal PdfType0Font(PdfDictionary dictionary, PdfDocument document) : base(dictionary, document)
     {
         Encoding = PdfCMapReader.Read(dictionary[PdfFontKeys.Encoding], document);
+        _unicodeCodes = PdfPredefinedCMaps.IsUnicode(Encoding?.Name);
+        if (Encoding?.Registry == AdobeRegistry)
+        {
+            Ordering = Encoding.Ordering;
+        }
+
         var descendants = document.Resolve(dictionary[PdfFontKeys.DescendantFonts]) as PdfArray;
         var cidFont = descendants is { Count: > 0 } ? document.Resolve(descendants[0]) as PdfDictionary : null;
         if (cidFont == null)
@@ -35,6 +43,12 @@ public sealed class PdfType0Font : PdfFont
         }
 
         CidFontType = PdfValues.Name(cidFont[PdfFontKeys.Subtype], document);
+        if (Ordering == null && document.Resolve(cidFont[PdfFontKeys.CIDSystemInfo]) is PdfDictionary system &&
+            (document.Resolve(system[PdfFontKeys.Registry]) as PdfString)?.ToText() == AdobeRegistry)
+        {
+            Ordering = (document.Resolve(system[PdfFontKeys.Ordering]) as PdfString)?.ToText();
+        }
+
         if (document.Resolve(cidFont[PdfFontKeys.FontDescriptor]) is PdfDictionary descriptor)
         {
             Descriptor = new PdfFontDescriptor(descriptor, document);
@@ -71,12 +85,16 @@ public sealed class PdfType0Font : PdfFont
         }
     }
 
-    /// <summary>The CMap from codes to CIDs; null when the font names a predefined CMap other than Identity-H and
-    /// Identity-V, whose data the engine does not carry.</summary>
+    /// <summary>The CMap from codes to CIDs; null when the font names no predefined CMap or its stream cannot be read.
+    /// </summary>
     public PdfCMap Encoding { get; }
 
     /// <summary>CIDFontType0 or CIDFontType2.</summary>
     public string CidFontType { get; }
+
+    /// <summary>The Adobe character collection its CIDs are of - Japan1, GB1, CNS1, Korea1 - by its CMap's
+    /// <c>/CIDSystemInfo</c>, else its CIDFont's (ISO 32000-2, 9.10.2); null for another registry.</summary>
+    public string Ordering { get; }
 
     public override bool IsVertical => Encoding?.IsVertical ?? false;
 
@@ -157,5 +175,14 @@ public sealed class PdfType0Font : PdfFont
         return Typeface.GetGlyphByCid(cid, out var glyph) ? glyph.Index : 0;
     }
 
-    private protected override string EncodedText(PdfCharacter character) => null;
+    private protected override string EncodedText(PdfCharacter character)
+    {
+        if (_unicodeCodes && PdfCodeText.Utf16(character.Code, character.Length) is { } text &&
+            !(text.Length == 1 && char.IsControl(text[0])))
+        {
+            return text;
+        }
+
+        return Ordering != null ? PdfCidTexts.Of(Ordering).TextOf(CidOf(character)) : null;
+    }
 }

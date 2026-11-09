@@ -19,6 +19,9 @@ internal static class PdfFontKeys
     public const string W2 = "W2";
     public const string DW2 = "DW2";
     public const string CIDToGIDMap = "CIDToGIDMap";
+    public const string CIDSystemInfo = "CIDSystemInfo";
+    public const string Registry = "Registry";
+    public const string Ordering = "Ordering";
     public const string UseCMap = "UseCMap";
     public const string CMapName = "CMapName";
     public const string FontMatrix = "FontMatrix";

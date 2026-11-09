@@ -17,6 +17,7 @@ public class PdfSimpleFont : PdfFont
     private readonly bool[] _named = new bool[256];
     private readonly IFont _substitute;
     private readonly bool _symbolic;
+    private readonly bool _dingbats;
 
     internal PdfSimpleFont(PdfDictionary dictionary, PdfDocument document) : base(dictionary, document)
     {
@@ -26,6 +27,7 @@ public class PdfSimpleFont : PdfFont
         }
 
         _symbolic = Descriptor?.IsSymbolic ?? PdfFontNames.BuiltInEncodingOf(BaseFont) != null;
+        _dingbats = PdfFontNames.IsDingbats(BaseFont);
         if (Subtype != PdfFontTypes.Type3)
         {
             Typeface = PdfFontPrograms.Embedded(Descriptor, document);
@@ -69,7 +71,7 @@ public class PdfSimpleFont : PdfFont
     }
 
     private protected override string EncodedText(PdfCharacter character) =>
-        character.Code < 256 ? PdfSimpleEncodings.TextOf(_names[character.Code]) : null;
+        character.Code < 256 ? PdfSimpleEncodings.TextOf(_names[character.Code], _dingbats) : null;
 
     private uint CffOrType1Glyph(uint code, string name)
     {
@@ -81,9 +83,6 @@ public class PdfSimpleFont : PdfFont
         return !_named[code] && Typeface.BuiltInEncoding[(int)code] is var builtIn and > 0 ? (uint)builtIn : 0;
     }
 
-    /// <summary>A TrueType program's glyph (ISO 32000-2, 9.6.5.4): a nonsymbolic font's code by the text its name
-    /// stands for, through the program's Unicode cmap, else by the name its post table gives; a symbolic font's code
-    /// as it is, or in the 0xF000 page a Microsoft symbol cmap puts it.</summary>
     private uint TrueTypeGlyph(uint code, string name) =>
         _symbolic ? SymbolicGlyph(Typeface.CurrentFont, Typeface, code, name)
             : NamedGlyph(Typeface.CurrentFont, Typeface, code, name);
@@ -92,11 +91,7 @@ public class PdfSimpleFont : PdfFont
         _symbolic ? SymbolicGlyph(_substitute, _substitute.Typeface, code, name)
             : NamedGlyph(_substitute, _substitute.Typeface, code, name);
 
-    /// <summary>A glyph by the text its name stands for, or by the name itself first when the name is a ligature or
-    /// a variant (<c>f_i</c>, <c>a.sc</c>), which a character map cannot tell from the plain letter; a name the program
-    /// has no glyph for is the missing glyph, and only a code the encoding names nothing goes to the map as it is.
-    /// </summary>
-    private static uint NamedGlyph(IFont font, Typeface program, uint code, string name)
+    private uint NamedGlyph(IFont font, Typeface program, uint code, string name)
     {
         if (name == null)
         {
@@ -109,7 +104,7 @@ public class PdfSimpleFont : PdfFont
             return exact.Index;
         }
 
-        if (PdfFontGlyphs.OfText(font, PdfSimpleEncodings.TextOf(name)) is var byText and > 0)
+        if (PdfFontGlyphs.OfText(font, PdfSimpleEncodings.TextOf(name, _dingbats)) is var byText and > 0)
         {
             return byText;
         }
@@ -127,7 +122,6 @@ public class PdfSimpleFont : PdfFont
         return name != null && program.GetGlyphByName(name, out var byName) ? byName.Index : 0;
     }
 
-    /// <summary>A code as it is, or in the 0xF000 page where a Microsoft symbol cmap puts it.</summary>
     private static uint CodeGlyph(IFont font, uint code) =>
         PdfFontGlyphs.OfCode(font, code) is var glyph and > 0 ? glyph : PdfFontGlyphs.OfCode(font, SymbolCodes | code);
 
@@ -158,9 +152,6 @@ public class PdfSimpleFont : PdfFont
         }
     }
 
-    /// <summary>The encoding a font has when its dictionary names none: a standard symbol font's own, an embedded
-    /// program's built-in one, StandardEncoding for a nonsymbolic font, and none for a symbolic TrueType font, whose
-    /// codes go straight to its cmap.</summary>
     private IReadOnlyList<string> DefaultEncoding()
     {
         if (!IsEmbedded && PdfFontNames.BuiltInEncodingOf(BaseFont) is { } standardSymbol)
@@ -219,7 +210,6 @@ public class PdfSimpleFont : PdfFont
         }
     }
 
-    /// <summary>A width the file does not give - a standard font's - from the program drawing it.</summary>
     private double ProgramWidth(uint code, double fallback)
     {
         var glyph = GlyphOf(new PdfCharacter(code, 1));
