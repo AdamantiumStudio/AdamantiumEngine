@@ -135,7 +135,7 @@ namespace Adamantium.Fonts.Parsers.CFF
             var count = cffFont.CharStringsIndex.DataByOffset.Count;
             var glyphs = new Glyph[count];
             var fontDicts = new FontDict[count];
-            var source = new CFFGlyphOutlineSource(this, cffFont, fontDicts);
+            var source = new CFFGlyphOutlineSource(this, cffFont, fontDicts, otfTtfReader.Length);
             cffFont.OutlineSource = source;
             var fdArraySelector = new FontDictArraySelector(cffFont.CIDFontInfo);
 

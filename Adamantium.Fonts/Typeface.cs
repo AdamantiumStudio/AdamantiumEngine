@@ -19,6 +19,8 @@ namespace Adamantium.Fonts
         private Func<uint, Glyph> glyphFactory;
         private List<UInt32> unicodes;
         private readonly List<string> errorMessages;
+        private Dictionary<string, Glyph> glyphsByName;
+        private Dictionary<uint, Glyph> glyphsByCid;
         internal IFontParser Parser { get; set; }
 
         internal IGlyphOutlineSource OutlineSource { get; set; }
@@ -103,6 +105,114 @@ namespace Adamantium.Fonts
         {
             glyphs.Clear();
             glyphs.AddRange(glyphsArray);
+            glyphsByName = null;
+            glyphsByCid = null;
+        }
+
+        /// <summary>The font's own encoding, for a Type 1 or bare CFF font: the glyph of each of 256 codes, -1 where a
+        /// code has none. Null for fonts that map characters by cmap instead.</summary>
+        public IReadOnlyList<int> BuiltInEncoding { get; internal set; }
+
+        /// <summary>Whether glyphs are named by CID (a CID-keyed CFF font) rather than by glyph name.</summary>
+        public bool IsCidKeyed { get; internal set; }
+
+        /// <summary>The glyph named <paramref name="name"/> in the font's charset or CharStrings.</summary>
+        public bool GetGlyphByName(string name, out Glyph glyph)
+        {
+            if (glyphsByName == null)
+            {
+                var names = new Dictionary<string, Glyph>(StringComparer.Ordinal);
+                foreach (var each in Glyphs)
+                {
+                    if (each.Name != null)
+                    {
+                        names.TryAdd(each.Name, each);
+                    }
+                }
+
+                glyphsByName = names;
+            }
+
+            glyph = null;
+            return name != null && glyphsByName.TryGetValue(name, out glyph);
+        }
+
+        /// <summary>The glyph of <paramref name="cid"/> in a CID-keyed font; in any other, the glyph of that index.
+        /// </summary>
+        public bool GetGlyphByCid(uint cid, out Glyph glyph)
+        {
+            if (!IsCidKeyed)
+            {
+                return GetGlyphByIndex(cid, out glyph);
+            }
+
+            if (glyphsByCid == null)
+            {
+                var cids = new Dictionary<uint, Glyph>();
+                foreach (var each in Glyphs)
+                {
+                    cids.TryAdd(each.Index == 0 ? 0 : each.SID, each);
+                }
+
+                glyphsByCid = cids;
+            }
+
+            return glyphsByCid.TryGetValue(cid, out glyph);
+        }
+
+        /// <summary>A bare CFF font program, as PDF embeds one (<c>FontFile3 /Type1C</c> or <c>/CIDFontType0C</c>).
+        /// </summary>
+        /// <exception cref="InvalidDataException">The data is not a CFF font.</exception>
+        public static Typeface LoadCff(byte[] data)
+        {
+            var parser = new Parsers.CFF.BareCffParser(data);
+            parser.Parse();
+            return parser.Typeface;
+        }
+
+        /// <summary>A Type 1 font program: PFA, PFB, or the clear text and the encrypted part as PDF embeds them
+        /// (<c>FontFile</c>).</summary>
+        /// <exception cref="InvalidDataException">The data is not a Type 1 font.</exception>
+        public static Typeface LoadType1(byte[] data)
+        {
+            var parser = new Parsers.Type1.Type1Parser(data);
+            parser.Parse();
+            return parser.Typeface;
+        }
+
+        /// <summary>A TrueType font program as PDF embeds one (<c>FontFile2</c>): often a subset without cmap, name,
+        /// OS/2, post or even maxp and hhea, since the document maps its characters and gives their widths.</summary>
+        /// <exception cref="InvalidDataException">The data is not a TrueType font.</exception>
+        public static Typeface LoadTrueTypeProgram(byte[] data)
+        {
+            ArgumentNullException.ThrowIfNull(data);
+            var stream = new FontStreamReader(data);
+            var reader = new FontTypeReader(stream, Encoding.UTF8, true);
+            var fontType = reader.GetFontType();
+            reader.Close();
+            if (fontType != FontType.Ttf)
+            {
+                throw new InvalidDataException("The data is not a TrueType font.");
+            }
+
+            stream.Position = 0;
+            var parser = new OpenTypeParser(stream, 3) { IsEmbeddedProgram = true };
+            try
+            {
+                parser.Parse();
+            }
+            catch (Exception exception) when (exception is EndOfStreamException or Exceptions.ParserException)
+            {
+                throw new InvalidDataException("The TrueType font is malformed: " + exception.Message, exception);
+            }
+
+            if (parser.Typeface.Fonts.Count == 0 || parser.Typeface.GlyphCount == 0)
+            {
+                throw new InvalidDataException("The TrueType font has no glyphs.");
+            }
+
+            parser.Typeface.SetDefaultFont();
+            return parser.Typeface;
         }
 
         internal void SetGlyphFactory(int count, Func<uint, Glyph> factory)

@@ -82,6 +82,17 @@ namespace Adamantium.Fonts.Parsers
         {
         }
 
+        /// <summary>A font program embedded in a document (PDF FontFile2): only head and the outline tables must be
+        /// there, since the document maps characters and gives names and metrics itself.</summary>
+        internal bool IsEmbeddedProgram { get; init; }
+
+        protected override bool ReadsTable(string name) => !IsEmbeddedProgram || name is TableNames.head or
+            TableNames.maxp or TableNames.loca or TableNames.glyf or TableNames.hhea or TableNames.hmtx or
+            TableNames.cmap or TableNames.post;
+
+        protected override bool CanDoWithout(string name) => IsEmbeddedProgram && name is TableNames.hhea or
+            TableNames.hmtx or TableNames.cmap or TableNames.post;
+
         public override void Parse()
         {
             // 1st step - check if this is a single font or collection
@@ -256,9 +267,9 @@ namespace Adamantium.Fonts.Parsers
             tableDirectory.SfntVersion = FontReader.ReadUInt32();
             tableDirectory.NumTables = FontReader.ReadUInt16();
 
-            tableDirectory.OutlineType = (tableDirectory.SfntVersion == 0x00010000
+            tableDirectory.OutlineType = tableDirectory.SfntVersion is 0x00010000 or 0x74727565
                 ? OutlineType.TrueType
-                : OutlineType.CompactFontFormat);
+                : OutlineType.CompactFontFormat;
 
             // skip other fields
             FontReader.Position += 6;
@@ -292,6 +303,11 @@ namespace Adamantium.Fonts.Parsers
         {
             foreach (var table in commonMandatoryTables)
             {
+                if (IsEmbeddedProgram && table != TableNames.head)
+                {
+                    continue;
+                }
+
                 if (!tableDirectory.TablesOffsets.ContainsKey(table))
                 {
                     throw new ParserException($"Table {table} is not present in {FilePath}");

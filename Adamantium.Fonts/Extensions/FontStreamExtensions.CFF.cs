@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Parsers.CFF;
@@ -22,50 +23,43 @@ namespace Adamantium.Fonts.Extensions
                 cffIndex.Count = reader.ReadUInt32();
             }
 
+            cffIndex.Offsets = new List<uint>();
+            cffIndex.DataByOffset = new List<byte[]>();
             if (cffIndex.Count == 0)
             {
-                return default;
+                return cffIndex;
             }
 
             cffIndex.OffsetSize = reader.ReadByte();
-
-            cffIndex.Offsets = new List<uint>();
-
-            for (int i = 0; i <= cffIndex.Count; ++i)
+            if (cffIndex.OffsetSize is < 1 or > 4 ||
+                (cffIndex.Count + 1L) * cffIndex.OffsetSize > reader.Length - reader.Position)
             {
-                switch (cffIndex.OffsetSize)
+                throw new InvalidDataException("A CFF INDEX is malformed.");
+            }
+
+            for (long i = 0; i <= cffIndex.Count; ++i)
+            {
+                uint offset = 0;
+                for (var b = 0; b < cffIndex.OffsetSize; b++)
                 {
-                    case 1:
-                        cffIndex.Offsets.Add(reader.ReadByte());
-                        break;
-                    case 2:
-                        cffIndex.Offsets.Add(reader.ReadUInt16());
-                        break;
-                    case 3:
-                        var rawOffset = reader.ReadBytes(3).ToList();
-                        rawOffset.Add(0);
-                        cffIndex.Offsets.Add(BitConverter.ToUInt32(rawOffset.ToArray(), 0));
-                        break;
-                    case 4:
-                        cffIndex.Offsets.Add(reader.ReadUInt32());
-                        break;
+                    offset = (offset << 8) | reader.ReadByte();
                 }
+
+                if (i == 0 ? offset != 1 : offset < cffIndex.Offsets[^1])
+                {
+                    throw new InvalidDataException("A CFF INDEX has offsets out of order.");
+                }
+
+                cffIndex.Offsets.Add(offset);
             }
 
-            var data = reader.ReadBytes((int)cffIndex.Offsets.Last() - 1);
-            Array.Reverse(data);
-            var dataByOffset = new List<byte[]>();
-
-            for (int i = 1; i < cffIndex.Offsets.Count; ++i)
+            var data = reader.ReadBytes(cffIndex.Offsets[^1] - 1L, true);
+            for (var i = 1; i < cffIndex.Offsets.Count; ++i)
             {
-                var startIndex = cffIndex.Offsets[i - 1] - 1;
-                var endIndex = cffIndex.Offsets[i] - 1;
-                var range = endIndex - startIndex;
-                var bytes = data.Skip((int)startIndex).Take((int)range).ToArray();
-                dataByOffset.Add(bytes);
+                var start = (int)cffIndex.Offsets[i - 1] - 1;
+                var end = (int)cffIndex.Offsets[i] - 1;
+                cffIndex.DataByOffset.Add(data.AsSpan(start, end - start).ToArray());
             }
-
-            cffIndex.DataByOffset = dataByOffset;
 
             return cffIndex;
         }
@@ -146,6 +140,11 @@ namespace Adamantium.Fonts.Extensions
                 case 4:
                     uint rangesCount = 0;
                     rangesCount = format == 3 ? reader.ReadUInt16() : reader.ReadUInt32();
+                    if (rangesCount * (format == 3 ? 3L : 6L) > reader.Length - reader.Position)
+                    {
+                        throw new InvalidDataException("The FDSelect ranges run past the end of the font.");
+                    }
+
                     font.CIDFontInfo.FdRanges = new FDRange[rangesCount+1];
                     for (int i = 0; i < rangesCount; i++)
                     {
@@ -160,7 +159,7 @@ namespace Adamantium.Fonts.Extensions
                     font.CIDFontInfo.FdRanges[rangesCount] = new FDRange(first, 0);
                     break;
                 default:
-                    throw new NotSupportedException($"Format {format} is not supported in FDSelect");
+                    throw new InvalidDataException($"FDSelect has format {format}, which the CFF formats do not define.");
             }
         }
     }

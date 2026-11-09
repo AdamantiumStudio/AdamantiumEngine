@@ -34,6 +34,12 @@ All packages share one version.
   whether the device imports such a texture in a format; `GraphicsAdapter.GetExternalImageMemoryFeatures` answers it.
 - `GraphicsAdapter.Luid`: the adapter's LUID on Windows, as another API is told which adapter to use.
 
+- Font programs as PDF embeds them: `Typeface.LoadCff` reads a bare CFF font (CID-keyed ones too),
+  `Typeface.LoadType1` a Type 1 font from PFA, PFB or the clear and encrypted parts of a PDF `FontFile` (flex, hint
+  replacement and seac accents followed), and `Typeface.LoadTrueTypeProgram` a TrueType subset that keeps only head
+  and its outlines. `Typeface.BuiltInEncoding`, `GetGlyphByName`, `GetGlyphByCid` and `IsCidKeyed` find their glyphs;
+  `StandardEncoding` names the codes of Adobe's standard encoding.
+
 - `IFont.IsMonospaced`: whether the font says every glyph is as wide as every other ('post' isFixedPitch), so a
   writer can name a monospace fallback for it.
 
@@ -132,6 +138,22 @@ All packages share one version.
   texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
 
 ### Fixed
+
+- A damaged font no longer hangs its reader, blows up its memory or is drawn from garbage: reading past the end of its
+  data or before its start fails instead of giving 0xFF bytes (a composite glyph read on for ever); glyphs whose loca
+  entries point outside glyf are invalid; a composite glyph nests at most 32 deep, holds at most 65535 points and skips
+  itself as a component; CFF and Type 1 charstrings, and the points composites copy, share a budget in proportion to
+  the font's size and glyph count, so a font whose every glyph is costly stays linear; arrays whose count the font gives
+  are checked against its data before they are allocated; CFF DICTs and INDEXes are read in linear time, an INDEX
+  whose offsets go back is refused and an operator short of operands is an error rather than a crash; a cmap range
+  ending at its type's maximum, or out of order, visits each code once; a cmap subtable of an unknown format is passed
+  over instead of failing the font.
+- cmap subtables of formats 2 (the one- and two-byte codes of Japanese, Chinese and Korean encodings), 8 (mixed 16-
+  and 32-bit codes) and 10 (one run of codes) are read and mapped; a font with one used to fail to load.
+- A CFF font's predefined charsets (ISOAdobe, Expert, Expert Subset) and encodings (Standard, Expert) are read, and a
+  DICT integer after byte 28 is signed, as the format says.
+- A cmap format 4 segment that maps through glyphIdArray adds its idDelta to the glyph found, as the format says.
+- A font's created and modified dates are seconds since 1904, as head stores them, not ticks.
 
 - Several compilers building effects at once no longer fail now and then with "Failed to load slang-c-shared.dll": the
   effect generator wrote its native libraries over the same files in place, so one compiler could load a library

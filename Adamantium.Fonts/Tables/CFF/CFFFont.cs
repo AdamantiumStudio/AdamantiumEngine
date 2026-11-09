@@ -18,7 +18,10 @@ namespace Adamantium.Fonts.Tables.CFF
         public string Name { get; set; }
         
         public IReadOnlyCollection<Glyph> Glyphs => glyphs.AsReadOnly();
-        
+
+        /// <summary>The built-in encoding: the glyph of each code, -1 where a code has none.</summary>
+        public int[] Encoding { get; internal set; }
+
         public UInt32 CharstringType { get; set; }
         
         internal List<FontDict> CidFontDicts { get; set; } 

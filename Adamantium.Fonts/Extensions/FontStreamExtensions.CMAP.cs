@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Tables.CFF;
@@ -18,26 +19,51 @@ namespace Adamantium.Fonts.Extensions
                     };
                     return format0;
                 }
-        
+
                 public static CharacterMapFormat2 ReadCharacterMapFormat2(this FontStreamReader reader)
                 {
-                    var format2 = new CharacterMapFormat2();
-                    format2.Length = reader.ReadUInt16();
-                    format2.Language = reader.ReadUInt16();
-                    for (int i = 0; i < format2.Length; i++)
+                    var format2 = new CharacterMapFormat2
                     {
-                        format2.GlyphIdArray[i] = reader.ReadUInt16();
+                        Length = reader.ReadUInt16(),
+                        Language = reader.ReadUInt16(),
+                    };
+                    var highestKey = 0;
+                    for (var i = 0; i < format2.SubheaderKeys.Length; i++)
+                    {
+                        format2.SubheaderKeys[i] = reader.ReadUInt16();
+                        highestKey = Math.Max(highestKey, format2.SubheaderKeys[i]);
                     }
-        
+
+                    var subHeaderCount = highestKey / 8 + 1;
+                    reader.EnsureAvailable(subHeaderCount, 8);
+                    format2.SubHeaders = new CharacterMapSubHeader[subHeaderCount];
+                    for (var i = 0; i < subHeaderCount; i++)
+                    {
+                        format2.SubHeaders[i] = new CharacterMapSubHeader
+                        {
+                            FirstCode = reader.ReadUInt16(),
+                            EntryCount = reader.ReadUInt16(),
+                            IdDelta = reader.ReadInt16(),
+                            IdRangeOffset = reader.ReadUInt16(),
+                        };
+                    }
+
+                    var glyphBytes = format2.Length - (6 + 2 * 256 + 8 * subHeaderCount);
+                    if (glyphBytes < 0)
+                    {
+                        throw new InvalidDataException("A cmap format 2 subtable is shorter than its subheaders.");
+                    }
+
+                    format2.GlyphIdArray = reader.ReadUInt16Array(glyphBytes / 2);
                     return format2;
                 }
-        
+
                 public static CharacterMapFormat4 ReadCharacterMapFormat4(this FontStreamReader reader)
                 {
                     var format4 = new CharacterMapFormat4();
                     format4.Length = reader.ReadUInt16();
-        
-                    var tableEndAt = reader.Position + format4.Length;
+
+                    var tableEndAt = reader.Position - 4 + format4.Length;
         
                     format4.Language = reader.ReadUInt16();
                     format4.SegCountX2 = reader.ReadUInt16();
@@ -53,9 +79,12 @@ namespace Adamantium.Fonts.Extensions
                     format4.IdRangeOffsets = reader.ReadUInt16Array(format4.SegCount);
         
                     var remainingLength = tableEndAt - reader.Position;
-                    var remainingEntries = remainingLength / 2;
-        
-                    format4.GlyphIdArray = reader.ReadUInt16Array((int) remainingEntries);
+                    if (remainingLength < 0)
+                    {
+                        throw new InvalidDataException("A cmap format 4 subtable is shorter than its segments.");
+                    }
+
+                    format4.GlyphIdArray = reader.ReadUInt16Array((int)(remainingLength / 2));
         
                     return format4;
                 }
@@ -73,17 +102,44 @@ namespace Adamantium.Fonts.Extensions
         
                     return format6;
                 }
-        
+
                 public static CharacterMapFormat8 ReadCharacterMapFormat8(this FontStreamReader reader)
                 {
-                    throw new NotSupportedException("Parsing of CMAP format 8 is not supported");
+                    var format8 = new CharacterMapFormat8
+                    {
+                        Reserved = reader.ReadUInt16(),
+                        Length = reader.ReadUInt32(),
+                        Language = reader.ReadUInt32(),
+                    };
+                    reader.ReadBytes(format8.Is32.Length, true).CopyTo(format8.Is32, 0);
+                    format8.NumGroups = reader.ReadUInt32();
+                    reader.EnsureAvailable(format8.NumGroups, 12);
+                    var groups = new SequentialMapGroup[format8.NumGroups];
+                    for (var i = 0; i < groups.Length; ++i)
+                    {
+                        groups[i].StartCharCode = reader.ReadUInt32();
+                        groups[i].EndCharCode = reader.ReadUInt32();
+                        groups[i].StartGlyphId = reader.ReadUInt32();
+                    }
+
+                    format8.Groups = groups.OrderBy(g => g.StartCharCode).ToArray();
+                    return format8;
                 }
-        
+
                 public static CharacterMapFormat10 ReadCharacterMapFormat10(this FontStreamReader reader)
                 {
-                    throw new NotSupportedException("Parsing of CMAP format 10 is not supported");
+                    var format10 = new CharacterMapFormat10
+                    {
+                        Reserved = reader.ReadUInt16(),
+                        Length = reader.ReadUInt32(),
+                        Language = reader.ReadUInt32(),
+                        StartCharCode = reader.ReadUInt32(),
+                        NumChars = reader.ReadUInt32(),
+                    };
+                    format10.GlyphIdArray = reader.ReadUInt16Array((int)Math.Min(format10.NumChars, int.MaxValue));
+                    return format10;
                 }
-        
+
                 public static CharacterMapFormat12 ReadCharacterMapFormat12(this FontStreamReader reader)
                 {
                     var format12 = new CharacterMapFormat12();
@@ -91,6 +147,7 @@ namespace Adamantium.Fonts.Extensions
                     format12.Length = reader.ReadUInt32();
                     format12.Language = reader.ReadUInt32();
                     format12.NumGroups = reader.ReadUInt32();
+                    reader.EnsureAvailable(format12.NumGroups, 12);
                     format12.Groups = new SequentialMapGroup[format12.NumGroups];
         
                     for (int i = 0; i < format12.Groups.Length; ++i)
@@ -114,6 +171,7 @@ namespace Adamantium.Fonts.Extensions
                     format13.Length = reader.ReadUInt32();
                     format13.Language = reader.ReadUInt32();
                     format13.NumGroups = reader.ReadUInt32();
+                    reader.EnsureAvailable(format13.NumGroups, 12);
                     format13.Groups = new ConstantMapGroup[format13.NumGroups];
         
                     for (int i = 0; i < format13.Groups.Length; ++i)
@@ -132,6 +190,7 @@ namespace Adamantium.Fonts.Extensions
                     var format14 = new CharacterMapFormat14();
                     format14.Length = reader.ReadUInt32();
                     format14.NumVarSelectorRecords = reader.ReadUInt32();
+                    reader.EnsureAvailable(format14.NumVarSelectorRecords, 11);
                     var records = new VariationSelectorRecord[format14.NumVarSelectorRecords];
         
                     for (int i = 0; i < format14.NumVarSelectorRecords; ++i)
@@ -165,11 +224,11 @@ namespace Adamantium.Fonts.Extensions
                             {
                                 var unicodeValue = reader.ReadUInt24();
                                 var glyphId = reader.ReadUInt16();
-                                selector.UVSMappings.Add(unicodeValue, glyphId);
+                                selector.UVSMappings[unicodeValue] = glyphId;
                             }
                         }
         
-                        format14.VarSelectors.Add(record.VarSelector, selector);
+                        format14.VarSelectors[record.VarSelector] = selector;
                     }
         
                     return format14;

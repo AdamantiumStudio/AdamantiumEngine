@@ -44,29 +44,29 @@ namespace Adamantium.Fonts.Tables.CMAP
 
         public override void CollectUnicodeChars(List<uint> unicodes)
         {
-            foreach (var group in Groups)
+            var from = 0u;
+            foreach (var group in Groups.OrderBy(g => g.StartCharCode))
             {
-                var start = group.StartCharCode;
-                var stop = group.EndCharCode;
-                for (uint u = start; u <= stop; ++u)
+                foreach (var code in CodesOf(group.StartCharCode, group.EndCharCode, from))
                 {
-                    unicodes.Add(u);
+                    unicodes.Add(code);
                 }
+
+                from = After(group.EndCharCode, from);
             }
         }
 
         public override void GetUnicodeToGlyphMappings(Dictionary<uint, uint> unicodeToGlyph)
         {
-            foreach (var group in Groups)
+            var from = 0u;
+            foreach (var group in Groups.OrderBy(g => g.StartCharCode))
             {
-                for (var character = group.StartCharCode; character <= group.EndCharCode; character++)
+                foreach (var code in CodesOf(group.StartCharCode, group.EndCharCode, from))
                 {
-                    unicodeToGlyph[character] = group.GlyphId;
-                    if (character == uint.MaxValue)
-                    {
-                        break;
-                    }
+                    unicodeToGlyph[code] = group.GlyphId;
                 }
+
+                from = After(group.EndCharCode, from);
             }
         }
     }

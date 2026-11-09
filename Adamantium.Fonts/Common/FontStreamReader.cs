@@ -16,9 +16,26 @@ namespace Adamantium.Fonts.Common
         {
             FilePath = path;
         }
+
+        /// <exception cref="InvalidDataException">An offset the font gives lies before its data or beyond any stream.
+        /// </exception>
+        public override long Position
+        {
+            get => base.Position;
+            set
+            {
+                if (value < 0 || value > int.MaxValue)
+                {
+                    throw new InvalidDataException("An offset in the font lies outside its data.");
+                }
+
+                base.Position = value;
+            }
+        }
         
         public byte[] ReadBytes(long count, bool ignoreEndian = false)
         {
+            EnsureAvailable(count);
             byte[] bytes = new byte[count];
             for (int i = 0; i < count; ++i)
             {
@@ -35,6 +52,7 @@ namespace Adamantium.Fonts.Common
         
         public sbyte[] ReadSignedBytes(long count)
         {
+            EnsureAvailable(count);
             sbyte[] bytes = new sbyte[count];
             for (int i = 0; i < count; ++i)
             {
@@ -51,12 +69,30 @@ namespace Adamantium.Fonts.Common
 
         public sbyte ReadSignedByte()
         {
-            return (sbyte)base.ReadByte();
+            return (sbyte)ReadByte();
         }
 
+        /// <exception cref="EndOfStreamException">The font data ends before the byte.</exception>
         public new byte ReadByte()
         {
-            return (byte)base.ReadByte();
+            var value = base.ReadByte();
+            if (value < 0)
+            {
+                throw new EndOfStreamException("The font data ends early.");
+            }
+
+            return (byte)value;
+        }
+
+        /// <summary>Fails before anything is allocated for <paramref name="count"/> values of
+        /// <paramref name="size"/> bytes that the data does not hold.</summary>
+        /// <exception cref="EndOfStreamException">The font data ends before them.</exception>
+        internal void EnsureAvailable(long count, int size = 1)
+        {
+            if (count < 0 || count > (Length - Position) / size)
+            {
+                throw new EndOfStreamException("The font data ends early.");
+            }
         }
 
         public UInt16 ReadUInt16()

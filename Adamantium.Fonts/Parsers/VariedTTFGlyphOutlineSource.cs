@@ -16,10 +16,12 @@ internal sealed class VariedTTFGlyphOutlineSource : IGlyphOutlineSource
     private readonly Font font;
     private readonly float[] coordinates;
     private readonly double[] originShifts;
+    private readonly FontWorkBudget budget;
 
     public VariedTTFGlyphOutlineSource(SfntParser parser, byte[] fontData, long glyfTableOffset, uint[] glyphOffsets,
         int glyphCount, Typeface typeface, Font font, float[] coordinates)
     {
+        budget = FontWorkBudget.ForCompositePoints(fontData.Length);
         this.parser = parser;
         this.fontData = fontData;
         this.glyfTableOffset = glyfTableOffset;
@@ -130,7 +132,7 @@ internal sealed class VariedTTFGlyphOutlineSource : IGlyphOutlineSource
             component.TransformMatrix = matrix;
         }
 
-        glyph.AddComponentOutlines(GlyphAt);
+        glyph.AddComponentOutlines(GlyphAt, budget);
         Finish(glyph, xs, count);
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Adamantium.Fonts.Tables.CMAP
 {
@@ -43,7 +44,8 @@ namespace Adamantium.Fonts.Tables.CMAP
 
             int i = Array.BinarySearch(EndCode, (ushort)character);
             i = i < 0 ? ~i : i;
-            if (i >= EndCode.Length || StartCode[i] > character)
+            if (i >= EndCode.Length || i >= StartCode.Length || i >= IdDelta.Length || i >= IdRangeOffsets.Length ||
+                StartCode[i] > character)
             {
                 return 0;
             }
@@ -53,35 +55,44 @@ namespace Adamantium.Fonts.Tables.CMAP
                 return (ushort)((character + IdDelta[i]) % 65536);
             }
 
-            var offset = (IdRangeOffsets[i] / 2) + (character - StartCode[i]);
+            var index = IdRangeOffsets[i] / 2 + (character - StartCode[i]) - IdRangeOffsets.Length + i;
+            if (index < 0 || index >= GlyphIdArray.Length)
+            {
+                return 0;
+            }
 
-            return GlyphIdArray[offset - IdRangeOffsets.Length + i];
+            var glyph = GlyphIdArray[index];
+            return glyph == 0 ? 0u : (ushort)((glyph + IdDelta[i]) % 65536);
         }
 
         public override void CollectUnicodeChars(List<uint> unicodes)
         {
-            for (int i = 0; i < StartCode.Length; ++i)
+            var from = 0u;
+            foreach (var i in SegmentsInOrder())
             {
-                var start = StartCode[i];
-                var stop = EndCode[i];
-                for (var j = start; j <= stop; ++j)
+                foreach (var code in CodesOf(StartCode[i], EndCode[i], from))
                 {
-                    unicodes.Add(j);
+                    unicodes.Add(code);
                 }
+
+                from = After(EndCode[i], from);
             }
         }
 
+        private IEnumerable<int> SegmentsInOrder() =>
+            Enumerable.Range(0, Math.Min(StartCode.Length, EndCode.Length)).OrderBy(i => StartCode[i]);
+
         public override void GetUnicodeToGlyphMappings(Dictionary<uint, uint> unicodeToGlyph)
         {
-            for (int i = 0; i < StartCode.Length; ++i)
+            var from = 0u;
+            foreach (var i in SegmentsInOrder())
             {
-                ushort start = StartCode[i];
-                ushort stop = EndCode[i];
-                for (uint j = start; j <= stop; ++j)
+                foreach (var code in CodesOf(StartCode[i], EndCode[i], from))
                 {
-                    var glyphIndex = GetGlyphIndex(j);
-                    unicodeToGlyph[j] = glyphIndex;
+                    unicodeToGlyph[code] = GetGlyphIndex(code);
                 }
+
+                from = After(EndCode[i], from);
             }
         }
     }

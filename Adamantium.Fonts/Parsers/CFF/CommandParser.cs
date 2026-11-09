@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Extensions;
@@ -9,12 +10,18 @@ namespace Adamantium.Fonts.Parsers.CFF
 {
     internal class CommandParser : OperandParser
     {
+        private const int MaxSteps = 500_000;
+        private const int MaxPendingBytes = 1 << 20;
+        private const int MaxOperands = 513;
+
         private static Dictionary<ushort, OperatorsType> bytesToOperatorMap;
         private ICFFParser cffParser;
+        private readonly FontWorkBudget budget;
 
-        internal CommandParser(ICFFParser cffParser)
+        internal CommandParser(ICFFParser cffParser, FontWorkBudget budget)
         {
             this.cffParser = cffParser;
+            this.budget = budget;
         }
 
         static CommandParser()
@@ -91,8 +98,16 @@ namespace Adamantium.Fonts.Parsers.CFF
 
             var variationStoreIndex = fontDict?.VariationStoreIndex ?? 0;
 
+            var steps = 0;
             while (mainStack.Count > 0)
             {
+                if (++steps > MaxSteps || mainStack.Count > MaxPendingBytes || operands.Count > MaxOperands)
+                {
+                    throw new InvalidDataException("A charstring runs too long or calls itself.");
+                }
+
+                budget.Spend(1);
+
                 token = mainStack.Pop();
 
                 if (token == 12) // escape byte found, it is a 2-byte operator
@@ -299,7 +314,11 @@ namespace Adamantium.Fonts.Parsers.CFF
                             commands.Add(command);
 
                             isBlendPresent = false;
-                            
+                            if (command.Operator == OperatorsType.endchar)
+                            {
+                                return commands;
+                            }
+
                             break;
                     }
 

@@ -17,6 +17,7 @@ namespace Adamantium.Fonts
     {
         private const double SideProbe = 1e-3;
         private const double VertexTolerance = 1e-3;
+        private const int MaxCompositePoints = ushort.MaxValue;
 
         private readonly object lockObject = new object();
 
@@ -311,11 +312,33 @@ namespace Adamantium.Fonts
             outlines.Add(outline);
         }
 
-        internal void AddComponentOutlines(Func<uint, Glyph> glyphAt)
+        /// <exception cref="System.IO.InvalidDataException">The components hold more points than a glyph can number
+        /// (TrueType numbers them in 16 bits), or than the font's <paramref name="budget"/> leaves.</exception>
+        internal void AddComponentOutlines(Func<uint, Glyph> glyphAt, FontWorkBudget budget)
         {
+            var points = 0;
             foreach (var component in CompositeGlyphComponents)
             {
                 var componentGlyph = glyphAt(component.SimpleGlyphIndex);
+                if (ReferenceEquals(componentGlyph, this))
+                {
+                    continue;
+                }
+
+                var componentPoints = 0;
+                foreach (var outline in componentGlyph.Outlines)
+                {
+                    componentPoints += outline.Points.Count;
+                }
+
+                points += componentPoints;
+                if (points > MaxCompositePoints)
+                {
+                    throw new System.IO.InvalidDataException("A composite glyph holds too many points.");
+                }
+
+                budget.Spend(componentPoints);
+
                 var componentOutlines = componentGlyph.TransformBasicOutlines(component.TransformMatrix);
                 if (component.IsAnchored)
                 {
