@@ -14,8 +14,8 @@ internal static class PdfFileRepair
     {
         var span = data.Span;
         var result = new PdfCrossReference(new PdfDictionary()) { IsRepaired = true };
-        var objects = new PdfKeywordSearch("obj"u8);
-        var streams = new PdfKeywordSearch("stream"u8, true);
+        var objects = new PdfKeywordSearch(PdfKeywords.ObjBytes);
+        var streams = new PdfKeywordSearch(PdfKeywords.StreamBytes, true);
         var position = 0;
         while (position < span.Length)
         {
@@ -25,14 +25,16 @@ internal static class PdfFileRepair
                 break;
             }
 
-            position = at + 3;
-            if (!EndsWord(span, at + 3) || !TryHeader(span, at, out var start, out var number, out var generation))
+            var afterKeyword = at + PdfKeywords.Obj.Length;
+            position = afterKeyword;
+            if (!EndsWord(span, afterKeyword) ||
+                !TryHeader(span, at, out var start, out var number, out var generation))
             {
                 continue;
             }
 
             result.Set(number, new PdfCrossReferenceEntry(PdfCrossReferenceEntryKind.InFile, start, generation));
-            position = Math.Max(position, ProvenStreamEnd(data, at + 3, objects, streams));
+            position = Math.Max(position, ProvenStreamEnd(data, afterKeyword, objects, streams));
         }
 
         ReadTrailers(data, result);
@@ -63,12 +65,12 @@ internal static class PdfFileRepair
             return -1;
         }
 
-        if ((dictionary as PdfDictionary)?["Length"] is not PdfInteger { Value: >= 0 } length)
+        if ((dictionary as PdfDictionary)?[PdfKeys.Length] is not PdfInteger { Value: >= 0 } length)
         {
             return -1;
         }
 
-        var dataStart = stream + "stream".Length;
+        var dataStart = stream + PdfKeywords.Stream.Length;
         if (dataStart < span.Length && span[dataStart] == '\r')
         {
             dataStart++;
@@ -86,11 +88,11 @@ internal static class PdfFileRepair
     private static void ReadTrailers(ReadOnlyMemory<byte> data, PdfCrossReference result)
     {
         var span = data.Span;
-        var trailers = new PdfKeywordSearch("trailer"u8, true);
+        var trailers = new PdfKeywordSearch(PdfKeywords.TrailerBytes, true);
         var at = trailers.Find(span, 0);
         while (at >= 0)
         {
-            var start = at + "trailer".Length;
+            var start = at + PdfKeywords.Trailer.Length;
             var next = trailers.Find(span, start);
             var end = next < 0 ? span.Length : next;
             at = next;
@@ -104,11 +106,11 @@ internal static class PdfFileRepair
                 continue;
             }
 
-            if (trailer is PdfDictionary dictionary && dictionary["Root"] != null)
+            if (trailer is PdfDictionary dictionary && dictionary[PdfKeys.Root] != null)
             {
                 foreach (var (key, value) in dictionary)
                 {
-                    if (key is not ("Prev" or "XRefStm"))
+                    if (key is not (PdfKeys.Prev or PdfKeys.XRefStm))
                     {
                         result.Trailer.Set(key, value);
                     }

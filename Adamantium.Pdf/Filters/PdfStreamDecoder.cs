@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.Pdf.Content;
 using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.Filters;
@@ -27,37 +28,37 @@ public static class PdfStreamDecoder
             var options = parameters[i];
             switch (name)
             {
-                case "FlateDecode":
-                case "Fl":
+                case PdfFilterNames.FlateDecode:
+                case PdfAbbreviations.FlateDecode:
                     current = Predict(PdfFlateFilter.Decode(current, limits), options, resolver);
                     break;
-                case "LZWDecode":
-                case "LZW":
-                    var earlyChange = Integer(options, "EarlyChange", resolver, 1) != 0;
+                case PdfFilterNames.LZWDecode:
+                case PdfAbbreviations.LZWDecode:
+                    var earlyChange = Integer(options, PdfKeys.EarlyChange, resolver, 1) != 0;
                     current = Predict(PdfLzwFilter.Decode(current.Span, earlyChange, limits), options, resolver);
                     break;
-                case "ASCIIHexDecode":
-                case "AHx":
+                case PdfFilterNames.ASCIIHexDecode:
+                case PdfAbbreviations.ASCIIHexDecode:
                     current = PdfAsciiHexFilter.Decode(current.Span);
                     break;
-                case "ASCII85Decode":
-                case "A85":
+                case PdfFilterNames.ASCII85Decode:
+                case PdfAbbreviations.ASCII85Decode:
                     current = PdfAscii85Filter.Decode(current.Span, limits);
                     break;
-                case "RunLengthDecode":
-                case "RL":
+                case PdfFilterNames.RunLengthDecode:
+                case PdfAbbreviations.RunLengthDecode:
                     current = PdfRunLengthFilter.Decode(current.Span, limits);
                     break;
-                case "Crypt":
+                case PdfFilterNames.Crypt:
                     break;
-                case "DCTDecode":
-                case "DCT":
-                    return new PdfDecodedStream(current, "DCTDecode", options);
-                case "CCITTFaxDecode":
-                case "CCF":
-                    return new PdfDecodedStream(current, "CCITTFaxDecode", options);
-                case "JPXDecode":
-                case "JBIG2Decode":
+                case PdfFilterNames.DCTDecode:
+                case PdfAbbreviations.DCTDecode:
+                    return new PdfDecodedStream(current, PdfFilterNames.DCTDecode, options);
+                case PdfFilterNames.CCITTFaxDecode:
+                case PdfAbbreviations.CCITTFaxDecode:
+                    return new PdfDecodedStream(current, PdfFilterNames.CCITTFaxDecode, options);
+                case PdfFilterNames.JPXDecode:
+                case PdfFilterNames.JBIG2Decode:
                     return new PdfDecodedStream(current, name, options);
                 default:
                     throw new PdfException("Unknown stream filter /" + name + ".");
@@ -70,8 +71,8 @@ public static class PdfStreamDecoder
     private static void ReadChain(PdfDictionary dictionary, IPdfObjectResolver resolver, List<string> filters,
         List<PdfDictionary> parameters)
     {
-        var filter = resolver.Resolve(dictionary["Filter"]);
-        var options = resolver.Resolve(dictionary["DecodeParms"]);
+        var filter = resolver.Resolve(dictionary[PdfKeys.Filter]);
+        var options = resolver.Resolve(dictionary[PdfKeys.DecodeParms]);
         if (filter is PdfName single)
         {
             filters.Add(single.Value);
@@ -116,14 +117,14 @@ public static class PdfStreamDecoder
             return data;
         }
 
-        var predictor = Integer(options, "Predictor", resolver, 1);
+        var predictor = Integer(options, PdfKeys.Predictor, resolver, 1);
         if (predictor <= 1)
         {
             return data;
         }
 
-        return PdfPredictor.Undo(data, predictor, Integer(options, "Colors", resolver, 1),
-            Integer(options, "BitsPerComponent", resolver, 8), Integer(options, "Columns", resolver, 1));
+        return PdfPredictor.Undo(data, predictor, Integer(options, PdfKeys.Colors, resolver, 1),
+            Integer(options, PdfKeys.BitsPerComponent, resolver, 8), Integer(options, PdfKeys.Columns, resolver, 1));
     }
 
     private static int Integer(PdfDictionary options, string key, IPdfObjectResolver resolver, int fallback)

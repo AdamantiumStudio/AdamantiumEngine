@@ -16,8 +16,9 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 {
     private const int MaxReferenceChain = 32;
     private const int MaxReadDepth = 64;
+    private const string DefaultVersion = "1.0";
 
-    private static readonly string[] TrailerKeys = ["Root", "Info", "ID", "Encrypt"];
+    private static readonly string[] TrailerKeys = [PdfKeys.Root, PdfKeys.Info, PdfKeys.Id, PdfKeys.Encrypt];
 
     private readonly ReadOnlyMemory<byte> _data;
     private readonly PdfReadOptions _options;
@@ -70,11 +71,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     public PdfDictionary Trailer => _crossReference.Trailer;
 
-    public PdfDictionary Catalog => Resolve(Trailer["Root"]) as PdfDictionary;
+    public PdfDictionary Catalog => Resolve(Trailer[PdfKeys.Root]) as PdfDictionary;
 
     /// <summary>The document information dictionary; null until the file is open, its strings being encrypted.
     /// </summary>
-    public PdfDictionary Info => IsAuthenticated ? Resolve(Trailer["Info"]) as PdfDictionary : null;
+    public PdfDictionary Info => IsAuthenticated ? Resolve(Trailer[PdfKeys.Info]) as PdfDictionary : null;
 
     /// <summary>Whether the file's cross-reference was broken and rebuilt by scanning.</summary>
     public bool IsRepaired => _crossReference.IsRepaired;
@@ -249,7 +250,8 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         var keyword = lexer.Next();
         var value = lexer.Next();
         return header.Kind == PdfTokenKind.Integer && header.Integer == number &&
-               generation.Kind == PdfTokenKind.Integer && keyword.IsKeyword("obj") && value.Kind == PdfTokenKind.Integer
+               generation.Kind == PdfTokenKind.Integer && keyword.IsKeyword(PdfKeywords.Obj) &&
+               value.Kind == PdfTokenKind.Integer
             ? value.Integer
             : null;
     }
@@ -327,10 +329,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         }
 
         PdfObjectStream objectStream = null;
-        if (GetObject(number) is PdfStream stream && stream.Dictionary["Type"] is PdfName { Value: "ObjStm" })
+        if (GetObject(number) is PdfStream stream &&
+            stream.Dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.ObjStm })
         {
-            var count = Resolve(stream.Dictionary["N"]) as PdfInteger;
-            var first = Resolve(stream.Dictionary["First"]) as PdfInteger;
+            var count = Resolve(stream.Dictionary[PdfKeys.N]) as PdfInteger;
+            var first = Resolve(stream.Dictionary[PdfKeys.First]) as PdfInteger;
             if (count != null && first != null && count.Value >= 0 && first.Value >= 0)
             {
                 var data = Decode(stream).Data;
@@ -351,23 +354,24 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         }
 
         var dictionary = stream.Dictionary;
-        if (dictionary["Type"] is PdfName { Value: "XRef" })
+        if (dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.XRef })
         {
             return stream.Data;
         }
 
-        if (!_security.EncryptsMetadata && dictionary["Type"] is PdfName { Value: "Metadata" })
+        if (!_security.EncryptsMetadata && dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.Metadata })
         {
             return stream.Data;
         }
 
         EnsureAuthenticated();
         var method = _security.StreamMethod;
-        if (FirstFilter(dictionary) == "Crypt")
+        if (FirstFilter(dictionary) == PdfFilterNames.Crypt)
         {
-            var parameters = Resolve(dictionary["DecodeParms"]);
+            var parameters = Resolve(dictionary[PdfKeys.DecodeParms]);
             var options = parameters is PdfArray array && array.Count > 0 ? Resolve(array[0]) : parameters;
-            var name = (Resolve((options as PdfDictionary)?["Name"]) as PdfName)?.Value ?? "Identity";
+            var name = (Resolve((options as PdfDictionary)?[PdfKeys.Name]) as PdfName)?.Value ??
+                       PdfCryptNames.Identity;
             method = _security.MethodOf(name);
         }
 
@@ -376,7 +380,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     private string FirstFilter(PdfDictionary dictionary)
     {
-        return Resolve(dictionary["Filter"]) switch
+        return Resolve(dictionary[PdfKeys.Filter]) switch
         {
             PdfName name => name.Value,
             PdfArray { Count: > 0 } array => (Resolve(array[0]) as PdfName)?.Value,
@@ -420,7 +424,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     private void OpenSecurity()
     {
-        var encrypt = Trailer["Encrypt"];
+        var encrypt = Trailer[PdfKeys.Encrypt];
         if (encrypt == null)
         {
             return;
@@ -436,7 +440,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
             return;
         }
 
-        var id = Resolve(Trailer["ID"]) as PdfArray;
+        var id = Resolve(Trailer[PdfKeys.Id]) as PdfArray;
         var firstId = id is { Count: > 0 } ? (Resolve(id[0]) as PdfString)?.Bytes : null;
         _security = new PdfStandardSecurityHandler(dictionary, firstId);
         if (_options.Password == null || !_security.Authenticate(_options.Password))
@@ -468,7 +472,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     private void RaiseVersionFromCatalog()
     {
-        if (!IsAuthenticated || Resolve(Catalog?["Version"]) is not PdfName name)
+        if (!IsAuthenticated || Resolve(Catalog?[PdfKeys.Version]) is not PdfName name)
         {
             return;
         }
@@ -510,13 +514,13 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
             var value = indirect?.Value;
             var dictionary = value as PdfDictionary ?? (value as PdfStream)?.Dictionary;
-            var type = (dictionary?["Type"] as PdfName)?.Value;
-            if (repaired.Trailer["Root"] == null && type == "Catalog")
+            var type = (dictionary?[PdfKeys.Type] as PdfName)?.Value;
+            if (repaired.Trailer[PdfKeys.Root] == null && type == PdfObjectTypes.Catalog)
             {
-                repaired.Trailer.Set("Root", new PdfReference(number, entry.Generation));
+                repaired.Trailer.Set(PdfKeys.Root, new PdfReference(number, entry.Generation));
             }
 
-            if (type == "XRef")
+            if (type == PdfObjectTypes.XRef)
             {
                 foreach (var key in TrailerKeys)
                 {
@@ -527,7 +531,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
                 }
             }
 
-            if (type != "ObjStm" || value is not PdfStream)
+            if (type != PdfObjectTypes.ObjStm || value is not PdfStream)
             {
                 continue;
             }
@@ -585,7 +589,8 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     private PdfObjectStream ObjectStreamForRepair(PdfStream stream)
     {
-        if (stream.Dictionary["N"] is not PdfInteger count || stream.Dictionary["First"] is not PdfInteger first)
+        if (stream.Dictionary[PdfKeys.N] is not PdfInteger count ||
+            stream.Dictionary[PdfKeys.First] is not PdfInteger first)
         {
             return null;
         }
@@ -608,16 +613,17 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     private string ReadHeaderVersion(ReadOnlySpan<byte> data)
     {
         var header = data.Slice(_headerOffset, Math.Min(16, data.Length - _headerOffset));
-        var version = "1.0";
-        if (header.StartsWith("%PDF-"u8))
+        var version = DefaultVersion;
+        if (header.StartsWith(PdfKeywords.FileHeaderBytes))
         {
-            var end = 5;
+            var start = PdfKeywords.FileHeaderBytes.Length;
+            var end = start;
             while (end < header.Length && (PdfCharacters.IsDigit(header[end]) || header[end] == '.'))
             {
                 end++;
             }
 
-            version = System.Text.Encoding.ASCII.GetString(header[5..end]);
+            version = System.Text.Encoding.ASCII.GetString(header[start..end]);
         }
 
         return version;

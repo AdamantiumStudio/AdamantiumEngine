@@ -7,11 +7,13 @@ namespace Adamantium.Pdf.Filters;
 /// zeros, up to <c>~&gt;</c>; a short last group of n characters gives n - 1 bytes.</summary>
 internal static class PdfAscii85Filter
 {
+    private static ReadOnlySpan<byte> StartMarker => "<~"u8;
+
     public static Memory<byte> Decode(ReadOnlySpan<byte> input, PdfDecodeLimits limits)
     {
-        if (input.StartsWith("<~"u8))
+        if (input.StartsWith(StartMarker))
         {
-            input = input[2..];
+            input = input[StartMarker.Length..];
         }
 
         var output = new PdfOutputBuffer(input.Length, limits.MaxDecodedLength);

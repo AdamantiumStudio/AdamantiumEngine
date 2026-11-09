@@ -21,11 +21,11 @@ public sealed class PdfPage
         Dictionary = dictionary;
         MediaBox = PdfRectangle.From(inherited.MediaBox, document) is { IsEmpty: false } media ? media : Letter;
         CropBox = Clip(PdfRectangle.From(inherited.CropBox, document), MediaBox);
-        BleedBox = Clip(PdfRectangle.From(dictionary["BleedBox"], document), CropBox);
-        TrimBox = Clip(PdfRectangle.From(dictionary["TrimBox"], document), CropBox);
-        ArtBox = Clip(PdfRectangle.From(dictionary["ArtBox"], document), CropBox);
+        BleedBox = Clip(PdfRectangle.From(dictionary[PdfKeys.BleedBox], document), CropBox);
+        TrimBox = Clip(PdfRectangle.From(dictionary[PdfKeys.TrimBox], document), CropBox);
+        ArtBox = Clip(PdfRectangle.From(dictionary[PdfKeys.ArtBox], document), CropBox);
         Rotation = NormalizeRotation(document.Resolve(inherited.Rotate));
-        UserUnit = document.Resolve(dictionary["UserUnit"]) switch
+        UserUnit = document.Resolve(dictionary[PdfKeys.UserUnit]) switch
         {
             PdfInteger integer when integer.Value > 0 => integer.Value,
             PdfReal real when real.Value > 0 && double.IsFinite(real.Value) => real.Value,
@@ -70,7 +70,7 @@ public sealed class PdfPage
         get
         {
             var streams = new List<PdfStream>();
-            switch (_document.Resolve(Dictionary["Contents"]))
+            switch (_document.Resolve(Dictionary[PdfKeys.Contents]))
             {
                 case PdfStream single:
                     streams.Add(single);
@@ -96,7 +96,7 @@ public sealed class PdfPage
         get
         {
             var annotations = new List<PdfDictionary>();
-            if (_document.Resolve(Dictionary["Annots"]) is PdfArray array)
+            if (_document.Resolve(Dictionary[PdfKeys.Annots]) is PdfArray array)
             {
                 foreach (var item in array)
                 {

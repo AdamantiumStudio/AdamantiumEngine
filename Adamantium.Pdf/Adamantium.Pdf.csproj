@@ -6,12 +6,13 @@
         <Configurations>Debug;Release</Configurations>
         <LangVersion>latest</LangVersion>
         <IsPackable>true</IsPackable>
-        <Description>Reads PDF files - objects, cross-reference tables and streams, damaged-file repair, stream filters, the standard security handler and the page tree.</Description>
+        <Description>Reads PDF files - objects, cross-reference tables and streams, damaged-file repair, stream filters, the standard security handler, the page tree, content streams, color spaces, functions and images.</Description>
         <PackageTags>adamantium;pdf;document</PackageTags>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
+        <ProjectReference Include="..\Adamantium.Imaging\Adamantium.Imaging.csproj" />
     </ItemGroup>
 
     <ItemGroup>

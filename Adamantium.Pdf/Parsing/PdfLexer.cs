@@ -10,6 +10,13 @@ internal sealed class PdfLexer
 {
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
+    private static readonly string[] SyntaxKeywords =
+    [
+        PdfKeywords.Reference, PdfKeywords.Free, PdfKeywords.InUse, PdfKeywords.Obj, PdfKeywords.EndObj,
+        PdfKeywords.Null, PdfKeywords.True, PdfKeywords.False, PdfKeywords.Xref, PdfKeywords.Stream,
+        PdfKeywords.EndStream, PdfKeywords.Trailer, PdfKeywords.StartXref,
+    ];
+
     private readonly ReadOnlyMemory<byte> _data;
     private readonly List<byte> _buffer = [];
 
@@ -398,22 +405,32 @@ internal sealed class PdfLexer
 
     private static string Keyword(ReadOnlySpan<byte> text)
     {
-        return text switch
+        foreach (var keyword in SyntaxKeywords)
         {
-            [(byte)'R'] => "R",
-            [(byte)'f'] => "f",
-            [(byte)'n'] => "n",
-            [(byte)'o', (byte)'b', (byte)'j'] => "obj",
-            [(byte)'e', (byte)'n', (byte)'d', (byte)'o', (byte)'b', (byte)'j'] => "endobj",
-            [(byte)'n', (byte)'u', (byte)'l', (byte)'l'] => "null",
-            [(byte)'t', (byte)'r', (byte)'u', (byte)'e'] => "true",
-            [(byte)'f', (byte)'a', (byte)'l', (byte)'s', (byte)'e'] => "false",
-            [(byte)'x', (byte)'r', (byte)'e', (byte)'f'] => "xref",
-            _ when text.SequenceEqual("stream"u8) => "stream",
-            _ when text.SequenceEqual("endstream"u8) => "endstream",
-            _ when text.SequenceEqual("trailer"u8) => "trailer",
-            _ when text.SequenceEqual("startxref"u8) => "startxref",
-            _ => Encoding.Latin1.GetString(text),
-        };
+            if (Spells(text, keyword))
+            {
+                return keyword;
+            }
+        }
+
+        return Encoding.Latin1.GetString(text);
+    }
+
+    private static bool Spells(ReadOnlySpan<byte> text, string keyword)
+    {
+        if (text.Length != keyword.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] != keyword[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

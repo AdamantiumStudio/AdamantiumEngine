@@ -14,7 +14,8 @@ public sealed class PdfPageLabels
 
     internal PdfPageLabels(PdfDocument document)
     {
-        if (!document.IsAuthenticated || document.Resolve(document.Catalog?["PageLabels"]) is not PdfDictionary root)
+        if (!document.IsAuthenticated ||
+            document.Resolve(document.Catalog?[PdfKeys.PageLabels]) is not PdfDictionary root)
         {
             return;
         }
@@ -25,7 +26,7 @@ public sealed class PdfPageLabels
         while (pending.Count > 0)
         {
             var node = pending.Pop();
-            if (document.Resolve(node["Nums"]) is PdfArray numbers)
+            if (document.Resolve(node[PdfPageLabelKeys.Nums]) is PdfArray numbers)
             {
                 for (var i = 0; i + 1 < numbers.Count; i += 2)
                 {
@@ -37,7 +38,7 @@ public sealed class PdfPageLabels
                 }
             }
 
-            if (document.Resolve(node["Kids"]) is PdfArray kids)
+            if (document.Resolve(node[PdfPageLabelKeys.Kids]) is PdfArray kids)
             {
                 foreach (var kid in kids)
                 {
@@ -84,17 +85,17 @@ public sealed class PdfPageLabels
 
     private static PdfPageLabelRange Range(int start, PdfDictionary label, PdfDocument document)
     {
-        var style = (document.Resolve(label["S"]) as PdfName)?.Value switch
+        var style = (document.Resolve(label[PdfPageLabelKeys.S]) as PdfName)?.Value switch
         {
-            "D" => PdfPageLabelStyle.Decimal,
-            "R" => PdfPageLabelStyle.UpperRoman,
-            "r" => PdfPageLabelStyle.LowerRoman,
-            "A" => PdfPageLabelStyle.UpperLetters,
-            "a" => PdfPageLabelStyle.LowerLetters,
+            PdfPageLabelStyleNames.Decimal => PdfPageLabelStyle.Decimal,
+            PdfPageLabelStyleNames.UpperRoman => PdfPageLabelStyle.UpperRoman,
+            PdfPageLabelStyleNames.LowerRoman => PdfPageLabelStyle.LowerRoman,
+            PdfPageLabelStyleNames.UpperLetters => PdfPageLabelStyle.UpperLetters,
+            PdfPageLabelStyleNames.LowerLetters => PdfPageLabelStyle.LowerLetters,
             _ => PdfPageLabelStyle.None,
         };
-        var prefix = (document.Resolve(label["P"]) as PdfString)?.ToText() ?? string.Empty;
-        var first = document.Resolve(label["St"]) is PdfInteger { Value: >= 1 and <= int.MaxValue } given
+        var prefix = (document.Resolve(label[PdfPageLabelKeys.P]) as PdfString)?.ToText() ?? string.Empty;
+        var first = document.Resolve(label[PdfPageLabelKeys.St]) is PdfInteger { Value: >= 1 and <= int.MaxValue } given
             ? (int)given.Value
             : 1;
         return new PdfPageLabelRange(start, style, prefix, first);

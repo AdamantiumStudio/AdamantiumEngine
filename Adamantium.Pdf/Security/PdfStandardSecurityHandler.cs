@@ -31,26 +31,26 @@ public sealed class PdfStandardSecurityHandler
     {
         _encrypt = encrypt;
         _firstId = firstId ?? [];
-        if (encrypt["Filter"] is PdfName { Value: not "Standard" } filter)
+        if (encrypt[PdfEncryptKeys.Filter] is PdfName { Value: not PdfCryptNames.Standard } filter)
         {
             throw new PdfException("The security handler /" + filter.Value + " is not supported.");
         }
 
-        Version = Integer(encrypt["V"], 0);
-        Revision = Integer(encrypt["R"], 2);
-        _owner = Bytes(encrypt["O"]);
-        _user = Bytes(encrypt["U"]);
-        _ownerKey = Bytes(encrypt["OE"]);
-        _userKey = Bytes(encrypt["UE"]);
-        _permissions = Integer(encrypt["P"], -1);
-        EncryptsMetadata = encrypt["EncryptMetadata"] is not PdfBoolean { Value: false };
-        StringMethod = MethodOf(encrypt["StrF"]);
-        StreamMethod = MethodOf(encrypt["StmF"]);
+        Version = Integer(encrypt[PdfEncryptKeys.V], 0);
+        Revision = Integer(encrypt[PdfEncryptKeys.R], 2);
+        _owner = Bytes(encrypt[PdfEncryptKeys.O]);
+        _user = Bytes(encrypt[PdfEncryptKeys.U]);
+        _ownerKey = Bytes(encrypt[PdfEncryptKeys.OE]);
+        _userKey = Bytes(encrypt[PdfEncryptKeys.UE]);
+        _permissions = Integer(encrypt[PdfEncryptKeys.P], -1);
+        EncryptsMetadata = encrypt[PdfEncryptKeys.EncryptMetadata] is not PdfBoolean { Value: false };
+        StringMethod = MethodOf(encrypt[PdfEncryptKeys.StrF]);
+        StreamMethod = MethodOf(encrypt[PdfEncryptKeys.StmF]);
         var aes128 = StringMethod == PdfCryptMethod.Aes128 || StreamMethod == PdfCryptMethod.Aes128;
         _keyLength = Revision >= 5 ? 32
             : Revision == 2 ? 5
             : aes128 ? 16
-            : KeyBytes(Integer(encrypt["Length"], Version >= 4 ? 128 : 40));
+            : KeyBytes(Integer(encrypt[PdfEncryptKeys.Length], Version >= 4 ? 128 : 40));
         if (_owner.Length < 32 || _user.Length < 32 || Revision < 2 || Revision > 6)
         {
             throw new PdfException("The encryption dictionary is malformed.");
@@ -120,19 +120,19 @@ public sealed class PdfStandardSecurityHandler
             return PdfCryptMethod.Rc4;
         }
 
-        var name = (filterName as PdfName)?.Value ?? "Identity";
-        if (name == "Identity")
+        var name = (filterName as PdfName)?.Value ?? PdfCryptNames.Identity;
+        if (name == PdfCryptNames.Identity)
         {
             return PdfCryptMethod.None;
         }
 
-        var filters = _encrypt["CF"] as PdfDictionary;
+        var filters = _encrypt[PdfEncryptKeys.CF] as PdfDictionary;
         var filter = filters?[name] as PdfDictionary;
-        return (filter?["CFM"] as PdfName)?.Value switch
+        return (filter?[PdfEncryptKeys.CFM] as PdfName)?.Value switch
         {
-            "V2" => PdfCryptMethod.Rc4,
-            "AESV2" => PdfCryptMethod.Aes128,
-            "AESV3" => PdfCryptMethod.Aes256,
+            PdfCryptNames.V2 => PdfCryptMethod.Rc4,
+            PdfCryptNames.AESV2 => PdfCryptMethod.Aes128,
+            PdfCryptNames.AESV3 => PdfCryptMethod.Aes256,
             _ => PdfCryptMethod.None,
         };
     }
