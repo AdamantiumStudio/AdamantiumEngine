@@ -15,8 +15,9 @@ namespace Adamantium.Pdf.Images;
 
 /// <summary>Decodes images (ISO 32000-2, 8.9) to 8-bit RGBA: samples of 1 to 16 bits through <c>/Decode</c> and the
 /// color space; JPEG, JPEG 2000, CCITT fax and JBIG2 through the engine's decoders; stencil masks, soft masks,
-/// explicit masks and color-key masks. A color space with a tint transform is evaluated on a grid, not once a pixel;
-/// rows past the end of the data are the color of zero samples.</summary>
+/// explicit masks and color-key masks. A color space with a tint transform or an ICC profile is evaluated on a grid,
+/// not once a pixel, when the image has more pixels than the grid nodes; a JPEG 2000 image with no <c>/ColorSpace</c> is shown through the profile it holds; rows past the
+/// end of the data are the color of zero samples.</summary>
 public static class PdfImageDecoder
 {
     /// <summary>The widest or tallest an image may be.</summary>
@@ -40,7 +41,7 @@ public static class PdfImageDecoder
         if (decoded.ImageFilter == PdfFilterNames.DCTDecode)
         {
             var samples = JpegChannels(decoded.Data, document, out width, out height, out var channels);
-            bitmap = Samples(dictionary, samples, width, height, 8, channels, resources, document, true);
+            bitmap = Samples(dictionary, samples, width, height, 8, channels, resources, document, true, null);
         }
         else if (decoded.ImageFilter == PdfFilterNames.JPXDecode)
         {
@@ -55,7 +56,7 @@ public static class PdfImageDecoder
                 : 1;
             bitmap = imageMask
                 ? Stencil(dictionary, data.Span, width, height, document)
-                : Samples(dictionary, data.Span, width, height, bits, 0, resources, document, true);
+                : Samples(dictionary, data.Span, width, height, bits, 0, resources, document, true, null);
         }
 
         if (withMasks && !bitmap.IsStencil)
@@ -185,8 +186,12 @@ public static class PdfImageDecoder
             }
         }
 
+        var embedded = dictionary[PdfKeys.ColorSpace] == null && image.IccProfile != null
+            ? PdfIccProfiles.Of(image.IccProfile, image.ColorChannels)
+            : null;
         var bitmap = Samples(dictionary, colors, image.Width, image.Height, 8, image.ColorChannels, resources,
-            document, false);
+            document, false, embedded == null ? null : new PdfIccBasedColorSpace(image.ColorChannels,
+                SpaceOf(dictionary, image.ColorChannels, resources, document), null, embedded));
         if (withMasks && image.HasAlpha && inData != 0 && dictionary[PdfKeys.SMask] == null)
         {
             for (var i = 0; i < pixels; i++)
@@ -200,9 +205,9 @@ public static class PdfImageDecoder
     }
 
     private static PdfImageBitmap Samples(PdfDictionary dictionary, ReadOnlySpan<byte> data, int width, int height,
-        int bits, int channels, PdfResources resources, PdfDocument document, bool readDecode)
+        int bits, int channels, PdfResources resources, PdfDocument document, bool readDecode, PdfColorSpace space)
     {
-        var space = SpaceOf(dictionary, channels, resources, document);
+        space ??= SpaceOf(dictionary, channels, resources, document);
         if (bits is not (1 or 2 or 4 or 8 or 16))
         {
             bits = 8;
@@ -226,7 +231,8 @@ public static class PdfImageDecoder
         var rowsWithData = (int)Math.Min(height, ((long)data.Length + rowBytes - 1) / rowBytes);
         var max = (1 << bits) - 1;
         var table = components == 1 && bits <= 8 ? Table(space, decode, bits) : null;
-        var grid = table == null && IsTinted(space) && components <= PdfColorGrid.MaxComponents
+        var grid = table == null && ConvertsSlowly(space) && components <= PdfColorGrid.MaxComponents &&
+                   (long)width * rowsWithData > PdfColorGrid.NodeCount(space, components)
             ? new PdfColorGrid(space, decode, components)
             : null;
         Span<double> color = stackalloc double[components];
@@ -295,9 +301,9 @@ public static class PdfImageDecoder
         return bitmap;
     }
 
-    private static bool IsTinted(PdfColorSpace space) =>
+    private static bool ConvertsSlowly(PdfColorSpace space) =>
         space is PdfSeparationColorSpace or PdfDeviceNColorSpace ||
-        (space is PdfIccBasedColorSpace icc && IsTinted(icc.Alternate));
+        (space is PdfIccBasedColorSpace icc && (icc.IsManaged || ConvertsSlowly(icc.Alternate)));
 
     private static byte[] Table(PdfColorSpace space, double[] decode, int bits)
     {

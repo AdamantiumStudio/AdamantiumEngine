@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Adamantium.Pdf.ColorSpaces;
 using Adamantium.Pdf.CrossReference;
 using Adamantium.Pdf.Filters;
 using Adamantium.Pdf.Fonts;
@@ -36,6 +37,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     private List<long> _offsets;
     private PdfPageTree _pages;
     private PdfPageLabels _pageLabels;
+    private PdfIccProfiles _iccProfiles;
 
     private PdfDocument(ReadOnlyMemory<byte> data, PdfReadOptions options)
     {
@@ -166,6 +168,9 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     internal PdfFont CachedFont(PdfObjectId id) => _fonts.GetValueOrDefault(id);
 
     internal void CacheFont(PdfObjectId id, PdfFont font) => _fonts[id] = font;
+
+    /// <summary>The document's ICC profiles, each read once.</summary>
+    internal PdfIccProfiles IccProfiles => _iccProfiles ??= new PdfIccProfiles(this);
 
     /// <summary>The predefined CMaps the document's fonts have named, by name; null for a name that is none.</summary>
     internal Dictionary<string, PdfCMap> PredefinedCMaps { get; } = [];
@@ -477,6 +482,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         _objects.Clear();
         _objectStreams.Clear();
         _fonts.Clear();
+        _iccProfiles = null;
         _pages = null;
         _pageLabels = null;
     }

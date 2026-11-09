@@ -50,6 +50,13 @@ All packages share one version.
   JBIG2 files.
 - `CcittDecoder` in `Adamantium.Imaging`: the CCITT fax decoder TIFF reads with, now public with the parameters of PDF's
   `CCITTFaxDecode` (`CcittOptions`) and looking codes up by table rather than bit by bit.
+- ICC color management in `Adamantium.Imaging` (`IccProfile`, `IccTransform`): profiles of version 2 and 4 -
+  matrix and curves, `lut8`, `lut16`, `lutAtoB` and `lutBtoA` tables with tetrahedral lookup - shown as sRGB in all four
+  rendering intents, with black point compensation (ISO 18619).
+- `Adamantium.Pdf` shows colors through ICC profiles: ICCBased spaces through their own profile (their `/Alternate`
+  only when it cannot be read), device colors with no `Default` space through the document's output intent, and a
+  JPEG 2000 image with no `/ColorSpace` through the profile it holds - relative colorimetric with black point
+  compensation, as a reader shows a page.
 
 - `SharedSurface.WriteRegions`: a producer whose frames are on the CPU writes the rectangles that changed into a surface
   it shares with a consumer on the same device (`CreateInDevice`) - submitted on its own, once the consumer has given
