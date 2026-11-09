@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Measurement;
+using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.Annotations;
@@ -109,7 +109,7 @@ public sealed class PdfNewAnnotation
         SetText(dictionary, PdfAnnotationKeys.Title, Author);
         if (Modified is { } modified)
         {
-            dictionary.Set(PdfAnnotationKeys.Modified, PdfString.FromText(Date(modified)));
+            dictionary.Set(PdfAnnotationKeys.Modified, PdfString.FromText(PdfDate.Format(modified)));
         }
 
         if (Color != null)
@@ -191,16 +191,6 @@ public sealed class PdfNewAnnotation
         }
 
         return dictionary;
-    }
-
-    /// <summary><paramref name="time"/> as a PDF date (ISO 32000-2, 7.9.4): D:YYYYMMDDHHmmSS and the offset from UTC.
-    /// </summary>
-    public static string Date(DateTimeOffset time)
-    {
-        var offset = time.Offset;
-        var sign = offset < TimeSpan.Zero ? '-' : offset == TimeSpan.Zero ? 'Z' : '+';
-        var text = "D:" + time.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture) + sign;
-        return sign == 'Z' ? text : text + $"{Math.Abs(offset.Hours):D2}'{Math.Abs(offset.Minutes):D2}";
     }
 
     private static void SetText(PdfDictionary dictionary, string key, string value)

@@ -35,6 +35,8 @@ internal static class PdfFontKeys
     public const string ItalicAngle = "ItalicAngle";
     public const string FontWeight = "FontWeight";
     public const string MissingWidth = "MissingWidth";
+    public const string Ascent = "Ascent";
+    public const string Descent = "Descent";
     public const string FontFile = "FontFile";
     public const string FontFile2 = "FontFile2";
     public const string FontFile3 = "FontFile3";

@@ -36,6 +36,11 @@ public sealed class PdfResources
 
     public PdfDictionary Properties(string name) => Get(PdfKeys.Properties, name) as PdfDictionary;
 
+    /// <summary>The entry <paramref name="name"/> of <paramref name="category"/> as written - a reference stays one, so
+    /// that what is read through it once can be kept by the document.</summary>
+    public PdfObject Entry(string category, string name) =>
+        (_resolver.Resolve(Dictionary[category]) as PdfDictionary)?[name];
+
     /// <summary>The resource <paramref name="name"/> of <paramref name="category"/>, resolved, or null.</summary>
     public PdfObject Get(string category, string name)
     {
