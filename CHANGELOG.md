@@ -18,6 +18,14 @@ All packages share one version.
   Indexed, Separation and DeviceN, each shown in sRGB (`PdfColorSpaces`); and images decoded to RGBA - samples of 1 to
   16 bits, JPEG, stencil, soft, explicit and color-key masks (`PdfImageDecoder`). CCITT, JPEG 2000 and JBIG2 images
   are not read yet.
+- `Adamantium.Pdf` reads the fonts pages show text with (`PdfFonts`): simple Type 1 and TrueType fonts with their
+  encodings and `/Differences` (Standard, WinAnsi, MacRoman, MacExpert, and the Symbol and ZapfDingbats fonts' own, as
+  annex D gives them), composite Type 0 fonts over CIDFontType0 and CIDFontType2 with Identity-H, Identity-V and
+  embedded CMaps, `/W` and `/W2` metrics and `/CIDToGIDMap`, and Type 3 fonts drawn by their glyph streams
+  (`PdfType3Font.CharProcOf`). Each code gives its width, its glyph in the font program and its text - by the
+  ToUnicode CMap, else by its glyph name. An embedded program draws as it is; a font the file does not embed takes the
+  system font of its name, else one of the same metrics as the standard font it is or resembles, and names it in
+  `PdfFont.Substitute`, while its widths stay the file's.
 - `JpegDecoder.DecodeChannels`: a JPEG's own channels - gray, RGB or CMYK, 8 bits each - for a reader that applies a
   color space of its own, as PDF does with an image's `/Decode` and color space.
 - `Lzw` in `Adamantium.Core.Compression`: the LZW decoder TIFF reads with, now shared by TIFF and PDF, with or without
@@ -154,6 +162,9 @@ All packages share one version.
   DICT integer after byte 28 is signed, as the format says.
 - A cmap format 4 segment that maps through glyphIdArray adds its idDelta to the glyph found, as the format says.
 - A font's created and modified dates are seconds since 1904, as head stores them, not ticks.
+- `Typeface.GetGlyphByCid` finds a glyph of a bare CFF font that is not CID-keyed by its charset, as PDF's
+  CIDFontType0 asks, rather than taking the CID for the glyph's index; the lookup tables of glyphs by name and by CID
+  are published safely to other threads.
 
 - Several compilers building effects at once no longer fail now and then with "Failed to load slang-c-shared.dll": the
   effect generator wrote its native libraries over the same files in place, so one compiler could load a library

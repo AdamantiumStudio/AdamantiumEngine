@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Adamantium.Pdf.CrossReference;
 using Adamantium.Pdf.Filters;
+using Adamantium.Pdf.Fonts;
 using Adamantium.Pdf.Objects;
 using Adamantium.Pdf.Parsing;
 using Adamantium.Pdf.Security;
@@ -24,6 +25,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     private readonly PdfReadOptions _options;
     private readonly Dictionary<int, PdfObject> _objects = [];
     private readonly Dictionary<int, PdfObjectStream> _objectStreams = [];
+    private readonly Dictionary<PdfObjectId, PdfFont> _fonts = [];
     private readonly HashSet<int> _reading = [];
     private readonly int _headerOffset;
     private PdfCrossReference _crossReference;
@@ -159,6 +161,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
         return value;
     }
+
+    /// <summary>The font read before from the object <paramref name="id"/>, or null.</summary>
+    internal PdfFont CachedFont(PdfObjectId id) => _fonts.GetValueOrDefault(id);
+
+    internal void CacheFont(PdfObjectId id, PdfFont font) => _fonts[id] = font;
 
     /// <summary>The indirect object with <paramref name="number"/>, or <see cref="PdfNull.Value"/>.</summary>
     public PdfObject GetObject(int number)
@@ -466,6 +473,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     {
         _objects.Clear();
         _objectStreams.Clear();
+        _fonts.Clear();
         _pages = null;
         _pageLabels = null;
     }

@@ -18,4 +18,13 @@
         <ProjectReference Include="..\..\Adamantium.Pdf\Adamantium.Pdf.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Content Include="..\Adamantium.FontTests\TTFFonts\SourceSans3-Bold.ttf" Link="Fonts\SourceSans3-Bold.ttf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="..\Adamantium.FontTests\OTFFonts\SourceSans3-Regular.otf" Link="Fonts\SourceSans3-Regular.otf">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
 </Project>
