@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Adamantium.Pdf.Annotations;
 using Adamantium.Pdf.Measurement;
+using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
+using Adamantium.Pdf.Text;
 
 namespace Adamantium.Pdf.Document;
 
@@ -118,6 +120,47 @@ public sealed class PdfPage
             return annotations;
         }
     }
+
+    /// <summary>The page's links, in the order of its annotations; hidden ones left out.</summary>
+    public IReadOnlyList<PdfLink> Links
+    {
+        get
+        {
+            var links = new List<PdfLink>();
+            foreach (var annotation in Annotations)
+            {
+                if (annotation.Subtype != PdfAnnotationTypes.Link || annotation.IsHidden)
+                {
+                    continue;
+                }
+
+                var quads = new List<PdfQuad>();
+                if (PdfValues.Numbers(annotation.Dictionary["QuadPoints"], _document) is { } points)
+                {
+                    for (var i = 0; i + 8 <= points.Length; i += 8)
+                    {
+                        quads.Add(new PdfQuad(new PdfPoint(points[i + 4], points[i + 5]),
+                            new PdfPoint(points[i + 6], points[i + 7]), new PdfPoint(points[i + 2], points[i + 3]),
+                            new PdfPoint(points[i], points[i + 1])));
+                    }
+                }
+
+                var dictionary = annotation.Dictionary;
+                var action = dictionary[PdfKeys.Dest] != null
+                    ? _document.ResolveDestination(dictionary[PdfKeys.Dest]) is { } destination
+                        ? PdfAction.ForDestination(destination)
+                        : null
+                    : PdfAction.From(dictionary["A"], _document);
+                links.Add(new PdfLink(annotation.Rect, quads, action));
+            }
+
+            return links;
+        }
+    }
+
+    /// <summary>Reads the page's text: its glyphs with their boxes, gathered into lines - what selection, copying and
+    /// search work on. Reads the content each time it is called.</summary>
+    public PdfPageText ReadText() => new(PdfTextReader.Read(this, _document));
 
     /// <summary>The regions of the page with a scale of their own (<c>/VP</c>), in their order.</summary>
     public IReadOnlyList<PdfViewport> Viewports => PdfViewport.ListFrom(Dictionary[PdfKeys.Viewports], _document);

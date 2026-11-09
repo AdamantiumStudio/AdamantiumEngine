@@ -39,6 +39,12 @@ internal static class PdfKeys
     public const string PageLabels = "PageLabels";
     public const string OutputIntents = "OutputIntents";
     public const string DestOutputProfile = "DestOutputProfile";
+    public const string Names = "Names";
+    public const string Dests = "Dests";
+    public const string Dest = "Dest";
+    public const string Outlines = "Outlines";
+    public const string Next = "Next";
+    public const string Count = "Count";
     public const string Extensions = "Extensions";
     public const string BaseVersion = "BaseVersion";
     public const string ExtensionLevel = "ExtensionLevel";

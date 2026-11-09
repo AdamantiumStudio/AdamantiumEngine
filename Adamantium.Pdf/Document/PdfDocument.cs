@@ -5,6 +5,7 @@ using Adamantium.Pdf.ColorSpaces;
 using Adamantium.Pdf.CrossReference;
 using Adamantium.Pdf.Filters;
 using Adamantium.Pdf.Fonts;
+using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
 using Adamantium.Pdf.Parsing;
 using Adamantium.Pdf.Security;
@@ -27,6 +28,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     private readonly Dictionary<int, PdfObject> _objects = [];
     private readonly Dictionary<int, PdfObjectStream> _objectStreams = [];
     private readonly Dictionary<PdfObjectId, PdfFont> _fonts = [];
+    private readonly Dictionary<PdfDictionary, PdfFont> _directFonts = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<int> _reading = [];
     private readonly int _headerOffset;
     private PdfCrossReference _crossReference;
@@ -38,6 +40,9 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     private PdfPageTree _pages;
     private PdfPageLabels _pageLabels;
     private PdfIccProfiles _iccProfiles;
+    private Dictionary<PdfObjectId, int> _pageIndexes;
+    private IReadOnlyList<PdfOutlineItem> _outline;
+    private Dictionary<string, PdfObject> _namedDestinations;
 
     private PdfDocument(ReadOnlyMemory<byte> data, PdfReadOptions options)
     {
@@ -118,6 +123,127 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     public PdfPageLabels PageLabels => _pageLabels ??= new PdfPageLabels(this);
 
+    /// <summary>The most outline items read (<see cref="Outline"/>).</summary>
+    public const int MaxOutlineItems = 100_000;
+
+    /// <summary>The document's outline - its bookmarks - top level first; read once, its loops broken and at most
+    /// <see cref="MaxOutlineItems"/> items long.</summary>
+    public IReadOnlyList<PdfOutlineItem> Outline => _outline ??= ReadOutline();
+
+    /// <summary>What the document information dictionary says: title, author, dates.</summary>
+    public PdfDocumentProperties Properties => new(Info, this);
+
+    /// <summary>The files embedded in the document (<c>/EmbeddedFiles</c>), in their list's order.</summary>
+    public IReadOnlyList<PdfAttachment> Attachments
+    {
+        get
+        {
+            var attachments = new List<PdfAttachment>();
+            var names = Resolve(Catalog?[PdfKeys.Names]) as PdfDictionary;
+            foreach (var (key, value) in PdfNameTree.Entries(names?["EmbeddedFiles"], this))
+            {
+                if (PdfAttachment.From(key, value, this) is { } attachment)
+                {
+                    attachments.Add(attachment);
+                }
+            }
+
+            return attachments;
+        }
+    }
+
+    /// <summary>The index of the page whose object is <paramref name="id"/>; -1 when it is not a page of the document.
+    /// </summary>
+    public int PageIndexOf(PdfObjectId id)
+    {
+        if (_pageIndexes == null)
+        {
+            _pageIndexes = [];
+            foreach (var page in Pages)
+            {
+                if (page.Id is { } pageId)
+                {
+                    _pageIndexes.TryAdd(pageId, page.Index);
+                }
+            }
+        }
+
+        return _pageIndexes.TryGetValue(id, out var index) ? index : -1;
+    }
+
+    /// <summary>The destination <paramref name="value"/> stands for: an explicit one, or one named - by a name or a
+    /// string, either looked for in the catalog's <c>/Dests</c> and then its <c>/Names</c> tree, which is read once;
+    /// null when it is none or the name is not found.</summary>
+    public PdfDestination ResolveDestination(PdfObject value)
+    {
+        var target = Resolve(value) switch
+        {
+            PdfName name => Named(name.Value),
+            PdfString text => Named(text.ToText()),
+            var other => other,
+        };
+        if (target is PdfDictionary wrapped)
+        {
+            target = Resolve(wrapped["D"]);
+        }
+
+        return target is PdfArray array ? PdfDestination.From(array, this) : null;
+    }
+
+    private PdfObject Named(string name)
+    {
+        _namedDestinations ??= PdfNameTree.Map((Resolve(Catalog?[PdfKeys.Names]) as PdfDictionary)?[PdfKeys.Dests],
+            this);
+        return Resolve((Resolve(Catalog?[PdfKeys.Dests]) as PdfDictionary)?[name]) is { } old and not PdfNull
+            ? old
+            : Resolve(_namedDestinations.GetValueOrDefault(name));
+    }
+
+    private IReadOnlyList<PdfOutlineItem> ReadOutline()
+    {
+        var top = new List<PdfOutlineItem>();
+        var outlines = Resolve(Catalog?[PdfKeys.Outlines]) as PdfDictionary;
+        if (Resolve(outlines?[PdfKeys.First]) is not PdfDictionary first)
+        {
+            return top;
+        }
+
+        var visited = new HashSet<PdfDictionary>(ReferenceEqualityComparer.Instance);
+        var levels = new Stack<(PdfDictionary First, List<PdfOutlineItem> Into)>();
+        levels.Push((first, top));
+        var count = 0;
+        while (levels.Count > 0 && count < MaxOutlineItems)
+        {
+            var (node, into) = levels.Pop();
+            for (; node != null && count < MaxOutlineItems && visited.Add(node);
+                 node = Resolve(node[PdfKeys.Next]) as PdfDictionary)
+            {
+                count++;
+                var children = new List<PdfOutlineItem>();
+                var action = node[PdfKeys.Dest] != null
+                    ? ResolveDestination(node[PdfKeys.Dest]) is { } destination
+                        ? PdfAction.ForDestination(destination)
+                        : null
+                    : PdfAction.From(node["A"], this);
+                var flags = PdfValues.Integer(node["F"], this);
+                var color = PdfValues.Numbers(node["C"], this);
+                into.Add(new PdfOutlineItem((Resolve(node["Title"]) as PdfString)?.ToText(), action, children)
+                {
+                    IsOpen = PdfValues.Integer(node[PdfKeys.Count], this) > 0,
+                    IsItalic = (flags & 1) != 0,
+                    IsBold = (flags & 2) != 0,
+                    Color = color is { Length: 3 } ? color : null,
+                });
+                if (Resolve(node[PdfKeys.First]) is PdfDictionary child)
+                {
+                    levels.Push((child, children));
+                }
+            }
+        }
+
+        return top;
+    }
+
     public static PdfDocument Open(byte[] data, PdfReadOptions options = null) =>
         new(data ?? throw new ArgumentNullException(nameof(data)), options);
 
@@ -178,6 +304,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     internal PdfFont CachedFont(PdfObjectId id) => _fonts.GetValueOrDefault(id);
 
     internal void CacheFont(PdfObjectId id, PdfFont font) => _fonts[id] = font;
+
+    /// <summary>The font read before from the direct font dictionary <paramref name="dictionary"/>, or null.</summary>
+    internal PdfFont CachedFont(PdfDictionary dictionary) => _directFonts.GetValueOrDefault(dictionary);
+
+    internal void CacheFont(PdfDictionary dictionary, PdfFont font) => _directFonts[dictionary] = font;
 
     /// <summary>The document's ICC profiles, each read once.</summary>
     internal PdfIccProfiles IccProfiles => _iccProfiles ??= new PdfIccProfiles(this);
@@ -512,7 +643,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         _objects.Clear();
         _objectStreams.Clear();
         _fonts.Clear();
+        _directFonts.Clear();
         _iccProfiles = null;
+        _pageIndexes = null;
+        _outline = null;
+        _namedDestinations = null;
         _pages = null;
         _pageLabels = null;
     }

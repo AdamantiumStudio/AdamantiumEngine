@@ -72,6 +72,17 @@ All packages share one version.
 - Measurement in `Adamantium.Pdf` (`PdfMeasure`, `PdfNumberFormat`, `PdfViewport`): rectilinear measure, number format
   and viewport dictionaries read and written, a displacement or an area of user space turned into the drawing's units
   and written through a chain of them - feet, then inches - and a scale from a calibration (`PdfMeasure.Scaled`).
+- A page's text with positions in `Adamantium.Pdf` (`PdfPage.ReadText`, `PdfPageText`): every glyph with its text -
+  from the font, or a marked span's `/ActualText` - and its box on the page, through text state, matrices and the
+  forms the page draws; lines along their baselines, spaces where glyphs stand apart, line breaks between lines. What
+  selection, copying and search work on: a range's text and boxes (`GetText`, `QuadsOf`), the caret nearest a point,
+  the glyphs in a box, and search that ignores case and accents unless asked and runs on across lines (`Find`).
+- Navigation in `Adamantium.Pdf`: the outline (`PdfDocument.Outline`), explicit and named destinations
+  (`ResolveDestination`), the actions a viewer follows - go to, go to another file, address, launch, named step
+  (`PdfAction`) - a page's links (`PdfPage.Links`), the embedded files (`PdfDocument.Attachments`, and a file
+  attachment annotation's), the document's properties with their dates (`PdfDocument.Properties`, `PdfDate`), and an
+  annotation's appearance for its state and the matrix that sets it into its rectangle
+  (`PdfAnnotation.Appearance`, `AppearanceTransform`). `PdfPoint`, `PdfMatrix` and `PdfQuad` carry positions.
 
 - `SharedSurface.WriteRegions`: a producer whose frames are on the CPU writes the rectangles that changed into a surface
   it shares with a consumer on the same device (`CreateInDevice`) - submitted on its own, once the consumer has given
@@ -189,6 +200,8 @@ All packages share one version.
 
 ### Fixed
 
+- `Adamantium.Pdf`: a font written directly into a page's resources, not as an object of its own, is read once,
+  rather than again at every `Tf` that selects it.
 - `Adamantium.Pdf`: an object a later update deleted - its free entry's generation raised - reads as null, as
   ISO 32000-2 says, rather than being found again by scanning the file; a free entry of generation 0 or 65535, as a
   damaged table's misplaced line has, still lets the object be looked for. In a hybrid file the `/XRefStm` stream's

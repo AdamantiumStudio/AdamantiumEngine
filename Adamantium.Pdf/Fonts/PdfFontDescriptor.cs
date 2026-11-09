@@ -15,6 +15,9 @@ public sealed class PdfFontDescriptor
         ItalicAngle = PdfValues.Number(dictionary[PdfFontKeys.ItalicAngle], document);
         FontWeight = PdfValues.Integer(dictionary[PdfFontKeys.FontWeight], document);
         MissingWidth = PdfValues.Number(dictionary[PdfFontKeys.MissingWidth], document);
+        Ascent = PdfValues.Number(dictionary[PdfFontKeys.Ascent], document);
+        Descent = PdfValues.Number(dictionary[PdfFontKeys.Descent], document);
+        FontBBox = PdfRectangle.From(dictionary[PdfFontKeys.FontBBox], document);
         FontFile = document.Resolve(dictionary[PdfFontKeys.FontFile]) as PdfStream;
         FontFile2 = document.Resolve(dictionary[PdfFontKeys.FontFile2]) as PdfStream;
         FontFile3 = document.Resolve(dictionary[PdfFontKeys.FontFile3]) as PdfStream;
@@ -33,6 +36,17 @@ public sealed class PdfFontDescriptor
 
     /// <summary>The width of a code the font's widths do not list, in thousandths of the size.</summary>
     public double MissingWidth { get; }
+
+    /// <summary>How far glyphs rise above the baseline, in thousandths of the size; 0 when the descriptor does not say.
+    /// </summary>
+    public double Ascent { get; }
+
+    /// <summary>How far glyphs fall below the baseline, in thousandths of the size, as a negative number; 0 when the
+    /// descriptor does not say.</summary>
+    public double Descent { get; }
+
+    /// <summary>The box every glyph fits in, in glyph space; null when the descriptor has none.</summary>
+    public PdfRectangle? FontBBox { get; }
 
     /// <summary>A Type 1 program.</summary>
     public PdfStream FontFile { get; }

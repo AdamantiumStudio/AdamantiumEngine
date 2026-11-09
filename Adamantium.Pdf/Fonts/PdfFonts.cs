@@ -7,7 +7,7 @@ namespace Adamantium.Pdf.Fonts;
 public static class PdfFonts
 {
     /// <summary>The font of a font dictionary; null when it is not one. An indirect font is read once per document,
-    /// however many pages use it.</summary>
+    /// however many pages use it, and a direct one once for its dictionary.</summary>
     public static PdfFont Create(PdfObject value, PdfDocument document)
     {
         if (value is PdfReference reference && document.CachedFont(reference.Id) is { } known)
@@ -18,6 +18,11 @@ public static class PdfFonts
         if (document.Resolve(value) is not PdfDictionary dictionary)
         {
             return null;
+        }
+
+        if (value is not PdfReference && document.CachedFont(dictionary) is { } direct)
+        {
+            return direct;
         }
 
         PdfFont font = PdfValues.Name(dictionary[PdfFontKeys.Subtype], document) switch
@@ -31,6 +36,10 @@ public static class PdfFonts
         if (font != null && value is PdfReference read)
         {
             document.CacheFont(read.Id, font);
+        }
+        else if (font != null)
+        {
+            document.CacheFont(dictionary, font);
         }
 
         return font;

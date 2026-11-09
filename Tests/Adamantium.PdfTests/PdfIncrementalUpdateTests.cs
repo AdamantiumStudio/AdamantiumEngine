@@ -6,6 +6,7 @@ using Adamantium.Pdf;
 using Adamantium.Pdf.Annotations;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Measurement;
+using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
 using Adamantium.Pdf.Writing;
 using NUnit.Framework;
@@ -382,13 +383,25 @@ public class PdfIncrementalUpdateTests
     }
 
     [Test]
-    public void ADateCarriesItsOffset()
+    public void ADateCarriesItsOffsetAndReadsBack()
     {
-        Assert.That(PdfNewAnnotation.Date(new DateTimeOffset(2026, 11, 9, 20, 5, 7, TimeSpan.FromHours(3))),
-            Is.EqualTo("D:20261109200507+03'00"));
-        Assert.That(PdfNewAnnotation.Date(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)),
-            Is.EqualTo("D:20260102030405Z"));
-        Assert.That(PdfNewAnnotation.Date(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromMinutes(-150))),
-            Is.EqualTo("D:20260102030405-02'30"));
+        var times = new[]
+        {
+            new DateTimeOffset(2026, 11, 9, 20, 5, 7, TimeSpan.FromHours(3)),
+            new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero),
+            new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromMinutes(-150)),
+        };
+        Assert.That(times.Select(PdfDate.Format),
+            Is.EqualTo(new[] { "D:20261109200507+03'00", "D:20260102030405Z", "D:20260102030405-02'30" }));
+        foreach (var time in times)
+        {
+            Assert.That(PdfDate.Parse(PdfDate.Format(time)), Is.EqualTo(time));
+        }
+
+        Assert.That(PdfDate.Parse("D:2026"), Is.EqualTo(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        Assert.That(PdfDate.Parse("D:20260230120000+05'30'"),
+            Is.EqualTo(new DateTimeOffset(2026, 2, 28, 12, 0, 0, TimeSpan.FromMinutes(330))), "a day past the month's end");
+        Assert.That(PdfDate.Parse("not a date"), Is.Null);
+        Assert.That(PdfDate.Parse(""), Is.Null);
     }
 }
