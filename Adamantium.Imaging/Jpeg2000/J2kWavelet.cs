@@ -10,6 +10,7 @@ namespace Adamantium.Imaging.Jpeg2000;
 internal static class J2kWavelet
 {
     private const int Pad = 8;
+    private const int ParallelWork = 1 << 16;
 
     private const float Alpha = -1.586134342059924f;
     private const float Beta = -0.052980118572961f;
@@ -33,16 +34,9 @@ internal static class J2kWavelet
                 var (u0, v0) = (resolution.X0, resolution.Y0);
                 var (w, h) = (resolution.X1 - u0, resolution.Y1 - v0);
                 var next = image;
-                Parallel.For(0, h, () => new int[longest], (y, _, line) =>
-                {
-                    Lift53(next, y * w, 1, w, u0, line);
-                    return line;
-                }, _ => { });
-                Parallel.For(0, w, () => new int[longest], (x, _, line) =>
-                {
-                    Lift53(next, x, w, h, v0, line);
-                    return line;
-                }, _ => { });
+                var work = (long)w * h;
+                Lines<int>(h, work, longest, (y, line) => Lift53(next, y * w, 1, w, u0, line));
+                Lines<int>(w, work, longest, (x, line) => Lift53(next, x, w, h, v0, line));
                 width = w;
             }
 
@@ -63,20 +57,33 @@ internal static class J2kWavelet
             var (u0, v0) = (resolution.X0, resolution.Y0);
             var (w, h) = (resolution.X1 - u0, resolution.Y1 - v0);
             var next = reals;
-            Parallel.For(0, h, () => new float[longest], (y, _, line) =>
-            {
-                Lift97(next, y * w, 1, w, u0, line);
-                return line;
-            }, _ => { });
-            Parallel.For(0, w, () => new float[longest], (x, _, line) =>
-            {
-                Lift97(next, x, w, h, v0, line);
-                return line;
-            }, _ => { });
+            var work = (long)w * h;
+            Lines<float>(h, work, longest, (y, line) => Lift97(next, y * w, 1, w, u0, line));
+            Lines<float>(w, work, longest, (x, line) => Lift97(next, x, w, h, v0, line));
             width = w;
         }
 
         return reals;
+    }
+
+    private static void Lines<T>(int count, long work, int longest, Action<int, T[]> lift)
+    {
+        if (work < ParallelWork)
+        {
+            var line = new T[longest];
+            for (var i = 0; i < count; i++)
+            {
+                lift(i, line);
+            }
+
+            return;
+        }
+
+        Parallel.For(0, count, () => new T[longest], (i, _, line) =>
+        {
+            lift(i, line);
+            return line;
+        }, _ => { });
     }
 
     private static T[] Interleave<T>(T[] lower, int lowerWidth, J2kResolution resolution, Func<J2kBand, T[]> of)

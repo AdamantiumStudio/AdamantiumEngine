@@ -21,7 +21,7 @@ internal sealed class J2kResolution
         PrecinctY0 = y0 >> precinctHeightExponent;
         PrecinctsAcross = x1 > x0 ? (int)(Ceiling(x1, precinctWidthExponent) - PrecinctX0) : 0;
         PrecinctsDown = y1 > y0 ? (int)(Ceiling(y1, precinctHeightExponent) - PrecinctY0) : 0;
-        limits.Spend((long)PrecinctsAcross * PrecinctsDown + 1 + bands.Length);
+        limits.Spend(((long)PrecinctsAcross * PrecinctsDown + 1 + bands.Length) * J2kLimits.ObjectCost);
         Precincts = new J2kPrecinctBand[(long)PrecinctsAcross * PrecinctsDown][];
     }
 

@@ -12,6 +12,7 @@ internal sealed class J2kTile
 {
     private const int StartOfPacket = 0xFF91;
     private const int EndOfHeader = 0xFF92;
+    private const int ParallelBlocks = 8;
 
     private readonly J2kTileComponent[] _components;
     private readonly J2kCodingStyle _coding;
@@ -272,11 +273,22 @@ internal sealed class J2kTile
             }
         }
 
-        Parallel.ForEach(blocks, () => new J2kBlockDecoder(), (item, _, decoder) =>
+        if (blocks.Count < ParallelBlocks)
         {
-            decoder.Decode(item.Block, item.Band, item.Component.Style, item.Component.RoiShift);
-            return decoder;
-        }, _ => { });
+            var decoder = new J2kBlockDecoder();
+            foreach (var (block, band, component) in blocks)
+            {
+                decoder.Decode(block, band, component.Style, component.RoiShift);
+            }
+        }
+        else
+        {
+            Parallel.ForEach(blocks, () => new J2kBlockDecoder(), (item, _, decoder) =>
+            {
+                decoder.Decode(item.Block, item.Band, item.Component.Style, item.Component.RoiShift);
+                return decoder;
+            }, _ => { });
+        }
 
         foreach (var component in _components)
         {

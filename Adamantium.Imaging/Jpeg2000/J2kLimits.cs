@@ -7,6 +7,9 @@ namespace Adamantium.Imaging.Jpeg2000;
 /// cut off here.</summary>
 internal sealed class J2kLimits
 {
+    /// <summary>What a resolution, subband or precinct costs, in samples.</summary>
+    public const int ObjectCost = 16;
+
     private long _left;
 
     /// <summary>A budget for an image of <paramref name="pixels"/> pixels and <paramref name="components"/>
