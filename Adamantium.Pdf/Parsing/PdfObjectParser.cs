@@ -14,8 +14,8 @@ internal sealed class PdfObjectParser
     private readonly PdfLexer _lexer;
     private readonly IPdfLengthResolver _lengths;
     private readonly Stack<PdfParserFrame> _stack = new();
-    private readonly PdfKeywordSearch _endStream = new("endstream"u8);
-    private readonly PdfKeywordSearch _endObj = new("endobj"u8);
+    private readonly PdfKeywordSearch _endStream = new(PdfKeywords.EndStreamBytes);
+    private readonly PdfKeywordSearch _endObj = new(PdfKeywords.EndObjBytes);
 
     public PdfObjectParser(PdfLexer lexer, IPdfLengthResolver lengths = null)
     {
@@ -114,8 +114,8 @@ internal sealed class PdfObjectParser
         var number = _lexer.Next();
         var generation = _lexer.Next();
         var keyword = _lexer.Next();
-        if (number.Kind != PdfTokenKind.Integer || generation.Kind != PdfTokenKind.Integer || !keyword.IsKeyword("obj") ||
-            number.Integer < 0 || number.Integer > int.MaxValue || generation.Integer < 0 ||
+        if (number.Kind != PdfTokenKind.Integer || generation.Kind != PdfTokenKind.Integer ||
+            !keyword.IsKeyword(PdfKeywords.Obj) || number.Integer < 0 || number.Integer > int.MaxValue || generation.Integer < 0 ||
             generation.Integer > ushort.MaxValue)
         {
             return null;
@@ -124,7 +124,7 @@ internal sealed class PdfObjectParser
         var id = new PdfObjectId((int)number.Integer, (int)generation.Integer);
         var value = ReadObject() ?? PdfNull.Value;
         var next = _lexer.Peek();
-        if (value is PdfDictionary dictionary && next.IsKeyword("stream"))
+        if (value is PdfDictionary dictionary && next.IsKeyword(PdfKeywords.Stream))
         {
             _lexer.Position = next.End;
             var stream = ReadStreamData(dictionary);
@@ -133,7 +133,7 @@ internal sealed class PdfObjectParser
             next = _lexer.Peek();
         }
 
-        if (next.IsKeyword("endobj"))
+        if (next.IsKeyword(PdfKeywords.EndObj))
         {
             _lexer.Position = next.End;
         }
@@ -169,7 +169,7 @@ internal sealed class PdfObjectParser
 
         _lexer.Position = end;
         var endStream = _lexer.Peek();
-        if (endStream.IsKeyword("endstream"))
+        if (endStream.IsKeyword(PdfKeywords.EndStream))
         {
             _lexer.Position = endStream.End;
         }
@@ -179,7 +179,7 @@ internal sealed class PdfObjectParser
 
     private long? DeclaredLength(PdfDictionary dictionary)
     {
-        return dictionary["Length"] switch
+        return dictionary[PdfKeys.Length] switch
         {
             PdfInteger integer => integer.Value,
             PdfReal real => (long)real.Value,
@@ -196,7 +196,7 @@ internal sealed class PdfObjectParser
             position++;
         }
 
-        return data[position..].StartsWith("endstream"u8);
+        return data[position..].StartsWith(PdfKeywords.EndStreamBytes);
     }
 
     /// <summary>Where the data ends when its length is wrong: before the end-of-line marker ahead of
@@ -240,7 +240,7 @@ internal sealed class PdfObjectParser
         if (generation.Kind == PdfTokenKind.Integer && generation.Integer >= 0 && generation.Integer <= ushort.MaxValue)
         {
             var keyword = _lexer.Next();
-            if (keyword.IsKeyword("R"))
+            if (keyword.IsKeyword(PdfKeywords.Reference))
             {
                 return new PdfReference((int)token.Integer, (int)generation.Integer);
             }
@@ -302,14 +302,15 @@ internal sealed class PdfObjectParser
     {
         value = keyword switch
         {
-            "true" => PdfBoolean.True,
-            "false" => PdfBoolean.False,
-            "null" => PdfNull.Value,
+            PdfKeywords.True => PdfBoolean.True,
+            PdfKeywords.False => PdfBoolean.False,
+            PdfKeywords.Null => PdfNull.Value,
             _ => null,
         };
         return value != null;
     }
 
     private static bool IsStructureKeyword(string keyword) =>
-        keyword is "obj" or "endobj" or "stream" or "endstream" or "xref" or "trailer" or "startxref";
+        keyword is PdfKeywords.Obj or PdfKeywords.EndObj or PdfKeywords.Stream or PdfKeywords.EndStream or
+            PdfKeywords.Xref or PdfKeywords.Trailer or PdfKeywords.StartXref;
 }

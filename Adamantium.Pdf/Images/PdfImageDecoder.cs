@@ -30,12 +30,12 @@ public static class PdfImageDecoder
     private static PdfImageBitmap Decode(PdfDictionary dictionary, PdfDecodedStream decoded, PdfResources resources,
         PdfDocument document, bool withMasks)
     {
-        var width = PdfValues.Integer(dictionary["Width"], document);
-        var height = PdfValues.Integer(dictionary["Height"], document);
-        var imageMask = PdfValues.Boolean(dictionary["ImageMask"], document);
+        var width = PdfValues.Integer(dictionary[PdfKeys.Width], document);
+        var height = PdfValues.Integer(dictionary[PdfKeys.Height], document);
+        var imageMask = PdfValues.Boolean(dictionary[PdfKeys.ImageMask], document);
 
         PdfImageBitmap bitmap;
-        if (decoded.ImageFilter == "DCTDecode")
+        if (decoded.ImageFilter == PdfFilterNames.DCTDecode)
         {
             var samples = JpegChannels(decoded.Data, document, out width, out height, out var channels);
             bitmap = Samples(dictionary, samples, width, height, 8, channels, resources, document);
@@ -50,7 +50,7 @@ public static class PdfImageDecoder
             bitmap = imageMask
                 ? Stencil(dictionary, decoded.Data.Span, width, height, document)
                 : Samples(dictionary, decoded.Data.Span, width, height,
-                    PdfValues.Integer(dictionary["BitsPerComponent"], document, 8), 0, resources, document);
+                    PdfValues.Integer(dictionary[PdfKeys.BitsPerComponent], document, 8), 0, resources, document);
         }
 
         if (withMasks && !bitmap.IsStencil)
@@ -94,7 +94,7 @@ public static class PdfImageDecoder
     private static PdfImageBitmap Stencil(PdfDictionary dictionary, ReadOnlySpan<byte> data, int width, int height,
         PdfDocument document)
     {
-        var decode = PdfValues.Numbers(dictionary["Decode"], document);
+        var decode = PdfValues.Numbers(dictionary[PdfKeys.Decode], document);
         var paintOn = decode is { Length: >= 2 } && decode[0] > decode[1] ? 1 : 0;
         var rgba = new byte[width * height * 4];
         var rowBytes = (width + 7) / 8;
@@ -117,7 +117,7 @@ public static class PdfImageDecoder
     private static PdfColorSpace SpaceOf(PdfDictionary dictionary, int channels, PdfResources resources,
         PdfDocument document)
     {
-        var space = PdfColorSpaces.Create(dictionary["ColorSpace"], resources, document);
+        var space = PdfColorSpaces.Create(dictionary[PdfKeys.ColorSpace], resources, document);
         if (space == null || space.Components == 0 || (channels > 0 && space.Components != channels))
         {
             space = channels switch
@@ -148,7 +148,7 @@ public static class PdfImageDecoder
         }
 
         var components = space.Components;
-        var decode = PdfValues.Numbers(dictionary["Decode"], document);
+        var decode = PdfValues.Numbers(dictionary[PdfKeys.Decode], document);
         if (decode == null || decode.Length < 2 * components)
         {
             decode = space.DefaultDecode(bits);
@@ -219,7 +219,7 @@ public static class PdfImageDecoder
             }
         }
 
-        if (document.Resolve(dictionary["Mask"]) is PdfArray colorKey)
+        if (document.Resolve(dictionary[PdfKeys.Mask]) is PdfArray colorKey)
         {
             ApplyColorKey(bitmap, data, rowBytes, rowsWithData, components, bits, colorKey, document);
         }
@@ -317,12 +317,12 @@ public static class PdfImageDecoder
         var soft = false;
         try
         {
-            if (document.Resolve(dictionary["SMask"]) is PdfStream softMask)
+            if (document.Resolve(dictionary[PdfKeys.SMask]) is PdfStream softMask)
             {
                 mask = Decode(softMask.Dictionary, document.Decode(softMask), resources, document, false);
                 soft = true;
             }
-            else if (document.Resolve(dictionary["Mask"]) is PdfStream stencilMask)
+            else if (document.Resolve(dictionary[PdfKeys.Mask]) is PdfStream stencilMask)
             {
                 mask = StencilMask(stencilMask, document);
             }
@@ -361,8 +361,8 @@ public static class PdfImageDecoder
             return null;
         }
 
-        var width = PdfValues.Integer(stream.Dictionary["Width"], document);
-        var height = PdfValues.Integer(stream.Dictionary["Height"], document);
+        var width = PdfValues.Integer(stream.Dictionary[PdfKeys.Width], document);
+        var height = PdfValues.Integer(stream.Dictionary[PdfKeys.Height], document);
         CheckSize(width, height, document);
         return Stencil(stream.Dictionary, decoded.Data.Span, width, height, document);
     }

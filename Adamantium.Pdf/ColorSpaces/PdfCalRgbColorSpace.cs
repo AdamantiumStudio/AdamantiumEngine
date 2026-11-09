@@ -16,7 +16,7 @@ public sealed class PdfCalRgbColorSpace : PdfColorSpace
         _matrix = matrix is { Length: 9 } ? matrix : [1, 0, 0, 0, 1, 0, 0, 0, 1];
     }
 
-    public override string Family => "CalRGB";
+    public override string Family => PdfColorSpaceFamilies.CalRGB;
 
     public override int Components => 3;
 

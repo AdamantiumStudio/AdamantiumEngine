@@ -1,3 +1,5 @@
+using Adamantium.Pdf.Parsing;
+
 namespace Adamantium.Pdf.Objects;
 
 /// <summary>The null object.</summary>
@@ -10,5 +12,5 @@ public sealed class PdfNull : PdfObject
     /// <summary>The one null.</summary>
     public static PdfNull Value { get; } = new();
 
-    public override string ToString() => "null";
+    public override string ToString() => PdfKeywords.Null;
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -147,9 +148,10 @@ public class PdfContentHostileTests
     {
         byte[] huge = [0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x2E, 0xE0, 0x2E, 0xE0, 0x01, 0x01, 0x11, 0x00,
             0xFF, 0xD9];
-        var watch = Stopwatch.StartNew();
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         Assert.Throws<PdfException>(() => Image("/Width 12000 /Height 12000 /Filter /DCTDecode", huge));
-        Assert.That(watch.ElapsedMilliseconds, Is.LessThan(1000));
+        Assert.That(GC.GetAllocatedBytesForCurrentThread() - allocatedBefore, Is.LessThan(16L << 20),
+            "a 12000 x 12000 frame decoded would take over 100 MB");
     }
 
     [Test]

@@ -17,7 +17,7 @@ public sealed class PdfIndexedColorSpace : PdfColorSpace
         _lookup = lookup;
     }
 
-    public override string Family => "Indexed";
+    public override string Family => PdfColorSpaceFamilies.Indexed;
 
     public override int Components => 1;
 

@@ -14,7 +14,7 @@ public sealed class PdfCalGrayColorSpace : PdfColorSpace
         _gamma = gamma > 0 ? gamma : 1;
     }
 
-    public override string Family => "CalGray";
+    public override string Family => PdfColorSpaceFamilies.CalGray;
 
     public override int Components => 1;
 

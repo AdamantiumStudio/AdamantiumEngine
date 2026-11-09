@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Adamantium.Pdf.Content;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Functions;
 using Adamantium.Pdf.Objects;
@@ -38,17 +39,21 @@ public static class PdfColorSpaces
 
         return family.Value switch
         {
-            "DeviceGray" or "G" or "DeviceRGB" or "RGB" or "DeviceCMYK" or "CMYK" =>
+            PdfColorSpaceFamilies.DeviceGray or PdfAbbreviations.DeviceGray or
+                PdfColorSpaceFamilies.DeviceRGB or PdfAbbreviations.DeviceRGB or
+                PdfColorSpaceFamilies.DeviceCMYK or PdfAbbreviations.DeviceCMYK =>
                 Named(family.Value, null, document, depth),
-            "Pattern" => new PdfPatternColorSpace(array.Count > 1 ? Create(array[1], resources, document, depth + 1)
+            PdfColorSpaceFamilies.Pattern => new PdfPatternColorSpace(array.Count > 1
+                ? Create(array[1], resources, document, depth + 1)
                 : null),
-            "CalGray" => CalGray(array, document),
-            "CalRGB" => CalRgb(array, document),
-            "Lab" => Lab(array, document),
-            "ICCBased" => IccBased(array, resources, document, depth),
-            "Indexed" or "I" => Indexed(array, resources, document, depth),
-            "Separation" => Separation(array, resources, document, depth),
-            "DeviceN" => DeviceN(array, resources, document, depth),
+            PdfColorSpaceFamilies.CalGray => CalGray(array, document),
+            PdfColorSpaceFamilies.CalRGB => CalRgb(array, document),
+            PdfColorSpaceFamilies.Lab => Lab(array, document),
+            PdfColorSpaceFamilies.ICCBased => IccBased(array, resources, document, depth),
+            PdfColorSpaceFamilies.Indexed or PdfAbbreviations.Indexed =>
+                Indexed(array, resources, document, depth),
+            PdfColorSpaceFamilies.Separation => Separation(array, resources, document, depth),
+            PdfColorSpaceFamilies.DeviceN => DeviceN(array, resources, document, depth),
             _ => null,
         };
     }
@@ -57,9 +62,9 @@ public static class PdfColorSpaces
     {
         var device = name switch
         {
-            "DeviceGray" or "G" => "DefaultGray",
-            "DeviceRGB" or "RGB" => "DefaultRGB",
-            "DeviceCMYK" or "CMYK" => "DefaultCMYK",
+            PdfColorSpaceFamilies.DeviceGray or PdfAbbreviations.DeviceGray => PdfColorSpaceFamilies.DefaultGray,
+            PdfColorSpaceFamilies.DeviceRGB or PdfAbbreviations.DeviceRGB => PdfColorSpaceFamilies.DefaultRGB,
+            PdfColorSpaceFamilies.DeviceCMYK or PdfAbbreviations.DeviceCMYK => PdfColorSpaceFamilies.DefaultCMYK,
             _ => null,
         };
         if (device != null)
@@ -72,13 +77,13 @@ public static class PdfColorSpaces
 
             return device switch
             {
-                "DefaultGray" => PdfDeviceGrayColorSpace.Instance,
-                "DefaultRGB" => PdfDeviceRgbColorSpace.Instance,
+                PdfColorSpaceFamilies.DefaultGray => PdfDeviceGrayColorSpace.Instance,
+                PdfColorSpaceFamilies.DefaultRGB => PdfDeviceRgbColorSpace.Instance,
                 _ => PdfDeviceCmykColorSpace.Instance,
             };
         }
 
-        if (name == "Pattern")
+        if (name == PdfColorSpaceFamilies.Pattern)
         {
             return new PdfPatternColorSpace(null);
         }
@@ -92,7 +97,7 @@ public static class PdfColorSpaces
 
     private static double[] WhitePoint(PdfDictionary parameters, PdfDocument document)
     {
-        var white = PdfValues.Numbers(parameters?["WhitePoint"], document);
+        var white = PdfValues.Numbers(parameters?[PdfKeys.WhitePoint], document);
         return white is { Length: 3 } && white[1] > 0 ? white : D65;
     }
 
@@ -100,21 +105,22 @@ public static class PdfColorSpaces
     {
         var parameters = Parameters(array, document);
         return new PdfCalGrayColorSpace(WhitePoint(parameters, document),
-            PdfValues.Number(parameters?["Gamma"], document, 1));
+            PdfValues.Number(parameters?[PdfKeys.Gamma], document, 1));
     }
 
     private static PdfColorSpace CalRgb(PdfArray array, PdfDocument document)
     {
         var parameters = Parameters(array, document);
         return new PdfCalRgbColorSpace(WhitePoint(parameters, document),
-            PdfValues.Numbers(parameters?["Gamma"], document), PdfValues.Numbers(parameters?["Matrix"], document));
+            PdfValues.Numbers(parameters?[PdfKeys.Gamma], document),
+            PdfValues.Numbers(parameters?[PdfKeys.Matrix], document));
     }
 
     private static PdfColorSpace Lab(PdfArray array, PdfDocument document)
     {
         var parameters = Parameters(array, document);
         return new PdfLabColorSpace(WhitePoint(parameters, document),
-            PdfValues.Numbers(parameters?["Range"], document));
+            PdfValues.Numbers(parameters?[PdfKeys.Range], document));
     }
 
     private static PdfColorSpace IccBased(PdfArray array, PdfResources resources, PdfDocument document, int depth)
@@ -125,9 +131,9 @@ public static class PdfColorSpaces
         }
 
         var dictionary = stream.Dictionary;
-        var components = PdfValues.Integer(dictionary["N"], document);
-        var alternate = dictionary["Alternate"] != null
-            ? Create(dictionary["Alternate"], resources, document, depth + 1)
+        var components = PdfValues.Integer(dictionary[PdfKeys.N], document);
+        var alternate = dictionary[PdfKeys.Alternate] != null
+            ? Create(dictionary[PdfKeys.Alternate], resources, document, depth + 1)
             : null;
         if (components is not (1 or 3 or 4))
         {
@@ -149,7 +155,8 @@ public static class PdfColorSpaces
             };
         }
 
-        return new PdfIccBasedColorSpace(components, alternate, PdfValues.Numbers(dictionary["Range"], document));
+        return new PdfIccBasedColorSpace(components, alternate,
+            PdfValues.Numbers(dictionary[PdfKeys.Range], document));
     }
 
     private static PdfColorSpace Indexed(PdfArray array, PdfResources resources, PdfDocument document, int depth)
@@ -195,7 +202,7 @@ public static class PdfColorSpaces
             return null;
         }
 
-        var colorant = PdfValues.Name(array[1], document) ?? "None";
+        var colorant = PdfValues.Name(array[1], document) ?? PdfColorants.None;
         var alternate = Create(array[2], resources, document, depth + 1);
         return new PdfSeparationColorSpace(colorant, alternate, PdfFunctions.Create(array[3], document));
     }
@@ -211,7 +218,7 @@ public static class PdfColorSpaces
         var colorants = new List<string>();
         foreach (var item in names)
         {
-            colorants.Add(PdfValues.Name(item, document) ?? "None");
+            colorants.Add(PdfValues.Name(item, document) ?? PdfColorants.None);
         }
 
         var alternate = Create(array[2], resources, document, depth + 1);

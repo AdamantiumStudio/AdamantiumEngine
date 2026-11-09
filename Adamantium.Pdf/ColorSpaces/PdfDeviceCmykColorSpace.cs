@@ -8,7 +8,7 @@ public sealed class PdfDeviceCmykColorSpace : PdfColorSpace
 {
     public static PdfDeviceCmykColorSpace Instance { get; } = new();
 
-    public override string Family => "DeviceCMYK";
+    public override string Family => PdfColorSpaceFamilies.DeviceCMYK;
 
     public override int Components => 4;
 

@@ -16,7 +16,7 @@ public sealed class PdfLabColorSpace : PdfColorSpace
             Math.Max(range[2], range[3])];
     }
 
-    public override string Family => "Lab";
+    public override string Family => PdfColorSpaceFamilies.Lab;
 
     public override int Components => 3;
 

@@ -18,23 +18,23 @@ public sealed class PdfResources
 
     public IPdfObjectResolver Resolver => _resolver;
 
-    public PdfDictionary Font(string name) => Get("Font", name) as PdfDictionary;
+    public PdfDictionary Font(string name) => Get(PdfKeys.Font, name) as PdfDictionary;
 
     /// <summary>An image or form, which are streams.</summary>
-    public PdfStream XObject(string name) => Get("XObject", name) as PdfStream;
+    public PdfStream XObject(string name) => Get(PdfKeys.XObject, name) as PdfStream;
 
-    public PdfDictionary ExtGState(string name) => Get("ExtGState", name) as PdfDictionary;
+    public PdfDictionary ExtGState(string name) => Get(PdfKeys.ExtGState, name) as PdfDictionary;
 
     /// <summary>A named color space as written: a name or an array.</summary>
-    public PdfObject ColorSpace(string name) => Get("ColorSpace", name);
+    public PdfObject ColorSpace(string name) => Get(PdfKeys.ColorSpace, name);
 
     /// <summary>A pattern: a stream (tiling) or a dictionary (shading).</summary>
-    public PdfObject Pattern(string name) => Get("Pattern", name);
+    public PdfObject Pattern(string name) => Get(PdfKeys.Pattern, name);
 
     /// <summary>A shading: a dictionary, or a stream for mesh shadings.</summary>
-    public PdfObject Shading(string name) => Get("Shading", name);
+    public PdfObject Shading(string name) => Get(PdfKeys.Shading, name);
 
-    public PdfDictionary Properties(string name) => Get("Properties", name) as PdfDictionary;
+    public PdfDictionary Properties(string name) => Get(PdfKeys.Properties, name) as PdfDictionary;
 
     /// <summary>The resource <paramref name="name"/> of <paramref name="category"/>, resolved, or null.</summary>
     public PdfObject Get(string category, string name)

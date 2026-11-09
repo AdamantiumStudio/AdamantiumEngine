@@ -7,7 +7,7 @@ public sealed class PdfDeviceRgbColorSpace : PdfColorSpace
 {
     public static PdfDeviceRgbColorSpace Instance { get; } = new();
 
-    public override string Family => "DeviceRGB";
+    public override string Family => PdfColorSpaceFamilies.DeviceRGB;
 
     public override int Components => 3;
 

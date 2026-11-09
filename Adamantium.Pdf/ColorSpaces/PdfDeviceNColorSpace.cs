@@ -18,7 +18,7 @@ public sealed class PdfDeviceNColorSpace : PdfColorSpace
         _tintTransform = tintTransform;
     }
 
-    public override string Family => "DeviceN";
+    public override string Family => PdfColorSpaceFamilies.DeviceN;
 
     public override int Components => Colorants.Count;
 

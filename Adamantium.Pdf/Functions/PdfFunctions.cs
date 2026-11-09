@@ -67,8 +67,8 @@ public static class PdfFunctions
             return null;
         }
 
-        var domain = PdfValues.Numbers(dictionary["Domain"], document);
-        var range = PdfValues.Numbers(dictionary["Range"], document);
+        var domain = PdfValues.Numbers(dictionary[PdfKeys.Domain], document);
+        var range = PdfValues.Numbers(dictionary[PdfKeys.Range], document);
         if (domain == null || domain.Length < 2 || domain.Length % 2 != 0)
         {
             return null;
@@ -76,7 +76,7 @@ public static class PdfFunctions
 
         try
         {
-            return PdfValues.Integer(dictionary["FunctionType"], document, -1) switch
+            return PdfValues.Integer(dictionary[PdfKeys.FunctionType], document, -1) switch
             {
                 0 when stream != null => Sampled(dictionary, stream, domain, range, document),
                 2 => Exponential(dictionary, domain, range, document),
@@ -95,20 +95,20 @@ public static class PdfFunctions
     private static PdfFunction Exponential(PdfDictionary dictionary, double[] domain, double[] range,
         PdfDocument document)
     {
-        var c0 = PdfValues.Numbers(dictionary["C0"], document) ?? [0];
-        var c1 = PdfValues.Numbers(dictionary["C1"], document) ?? [1];
+        var c0 = PdfValues.Numbers(dictionary[PdfKeys.C0], document) ?? [0];
+        var c1 = PdfValues.Numbers(dictionary[PdfKeys.C1], document) ?? [1];
         if (c0.Length != c1.Length)
         {
             return null;
         }
 
-        return new PdfExponentialFunction(domain, range, c0, c1, PdfValues.Number(dictionary["N"], document, 1));
+        return new PdfExponentialFunction(domain, range, c0, c1, PdfValues.Number(dictionary[PdfKeys.N], document, 1));
     }
 
     private static PdfFunction Stitching(PdfDictionary dictionary, double[] domain, double[] range,
         PdfDocument document, int depth, Dictionary<int, PdfFunction> read)
     {
-        if (document.Resolve(dictionary["Functions"]) is not PdfArray items || items.Count == 0)
+        if (document.Resolve(dictionary[PdfKeys.Functions]) is not PdfArray items || items.Count == 0)
         {
             return null;
         }
@@ -125,8 +125,8 @@ public static class PdfFunctions
             functions.Add(function);
         }
 
-        var bounds = PdfValues.Numbers(dictionary["Bounds"], document) ?? [];
-        var encode = PdfValues.Numbers(dictionary["Encode"], document) ?? [];
+        var bounds = PdfValues.Numbers(dictionary[PdfKeys.Bounds], document) ?? [];
+        var encode = PdfValues.Numbers(dictionary[PdfKeys.Encode], document) ?? [];
         return bounds.Length == functions.Count - 1
             ? new PdfStitchingFunction(domain, range, functions, bounds, encode)
             : null;
@@ -135,8 +135,8 @@ public static class PdfFunctions
     private static PdfFunction Sampled(PdfDictionary dictionary, PdfStream stream, double[] domain, double[] range,
         PdfDocument document)
     {
-        var sizes = PdfValues.Numbers(dictionary["Size"], document);
-        var bits = PdfValues.Integer(dictionary["BitsPerSample"], document);
+        var sizes = PdfValues.Numbers(dictionary[PdfKeys.Size], document);
+        var bits = PdfValues.Integer(dictionary[PdfKeys.BitsPerSample], document);
         var inputs = domain.Length / 2;
         if (range == null || range.Length < 2 || sizes == null || sizes.Length != inputs ||
             inputs > PdfSampledFunction.MaxInputs || bits is not (1 or 2 or 4 or 8 or 12 or 16 or 24 or 32))
@@ -162,7 +162,7 @@ public static class PdfFunctions
             }
         }
 
-        var encode = PdfValues.Numbers(dictionary["Encode"], document);
+        var encode = PdfValues.Numbers(dictionary[PdfKeys.Encode], document);
         if (encode == null || encode.Length < 2 * inputs)
         {
             encode = new double[2 * inputs];
@@ -172,7 +172,7 @@ public static class PdfFunctions
             }
         }
 
-        var decode = PdfValues.Numbers(dictionary["Decode"], document);
+        var decode = PdfValues.Numbers(dictionary[PdfKeys.Decode], document);
         if (decode == null || decode.Length < range.Length)
         {
             decode = range;

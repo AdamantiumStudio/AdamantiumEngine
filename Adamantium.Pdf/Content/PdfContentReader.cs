@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.Pdf.ColorSpaces;
 using Adamantium.Pdf.Objects;
 using Adamantium.Pdf.Parsing;
 
@@ -17,7 +18,7 @@ public sealed class PdfContentReader
     private readonly ReadOnlyMemory<byte> _data;
     private readonly PdfLexer _lexer;
     private readonly PdfObjectParser _parser;
-    private readonly PdfKeywordSearch _endImage = new("EI"u8);
+    private readonly PdfKeywordSearch _endImage = new(PdfKeywords.EndImageBytes);
 
     public PdfContentReader(ReadOnlyMemory<byte> data)
     {
@@ -46,10 +47,11 @@ public sealed class PdfContentReader
             {
                 case PdfTokenKind.EndOfData:
                     return null;
-                case PdfTokenKind.Keyword when token.Text is not ("true" or "false" or "null"):
+                case PdfTokenKind.Keyword
+                    when token.Text is not (PdfKeywords.True or PdfKeywords.False or PdfKeywords.Null):
                     _lexer.Position = token.End;
-                    return token.Text == "BI"
-                        ? new PdfContentOperation("BI", operands, ReadInlineImage())
+                    return token.Text == PdfKeywords.BeginImage
+                        ? new PdfContentOperation(PdfKeywords.BeginImage, operands, ReadInlineImage())
                         : new PdfContentOperation(token.Text, operands);
                 case PdfTokenKind.ArrayEnd:
                 case PdfTokenKind.DictionaryEnd:
@@ -92,7 +94,7 @@ public sealed class PdfContentReader
                 return new PdfInlineImage(dictionary, ReadOnlyMemory<byte>.Empty);
             }
 
-            if (token.IsKeyword("ID"))
+            if (token.IsKeyword(PdfKeywords.ImageData))
             {
                 _lexer.Position = token.End;
                 break;
@@ -129,7 +131,7 @@ public sealed class PdfContentReader
         var data = _data[start..Math.Min(end, span.Length)];
         _lexer.Position = Math.Min(span.Length, end);
         var close = _lexer.Peek();
-        if (close.IsKeyword("EI"))
+        if (close.IsKeyword(PdfKeywords.EndImage))
         {
             _lexer.Position = close.End;
         }
@@ -141,7 +143,9 @@ public sealed class PdfContentReader
     /// there.</summary>
     private static int? DeclaredEnd(PdfDictionary dictionary, ReadOnlySpan<byte> span, int start)
     {
-        long? length = dictionary["Length"] is PdfInteger declared ? declared.Value : UnfilteredLength(dictionary);
+        long? length = dictionary[PdfKeys.Length] is PdfInteger declared
+            ? declared.Value
+            : UnfilteredLength(dictionary);
         if (length is not { } count || count < 0 || start + count > span.Length)
         {
             return null;
@@ -154,27 +158,32 @@ public sealed class PdfContentReader
             at++;
         }
 
-        return span[at..].StartsWith("EI"u8) && (at + 2 == span.Length || !PdfCharacters.IsRegular(span[at + 2]))
+        var after = at + PdfKeywords.EndImage.Length;
+        return span[at..].StartsWith(PdfKeywords.EndImageBytes) &&
+               (after == span.Length || !PdfCharacters.IsRegular(span[after]))
             ? end
             : null;
     }
 
     private static long? UnfilteredLength(PdfDictionary dictionary)
     {
-        if (dictionary["Filter"] != null || dictionary["Width"] is not PdfInteger width ||
-            dictionary["Height"] is not PdfInteger height)
+        if (dictionary[PdfKeys.Filter] != null || dictionary[PdfKeys.Width] is not PdfInteger width ||
+            dictionary[PdfKeys.Height] is not PdfInteger height)
         {
             return null;
         }
 
-        var imageMask = dictionary["ImageMask"] is PdfBoolean { Value: true };
-        var bits = imageMask ? 1 : dictionary["BitsPerComponent"] is PdfInteger bpc ? bpc.Value : 8;
-        var components = imageMask ? 1 : dictionary["ColorSpace"] switch
+        var imageMask = dictionary[PdfKeys.ImageMask] is PdfBoolean { Value: true };
+        var bits = imageMask ? 1 : dictionary[PdfKeys.BitsPerComponent] is PdfInteger bpc ? bpc.Value : 8;
+        var components = imageMask ? 1 : dictionary[PdfKeys.ColorSpace] switch
         {
-            PdfName { Value: "DeviceRGB" or "CalRGB" or "Lab" } => 3,
-            PdfName { Value: "DeviceCMYK" } => 4,
+            PdfName
+            {
+                Value: PdfColorSpaceFamilies.DeviceRGB or PdfColorSpaceFamilies.CalRGB or PdfColorSpaceFamilies.Lab
+            } => 3,
+            PdfName { Value: PdfColorSpaceFamilies.DeviceCMYK } => 4,
             PdfName => 1,
-            PdfArray { Count: > 0 } array when array[0] is PdfName { Value: "Indexed" } => 1,
+            PdfArray { Count: > 0 } array when array[0] is PdfName { Value: PdfColorSpaceFamilies.Indexed } => 1,
             _ => 0,
         };
         if (components == 0 || width.Value <= 0 || height.Value <= 0 || bits is < 1 or > 16)

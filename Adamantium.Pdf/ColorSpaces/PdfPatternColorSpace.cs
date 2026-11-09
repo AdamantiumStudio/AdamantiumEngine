@@ -11,7 +11,7 @@ public sealed class PdfPatternColorSpace : PdfColorSpace
         Underlying = underlying;
     }
 
-    public override string Family => "Pattern";
+    public override string Family => PdfColorSpaceFamilies.Pattern;
 
     /// <summary>The underlying space's components; a pattern name is an operand of its own.</summary>
     public override int Components => Underlying?.Components ?? 0;

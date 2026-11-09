@@ -17,14 +17,14 @@ public sealed class PdfSeparationColorSpace : PdfColorSpace
         _tintTransform = tintTransform;
     }
 
-    public override string Family => "Separation";
+    public override string Family => PdfColorSpaceFamilies.Separation;
 
     public override int Components => 1;
 
     public string Colorant { get; }
 
     /// <summary>Whether marks in this space are not painted at all.</summary>
-    public bool PaintsNothing => Colorant == "None";
+    public bool PaintsNothing => Colorant == PdfColorants.None;
 
     /// <summary>A full tint.</summary>
     public override void InitialColor(Span<double> components) => components[0] = 1;
@@ -32,7 +32,7 @@ public sealed class PdfSeparationColorSpace : PdfColorSpace
     public override void ToRgb(ReadOnlySpan<double> components, Span<double> rgb)
     {
         var tint = Clamp01(At(components, 0));
-        if (Colorant == "All" || _tintTransform == null || _alternate == null)
+        if (Colorant == PdfColorants.All || _tintTransform == null || _alternate == null)
         {
             rgb[0] = rgb[1] = rgb[2] = 1 - tint;
             return;

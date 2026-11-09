@@ -16,7 +16,7 @@ public sealed class PdfIccBasedColorSpace : PdfColorSpace
         _range = range != null && range.Length == 2 * components ? range : null;
     }
 
-    public override string Family => "ICCBased";
+    public override string Family => PdfColorSpaceFamilies.ICCBased;
 
     public override int Components { get; }
 
