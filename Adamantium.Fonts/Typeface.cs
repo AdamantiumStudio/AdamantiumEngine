@@ -119,45 +119,48 @@ namespace Adamantium.Fonts
         /// <summary>The glyph named <paramref name="name"/> in the font's charset or CharStrings.</summary>
         public bool GetGlyphByName(string name, out Glyph glyph)
         {
-            if (glyphsByName == null)
+            var byName = System.Threading.Volatile.Read(ref glyphsByName);
+            if (byName == null)
             {
-                var names = new Dictionary<string, Glyph>(StringComparer.Ordinal);
+                byName = new Dictionary<string, Glyph>(StringComparer.Ordinal);
                 foreach (var each in Glyphs)
                 {
                     if (each.Name != null)
                     {
-                        names.TryAdd(each.Name, each);
+                        byName.TryAdd(each.Name, each);
                     }
                 }
 
-                glyphsByName = names;
+                System.Threading.Volatile.Write(ref glyphsByName, byName);
             }
 
             glyph = null;
-            return name != null && glyphsByName.TryGetValue(name, out glyph);
+            return name != null && byName.TryGetValue(name, out glyph);
         }
 
-        /// <summary>The glyph of <paramref name="cid"/> in a CID-keyed font; in any other, the glyph of that index.
-        /// </summary>
+        /// <summary>The glyph of <paramref name="cid"/>: by the charset of a CFF font - its CIDs in a CID-keyed one,
+        /// its string ids in any other, as PDF's CIDFontType0 reads them (ISO 32000-2, 9.7.4.2); in any other font, the
+        /// glyph of that index.</summary>
         public bool GetGlyphByCid(uint cid, out Glyph glyph)
         {
-            if (!IsCidKeyed)
+            if (!IsCidKeyed && Parser is not Parsers.CFF.BareCffParser)
             {
                 return GetGlyphByIndex(cid, out glyph);
             }
 
-            if (glyphsByCid == null)
+            var byCid = System.Threading.Volatile.Read(ref glyphsByCid);
+            if (byCid == null)
             {
-                var cids = new Dictionary<uint, Glyph>();
+                byCid = new Dictionary<uint, Glyph>();
                 foreach (var each in Glyphs)
                 {
-                    cids.TryAdd(each.Index == 0 ? 0 : each.SID, each);
+                    byCid.TryAdd(each.Index == 0 ? 0 : each.SID, each);
                 }
 
-                glyphsByCid = cids;
+                System.Threading.Volatile.Write(ref glyphsByCid, byCid);
             }
 
-            return glyphsByCid.TryGetValue(cid, out glyph);
+            return byCid.TryGetValue(cid, out glyph);
         }
 
         /// <summary>A bare CFF font program, as PDF embeds one (<c>FontFile3 /Type1C</c> or <c>/CIDFontType0C</c>).
