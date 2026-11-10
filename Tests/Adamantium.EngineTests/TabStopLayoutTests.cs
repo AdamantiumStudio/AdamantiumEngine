@@ -59,6 +59,21 @@ public class TabStopLayoutTests
     }
 
     [Test]
+    public void AWidthOfNoWholeUnits_IsLaidToItsFraction_TheRightEdgeAtIt()
+    {
+        static double EndAt(double width)
+        {
+            var typeface = SourceSans.Value;
+            var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+            layout.ProcessText("Chapter", FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords,
+                TextTrimming.None, HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
+            return End(layout, 6);
+        }
+
+        Assert.That(EndAt(200.6) - EndAt(200), Is.EqualTo(0.6).Within(1e-3), "not short of the edge by the fraction");
+    }
+
+    [Test]
     public void ACenterStop_CentersTheTextOnIt()
     {
         var layout = Layout("x\tabc", new TabStop(200, TabAlignment.Center));
