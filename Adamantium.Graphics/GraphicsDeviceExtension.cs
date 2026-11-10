@@ -67,6 +67,23 @@ public static class GraphicsDeviceExtension
         }
 
         var commandBuffer = graphicsDevice.BeginSingleTimeCommand();
+        try
+        {
+            RecordCopy(graphicsDevice, commandBuffer, sourceTexture, destinationTexture);
+        }
+        catch
+        {
+            // The layout changes it submits on the way may fail: the scope is given back, not left holding the lock.
+            graphicsDevice.AbandonSingleTimeCommand(commandBuffer);
+            throw;
+        }
+
+        graphicsDevice.EndSingleTimeCommand(commandBuffer);
+    }
+
+    private static void RecordCopy(IGraphicsDevice graphicsDevice, CommandBuffer commandBuffer, ITexture sourceTexture,
+        ITexture destinationTexture)
+    {
         var imageCopy = new ImageCopy();
         imageCopy.Extent = new Extent3D();
         imageCopy.SrcOffset = new Offset3D();
@@ -135,7 +152,5 @@ public static class GraphicsDeviceExtension
 
         sourceTexture.TransitionImageLayout(ImageLayout.ColorAttachmentOptimal);
         destinationTexture.TransitionImageLayout(ImageLayout.ShaderReadOnlyOptimal);
-        
-        graphicsDevice.EndSingleTimeCommand(commandBuffer);
     }
 }

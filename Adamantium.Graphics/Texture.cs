@@ -21,6 +21,7 @@ public unsafe class Texture : GraphicsResource, ITexture
     private DeviceMemory _stagingMemory;
     private ulong _stagingSize;
     private nuint _stagingData;
+    private bool _readBackGone;
 
     public TextureDescription Description;
 
@@ -287,8 +288,9 @@ public unsafe class Texture : GraphicsResource, ITexture
         var typeBits = memoryRequirements.MemoryTypeBits;
         // Cached memory where the buffer may take it, else any the host sees; never a type it cannot map.
         const MemoryPropertyFlags seen = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent;
-        if (!TryMemoryIndex(typeBits, memoryProperties, out var memoryIndex) &&
-            (!memoryProperties.HasFlag(seen) || !TryMemoryIndex(typeBits, seen, out memoryIndex)))
+        var adapter = GraphicsDevice.Adapter;
+        if (!adapter.TryFindMemoryIndex(typeBits, memoryProperties, out var memoryIndex) &&
+            (!memoryProperties.HasFlag(seen) || !adapter.TryFindMemoryIndex(typeBits, seen, out memoryIndex)))
         {
             GraphicsDevice.Destroy(buffer);
             throw new NotSupportedException(
@@ -313,21 +315,6 @@ public unsafe class Texture : GraphicsResource, ITexture
             GraphicsDevice.Destroy(bufferMemory);
             throw new Exception("failed to bind buffer memory!");
         }
-    }
-
-    private bool TryMemoryIndex(uint typeBits, MemoryPropertyFlags properties, out uint index)
-    {
-        var types = GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceMemoryProperties();
-        for (index = 0; index < types.MemoryTypeCount; index++)
-        {
-            if ((typeBits & (1u << (int)index)) != 0 &&
-                ((MemoryPropertyFlags)types.MemoryTypes.Span[(int)index].PropertyFlags).HasFlag(properties))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void CopyBufferToImage(VkBuffer buffer, VulkanImage image, TextureDescription description)
@@ -929,6 +916,7 @@ public unsafe class Texture : GraphicsResource, ITexture
     {
         lock (_stagingLock)
         {
+            ObjectDisposedException.ThrowIf(_readBackGone, this);
             CopyThroughKeptStagingBuffer(destination, layer, level);
         }
     }
@@ -1053,15 +1041,16 @@ public unsafe class Texture : GraphicsResource, ITexture
 
         lock (_stagingLock)
         {
-            // Before the image goes: a read-back holding the lock copies from an image still there.
+            // A read-back holding the lock copies from an image still there; one coming after finds it gone.
+            _readBackGone = true;
             ReleaseStagingBuffer();
+            GraphicsDevice.Destroy(ImageView);
             if (_disposeImage)
             {
                 GraphicsDevice.Destroy(VulkanImage);
             }
         }
 
-        GraphicsDevice.Destroy(ImageView);
         if (ImageMemory != null && _imageMemoryBytes > 0)
         {
             GraphicsDevice.MainDevice.CountImageBytes(-(long)_imageMemoryBytes);

@@ -2280,6 +2280,20 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
     }
 
+    /// <summary>Gives back a single-time scope begun but not to be submitted - what recorded into it threw: its command
+    /// buffer freed, the submission lock released.</summary>
+    public void AbandonSingleTimeCommand(CommandBuffer commandBuffer)
+    {
+        try
+        {
+            LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
+        }
+        finally
+        {
+            _submissionSync?.Release();
+        }
+    }
+
     public void EndSingleTimeCommand(CommandBuffer commandBuffer)
     {
         Result submitted;
@@ -2287,21 +2301,30 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         Fence fence = null;
         try
         {
-            commandBuffer.EndCommandBuffer();
-            fence = LogicalDevice.CreateFence(new FenceCreateInfo());
-            var submitInfo = new SubmitInfo2
+            // A buffer that failed to end - out of memory - is not executable: never submitted.
+            submitted = commandBuffer.EndCommandBuffer();
+            if (submitted == Result.Success)
             {
-                CommandBufferInfoCount = 1,
-                PCommandBufferInfos = new[] { new CommandBufferSubmitInfo { CommandBuffer = commandBuffer } }
-            };
-            lock (GraphicsQueueLock)
-            {
-                submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
+                fence = LogicalDevice.CreateFence(new FenceCreateInfo());
+                var submitInfo = new SubmitInfo2
+                {
+                    CommandBufferInfoCount = 1,
+                    PCommandBufferInfos = new[] { new CommandBufferSubmitInfo { CommandBuffer = commandBuffer } }
+                };
+                lock (GraphicsQueueLock)
+                {
+                    submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
+                }
             }
 
             waited = submitted == Result.Success
                 ? LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue)
                 : submitted;
+            if (submitted == Result.Success && waited != Result.Success)
+            {
+                // The wait failed, not the work: it may still run, reading what is freed below.
+                DeviceWaitIdle();
+            }
         }
         finally
         {

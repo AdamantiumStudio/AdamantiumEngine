@@ -24,7 +24,14 @@ public class SyncObject : IDisposable
     public void Wait()
     {
         if (!IsSyncEnabled) return;
-        _mutex.WaitOne();
+        try
+        {
+            _mutex.WaitOne();
+        }
+        catch (AbandonedMutexException)
+        {
+            // Another process died holding it: it is ours now, as a wait that succeeded.
+        }
     }
 
     public void Release()

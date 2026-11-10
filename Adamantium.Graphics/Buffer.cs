@@ -170,8 +170,13 @@ namespace Adamantium.Graphics
             try
             {
                 var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(created);
-                var memoryTypeIndex =
-                    GraphicsDevice.Adapter.FindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties);
+                if (!GraphicsDevice.Adapter.TryFindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties,
+                        out var memoryTypeIndex) && memoryProperties.HasFlag(MemoryPropertyFlags.HostVisible))
+                {
+                    // Written through its mapping: never a type the host cannot see.
+                    throw new NotSupportedException(
+                        $"None of the memory types the buffer may take (0x{memoryRequirements.MemoryTypeBits:X}) is {memoryProperties}.");
+                }
 
                 allocated = Allocator.Allocate(
                     memoryRequirements.Size,
