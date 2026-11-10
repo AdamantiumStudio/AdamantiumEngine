@@ -2268,30 +2268,76 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         // Held across the whole single-time scope (until EndSingleTimeCommand): serializes command-pool access AND the
         // queue submit in EndSingleTimeCommand against the main render submit and other uploads (see _submissionSync).
         _submissionSync?.Wait();
-        return LogicalDevice.BeginSingleTimeCommand(TransferCommandPool);
+        try
+        {
+            return LogicalDevice.BeginSingleTimeCommand(TransferCommandPool);
+        }
+        catch
+        {
+            // No command buffer, no scope to end: the lock is not left held against every other submit.
+            _submissionSync?.Release();
+            throw;
+        }
+    }
+
+    /// <summary>Gives back a single-time scope begun but not to be submitted - what recorded into it threw: its command
+    /// buffer freed, the submission lock released.</summary>
+    public void AbandonSingleTimeCommand(CommandBuffer commandBuffer)
+    {
+        try
+        {
+            LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
+        }
+        finally
+        {
+            _submissionSync?.Release();
+        }
     }
 
     public void EndSingleTimeCommand(CommandBuffer commandBuffer)
     {
-        commandBuffer.EndCommandBuffer();
-        var fence = LogicalDevice.CreateFence(new FenceCreateInfo());
-        var submitInfo = new SubmitInfo2
-        {
-            CommandBufferInfoCount = 1,
-            PCommandBufferInfos = new[] { new CommandBufferSubmitInfo { CommandBuffer = commandBuffer } }
-        };
         Result submitted;
-        lock (GraphicsQueueLock)
+        Result waited;
+        Fence fence = null;
+        try
         {
-            submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
+            // A buffer that failed to end - out of memory - is not executable: never submitted.
+            submitted = commandBuffer.EndCommandBuffer();
+            if (submitted == Result.Success)
+            {
+                fence = LogicalDevice.CreateFence(new FenceCreateInfo());
+                var submitInfo = new SubmitInfo2
+                {
+                    CommandBufferInfoCount = 1,
+                    PCommandBufferInfos = new[] { new CommandBufferSubmitInfo { CommandBuffer = commandBuffer } }
+                };
+                lock (GraphicsQueueLock)
+                {
+                    submitted = GraphicsQueue.QueueSubmit2(1, submitInfo, fence);
+                }
+            }
+
+            waited = submitted == Result.Success
+                ? LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue)
+                : submitted;
+            if (submitted == Result.Success && waited != Result.Success)
+            {
+                // The wait failed, not the work: it may still run, reading what is freed below.
+                DeviceWaitIdle();
+            }
+        }
+        finally
+        {
+            // Out of memory on the way leaves neither the command buffer nor the lock behind.
+            LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
+            if (fence != null)
+            {
+                LogicalDevice.DestroyFence(fence);
+            }
+
+            _submissionSync?.Release();
         }
 
-        var waited = submitted == Result.Success
-            ? LogicalDevice.WaitForFences(1, fence, true, ulong.MaxValue)
-            : submitted;
-        LogicalDevice.FreeCommandBuffers(TransferCommandPool, 1, commandBuffer);
-        LogicalDevice.DestroyFence(fence);
-        _submissionSync?.Release();
         MainDevice.Observe(submitted);
         MainDevice.Observe(waited);
     }

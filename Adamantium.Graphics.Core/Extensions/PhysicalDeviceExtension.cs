@@ -33,19 +33,26 @@ public static class PhysicalDeviceExtension
         return presentSupport;
     }
 
-    public static UInt32 FindMemoryIndex(this GraphicsAdapter physicalDevice, UInt32 memoryTypeBits, MemoryPropertyFlags propertyFlags)
+    public static UInt32 FindMemoryIndex(this GraphicsAdapter physicalDevice, UInt32 memoryTypeBits, MemoryPropertyFlags propertyFlags) =>
+        physicalDevice.TryFindMemoryIndex(memoryTypeBits, propertyFlags, out var index) ? index : 0;
+
+    /// <summary>The first memory type of <paramref name="memoryTypeBits"/> with all of <paramref name="propertyFlags"/>;
+    /// false when none has them.</summary>
+    public static bool TryFindMemoryIndex(this GraphicsAdapter physicalDevice, UInt32 memoryTypeBits,
+        MemoryPropertyFlags propertyFlags, out UInt32 index)
     {
         var memProperties = physicalDevice.Adapter.GetPhysicalDeviceMemoryProperties();
-        for (uint i = 0; i < memProperties.MemoryTypeCount; i++)
+        for (index = 0; index < memProperties.MemoryTypeCount; index++)
         {
-            if (((memoryTypeBits >> (int)i) & 1) == 1 &&
-                ((MemoryPropertyFlags)memProperties.MemoryTypes.Span[(int)i].PropertyFlags).HasFlag(propertyFlags))
+            if (((memoryTypeBits >> (int)index) & 1) == 1 &&
+                ((MemoryPropertyFlags)memProperties.MemoryTypes.Span[(int)index].PropertyFlags).HasFlag(propertyFlags))
             {
-                return i;
+                return true;
             }
         }
 
-        return 0;
+        index = 0;
+        return false;
     }
 }
 

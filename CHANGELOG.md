@@ -215,6 +215,16 @@ All packages share one version.
 
 ### Fixed
 
+- A texture read back to an image (`Texture.ToImage`, `CopyTo`; a window's screenshot) when the GPU's memory is full
+  no longer crashes the next read: the staging buffer whose memory failed was destroyed but stayed held, and was
+  released a second time. Out of memory leaves nothing else behind either: a `Buffer` that fails to be made gives
+  back its Vulkan buffer, its memory and its staging copy; a single-time command that fails releases the submission
+  lock and its command buffer, so other submits do not wait forever (`AbandonSingleTimeCommand` gives back one begun
+  but not to be submitted); one that failed to end is not submitted, and one whose wait failed is waited out before
+  its buffers are freed; a timestamp pool or an empty set layout that failed is not used as if made, nor asked for
+  again every frame. The submission lock left by a process that died holding it is taken over, not thrown on. A
+  buffer or a texture's staging copy written through its mapping never takes memory the host cannot see
+  (`TryFindMemoryIndex`). A texture read back after it was disposed throws rather than copying from a freed image.
 - A font whose glyphs are read only as they are asked for - a PDF's bare CFF program - answered a character it does not
   map by throwing; it answers with glyph 0, the missing glyph.
 - `TextLayout.ProcessText` lays the lines to the width given, to its fraction, not to its whole units: a right tab stop

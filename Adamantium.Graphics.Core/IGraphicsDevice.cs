@@ -309,6 +309,10 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
 
     CommandBuffer BeginSingleTimeCommand();
 
+    /// <summary>Gives back a single-time scope begun but not to be submitted: its command buffer freed, the submission
+    /// lock released.</summary>
+    void AbandonSingleTimeCommand(CommandBuffer commandBuffer);
+
     void EndSingleTimeCommand(CommandBuffer commandBuffer);
 
     Color ClearColor { get; set; }

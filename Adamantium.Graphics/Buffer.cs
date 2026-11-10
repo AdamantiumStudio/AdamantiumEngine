@@ -65,7 +65,7 @@ namespace Adamantium.Graphics
             ElementSize = (uint)(dataPointer.Size / dataPointer.Count);
             ElementCount = dataPointer.Count;
 
-            Initialize(dataPointer);
+            Build(() => Initialize(dataPointer));
         }
 
         protected Buffer(IGraphicsDevice device, 
@@ -89,25 +89,48 @@ namespace Adamantium.Graphics
             ElementSize = (uint)(size / count);
             ElementCount = count;
 
-            CreateBuffer(size,
-                BufferUsageFlags.TransferDst | Usage,
-                MemoryFlags,
-                out VulkanBuffer,
-                out _allocation);
-            _deviceAddress = 0;
+            Build(() =>
+            {
+                CreateBuffer(size,
+                    BufferUsageFlags.TransferDst | Usage,
+                    MemoryFlags,
+                    out VulkanBuffer,
+                    out _allocation);
+                _deviceAddress = 0;
+            });
         }
 
         private bool IsHostVisible => MemoryFlags.HasFlag(MemoryPropertyFlags.HostVisible);
+
+        // A buffer that fails to be made gives back what it took and leaves the device's list of resources.
+        private void Build(Action build)
+        {
+            try
+            {
+                build();
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
 
         private void UploadViaStaging(DataPointer dataPointer, ulong dstOffset)
         {
             CreateBuffer(dataPointer.Size, BufferUsageFlags.TransferSrc,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent,
                 out var stagingBuffer, out var stagingAllocation);
-            UpdateBufferContent(stagingAllocation, dataPointer);
-            CopyBuffer(stagingBuffer, VulkanBuffer, dataPointer.Size, dstOffset);
-            GraphicsDevice.Destroy(stagingBuffer);
-            Allocator.Free(stagingAllocation);
+            try
+            {
+                UpdateBufferContent(stagingAllocation, dataPointer);
+                CopyBuffer(stagingBuffer, VulkanBuffer, dataPointer.Size, dstOffset);
+            }
+            finally
+            {
+                GraphicsDevice.Destroy(stagingBuffer);
+                Allocator.Free(stagingAllocation);
+            }
         }
 
         private void Initialize(DataPointer dataPointer)
@@ -142,23 +165,42 @@ namespace Adamantium.Graphics
             bufferInfo.Usage = (BufferUsageFlagBits)usage;
             bufferInfo.SharingMode = SharingMode.Exclusive;
 
-            buffer = GraphicsDevice.LogicalDevice.CreateBuffer(bufferInfo);
-
-            var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(buffer);
-            var memoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties);
-
-            allocation = Allocator.Allocate(
-                memoryRequirements.Size,
-                memoryRequirements.Alignment,
-                memoryTypeIndex,
-                memoryRequirements.MemoryTypeBits,
-                usage.HasFlag(BufferUsageFlags.ShaderDeviceAddress));
-
-            var result = GraphicsDevice.LogicalDevice.BindBufferMemory(buffer, allocation.Memory, allocation.Offset);
-            if (result != Result.Success)
+            var created = GraphicsDevice.LogicalDevice.CreateBuffer(bufferInfo);
+            DeviceMemoryAllocator.MemoryAllocation allocated = null;
+            try
             {
-                throw new GraphicsEngineException("Failed to bind buffer memory to buffer");
+                var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(created);
+                if (!GraphicsDevice.Adapter.TryFindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties,
+                        out var memoryTypeIndex) && memoryProperties.HasFlag(MemoryPropertyFlags.HostVisible))
+                {
+                    // Written through its mapping: never a type the host cannot see.
+                    throw new NotSupportedException(
+                        $"None of the memory types the buffer may take (0x{memoryRequirements.MemoryTypeBits:X}) is {memoryProperties}.");
+                }
+
+                allocated = Allocator.Allocate(
+                    memoryRequirements.Size,
+                    memoryRequirements.Alignment,
+                    memoryTypeIndex,
+                    memoryRequirements.MemoryTypeBits,
+                    usage.HasFlag(BufferUsageFlags.ShaderDeviceAddress));
+
+                var result = GraphicsDevice.LogicalDevice.BindBufferMemory(created, allocated.Memory, allocated.Offset);
+                if (result != Result.Success)
+                {
+                    throw new GraphicsEngineException("Failed to bind buffer memory to buffer");
+                }
             }
+            catch
+            {
+                // Out of memory leaves nothing behind: neither the buffer nor what was allocated for it.
+                GraphicsDevice.Destroy(created);
+                Allocator.Free(allocated);
+                throw;
+            }
+
+            buffer = created;
+            allocation = allocated;
         }
 
         private void CopyBuffer(VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, ulong size, ulong dstOffset = 0)

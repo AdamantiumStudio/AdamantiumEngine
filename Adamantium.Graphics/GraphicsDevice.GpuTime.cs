@@ -8,6 +8,7 @@ public partial class GraphicsDevice
     private QueryPool _gpuTimestamps;
     private bool[] _gpuTimed;
     private double _gpuTickMs;
+    private bool _gpuTimestampsFailed;
 
     /// <summary>GPU time of the last finished frame, from its first command to its last, in milliseconds; work other
     /// queues ran in between counts too. 0 when the device cannot time.</summary>
@@ -15,7 +16,7 @@ public partial class GraphicsDevice
 
     private void StartGpuTimer(CommandBuffer commandBuffer)
     {
-        if (_gpuTimestamps == null && !CreateGpuTimestamps()) return;
+        if (_gpuTimestamps == null && (_gpuTimestampsFailed || !CreateGpuTimestamps())) return;
 
         var first = CurrentFrame * 2;
         if (_gpuTimed[CurrentFrame])
@@ -46,17 +47,26 @@ public partial class GraphicsDevice
 
     private bool CreateGpuTimestamps()
     {
+        // Tried once: a device that cannot time, or had no memory for it, is not asked again every frame.
+        _gpuTimestampsFailed = true;
         var limits = Adapter.AdapterProperties.Limits;
         if (!limits.TimestampComputeAndGraphics) return false;
 
         _gpuTickMs = limits.TimestampPeriod / 1e6;
         _gpuTimed = new bool[MaxFramesInFlight];
         var info = new QueryPoolCreateInfo { QueryType = QueryType.Timestamp, QueryCount = MaxFramesInFlight * 2 };
-        return LogicalDevice.CreateQueryPool(info, null, out _gpuTimestamps) == Result.Success;
+        // Held only once made: a pool that failed must not be written to as if it were there.
+        if (LogicalDevice.CreateQueryPool(info, null, out var pool) != Result.Success) return false;
+
+        _gpuTimestampsFailed = false;
+
+        _gpuTimestamps = pool;
+        return true;
     }
 
     private void DestroyGpuTimestamps()
     {
+        _gpuTimestampsFailed = false;
         if (_gpuTimestamps == null) return;
 
         LogicalDevice?.DestroyQueryPool(_gpuTimestamps);

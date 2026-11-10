@@ -21,6 +21,7 @@ public unsafe class Texture : GraphicsResource, ITexture
     private DeviceMemory _stagingMemory;
     private ulong _stagingSize;
     private nuint _stagingData;
+    private bool _readBackGone;
 
     public TextureDescription Description;
 
@@ -284,11 +285,22 @@ public unsafe class Texture : GraphicsResource, ITexture
         buffer = GraphicsDevice.LogicalDevice.CreateBuffer(bufferInfo);
 
         var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(buffer);
+        var typeBits = memoryRequirements.MemoryTypeBits;
+        // Cached memory where the buffer may take it, else any the host sees; never a type it cannot map.
+        const MemoryPropertyFlags seen = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent;
+        var adapter = GraphicsDevice.Adapter;
+        if (!adapter.TryFindMemoryIndex(typeBits, memoryProperties, out var memoryIndex) &&
+            (!memoryProperties.HasFlag(seen) || !adapter.TryFindMemoryIndex(typeBits, seen, out memoryIndex)))
+        {
+            GraphicsDevice.Destroy(buffer);
+            throw new NotSupportedException(
+                $"None of the memory types the buffer may take (0x{typeBits:X}) is {memoryProperties}.");
+        }
 
         var allocInfo = new MemoryAllocateInfo
         {
             AllocationSize = memoryRequirements.Size,
-            MemoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties)
+            MemoryTypeIndex = memoryIndex
         };
 
         if (device.AllocateMemory(allocInfo, null, out bufferMemory) != Result.Success)
@@ -904,6 +916,7 @@ public unsafe class Texture : GraphicsResource, ITexture
     {
         lock (_stagingLock)
         {
+            ObjectDisposedException.ThrowIf(_readBackGone, this);
             CopyThroughKeptStagingBuffer(destination, layer, level);
         }
     }
@@ -914,11 +927,26 @@ public unsafe class Texture : GraphicsResource, ITexture
         if (_stagingBuffer == null || _stagingSize < size)
         {
             ReleaseStagingBuffer();
+            // Held only once whole: a buffer whose memory failed is destroyed and must not stay to be released again.
             CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, GetStagingMemory(),
-                out _stagingBuffer, out _stagingMemory);
+                out var buffer, out var memory);
+            nuint data;
+            try
+            {
+                data = GraphicsDevice.MapMemory(memory, 0, size, 0);
+            }
+            catch
+            {
+                GraphicsDevice.Destroy(buffer);
+                GraphicsDevice.Destroy(memory);
+                throw;
+            }
+
+            _stagingBuffer = buffer;
+            _stagingMemory = memory;
+            _stagingData = data;
             _stagingSize = size;
             GraphicsDevice.MainDevice.CountStagingBytes((long)size);
-            _stagingData = GraphicsDevice.MapMemory(_stagingMemory, 0, size, 0);
         }
 
         var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
@@ -1011,17 +1039,18 @@ public unsafe class Texture : GraphicsResource, ITexture
             _levelInfos = null;
         }
 
-        if (_disposeImage)
-        {
-            GraphicsDevice.Destroy(VulkanImage);
-        }
-
         lock (_stagingLock)
         {
+            // A read-back holding the lock copies from an image still there; one coming after finds it gone.
+            _readBackGone = true;
             ReleaseStagingBuffer();
+            GraphicsDevice.Destroy(ImageView);
+            if (_disposeImage)
+            {
+                GraphicsDevice.Destroy(VulkanImage);
+            }
         }
 
-        GraphicsDevice.Destroy(ImageView);
         if (ImageMemory != null && _imageMemoryBytes > 0)
         {
             GraphicsDevice.MainDevice.CountImageBytes(-(long)_imageMemoryBytes);
