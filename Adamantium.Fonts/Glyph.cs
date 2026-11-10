@@ -154,9 +154,9 @@ namespace Adamantium.Fonts
             CenterToBaseLineMultiplier = new Vector2<double>(diff.X / unitsPerEm, diff.Y / unitsPerEm);
         }
 
-        /// <summary>The glyph's outline in font units, y up: its contours, each a closed run of segments of two points (a
-        /// line), three (a quadratic Bézier) or four (a cubic). A copy the caller may keep.</summary>
-        public Vector2<double>[][][] GetContours()
+        /// <summary>The glyph's outline in font units, y up: its closed contours of lines and Béziers. A copy the caller
+        /// may keep.</summary>
+        public IReadOnlyList<GlyphContour> GetContours()
         {
             if (IsEmpty)
             {
@@ -184,25 +184,35 @@ namespace Adamantium.Fonts
                     }
                 }
 
-                var contours = new List<Vector2<double>[][]>(Outlines.Count);
+                var contours = new List<GlyphContour>(Outlines.Count);
                 foreach (var outline in Outlines)
                 {
-                    var segments = new List<Vector2<double>[]>(outline.Segments.Count);
+                    var segments = new List<GlyphSegment>(outline.Segments.Count);
                     foreach (var segment in outline.Segments)
                     {
-                        if (segment.Points.Count is >= 2 and <= 4)
+                        // A split keeps a piece as its points: two for a line, three or four for a curve.
+                        var points = segment.Points;
+                        switch (points.Count)
                         {
-                            segments.Add(segment.Points.ToArray());
+                            case 2:
+                                segments.Add(GlyphSegment.Line(points[0], points[1]));
+                                break;
+                            case 3:
+                                segments.Add(GlyphSegment.Quadratic(points[0], points[1], points[2]));
+                                break;
+                            case 4:
+                                segments.Add(GlyphSegment.Cubic(points[0], points[1], points[2], points[3]));
+                                break;
                         }
                     }
 
                     if (segments.Count > 0)
                     {
-                        contours.Add(segments.ToArray());
+                        contours.Add(new GlyphContour(segments));
                     }
                 }
 
-                return contours.ToArray();
+                return contours;
             }
         }
 

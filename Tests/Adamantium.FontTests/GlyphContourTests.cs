@@ -7,9 +7,9 @@ namespace Adamantium.FontTests;
 // A glyph's outline handed out as segments: what draws the letter as a path - a stroked letter, a letter that clips.
 public class GlyphContourTests
 {
-    [TestCase("TTFFonts/SourceSans3-Regular.ttf", 3)]
-    [TestCase("OTFFonts/SourceSans3-Regular.otf", 4)]
-    public void TheContours_AreClosedRunsOfLinesAndCurves(string path, int curvePoints)
+    [TestCase("TTFFonts/SourceSans3-Regular.ttf", GlyphSegmentKind.Quadratic)]
+    [TestCase("OTFFonts/SourceSans3-Regular.otf", GlyphSegmentKind.Cubic)]
+    public void TheContours_AreClosedRunsOfLinesAndCurves(string path, GlyphSegmentKind curves)
     {
         var typeface = Typeface.LoadFont(path, 3);
         var font = typeface.Fonts[0];
@@ -19,21 +19,22 @@ public class GlyphContourTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(contours, Has.Length.EqualTo(2), "the outside and the counter");
+            Assert.That(contours, Has.Count.EqualTo(2), "the outside and the counter");
             foreach (var contour in contours)
             {
-                Assert.That(contour.All(s => s.Length is >= 2 and <= 4));
-                Assert.That(contour.Any(s => s.Length == curvePoints), "curves of the font's own degree");
-                for (var i = 1; i < contour.Length; i++)
+                var segments = contour.Segments;
+                Assert.That(segments.Any(s => s.Kind == curves), "curves of the font's own degree");
+                Assert.That(segments.All(s => s.Kind == GlyphSegmentKind.Line || s.Kind == curves));
+                for (var i = 1; i < segments.Count; i++)
                 {
-                    Assert.That(contour[i][0], Is.EqualTo(contour[i - 1][^1]), "each segment starts where the last ends");
+                    Assert.That(segments[i].Start, Is.EqualTo(segments[i - 1].End), "each segment starts where the last ends");
                 }
 
-                Assert.That(contour[^1][^1], Is.EqualTo(contour[0][0]), "closed");
+                Assert.That(segments[^1].End, Is.EqualTo(segments[0].Start), "closed");
             }
 
             var bounds = o.BoundingRectangle;
-            var xs = contours.SelectMany(c => c.SelectMany(s => s)).Select(p => p.X).ToArray();
+            var xs = contours.SelectMany(c => c.Segments).SelectMany(s => new[] { s.Start.X, s.End.X }).ToArray();
             Assert.That(xs.Min(), Is.GreaterThanOrEqualTo(bounds.Left - 1));
             Assert.That(xs.Max(), Is.LessThanOrEqualTo(bounds.Right + 1));
         });
@@ -48,15 +49,18 @@ public class GlyphContourTests
     }
 
     [Test]
-    public void TheCopy_IsTheCallers()
+    public void EachCall_GivesItsOwnCopy()
     {
         var font = Typeface.LoadFont("TTFFonts/SourceSans3-Regular.ttf", 3).Fonts[0];
         var h = font.GetGlyphByCharacter('H');
+
         var first = h.GetContours();
-        var original = first[0][0][0];
+        var second = h.GetContours();
 
-        first[0][0][0] = new Mathematics.Vector2<double>(-999, -999);
-
-        Assert.That(h.GetContours()[0][0][0], Is.EqualTo(original));
+        Assert.Multiple(() =>
+        {
+            Assert.That(second, Is.Not.SameAs(first));
+            Assert.That(second[0].Segments, Is.EqualTo(first[0].Segments), "the same outline");
+        });
     }
 }
