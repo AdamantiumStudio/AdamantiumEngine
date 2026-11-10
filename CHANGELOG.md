@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- Glyphs placed by the caller (`TextLayout.ProcessGlyphs`, `PositionedGlyph`): each by its index in the font and its pen
+  position, drawn where it stands - nothing shaped, broken into lines or snapped to the pixel grid - through the same
+  atlas, quads and effects as laid-out text. What a document that sets its own text, a PDF page, draws with.
+- `Glyph.GetContours`: a glyph's outline as closed contours of lines and quadratic or cubic Béziers, in font units -
+  what strokes letters as paths and clips by them.
 - Hidden text in `TextLayout`, as Word's: `TextAttributes.Hidden` lays a stretch as nothing - no glyph, no width, no
   height in its line, no tab or line break of its own - its characters keeping their places, so the caret before and
   after it stands at one spot and steps over it with the character after it.

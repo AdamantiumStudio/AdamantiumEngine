@@ -464,6 +464,76 @@ public class TextLayout : DisposableObject
         return Lay(text, fontSize, renderingParameters, Snapshot());
     }
 
+    /// <summary>Takes glyphs the caller has already placed instead of laying out a string: each is drawn from its pen
+    /// position, at <paramref name="fontSize"/>, with nothing shaped, broken into lines or snapped to the pixel grid - a
+    /// page that zooms keeps every glyph where its document put it. Returns the size from the origin to the right and
+    /// bottom of the ink.</summary>
+    public Size<double> ProcessGlyphs(IReadOnlyList<PositionedGlyph> glyphs, double fontSize)
+    {
+        ArgumentNullException.ThrowIfNull(glyphs);
+        if (!double.IsFinite(fontSize) || fontSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fontSize), fontSize, "A size above zero.");
+        }
+
+        var scale = fontSize / Font.UnitsPerEm;
+        var placed = new List<GlyphWordData>(glyphs.Count);
+        double right = 0;
+        double bottom = 0;
+        for (var i = 0; i < glyphs.Count; i++)
+        {
+            var at = glyphs[i];
+            // A glyph at no point is drawn nowhere: it would make the whole run's size no number.
+            if (!double.IsFinite(at.X) || !double.IsFinite(at.Y))
+            {
+                continue;
+            }
+
+            var glyph = Font.GetGlyphByIndex(at.Index);
+            var rect = TextGeometry.PlacedGlyphRect(Font, glyph, at.X, at.Y, scale);
+            placed.Add(new GlyphWordData(glyph, PlacedSymbol, rect, i, 0)
+            {
+                Font = Font,
+                FontSize = fontSize,
+                PenX = at.X,
+                Advance = Font.GetAdvanceWidth(glyph.Index) * scale,
+                Placed = true,
+            });
+            right = Math.Max(right, rect.Right);
+            bottom = Math.Max(bottom, rect.Bottom);
+        }
+
+        _attributed = null;
+        Text = new string(PlacedSymbol, glyphs.Count);
+        FontSize = (float)fontSize;
+        _laidOutOptions = Snapshot();
+        OversetIndex = glyphs.Count;
+        HasPendingFonts = false;
+        var size = new Size<double>(right, bottom);
+        Publish(new LaidOutText
+        {
+            Text = Text,
+            FontSize = fontSize,
+            Font = Font,
+            Options = _laidOutOptions,
+            RenderingParameters = RenderingParameters,
+            Glyphs = placed,
+            DotGlyph = _composer.DotGlyph,
+            Size = size,
+            RealTextDimensions = size,
+        });
+        _quads.Clear();
+        CalculatedLayoutSize = size;
+        RealTextDimensions = size;
+        _textUpdated = true;
+        // Nothing was laid out from a string: a ProcessText after this lays out its text afresh, whatever it asks.
+        _laidOutOptions = null;
+        return size;
+    }
+
+    // What a placed glyph stands for in the text: it came with no character.
+    private const char PlacedSymbol = '�';
+
     /// <summary>Whether the paragraph holding UTF-16 <paramref name="index"/> of the text last laid out runs right to
     /// left: its lines start on the right, where <see cref="HorizontalTextAlignment.Left"/> puts them.</summary>
     public bool IsRightToLeftParagraph(int index)

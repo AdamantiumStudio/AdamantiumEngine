@@ -60,6 +60,10 @@ public class GlyphWordData
     /// <summary>Whether the glyph is a ruby annotation's, set beside its base: it takes none of the base's effects.</summary>
     public bool Annotates { get; init; }
 
+    /// <summary>Whether the caller placed the glyph (<see cref="TextLayout.ProcessGlyphs"/>): drawn exactly where it
+    /// stands, never snapped to the pixel grid.</summary>
+    public bool Placed { get; init; }
+
     internal double Tail { get; init; }
 
     public override string ToString()

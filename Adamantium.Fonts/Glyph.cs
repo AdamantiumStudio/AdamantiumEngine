@@ -154,6 +154,58 @@ namespace Adamantium.Fonts
             CenterToBaseLineMultiplier = new Vector2<double>(diff.X / unitsPerEm, diff.Y / unitsPerEm);
         }
 
+        /// <summary>The glyph's outline in font units, y up: its contours, each a closed run of segments of two points (a
+        /// line), three (a quadratic Bézier) or four (a cubic). A copy the caller may keep.</summary>
+        public Vector2<double>[][][] GetContours()
+        {
+            if (IsEmpty)
+            {
+                return [];
+            }
+
+            lock (lockObject)
+            {
+                if (!isSplitOnSegments)
+                {
+                    try
+                    {
+                        SplitOnSegments();
+                    }
+                    catch (Exception exception) when (exception is not OutOfMemoryException)
+                    {
+                        // A broken outline - one starting on a control point, an empty one - from a font a document
+                        // carries: drawn as no path, its half-split segments dropped so a later split starts clean.
+                        foreach (var outline in Outlines)
+                        {
+                            outline.Segments.Clear();
+                        }
+
+                        return [];
+                    }
+                }
+
+                var contours = new List<Vector2<double>[][]>(Outlines.Count);
+                foreach (var outline in Outlines)
+                {
+                    var segments = new List<Vector2<double>[]>(outline.Segments.Count);
+                    foreach (var segment in outline.Segments)
+                    {
+                        if (segment.Points.Count is >= 2 and <= 4)
+                        {
+                            segments.Add(segment.Points.ToArray());
+                        }
+                    }
+
+                    if (segments.Count > 0)
+                    {
+                        contours.Add(segments.ToArray());
+                    }
+                }
+
+                return contours.ToArray();
+            }
+        }
+
         public Vector3F[] Sample(byte rate)
         {
             if (IsEmpty)

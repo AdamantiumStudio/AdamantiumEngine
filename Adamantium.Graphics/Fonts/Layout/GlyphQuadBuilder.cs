@@ -381,7 +381,7 @@ internal sealed class GlyphQuadBuilder
         _items[ElementsCount] = new FontItem
         {
             ArrangeRect = new Vector4F((float)Pen(word),
-                (float)(word.Upright ? Baseline(word) : Math.Round(Baseline(word))), (float)(scale * word.HorizontalScale),
+                (float)(word.Upright || word.Placed ? Baseline(word) : Math.Round(Baseline(word))), (float)(scale * word.HorizontalScale),
                 scale),
             Depth = 1.0f,
             Color = GlyphColor(word),
