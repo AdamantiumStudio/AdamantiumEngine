@@ -1126,7 +1126,8 @@ internal sealed class LineComposer
             var origin = 0.0;
             if (LineState(line).RightToLeft)
             {
-                var excluded = slots != null ? frames[SlotOf(line).Frame].Width - SlotOf(line).Right : 0;
+                var slot = slots != null ? SlotOf(line) : default;
+                var excluded = slots != null ? SlotRight(slot.Frame, frames[slot.Frame].Right) - slot.Right : 0;
                 origin = LineIndent(line) - RightReserve(line) - excluded;
             }
 
@@ -2262,7 +2263,7 @@ internal sealed class LineComposer
                 rowAt + rowHeight <= frames[f].Bottom + 1e-6 &&
                 SpanPast(frames[f], rowAt, rowHeight, beside, rightToLeft) is { } next)
             {
-                slots.Add((f, next.Left - frames[f].Left, next.Right - frames[f].Left, rowAt, rowUnsnapped));
+                slots.Add((f, next.Left - frames[f].Left, SlotRight(f, next.Right), rowAt, rowUnsnapped));
                 slotCursors.Add((f, Math.Max(top, rowAt + rowHeight + SpacingAfter(line)), rows,
                     rightToLeft ? next.Left : next.Right, rightToLeft, rowAt, rowUnsnapped));
                 slotBases.Add((gap, room, rowHeight, GridsLine(line), rightToLeft));
@@ -2302,7 +2303,7 @@ internal sealed class LineComposer
                 var edge = rightToLeft ? double.PositiveInfinity : double.NegativeInfinity;
                 if (SpanPast(frame, rowTop, rowHeight, edge, rightToLeft) is { } first)
                 {
-                    slots.Add((f, first.Left - frame.Left, first.Right - frame.Left, rowTop, unsnapped));
+                    slots.Add((f, first.Left - frame.Left, SlotRight(f, first.Right), rowTop, unsnapped));
                     slotCursors.Add((f, top, rows, rightToLeft ? first.Left : first.Right, rightToLeft, rowTop,
                         unsnapped));
                     slotBases.Add((gap, room, rowHeight, GridsLine(line), rightToLeft));
@@ -2483,6 +2484,24 @@ internal sealed class LineComposer
                                        + EdgeReserve(line, false) + (line < dropBeside && !dropRightToLeft ? dropIndent : 0);
 
         double LineRight(int line) => (slots != null ? SlotOf(line).Right : areaWidth) - RightReserve(line);
+
+        // A span reaching its frame's right edge, the frame wider than the width laid to by its float's rounding up
+        // only, runs to that width - as the same text laid without frames does. Within the frame's left.
+        double SlotRight(int frameIndex, double right)
+        {
+            var frame = frames[frameIndex];
+            double frameRight = frame.Right;
+            var toTheWidth = right == frameRight && frameRight >= areaWidth &&
+                             frameRight - areaWidth <= FloatStep(areaWidth);
+            return (toTheWidth ? areaWidth : right) - frame.Left;
+        }
+
+        // The room between a float at value and the next one up.
+        static double FloatStep(double value)
+        {
+            var single = MathF.Abs((float)value);
+            return (double)MathF.BitIncrement(single) - single;
+        }
 
         bool LineHasContent() => cursorPosition > LineIndent(lineIndex) + 1e-9;
 

@@ -73,6 +73,36 @@ public class TabStopLayoutTests
         Assert.That(EndAt(200.6) - EndAt(200), Is.EqualTo(0.6).Within(1e-3), "not short of the edge by the fraction");
     }
 
+    [TestCase(0f)]
+    [TestCase(10.3f)]
+    public void AFrameAsWideAsTheWidthButForItsFloat_EndsTheLineWhereNoFrameDoes(float left)
+    {
+        // A width a float cannot hold: the frame's right rounded up to the next float, so text set to it does not wrap.
+        const double width = 642.6957;
+        double EndAt(bool framed)
+        {
+            var typeface = SourceSans.Value;
+            var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
+            if (framed)
+            {
+                var across = (float)(width - left);
+                while (new RectangleF(left, 0, across, 400).Right < width)
+                {
+                    across = MathF.BitIncrement(across);
+                }
+
+                layout.Frames = [new RectangleF(left, 0, across, 400)];
+            }
+
+            layout.ProcessText("Chapter", FontSize, new Size<double>(width, double.NaN), TextWrapping.WrapByWords,
+                TextTrimming.None, HorizontalTextAlignment.Right, VerticalTextAlignment.Top);
+            return End(layout, 6);
+        }
+
+        Assert.That((float)width, Is.LessThan(width), "the float falls short of the width");
+        Assert.That(EndAt(true), Is.EqualTo(EndAt(false)).Within(1e-9), "the same right edge, framed or not");
+    }
+
     [Test]
     public void ACenterStop_CentersTheTextOnIt()
     {
