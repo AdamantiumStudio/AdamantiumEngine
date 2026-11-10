@@ -731,6 +731,8 @@ public class TextLayout : DisposableObject
         TextTrimming textTrimming, HorizontalTextAlignment horizontalTextAlignment,
         VerticalTextAlignment verticalTextAlignment, bool justifyLastLine)
     {
+        // The lines are laid to the width as given; the area's whole units would put a stop at its very edge past it.
+        var layWidth = Double.IsFinite(textArea.Width) && textArea.Width < Int32.MaxValue ? textArea.Width : Double.NaN;
         if (Double.IsNaN(textArea.Width))
         {
             textArea.Width = Int32.MaxValue;
@@ -748,7 +750,8 @@ public class TextLayout : DisposableObject
             JustifyLastLine = justifyLastLine,
             TextWrapping = textWrapping,
             TextTrimming = textTrimming,
-            TextArea = new Rectangle<int>(Vector2F.Zero.As<int>(), textArea.As<int>())
+            TextArea = new Rectangle<int>(Vector2F.Zero.As<int>(), textArea.As<int>()),
+            LayWidth = layWidth,
         };
     }
 

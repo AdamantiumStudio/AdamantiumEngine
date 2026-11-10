@@ -10,6 +10,10 @@ namespace Adamantium.Graphics.Fonts
         /// </summary>
         public Rectangle<int> TextArea { get; set; }
 
+        /// <summary>The width the lines are laid to, to a fraction of a unit - the whole units of
+        /// <see cref="TextArea"/> fall short of it; NaN takes the area's width.</summary>
+        internal double LayWidth { get; set; } = double.NaN;
+
         public TextWrapping TextWrapping { get; set; }
 
         public HorizontalTextAlignment HorizontalTextAlignment { get; set; }
@@ -31,7 +35,8 @@ namespace Adamantium.Graphics.Fonts
         {
             if (ReferenceEquals(null, other)) return false;
             if (ReferenceEquals(this, other)) return true;
-            return TextArea.Equals(other.TextArea) && 
+            return TextArea.Equals(other.TextArea) &&
+                   LayWidth.Equals(other.LayWidth) &&
                    TextWrapping == other.TextWrapping &&
                    HorizontalTextAlignment == other.HorizontalTextAlignment &&
                    VerticalTextAlignment == other.VerticalTextAlignment &&
@@ -50,7 +55,7 @@ namespace Adamantium.Graphics.Fonts
         
         public override int GetHashCode()
         {
-            return HashCode.Combine(TextArea, (int)TextWrapping, (int)HorizontalTextAlignment, (int)VerticalTextAlignment, JustifyLastLine, (int)TextTrimming, Color);
+            return HashCode.Combine(TextArea, LayWidth, (int)TextWrapping, (int)HorizontalTextAlignment, (int)VerticalTextAlignment, JustifyLastLine, (int)TextTrimming, Color);
         }
         
         public static bool operator ==(TextRenderingParameters paramA, TextRenderingParameters paramB)

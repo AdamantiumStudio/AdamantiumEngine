@@ -132,6 +132,9 @@ internal sealed class LineComposer
     // Text longer than this many lines is not balanced: each width tried lays all of it out again.
     private const int MostBalancedLines = 10;
 
+    // How far past a line's right edge text still fits: what rounding leaves of text set to end at the very edge.
+    private const double EdgeTolerance = 1e-6;
+
     // The narrowest whole width the text wraps in without taking more lines than MaxLines, or than wrapping at the full
     // width takes; 0 when the lines are not balanced. The lines are still aligned in the full width. A width counts only
     // when every word fits its line whole - none past the room, none broken by hyphenation - and every line fits the
@@ -150,6 +153,8 @@ internal sealed class LineComposer
         var tried = new TextRenderingParameters
         {
             TextArea = new Rectangle<int>(area.X, area.Y, area.Width, Int32.MaxValue),
+            // The full width as the layout itself takes it, for the lines it takes; each width tried is its own.
+            LayWidth = renderingParameters.LayWidth,
             TextWrapping = renderingParameters.TextWrapping,
             HorizontalTextAlignment = renderingParameters.HorizontalTextAlignment,
             VerticalTextAlignment = VerticalTextAlignment.Top,
@@ -346,10 +351,17 @@ internal sealed class LineComposer
 
 
         var textArea = renderingParameters.TextArea;
-        if (wrapWidth > 0 && wrapWidth < textArea.Width)
+        var balanced = wrapWidth > 0 && wrapWidth < textArea.Width;
+        if (balanced)
         {
             textArea.Width = wrapWidth;
         }
+
+        // The width the lines run to, to a fraction: the area's whole units fall short of it, and a stop at the edge
+        // would wrap. A balanced width, found in whole units, stands as it is.
+        double areaWidth = !balanced && Double.IsFinite(renderingParameters.LayWidth)
+            ? renderingParameters.LayWidth
+            : textArea.Width;
 
         double width = 0;
         double height = textArea.Y;
@@ -662,7 +674,9 @@ internal sealed class LineComposer
         var finalRect = new Size<double>(Math.Ceiling(maxX), Math.Ceiling(height));
         if (renderingParameters.TextArea.Width != Int32.MaxValue)
         {
-            finalRect.Width = renderingParameters.TextArea.Width;
+            finalRect.Width = Double.IsFinite(renderingParameters.LayWidth)
+                ? renderingParameters.LayWidth
+                : renderingParameters.TextArea.Width;
         }
 
         if (renderingParameters.TextArea.Height != Int32.MaxValue)
@@ -725,7 +739,7 @@ internal sealed class LineComposer
         if (leaders.Count > 0)
         {
             glyphsData = WithLeaders(glyphsData, leaders,
-                slots == null && textArea.Width < Int32.MaxValue ? textArea.Width : double.MaxValue);
+                slots == null && textArea.Width < Int32.MaxValue ? areaWidth : double.MaxValue);
         }
 
         if (rubies != null)
@@ -924,7 +938,7 @@ internal sealed class LineComposer
         {
             var (areaLeft, areaRight) = frame >= 0
                 ? ((double)frames[frame].Left, (double)frames[frame].Right)
-                : (0.0, textArea.Width < Int32.MaxValue ? textArea.Width : laidWidth);
+                : (0.0, textArea.Width < Int32.MaxValue ? areaWidth : laidWidth);
             var top = lineTops[first];
             var bottom = lineTops[last] + lineHeights[last];
             foreach (var exclusion in vertical ? [] : exclusions ?? [])
@@ -1211,7 +1225,7 @@ internal sealed class LineComposer
 
         bool NumberFitsWith(int letter)
         {
-            var room = frames is { Count: > 0 } ? frames.Max(frame => (double)frame.Width) : textArea.Width;
+            var room = frames is { Count: > 0 } ? frames.Max(frame => (double)frame.Width) : areaWidth;
             if (room >= Int32.MaxValue)
             {
                 return true;
@@ -2468,7 +2482,7 @@ internal sealed class LineComposer
         double LineIndent(int line) => (slots != null ? SlotOf(line).Left : 0)
                                        + EdgeReserve(line, false) + (line < dropBeside && !dropRightToLeft ? dropIndent : 0);
 
-        double LineRight(int line) => (slots != null ? SlotOf(line).Right : textArea.Width) - RightReserve(line);
+        double LineRight(int line) => (slots != null ? SlotOf(line).Right : areaWidth) - RightReserve(line);
 
         bool LineHasContent() => cursorPosition > LineIndent(lineIndex) + 1e-9;
 
@@ -3096,7 +3110,8 @@ internal sealed class LineComposer
             renderingParameters.JustifyLastLine || options.LastLineAlignment == HorizontalTextAlignment.Justify;
 
         bool Overflows(double width) =>
-            cursorPosition + width > LineRight(lineIndex) && cursorPosition + width > LineRight(lineIndex) + LineShrink();
+            cursorPosition + width > LineRight(lineIndex) + EdgeTolerance &&
+            cursorPosition + width > LineRight(lineIndex) + LineShrink() + EdgeTolerance;
 
         double AlignRight(int line) => slots != null
             ? LineRight(line)
