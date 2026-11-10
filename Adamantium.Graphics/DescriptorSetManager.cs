@@ -280,8 +280,9 @@ public class DescriptorSetManager : DisposableObject, IDescriptorManager
             {
                 if (_emptyLayout == null)
                 {
-                    Check(LogicalDevice.CreateDescriptorSetLayout(new DescriptorSetLayoutCreateInfo(), null, out _emptyLayout),
+                    Check(LogicalDevice.CreateDescriptorSetLayout(new DescriptorSetLayoutCreateInfo(), null, out var made),
                         "an empty set layout");
+                    _emptyLayout = made;
                 }
 
                 return _emptyLayout;

@@ -65,7 +65,7 @@ namespace Adamantium.Graphics
             ElementSize = (uint)(dataPointer.Size / dataPointer.Count);
             ElementCount = dataPointer.Count;
 
-            Initialize(dataPointer);
+            Build(() => Initialize(dataPointer));
         }
 
         protected Buffer(IGraphicsDevice device, 
@@ -89,25 +89,48 @@ namespace Adamantium.Graphics
             ElementSize = (uint)(size / count);
             ElementCount = count;
 
-            CreateBuffer(size,
-                BufferUsageFlags.TransferDst | Usage,
-                MemoryFlags,
-                out VulkanBuffer,
-                out _allocation);
-            _deviceAddress = 0;
+            Build(() =>
+            {
+                CreateBuffer(size,
+                    BufferUsageFlags.TransferDst | Usage,
+                    MemoryFlags,
+                    out VulkanBuffer,
+                    out _allocation);
+                _deviceAddress = 0;
+            });
         }
 
         private bool IsHostVisible => MemoryFlags.HasFlag(MemoryPropertyFlags.HostVisible);
+
+        // A buffer that fails to be made gives back what it took and leaves the device's list of resources.
+        private void Build(Action build)
+        {
+            try
+            {
+                build();
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
 
         private void UploadViaStaging(DataPointer dataPointer, ulong dstOffset)
         {
             CreateBuffer(dataPointer.Size, BufferUsageFlags.TransferSrc,
                 MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent,
                 out var stagingBuffer, out var stagingAllocation);
-            UpdateBufferContent(stagingAllocation, dataPointer);
-            CopyBuffer(stagingBuffer, VulkanBuffer, dataPointer.Size, dstOffset);
-            GraphicsDevice.Destroy(stagingBuffer);
-            Allocator.Free(stagingAllocation);
+            try
+            {
+                UpdateBufferContent(stagingAllocation, dataPointer);
+                CopyBuffer(stagingBuffer, VulkanBuffer, dataPointer.Size, dstOffset);
+            }
+            finally
+            {
+                GraphicsDevice.Destroy(stagingBuffer);
+                Allocator.Free(stagingAllocation);
+            }
         }
 
         private void Initialize(DataPointer dataPointer)
@@ -166,12 +189,8 @@ namespace Adamantium.Graphics
             catch
             {
                 // Out of memory leaves nothing behind: neither the buffer nor what was allocated for it.
-                if (allocated != null)
-                {
-                    Allocator.Free(allocated);
-                }
-
                 GraphicsDevice.Destroy(created);
+                Allocator.Free(allocated);
                 throw;
             }
 

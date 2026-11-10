@@ -284,11 +284,21 @@ public unsafe class Texture : GraphicsResource, ITexture
         buffer = GraphicsDevice.LogicalDevice.CreateBuffer(bufferInfo);
 
         var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(buffer);
+        var typeBits = memoryRequirements.MemoryTypeBits;
+        // Cached memory where the buffer may take it, else any the host sees; never a type it cannot map.
+        const MemoryPropertyFlags seen = MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent;
+        if (!TryMemoryIndex(typeBits, memoryProperties, out var memoryIndex) &&
+            (!memoryProperties.HasFlag(seen) || !TryMemoryIndex(typeBits, seen, out memoryIndex)))
+        {
+            GraphicsDevice.Destroy(buffer);
+            throw new NotSupportedException(
+                $"None of the memory types the buffer may take (0x{typeBits:X}) is {memoryProperties}.");
+        }
 
         var allocInfo = new MemoryAllocateInfo
         {
             AllocationSize = memoryRequirements.Size,
-            MemoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties)
+            MemoryTypeIndex = memoryIndex
         };
 
         if (device.AllocateMemory(allocInfo, null, out bufferMemory) != Result.Success)
@@ -303,6 +313,21 @@ public unsafe class Texture : GraphicsResource, ITexture
             GraphicsDevice.Destroy(bufferMemory);
             throw new Exception("failed to bind buffer memory!");
         }
+    }
+
+    private bool TryMemoryIndex(uint typeBits, MemoryPropertyFlags properties, out uint index)
+    {
+        var types = GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceMemoryProperties();
+        for (index = 0; index < types.MemoryTypeCount; index++)
+        {
+            if ((typeBits & (1u << (int)index)) != 0 &&
+                ((MemoryPropertyFlags)types.MemoryTypes.Span[(int)index].PropertyFlags).HasFlag(properties))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void CopyBufferToImage(VkBuffer buffer, VulkanImage image, TextureDescription description)
@@ -917,23 +942,16 @@ public unsafe class Texture : GraphicsResource, ITexture
             // Held only once whole: a buffer whose memory failed is destroyed and must not stay to be released again.
             CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, GetStagingMemory(),
                 out var buffer, out var memory);
-            var data = (nuint)0;
+            nuint data;
             try
             {
                 data = GraphicsDevice.MapMemory(memory, 0, size, 0);
             }
-            finally
+            catch
             {
-                if (data == 0)
-                {
-                    GraphicsDevice.Destroy(buffer);
-                    GraphicsDevice.Destroy(memory);
-                }
-            }
-
-            if (data == 0)
-            {
-                throw new Exception("failed to map the staging buffer's memory!");
+                GraphicsDevice.Destroy(buffer);
+                GraphicsDevice.Destroy(memory);
+                throw;
             }
 
             _stagingBuffer = buffer;
@@ -1033,14 +1051,14 @@ public unsafe class Texture : GraphicsResource, ITexture
             _levelInfos = null;
         }
 
-        if (_disposeImage)
-        {
-            GraphicsDevice.Destroy(VulkanImage);
-        }
-
         lock (_stagingLock)
         {
+            // Before the image goes: a read-back holding the lock copies from an image still there.
             ReleaseStagingBuffer();
+            if (_disposeImage)
+            {
+                GraphicsDevice.Destroy(VulkanImage);
+            }
         }
 
         GraphicsDevice.Destroy(ImageView);

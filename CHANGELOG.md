@@ -211,7 +211,10 @@ All packages share one version.
 
 - A texture read back to an image (`Texture.ToImage`, `CopyTo`; a window's screenshot) when the GPU's memory is full
   no longer crashes the next read: the staging buffer whose memory failed was destroyed but stayed held, and was
-  released a second time. A `Buffer` whose memory fails no longer leaves its Vulkan buffer behind.
+  released a second time. Out of memory leaves nothing else behind either: a `Buffer` that fails to be made gives
+  back its Vulkan buffer, its memory and its staging copy; a single-time command that fails releases the submission
+  lock and its command buffer, so other submits do not wait forever; a timestamp pool or an empty set layout that
+  failed is not used as if made. A texture's staging memory is of a type its buffer may take, cached where it can be.
 - `TextLayout.ProcessText` lays the lines to the width given, to its fraction, not to its whole units: a right tab stop
   at the edge of a column of 642.5 no longer wraps what follows it, and text aligned right or justified reaches the
   edge. Lines laid across, as horizontal text is; a vertical column's length stays in whole units.

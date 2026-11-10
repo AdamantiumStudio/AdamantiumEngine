@@ -52,7 +52,11 @@ public partial class GraphicsDevice
         _gpuTickMs = limits.TimestampPeriod / 1e6;
         _gpuTimed = new bool[MaxFramesInFlight];
         var info = new QueryPoolCreateInfo { QueryType = QueryType.Timestamp, QueryCount = MaxFramesInFlight * 2 };
-        return LogicalDevice.CreateQueryPool(info, null, out _gpuTimestamps) == Result.Success;
+        // Held only once made: a pool that failed must not be written to as if it were there.
+        if (LogicalDevice.CreateQueryPool(info, null, out var pool) != Result.Success) return false;
+
+        _gpuTimestamps = pool;
+        return true;
     }
 
     private void DestroyGpuTimestamps()
