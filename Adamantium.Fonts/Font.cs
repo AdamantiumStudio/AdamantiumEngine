@@ -957,7 +957,10 @@ namespace Adamantium.Fonts
         {
             if (!unicodeToGlyph.TryGetValue(unicode, out var glyph))
             {
-                return baseFont != null ? GetGlyphByIndex(baseFont.glyphs[0].Index) : glyphs[0];
+                // The missing glyph, 0 - which a font whose glyphs are read only as asked for, as a PDF's bare
+                // programs are, has not listed yet.
+                var known = (baseFont ?? this).glyphs;
+                return known.Count > 0 && baseFont == null ? known[0] : GetGlyphByIndex(0);
             }
 
             return baseFont != null ? GetGlyphByIndex(glyph.Index) : glyph;

@@ -27,6 +27,12 @@ All packages share one version.
   Indexed, Separation and DeviceN, each shown in sRGB (`PdfColorSpaces`); and images decoded to RGBA - samples of 1 to
   16 bits, JPEG, JPEG 2000 (`/SMaskInData` included), CCITT fax and JBIG2 (`/JBIG2Globals` included), stencil, soft,
   explicit and color-key masks (`PdfImageDecoder`).
+- `Adamantium.Pdf` reads what a page is painted through: graphics state parameter dictionaries
+  (`PdfGraphicsStateParameters`) with their line parameters, opacities, blend modes (`PdfBlendMode`) and soft masks
+  (`PdfSoftMask`); forms' transparency groups (`PdfTransparencyGroup`); which optional content is shown on the screen
+  and on paper (`PdfOptionalContent`), by the default configuration, its usage and visibility expressions; shadings of
+  all seven types (`PdfShading`) - function-based, axial, radial, and meshes of triangles and of Coons and
+  tensor-product patches read out of their packed bits - and patterns, tiling and shading (`PdfPattern`).
 - `Adamantium.Pdf` reads the fonts pages show text with (`PdfFonts`): simple Type 1 and TrueType fonts with their
   encodings and `/Differences` (Standard, WinAnsi, MacRoman, MacExpert, and the Symbol and ZapfDingbats fonts' own, as
   annex D gives them), composite Type 0 fonts over CIDFontType0 and CIDFontType2 with Identity-H, Identity-V and
@@ -219,6 +225,8 @@ All packages share one version.
   again every frame. The submission lock left by a process that died holding it is taken over, not thrown on. A
   buffer or a texture's staging copy written through its mapping never takes memory the host cannot see
   (`TryFindMemoryIndex`). A texture read back after it was disposed throws rather than copying from a freed image.
+- A font whose glyphs are read only as they are asked for - a PDF's bare CFF program - answered a character it does not
+  map by throwing; it answers with glyph 0, the missing glyph.
 - `TextLayout.ProcessText` lays the lines to the width given, to its fraction, not to its whole units: a right tab stop
   at the edge of a column of 642.5 no longer wraps what follows it, and text aligned right or justified reaches the
   edge. Lines laid across, as horizontal text is; a vertical column's length stays in whole units.

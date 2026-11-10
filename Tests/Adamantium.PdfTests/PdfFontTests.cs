@@ -74,6 +74,21 @@ public class PdfFontTests
     }
 
     [Test]
+    public void ABareCffProgramAnswersACharacterItDoesNotMapWithTheMissingGlyph()
+    {
+        var (_, font) = Open(
+            "<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+SourceSans3-Regular /Encoding /WinAnsiEncoding " +
+            "/FontDescriptor 4 0 R >>",
+            PdfFileBuilder.Latin1("<< /Type /FontDescriptor /FontName /ABCDEF+SourceSans3-Regular /Flags 32 " +
+                                  "/FontFile3 5 0 R >>"),
+            PdfFileBuilder.Stream("/Subtype /Type1C", CffOf(OpenTypePath)));
+
+        // Its glyphs are read as they are asked for; a text layout asks for the space and the dot first.
+        var program = font.Typeface.Fonts[0];
+        Assert.That(program.GetGlyphByCharacter(' ')?.Index ?? 0, Is.Zero);
+    }
+
+    [Test]
     public void EmbeddedTrueTypeFindsGlyphsThroughItsUnicodeCmap()
     {
         var program = File.ReadAllBytes(TrueTypePath);
