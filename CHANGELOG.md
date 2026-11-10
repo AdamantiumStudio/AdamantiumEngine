@@ -204,6 +204,9 @@ All packages share one version.
 
 ### Fixed
 
+- `TextLayout.ProcessText` lays the lines to the width given, to its fraction, not to its whole units: a right tab stop
+  at the edge of a column of 642.5 no longer wraps what follows it, and text aligned right or justified reaches the
+  edge. Lines laid across, as horizontal text is; a vertical column's length stays in whole units.
 - `Adamantium.Pdf`: a font written directly into a page's resources, not as an object of its own, is read once,
   rather than again at every `Tf` that selects it.
 - `Adamantium.Pdf`: an object a later update deleted - its free entry's generation raised - reads as null, as
