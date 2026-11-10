@@ -209,6 +209,9 @@ All packages share one version.
 
 ### Fixed
 
+- A texture read back to an image (`Texture.ToImage`, `CopyTo`; a window's screenshot) when the GPU's memory is full
+  no longer crashes the next read: the staging buffer whose memory failed was destroyed but stayed held, and was
+  released a second time. A `Buffer` whose memory fails no longer leaves its Vulkan buffer behind.
 - `TextLayout.ProcessText` lays the lines to the width given, to its fraction, not to its whole units: a right tab stop
   at the edge of a column of 642.5 no longer wraps what follows it, and text aligned right or justified reaches the
   edge. Lines laid across, as horizontal text is; a vertical column's length stays in whole units.

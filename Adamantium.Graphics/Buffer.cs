@@ -142,23 +142,41 @@ namespace Adamantium.Graphics
             bufferInfo.Usage = (BufferUsageFlagBits)usage;
             bufferInfo.SharingMode = SharingMode.Exclusive;
 
-            buffer = GraphicsDevice.LogicalDevice.CreateBuffer(bufferInfo);
-
-            var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(buffer);
-            var memoryTypeIndex = GraphicsDevice.Adapter.FindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties);
-
-            allocation = Allocator.Allocate(
-                memoryRequirements.Size,
-                memoryRequirements.Alignment,
-                memoryTypeIndex,
-                memoryRequirements.MemoryTypeBits,
-                usage.HasFlag(BufferUsageFlags.ShaderDeviceAddress));
-
-            var result = GraphicsDevice.LogicalDevice.BindBufferMemory(buffer, allocation.Memory, allocation.Offset);
-            if (result != Result.Success)
+            var created = GraphicsDevice.LogicalDevice.CreateBuffer(bufferInfo);
+            DeviceMemoryAllocator.MemoryAllocation allocated = null;
+            try
             {
-                throw new GraphicsEngineException("Failed to bind buffer memory to buffer");
+                var memoryRequirements = GraphicsDevice.LogicalDevice.GetBufferMemoryRequirements(created);
+                var memoryTypeIndex =
+                    GraphicsDevice.Adapter.FindMemoryIndex(memoryRequirements.MemoryTypeBits, memoryProperties);
+
+                allocated = Allocator.Allocate(
+                    memoryRequirements.Size,
+                    memoryRequirements.Alignment,
+                    memoryTypeIndex,
+                    memoryRequirements.MemoryTypeBits,
+                    usage.HasFlag(BufferUsageFlags.ShaderDeviceAddress));
+
+                var result = GraphicsDevice.LogicalDevice.BindBufferMemory(created, allocated.Memory, allocated.Offset);
+                if (result != Result.Success)
+                {
+                    throw new GraphicsEngineException("Failed to bind buffer memory to buffer");
+                }
             }
+            catch
+            {
+                // Out of memory leaves nothing behind: neither the buffer nor what was allocated for it.
+                if (allocated != null)
+                {
+                    Allocator.Free(allocated);
+                }
+
+                GraphicsDevice.Destroy(created);
+                throw;
+            }
+
+            buffer = created;
+            allocation = allocated;
         }
 
         private void CopyBuffer(VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, ulong size, ulong dstOffset = 0)

@@ -914,11 +914,33 @@ public unsafe class Texture : GraphicsResource, ITexture
         if (_stagingBuffer == null || _stagingSize < size)
         {
             ReleaseStagingBuffer();
+            // Held only once whole: a buffer whose memory failed is destroyed and must not stay to be released again.
             CreateBuffer(size, BufferUsageFlagBits.TransferSrcBit | BufferUsageFlagBits.TransferDstBit, GetStagingMemory(),
-                out _stagingBuffer, out _stagingMemory);
+                out var buffer, out var memory);
+            var data = (nuint)0;
+            try
+            {
+                data = GraphicsDevice.MapMemory(memory, 0, size, 0);
+            }
+            finally
+            {
+                if (data == 0)
+                {
+                    GraphicsDevice.Destroy(buffer);
+                    GraphicsDevice.Destroy(memory);
+                }
+            }
+
+            if (data == 0)
+            {
+                throw new Exception("failed to map the staging buffer's memory!");
+            }
+
+            _stagingBuffer = buffer;
+            _stagingMemory = memory;
+            _stagingData = data;
             _stagingSize = size;
             GraphicsDevice.MainDevice.CountStagingBytes((long)size);
-            _stagingData = GraphicsDevice.MapMemory(_stagingMemory, 0, size, 0);
         }
 
         var commandBuffer = GraphicsDevice.BeginSingleTimeCommand();
