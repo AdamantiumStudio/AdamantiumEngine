@@ -116,11 +116,14 @@ public sealed class PdfMeshShading : PdfShading
         }
     }
 
-    private static void Lattice(ReadOnlySpan<byte> data, PdfMeshValues values, int perRow, List<PdfMeshTriangle> triangles)
+    // Rows are kept as long as the data has vertices for, not as long as /VerticesPerRow claims.
+    private static void Lattice(ReadOnlySpan<byte> data, PdfMeshValues values, int perRow,
+        List<PdfMeshTriangle> triangles)
     {
         var bits = new PdfBitReader(data);
-        var above = new List<PdfMeshVertex>(Math.Min(perRow, MaxVertices));
-        var row = new List<PdfMeshVertex>(Math.Min(perRow, MaxVertices));
+        var capacity = (int)Math.Min(perRow, Math.Min(MaxVertices, data.Length * 8L / Math.Max(values.VertexBits, 1) + 1));
+        var above = new List<PdfMeshVertex>(capacity);
+        var row = new List<PdfMeshVertex>(capacity);
         for (var read = 0; read < MaxVertices && bits.Has(values.VertexBits); read++)
         {
             row.Add(values.Vertex(ref bits));
