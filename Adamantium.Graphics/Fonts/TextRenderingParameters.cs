@@ -58,14 +58,14 @@ namespace Adamantium.Graphics.Fonts
             return HashCode.Combine(TextArea, LayWidth, (int)TextWrapping, (int)HorizontalTextAlignment, (int)VerticalTextAlignment, JustifyLastLine, (int)TextTrimming, Color);
         }
         
-        public static bool operator ==(TextRenderingParameters @paramA, TextRenderingParameters @paramB)
+        public static bool operator ==(TextRenderingParameters paramA, TextRenderingParameters paramB)
         {
-            return paramA.Equals(@paramB);
+            return paramA is null ? paramB is null : paramA.Equals(paramB);
         }
 
         public static bool operator !=(TextRenderingParameters paramA, TextRenderingParameters paramB)
         {
-            return !@paramA.Equals(@paramB);
+            return !(paramA == paramB);
         }
     }
 }

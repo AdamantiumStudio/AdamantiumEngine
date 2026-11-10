@@ -193,6 +193,11 @@ internal static class TextGeometry
     public static RectangleF DrawnGlyphRect(GlyphWordData word, IFont font, Glyph glyph, double scale)
     {
         var baseline = Baseline(word);
+        if (word.Placed)
+        {
+            return PlacedGlyphRect(font, glyph, Pen(word), baseline, scale);
+        }
+
         var rect = Widened(CalculateGlyphPosition(font, glyph, Pen(word), baseline, scale), Pen(word),
             word.HorizontalScale);
         if (word.Upright)
@@ -223,15 +228,18 @@ internal static class TextGeometry
         double glyphBase,
         double scale)
     {
-        var verticalShift = -glyph.BoundingRectangle.Y * scale;
-        var horizontalShift = font.GetLeftSideBearing(glyph.Index) * scale;
+        // X stays sub-pixel: snapping fractional advances made equal gaps render a pixel apart.
+        return PlacedGlyphRect(font, glyph, glyphLeft, Math.Round(glyphBase), scale);
+    }
 
+    /// <summary>Where the glyph's ink lies drawn from pen position <paramref name="penX"/> on
+    /// <paramref name="baseline"/>, y down, nothing snapped.</summary>
+    public static RectangleF PlacedGlyphRect(IFont font, Glyph glyph, double penX, double baseline, double scale)
+    {
         var glyphWidth = glyph.BoundingRectangle.Width * scale;
         var glyphHeight = glyph.BoundingRectangle.Height * scale;
-        var glyphTop = (Math.Round(glyphBase) - glyphHeight) + verticalShift;
-        glyphLeft += horizontalShift;
-
-        // X stays sub-pixel: snapping fractional advances made equal gaps render a pixel apart.
+        var glyphTop = baseline - glyphHeight - glyph.BoundingRectangle.Y * scale;
+        var glyphLeft = penX + font.GetLeftSideBearing(glyph.Index) * scale;
         return new RectangleF((float)glyphLeft, (float)glyphTop, (float)glyphWidth, (float)glyphHeight);
     }
 }
