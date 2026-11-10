@@ -215,6 +215,9 @@ All packages share one version.
 
 ### Fixed
 
+- Text laid in a frame as wide as the width given but for the frame's float - rounded up so text set to its edge does
+  not wrap - ends its lines at that width, as without a frame: a paragraph going round a picture beside none of its
+  lines is laid exactly as one with no picture.
 - A texture read back to an image (`Texture.ToImage`, `CopyTo`; a window's screenshot) when the GPU's memory is full
   no longer crashes the next read: the staging buffer whose memory failed was destroyed but stayed held, and was
   released a second time. Out of memory leaves nothing else behind either: a `Buffer` that fails to be made gives

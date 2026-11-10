@@ -1126,7 +1126,8 @@ internal sealed class LineComposer
             var origin = 0.0;
             if (LineState(line).RightToLeft)
             {
-                var excluded = slots != null ? Math.Max(0, frames[SlotOf(line).Frame].Width - SlotOf(line).Right) : 0;
+                var slot = slots != null ? SlotOf(line) : default;
+                var excluded = slots != null ? SlotRight(slot.Frame, frames[slot.Frame].Right) - slot.Right : 0;
                 origin = LineIndent(line) - RightReserve(line) - excluded;
             }
 
@@ -2484,15 +2485,22 @@ internal sealed class LineComposer
 
         double LineRight(int line) => (slots != null ? SlotOf(line).Right : areaWidth) - RightReserve(line);
 
-        // A span reaching its frame's right edge, the frame as wide as the width laid to but for its float's rounding,
-        // runs to that width - as the same text laid without frames does. Within the frame's left.
+        // A span reaching its frame's right edge, the frame wider than the width laid to by its float's rounding up
+        // only, runs to that width - as the same text laid without frames does. Within the frame's left.
         double SlotRight(int frameIndex, double right)
         {
             var frame = frames[frameIndex];
-            var frameRight = (double)frame.Left + frame.Width;
-            var toTheWidth = Math.Abs(right - frameRight) < 1e-9 &&
-                             Math.Abs(frameRight - areaWidth) <= Math.Abs(areaWidth) * 2.5e-7;
+            double frameRight = frame.Right;
+            var toTheWidth = right == frameRight && frameRight >= areaWidth &&
+                             frameRight - areaWidth <= FloatStep(areaWidth);
             return (toTheWidth ? areaWidth : right) - frame.Left;
+        }
+
+        // The room between a float at value and the next one up.
+        static double FloatStep(double value)
+        {
+            var single = MathF.Abs((float)value);
+            return (double)MathF.BitIncrement(single) - single;
         }
 
         bool LineHasContent() => cursorPosition > LineIndent(lineIndex) + 1e-9;
