@@ -185,6 +185,11 @@ All packages share one version.
 
 ### Changed
 
+- Glyphs reach the atlas sooner and for less: the MSDF of a glyph is computed by code optimized from its first call,
+  where it ran unoptimized for seconds while an application started, a glyph of Segoe UI taking 100-500 ms instead of
+  2. A batch of glyphs no longer splits each glyph's rows across every core inside the batch's own parallel loop, and a
+  glyph's field and mask are rented instead of allocated; the bytes are the same. An overload of `MSDFGenerator.GenerateDirectMSDF`
+  takes `rowsInParallel`; the one without it splits the rows, as before.
 - `Adamantium.Core.Shared`, a new package, holds what the source generators share with the running application: the
   logger (`Logger`, `LogMessage`, `LogMessageType`), `TextGenerator`, and `FontWeight`, `FontStretch`, `FontFeature`
   with the OpenType feature registry. Their namespaces are now `Adamantium.Core.Shared`,

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Adamantium.Fonts.Common;
 using Adamantium.Fonts.Exceptions;
@@ -615,6 +616,8 @@ namespace Adamantium.Fonts
             return this;
         }
 
+        // Every pair of segments, for every glyph the atlas fills as the application starts: optimized from the first call.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private Vector3F[] RemoveSelfIntersections(in SampledOutline[] outlines)
         {
             // Built apart and then put in place whole: the outline is read without the lock while it is made again.
@@ -753,6 +756,7 @@ namespace Adamantium.Fonts
             return (offset.X * direction.X + offset.Y * direction.Y) / squared;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static bool Overlap(LineSegment2D first, LineSegment2D second)
         {
             if (Vector2<double>.Determinant(first.Direction, second.Direction) != 0
@@ -775,6 +779,7 @@ namespace Adamantium.Fonts
             return filledOnLeft != IsFilled(segments, middle - side);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static bool IsFilled(LineSegment2D[] segments, Vector2<double> point)
         {
             var winding = 0;

@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Fonts.Common
 {
+    // The distances are asked for every texel of every glyph, on the workers that fill the atlas, which is when the rest
+    // of the application starts: optimized from their first call, not after the runtime gets round to them.
     public static class GlyphSegmentsMath
     {
         public static bool IsSegmentsConnected(ref LineSegment2D segment1, ref LineSegment2D segment2)
@@ -18,11 +21,13 @@ namespace Adamantium.Fonts.Common
             return double.RadiansToDegrees(Math.Abs(MathHelper.Angle.Between(newSeg.End - newSeg.Start, next.End - next.Start)));
         }
         
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double GetDistanceToSegment(LineSegment2D segment, Vector2<double> point)
         {
             return point.DistanceToPoint(segment.Start, segment.End);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double GetSignedDistanceToSegment(LineSegment2D segment, Vector2<double> point)
         {
             var distance = GetDistanceToSegment(segment, point);
@@ -39,6 +44,7 @@ namespace Adamantium.Fonts.Common
             return distance;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double GetSignedPseudoDistanceToSegment(LineSegment2D segment, Vector2<double> point)
         {
             var distance = MathHelper.Polyline.DistanceToLine(segment.Start, segment.End, point);
@@ -55,6 +61,7 @@ namespace Adamantium.Fonts.Common
             return distance;
         }
         
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double GetSignedDistanceToSegmentsJoint(List<LineSegment2D> closestSegments, Vector2<double> point, bool pseudo)
         {
             Func<LineSegment2D, Vector2<double>, double> SignedDistanceFunc = null;

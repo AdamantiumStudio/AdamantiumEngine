@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Adamantium.Fonts.Common;
 using Adamantium.Mathematics;
 
@@ -7,7 +8,7 @@ namespace Adamantium.Fonts.TextureGeneration;
 
 /// <summary>Finds the segments of a <see cref="SegmentGrid"/> nearest a point, in any of its channels. Each search
 /// starts from the answer to the one before, so points asked for in order along a row cost the least; one per
-/// thread.</summary>
+/// thread. Optimized from the first call: it runs for every texel, as the application starts.</summary>
 internal sealed class SegmentSearch
 {
     private const double TieTolerance = 1e-9;
@@ -27,6 +28,7 @@ internal sealed class SegmentSearch
     private readonly List<int>[] candidates = [[], [], [], []];
     private readonly List<double>[] candidateDistances = [[], [], [], []];
     private readonly List<int> ties = [];
+    private readonly List<int> finalists = [];
     private double widestKeepSquared;
     private int stamp;
 
@@ -39,6 +41,7 @@ internal sealed class SegmentSearch
 
     /// <summary>Fills nearest[c], for each channel c whose bit is set in wanted, with the segments of that channel
     /// nearest the point, in the order of their indices; more than one when their distances tie.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void FindNearest(Vector2<double> point, List<LineSegment2D>[] nearest, int wanted = SegmentGrid.AllChannels)
     {
         for (var channel = 0; channel < SegmentGrid.ChannelCount; channel++)
@@ -106,6 +109,7 @@ internal sealed class SegmentSearch
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Visit(int cell, Vector2<double> point, int open)
     {
         var startX = grid.StartX;
@@ -131,6 +135,7 @@ internal sealed class SegmentSearch
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Offer(int entry, double distanceSquared, int open)
     {
         var members = grid.EntryChannels[entry] & open;
@@ -171,6 +176,7 @@ internal sealed class SegmentSearch
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void RefreshKeep(int open)
     {
         var widest = -1.0;
@@ -192,6 +198,7 @@ internal sealed class SegmentSearch
         widestKeepSquared = widest;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void ResolveTies(int channel, Vector2<double> point)
     {
         ties.Clear();
@@ -211,7 +218,8 @@ internal sealed class SegmentSearch
         }
 
         ties.Sort();
-        var finalists = ties.ToArray();
+        finalists.Clear();
+        finalists.AddRange(ties);
         ties.Clear();
         var best = double.MaxValue;
         foreach (var index in finalists)
