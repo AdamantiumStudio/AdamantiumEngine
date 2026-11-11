@@ -296,6 +296,15 @@ namespace Adamantium.Fonts.TextureGeneration
         private static bool IsNear(Vector2<double> point, Vector2<double> other) =>
             Math.Abs(point.X - other.X) < VertexTolerance && Math.Abs(point.Y - other.Y) < VertexTolerance;
 
+        public static GlyphTextureData GenerateDirectMSDF(
+            this Glyph glyph,
+            uint originalSize,
+            double pxRange,
+            ushort unitsPerEm,
+            uint margin) =>
+            GenerateDirectMSDF(glyph, originalSize, pxRange, unitsPerEm, margin, true);
+
+        /// <summary>Generates the MSDF texture as the overload without <paramref name="rowsInParallel"/> does.</summary>
         /// <param name="rowsInParallel">Whether the glyph's rows are computed in bands on several threads: for a glyph
         /// made alone. A caller that makes many glyphs at once makes them in parallel instead - bands inside each of
         /// those would put every core's worth of bands behind every other glyph's.</param>
@@ -308,7 +317,7 @@ namespace Adamantium.Fonts.TextureGeneration
             double pxRange,
             ushort unitsPerEm,
             uint margin,
-            bool rowsInParallel = true)
+            bool rowsInParallel)
         {
             var glyphSegments = glyph.GetMergedOutlineSegments();
             if (glyphSegments.Count == 0)
