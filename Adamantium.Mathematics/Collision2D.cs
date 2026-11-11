@@ -17,6 +17,7 @@ namespace Adamantium.Mathematics
             return MathHelper.Scalar.WithinEpsilon(ab, ap + bp, Polygon.Epsilon);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static bool SegmentSegmentIntersection(ref LineSegment2D segment1, ref LineSegment2D segment2, out Vector2<double> point)
         {
             var p = segment1.Start;
@@ -258,18 +259,21 @@ namespace Adamantium.Mathematics
             return true;
         }
         
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double Distance(Vector2<double> v1, Vector2<double> v2)
         {
             //return Math.Sqrt(Math.Pow(v2.X - v1.X, 2) + Math.Pow(v2.Y - v1.Y, 2));
             return (v2 - v1).Length(); //Math.Sqrt((v2.X - v1.X) * (v2.X - v1.X) + (v2.Y - v1.Y) * (v2.Y - v1.Y));
         }
         
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double Distance(double x1, double y1, double x2, double y2)
         {
             //return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
             return Math.Sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static double DistanceToPoint(this Vector2<double> point, Vector2<double> start, Vector2<double> end)
         {
             double dStart = Distance(point, start);

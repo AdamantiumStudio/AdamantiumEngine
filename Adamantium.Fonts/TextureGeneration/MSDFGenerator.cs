@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Adamantium.Fonts.Common;
 using Adamantium.Mathematics;
@@ -192,6 +194,7 @@ namespace Adamantium.Fonts.TextureGeneration
             return new SegmentGrid(lines, channels);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static ColoredDistance GetColoredDistances(SegmentSearch search, List<LineSegment2D>[] closest,
             Vector2<double> point, double range, double pxRange, bool isTtf)
         {
@@ -293,12 +296,19 @@ namespace Adamantium.Fonts.TextureGeneration
         private static bool IsNear(Vector2<double> point, Vector2<double> other) =>
             Math.Abs(point.X - other.X) < VertexTolerance && Math.Abs(point.Y - other.Y) < VertexTolerance;
 
+        /// <param name="rowsInParallel">Whether the glyph's rows are computed in bands on several threads: for a glyph
+        /// made alone. A caller that makes many glyphs at once makes them in parallel instead - bands inside each of
+        /// those would put every core's worth of bands behind every other glyph's.</param>
+        /// <remarks>Optimized from its first call, as what it calls for every texel is: the atlas is filled as the
+        /// application starts, when code the runtime has not optimized yet runs many times slower.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static GlyphTextureData GenerateDirectMSDF(
             this Glyph glyph,
             uint originalSize,
             double pxRange,
             ushort unitsPerEm,
-            uint margin)
+            uint margin,
+            bool rowsInParallel = true)
         {
             var glyphSegments = glyph.GetMergedOutlineSegments();
             if (glyphSegments.Count == 0)
@@ -349,13 +359,17 @@ namespace Adamantium.Fonts.TextureGeneration
             var textureData = new GlyphTextureData((uint)size.Width, (uint)size.Height, glyph.Index, margin,
                 glyph.RelatedCharacters.FirstOrDefault());
 
-            var coloredDistances = new ColoredDistance[fullWidth, fullHeight];
+            // Rented: a glyph's field is a large-object allocation, and every glyph the atlas fills made one.
+            var coloredDistances = ArrayPool<ColoredDistance>.Shared.Rent(fullWidth * fullHeight);
             var isTtf = glyph.OutlineType == OutlineType.TrueType;
             var grid = CreateChannelGrid(segments);
-            var bandHeight = Math.Max(MinBandRows, (fullHeight + Environment.ProcessorCount - 1) / Environment.ProcessorCount);
+            var bandHeight = rowsInParallel
+                ? Math.Max(MinBandRows, (fullHeight + Environment.ProcessorCount - 1) / Environment.ProcessorCount)
+                : fullHeight;
             var bands = (fullHeight + bandHeight - 1) / bandHeight;
 
-            Parallel.For(0, bands, band =>
+            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+            void Band(int band)
             {
                 var search = new SegmentSearch(grid);
                 List<LineSegment2D>[] closest = [[], [], [], []];
@@ -374,10 +388,20 @@ namespace Adamantium.Fonts.TextureGeneration
 
                         // Full multichannel field everywhere (no collapse to the true distance): the R/G/B
                         // pseudo-distances are the actual MSDF and must fill the cell - that's the colored field.
-                        coloredDistances[x, y] = GetColoredDistances(search, closest, samplingPoint, range, pxRange, isTtf);
+                        coloredDistances[y * fullWidth + x] =
+                            GetColoredDistances(search, closest, samplingPoint, range, pxRange, isTtf);
                     }
                 }
-            });
+            }
+
+            if (bands > 1)
+            {
+                Parallel.For(0, bands, Band);
+            }
+            else
+            {
+                Band(0);
+            }
 
             // 4. Fix artifacts: away from the outline the true distance stands in for channels that mislead - past an
             // acute corner an edge's extension holds a channel at the contour's level, drawn as a line out to the cell's
@@ -386,21 +410,19 @@ namespace Adamantium.Fonts.TextureGeneration
             // legitimate corners.)
             UseTrueDistanceAwayFromOutline(coloredDistances, fullWidth, fullHeight, pxRange);
 
-            // 5. Normalize MSDF/SDF to [0 .. 255], written contiguously over the whole bitmap.
+            // 5. Normalize MSDF/SDF to [0 .. 255], written contiguously over the whole bitmap - the field's own order.
             var index = 0;
-            for (var y = 0; y < fullHeight; y++)
+            for (var texel = 0; texel < fullWidth * fullHeight; texel++)
             {
-                for (var x = 0; x < fullWidth; x++)
-                {
-                    var distance = coloredDistances[x, y];
-                    textureData.Pixels[index + 0] = MsdfGeneratorHelper.PixelFloatToByte(distance.RedDistance);
-                    textureData.Pixels[index + 1] = MsdfGeneratorHelper.PixelFloatToByte(distance.GreenDistance);
-                    textureData.Pixels[index + 2] = MsdfGeneratorHelper.PixelFloatToByte(distance.BlueDistance);
-                    textureData.Pixels[index + 3] = MsdfGeneratorHelper.PixelFloatToByte(distance.AlphaDistance);
-                    index += 4;
-                }
+                var distance = coloredDistances[texel];
+                textureData.Pixels[index + 0] = MsdfGeneratorHelper.PixelFloatToByte(distance.RedDistance);
+                textureData.Pixels[index + 1] = MsdfGeneratorHelper.PixelFloatToByte(distance.GreenDistance);
+                textureData.Pixels[index + 2] = MsdfGeneratorHelper.PixelFloatToByte(distance.BlueDistance);
+                textureData.Pixels[index + 3] = MsdfGeneratorHelper.PixelFloatToByte(distance.AlphaDistance);
+                index += 4;
             }
 
+            ArrayPool<ColoredDistance>.Shared.Return(coloredDistances);
             return textureData;
         }
         
@@ -430,7 +452,9 @@ namespace Adamantium.Fonts.TextureGeneration
             var size = textureData.BoundingRect.Size;
 
             // 2. Generate colored pseudo-distance field
-            var coloredDistances = new ColoredDistance[(int)size.Width, (int)size.Height];
+            var width = (int)size.Width;
+            var height = (int)size.Height;
+            var coloredDistances = ArrayPool<ColoredDistance>.Shared.Rent(width * height);
 
             var scaleX = size.Width / glyphBoundingRectangle.Width;
             var scaleY = size.Height / glyphBoundingRectangle.Height;
@@ -456,9 +480,9 @@ namespace Adamantium.Fonts.TextureGeneration
             //var paddingX = 0;
             //var paddingY = 0;
 
-            for (var y = 0; y < size.Height; ++y)
+            for (var y = 0; y < height; ++y)
             {
-                for (var x = 0; x < size.Width; ++x)
+                for (var x = 0; x < width; ++x)
                 {
                     // determine the closest segment to current sampling point
                     //var samplingPoint =
@@ -475,27 +499,27 @@ namespace Adamantium.Fonts.TextureGeneration
                         samplingPoint.Y >= glyphBoundingRectangle.Y - additionalSpace &&
                         samplingPoint.Y <= glyphBoundingRectangle.Bottom + additionalSpace)
                     {
-                        coloredDistances[x, y] = GetColoredDistances(search, closest, samplingPoint, range, pxRange, glyph.OutlineType == OutlineType.TrueType);
+                        coloredDistances[y * width + x] = GetColoredDistances(search, closest, samplingPoint, range, pxRange, glyph.OutlineType == OutlineType.TrueType);
                     }
                     else
                     {
-                        coloredDistances[x, y] = minColoredDistance;
+                        coloredDistances[y * width + x] = minColoredDistance;
                     }
                 }
             }
 
             // 3. Fix artifacts, as GenerateDirectMSDF does.
-            UseTrueDistanceAwayFromOutline(coloredDistances, (int)size.Width, (int)size.Height, pxRange);
+            UseTrueDistanceAwayFromOutline(coloredDistances, width, height, pxRange);
 
             // 4. Normalize MSDF and SDF to [0 .. 255] range
             var margin = (int)textureData.Margin;
             var rowStride = (size.Width + (margin * 2)) * 4;
-            for (var y = 0; y < size.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var index = (int)(rowStride * (y + margin)) + (margin * 4);
-                for (var x = 0; x < size.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
-                    var distance = coloredDistances[x, y];
+                    var distance = coloredDistances[y * width + x];
                     var red = MsdfGeneratorHelper.PixelFloatToByte(distance.RedDistance);
                     var green = MsdfGeneratorHelper.PixelFloatToByte(distance.GreenDistance);
                     var blue = MsdfGeneratorHelper.PixelFloatToByte(distance.BlueDistance);
@@ -509,8 +533,10 @@ namespace Adamantium.Fonts.TextureGeneration
                     index += 4;
                 }
             }
+
+            ArrayPool<ColoredDistance>.Shared.Return(coloredDistances);
         }
-        
+
         // --- ARTIFACT FIXING ---
         // true - no collision, false - collision
         private static bool CheckNeighbor(ColoredDistance neighbor, ColoredDistance current, double threshold)
@@ -561,58 +587,60 @@ namespace Adamantium.Fonts.TextureGeneration
             return true;
         }
 
-        private static void UseTrueDistanceAwayFromOutline(ColoredDistance[,] data, int width, int height, double pxRange)
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void UseTrueDistanceAwayFromOutline(ColoredDistance[] data, int width, int height, double pxRange)
         {
-            var replace = new bool[width, height];
+            var texels = width * height;
+            var replace = ArrayPool<bool>.Shared.Rent(texels);
+            Array.Clear(replace, 0, texels);
             for (var y = 0; y < height; y++)
             {
                 for (var x = 0; x < width; x++)
                 {
-                    replace[x, y] |= Texels(data[x, y].AlphaDistance, pxRange) > FarBandTexels;
+                    replace[y * width + x] |= Texels(data[y * width + x].AlphaDistance, pxRange) > FarBandTexels;
                     if (x + 1 < width)
                     {
-                        MarkMisleading(data, replace, pxRange, x, y, x + 1, y);
+                        MarkMisleading(data, replace, width, pxRange, x, y, x + 1, y);
                     }
 
                     if (y + 1 < height)
                     {
-                        MarkMisleading(data, replace, pxRange, x, y, x, y + 1);
+                        MarkMisleading(data, replace, width, pxRange, x, y, x, y + 1);
                     }
 
                     if (x + 1 < width && y + 1 < height)
                     {
-                        MarkMisleading(data, replace, pxRange, x, y, x + 1, y + 1);
+                        MarkMisleading(data, replace, width, pxRange, x, y, x + 1, y + 1);
                     }
                 }
             }
 
-            for (var y = 0; y < height; y++)
+            for (var texel = 0; texel < texels; texel++)
             {
-                for (var x = 0; x < width; x++)
+                if (!replace[texel])
                 {
-                    if (!replace[x, y])
-                    {
-                        continue;
-                    }
-
-                    var distance = data[x, y];
-                    distance.RedDistance = distance.AlphaDistance;
-                    distance.GreenDistance = distance.AlphaDistance;
-                    distance.BlueDistance = distance.AlphaDistance;
-                    data[x, y] = distance;
+                    continue;
                 }
+
+                ref var distance = ref data[texel];
+                distance.RedDistance = distance.AlphaDistance;
+                distance.GreenDistance = distance.AlphaDistance;
+                distance.BlueDistance = distance.AlphaDistance;
             }
+
+            ArrayPool<bool>.Shared.Return(replace);
         }
 
-        private static void MarkMisleading(ColoredDistance[,] data, bool[,] replace, double pxRange, int x0, int y0,
-            int x1, int y1)
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void MarkMisleading(ColoredDistance[] data, bool[] replace, int width, double pxRange, int x0,
+            int y0, int x1, int y1)
         {
             double red = 0, green = 0, blue = 0, alpha = 0;
             for (var y = y0; y <= y1; y++)
             {
                 for (var x = x0; x <= x1; x++)
                 {
-                    ref var distance = ref data[x, y];
+                    ref var distance = ref data[y * width + x];
                     red += distance.RedDistance;
                     green += distance.GreenDistance;
                     blue += distance.BlueDistance;
@@ -633,7 +661,7 @@ namespace Adamantium.Fonts.TextureGeneration
             {
                 for (var x = x0; x <= x1; x++)
                 {
-                    replace[x, y] |= Texels(data[x, y].AlphaDistance, pxRange) > NearBandTexels;
+                    replace[y * width + x] |= Texels(data[y * width + x].AlphaDistance, pxRange) > NearBandTexels;
                 }
             }
         }
