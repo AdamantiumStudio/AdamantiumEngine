@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `SamplerStates.PixelatedClampToEdge`: a picture enlarged in hard squares - the nearest texel - and reduced smoothly,
+  clamped to the edge; what a PDF image with `/Interpolate false` asks for.
 - Glyphs placed by the caller (`TextLayout.ProcessGlyphs`, `PositionedGlyph`): each by its index in the font and its pen
   position, drawn where it stands - nothing shaped, broken into lines or snapped to the pixel grid - through the same
   atlas, quads and effects as laid-out text. What a document that sets its own text, a PDF page, draws with.

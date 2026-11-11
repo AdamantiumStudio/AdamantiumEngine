@@ -26,6 +26,14 @@ public static class SamplerStates
         GetSamplerSate(nameof(LinearClampToEdge), Filter.Linear, SamplerAddressMode.ClampToEdge, false);
 
     /// <summary>
+    /// A picture enlarged in hard squares - the nearest texel, no blend between them - and reduced smoothly, so it does
+    /// not shimmer; texture coordinates clamped to the edge. CSS's <c>image-rendering: pixelated</c>.
+    /// </summary>
+    public static readonly SamplerState PixelatedClampToEdge =
+        GetSamplerSate(nameof(PixelatedClampToEdge), Filter.Linear, SamplerAddressMode.ClampToEdge, false,
+            magFilter: Filter.Nearest);
+
+    /// <summary>
     /// Linear filtering with texture coordinate mirroring.
     /// </summary>
     public static readonly SamplerState LinearMirror =
@@ -78,10 +86,11 @@ public static class SamplerStates
         float maxAnisotropy = 16,
         bool unnormalizedCoordinates = false,
         bool compareEnabled = false,
-        CompareOp compareOp = CompareOp.Always)
+        CompareOp compareOp = CompareOp.Always,
+        Filter? magFilter = null)
     {
         var samplerInfo = new SamplerCreateInfo();
-        samplerInfo.MagFilter = filter;
+        samplerInfo.MagFilter = magFilter ?? filter;
         samplerInfo.MinFilter = filter;
         samplerInfo.AddressModeU = samplerMode;
         samplerInfo.AddressModeV = samplerMode;
