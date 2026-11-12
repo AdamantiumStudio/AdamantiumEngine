@@ -25,11 +25,17 @@ namespace Adamantium.ECS
        IDisposable,
        IEntitySearch
     {
-        public Entity(Entity owner = null, String name = "")
+        public Entity(Entity owner = null, String name = "") : this(owner, name, UidGenerator.Generate())
+        {
+        }
+
+        /// <summary>An entity with the id <paramref name="uid"/> - one a scene file gave it, which others refer to it
+        /// by.</summary>
+        public Entity(Entity owner, String name, UInt128 uid)
         {
             dependencies = new TrackingCollection<Entity>();
             dependenciesReadOnly = new ReadOnlyTrackingCollection<Entity>(dependencies);
-            uid = UidGenerator.Generate();
+            this.uid = uid;
             Owner = owner;
             rootUid = uid;
             if (Owner != null)

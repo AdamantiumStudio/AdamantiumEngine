@@ -7,6 +7,21 @@ All packages share one version.
 
 ### Added
 
+- Scene files (`.ascene`, `SceneFile`): a scene in readable XML - what stands in it, where and which way it faces. The
+  models by their asset names, nothing more of them (`SceneModel`: position, rotation, scale); what no file holds
+  described whole, each kind in a section of its own: lights (`SceneLight`), cameras (`SceneCamera`), spawn points
+  (`SceneSpawnPoint`), the components of the game's code (`SceneBehaviour`: its type and the values of its fields).
+  Every entry has an id; an entry stands in another by that one's id, so the file stays flat. A component whose type is
+  not loaded is written back as it was read. A file of a later version is refused. A patch (`SceneFile.Patch`) has the
+  same form. `SceneBuilder` puts a scene into a world - each model asset loaded once, all at once; a model that does
+  not load stays naming its asset - and `SceneCapture` writes a world back into a scene, leaving out the cameras the
+  outputs own.
+- `Behaviour`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
+  are what a scene keeps of it. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedBehaviour`
+  stands for a component whose code is not loaded. `Entity(owner, name, uid)`: an entity with a given id.
+- `Vector3<T>.Parse`, `Vector4<T>.Parse`, `Quaternion<T>.Parse`: read from text as `Vector2<T>.Parse` does, so markup
+  takes them too.
+
 - `ScreenshotRenderingService` with its `ScreenshotRenderingProcessor`: screenshots of entities, taken in the universe
   the service is made in (`Create`). An entity put in its queue (`Enqueue`) - one no world holds, so nothing else draws
   it - is drawn alone, one a frame, into an output of the service's own, from the front, above and to the right, every
@@ -232,6 +247,8 @@ All packages share one version.
 
 ### Changed
 
+- `LightManager.AddLight`: a light standing in another entity joins the world with that entity's root, not as a root
+  of its own.
 - `IUniverseWatcher` moved from `Adamantium.ECS` to `Adamantium.Multiverse`, beside the outputs it now asks frames of.
 - A source changed is imported again with the settings its asset file records, unless the manifest gives the asset
   some; an asset file is imported again for its settings only when the manifest's differ from those it records. It was

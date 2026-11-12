@@ -57,7 +57,8 @@ public class LightManager
         return light;
     }
 
-    /// <summary>Puts <paramref name="light"/> in the world as a light; an entity without a <see cref="Light"/> is ignored.</summary>
+    /// <summary>Puts <paramref name="light"/> in the world as a light; an entity without a <see cref="Light"/> is ignored.
+    /// One standing in another entity joins the world with that entity's root, not on its own.</summary>
     public void AddLight(Entity light)
     {
         var component = light.GetComponent<Light>();
@@ -73,7 +74,10 @@ public class LightManager
             lightsDirty = true;
         }
 
-        entityWorld.EntityManager.AddEntity(light);
+        if (light.Owner == null)
+        {
+            entityWorld.EntityManager.AddEntity(light);
+        }
     }
 
     /// <summary>Takes <paramref name="light"/> out of the lights and out of the world.</summary>

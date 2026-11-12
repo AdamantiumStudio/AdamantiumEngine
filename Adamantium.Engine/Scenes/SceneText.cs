@@ -15,6 +15,9 @@ internal static class SceneText
     public static string Format<T>(Vector3<T> value) where T : unmanaged, INumber<T> =>
         Join(value.X, value.Y, value.Z);
 
+    public static string Format<T>(Vector4<T> value) where T : unmanaged, INumber<T> =>
+        Join(value.X, value.Y, value.Z, value.W);
+
     public static string Format<T>(Quaternion<T> value) where T : unmanaged, IFloatingPointIeee754<T> =>
         Join(value.X, value.Y, value.Z, value.W);
 
