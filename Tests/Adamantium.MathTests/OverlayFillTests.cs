@@ -21,10 +21,11 @@ namespace Adamantium.MathTests
         {
             var rings = new[]
             {
-                new[] { V(64.00000157515805, 47.999994705295045), V(95.99999314631633, -6.064538560372098E-06), V(64.00000653474822, 32.00000193525607) },
-                new[] { V(47.99998761443542, 16.000013296738544), V(95.99999370906363, 5.879418780505385E-06), V(-1.8021879376853755E-06, 48.00000513058008) },
+                new[] { V(64.0000157515805, 47.99994705295045), V(95.9999314631633, -6.064538560372098E-05), V(64.0000653474822, 32.0000193525607) },
+                new[] { V(47.9998761443542, 16.00013296738544), V(95.9999370906363, 5.879418780505385E-05), V(-1.8021879376853755E-05, 48.0000513058008) },
             };
 
+            Assert.That(Rounded(rings)[0][1], Is.Not.EqualTo(Rounded(rings)[1][1]), "the tips stay apart as contours keep them");
             Assert.That(Faults(RingFill.Fill(GeometryOverlay.Outline(rings, rule), FillRule.NonZero), rings, rule), Is.Empty);
             Assert.That(Faults(Fill(rule, rings), Rounded(rings), rule), Is.Empty);
         }
@@ -34,10 +35,11 @@ namespace Adamantium.MathTests
         {
             var rings = new[]
             {
-                new[] { V(79.99999518623967, 80.00000990732585), V(1.2242622076181053E-05, 48.000005798690125), V(31.999985124137496, 64.00001266196894),
-                    V(3.5843027190232197E-06, 48.000006418346686), V(64.00000086433774, 79.99998742026393) },
+                new[] { V(79.9999518623967, 80.0000990732585), V(1.2242622076181053E-04, 48.00005798690125), V(31.99985124137496, 64.0001266196894),
+                    V(3.5843027190232197E-05, 48.00006418346686), V(64.0000086433774, 79.9998742026393) },
             };
 
+            Assert.That(Rounded(rings)[0][1], Is.Not.EqualTo(Rounded(rings)[0][3]), "the two points stay apart as contours keep them");
             Assert.That(Faults(Fill(rule, rings), Rounded(rings), rule), Is.Empty);
         }
 
@@ -376,8 +378,10 @@ namespace Adamantium.MathTests
                 new[] { V(1 + 0.4e-9, 4), V(1 + 0.7e-9, 4), V(4, 5) },
             };
             Assert.That(Faults(RingFill.Fill(rings, rule), rings, rule), Is.Empty);
-            var scaled = Array.ConvertAll(rings, ring => Array.ConvertAll(ring, p => p * 5e4));
-            scaled[2] = new[] { V(50000.00002, 200000), V(50000.00003, 200000), V(200000, 250000) };
+            // Large enough that the weld is longer than the step contours round to, so the corners stay apart until welded.
+            var scaled = Array.ConvertAll(rings, ring => Array.ConvertAll(ring, p => p * 5e7));
+            scaled[2] = new[] { V(5e7 + 0.002, 2e8), V(5e7 + 0.003, 2e8), V(2e8, 2.5e8) };
+            Assert.That(Rounded(scaled)[2].Distinct().Count(), Is.EqualTo(3), "the sliver's corners stay apart as contours keep them");
             Assert.That(Faults(Fill(rule, scaled), Rounded(scaled), rule), Is.Empty);
         }
 
@@ -534,6 +538,19 @@ namespace Adamantium.MathTests
             Assert.That(ring[(at + 1) % ring.Length], Is.EqualTo(down[0]));
         }
 
+        // An open contour that ends where it began keeps its last point, so its stroke runs its last leg; a closed one
+        // drops it, the closing side already being there.
+        [Test]
+        public void AnOpenContourEndingAtItsStart_KeepsItsLastPoint()
+        {
+            var points = new[] { V(0, 0), V(10, 0), V(10, 10), V(0, 0) };
+            Assert.Multiple(() =>
+            {
+                Assert.That(new MeshContour(points, isGeometryClosed: false).Points, Has.Length.EqualTo(4));
+                Assert.That(new MeshContour(points, isGeometryClosed: true).Points, Has.Length.EqualTo(3));
+            });
+        }
+
         // Squares around a few centres, each a different size and turned either way, dealt to the two areas at random:
         // nested within a centre, apart across centres, never meeting.
         static (Vector2<double>[][] First, Vector2<double>[][] Second) ClearRings(Random random)
@@ -610,9 +627,9 @@ namespace Adamantium.MathTests
             return p.FillIndirect();
         }
 
-        // The contour keeps five decimals: the truth is the rings as it keeps them.
+        // The contour rounds to MathHelper.Coordinates: the truth is the rings as it keeps them.
         static Vector2<double>[][] Rounded(Vector2<double>[][] rings) =>
-            Array.ConvertAll(rings, ring => Array.ConvertAll(ring, p => Vector2<double>.Round(p, MeshContour.CoordinatePrecision)));
+            Array.ConvertAll(rings, ring => Array.ConvertAll(ring, p => MathHelper.Coordinates.Round(p)));
 
         // Points covered other than the rule says, or twice; points within a thousandth of the size of an edge are left
         // out.

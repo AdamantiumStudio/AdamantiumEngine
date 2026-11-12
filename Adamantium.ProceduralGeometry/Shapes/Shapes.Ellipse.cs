@@ -98,10 +98,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var x = center.X + (radiusX * Math.Cos(angleItem));
                     var y = center.Y + (radiusY * Math.Sin(angleItem));
 
-                    x = Math.Round(x, 4);
-                    y = Math.Round(y, 4);
-
-                    var vertex = new Vector2<double>(x, y);
+                    var vertex = MathHelper.Coordinates.Round(new Vector2<double>(x, y));
 
                     vertices.Add(vertex);
                 }
@@ -161,9 +158,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 for (int i = 0; i < count; ++i)
                 {
                     double a = startRad + stepRad * i;
-                    double x = Math.Round(radiusX * Math.Cos(a), 4, MidpointRounding.AwayFromZero);
-                    double y = Math.Round(radiusY * Math.Sin(a), 4, MidpointRounding.AwayFromZero);
-                    vertices.Add(new Vector3<double>(x, y, 0));
+                    vertices.Add(MathHelper.Coordinates.Round(new Vector3<double>(radiusX * Math.Cos(a), radiusY * Math.Sin(a), 0)));
                 }
 
                 // A pie sector's outline runs arc -> center -> back to the first radius (closed loop); an edge-to-edge

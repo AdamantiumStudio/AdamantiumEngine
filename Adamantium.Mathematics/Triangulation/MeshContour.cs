@@ -6,12 +6,6 @@ namespace Adamantium.Mathematics.Triangulation;
 
 public class MeshContour
 {
-    /// <summary>Coordinates are snapped to this many decimals on ingestion. The triangulator compares points
-    /// exactly (==, Dictionary&lt;Vector2<double>&gt; keys), so without snapping, coordinates that are equal up to
-    /// floating-point noise are treated as distinct points — producing spurious strips/holes (e.g. when combining
-    /// nested ellipses). 5 decimals is far finer than any 2D UI layout needs.</summary>
-    public const int CoordinatePrecision = 5;
-
     public string Name { get; set; }
     public Vector2<double>[] Points { get; set; } = [];
 
@@ -78,12 +72,10 @@ public class MeshContour
 
     public void SetPoints(IEnumerable<Vector2<double>> points, bool generateSegments = true)
     {
-        // Snap to CoordinatePrecision first so floating-point-noise-equal coordinates become exactly equal for the
-        // triangulator's exact point comparisons (and the dedup below collapses the now-coincident points).
         var kept = points is Vector2<double>[] given ? (Vector2<double>[])given.Clone() : points.ToArray();
         for (var i = 0; i < kept.Length; i++)
         {
-            kept[i] = Vector2<double>.Round(kept[i], CoordinatePrecision);
+            kept[i] = MathHelper.Coordinates.Round(kept[i]);
         }
 
         var count = 0;
@@ -97,7 +89,7 @@ public class MeshContour
                 kept[count++] = p1;
             }
 
-            if (i + 1 == kept.Length - 1 && count > 0 && p2 != kept[0])
+            if (i + 1 == kept.Length - 1 && count > 0 && (!IsGeometryClosed || p2 != kept[0]))
             {
                 kept[count++] = p2;
             }
@@ -204,7 +196,7 @@ public class MeshContour
         {
             // Snap computed intersection points to the same precision as contour points, so they coincide cleanly
             // with existing endpoints instead of landing a floating-point-epsilon away.
-            point = Vector2<double>.Round(point, CoordinatePrecision);
+            point = MathHelper.Coordinates.Round(point);
             if (point == seg.Start || point == seg.End) return;
             if (!intersectionsList.TryGetValue(point, out var inter))
             {
@@ -313,7 +305,7 @@ public class MeshContour
         for (var i = 0; i < copy.Points.Length; i++)
         {
             var point = copy.Points[i];
-            copy.Points[i] = Vector2<double>.Round(point, CoordinatePrecision);
+            copy.Points[i] = MathHelper.Coordinates.Round(point);
         }
         
         if (GeometryPoints != null) copy.GeometryPoints = new List<GeometryIntersection>(GeometryPoints);

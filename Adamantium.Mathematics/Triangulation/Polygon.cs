@@ -100,14 +100,14 @@ namespace Adamantium.Mathematics.Triangulation
         {
             foreach (var point in points)
             {
-                point.Coordinates = Vector2<double>.Round(point.Coordinates, 3);
+                point.Coordinates = MathHelper.Coordinates.Round(point.Coordinates);
             }
 
             for (int i = 0; i < segments.Count; i++)
             {
                 var segment = segments[i];
-                segment.SegmentEnds[0].Coordinates = Vector2<double>.Round(segment.Start, 3);
-                segment.SegmentEnds[1].Coordinates = Vector2<double>.Round(segment.End, 3);
+                segment.SegmentEnds[0].Coordinates = MathHelper.Coordinates.Round(segment.Start);
+                segment.SegmentEnds[1].Coordinates = MathHelper.Coordinates.Round(segment.End);
             }
 
             MergedPoints.AddRange(points);
