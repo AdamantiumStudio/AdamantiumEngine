@@ -110,7 +110,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 var placed = transform is { IsIdentity: false };
                 if (!placed)
                 {
-                    vertices = vertices.Select(vertex => Vector3<double>.Round(vertex, 3)).ToList();
+                    vertices = vertices.Select(MathHelper.Coordinates.Round).ToList();
                 }
 
                 var mesh = new Mesh(primitiveType);
@@ -157,7 +157,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     var x = center.X + (radius.X * Math.Cos(angle));
                     var y = center.Y - (radius.Y * Math.Sin(angle));
                     angle += angleItem;
-                    vertices.Add(new Vector3<double>(Vector2<double>.Round(new Vector2<double>(x, y), 3), 0));
+                    vertices.Add(new Vector3<double>(MathHelper.Coordinates.Round(new Vector2<double>(x, y)), 0));
                 }
             }
             

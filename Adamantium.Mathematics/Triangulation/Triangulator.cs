@@ -101,7 +101,7 @@ namespace Adamantium.Mathematics.Triangulation
             {
                 foreach (var rayPoint in rayPoints)
                 {
-                    rayPoint.Coordinates = Vector2<double>.Round(rayPoint.Coordinates, 4);
+                    rayPoint.Coordinates = MathHelper.Coordinates.Round(rayPoint.Coordinates);
                 }
             }
             

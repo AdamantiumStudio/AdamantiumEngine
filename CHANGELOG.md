@@ -7,8 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `MathHelper.Coordinates`: the one step geometry coordinates are rounded to - 4 decimals, `Step` 1e-4, and `Round`
+  for a number, a `Vector2` and a `Vector3`. Meshes, contours, shapes, glyph outlines and the points the triangulator
+  cuts at all round with it.
 - `GeometryOverlay.Combine(first, second, mode, weld)`: points nearer than `weld` are one, and a corner that near an
-  edge lies on it. It is for coordinates rounded to a step - UI meshes round to `Mesh.RoundPrecision` - which otherwise
+  edge lies on it. It is for coordinates rounded to a step - `MathHelper.Coordinates.Step` - which otherwise
   leave seams and slivers where the shapes meet. The least distance stays a ten-billionth of the areas' size.
 - `GeometryOverlay`: two areas (`RingArea` - rings under a fill rule) combined by an `AreaCombineMode` (union,
   intersection, difference, xor), or one area's rings turned into the simple rings bounding what its rule fills
@@ -195,6 +198,13 @@ All packages share one version.
 
 ### Changed
 
+- Geometry coordinates round to one step, 4 decimals (`MathHelper.Coordinates`), a value halfway between two steps
+  away from zero. Before, each place rounded by a number of its own:
+  - `MeshContour` kept 5 decimals;
+  - `Shapes.Rectangle` - its corners and the points of its rounded corners - and `Polygon.FillDirect` kept 3;
+  - meshes, ellipses, glyph outlines and the triangulator's cut points kept 4, some rounding a halfway value to even.
+
+  Contours now keep a decimal less; rectangles and `FillDirect` keep a decimal more.
 - `GeometryOverlay.Combine` takes less time. Rings of the two areas that keep clear of one another
   (`RingContacts.AnyMeet`) are combined by how they nest, without cutting. The sweep over the edges keeps them in an
   array and sorts its events without a delegate. Measured in Release on one machine, before → after:
@@ -241,6 +251,8 @@ All packages share one version.
 
 ### Fixed
 
+- An open `MeshContour` that ends where it began keeps its last point, so a stroke runs its last leg. It was dropped
+  as if the contour were closed.
 - An outlined `Shapes.Polygon` has its corners as a closed contour beside its line strip, as an outlined ellipse does.
   Whoever read its outline as a contour found none: a UI polygon with a ring thickness came out empty.
 - `Polygon.FillIndirect` fills rings that meet as the fill rule says of every point: a hole touching its outer ring at a
@@ -334,6 +346,8 @@ All packages share one version.
 - `Polygon.ProcessedContours`: copies of the contours, made on every `FillIndirect` call. Stroke the contours you
   gave instead. The copies were cut into segments, which merged a ring's repeated corners, so a ring passing one point
   twice came out closed by a side it never had.
+- `PlanarFill`: `RingFill` fills any rings, and nothing called it any more.
+- `Mesh.RoundPrecision` and `MeshContour.CoordinatePrecision`: use `MathHelper.Coordinates`.
 
 ## 0.1.0-alpha.5 - 2026-11-03
 

@@ -70,7 +70,7 @@ namespace Adamantium.Fonts.Common
             {
                 foreach (var point in segment.Points)
                 {
-                    sampledPoints.Add(new Vector2<double>(Math.Round(point.X, 4), Math.Round(point.Y, 4)));
+                    sampledPoints.Add(MathHelper.Coordinates.Round(new Vector2<double>(point.X, point.Y)));
                 }
 
                 return sampledPoints;
@@ -86,7 +86,7 @@ namespace Adamantium.Fonts.Common
                               3 * Math.Pow(d, 2) * (1 - d) * p[2].X + Math.Pow(d, 3) * p[3].X;
                 var bezierY = Math.Pow(1 - d, 3) * p[0].Y + 3 * d * Math.Pow(1 - d, 2) * p[1].Y +
                               3 * Math.Pow(d, 2) * (1 - d) * p[2].Y + Math.Pow(d, 3) * p[3].Y;
-                sampledPoints.Add(new Vector2<double>(Math.Round(bezierX, 4), Math.Round(bezierY, 4)));
+                sampledPoints.Add(MathHelper.Coordinates.Round(new Vector2<double>(bezierX, bezierY)));
             }
 
             return sampledPoints;

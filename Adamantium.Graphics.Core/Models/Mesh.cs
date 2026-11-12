@@ -19,8 +19,6 @@ public class Mesh
     private int convexHullVersion;
     private Vector3<double>[] convexHullPoints;
 
-    public static int RoundPrecision => 4;
-    
     public string Name { get; set; }
 
     public Mesh() : this(PrimitiveType.TriangleList)
@@ -771,7 +769,7 @@ public class Mesh
         var transformed = new Vector3<double>[points.Length];
         for (int i = 0; i < points.Length; i++)
         {
-            transformed[i] = Vector3<double>.Round(Vector3<double>.TransformCoordinate(points[i], transform), RoundPrecision);
+            transformed[i] = MathHelper.Coordinates.Round(Vector3<double>.TransformCoordinate(points[i], transform));
         }
 
         return transformed;
@@ -788,7 +786,7 @@ public class Mesh
             
         for (int i = 0; i < Points.Length; i++)
         {
-            Points[i] = Vector3<double>.Round(Vector3<double>.TransformCoordinate(Points[i], transformMatrix), RoundPrecision);
+            Points[i] = MathHelper.Coordinates.Round(Vector3<double>.TransformCoordinate(Points[i], transformMatrix));
         }
 
         foreach (var meshContour in Contours)

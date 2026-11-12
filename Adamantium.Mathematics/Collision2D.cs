@@ -47,7 +47,7 @@ namespace Adamantium.Mathematics
             }
 
             point = p + r * t;
-            point = Vector2<double>.Round(point, 4);
+            point = MathHelper.Coordinates.Round(point);
             return true;
         }
         
@@ -80,7 +80,7 @@ namespace Adamantium.Mathematics
             }
 
             point = p + r * t;
-            point = Vector2<double>.Round(point, 4);
+            point = MathHelper.Coordinates.Round(point);
             return true;
         }
 
