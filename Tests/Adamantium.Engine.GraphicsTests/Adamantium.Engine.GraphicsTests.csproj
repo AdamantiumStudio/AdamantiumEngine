@@ -19,6 +19,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- A model to take snapshots of: the compiler tests' skinned figure, used where it lies. -->
+    <Content Include="..\Adamantium.Engine.CompilerTests\GltfData\RiggedFigure\**" LinkBase="Models\RiggedFigure">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Test-only effect fixtures (compute smoke + the GPU stroke expander/draw). They live here, NOT in the working
          Adamantium.FX project, so the engine isn't cluttered with test shaders and the generator doesn't emit phantom
          duplicate classes. Compiled at runtime via Effect.CompileFromFile from EffectsData. -->
@@ -97,6 +104,9 @@
     <ProjectReference Include="..\..\Adamantium.Graphics.Core\Adamantium.Graphics.Core.csproj" />
     <ProjectReference Include="..\..\Adamantium.Graphics\Adamantium.Graphics.csproj" />
     <ProjectReference Include="..\..\Adamantium.Imaging\Adamantium.Imaging.csproj" />
+    <!-- Under its own alias: these tests live in Adamantium.Engine.*, where the engine's own types (its TextLayout) would
+         hide the graphics' ones the font tests mean. -->
+    <ProjectReference Include="..\..\Adamantium.Engine\Adamantium.Engine.csproj" Aliases="engine" />
   </ItemGroup>
 
 </Project>

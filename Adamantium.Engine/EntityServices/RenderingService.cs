@@ -29,6 +29,11 @@ public class RenderingService : EntityService
     protected Camera ActiveCamera { get; set; }
     protected bool ShowDebugOutput { get; set; }
 
+    /// <summary>Whether the surfaces drawn write their alpha into the frame. Off, the alpha the frame was cleared with
+    /// stays, so a panel can fade the whole frame; on, a frame cleared transparent keeps only what was drawn - a
+    /// picture of a model over nothing.</summary>
+    public bool WritesAlpha { get; set; }
+
     public RenderingService(EntityWorld world, UniverseOutput window) : base(world)
     {
         GraphicsDeviceService = world.Satellites.Get<IGraphicsDeviceService>();
@@ -113,10 +118,13 @@ public class RenderingService : EntityService
         GraphicsDevice.SetDepthBuffer(Window.Presenter.DepthBuffer);
         // Must match the presenter's MSAA, or the model is not rasterized.
         GraphicsDevice.MSAALevel = Window.Presenter.MSAALevel;
-        // Alpha is not written, so the cleared 1 stays and the panel can fade the frame with its own Opacity.
-        GraphicsDevice.ColorComponentFlags = Adamantium.Vulkan.Core.ColorComponentFlagBits.RBit |
-                                             Adamantium.Vulkan.Core.ColorComponentFlagBits.GBit |
-                                             Adamantium.Vulkan.Core.ColorComponentFlagBits.BBit;
+        // Unless told to, alpha is not written, so the cleared 1 stays and the panel can fade the frame with its own Opacity.
+        var colorWrite = Adamantium.Vulkan.Core.ColorComponentFlagBits.RBit |
+                         Adamantium.Vulkan.Core.ColorComponentFlagBits.GBit |
+                         Adamantium.Vulkan.Core.ColorComponentFlagBits.BBit;
+        GraphicsDevice.ColorComponentFlags = WritesAlpha
+            ? colorWrite | Adamantium.Vulkan.Core.ColorComponentFlagBits.ABit
+            : colorWrite;
         // An opaque scene must not inherit the blend the UI pass left set.
         GraphicsDevice.ColorBlendEquation = Adamantium.Graphics.Core.ColorBlendEquations.Opaque;
 

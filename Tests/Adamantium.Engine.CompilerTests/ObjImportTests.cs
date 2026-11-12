@@ -117,6 +117,51 @@ f 1//1 2//1 3//1 4//1
             Assert.That(mesh.Indices.Length, Is.EqualTo(6), "a quad is two triangles");
         }
 
+        // Faces that name positions alone - the plainest .obj there is - read three numbers a corner like any other.
+        [Test]
+        public void Import_ReadsFacesOfPositionsAlone()
+        {
+            var scene = Import(@"
+v 0 0 0
+v 1 0 0
+v 1 1 0
+v 0 1 0
+f 1 2 3
+f 1 3 4
+");
+
+            var mesh = SingleMesh(scene);
+            Assert.Multiple(() =>
+            {
+                Assert.That(mesh.Indices.Length, Is.EqualTo(6), "two triangles");
+                Assert.That(mesh.Points.Max(point => point.X) - mesh.Points.Min(point => point.X),
+                    Is.EqualTo(1).Within(1e-6), "the square's width");
+                Assert.That(mesh.Points.Max(point => point.Y) - mesh.Points.Min(point => point.Y),
+                    Is.EqualTo(1).Within(1e-6), "the square's height");
+            });
+        }
+
+        [Test]
+        public void Import_ReadsFacesOfPositionsAndTextureCoordinates()
+        {
+            var scene = Import(@"
+v 0 0 0
+v 1 0 0
+v 0 1 0
+vt 0 0
+vt 1 0
+vt 0 1
+f 1/1 2/2 3/3
+");
+
+            var mesh = SingleMesh(scene);
+            Assert.Multiple(() =>
+            {
+                Assert.That(mesh.Indices.Length, Is.EqualTo(3), "one triangle");
+                Assert.That(mesh.UV0.Length, Is.EqualTo(mesh.Points.Length));
+            });
+        }
+
         private static Mesh SingleMesh(SceneData scene)
         {
             Assert.That(scene, Is.Not.Null, "the import returned nothing");

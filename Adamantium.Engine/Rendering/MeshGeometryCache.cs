@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO.Hashing;
 using System.Runtime.CompilerServices;
@@ -17,13 +18,15 @@ namespace Adamantium.Engine.Rendering;
 /// <summary>
 /// The render layer's GPU geometry. A mesh in a vertex format maps to the geometry of its content: meshes with the same
 /// vertices and indices share one set of buffers, found by a hash of what would be uploaded, so their copies draw as one
-/// instanced call. A mesh is hashed again only when its version moves; a geometry no mesh uses any more is let go once no
-/// frame in flight draws with it. Owned and disposed by the processor that draws with it.
+/// instanced call. A mesh is hashed again only when its version moves. The cache does not keep a mesh alive: once a mesh
+/// is collected, its geometry is let go on the next call, when no other mesh shares it and no frame in flight draws with
+/// it. Owned and disposed by the processor that draws with it, and used from its thread alone.
 /// </summary>
 public sealed class MeshGeometryCache : DisposableObject
 {
     private readonly IGraphicsDevice _device;
-    private readonly Dictionary<MeshKey, (int Version, RenderGeometry Geometry)> _meshes = new();
+    private readonly ConditionalWeakTable<Mesh, MeshGeometries> _meshes = new();
+    private readonly ConcurrentQueue<RenderGeometry> _collected = new();
     private readonly Dictionary<ContentKey, (RenderGeometry Geometry, int Users)> _contents = new();
     private readonly Dictionary<RenderGeometry, ContentKey> _contentOf = new();
 
@@ -32,12 +35,18 @@ public sealed class MeshGeometryCache : DisposableObject
         _device = device;
     }
 
+    /// <summary>How many sets of buffers the cache holds: one for each content its live meshes have.</summary>
+    public int GeometryCount => _contents.Count;
+
     /// <summary>The geometry <paramref name="mesh"/> draws with in <paramref name="vertexType"/>: the one of its content,
     /// made when no other mesh has that content yet.</summary>
     public RenderGeometry GetOrCreate(Mesh mesh, Type vertexType)
     {
-        var key = new MeshKey(mesh, vertexType);
-        if (_meshes.TryGetValue(key, out var known) && known.Version == mesh.Version)
+        ReleaseCollected();
+
+        var geometries = _meshes.GetValue(mesh, _ => new MeshGeometries(_collected));
+        var known = geometries.Find(vertexType);
+        if (known.Geometry != null && known.Version == mesh.Version)
         {
             return known.Geometry;
         }
@@ -50,7 +59,7 @@ public sealed class MeshGeometryCache : DisposableObject
             Release(known.Geometry);
         }
 
-        _meshes[key] = (mesh.Version, geometry);
+        geometries.Set(vertexType, mesh.Version, geometry);
         return geometry;
     }
 
@@ -76,9 +85,21 @@ public sealed class MeshGeometryCache : DisposableObject
         return geometry;
     }
 
+    private void ReleaseCollected()
+    {
+        while (_collected.TryDequeue(out var geometry))
+        {
+            Release(geometry);
+        }
+    }
+
     private void Release(RenderGeometry geometry)
     {
-        var content = _contentOf[geometry];
+        if (!_contentOf.TryGetValue(geometry, out var content))
+        {
+            return;
+        }
+
         var (_, users) = _contents[content];
         if (users > 1)
         {
@@ -103,27 +124,56 @@ public sealed class MeshGeometryCache : DisposableObject
             _contents.Clear();
             _contentOf.Clear();
             _meshes.Clear();
+            _collected.Clear();
         }
 
         base.Dispose(disposeManagedResources);
     }
 
-    // Reference identity on the mesh, so a replaced Mesh instance is a fresh entry; the vertex format apart, so a mesh
-    // drawn both skinned and static has a geometry for each.
-    private readonly struct MeshKey : IEquatable<MeshKey>
+    private sealed class MeshGeometries
     {
-        private readonly Mesh _mesh;
-        private readonly Type _vertexType;
+        private readonly ConcurrentQueue<RenderGeometry> _collected;
+        private readonly List<(Type VertexType, int Version, RenderGeometry Geometry)> _formats = new(1);
 
-        public MeshKey(Mesh mesh, Type vertexType)
+        public MeshGeometries(ConcurrentQueue<RenderGeometry> collected)
         {
-            _mesh = mesh;
-            _vertexType = vertexType;
+            _collected = collected;
         }
 
-        public bool Equals(MeshKey other) => ReferenceEquals(_mesh, other._mesh) && _vertexType == other._vertexType;
-        public override bool Equals(object obj) => obj is MeshKey other && Equals(other);
-        public override int GetHashCode() => HashCode.Combine(RuntimeHelpers.GetHashCode(_mesh), _vertexType);
+        ~MeshGeometries()
+        {
+            foreach (var (_, _, geometry) in _formats)
+            {
+                _collected.Enqueue(geometry);
+            }
+        }
+
+        public (int Version, RenderGeometry Geometry) Find(Type vertexType)
+        {
+            foreach (var (type, version, geometry) in _formats)
+            {
+                if (type == vertexType)
+                {
+                    return (version, geometry);
+                }
+            }
+
+            return default;
+        }
+
+        public void Set(Type vertexType, int version, RenderGeometry geometry)
+        {
+            for (var i = 0; i < _formats.Count; i++)
+            {
+                if (_formats[i].VertexType == vertexType)
+                {
+                    _formats[i] = (vertexType, version, geometry);
+                    return;
+                }
+            }
+
+            _formats.Add((vertexType, version, geometry));
+        }
     }
 
     private readonly record struct ContentKey(

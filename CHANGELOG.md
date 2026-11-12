@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- `ModelSnapshotService` (`IModelSnapshotService`): a model drawn alone to a PNG for its asset's thumbnail - in its
+  bind pose, from the front, above and to the right, every corner of its bounds in view, over a transparent ground - in
+  a small universe of its own, on the devices of the universe it serves. `OffscreenOutput`: an output of a universe
+  with no surface, drawn into a texture of a fixed size that `ReadFrame` reads back. `RenderingService.WritesAlpha`:
+  the surfaces drawn write their alpha, so a frame cleared transparent keeps only what was drawn.
+- `ContentBuilder.WriteThumbnail`: a picture put into an asset file, the rest of the file kept, under the content
+  project's lock, unless the file was written again since the picture was taken of it. `BuildResult.Imported`: the
+  assets a build imported (`ImportedAsset`), each with why (`ImportReason`) and whether the asset file it replaced had
+  a thumbnail - which the new one has not.
 - `GeometryOverlay`: two areas (`RingArea` - rings under a fill rule) combined by an `AreaCombineMode` (union,
   intersection, difference, xor), or one area's rings turned into the simple rings bounding what its rule fills
   (`Outline`). Rings crossing, touching or lying along one another are cut where they meet - found by a line swept
@@ -229,6 +238,12 @@ All packages share one version.
 
 ### Fixed
 
+- `MeshGeometryCache` lets a mesh's GPU buffers go once the mesh is collected - when no other live mesh has the same
+  content and no frame in flight draws with them - instead of keeping every mesh ever drawn, and its buffers, for as
+  long as the processor lived: a model taken out of the scene kept its geometry on the GPU.
+- A Wavefront `.obj` whose faces name positions alone, or positions and texture coordinates without normals, is read
+  corner by corner as written; its indices were read one or two to a corner instead of three, and the model came out
+  torn or empty.
 - `Polygon.FillIndirect` fills rings that meet as the fill rule says of every point: a hole touching its outer ring at a
   point - at a corner too - holes touching or sharing sides, rings lying on one another, and a ring crossing another
   only through its corners. Rings that meet are laid over one another (`GeometryOverlay`) and the faces they bound

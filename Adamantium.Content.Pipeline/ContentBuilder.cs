@@ -158,9 +158,9 @@ public sealed class ContentBuilder
 
             try
             {
-                var reason = ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory,
+                var imported = ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory,
                     outputDirectory, intermediateDirectory, log);
-                if (reason == null && !cache.IsStale(asset.Source, assetFull, asset.Parameters, cookedFull))
+                if (imported == null && !cache.IsStale(asset.Source, assetFull, asset.Parameters, cookedFull))
                 {
                     log($"  [up-to-date] {asset.Source}");
                     result.Skipped++;
@@ -171,9 +171,9 @@ public sealed class ContentBuilder
                 File.Copy(assetFull, cookedFull, true);
                 var written = CopyCompanions(assetFull, cookedDirectory, outputDirectory, sourceFull, log);
                 cache.Update(asset.Source, assetFull, asset.Parameters, cookedRelative, written);
-                if (reason != null)
+                if (imported is { } done)
                 {
-                    result.Cooked++;
+                    result.AddImported(done);
                 }
                 else
                 {
@@ -257,13 +257,13 @@ public sealed class ContentBuilder
             try
             {
                 if (ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory, outputDirectory,
-                        intermediateDirectory, log) == null)
+                        intermediateDirectory, log) is { } imported)
                 {
-                    result.Skipped++;
+                    result.AddImported(imported);
                 }
                 else
                 {
-                    result.Cooked++;
+                    result.Skipped++;
                 }
             }
             catch (Exception ex)
@@ -285,9 +285,9 @@ public sealed class ContentBuilder
             : Path.Combine(projectDirectory, "obj", "assets", logicalName + writer.OutputExtension);
 
     // Imports the source into its asset file when it needs it and says why; null when the asset file is up to date.
-    private string ImportIfNeeded(ContentAsset asset, IContentImporter importer, string sourceFull, string logicalName,
-        string assetFull, string projectDirectory, string outputDirectory, string intermediateDirectory,
-        Action<string> log)
+    private ImportedAsset? ImportIfNeeded(ContentAsset asset, IContentImporter importer, string sourceFull,
+        string logicalName, string assetFull, string projectDirectory, string outputDirectory,
+        string intermediateDirectory, Action<string> log)
     {
         var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
         var file = new FileInfo(sourceFull);
@@ -295,13 +295,14 @@ public sealed class ContentBuilder
         var length = file.Length;
         string hash = null;
         string Hash() => hash ??= AssetSource.ComputeHash(sourceFull);
-        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, asset.Parameters, log);
-        if (reason == null)
+        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, asset.Parameters, log,
+            out var hadThumbnail);
+        if (reason is not { } why)
         {
             return null;
         }
 
-        log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({reason})");
+        log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({Describe(why)})");
         List<(string From, string To)> companions = [];
         var context = new ContentBuildContext
         {
@@ -326,8 +327,17 @@ public sealed class ContentBuilder
             EngineVersion = EngineVersion,
             Companions = companions.Select(companion => Normalize(companion.To)).Distinct().ToList()
         });
-        return reason;
+        return new ImportedAsset(assetFull, why, hadThumbnail);
     }
+
+    private static string Describe(ImportReason reason) => reason switch
+    {
+        ImportReason.New => "new",
+        ImportReason.SourceChanged => "source changed",
+        ImportReason.SettingsChanged => "settings changed",
+        ImportReason.Unreadable => "unreadable",
+        _ => "asked"
+    };
 
     private HashSet<string> GetImportTargets(ContentManifest manifest, string projectDirectory)
     {
@@ -345,18 +355,20 @@ public sealed class ContentBuilder
         return targets;
     }
 
-    private static string GetImportReason(string assetFull, string sourceFull, DateTime sourceWritten, long sourceLength,
-        Func<string> sourceHash, string importerName, IReadOnlyDictionary<string, string> parameters, Action<string> log)
+    private static ImportReason? GetImportReason(string assetFull, string sourceFull, DateTime sourceWritten,
+        long sourceLength, Func<string> sourceHash, string importerName, IReadOnlyDictionary<string, string> parameters,
+        Action<string> log, out bool hadThumbnail)
     {
+        hadThumbnail = false;
         if (!File.Exists(assetFull))
         {
-            return "new";
+            return ImportReason.New;
         }
 
         AssetFile file;
         try
         {
-            file = AssetFile.Read(assetFull, AssetFileSection.Source);
+            file = AssetFile.Read(assetFull, AssetFileSection.Source | AssetFileSection.Thumbnail);
         }
         catch (AssetFormatException exception) when (exception.WrittenVersion != null)
         {
@@ -365,8 +377,10 @@ public sealed class ContentBuilder
         }
         catch (AssetFormatException)
         {
-            return "unreadable";
+            return ImportReason.Unreadable;
         }
+
+        hadThumbnail = file.Thumbnail != null;
 
         if (file.Version != AssetFile.FormatVersion)
         {
@@ -377,13 +391,13 @@ public sealed class ContentBuilder
         var source = file.Source;
         if (source == null || (source.Written != sourceWritten || source.Length != sourceLength) && source.Hash != sourceHash())
         {
-            return "source changed";
+            return ImportReason.SourceChanged;
         }
 
         return string.Equals(source.Importer, importerName, StringComparison.OrdinalIgnoreCase)
                && HaveSameParameters(source.Parameters, parameters)
             ? null
-            : "settings changed";
+            : ImportReason.SettingsChanged;
     }
 
     private static bool HaveSameParameters(IReadOnlyDictionary<string, string> recorded,
@@ -433,11 +447,42 @@ public sealed class ContentBuilder
         return written;
     }
 
+    /// <summary>Puts <paramref name="png"/> into the asset file at <paramref name="assetFile"/> as its thumbnail, the
+    /// rest of the file as it was, under the lock of the content project in <paramref name="projectDirectory"/> - null
+    /// for a file in no project - so no import writes the file meanwhile. Nothing is written, and false given, when the
+    /// file is gone, was written again since <paramref name="written"/> (its last write time, in UTC, when the picture was
+    /// taken of it), or is of an older format version, whose body this engine does not write.</summary>
+    public static bool WriteThumbnail(string projectDirectory, string assetFile, byte[] png, DateTime written)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(assetFile);
+        ArgumentNullException.ThrowIfNull(png);
+
+        using var projectLock = projectDirectory == null ? null : ProjectLock.Take(projectDirectory);
+        if (!File.Exists(assetFile) || File.GetLastWriteTimeUtc(assetFile) != written)
+        {
+            return false;
+        }
+
+        var file = AssetFile.Read(assetFile, AssetFileSection.All);
+        if (file.Version != AssetFile.FormatVersion)
+        {
+            return false;
+        }
+
+        file.Thumbnail = png;
+        Replace(assetFile, file);
+        return true;
+    }
+
     private static void WriteAssetFile(string path, IContentWriter writer, object content, AssetSource source)
     {
         using var body = new MemoryStream();
         writer.Write(body, content);
+        Replace(path, new AssetFile { Source = source, Body = body.ToArray() });
+    }
 
+    private static void Replace(string path, AssetFile file)
+    {
         // Hidden and named afresh, so no content glob lists it and no other writer meets it.
         var writing = Path.Combine(Path.GetDirectoryName(path),
             $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.writing");
@@ -446,7 +491,7 @@ public sealed class ContentBuilder
         {
             using (var stream = File.Create(writing))
             {
-                new AssetFile { Source = source, Body = body.ToArray() }.WriteTo(stream);
+                file.WriteTo(stream);
             }
 
             File.Move(writing, path, true);

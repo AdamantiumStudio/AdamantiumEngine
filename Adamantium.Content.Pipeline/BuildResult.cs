@@ -1,8 +1,15 @@
+using System.Collections.Generic;
+
 namespace Adamantium.Content.Pipeline;
 
 /// <summary>Summary of a content build.</summary>
 public sealed class BuildResult
 {
+    private readonly List<ImportedAsset> imported = [];
+
+    /// <summary>The assets imported, in the order they were; as many as <see cref="Cooked"/>.</summary>
+    public IReadOnlyList<ImportedAsset> Imported => imported;
+
     /// <summary>Assets imported into their asset files, and copied to the output.</summary>
     public int Cooked { get; set; }
 
@@ -15,6 +22,12 @@ public sealed class BuildResult
 
     /// <summary>Assets that could not be built; each is logged as an error.</summary>
     public int Failed { get; set; }
+
+    internal void AddImported(ImportedAsset asset)
+    {
+        imported.Add(asset);
+        Cooked++;
+    }
 
     public override string ToString() => $"cooked: {Cooked}, copied: {Copied}, up-to-date: {Skipped}, failed: {Failed}";
 }

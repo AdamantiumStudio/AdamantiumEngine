@@ -183,6 +183,8 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
                         offset.Position = 0;
                         offset.UV0 = layout.HasUV ? 1 : null;
                         offset.Normal = layout.HasNormal ? (ulong?)2 : null;
+                        // The stride is three whatever the face named: without a normal, it was taken as one or two.
+                        offset.Observe(2);
                         semanticData.Semantic = GetSemantic(offset);
                         offset = new Offset();
                         offsetIndex = 0;

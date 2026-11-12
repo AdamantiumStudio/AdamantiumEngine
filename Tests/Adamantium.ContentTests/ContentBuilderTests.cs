@@ -496,6 +496,90 @@ public class ContentBuilderTests
     }
 
     [Test]
+    public void WriteThumbnail_PutsThePictureIn_AndKeepsTheRestOfTheFile()
+    {
+        var asset = ImportTriangle();
+        var before = AssetFile.Read(asset, AssetFileSection.All);
+
+        var written = ContentBuilder.WriteThumbnail(_project, asset, [1, 2, 3], File.GetLastWriteTimeUtc(asset));
+
+        var after = AssetFile.Read(asset, AssetFileSection.All);
+        Assert.Multiple(() =>
+        {
+            Assert.That(written, Is.True);
+            Assert.That(after.Thumbnail, Is.EqualTo(new byte[] { 1, 2, 3 }));
+            Assert.That(after.Body, Is.EqualTo(before.Body));
+            Assert.That(after.Source.Hash, Is.EqualTo(before.Source.Hash));
+        });
+    }
+
+    // The picture was taken of the file as it was; written again since - imported anew - it holds another model.
+    [Test]
+    public void WriteThumbnail_OfAFileWrittenSince_WritesNothing()
+    {
+        var asset = ImportTriangle();
+        var taken = File.GetLastWriteTimeUtc(asset);
+        File.SetLastWriteTimeUtc(asset, taken.AddSeconds(5));
+
+        var written = ContentBuilder.WriteThumbnail(_project, asset, [1, 2, 3], taken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(written, Is.False);
+            Assert.That(AssetFile.Read(asset, AssetFileSection.Thumbnail).Thumbnail, Is.Null);
+        });
+    }
+
+    // The new asset file has no thumbnail, as the old one showed what the asset held before; the result says it had one,
+    // so the editor that made it can make it again.
+    [Test]
+    public void AModelImportedAgain_LosesItsThumbnail_AndSaysItHadOne()
+    {
+        var asset = ImportTriangle();
+        ContentBuilder.WriteThumbnail(_project, asset, [1, 2, 3], File.GetLastWriteTimeUtc(asset));
+        Write("Models/triangle.obj", Triangle.Replace("v 1 0 0", "v 2 0 0"));
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = new ContentBuilder().Import(manifest, _project);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AssetFile.Read(asset, AssetFileSection.Thumbnail).Thumbnail, Is.Null);
+            Assert.That(result.Imported, Has.Count.EqualTo(1));
+            Assert.That(result.Imported[0].AssetFile, Is.EqualTo(asset));
+            Assert.That(result.Imported[0].Reason, Is.EqualTo(ImportReason.SourceChanged));
+            Assert.That(result.Imported[0].HadThumbnail, Is.True);
+        });
+    }
+
+    [Test]
+    public void ANewModel_IsImportedAsNew_WithNoThumbnailBefore()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = new ContentBuilder().Import(manifest, _project);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Imported, Has.Count.EqualTo(1));
+            Assert.That(result.Imported[0].Reason, Is.EqualTo(ImportReason.New));
+            Assert.That(result.Imported[0].HadThumbnail, Is.False);
+        });
+    }
+
+    private string ImportTriangle()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        new ContentBuilder().Import(manifest, _project);
+        return Path.Combine(_project, "Models", "triangle.obj.aemf");
+    }
+
+    [Test]
     public void Import_LeavesAnUpToDateAssetFile_AndBuildStillCopiesIt()
     {
         Write("Models/triangle.obj", Triangle);
