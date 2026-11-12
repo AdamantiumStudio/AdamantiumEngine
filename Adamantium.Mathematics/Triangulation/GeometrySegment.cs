@@ -22,10 +22,6 @@ public class GeometrySegment
     public GeometrySegment(MeshContour parent, GeometryIntersection start, GeometryIntersection end)
     {
         Parent = parent;
-
-        // start.Coordinates = Vector2<double>.Round(start.Coordinates, 3);
-        // end.Coordinates = Vector2<double>.Round(end.Coordinates, 3);
-        
         Direction = end.Coordinates - start.Coordinates;
         DirectionNormalized = Vector2<double>.Normalize(Direction);
         

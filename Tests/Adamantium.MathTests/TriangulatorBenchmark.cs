@@ -157,7 +157,7 @@ namespace Adamantium.MathTests
                     var x = center.X + radius * Math.Cos(a);
                     var y = center.Y - radius * Math.Sin(a);
                     a += step;
-                    v.Add(Vector2<double>.Round(new Vector2<double>(x, y), 3));
+                    v.Add(MathHelper.Coordinates.Round(new Vector2<double>(x, y)));
                 }
             }
 
