@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Adamantium.Mathematics;
 using Adamantium.Mathematics.Triangulation;
 using NUnit.Framework;
@@ -279,7 +280,8 @@ namespace Adamantium.MathTests
                         {
                             var combined = GeometryOverlay.Combine(new RingArea(first, ruleA), new RingArea(second, ruleB), name);
                             var tris = RingFill.Fill(combined, FillRule.NonZero);
-                            var fault = CombineFault(tris, first, ruleA, second, ruleB, fills);
+                            var fault = CombineFault(tris, first, ruleA, second, ruleB, fills) ??
+                                        TurnFault(combined, first, ruleA, second, ruleB, fills);
                             if (fault != null && wrong.Count < 5) wrong.Add($"{name} {ruleA}/{ruleB}: {Describe(first)} with {Describe(second)} - {fault}");
                         }
                     }
@@ -446,6 +448,127 @@ namespace Adamantium.MathTests
             }
         }
 
+        // Rings of the two areas that keep clear of one another are combined by how they nest, without cutting; the
+        // result must fill as the mode says all the same.
+        [Test]
+        public void CombineModes_OfRingsKeepingClear_FillAsTheirRuleSays()
+        {
+            var random = new Random(91);
+            var modes = new (AreaCombineMode Mode, Func<bool, bool, bool> Fills)[]
+            {
+                (AreaCombineMode.Union, (a, b) => a || b), (AreaCombineMode.Intersect, (a, b) => a && b),
+                (AreaCombineMode.Exclude, (a, b) => a && !b), (AreaCombineMode.Xor, (a, b) => a ^ b),
+            };
+            var wrong = new List<string>();
+            for (var n = 0; n < 200; n++)
+            {
+                var (first, second) = ClearRings(random);
+                Assert.That(RingContacts.AnyMeet(first.Concat(second).ToArray()), Is.False, "the rings keep clear");
+                foreach (var ruleA in Rules)
+                {
+                    foreach (var ruleB in Rules)
+                    {
+                        foreach (var (mode, fills) in modes)
+                        {
+                            var combined = GeometryOverlay.Combine(new RingArea(first, ruleA), new RingArea(second, ruleB), mode);
+                            var tris = RingFill.Fill(combined, FillRule.NonZero);
+                            var fault = CombineFault(tris, first, ruleA, second, ruleB, fills) ??
+                                        TurnFault(combined, first, ruleA, second, ruleB, fills);
+                            if (fault != null && wrong.Count < 5) wrong.Add($"{mode} {ruleA}/{ruleB}: {Describe(first)} with {Describe(second)} - {fault}");
+                        }
+                    }
+                }
+            }
+
+            Assert.That(wrong, Is.Empty);
+        }
+
+        // A corner as far from the other ring's edge as the weld reaches is welded onto it, as the overlay does, rather
+        // than taken as clear by the nesting shortcut: the two measure nearness a little differently at that edge.
+        [Test]
+        public void ACornerAtTheWeldDistance_IsWeldedOntoTheEdge()
+        {
+            var a = new[] { V(0, 0), V(7.7, 0), V(0, 5.929) };
+            var b = new[] { V(3.8500000004697723, 2.964500000610094), V(7.7, 7.7), V(6.930000000000001, 7.7) };
+            var union = GeometryOverlay.Combine(new RingArea([a], FillRule.EvenOdd), new RingArea([b], FillRule.EvenOdd), AreaCombineMode.Union);
+            Assert.That(union.Sum(ring => ring.Length), Is.EqualTo(7), "the hypotenuse is cut at the corner");
+        }
+
+        // Shapes rounded to a step meet across a gap of less than that step: a weld that long closes it, the least weld
+        // does not.
+        [Test]
+        public void AWeldGiven_ClosesAGapShorterThanIt()
+        {
+            var left = new RingArea([Rect(0, 0, 60, 100)], FillRule.EvenOdd);
+            var right = new RingArea([Rect(60.000001, 0, 120, 100)], FillRule.EvenOdd);
+            Assert.Multiple(() =>
+            {
+                Assert.That(GeometryOverlay.Combine(left, right, AreaCombineMode.Union), Has.Count.EqualTo(2));
+                Assert.That(GeometryOverlay.Combine(left, right, AreaCombineMode.Union, 1e-4), Has.Count.EqualTo(1));
+                Assert.That(() => GeometryOverlay.Combine(left, right, AreaCombineMode.Union, double.NaN), Throws.InstanceOf<ArgumentOutOfRangeException>());
+            });
+        }
+
+        // The weld scales with huge coordinates as they are brought near one and back.
+        [Test]
+        public void AWeldGiven_HoldsForHugeCoordinates()
+        {
+            const double s = 1e120;
+            var left = new RingArea([Rect(0, 0, 60 * s, 100 * s)], FillRule.EvenOdd);
+            var right = new RingArea([Rect(60.000001 * s, 0, 120 * s, 100 * s)], FillRule.EvenOdd);
+            Assert.That(GeometryOverlay.Combine(left, right, AreaCombineMode.Union, 1e-4 * s), Has.Count.EqualTo(1));
+        }
+
+        // Two corners at one place along an edge, either side of it within the weld, cut it in the order they were
+        // found.
+        [Test]
+        public void CutsAtOnePlaceAlongAnEdge_KeepTheOrderTheyWereFound()
+        {
+            const double m = 96e-10;
+            var a = Rect(0, 0, 96, 50);
+            var up = new[] { V(30, 0.9 * m), V(50, 90), V(52, 90) };
+            var down = new[] { V(30, -0.9 * m), V(31, -40), V(28, -40) };
+            var union = GeometryOverlay.Combine(new RingArea([a], FillRule.EvenOdd), new RingArea([up, down], FillRule.EvenOdd), AreaCombineMode.Union);
+            var ring = union.Single(r => Array.IndexOf(r, V(0, 0)) >= 0);
+            var at = Array.IndexOf(ring, V(0, 0));
+            Assert.That(ring[(at + 1) % ring.Length], Is.EqualTo(down[0]));
+        }
+
+        // Squares around a few centres, each a different size and turned either way, dealt to the two areas at random:
+        // nested within a centre, apart across centres, never meeting.
+        static (Vector2<double>[][] First, Vector2<double>[][] Second) ClearRings(Random random)
+        {
+            var first = new List<Vector2<double>[]>();
+            var second = new List<Vector2<double>[]>();
+            var centres = new[] { V(24, 24), V(72, 24), V(24, 72), V(72, 72) };
+            foreach (var centre in centres)
+            {
+                var sizes = Enumerable.Range(1, 10).OrderBy(_ => random.Next()).Take(random.Next(4)).ToList();
+                foreach (var size in sizes)
+                {
+                    var half = 2.1 * size + 0.37;
+                    var square = Rect(centre.X - half, centre.Y - half, centre.X + half, centre.Y + half);
+                    if (random.Next(2) == 0) square = Reversed(square);
+                    (random.Next(2) == 0 ? first : second).Add(square);
+                }
+            }
+
+            // Small rectangles in columns down the middle band, off centre in their cells: rings sharing an x, met by the
+            // sweep at one place, and edges running straight up.
+            for (var column = 0; column < 4; column++)
+            {
+                for (var row = 0; row < 3; row++)
+                {
+                    if (random.Next(2) == 0) continue;
+                    var (x, y) = (2 + 24 * column, 47.2 + 0.6 * row);
+                    var cell = random.Next(2) == 0 ? Rect(x, y, x + 1.5 + random.Next(3), y + 0.4) : Reversed(Rect(x, y, x + 2, y + 0.4));
+                    (random.Next(2) == 0 ? first : second).Add(cell);
+                }
+            }
+
+            return (first.ToArray(), second.ToArray());
+        }
+
         static Vector2<double>[][] RandomRings(Random random)
         {
             var rings = new Vector2<double>[1 + random.Next(2)][];
@@ -532,6 +655,30 @@ namespace Adamantium.MathTests
             }
 
             return count;
+        }
+
+        // The combined rings turn with their kept side on the left: around a kept point they wind once, around any other
+        // not at all.
+        static string TurnFault(List<Vector2<double>[]> combined, Vector2<double>[][] first, FillRule ruleA, Vector2<double>[][] second,
+            FillRule ruleB, Func<bool, bool, bool> fills)
+        {
+            for (var j = 0; j < 41; j++)
+            {
+                for (var i = 0; i < 41; i++)
+                {
+                    var pt = V(96.0 * (i + 0.3719) / 41, 96.0 * (j + 0.6143) / 41);
+                    if (Array.Exists(first, ring => Distance(ring, pt) < 0.1) || Array.Exists(second, ring => Distance(ring, pt) < 0.1)) continue;
+                    int wa = 0, wb = 0, wc = 0;
+                    foreach (var ring in first) wa += Winding(ring, pt);
+                    foreach (var ring in second) wb += Winding(ring, pt);
+                    foreach (var ring in combined) wc += Winding(ring, pt);
+                    var inA = ruleA == FillRule.NonZero ? wa != 0 : (wa & 1) != 0;
+                    var inB = ruleB == FillRule.NonZero ? wb != 0 : (wb & 1) != 0;
+                    if (wc != (fills(inA, inB) ? 1 : 0)) return $"({pt.X}, {pt.Y}) wound {wc} times";
+                }
+            }
+
+            return null;
         }
 
         static int Winding(Vector2<double>[] ring, Vector2<double> p)

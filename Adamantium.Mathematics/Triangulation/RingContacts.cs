@@ -18,10 +18,16 @@ public static class RingContacts
     /// but for neighbours in one ring meeting at their shared corner, unless one folds back along or near the other.
     /// A ring of two points runs back along itself, so it meets; rings of fewer, or with a coordinate not a finite
     /// number, are left out.</summary>
-    public static bool AnyMeet(IReadOnlyList<Vector2<double>[]> rings)
+    public static bool AnyMeet(IReadOnlyList<Vector2<double>[]> rings) => AnyMeet(rings, 1, 0);
+
+    /// <summary><see cref="AnyMeet(IReadOnlyList{Vector2{double}[]})"/> with the distance that counts as meeting no
+    /// shorter than <paramref name="weld"/>, and then <paramref name="reach"/> times as long.</summary>
+    internal static bool AnyMeet(IReadOnlyList<Vector2<double>[]> rings, double reach, double weld)
     {
         ArgumentNullException.ThrowIfNull(rings);
-        rings = MathHelper.RingMath.Scaled(rings, MathHelper.RingMath.Scale(MathHelper.RingMath.Largest(rings)));
+        var exponent = MathHelper.RingMath.Scale(MathHelper.RingMath.Largest(rings));
+        rings = MathHelper.RingMath.Scaled(rings, exponent);
+        weld = Math.ScaleB(weld, exponent);
         var segments = new List<(Vector2<double> Left, Vector2<double> Right)>();
         var edges = new List<(int Ring, int Index, int Count)>();
         var corners = new HashSet<Vector2<double>>();
@@ -42,7 +48,7 @@ public static class RingContacts
 
         if (segments.Count == 0) return false;
         var position = Math.Max(Math.Max(Math.Abs(minX), Math.Abs(maxX)), Math.Max(Math.Abs(minY), Math.Abs(maxY)));
-        var near = Math.Max(Math.Max(maxX - minX, maxY - minY) * NearFraction, position * PositionFraction);
+        var near = reach * Math.Max(Math.Max(Math.Max(maxX - minX, maxY - minY) * NearFraction, position * PositionFraction), weld);
         return new ContactSweep(segments, near).Run((first, second) => Meet(segments[first], segments[second], edges[first], edges[second], near));
     }
 

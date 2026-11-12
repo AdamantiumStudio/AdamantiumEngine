@@ -32,7 +32,11 @@ public static class RingFill
     private static List<Vector3<double>> FillUsable(List<Vector2<double>[]> usable, FillRule rule)
     {
         if (usable.Count == 1 && MathHelper.Polyline.IsConvex<double>(usable[0])) return Triangulator.FanTriangulate(usable[0]);
-        if (RingContacts.AnyMeet(usable)) return FaceFill.Fill(GeometryOverlay.Outline(usable, rule));
+        if (RingContacts.AnyMeet(usable))
+        {
+            return FaceFill.Fill(OverlayGraph.Combine(new RingArea(usable, rule), new RingArea([], FillRule.EvenOdd),
+                AreaCombineMode.Union));
+        }
         if (usable.Count > 1) return FillNested(usable, rule);
         var alone = new List<Vector3<double>>();
         FaceFill.FillFace(usable[0], [], alone);

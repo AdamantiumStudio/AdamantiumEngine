@@ -38,6 +38,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     }
                     default:
                         mesh = GenerateOutlinedGeometry(radii.As<float>(), tessellation, startAngle);
+                        mesh.AddContour(Corners(radii, tessellation, startAngle), true);
                         break;
                 }
 
