@@ -12,8 +12,6 @@ namespace Adamantium.Mathematics.Triangulation
         private readonly HashSet<Vector2<double>> mergedPointsHash;
         private readonly List<ContoursContainer> contourContainers;
 
-        public List<MeshContour> ProcessedContours { get; private set; }
-
         /// <summary>
         /// Precision level for polygon triangulation
         /// </summary>
@@ -57,7 +55,6 @@ namespace Adamantium.Mathematics.Triangulation
             MergedPoints = new List<GeometryIntersection>();
             mergedPointsHash = new HashSet<Vector2<double>>();
             MergedSegments = new List<GeometrySegment>();
-            ProcessedContours = new List<MeshContour>();
             FillRule = fillRule;
         }
 
@@ -79,23 +76,24 @@ namespace Adamantium.Mathematics.Triangulation
         /// <summary>
         /// The triangles filling the contours by <see cref="FillRule"/> (<see cref="RingFill.Fill"/>), each contour taken
         /// as closed; a contour of fewer than three points, or with a coordinate not a finite number, fills nothing.
-        /// <see cref="ProcessedContours"/> holds copies of this call's contours, every point kept.
         /// </summary>
         public List<Vector3<double>> FillIndirect(bool triangulate = true)
         {
+            if (!triangulate)
+            {
+                return new List<Vector3<double>>();
+            }
+
             var rings = new List<Vector2<double>[]>();
-            ProcessedContours.Clear();
             foreach (var container in contourContainers)
             {
                 foreach (var contour in container.Contours)
                 {
-                    if (contour.Points == null || contour.Points.Length == 0 || !MathHelper.RingMath.Finite(contour.Points)) continue;
-                    ProcessedContours.Add(contour.Copy());
-                    if (contour.Points.Length >= 3) rings.Add(contour.Points);
+                    if (contour.Points is { Length: >= 3 }) rings.Add(contour.Points);
                 }
             }
 
-            return triangulate ? RingFill.Fill(rings, FillRule) : new List<Vector3<double>>();
+            return RingFill.Fill(rings, FillRule);
         }
 
         public List<Vector3<double>> FillDirect(List<GeometryIntersection> points, List<GeometrySegment> segments)

@@ -431,29 +431,6 @@ namespace Adamantium.MathTests
         }
 
         [Test]
-        public void FillingTwice_GivesTheContoursOnce()
-        {
-            var p = new Polygon();
-            p.AddContour(new MeshContour(Rect(0, 0, 10, 10)));
-            p.AddContour(new MeshContour(Reversed(Rect(2, 2, 4, 4))));
-            p.FillIndirect();
-            p.FillIndirect();
-            Assert.That(p.ProcessedContours, Has.Count.EqualTo(2));
-        }
-
-        // A ring through one point twice keeps both passes: whoever strokes the processed contour must not close the
-        // ring by a side it never had.
-        [Test]
-        public void ARingThroughAPointTwice_KeepsBothPassesInItsProcessedContour()
-        {
-            var ring = new[] { V(0, 0), V(120, 0), V(60, 60), V(120, 120), V(0, 120), V(60, 60) };
-            var p = new Polygon();
-            p.AddContour(new MeshContour(ring));
-            p.FillIndirect();
-            Assert.That(p.ProcessedContours[0].Points, Is.EqualTo(ring));
-        }
-
-        [Test]
         public void ContoursThatAreNoRings_FillNothing()
         {
             foreach (var contours in new[]
