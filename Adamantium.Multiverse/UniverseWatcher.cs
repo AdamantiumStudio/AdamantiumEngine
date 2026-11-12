@@ -8,8 +8,9 @@ namespace Adamantium.Multiverse;
 
 /// <summary>A universe's <see cref="IUniverseWatcher"/>, the one place that asks it for frames: it keeps the most frames
 /// asked for and the latest moment to draw until, and wakes the universe once for any number of asks between its
-/// frames; a frame of one output alone it asks for as it is told.</summary>
-internal sealed class UniverseWatcher : IUniverseOutputWatcher
+/// frames; a frame of one output alone it asks for as it is told; nothing while the universe draws every frame.
+/// </summary>
+internal sealed class UniverseWatcher : IUniverseWatcher
 {
     private readonly Action wake;
     private readonly Action<UniverseOutput> wakeOutput;

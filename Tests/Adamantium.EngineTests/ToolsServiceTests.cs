@@ -39,31 +39,23 @@ public class ToolsServiceTests
     public void AToolChanged_WakesTheUniverse_WhileItsWatcherWatchesTheService()
     {
         var universe = new TestUniverse();
-        var watcher = new UniverseWatcher(Wake, _ => Wake()) { IsWatching = true };
+        universe.Watcher.IsWatching = true;
         universe.Satellites.Add(new Selection());
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
-        universe.Satellites.Add<IUniverseWatcher>(watcher);
         var tools = new ToolsService(universe.EntityWorld);
         tools.Initialize();
 
         tools.Tool = new MoveTool();
-        var watched = wakes;
-        watcher.Woken();
+        var watched = universe.Invalidations;
+        universe.Watcher.Woken();
         tools.UnloadContent();
         tools.Tool = new RotationTool();
 
         Assert.Multiple(() =>
         {
             Assert.That(watched, Is.EqualTo(1));
-            Assert.That(wakes, Is.EqualTo(1), "a service taken out is no longer watched");
+            Assert.That(universe.Invalidations, Is.EqualTo(1), "a service taken out is no longer watched");
         });
-    }
-
-    private int wakes;
-
-    private void Wake()
-    {
-        wakes++;
     }
 
     [Test]

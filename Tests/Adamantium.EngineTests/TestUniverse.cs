@@ -17,8 +17,15 @@ public class TestUniverse : IUniverse
         Satellites = new Satellites();
         Container = new AdamantiumDependencyContainer();
         EntityWorld = new EntityWorld(Container, Satellites);
-        Satellites.Add<IUniverseOutputWatcher>(new UniverseWatcher(Invalidate, Invalidate));
+        Watcher = new UniverseWatcher(Invalidate, Invalidate);
+        Satellites.Add<IUniverseWatcher>(Watcher);
     }
+
+    /// <summary>The universe's watcher; not watching until the test says so.</summary>
+    internal UniverseWatcher Watcher { get; }
+
+    /// <summary>How many times every output was asked for a frame.</summary>
+    public int Invalidations { get; private set; }
 
     public EntityWorld EntityWorld { get; }
 
@@ -92,6 +99,7 @@ public class TestUniverse : IUniverse
 
     public void Invalidate()
     {
+        Invalidations++;
     }
 
     public void Invalidate(UniverseOutput output)

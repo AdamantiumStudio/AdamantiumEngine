@@ -6,6 +6,7 @@ using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
 using Adamantium.Graphics.Core;
 using Adamantium.Mathematics;
+using Adamantium.Multiverse;
 using Adamantium.Engine.Tools;
 
 namespace Adamantium.Engine.EntityServices;

@@ -126,7 +126,6 @@ public class Universe : IUniverse
         watcher.Watch(EntityWorld);
 
         Satellites.Add<IUniverseWatcher>(watcher);
-        Satellites.Add<IUniverseOutputWatcher>(watcher);
         Satellites.Add<IUniverse>(this);
         Satellites.Add<IAdamantiumApplication>(this);
         Satellites.Add<IUniversePlatform>(platform);

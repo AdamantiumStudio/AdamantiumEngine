@@ -14,7 +14,7 @@ namespace Adamantium.Engine.EntityServices;
 public class TransformService : EntityService
 {
     private IUniverse universe;
-    private IUniverseOutputWatcher frames;
+    private IUniverseWatcher frames;
     private readonly List<Viewpoint> viewpoints = [];
     private int viewpointCount;
     private readonly Vector3F[] corners = new Vector3F[8];
@@ -37,7 +37,7 @@ public class TransformService : EntityService
     public override void Initialize()
     {
         universe = EntityWorld.Satellites.Get<IUniverse>();
-        frames = EntityWorld.Satellites.Get<IUniverseOutputWatcher>();
+        frames = EntityWorld.Satellites.Get<IUniverseWatcher>();
         if (!EntityWorld.Satellites.TryGet(out index))
         {
             index = new SceneIndex();
