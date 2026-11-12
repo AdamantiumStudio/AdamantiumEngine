@@ -68,6 +68,19 @@ public struct CameraType : IEquatable<CameraType>
         return !left.Equals(right);
     }
 
+    /// <summary>The type <see cref="ToString"/> names: "Free", "FirstPerson", "ThirdPersonFree", "ThirdPersonFreeAlt",
+    /// "ThirdPersonLocked" or "Special".</summary>
+    /// <exception cref="FormatException"><paramref name="value"/> names no camera type.</exception>
+    public static CameraType Parse(string value)
+    {
+        if (!Enum.TryParse<CameraClass>(value, false, out var cameraClass) || !Enum.IsDefined(cameraClass))
+        {
+            throw new FormatException($"\"{value}\" names no camera type");
+        }
+
+        return new CameraType(cameraClass);
+    }
+
     public override string ToString()
     {
         return Value.ToString();

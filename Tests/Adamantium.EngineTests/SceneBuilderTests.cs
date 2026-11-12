@@ -14,6 +14,7 @@ using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse;
 using NUnit.Framework;
+using CameraType = Adamantium.Graphics.Core.CameraType;
 
 namespace Adamantium.EngineTests;
 
@@ -66,8 +67,16 @@ public class SceneBuilderTests
         scene.Cameras.Add(new SceneCamera
         {
             Uid = 20, Name = "Intro", Position = new Vector3<double>(10, 4, 10), FieldOfView = 50, Near = 0.5f,
-            Far = 900, Follows = 2
+            Far = 900, Type = CameraType.ThirdPersonFree, Rotation = new QuaternionF(0, 0.47942555f, 0, 0.87758255f)
         });
+        scene.Markers.Add(new SceneMarker { Uid = 40, Name = "Props", Kind = SceneMarkerKind.Group, Position = new Vector3<double>(100, 0, 0) });
+        var crate = new SceneShape
+        {
+            Uid = 50, Name = "Crate", Type = typeof(CubeShape).FullName, Parent = 40, Position = new Vector3<double>(1, 0, 0),
+            Color = new Vector4F(0.5f, 0.25f, 0, 1), Scale = new Vector3F(2, 2, 2)
+        };
+        crate.Values.Add(new SceneValue(nameof(CubeShape.Size), "1, 0.5, 1"));
+        scene.Shapes.Add(crate);
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 30, Name = "Start", Position = new Vector3<double>(0, 0, 5) });
         var patrol = new SceneBehaviour { On = 1, Type = typeof(Patrol).FullName };
         patrol.Values.Add(new SceneValue(nameof(Patrol.Speed), "2.5"));
@@ -114,7 +123,16 @@ public class SceneBuilderTests
             Assert.That(lamp.OuterSpotAngle, Is.EqualTo(35).Within(1e-4));
 
             var intro = back.Cameras.Single();
-            Assert.That((intro.Uid, intro.Name, intro.Follows), Is.EqualTo(((UInt128)20, "Intro", (UInt128?)2)));
+            Assert.That((intro.Uid, intro.Name, intro.Type), Is.EqualTo(((UInt128)20, "Intro", CameraType.ThirdPersonFree)));
+            Assert.That(intro.Rotation, Is.EqualTo(new QuaternionF(0, 0.47942555f, 0, 0.87758255f)));
+
+            var props = back.Markers.Single();
+            Assert.That((props.Uid, props.Kind, props.Position), Is.EqualTo(((UInt128)40, SceneMarkerKind.Group, new Vector3<double>(100, 0, 0))));
+            var crate = back.Shapes.Single();
+            Assert.That((crate.Uid, crate.Parent, crate.Type), Is.EqualTo(((UInt128)50, (UInt128?)40, typeof(CubeShape).FullName)));
+            Assert.That((crate.Position, crate.Scale, crate.Color),
+                Is.EqualTo((new Vector3<double>(1, 0, 0), new Vector3F(2, 2, 2), new Vector4F(0.5f, 0.25f, 0, 1))));
+            Assert.That(crate.Values, Does.Contain(new SceneValue(nameof(CubeShape.Size), "1, 0.5, 1")));
             Assert.That((intro.FieldOfView, intro.Near, intro.Far), Is.EqualTo((50f, 0.5f, 900f)));
             Assert.That(intro.Position, Is.EqualTo(new Vector3<double>(10, 4, 10)));
 
@@ -206,6 +224,155 @@ public class SceneBuilderTests
         var entities = await Build(scene);
 
         Assert.That(entities.Count(entity => entity.Owner == null), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task AnIdTakenBefore_LeavesTheLaterEntryOut_AndTheSceneIsBuilt()
+    {
+        var scene = new SceneFile();
+        scene.Models.Add(new SceneModel { Uid = 1, Name = "Robot", Asset = RobotAsset });
+        scene.Cameras.Add(new SceneCamera { Uid = 1, Name = "Same id" });
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 2, Name = "Start" });
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 2, Name = "Start again" });
+
+        var entities = await Build(scene);
+
+        Assert.That(entities.Select(entity => entity.Name), Is.EqualTo(new[] { "Robot", "Start" }));
+    }
+
+    [Test]
+    public async Task AnIdTheWorldHasAlready_LeavesTheEntryOut()
+    {
+        await Build(Sample());
+
+        var again = await Build(Sample());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(again, Is.Empty);
+            Assert.That(SceneCapture.Capture(universe.EntityWorld).Models, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task TwoComponentsWhoseCodeIsNotLoaded_OnOneEntity_AreBothKept()
+    {
+        var scene = new SceneFile();
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start" });
+        scene.Behaviours.Add(new SceneBehaviour { On = 1, Type = "ModA.Glow" });
+        scene.Behaviours.Add(new SceneBehaviour { On = 1, Type = "ModB.Hum" });
+
+        await Build(scene);
+        var back = SceneCapture.Capture(universe.EntityWorld);
+
+        Assert.That(back.Behaviours.Select(entry => entry.Type), Is.EqualTo(new[] { "ModA.Glow", "ModB.Hum" }));
+    }
+
+    [Test]
+    public async Task AFieldOverridden_IsWrittenOnce_AndOneNamedAsTheEntrysOwnAttributeIsNotWritten()
+    {
+        var scene = new SceneFile();
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start" });
+        var entry = new SceneBehaviour { On = 1, Type = typeof(FastWalker).FullName };
+        entry.Values.Add(new SceneValue(nameof(FastWalker.Speed), "7"));
+        scene.Behaviours.Add(entry);
+        await Build(scene);
+
+        var back = SceneCapture.Capture(universe.EntityWorld);
+        using var stream = new MemoryStream();
+        back.Write(stream);
+
+        Assert.That(back.Behaviours.Single().Values.Select(value => value.Name),
+            Is.EquivalentTo(new[] { nameof(FastWalker.Speed) }));
+    }
+
+    [Test]
+    public async Task WhatStandsInAPartOfAModel_IsWrittenWhereItStands()
+    {
+        var scene = new SceneFile();
+        scene.Models.Add(new SceneModel { Uid = 1, Name = "Robot", Asset = RobotAsset });
+        var entities = await Build(scene);
+        var body = entities[0].Dependencies.Single(part => part.Name == "Body");
+        body.Transform.Position = new Vector3<double>(0, 2, 0);
+        var lamp = new Entity(null, "Lamp");
+        new Adamantium.Engine.Templates.Lights.LightTemplate().Build(lamp, LightType.Point);
+        lamp.Transform.Position = new Vector3<double>(0, 1, 0);
+        universe.EntityWorld.EntityManager.SetOwner(lamp, body);
+        universe.EntityWorld.ForceUpdate();
+
+        var written = SceneCapture.Capture(universe.EntityWorld).Lights.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(written.Parent, Is.EqualTo((UInt128?)1));
+            Assert.That(written.Position.Y, Is.EqualTo(3).Within(1e-9));
+        });
+    }
+
+    [Test]
+    public async Task ACamerasRotation_IsTheWayItFaces_AsAnyOtherEntrys()
+    {
+        var facing = new QuaternionF(0, 0.47942555f, 0, 0.87758255f);
+        var scene = new SceneFile();
+        scene.Cameras.Add(new SceneCamera { Uid = 1, Name = "Intro", Rotation = facing });
+
+        var entities = await Build(scene);
+
+        Assert.That(entities[0].GetComponent<Camera>().Rotation, Is.EqualTo(QuaternionF.Conjugate(facing)));
+    }
+
+    [Test]
+    public async Task ASpotsAngles_ComeBackAsTheyWere()
+    {
+        var scene = new SceneFile();
+        for (var angle = 1; angle < 90; angle++)
+        {
+            scene.Lights.Add(new SceneLight { Uid = (UInt128)angle, Name = $"{angle}", Type = LightType.Spot, OuterSpotAngle = angle });
+        }
+
+        await Build(scene);
+        var back = SceneCapture.Capture(universe.EntityWorld);
+
+        Assert.That(back.Lights.Select(light => light.OuterSpotAngle), Is.EqualTo(Enumerable.Range(1, 89).Select(a => (float)a)));
+    }
+
+    [Test]
+    public async Task ARotationThatIsNone_IsTakenAsNone()
+    {
+        var scene = new SceneFile();
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start", Rotation = new QuaternionF(0, 0, 0, 0) });
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 2, Name = "Turned", Rotation = new QuaternionF(0, 1, 0, 1) });
+
+        var entities = await Build(scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entities[0].Transform.Rotation, Is.EqualTo(QuaternionF.Identity));
+            Assert.That(entities[1].Transform.Rotation.IsNormalized, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task AnEntryWithNoName_GetsAnEmptyOne()
+    {
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+            "<Scene Version=\"1\"><SpawnPoints><SpawnPoint Uid=\"1\" Position=\"0 0 0\" /></SpawnPoints></Scene>"));
+
+        var entities = await Build(SceneFile.Read(stream));
+
+        Assert.That(entities[0].Name, Is.EqualTo(""));
+    }
+
+    public class Walker : Behaviour
+    {
+        public virtual double Speed { get; set; }
+    }
+
+    public sealed class FastWalker : Walker
+    {
+        public override double Speed { get; set; }
+
+        public string Type { get; set; } = "runner";
     }
 
     public enum PatrolMode

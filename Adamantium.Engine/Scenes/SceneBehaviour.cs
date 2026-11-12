@@ -11,6 +11,9 @@ namespace Adamantium.Engine.Scenes;
 /// off - so the scene does not lose it.</summary>
 public sealed class SceneBehaviour
 {
+    /// <summary>The entry's own attributes, which no field of the component can be named.</summary>
+    public static readonly IReadOnlyCollection<string> OwnAttributes = ["On", "Type"];
+
     /// <summary>The id of the entry it is on.</summary>
     [XmlIgnore]
     public UInt128 On { get; set; }
@@ -33,26 +36,15 @@ public sealed class SceneBehaviour
     [XmlAnyAttribute, EditorBrowsable(EditorBrowsableState.Never)]
     public XmlAttribute[] ValueAttributes
     {
-        get
-        {
-            var document = new XmlDocument();
-            var attributes = new XmlAttribute[Values.Count];
-            for (var i = 0; i < Values.Count; i++)
-            {
-                attributes[i] = document.CreateAttribute(Values[i].Name);
-                attributes[i].Value = Values[i].Text;
-            }
+        get => SceneValues.ToAttributes(Values);
+        set => SceneValues.FromAttributes(value, Values);
+    }
 
-            return attributes;
-        }
-        set
-        {
-            Values.Clear();
-            if (value == null) return;
-            foreach (var attribute in value)
-            {
-                Values.Add(new SceneValue(attribute.Name, attribute.Value));
-            }
-        }
+    /// <summary>A copy of the entry, on <paramref name="on"/>.</summary>
+    public SceneBehaviour CopyOn(UInt128 on)
+    {
+        var copy = new SceneBehaviour { On = on, Type = Type };
+        copy.Values.AddRange(Values);
+        return copy;
     }
 }

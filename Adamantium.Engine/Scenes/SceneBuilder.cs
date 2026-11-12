@@ -1,26 +1,32 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Managers;
 using Adamantium.Engine.Templates;
+using Adamantium.Engine.Templates.Lights;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.Multiverse;
 using Serilog;
 
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>
 /// Puts a <see cref="SceneFile"/> into a world: every entry an entity with the entry's id, the models loaded by the
-/// asset service - all at once, each asset once however many times it stands in the scene - lights, cameras and spawn
-/// points made as the file describes them, the game's components set on what they are on. A model that does not load
-/// stays as an empty entity naming its asset, so writing the scene back keeps it.
+/// asset service - all at once, each asset once however many times it stands in the scene - lights, cameras, spawn
+/// points, groups, empty entities and shapes made as the file describes them, the game's components set on what they
+/// are on. A model that does not load stays as an empty entity naming its asset, so writing the scene back keeps it.
+/// The file may come from anywhere - a mod, say: an entry with an id another entry of the file or an entity of the world
+/// already has is logged and left out, a rotation that is no rotation is taken as none.
 /// </summary>
 public sealed class SceneBuilder
 {
+    private const int DefaultViewWidth = 800;
+    private const int DefaultViewHeight = 600;
+
     private readonly EntityWorld world;
     private readonly IAssetService assets;
 
@@ -32,39 +38,36 @@ public sealed class SceneBuilder
         this.assets = assets;
     }
 
-    /// <summary>Builds <paramref name="scene"/> and adds it to the world; the entities made for its entries, in the
-    /// file's order: models, lights, cameras, spawn points.</summary>
+    /// <summary>Builds <paramref name="scene"/> and adds it to the world; the entities made for its entries, section by
+    /// section in the file's order.</summary>
     public async Task<IReadOnlyList<Entity>> Build(SceneFile scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
+        var byId = new Dictionary<UInt128, Entity>();
+        var made = new List<(ScenePlacement Entry, Entity Entity)>();
+        var inWorld = WorldIds();
+
+        var models = Admitted(scene.Models, byId, inWorld);
         var loads = new Dictionary<string, Task<SceneData>>(StringComparer.Ordinal);
-        foreach (var model in scene.Models.Where(model => !string.IsNullOrEmpty(model.Asset)))
+        foreach (var model in models)
         {
-            if (!loads.ContainsKey(model.Asset))
+            if (!string.IsNullOrEmpty(model.Asset) && !loads.ContainsKey(model.Asset))
             {
                 loads[model.Asset] = assets.LoadAsync<SceneData>(model.Asset);
             }
         }
 
-        var made = new List<(ScenePlacement Entry, Entity Entity)>();
-        foreach (var model in scene.Models)
+        foreach (var model in models)
         {
-            made.Add((model, await MakeModel(model, loads)));
+            Keep(model, await MakeModel(model, loads), byId, made);
         }
 
-        made.AddRange(scene.Lights.Select(light => ((ScenePlacement)light, MakeLight(light))));
-        made.AddRange(scene.Cameras.Select(camera => ((ScenePlacement)camera, MakeCamera(camera))));
-        made.AddRange(scene.SpawnPoints.Select(point => ((ScenePlacement)point, MakeSpawnPoint(point))));
-
-        var byId = new Dictionary<UInt128, Entity>();
-        foreach (var (entry, entity) in made)
-        {
-            if (!byId.TryAdd(entry.Uid, entity))
-            {
-                Log.Logger.Warning("Scene: two entries have the id {Uid}; references find the first", entry.UidText);
-            }
-        }
+        foreach (var light in Admitted(scene.Lights, byId, inWorld)) Keep(light, MakeLight(light), byId, made);
+        foreach (var camera in Admitted(scene.Cameras, byId, inWorld)) Keep(camera, MakeCamera(camera), byId, made);
+        foreach (var point in Admitted(scene.SpawnPoints, byId, inWorld)) Keep(point, MakeSpawnPoint(point), byId, made);
+        foreach (var marker in Admitted(scene.Markers, byId, inWorld)) Keep(marker, MakeMarker(marker), byId, made);
+        foreach (var shape in Admitted(scene.Shapes, byId, inWorld)) Keep(shape, await MakeShape(shape), byId, made);
 
         foreach (var (entry, entity) in made)
         {
@@ -81,30 +84,24 @@ public sealed class SceneBuilder
             }
         }
 
-        foreach (var camera in scene.Cameras)
-        {
-            if (camera.Follows is { } followed && byId.TryGetValue(followed, out var target))
-            {
-                byId[camera.Uid].GetComponent<Camera>().LookAtObject = target;
-            }
-        }
-
         foreach (var entry in scene.Behaviours)
         {
-            if (!byId.TryGetValue(entry.On, out var entity))
+            if (byId.TryGetValue(entry.On, out var entity))
+            {
+                AddBehaviour(entity, entry);
+            }
+            else
             {
                 Log.Logger.Warning("Scene: {Type} is on {On}, which the scene does not hold; it is left out",
                     entry.Type, entry.OnText);
-                continue;
             }
-
-            entity.AddComponent(MakeBehaviour(entry));
         }
 
         world.Satellites.TryGet(out LightManager lights);
-        var entities = made.Select(pair => pair.Entity).ToList();
-        foreach (var entity in entities)
+        var entities = new List<Entity>(made.Count);
+        foreach (var (_, entity) in made)
         {
+            entities.Add(entity);
             if (lights != null && entity.ContainsComponent<Light>())
             {
                 lights.AddLight(entity);
@@ -118,9 +115,66 @@ public sealed class SceneBuilder
         return entities;
     }
 
+    // The ids of every entity of the world, roots and what stands in them.
+    private HashSet<UInt128> WorldIds()
+    {
+        var ids = new HashSet<UInt128>();
+        var stack = new Stack<Entity>();
+        foreach (var root in world.EntityManager.RootEntities)
+        {
+            stack.Push(root);
+        }
+
+        while (stack.Count > 0)
+        {
+            var entity = stack.Pop();
+            ids.Add(entity.Uid);
+            foreach (var part in entity.Dependencies)
+            {
+                stack.Push(part);
+            }
+        }
+
+        return ids;
+    }
+
+    // The entries of a section whose ids no entry before them and no entity of the world has.
+    private static List<T> Admitted<T>(List<T> section, Dictionary<UInt128, Entity> byId, HashSet<UInt128> inWorld)
+        where T : ScenePlacement
+    {
+        var admitted = new List<T>(section.Count);
+        var ids = new HashSet<UInt128>();
+        foreach (var entry in section)
+        {
+            if (byId.ContainsKey(entry.Uid) || !ids.Add(entry.Uid))
+            {
+                Log.Logger.Warning("Scene: {Name} has the id {Uid} of an entry before it; it is left out",
+                    entry.Name, entry.UidText);
+            }
+            else if (inWorld.Contains(entry.Uid))
+            {
+                Log.Logger.Warning("Scene: {Name} has the id {Uid} of an entity the world has already; it is left out",
+                    entry.Name, entry.UidText);
+            }
+            else
+            {
+                admitted.Add(entry);
+            }
+        }
+
+        return admitted;
+    }
+
+    private static void Keep(ScenePlacement entry, Entity entity, Dictionary<UInt128, Entity> byId,
+        List<(ScenePlacement, Entity)> made)
+    {
+        byId.Add(entry.Uid, entity);
+        made.Add((entry, entity));
+    }
+
     private async Task<Entity> MakeModel(SceneModel entry, Dictionary<string, Task<SceneData>> loads)
     {
-        var entity = new Entity(null, entry.Name, entry.Uid) { Source = entry.Asset, IconKey = EntityIconKeys.Model };
+        var entity = new Entity(null, entry.Name, entry.Uid) { IconKey = EntityIconKeys.Model };
         if (!string.IsNullOrEmpty(entry.Asset))
         {
             try
@@ -139,70 +193,131 @@ public sealed class SceneBuilder
 
         entity.Name = entry.Name;
         entity.Source = entry.Asset;
-        entity.Transform.Position = entry.Position;
-        entity.Transform.Rotation = entry.Rotation;
+        Place(entity, entry);
         entity.Transform.ScaleFactor = entry.Scale;
         return entity;
     }
 
     private static Entity MakeLight(SceneLight entry)
     {
-        var entity = Place(entry);
-        entity.AddComponent(new Light(entry.Type)
-        {
-            Color = entry.Color,
-            Intensity = entry.Intensity,
-            Range = entry.Range,
-            InnerSpotAngle = float.DegreesToRadians(entry.InnerSpotAngle),
-            OuterSpotAngle = float.DegreesToRadians(entry.OuterSpotAngle),
-            IsWithShadows = entry.Shadows,
-            ShadowMapResolution = entry.ShadowMapResolution
-        });
+        var entity = new Entity(null, entry.Name, entry.Uid);
+        Place(entity, entry);
+        var type = entry.Type is LightType.Directional or LightType.Point or LightType.Spot ? entry.Type : LightType.Point;
+        var light = new LightTemplate().Build(entity, type);
+        light.Color = entry.Color;
+        light.Intensity = entry.Intensity;
+        light.Range = entry.Range;
+        light.InnerSpotAngle = float.DegreesToRadians(entry.InnerSpotAngle);
+        light.OuterSpotAngle = float.DegreesToRadians(entry.OuterSpotAngle);
+        light.IsWithShadows = entry.Shadows;
+        light.ShadowMapResolution = entry.ShadowMapResolution;
         return entity;
     }
 
     private static Entity MakeCamera(SceneCamera entry)
     {
-        var entity = Place(entry);
-        entity.Transform.Rotation = QuaternionF.Identity;
-        entity.IconKey = EntityIconKeys.Camera;
-        var camera = new Camera(Vector3<double>.ForwardLH, -Vector3<double>.Up, entry.FieldOfView, 800, 600, entry.Near,
-            entry.Far)
-        {
-            ProjectionType = entry.Projection,
-            OrthoScale = entry.OrthoScale,
-            Rotation = entry.Rotation
-        };
-        entity.AddComponent(camera);
+        var entity = new Entity(null, entry.Name, entry.Uid);
+        entity.Transform.Position = entry.Position;
+        var camera = new CameraTemplate().Build(entity, Vector3<double>.ForwardLH, -Vector3<double>.Up,
+            entry.FieldOfView, DefaultViewWidth, DefaultViewHeight, entry.Near, entry.Far);
+        camera.Type = entry.Type;
+        camera.ProjectionType = entry.Projection;
+        camera.OrthoScale = entry.OrthoScale;
+        // A camera's own rotation is its view, the opposite turn of the way it faces.
+        camera.Rotation = QuaternionF.Conjugate(Rotation(entry));
         return entity;
     }
 
     private static Entity MakeSpawnPoint(SceneSpawnPoint entry)
     {
-        var entity = Place(entry);
+        var entity = new Entity(null, entry.Name, entry.Uid);
+        Place(entity, entry);
         entity.AddComponent(new SpawnPoint());
         return entity;
     }
 
-    private static Component MakeBehaviour(SceneBehaviour entry)
+    private static Entity MakeMarker(SceneMarker entry)
     {
-        var type = BehaviourFields.FindType(entry.Type);
+        var entity = new Entity(null, entry.Name, entry.Uid)
+        {
+            IconKey = entry.Kind == SceneMarkerKind.Group ? EntityIconKeys.Group : EntityIconKeys.Entity
+        };
+        Place(entity, entry);
+        entity.AddComponent(new Marker());
+        return entity;
+    }
+
+    private static async Task<Entity> MakeShape(SceneShape entry)
+    {
+        var entity = new Entity(null, entry.Name, entry.Uid);
+        var type = ComponentFields.FindType<ProceduralShape>(entry.Type);
         if (type == null)
         {
-            return new UnloadedBehaviour(entry);
+            Log.Logger.Warning("Scene: the shape {Type} of {Name} is not loaded; it is kept as it was read",
+                entry.Type, entry.Name);
+            entity.AddComponent(new UnloadedShape(entry));
+        }
+        else
+        {
+            var shape = (ProceduralShape)Activator.CreateInstance(type);
+            ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
+            await new ShapeTemplate(shape).BuildEntity(entity);
+            entity.AddComponent(new Material { DiffuseColor = entry.Color });
+        }
+
+        entity.Name = entry.Name;
+        Place(entity, entry);
+        entity.Transform.ScaleFactor = entry.Scale;
+        return entity;
+    }
+
+    private static void AddBehaviour(Entity entity, SceneBehaviour entry)
+    {
+        var type = ComponentFields.FindType<Behaviour>(entry.Type);
+        if (type == null)
+        {
+            var unloaded = entity.GetComponent<UnloadedBehaviours>();
+            if (unloaded == null)
+            {
+                unloaded = new UnloadedBehaviours();
+                entity.AddComponent(unloaded);
+            }
+
+            unloaded.Entries.Add(entry);
+            return;
+        }
+
+        if (entity.ContainsComponent(type))
+        {
+            Log.Logger.Warning("Scene: {Name} has a {Type} already, and an entity has one of each; the second is left out",
+                entity.Name, entry.Type);
+            return;
         }
 
         var behaviour = (Behaviour)Activator.CreateInstance(type);
-        BehaviourFields.Read(entry, behaviour);
-        return behaviour;
+        ComponentFields.Read(entry.Values, behaviour, typeof(Behaviour));
+        entity.AddComponent(behaviour);
     }
 
-    private static Entity Place(ScenePlacement entry)
+    private static void Place(Entity entity, ScenePlacement entry)
     {
-        var entity = new Entity(null, entry.Name, entry.Uid);
         entity.Transform.Position = entry.Position;
-        entity.Transform.Rotation = entry.Rotation;
-        return entity;
+        entity.Transform.Rotation = Rotation(entry);
+    }
+
+    // The entry's rotation made unit; none for one that is no rotation - zero, or not numbers.
+    private static QuaternionF Rotation(ScenePlacement entry)
+    {
+        var rotation = entry.Rotation;
+        var lengthSquared = rotation.LengthSquared();
+        if (!float.IsFinite(lengthSquared) || lengthSquared < 1e-12f)
+        {
+            Log.Logger.Warning("Scene: {Name} has the rotation {Rotation}, which is none; it faces as it is",
+                entry.Name, entry.RotationText);
+            return QuaternionF.Identity;
+        }
+
+        return rotation.IsNormalized ? rotation : QuaternionF.Normalize(rotation);
     }
 
     // Whether owner is entity or stands in it: a file whose parents go round in a circle puts no entity in itself.

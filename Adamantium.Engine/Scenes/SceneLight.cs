@@ -16,17 +16,18 @@ public sealed class SceneLight : ScenePlacement
     [XmlAttribute]
     public float Intensity { get; set; } = 1;
 
-    /// <summary>How far a point light or a spot reaches.</summary>
+    /// <summary>How far a point light or a spot reaches; 1 unless the file says, as a new light has it.</summary>
     [XmlAttribute]
-    public float Range { get; set; }
+    public float Range { get; set; } = 1;
 
     /// <summary>The angle, in degrees, of a spot's full light.</summary>
     [XmlAttribute]
     public float InnerSpotAngle { get; set; }
 
-    /// <summary>The angle, in degrees, where a spot's light ends.</summary>
+    /// <summary>The angle, in degrees, where a spot's light ends; 45 unless the file says, as a new light has it.
+    /// </summary>
     [XmlAttribute]
-    public float OuterSpotAngle { get; set; }
+    public float OuterSpotAngle { get; set; } = 45;
 
     [XmlAttribute]
     public bool Shadows { get; set; }

@@ -14,7 +14,7 @@ public abstract class ScenePlacement
     public UInt128 Uid { get; set; }
 
     [XmlAttribute]
-    public string Name { get; set; }
+    public string Name { get; set; } = "";
 
     /// <summary>The id of what it stands in - an entry of any section; null for one standing in the scene itself.
     /// </summary>

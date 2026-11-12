@@ -11,9 +11,9 @@ namespace Adamantium.Engine.Scenes;
 /// <summary>
 /// A scene as its file (<c>.ascene</c>) holds it, in readable XML: what is put in the scene, where and which way it
 /// faces - the models by their asset names, nothing more of them; what no file holds - lights, cameras, spawn points,
-/// the components of the game's code - described whole. Each kind has a section of its own. Every entry has an id the
-/// others and the patches of mods refer to it by; an entry stands in another by that one's id, so the file stays flat
-/// however deep the scene. A patch (<see cref="Patch"/>) has the same form and holds only what it changes.
+/// groups and empty entities, procedural shapes by their recipes, the components of the game's code - described whole.
+/// Each kind has a section of its own. Every entry has an id the others and the patches of mods refer to it by; an
+/// entry stands in another by that one's id, so the file stays flat however deep the scene.
 /// </summary>
 [XmlRoot("Scene")]
 public sealed class SceneFile
@@ -29,10 +29,6 @@ public sealed class SceneFile
     [XmlAttribute]
     public int Version { get; set; } = FormatVersion;
 
-    /// <summary>The name of the scene this one patches; null for a scene of its own.</summary>
-    [XmlAttribute]
-    public string Patch { get; set; }
-
     [XmlArray("Models"), XmlArrayItem("Model")]
     public List<SceneModel> Models { get; set; } = [];
 
@@ -45,11 +41,23 @@ public sealed class SceneFile
     [XmlArray("SpawnPoints"), XmlArrayItem("SpawnPoint")]
     public List<SceneSpawnPoint> SpawnPoints { get; set; } = [];
 
+    [XmlArray("Markers"), XmlArrayItem("Marker")]
+    public List<SceneMarker> Markers { get; set; } = [];
+
+    [XmlArray("Shapes"), XmlArrayItem("Shape")]
+    public List<SceneShape> Shapes { get; set; } = [];
+
     [XmlArray("Behaviours"), XmlArrayItem("Behaviour")]
     public List<SceneBehaviour> Behaviours { get; set; } = [];
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeModels() => Models.Count > 0;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeMarkers() => Markers.Count > 0;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeShapes() => Shapes.Count > 0;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeLights() => Lights.Count > 0;

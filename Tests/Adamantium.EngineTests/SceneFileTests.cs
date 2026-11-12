@@ -6,6 +6,7 @@ using System.Threading;
 using Adamantium.Engine.Scenes;
 using Adamantium.Graphics.Core.Models;
 using CameraProjectionType = Adamantium.ECS.Components.CameraProjectionType;
+using CameraType = Adamantium.Graphics.Core.CameraType;
 using Adamantium.Mathematics;
 using NUnit.Framework;
 
@@ -38,8 +39,16 @@ public class SceneFileTests
         scene.Cameras.Add(new SceneCamera
         {
             Uid = 20, Name = "Map", Projection = CameraProjectionType.Ortho, OrthoScale = new Vector2F(40, 30),
-            Near = 1, Far = 500, Follows = Robot
+            Near = 1, Far = 500, Type = CameraType.ThirdPersonLocked, Parent = Robot
         });
+        scene.Markers.Add(new SceneMarker { Uid = 40, Name = "Props", Kind = SceneMarkerKind.Group });
+        var floor = new SceneShape
+        {
+            Uid = 50, Name = "Floor", Type = "Adamantium.ECS.Components.CubeShape", Color = new Vector4F(0.2f, 0.4f, 0.6f, 1),
+            Scale = new Vector3F(20, 1, 20)
+        };
+        floor.Values.Add(new SceneValue("Size", "1, 0.1, 1"));
+        scene.Shapes.Add(floor);
         scene.SpawnPoints.Add(new SceneSpawnPoint
             { Uid = 30, Name = "Player start", Position = new Vector3<double>(0, 0, 5) });
         var patrol = new SceneBehaviour { On = Robot, Type = "Game.Patrol" };
@@ -96,7 +105,14 @@ public class SceneFileTests
             Assert.That(map.Projection, Is.EqualTo(CameraProjectionType.Ortho));
             Assert.That(map.OrthoScale, Is.EqualTo(new Vector2F(40, 30)));
             Assert.That((map.Near, map.Far), Is.EqualTo((1f, 500f)));
-            Assert.That(map.Follows, Is.EqualTo(Robot));
+            Assert.That((map.Type, map.Parent), Is.EqualTo((CameraType.ThirdPersonLocked, (UInt128?)Robot)));
+
+            Assert.That((read.Markers[0].Uid, read.Markers[0].Kind), Is.EqualTo(((UInt128)40, SceneMarkerKind.Group)));
+            var floor = read.Shapes[0];
+            Assert.That(floor.Type, Is.EqualTo("Adamantium.ECS.Components.CubeShape"));
+            Assert.That(floor.Color, Is.EqualTo(new Vector4F(0.2f, 0.4f, 0.6f, 1)));
+            Assert.That(floor.Scale, Is.EqualTo(new Vector3F(20, 1, 20)));
+            Assert.That(floor.Values, Is.EqualTo(new[] { new SceneValue("Size", "1, 0.1, 1") }));
 
             Assert.That(read.SpawnPoints[0].Position, Is.EqualTo(new Vector3<double>(0, 0, 5)));
 

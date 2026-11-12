@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Mathematics;
 using Adamantium.Multiverse;
 using Serilog;
 
@@ -10,11 +11,16 @@ namespace Adamantium.Engine.Scenes;
 /// <summary>
 /// Writes what stands in a world into a <see cref="SceneFile"/>: a model's root - an entity naming its asset
 /// (<see cref="Entity.Source"/>) - as the model, where and which way, nothing of its parts; a light, a camera, a spawn
-/// point whole; the game's components on any of them. The cameras the universe's outputs own are the editor's view, not
-/// the scene's, and are left out, as is whatever else stands in the world.
+/// point, a group or an empty entity, a procedural shape by its recipe, whole; the game's components on any of them.
+/// What stands inside something the scene does not keep - a model's part - is written in the nearest entry it stands
+/// in, placed as it stands. The cameras the universe's outputs own are the editor's view, not the scene's, and are left
+/// out, as is whatever else stands in the world. Called on the world's thread, after the world took in what was added.
 /// </summary>
 public static class SceneCapture
 {
+    // Degrees written to this many decimals: turned to radians and back in floats, a whole angle comes back a hair off.
+    private const int AngleDecimals = 4;
+
     public static SceneFile Capture(EntityWorld world)
     {
         ArgumentNullException.ThrowIfNull(world);
@@ -42,21 +48,20 @@ public static class SceneCapture
             var entry = Entry(entity, ownCameras);
             if (entry != null)
             {
-                if (placed != null)
+                entry.Parent = placed?.Uid;
+                if (entity.Owner != placed)
                 {
-                    if (entity.Owner != placed)
-                    {
-                        Log.Logger.Warning(
-                            "Scene: {Name} stands in a part of {Placed}; the scene puts it in {Placed} itself",
-                            entity.Name, placed.Name);
-                    }
-
-                    entry.Parent = placed.Uid;
+                    PlaceIn(entry, entity, placed);
                 }
 
                 Add(scene, entry);
                 AddBehaviours(scene, entity);
                 placed = entity;
+            }
+            else if (entity.ContainsComponent<Behaviour>() || entity.ContainsComponent<UnloadedBehaviours>())
+            {
+                Log.Logger.Warning("Scene: {Name} is nothing the scene keeps; the game's components on it are not kept",
+                    entity.Name);
             }
 
             for (var i = entity.Dependencies.Count - 1; i >= 0; i--)
@@ -80,8 +85,7 @@ public static class SceneCapture
             entry = new SceneLight
             {
                 Type = light.Type, Color = light.Color, Intensity = light.Intensity, Range = light.Range,
-                InnerSpotAngle = float.RadiansToDegrees(light.InnerSpotAngle),
-                OuterSpotAngle = float.RadiansToDegrees(light.OuterSpotAngle),
+                InnerSpotAngle = Degrees(light.InnerSpotAngle), OuterSpotAngle = Degrees(light.OuterSpotAngle),
                 Shadows = light.IsWithShadows, ShadowMapResolution = light.ShadowMapResolution
             };
         }
@@ -91,18 +95,44 @@ public static class SceneCapture
 
             var placedCamera = new SceneCamera
             {
-                Projection = camera.ProjectionType, FieldOfView = camera.Fov, Near = camera.ZNear, Far = camera.ZFar,
-                OrthoScale = camera.OrthoScale, Follows = camera.LookAtObject?.Uid
+                Uid = entity.Uid, Name = entity.Name ?? "", Position = entity.Transform.Position,
+                // A camera's own rotation is its view, the opposite turn of the way it faces.
+                Rotation = QuaternionF.Conjugate(camera.Rotation),
+                Type = camera.Type, Projection = camera.ProjectionType, FieldOfView = camera.Fov,
+                Near = camera.ZNear, Far = camera.ZFar, OrthoScale = camera.OrthoScale
             };
-            placedCamera.Uid = entity.Uid;
-            placedCamera.Name = entity.Name;
-            placedCamera.Position = entity.Transform.Position;
-            placedCamera.Rotation = camera.Rotation;
             return placedCamera;
         }
         else if (entity.ContainsComponent<SpawnPoint>())
         {
             entry = new SceneSpawnPoint();
+        }
+        else if (entity.GetComponent<ProceduralShape>() is { } shape)
+        {
+            var placedShape = new SceneShape
+            {
+                Type = shape.GetType().FullName,
+                Color = entity.GetComponent<Material>()?.DiffuseColor ?? Material.DefaultDiffuseColor,
+                Scale = entity.Transform.ScaleFactor
+            };
+            ComponentFields.Write(shape, typeof(ActivatableComponent), placedShape.Values, SceneShape.OwnAttributes);
+            entry = placedShape;
+        }
+        else if (entity.GetComponent<UnloadedShape>() is { } unloaded)
+        {
+            var kept = new SceneShape
+            {
+                Type = unloaded.Entry.Type, Color = unloaded.Entry.Color, Scale = entity.Transform.ScaleFactor
+            };
+            kept.Values.AddRange(unloaded.Entry.Values);
+            entry = kept;
+        }
+        else if (entity.ContainsComponent<Marker>())
+        {
+            entry = new SceneMarker
+            {
+                Kind = entity.IconKey == EntityIconKeys.Group ? SceneMarkerKind.Group : SceneMarkerKind.Empty
+            };
         }
         else
         {
@@ -110,11 +140,31 @@ public static class SceneCapture
         }
 
         entry.Uid = entity.Uid;
-        entry.Name = entity.Name;
+        entry.Name = entity.Name ?? "";
         entry.Position = entity.Transform.Position;
         entry.Rotation = entity.Transform.Rotation;
         return entry;
     }
+
+    // Places the entry in placed - null for the scene itself - as the entity stands, through the entities between them
+    // that the scene does not keep.
+    private static void PlaceIn(ScenePlacement entry, Entity entity, Entity placed)
+    {
+        var position = entry.Position;
+        var rotation = entry.Rotation;
+        for (var each = entity.Owner; each != null && each != placed; each = each.Owner)
+        {
+            var transform = each.Transform;
+            var scaled = position * transform.Scale.As<double>();
+            position = Vector3.Transform(scaled, transform.Rotation.As<double>()) + transform.Position;
+            rotation = transform.Rotation * rotation;
+        }
+
+        entry.Position = position;
+        entry.Rotation = rotation;
+    }
+
+    private static float Degrees(float radians) => MathF.Round(float.RadiansToDegrees(radians), AngleDecimals);
 
     private static void Add(SceneFile scene, ScenePlacement entry)
     {
@@ -124,6 +174,8 @@ public static class SceneCapture
             case SceneLight light: scene.Lights.Add(light); break;
             case SceneCamera camera: scene.Cameras.Add(camera); break;
             case SceneSpawnPoint point: scene.SpawnPoints.Add(point); break;
+            case SceneMarker marker: scene.Markers.Add(marker); break;
+            case SceneShape shape: scene.Shapes.Add(shape); break;
         }
     }
 
@@ -133,13 +185,16 @@ public static class SceneCapture
         {
             switch (component)
             {
-                case UnloadedBehaviour unloaded:
-                    unloaded.Entry.On = entity.Uid;
-                    scene.Behaviours.Add(unloaded.Entry);
+                case UnloadedBehaviours unloaded:
+                    foreach (var kept in unloaded.Entries)
+                    {
+                        scene.Behaviours.Add(kept.CopyOn(entity.Uid));
+                    }
+
                     break;
                 case Behaviour behaviour:
                     var entry = new SceneBehaviour { On = entity.Uid, Type = behaviour.GetType().FullName };
-                    BehaviourFields.Write(behaviour, entry);
+                    ComponentFields.Write(behaviour, typeof(Behaviour), entry.Values, SceneBehaviour.OwnAttributes);
                     scene.Behaviours.Add(entry);
                     break;
             }
