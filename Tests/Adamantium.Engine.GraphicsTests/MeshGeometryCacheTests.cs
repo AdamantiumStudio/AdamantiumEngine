@@ -1,6 +1,5 @@
 extern alias engine;
 using System;
-using System.Runtime.CompilerServices;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Graphics.Core.Vertices;
 using Adamantium.Mathematics;
@@ -9,8 +8,8 @@ using engine::Adamantium.Engine.Rendering;
 
 namespace Adamantium.Engine.GraphicsTests;
 
-/// <summary>The GPU geometry of meshes lives as long as the meshes: a mesh gone takes its buffers with it, unless a mesh
-/// still alive has the same content.</summary>
+/// <summary>The cache lets go of the GPU geometry of the meshes no longer drawn, itself: a mesh not drawn for the time it
+/// keeps takes its buffers with it, unless a mesh still drawn has the same content; Clear lets go of all.</summary>
 [TestFixture]
 public class MeshGeometryCacheTests
 {
@@ -18,55 +17,58 @@ public class MeshGeometryCacheTests
     public void ReleaseDevices() => GpuFixture.ReleaseRenderDevices();
 
     [Test]
-    public void AMeshCollected_LetsItsGeometryGo()
+    public void AMeshNotDrawn_LetsItsGeometryGo_AndOneDrawnKeepsIt()
     {
-        using var cache = new MeshGeometryCache(GpuFixture.CreateRenderDevice());
-        DrawOnce(cache, 1);
+        using var cache = new MeshGeometryCache(GpuFixture.CreateRenderDevice(), TimeSpan.FromHours(1));
+        var gone = Triangle(1);
         var kept = Triangle(2);
-        cache.GetOrCreate(kept, typeof(MeshVertex));
-
-        Collect();
-        cache.GetOrCreate(kept, typeof(MeshVertex));
-
-        Assert.That(cache.GeometryCount, Is.EqualTo(1));
-        GC.KeepAlive(kept);
-    }
-
-    [Test]
-    public void AMeshCollected_KeepsTheGeometryAMeshAliveShares()
-    {
-        using var cache = new MeshGeometryCache(GpuFixture.CreateRenderDevice());
-        var kept = Triangle(1);
+        cache.GetOrCreate(gone, typeof(MeshVertex));
         var geometry = cache.GetOrCreate(kept, typeof(MeshVertex));
-        DrawOnce(cache, 1);
+        using var quick = new MeshGeometryCache(GpuFixture.CreateRenderDevice(), TimeSpan.Zero);
+        quick.GetOrCreate(gone, typeof(MeshVertex));
 
-        Collect();
+        cache.ReleaseUnused();
+        quick.ReleaseUnused();
 
         Assert.Multiple(() =>
         {
+            Assert.That(cache.GeometryCount, Is.EqualTo(2), "drawn within the time kept");
             Assert.That(cache.GetOrCreate(kept, typeof(MeshVertex)), Is.SameAs(geometry));
-            Assert.That(cache.GeometryCount, Is.EqualTo(1));
+            Assert.That(quick.GeometryCount, Is.Zero, "not drawn for the time kept");
         });
-        GC.KeepAlive(kept);
     }
 
     [Test]
-    public void AMeshAlive_KeepsItsGeometry()
+    public void AMeshLetGo_KeepsTheGeometryAMeshStillHeldShares()
     {
-        using var cache = new MeshGeometryCache(GpuFixture.CreateRenderDevice());
-        var kept = Triangle(1);
-        var geometry = cache.GetOrCreate(kept, typeof(MeshVertex));
+        using var cache = new MeshGeometryCache(GpuFixture.CreateRenderDevice(), TimeSpan.Zero);
+        var first = Triangle(1);
+        var second = Triangle(1);
+        var shared = cache.GetOrCreate(first, typeof(MeshVertex));
+        cache.ReleaseUnused();
+        Assert.That(cache.GeometryCount, Is.Zero, "the first let go");
 
-        Collect();
+        var again = cache.GetOrCreate(second, typeof(MeshVertex));
+        var firstAgain = cache.GetOrCreate(first, typeof(MeshVertex));
 
-        Assert.That(cache.GetOrCreate(kept, typeof(MeshVertex)), Is.SameAs(geometry));
-        GC.KeepAlive(kept);
+        Assert.Multiple(() =>
+        {
+            Assert.That(again, Is.Not.SameAs(shared), "made anew once let go");
+            Assert.That(firstAgain, Is.SameAs(again), "the same content shares one geometry");
+            Assert.That(cache.GeometryCount, Is.EqualTo(1));
+        });
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void DrawOnce(MeshGeometryCache cache, double size)
+    [Test]
+    public void Clear_LetsGoOfEveryMesh()
     {
-        cache.GetOrCreate(Triangle(size), typeof(MeshVertex));
+        using var cache = new MeshGeometryCache(GpuFixture.CreateRenderDevice());
+        cache.GetOrCreate(Triangle(1), typeof(MeshVertex));
+        cache.GetOrCreate(Triangle(2), typeof(MeshVertex));
+
+        cache.Clear();
+
+        Assert.That(cache.GeometryCount, Is.Zero);
     }
 
     private static Mesh Triangle(double size)
@@ -74,12 +76,5 @@ public class MeshGeometryCacheTests
         return new Mesh()
             .SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(size, 0, 0), new Vector3<double>(0, size, 0)])
             .SetIndices([0, 1, 2]);
-    }
-
-    private static void Collect()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
     }
 }

@@ -10,12 +10,13 @@ All packages share one version.
 - `ScreenshotRenderingService` with its `ScreenshotRenderingProcessor`: screenshots of entities, taken in the universe
   the service is made in (`Create`). An entity put in its queue (`Enqueue`) - one no world holds, so nothing else draws
   it - is drawn alone, one a frame, into an output of the service's own, from the front, above and to the right, every
-  corner of its bounds in view, over a transparent ground, in the light of a `ScreenshotLighting` of its own (`Studio`
-  by default) and none of the world's; the task completes with the picture. Asleep while its queue is empty.
+  corner of its bounds in view, over a transparent ground; the task completes with the picture. Asleep while its queue
+  is empty. The processor draws with a rendering of its own, whatever renders the scene: `ScreenshotEffect` - the
+  colors or textures of the materials in the directional lights of a `ScreenshotLighting` (`Studio` by default) and an
+  even light, no clusters, no instancing, no skinning, the model in its bind pose.
   `OffscreenOutput`: an output with no surface, drawn into a texture of a fixed size that `ReadFrame` reads back.
   `RenderingService.WritesAlpha`: the surfaces drawn write their alpha, so a frame cleared transparent keeps only what
-  was drawn. `ForwardPlusRenderingProcessor` takes its camera, the roots it draws and its lights from overridable
-  members (`ViewCamera`, `DrawnEntities`, `DirectionalLights`, `PointLights`, `SpotLights`).
+  was drawn.
 - `EntityService.IsActive`: a service not active is passed by in the frame - not updated, drawn or presented - and only
   told the frame ended; a service taken out with its output stops at once, so the frame it goes in no longer draws on
   an output already let go. `EntityServiceManager.HasActiveRenderingService`: a universe with no outputs still draws
@@ -285,10 +286,11 @@ All packages share one version.
 
 ### Fixed
 
-- `MeshGeometryCache` lets a mesh's GPU buffers go once the mesh is collected - when no other live mesh has the same
-  content and no frame in flight draws with them - instead of keeping every mesh ever drawn, and its buffers, for as
-  long as the processor lived: a model taken out of the scene kept its geometry on the GPU. It goes in the next frame
-  (`MeshGeometryCache.ReleaseCollected`), one that draws no mesh too.
+- `MeshGeometryCache` lets a mesh's GPU buffers go itself once the mesh was not drawn for a while
+  (`ReleaseUnused`, called each frame by the processors that draw; `KeepUnused`, five seconds by default) - when no
+  other mesh kept has the same content and no frame in flight draws with them - instead of keeping every mesh ever
+  drawn, and its buffers, for as long as the processor lived: a model taken out of the scene kept its geometry on the
+  GPU. `Clear` lets go of all at once.
 - A Wavefront `.obj` whose faces name positions alone, or positions and texture coordinates without normals, is read
   corner by corner as written; its indices were read one or two to a corner instead of three, and the model came out
   torn or empty.

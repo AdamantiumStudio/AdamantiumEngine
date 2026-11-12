@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO.Hashing;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.Graphics;
@@ -18,38 +17,50 @@ namespace Adamantium.Engine.Rendering;
 /// <summary>
 /// The render layer's GPU geometry. A mesh in a vertex format maps to the geometry of its content: meshes with the same
 /// vertices and indices share one set of buffers, found by a hash of what would be uploaded, so their copies draw as one
-/// instanced call. A mesh is hashed again only when its version moves. The cache does not keep a mesh alive: once a mesh
-/// is collected, its geometry is let go on the next call or <see cref="ReleaseCollected"/>, when no other mesh shares it
-/// and no frame in flight draws with it. Owned and disposed by the processor that draws with it, and used from its thread alone.
+/// instanced call. A mesh is hashed again only when its version moves. The cache owns the buffers and lets them go
+/// itself: <see cref="ReleaseUnused"/>, called once a frame by whoever draws, drops the meshes not drawn for
+/// <see cref="KeepUnused"/>, and a buffer goes once no mesh kept shares it and no frame in flight draws with it;
+/// <see cref="Clear"/> drops every mesh at once. Owned and disposed by the processor that draws with it, and used from its
+/// thread alone.
 /// </summary>
 public sealed class MeshGeometryCache : DisposableObject
 {
+    /// <summary>How long a mesh not drawn keeps its geometry unless told otherwise.</summary>
+    public static readonly TimeSpan DefaultKeepUnused = TimeSpan.FromSeconds(5);
+
     private readonly IGraphicsDevice _device;
-    private readonly ConditionalWeakTable<Mesh, MeshGeometries> _meshes = new();
-    private readonly ConcurrentQueue<RenderGeometry> _collected = new();
+    private readonly Dictionary<Mesh, MeshGeometries> _meshes = new(ReferenceEqualityComparer.Instance);
+    private readonly List<Mesh> _unused = [];
     private readonly Dictionary<ContentKey, (RenderGeometry Geometry, int Users)> _contents = new();
     private readonly Dictionary<RenderGeometry, ContentKey> _contentOf = new();
 
-    public MeshGeometryCache(IGraphicsDevice device)
+    public MeshGeometryCache(IGraphicsDevice device) : this(device, DefaultKeepUnused)
     {
-        _device = device;
     }
 
-    /// <summary>How many sets of buffers the cache holds: one for each content its live meshes have.</summary>
+    public MeshGeometryCache(IGraphicsDevice device, TimeSpan keepUnused)
+    {
+        _device = device;
+        KeepUnused = keepUnused;
+    }
+
+    /// <summary>How long a mesh not drawn keeps its geometry.</summary>
+    public TimeSpan KeepUnused { get; }
+
+    /// <summary>How many sets of buffers the cache holds: one for each content its meshes have.</summary>
     public int GeometryCount => _contents.Count;
 
     /// <summary>The geometry <paramref name="mesh"/> draws with in <paramref name="vertexType"/>: the one of its content,
-    /// made when no other mesh has that content yet.</summary>
+    /// made when no other mesh has that content yet. The mesh counts as drawn now.</summary>
     public RenderGeometry GetOrCreate(Mesh mesh, Type vertexType)
     {
-        ReleaseCollected();
-
         if (!_meshes.TryGetValue(mesh, out var geometries))
         {
-            geometries = new MeshGeometries(_collected);
+            geometries = new MeshGeometries();
             _meshes.Add(mesh, geometries);
         }
 
+        geometries.LastDrawn = Stopwatch.GetTimestamp();
         var known = geometries.Find(vertexType);
         if (known.Geometry != null && known.Version == mesh.Version)
         {
@@ -66,6 +77,52 @@ public sealed class MeshGeometryCache : DisposableObject
 
         geometries.Set(vertexType, mesh.Version, geometry);
         return geometry;
+    }
+
+    /// <summary>Lets go of the geometry of the meshes not drawn for <see cref="KeepUnused"/>: called once a frame by
+    /// whoever draws, in a frame that draws no mesh too.</summary>
+    public void ReleaseUnused()
+    {
+        var now = Stopwatch.GetTimestamp();
+        foreach (var (mesh, geometries) in _meshes)
+        {
+            if (Stopwatch.GetElapsedTime(geometries.LastDrawn, now) >= KeepUnused)
+            {
+                _unused.Add(mesh);
+            }
+        }
+
+        foreach (var mesh in _unused)
+        {
+            Forget(mesh);
+        }
+
+        _unused.Clear();
+    }
+
+    /// <summary>Lets go of the geometry of every mesh.</summary>
+    public void Clear()
+    {
+        _unused.AddRange(_meshes.Keys);
+        foreach (var mesh in _unused)
+        {
+            Forget(mesh);
+        }
+
+        _unused.Clear();
+    }
+
+    private void Forget(Mesh mesh)
+    {
+        if (!_meshes.Remove(mesh, out var geometries))
+        {
+            return;
+        }
+
+        foreach (var geometry in geometries.All)
+        {
+            Release(geometry);
+        }
     }
 
     private RenderGeometry Share<T>(T[] vertices, Mesh mesh, Type vertexType) where T : struct
@@ -88,16 +145,6 @@ public sealed class MeshGeometryCache : DisposableObject
         _contents.Add(content, (geometry, 1));
         _contentOf.Add(geometry, content);
         return geometry;
-    }
-
-    /// <summary>Lets go of the geometry of the meshes collected since: called once a frame by whoever draws, so it goes
-    /// in a frame that draws no mesh too.</summary>
-    public void ReleaseCollected()
-    {
-        while (_collected.TryDequeue(out var geometry))
-        {
-            Release(geometry);
-        }
     }
 
     private void Release(RenderGeometry geometry)
@@ -131,7 +178,6 @@ public sealed class MeshGeometryCache : DisposableObject
             _contents.Clear();
             _contentOf.Clear();
             _meshes.Clear();
-            _collected.Clear();
         }
 
         base.Dispose(disposeManagedResources);
@@ -139,19 +185,18 @@ public sealed class MeshGeometryCache : DisposableObject
 
     private sealed class MeshGeometries
     {
-        private readonly ConcurrentQueue<RenderGeometry> _collected;
         private readonly List<(Type VertexType, int Version, RenderGeometry Geometry)> _formats = new(1);
 
-        public MeshGeometries(ConcurrentQueue<RenderGeometry> collected)
-        {
-            _collected = collected;
-        }
+        public long LastDrawn { get; set; }
 
-        ~MeshGeometries()
+        public IEnumerable<RenderGeometry> All
         {
-            foreach (var (_, _, geometry) in _formats)
+            get
             {
-                _collected.Enqueue(geometry);
+                foreach (var (_, _, geometry) in _formats)
+                {
+                    yield return geometry;
+                }
             }
         }
 

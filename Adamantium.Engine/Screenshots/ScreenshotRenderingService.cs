@@ -169,7 +169,6 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
     public override void FrameEnded()
     {
         base.FrameEnded();
-        _processor.ReleaseCollectedGeometry();
         if (_drawn && _current != null)
         {
             var shot = _current;

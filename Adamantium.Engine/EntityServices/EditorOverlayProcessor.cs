@@ -75,7 +75,7 @@ public class EditorOverlayProcessor : RenderingProcessor
 
     public override void Draw(AppTime appTime)
     {
-        geometry?.ReleaseCollected();
+        geometry?.ReleaseUnused();
         ActiveCamera = Window.Camera;
         if (ActiveCamera == null)
         {

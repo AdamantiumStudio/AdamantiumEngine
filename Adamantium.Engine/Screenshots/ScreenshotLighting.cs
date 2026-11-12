@@ -16,8 +16,6 @@ public sealed class ScreenshotLighting
         Lights = lights ?? [];
         Ambient = ambient;
         DirectionalLights = [.. Lights.Where(light => light.Type == LightType.Directional)];
-        PointLights = [.. Lights.Where(light => light.Type == LightType.Point)];
-        SpotLights = [.. Lights.Where(light => light.Type == LightType.Spot)];
     }
 
     /// <summary>The lights, each the light of an entity of its own that no world holds.</summary>
@@ -26,11 +24,8 @@ public sealed class ScreenshotLighting
     /// <summary>The light every surface gets whatever the lights.</summary>
     public Vector3F Ambient { get; }
 
+    /// <summary>The directional ones among <see cref="Lights"/>: the only kind a screenshot is lit by.</summary>
     public IReadOnlyList<Light> DirectionalLights { get; }
-
-    public IReadOnlyList<Light> PointLights { get; }
-
-    public IReadOnlyList<Light> SpotLights { get; }
 
     /// <summary>Two directional lights, a key from above, front and right and a dimmer fill from the left, and a little
     /// ambient light: a model's shape reads from every side the camera of a thumbnail sees.</summary>

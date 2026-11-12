@@ -10,7 +10,7 @@
         <LangVersion>latest</LangVersion>
         <OutputType>Library</OutputType>
         <IsPackable>true</IsPackable>
-        <Description>Built-in effects of the Adamantium engine - basic, font, sprite, Forward+ lighting and full-screen quad - compiled into the assembly at build time.</Description>
+        <Description>Built-in effects of the Adamantium engine - basic, font, sprite, Forward+ lighting, screenshot and full-screen quad - compiled into the assembly at build time.</Description>
         <PackageTags>adamantium;engine;shader;effects</PackageTags>
     </PropertyGroup>
 
