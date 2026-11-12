@@ -32,7 +32,7 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
     private readonly ScreenshotRenderingProcessor _processor = new();
     private readonly object _lock = new();
     private readonly Queue<Shot> _queue = new();
-    private readonly IUniverse _universe;
+    private readonly IUniverseWatcher _frames;
     private Shot _current;
     private bool _drawn;
     private volatile bool _deviceLost;
@@ -41,7 +41,7 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
     public ScreenshotRenderingService(EntityWorld world, OffscreenOutput output) : base(world, output)
     {
         _output = output;
-        _universe = world.Satellites.Get<IUniverse>();
+        _frames = world.Satellites.Get<IUniverseWatcher>();
         WritesAlpha = true;
         IsActive = false;
         AttachProcessor(_processor);
@@ -79,7 +79,7 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
             IsActive = true;
         }
 
-        _universe.Invalidate(_output);
+        _frames.Watch();
         return shot.Picture.Task;
     }
 
@@ -100,7 +100,7 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
 
         if (waiting)
         {
-            _universe.Invalidate(_output);
+            _frames.Watch();
         }
     }
 
@@ -186,7 +186,7 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
 
         if (more)
         {
-            _universe.Invalidate(_output);
+            _frames.Watch();
         }
     }
 
