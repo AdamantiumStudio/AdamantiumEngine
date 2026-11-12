@@ -79,7 +79,7 @@ namespace Adamantium.Mathematics.Triangulation
         /// <summary>
         /// The triangles filling the contours by <see cref="FillRule"/> (<see cref="RingFill.Fill"/>), each contour taken
         /// as closed; a contour of fewer than three points, or with a coordinate not a finite number, fills nothing.
-        /// <see cref="ProcessedContours"/> holds the contours cut into segments, those of this call only.
+        /// <see cref="ProcessedContours"/> holds copies of this call's contours, every point kept.
         /// </summary>
         public List<Vector3<double>> FillIndirect(bool triangulate = true)
         {
@@ -90,9 +90,7 @@ namespace Adamantium.Mathematics.Triangulation
                 foreach (var contour in container.Contours)
                 {
                     if (contour.Points == null || contour.Points.Length == 0 || !MathHelper.RingMath.Finite(contour.Points)) continue;
-                    var copy = contour.Copy();
-                    copy.SplitOnSegments();
-                    ProcessedContours.Add(copy);
+                    ProcessedContours.Add(contour.Copy());
                     if (contour.Points.Length >= 3) rings.Add(contour.Points);
                 }
             }

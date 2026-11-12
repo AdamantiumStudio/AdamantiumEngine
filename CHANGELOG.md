@@ -229,6 +229,8 @@ All packages share one version.
 
 ### Fixed
 
+- `Polygon.ProcessedContours` keeps every point of a contour. A ring passing one point twice lost its second pass
+  there, so whoever stroked it closed it by a side it never had.
 - `Polygon.FillIndirect` fills rings that meet as the fill rule says of every point: a hole touching its outer ring at a
   point - at a corner too - holes touching or sharing sides, rings lying on one another, and a ring crossing another
   only through its corners. Rings that meet are laid over one another (`GeometryOverlay`) and the faces they bound
