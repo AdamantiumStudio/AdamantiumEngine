@@ -10,7 +10,7 @@ namespace Adamantium.Mathematics.Triangulation;
 /// </summary>
 internal sealed class ContactSweep
 {
-    private readonly IReadOnlyList<(Vector2<double> Left, Vector2<double> Right)> segments;
+    private readonly (Vector2<double> Left, Vector2<double> Right)[] segments;
     private readonly double margin;
     private readonly List<int> line = [];
     private double x;
@@ -21,7 +21,7 @@ internal sealed class ContactSweep
     /// meet the line together.</summary>
     public ContactSweep(IReadOnlyList<(Vector2<double> Left, Vector2<double> Right)> segments, double margin)
     {
-        this.segments = segments;
+        this.segments = segments as (Vector2<double> Left, Vector2<double> Right)[] ?? [.. segments];
         this.margin = margin;
     }
 
@@ -44,20 +44,15 @@ internal sealed class ContactSweep
     public bool Run(Func<int, int, bool> meet, bool passCrossings = false, Action<int, int> joined = null,
         Action<Vector2<double>> passed = null, Func<int, int, bool> mayPass = null)
     {
-        var events = new List<(Vector2<double> At, bool Leaves, int Segment)>(segments.Count * 2);
-        for (var i = 0; i < segments.Count; i++)
+        var events = new SweepEvent[segments.Length * 2];
+        for (var i = 0; i < segments.Length; i++)
         {
             var (left, right) = segments[i];
-            events.Add((new Vector2<double>(left.X - margin, left.Y), false, i));
-            events.Add((new Vector2<double>(right.X + margin, right.Y), true, i));
+            events[2 * i] = new SweepEvent(new Vector2<double>(left.X - margin, left.Y), false, i);
+            events[2 * i + 1] = new SweepEvent(new Vector2<double>(right.X + margin, right.Y), true, i);
         }
 
-        events.Sort((e, f) =>
-        {
-            if (e.At.X != f.At.X) return e.At.X.CompareTo(f.At.X);
-            if (e.At.Y != f.At.Y) return e.At.Y.CompareTo(f.At.Y);
-            return f.Leaves.CompareTo(e.Leaves);
-        });
+        events.AsSpan().Sort();
 
         var crossings = new PriorityQueue<(int Below, int Above), double>();
         var swapped = new HashSet<(int, int)>();
@@ -73,9 +68,9 @@ internal sealed class ContactSweep
             return false;
         }
 
-        for (var index = 0; index < events.Count; index++)
+        for (var index = 0; index < events.Length; index++)
         {
-            var (at, leaves, s) = events[index];
+            var (at, leaves, s) = (events[index].At, events[index].Leaves, events[index].Segment);
             while (crossings.TryPeek(out var pair, out var crossX) && crossX <= at.X)
             {
                 crossings.Dequeue();
@@ -112,7 +107,7 @@ internal sealed class ContactSweep
                 }
             }
 
-            if (passed != null && (index + 1 == events.Count || events[index + 1].At != at))
+            if (passed != null && (index + 1 == events.Length || events[index + 1].At != at))
             {
                 passed(at);
             }

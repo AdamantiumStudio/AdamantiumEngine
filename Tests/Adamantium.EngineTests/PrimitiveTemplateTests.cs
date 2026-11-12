@@ -57,6 +57,21 @@ public class PrimitiveTemplateTests
         });
     }
 
+    // An outlined polygon is its line strip and, for whoever reads its outline as a contour, its closed corners.
+    [Test]
+    public void AnOutlinedPolygon_HasItsCornersAsAClosedContour()
+    {
+        var mesh = Shapes.Polygon.GenerateGeometry(GeometryType.Outlined, new Vector2<double>(2), 6);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mesh.MeshTopology, Is.EqualTo(PrimitiveType.LineStrip));
+            Assert.That(mesh.Contours, Has.Count.EqualTo(1));
+            Assert.That(mesh.Contours[0].IsGeometryClosed, Is.True);
+            Assert.That(mesh.Contours[0].Points, Has.Length.EqualTo(6));
+        });
+    }
+
     [Test]
     public void ATeapotsLid_IsAtItsTop_UpBeingMinusY()
     {
