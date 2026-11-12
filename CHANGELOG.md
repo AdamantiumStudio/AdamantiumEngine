@@ -28,6 +28,9 @@ All packages share one version.
   with the settings asked for - with the manifest's when it gives some - and never over an asset file a newer engine
   wrote. `ContentBuilder.FindSource`: the source an asset file was imported from. `AssetFile.Sections`: the sections a
   file has, read or not - whether it has a thumbnail is known without reading the picture.
+- `GeometryOverlay.Combine(first, second, mode, weld)`: points nearer than `weld` are one, and a corner that near an
+  edge lies on it. It is for coordinates rounded to a step - UI meshes round to `Mesh.RoundPrecision` - which otherwise
+  leave seams and slivers where the shapes meet. The least distance stays a ten-billionth of the areas' size.
 - `GeometryOverlay`: two areas (`RingArea` - rings under a fill rule) combined by an `AreaCombineMode` (union,
   intersection, difference, xor), or one area's rings turned into the simple rings bounding what its rule fills
   (`Outline`). Rings crossing, touching or lying along one another are cut where they meet - found by a line swept
@@ -216,6 +219,15 @@ All packages share one version.
 - A source changed is imported again with the settings its asset file records, unless the manifest gives the asset
   some; an asset file is imported again for its settings only when the manifest's differ from those it records. It was
   imported with the manifest's every time, which were none for an asset the manifest did not set up.
+- `GeometryOverlay.Combine` takes less time. Rings of the two areas that keep clear of one another
+  (`RingContacts.AnyMeet`) are combined by how they nest, without cutting. The sweep over the edges keeps them in an
+  array and sorts its events without a delegate. Measured in Release on one machine, before → after:
+  - a 256-gon ring less one inside it: 0.57 → 0.21 ms;
+  - 100 nested squares less a small one: 0.53 → 0.26 ms;
+  - 400 squares and 400 squares apart from them, united: 5.6 → 2.1 ms;
+  - 400 squares and 400 crossing them, intersected: 10.9 → 10.0 ms;
+  - two 2000-point stars, xor: 172 → 158 ms;
+  - two 512-gon circles, crossing: 1.4 → 1.5 ms, for the check that the rings meet before they are cut.
 - Glyphs reach the atlas sooner and for less: the MSDF of a glyph is computed by code optimized from its first call,
   where it ran unoptimized for seconds while an application started, a glyph of Segoe UI taking 100-500 ms instead of
   2. A batch of glyphs no longer splits each glyph's rows across every core inside the batch's own parallel loop, and a
@@ -260,6 +272,8 @@ All packages share one version.
 - A Wavefront `.obj` whose faces name positions alone, or positions and texture coordinates without normals, is read
   corner by corner as written; its indices were read one or two to a corner instead of three, and the model came out
   torn or empty.
+- An outlined `Shapes.Polygon` has its corners as a closed contour beside its line strip, as an outlined ellipse does.
+  Whoever read its outline as a contour found none: a UI polygon with a ring thickness came out empty.
 - `Polygon.FillIndirect` fills rings that meet as the fill rule says of every point: a hole touching its outer ring at a
   point - at a corner too - holes touching or sharing sides, rings lying on one another, and a ring crossing another
   only through its corners. Rings that meet are laid over one another (`GeometryOverlay`) and the faces they bound

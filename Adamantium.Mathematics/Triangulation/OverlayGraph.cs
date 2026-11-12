@@ -25,13 +25,14 @@ internal sealed class OverlayGraph
     private List<(int From, int To, int First, int Second)> pieces = [];
     private int[] together = [];
 
-    private OverlayGraph(double grid)
+    private OverlayGraph(double merge)
     {
-        merge = grid * MergeSteps;
+        this.merge = merge;
     }
 
-    /// <summary>See <see cref="GeometryOverlay.Combine"/>.</summary>
-    public static List<Vector2<double>[]> Combine(RingArea first, RingArea second, AreaCombineMode mode)
+    /// <summary>See <see cref="GeometryOverlay.Combine(RingArea, RingArea, AreaCombineMode, double)"/>; points nearer
+    /// than <paramref name="weld"/>, or than the overlay's own least distance if that is longer, are one.</summary>
+    public static List<Vector2<double>[]> Combine(RingArea first, RingArea second, AreaCombineMode mode, double weld = 0)
     {
         var grid = Grid(first.Rings, second.Rings);
         if (grid <= 0)
@@ -39,14 +40,15 @@ internal sealed class OverlayGraph
             return [];
         }
 
-        var overlay = new OverlayGraph(grid);
+        var overlay = new OverlayGraph(Math.Max(grid * MergeSteps, weld));
         overlay.AddRings(first.Rings, 0);
         overlay.AddRings(second.Rings, 1);
         overlay.Planarize();
         return overlay.Boundary(first.Rule, second.Rule, mode);
     }
 
-    private static bool Keeps(AreaCombineMode mode, bool inFirst, bool inSecond) => mode switch
+    /// <summary>Whether <paramref name="mode"/> keeps a point inside the first area or not and the second or not.</summary>
+    internal static bool Keeps(AreaCombineMode mode, bool inFirst, bool inSecond) => mode switch
     {
         AreaCombineMode.Union => inFirst || inSecond,
         AreaCombineMode.Xor => inFirst != inSecond,
@@ -254,64 +256,76 @@ internal sealed class OverlayGraph
             }
         }
 
-        var runs = new Dictionary<(int, int), (int First, int Second)>();
-        var order = new List<(int, int)>();
-        var lines = new Dictionary<int, List<int>>();
+        var runs = new Dictionary<(int, int), (int First, int Second)>(pieces.Count);
+        var order = new List<(int, int)>(pieces.Count);
+        var roots = new int[pieces.Count];
+        var size = new int[pieces.Count];
         for (var e = 0; e < pieces.Count; e++)
         {
-            var root = Root(together, e);
-            if (!lines.TryGetValue(root, out var members))
+            roots[e] = Root(together, e);
+            size[roots[e]]++;
+        }
+
+        Dictionary<int, List<int>> lines = null;
+        for (var e = 0; e < pieces.Count; e++)
+        {
+            if (size[roots[e]] < 2)
             {
-                lines[root] = members = [];
+                continue;
+            }
+
+            lines ??= [];
+            if (!lines.TryGetValue(roots[e], out var members))
+            {
+                lines[roots[e]] = members = [];
             }
 
             members.Add(e);
         }
 
-        var alongLine = new HashSet<int>();
-        foreach (var (root, members) in lines)
+        var alongLine = new bool[pieces.Count];
+        if (lines != null)
         {
-            if (members.Count > 1 && CutAlongLine(members, cuts, runs, order))
+            foreach (var (root, members) in lines)
             {
-                alongLine.Add(root);
+                alongLine[root] = CutAlongLine(members, cuts, runs, order);
             }
         }
 
+        var chain = new List<(double Along, int Found, int Id)>();
+        var seen = new HashSet<int>();
         for (var e = 0; e < pieces.Count; e++)
         {
-            if (alongLine.Contains(Root(together, e)))
+            if (alongLine[roots[e]])
             {
                 continue;
             }
 
             var (from, to, first, second) = pieces[e];
-            var chain = new List<int> { from };
-            if (cuts[e] != null)
+            if (cuts[e] == null)
             {
-                var a = points[from];
-                var d = points[to] - a;
-                chain.AddRange(cuts[e].Distinct().Where(id => id != from && id != to)
-                    .OrderBy(id => Vector2<double>.Dot(points[id] - a, d)));
+                Run(from, to, first, second, runs, order);
+                continue;
             }
 
-            chain.Add(to);
-            for (var i = 0; i + 1 < chain.Count; i++)
+            var a = points[from];
+            var d = points[to] - a;
+            chain.Clear();
+            seen.Clear();
+            foreach (var id in cuts[e])
             {
-                var (u, v) = (chain[i], chain[i + 1]);
-                if (u == v)
-                {
-                    continue;
-                }
-
-                var key = u < v ? (u, v) : (v, u);
-                var way = u < v ? 1 : -1;
-                if (!runs.TryGetValue(key, out var count))
-                {
-                    order.Add(key);
-                }
-
-                runs[key] = (count.First + way * first, count.Second + way * second);
+                if (id != from && id != to && seen.Add(id)) chain.Add((Vector2<double>.Dot(points[id] - a, d), chain.Count, id));
             }
+
+            chain.Sort();
+            var previous = from;
+            foreach (var (_, _, id) in chain)
+            {
+                Run(previous, id, first, second, runs, order);
+                previous = id;
+            }
+
+            Run(previous, to, first, second, runs, order);
         }
 
         var split = new List<(int From, int To, int First, int Second)>(order.Count);
@@ -325,6 +339,24 @@ internal sealed class OverlayGraph
         }
 
         return split;
+    }
+
+    private static void Run(int u, int v, int first, int second, Dictionary<(int, int), (int First, int Second)> runs,
+        List<(int, int)> order)
+    {
+        if (u == v)
+        {
+            return;
+        }
+
+        var key = u < v ? (u, v) : (v, u);
+        var way = u < v ? 1 : -1;
+        if (!runs.TryGetValue(key, out var count))
+        {
+            order.Add(key);
+        }
+
+        runs[key] = (count.First + way * first, count.Second + way * second);
     }
 
     private bool CutAlongLine(List<int> members, List<int>[] cuts, Dictionary<(int, int), (int First, int Second)> runs,
@@ -766,7 +798,8 @@ internal sealed class OverlayGraph
 
     private Vector2<double> Direction(int h) => points[Origin(h ^ 1)] - points[Origin(h)];
 
-    private static bool Inside(int winding, FillRule rule) => rule == FillRule.NonZero ? winding != 0 : (winding & 1) != 0;
+    /// <summary>Whether a point of <paramref name="winding"/> is inside under <paramref name="rule"/>.</summary>
+    internal static bool Inside(int winding, FillRule rule) => rule == FillRule.NonZero ? winding != 0 : (winding & 1) != 0;
 
     private int Next(List<(int From, int To)> kept, Dictionary<int, List<(double Angle, int Edge)>> outgoing, int current)
     {
