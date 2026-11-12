@@ -31,7 +31,7 @@ internal sealed class NestingSweep
         for (var i = 0; i < count; i++)
         {
             var ring = rings[i];
-            var counterclockwise = RingMath.SignedArea(ring) >= 0;
+            var counterclockwise = MathHelper.RingMath.SignedArea(ring) >= 0;
             leftmost[i] = ring[0];
             for (var k = 0; k < ring.Length; k++)
             {

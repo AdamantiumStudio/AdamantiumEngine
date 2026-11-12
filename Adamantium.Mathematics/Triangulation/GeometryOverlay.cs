@@ -4,47 +4,35 @@ using System.Collections.Generic;
 namespace Adamantium.Mathematics.Triangulation;
 
 /// <summary>
-/// Two areas - closed rings, each set under its fill rule - combined by a rule of which side is filled. Points nearer
-/// than a ten-billionth of the areas' size - or than a few hundred steps of the doubles that far from the origin - are
-/// one point, and an end that near another edge lies on it: what is that close in the shapes given is meant to meet;
-/// the points themselves stay where they are. Every edge is cut wherever another crosses or touches it, along a shared
-/// edge too, again until no cut makes another, and the pieces lying on one another are made one, adding up how often,
-/// and which way, each area's rings run along it. The pieces bound the faces of the plane they cut; one ray to each
-/// connected set of pieces gives the winding around it, and crossing a piece changes the winding by the piece's runs,
-/// so every face gets its winding from its neighbour's - the same on both sides of every piece. A piece is kept where
-/// the rule fills one side and not the other, turned so the filled side is on its left, and the pieces are joined into
-/// closed rings, each turning at a vertex to the first piece clockwise from the one it came in by, so rings meeting at
-/// a point part there; a ring that passes a point twice is parted into simple rings. Rings of fewer than two points,
-/// or with a coordinate not a finite number, are left out.
+/// Combines areas bounded by rings that may cross, touch or overlap, and returns simple, non-crossing rings with the
+/// filled side on the left. Points closer than a ten-billionth of the areas' size are treated as one. Rings with fewer
+/// than two points or a non-finite coordinate are ignored.
 /// </summary>
 public static class GeometryOverlay
 {
-    /// <summary>The rings bounding where <paramref name="fills"/> says the area is filled, given whether a point is in
-    /// the first area and the second; each ring simple, crossing no other, its filled side on its left. An area is its
-    /// rings under its rule. The rule must leave empty what is in neither area, or the result has no bound.</summary>
-    public static List<Vector2<double>[]> Combine((IReadOnlyList<Vector2<double>[]> Rings, FillRule Rule) first,
-        (IReadOnlyList<Vector2<double>[]> Rings, FillRule Rule) second, Func<bool, bool, bool> fills)
+    /// <summary>The rings bounding what <paramref name="mode"/> keeps of <paramref name="first"/> and
+    /// <paramref name="second"/>; each ring simple, crossing no other, its filled side on its left.</summary>
+    public static List<Vector2<double>[]> Combine(RingArea first, RingArea second, AreaCombineMode mode)
     {
-        ArgumentNullException.ThrowIfNull(first.Rings);
-        ArgumentNullException.ThrowIfNull(second.Rings);
-        ArgumentNullException.ThrowIfNull(fills);
-        if (fills(false, false))
+        ArgumentNullException.ThrowIfNull(first.Rings, nameof(first));
+        ArgumentNullException.ThrowIfNull(second.Rings, nameof(second));
+        if (!Enum.IsDefined(mode))
         {
-            throw new ArgumentException("What is in neither area must not be filled: the result would have no bound.",
-                nameof(fills));
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
         }
 
-        var exponent = RingMath.Scale(Math.Max(RingMath.Largest(first.Rings), RingMath.Largest(second.Rings)));
+        var exponent = MathHelper.RingMath.Scale(Math.Max(MathHelper.RingMath.Largest(first.Rings),
+            MathHelper.RingMath.Largest(second.Rings)));
         if (exponent == 0)
         {
-            return OverlayGraph.Combine(first, second, fills);
+            return OverlayGraph.Combine(first, second, mode);
         }
 
-        var rings = OverlayGraph.Combine((RingMath.Scaled(first.Rings, exponent), first.Rule),
-            (RingMath.Scaled(second.Rings, exponent), second.Rule), fills);
+        var rings = OverlayGraph.Combine(new RingArea(MathHelper.RingMath.Scaled(first.Rings, exponent), first.Rule),
+            new RingArea(MathHelper.RingMath.Scaled(second.Rings, exponent), second.Rule), mode);
         foreach (var ring in rings)
         {
-            for (var i = 0; i < ring.Length; i++) ring[i] = RingMath.Scaled(ring[i], -exponent);
+            for (var i = 0; i < ring.Length; i++) ring[i] = MathHelper.RingMath.Scaled(ring[i], -exponent);
         }
 
         return rings;
@@ -54,5 +42,5 @@ public static class GeometryOverlay
     /// touching or lying on one another as they may - each simple, crossing no other, its filled side on its left.
     /// </summary>
     public static List<Vector2<double>[]> Outline(IReadOnlyList<Vector2<double>[]> rings, FillRule rule) =>
-        Combine((rings, rule), ([], FillRule.EvenOdd), static (inFirst, _) => inFirst);
+        Combine(new RingArea(rings, rule), new RingArea([], FillRule.EvenOdd), AreaCombineMode.Union);
 }

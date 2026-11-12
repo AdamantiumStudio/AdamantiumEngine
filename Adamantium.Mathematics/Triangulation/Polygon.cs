@@ -89,7 +89,7 @@ namespace Adamantium.Mathematics.Triangulation
             {
                 foreach (var contour in container.Contours)
                 {
-                    if (contour.Points == null || contour.Points.Length == 0 || !RingMath.Finite(contour.Points)) continue;
+                    if (contour.Points == null || contour.Points.Length == 0 || !MathHelper.RingMath.Finite(contour.Points)) continue;
                     var copy = contour.Copy();
                     copy.SplitOnSegments();
                     ProcessedContours.Add(copy);

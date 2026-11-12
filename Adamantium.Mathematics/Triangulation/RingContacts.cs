@@ -21,7 +21,7 @@ public static class RingContacts
     public static bool AnyMeet(IReadOnlyList<Vector2<double>[]> rings)
     {
         ArgumentNullException.ThrowIfNull(rings);
-        rings = RingMath.Scaled(rings, RingMath.Scale(RingMath.Largest(rings)));
+        rings = MathHelper.RingMath.Scaled(rings, MathHelper.RingMath.Scale(MathHelper.RingMath.Largest(rings)));
         var segments = new List<(Vector2<double> Left, Vector2<double> Right)>();
         var edges = new List<(int Ring, int Index, int Count)>();
         var corners = new HashSet<Vector2<double>>();
@@ -29,7 +29,7 @@ public static class RingContacts
         for (var r = 0; r < rings.Count; r++)
         {
             var ring = rings[r];
-            if (ring == null || ring.Length < 2 || !RingMath.Finite(ring)) continue;
+            if (ring == null || ring.Length < 2 || !MathHelper.RingMath.Finite(ring)) continue;
             for (var i = 0; i < ring.Length; i++)
             {
                 var (a, b) = (ring[i], ring[(i + 1) % ring.Length]);

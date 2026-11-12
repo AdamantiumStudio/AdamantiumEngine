@@ -7,12 +7,11 @@ All packages share one version.
 
 ### Added
 
-- `GeometryOverlay`: two areas - rings under their fill rules - combined by a rule of which side is filled (union,
-  intersection, difference, either but not both, or any other), or one area's rings turned into the simple rings
-  bounding what its rule fills (`Outline`). Rings crossing, touching or lying along one another are cut where they
-  meet - found by a line swept across them, however long their edges - points nearer than a ten-billionth of the size
-  taken as one, and the result is simple rings crossing nowhere, each with its filled side on its left; a rule that
-  fills what is in neither area is refused. `RingFill.Fill` triangulates any rings by a fill rule: rings that keep
+- `GeometryOverlay`: two areas (`RingArea` - rings under a fill rule) combined by an `AreaCombineMode` (union,
+  intersection, difference, xor), or one area's rings turned into the simple rings bounding what its rule fills
+  (`Outline`). Rings crossing, touching or lying along one another are cut where they meet - found by a line swept
+  across them, however long their edges - points nearer than a ten-billionth of the size taken as one, and the result
+  is simple rings crossing nowhere, each with its filled side on its left. `RingFill.Fill` triangulates any rings by a fill rule: rings that keep
   clear of each other (`RingContacts.AnyMeet`) by how they nest, found by a sweep, the others through the overlay; each
   face by clipping ears, a face the clipping does not cover whole by the trapezoids between its edges.
 - `SamplerStates.PixelatedClampToEdge`: a picture enlarged in hard squares - the nearest texel - and reduced smoothly,

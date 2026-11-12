@@ -4,15 +4,8 @@ using System.Collections.Generic;
 namespace Adamantium.Mathematics.Triangulation;
 
 /// <summary>
-/// Fills closed rings by a fill rule, whatever they do to one another. Rings that keep clear of each other
-/// (<see cref="RingContacts.AnyMeet"/>) fill by how they nest: a line swept across x finds the ring straight around each
-/// by the edge just below its leftmost corner - that ring if its inside lies above the edge, else the ring around that
-/// one - so the winding inside every ring is the one around it and its own turn; each region a ring bounds less the
-/// rings straight inside is filled or not by its winding, and filled regions next to each other are cut as one face.
-/// Rings that cross, touch or lie along one another are laid over one another first
-/// (<see cref="GeometryOverlay.Outline"/>), into the simple rings bounding what the rule fills, and the faces those
-/// bound are filled. Each face is cut by clipping ears, or into the trapezoids between its edges where the clipping does
-/// not cover it whole.
+/// Triangulates closed rings by a fill rule, whether or not they cross, touch or overlap. Rings that meet go through
+/// <see cref="GeometryOverlay.Outline"/> first.
 /// </summary>
 public static class RingFill
 {
@@ -25,14 +18,14 @@ public static class RingFill
         var usable = new List<Vector2<double>[]>(rings.Count);
         foreach (var ring in rings)
         {
-            if (ring != null && ring.Length >= 3 && RingMath.Finite(ring)) usable.Add(ring);
+            if (ring != null && ring.Length >= 3 && MathHelper.RingMath.Finite(ring)) usable.Add(ring);
         }
 
         if (usable.Count == 0) return [];
-        var exponent = RingMath.Scale(RingMath.Largest(usable));
+        var exponent = MathHelper.RingMath.Scale(MathHelper.RingMath.Largest(usable));
         if (exponent == 0) return FillUsable(usable, rule);
-        var triangles = FillUsable(new List<Vector2<double>[]>(RingMath.Scaled(usable, exponent)), rule);
-        for (var i = 0; i < triangles.Count; i++) triangles[i] = RingMath.Scaled(triangles[i], -exponent);
+        var triangles = FillUsable(new List<Vector2<double>[]>(MathHelper.RingMath.Scaled(usable, exponent)), rule);
+        for (var i = 0; i < triangles.Count; i++) triangles[i] = MathHelper.RingMath.Scaled(triangles[i], -exponent);
         return triangles;
     }
 
@@ -57,7 +50,7 @@ public static class RingFill
         {
             var around = parent[ring];
             depth[ring] = around < 0 ? 0 : depth[around] + 1;
-            winding[ring] = (RingMath.SignedArea(rings[ring]) >= 0 ? 1 : -1) + (around < 0 ? 0 : winding[around]);
+            winding[ring] = (MathHelper.RingMath.SignedArea(rings[ring]) >= 0 ? 1 : -1) + (around < 0 ? 0 : winding[around]);
         }
 
         var children = new List<int>[count];

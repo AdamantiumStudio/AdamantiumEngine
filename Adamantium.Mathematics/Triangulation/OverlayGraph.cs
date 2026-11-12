@@ -31,8 +31,7 @@ internal sealed class OverlayGraph
     }
 
     /// <summary>See <see cref="GeometryOverlay.Combine"/>.</summary>
-    public static List<Vector2<double>[]> Combine((IReadOnlyList<Vector2<double>[]> Rings, FillRule Rule) first,
-        (IReadOnlyList<Vector2<double>[]> Rings, FillRule Rule) second, Func<bool, bool, bool> fills)
+    public static List<Vector2<double>[]> Combine(RingArea first, RingArea second, AreaCombineMode mode)
     {
         var grid = Grid(first.Rings, second.Rings);
         if (grid <= 0)
@@ -44,10 +43,18 @@ internal sealed class OverlayGraph
         overlay.AddRings(first.Rings, 0);
         overlay.AddRings(second.Rings, 1);
         overlay.Planarize();
-        return overlay.Boundary(first.Rule, second.Rule, fills);
+        return overlay.Boundary(first.Rule, second.Rule, mode);
     }
 
-    private static bool Usable(Vector2<double>[] ring) => ring != null && ring.Length >= 2 && RingMath.Finite(ring);
+    private static bool Keeps(AreaCombineMode mode, bool inFirst, bool inSecond) => mode switch
+    {
+        AreaCombineMode.Union => inFirst || inSecond,
+        AreaCombineMode.Xor => inFirst != inSecond,
+        AreaCombineMode.Intersect => inFirst && inSecond,
+        _ => inFirst && !inSecond,
+    };
+
+    private static bool Usable(Vector2<double>[] ring) => ring != null && ring.Length >= 2 && MathHelper.RingMath.Finite(ring);
 
     private static double Grid(IReadOnlyList<Vector2<double>[]> first, IReadOnlyList<Vector2<double>[]> second)
     {
@@ -492,7 +499,7 @@ internal sealed class OverlayGraph
         return t > 0 && t < 1 && Math.Abs(Cross(d, p - a)) / length <= merge;
     }
 
-    private List<Vector2<double>[]> Boundary(FillRule firstRule, FillRule secondRule, Func<bool, bool, bool> fills)
+    private List<Vector2<double>[]> Boundary(FillRule firstRule, FillRule secondRule, AreaCombineMode mode)
     {
         var winding = FaceWindings(out var face);
         var outgoing = new Dictionary<int, List<(double Angle, int Edge)>>();
@@ -502,8 +509,8 @@ internal sealed class OverlayGraph
             var (u, v, _, _) = pieces[i];
             var (leftFirst, leftSecond) = winding[face[2 * i]];
             var (rightFirst, rightSecond) = winding[face[2 * i + 1]];
-            var leftFilled = fills(Inside(leftFirst, firstRule), Inside(leftSecond, secondRule));
-            var rightFilled = fills(Inside(rightFirst, firstRule), Inside(rightSecond, secondRule));
+            var leftFilled = Keeps(mode, Inside(leftFirst, firstRule), Inside(leftSecond, secondRule));
+            var rightFilled = Keeps(mode, Inside(rightFirst, firstRule), Inside(rightSecond, secondRule));
             if (leftFilled == rightFilled)
             {
                 continue;

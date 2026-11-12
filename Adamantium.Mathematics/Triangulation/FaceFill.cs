@@ -29,8 +29,8 @@ internal static class FaceFill
         var outer = new List<bool>();
         foreach (var ring in rings)
         {
-            if (ring == null || ring.Length < 3 || !RingMath.Finite(ring)) continue;
-            var area = RingMath.SignedArea(ring);
+            if (ring == null || ring.Length < 3 || !MathHelper.RingMath.Finite(ring)) continue;
+            var area = MathHelper.RingMath.SignedArea(ring);
             if (area == 0) continue;
             kept.Add(ring);
             outer.Add(area > 0);
@@ -88,8 +88,8 @@ internal static class FaceFill
             return false;
         }
 
-        var faceArea = Math.Abs(RingMath.SignedArea(face[0]));
-        for (var h = 1; h < face.Count; h++) faceArea -= Math.Abs(RingMath.SignedArea(face[h]));
+        var faceArea = Math.Abs(MathHelper.RingMath.SignedArea(face[0]));
+        for (var h = 1; h < face.Count; h++) faceArea -= Math.Abs(MathHelper.RingMath.SignedArea(face[h]));
         var cut = 0.0;
         for (var t = 0; t + 2 < indices.Count; t += 3)
         {

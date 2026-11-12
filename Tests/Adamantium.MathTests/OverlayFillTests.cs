@@ -229,10 +229,10 @@ namespace Adamantium.MathTests
         }
 
         [Test]
-        public void ARuleFillingOutsideBothAreas_IsRefused()
+        public void AnUnknownMode_IsRefused()
         {
-            Assert.That(() => GeometryOverlay.Combine(([Rect(0, 0, 1, 1)], FillRule.EvenOdd), ([], FillRule.EvenOdd), (a, _) => !a),
-                Throws.ArgumentException);
+            Assert.That(() => GeometryOverlay.Combine(new RingArea([Rect(0, 0, 1, 1)], FillRule.EvenOdd),
+                new RingArea([], FillRule.EvenOdd), (AreaCombineMode)7), Throws.InstanceOf<ArgumentOutOfRangeException>());
         }
 
         // A face cut into trapezoids - its holes meet at a point - gets about as many as it has corners, not as many as
@@ -261,9 +261,10 @@ namespace Adamantium.MathTests
         public void CombineModes_FillAsTheirRuleSays()
         {
             var random = new Random(77);
-            var modes = new (string Name, Func<bool, bool, bool> Fills)[]
+            var modes = new (AreaCombineMode Mode, Func<bool, bool, bool> Fills)[]
             {
-                ("union", (a, b) => a || b), ("intersection", (a, b) => a && b), ("difference", (a, b) => a && !b), ("xor", (a, b) => a ^ b),
+                (AreaCombineMode.Union, (a, b) => a || b), (AreaCombineMode.Intersect, (a, b) => a && b),
+                (AreaCombineMode.Exclude, (a, b) => a && !b), (AreaCombineMode.Xor, (a, b) => a ^ b),
             };
             var wrong = new List<string>();
             for (var n = 0; n < 150; n++)
@@ -276,7 +277,8 @@ namespace Adamantium.MathTests
                     {
                         foreach (var (name, fills) in modes)
                         {
-                            var tris = RingFill.Fill(GeometryOverlay.Combine((first, ruleA), (second, ruleB), fills), FillRule.NonZero);
+                            var combined = GeometryOverlay.Combine(new RingArea(first, ruleA), new RingArea(second, ruleB), name);
+                            var tris = RingFill.Fill(combined, FillRule.NonZero);
                             var fault = CombineFault(tris, first, ruleA, second, ruleB, fills);
                             if (fault != null && wrong.Count < 5) wrong.Add($"{name} {ruleA}/{ruleB}: {Describe(first)} with {Describe(second)} - {fault}");
                         }
