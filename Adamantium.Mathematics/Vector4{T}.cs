@@ -75,6 +75,16 @@ public struct Vector4<T> : IEquatable<Vector4<T>>, IFormattable where T : unmana
     /// <summary>The size of the vector in bytes.</summary>
     public static int SizeInBytes => Unsafe.SizeOf<Vector4<T>>();
 
+    /// <summary>The vector written as "x y z w" or "x, y, z, w", the numbers in the invariant culture - as markup gives
+    /// it.</summary>
+    /// <exception cref="FormatException"><paramref name="value"/> does not hold four numbers.</exception>
+    public static Vector4<T> Parse(string value)
+    {
+        Span<T> numbers = stackalloc T[4];
+        MarkupNumbers.Parse(value, numbers, "x y z w");
+        return new Vector4<T>(numbers);
+    }
+
     /// <summary>All zero.</summary>
     public static Vector4<T> Zero => default;
 
