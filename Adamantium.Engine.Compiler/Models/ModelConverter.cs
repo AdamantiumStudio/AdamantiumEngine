@@ -26,10 +26,15 @@ namespace Adamantium.Engine.Compiler.Models
         public IReadOnlyList<String> UnsupportedFeatures { get; private set; } = Array.Empty<String>();
 
         //The parse is synchronous; the former name ImportFileAsync promised otherwise
-        public SceneData ImportFile(string path, CancellationToken cancellationToken = default)
+        public SceneData ImportFile(string path, CancellationToken cancellationToken = default) =>
+            ImportFile(path, new ConversionConfig(true), cancellationToken);
+
+        /// <summary>Imports the file at <paramref name="path"/> as <paramref name="config"/> says.</summary>
+        public SceneData ImportFile(string path, ConversionConfig config, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(config);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token, cancellationToken);
-            var converter = ModelConverterFactory.GetConverter(path, new ConversionConfig(true));
+            var converter = ModelConverterFactory.GetConverter(path, config);
 
             ConvertationInProgress = true;
             ConvertationFinished = false;

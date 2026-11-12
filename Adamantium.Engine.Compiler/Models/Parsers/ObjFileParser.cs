@@ -183,6 +183,7 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
                         offset.Position = 0;
                         offset.UV0 = layout.HasUV ? 1 : null;
                         offset.Normal = layout.HasNormal ? (ulong?)2 : null;
+                        offset.Observe(2);
                         semanticData.Semantic = GetSemantic(offset);
                         offset = new Offset();
                         offsetIndex = 0;

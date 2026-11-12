@@ -123,6 +123,7 @@ namespace Adamantium.ECS
             }
         }
 
+        /// <summary>Unloads every service, those added since the last frame and not yet joined too.</summary>
         public void UnloadContent()
         {
             lock (syncObject)
@@ -131,6 +132,13 @@ namespace Adamantium.ECS
                 {
                     service.UnloadContent();
                 }
+
+                foreach (var service in servicesToAdd)
+                {
+                    service.UnloadContent();
+                }
+
+                servicesToAdd.Clear();
             }
         }
 
@@ -138,17 +146,39 @@ namespace Adamantium.ECS
         {
             foreach (var handler in _snapshot)
             {
-                handler.Update(appTime);
+                if (handler.IsActive)
+                {
+                    handler.Update(appTime);
+                }
             }
         }
 
-        /// <summary>Draws every rendering service that agrees to draw this frame. True when at least one did.</summary>
+        /// <summary>Whether an active rendering service is among the services: one with an output of its own draws even
+        /// in a universe without outputs.</summary>
+        public bool HasActiveRenderingService
+        {
+            get
+            {
+                foreach (var service in _snapshot)
+                {
+                    if (service.IsRenderingService && service.IsActive)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>Draws every active rendering service that agrees to draw this frame. True when at least one did.
+        /// </summary>
         public bool Draw(AppTime appTime)
         {
             var drew = false;
             foreach (var service in _snapshot)
             {
-                if (!service.IsRenderingService) continue;
+                if (!service.IsRenderingService || !service.IsActive) continue;
 
                 if (!service.BeginDraw()) continue;
 
@@ -167,7 +197,7 @@ namespace Adamantium.ECS
         {
             foreach (var service in _snapshot)
             {
-                if (service.CanDisplayContent)
+                if (service.IsActive && service.CanDisplayContent)
                 {
                     service.Present();
                 }

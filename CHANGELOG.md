@@ -7,6 +7,40 @@ All packages share one version.
 
 ### Added
 
+- `ScreenshotRenderingService` with its `ScreenshotRenderingProcessor`: screenshots of entities, taken in the universe
+  the service is made in (`Create`). An entity put in its queue (`Enqueue`) - one no world holds, so nothing else draws
+  it - is drawn alone, one a frame, into an output of the service's own, from the front, above and to the right, every
+  corner of its bounds in view, over a transparent ground; the task completes with the picture. Asleep while its queue
+  is empty. The processor draws with a rendering of its own, whatever renders the scene: `ScreenshotEffect` - the
+  colors or textures of the materials in the directional lights of a `ScreenshotLighting` (`Studio` by default) and an
+  even light, no clusters, no instancing, no skinning, the model in its bind pose.
+  `OffscreenOutput`: an output with no surface, drawn into a texture of a fixed size that `ReadFrame` reads back.
+  `RenderingService.WritesAlpha`: the surfaces drawn write their alpha, so a frame cleared transparent keeps only what
+  was drawn.
+- `EntityService.IsActive`: a service not active is passed by in the frame - not updated, drawn or presented - and only
+  told the frame ended; a service taken out with its output stops at once, so the frame it goes in no longer draws on
+  an output already let go. `EntityServiceManager.HasActiveRenderingService`: a universe with no outputs still draws
+  its frame while one is active; services added but not yet joined are unloaded with the rest.
+  `Universe.CreateAssetService`: an asset service set up as the universe's, whose loads its maker unloads alone.
+  `OffscreenOutput.ReadFrame` waits for the frames of its own device, not for the whole GPU.
+- `IUniverseWatcher.Invalidate(output)`: a frame of one output alone. The services that asked the universe for frames -
+  `TransformService` and the screenshots - ask its watcher.
+- `ContentBuilder.WriteThumbnail`: a picture put into an asset file, the rest of the file kept, under the content
+  project's lock, unless the file was written again since the picture was taken of it. `BuildResult.Imported`: the
+  assets a build imported (`ImportedAsset`), each with why (`ImportReason`) and whether the asset file it replaced had
+  a thumbnail - which the new one has not.
+- Import settings an importer declares (`IContentImporter.Settings`, `ImportSetting` - a name, its kind
+  (`ImportSettingKind`: a switch, a number, a choice of `ImportSettingChoice`), its default and how it is said), so a
+  tool can offer them without knowing the importer; `ContentBuilder.GetSettings`, `GetImporterName` and
+  `ImporterNames`. The model importer reads four: `Scale` - the whole model from its root - `UpAxis` (as the file says,
+  Y or Z), `Normals` (from the file, computed where it has none, or always computed) and `Animations` (the clips
+  imported or left out, the skin kept in its bind pose); a value it cannot take is warned about (ACB011) and its default
+  taken. `ModelConverter.ImportFile` takes a `ConversionConfig`, which gains `SourceUpAxis` and `RecalculateNormals`.
+- `ContentBuilder.SetDefaultParameters`: what a source with no asset file yet is imported with, for an asset the
+  manifest gives no settings. `ContentBuilder.ImportAsset`: one asset of a manifest imported anew, up to date or not,
+  with the settings asked for - with the manifest's when it gives some - and never over an asset file a newer engine
+  wrote. `ContentBuilder.FindSource`: the source an asset file was imported from. `AssetFile.Sections`: the sections a
+  file has, read or not - whether it has a thumbnail is known without reading the picture.
 - `MathHelper.Coordinates`: the one step geometry coordinates are rounded to - 4 decimals, `Step` 1e-4, and `Round`
   for a number, a `Vector2` and a `Vector3`. Meshes, contours, shapes, glyph outlines and the points the triangulator
   cuts at all round with it.
@@ -198,6 +232,10 @@ All packages share one version.
 
 ### Changed
 
+- `IUniverseWatcher` moved from `Adamantium.ECS` to `Adamantium.Multiverse`, beside the outputs it now asks frames of.
+- A source changed is imported again with the settings its asset file records, unless the manifest gives the asset
+  some; an asset file is imported again for its settings only when the manifest's differ from those it records. It was
+  imported with the manifest's every time, which were none for an asset the manifest did not set up.
 - Geometry coordinates round to one step, 4 decimals (`MathHelper.Coordinates`), a value halfway between two steps
   away from zero. Before, each place rounded by a number of its own:
   - `MeshContour` kept 5 decimals;
@@ -251,6 +289,14 @@ All packages share one version.
 
 ### Fixed
 
+- `MeshGeometryCache` lets a mesh's GPU buffers go itself once the mesh was not drawn for a while
+  (`ReleaseUnused`, called each frame by the processors that draw; `KeepUnused`, five seconds by default) - when no
+  other mesh kept has the same content and no frame in flight draws with them - instead of keeping every mesh ever
+  drawn, and its buffers, for as long as the processor lived: a model taken out of the scene kept its geometry on the
+  GPU. `Clear` lets go of all at once.
+- A Wavefront `.obj` whose faces name positions alone, or positions and texture coordinates without normals, is read
+  corner by corner as written; its indices were read one or two to a corner instead of three, and the model came out
+  torn or empty.
 - An open `MeshContour` that ends where it began keeps its last point, so a stroke runs its last leg. It was dropped
   as if the contour were closed.
 - An outlined `Shapes.Polygon` has its corners as a closed contour beside its line strip, as an outlined ellipse does.

@@ -8,10 +8,12 @@ namespace Adamantium.Multiverse;
 
 /// <summary>A universe's <see cref="IUniverseWatcher"/>, the one place that asks it for frames: it keeps the most frames
 /// asked for and the latest moment to draw until, and wakes the universe once for any number of asks between its
-/// frames.</summary>
+/// frames; a frame of one output alone it asks for as it is told; nothing while the universe draws every frame.
+/// </summary>
 internal sealed class UniverseWatcher : IUniverseWatcher
 {
     private readonly Action wake;
+    private readonly Action<UniverseOutput> wakeOutput;
     private readonly Lock gate = new();
     private readonly HashSet<INotifyUniverse> watching = [];
     private int framesOwed;
@@ -19,10 +21,21 @@ internal sealed class UniverseWatcher : IUniverseWatcher
     private int wakePending;
     private volatile bool isWatching;
 
-    /// <summary>A watcher that calls <paramref name="wake"/> to wake its universe.</summary>
-    internal UniverseWatcher(Action wake)
+    /// <summary>A watcher that calls <paramref name="wake"/> to wake its universe for every output, and
+    /// <paramref name="wakeOutput"/> for one.</summary>
+    internal UniverseWatcher(Action wake, Action<UniverseOutput> wakeOutput)
     {
         this.wake = wake;
+        this.wakeOutput = wakeOutput;
+    }
+
+    public void Invalidate(UniverseOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (isWatching)
+        {
+            wakeOutput(output);
+        }
     }
 
     /// <summary>Whether the universe draws only when asked, so there is anything to watch for. While it draws every

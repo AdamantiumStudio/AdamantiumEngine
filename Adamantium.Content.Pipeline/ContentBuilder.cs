@@ -22,6 +22,8 @@ public sealed class ContentBuilder
     private readonly Dictionary<string, IContentImporter> importersByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IContentImporter> importersByExtension = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IContentWriter> writersByImporter = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> defaultsByImporter =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly string EngineVersion =
         typeof(AssetFile).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
@@ -52,6 +54,69 @@ public sealed class ContentBuilder
 
     /// <summary>True if the builder can handle the given source extension.</summary>
     public bool CanImport(string extension) => importersByExtension.ContainsKey(extension);
+
+    /// <summary>The names of the importers registered.</summary>
+    public IReadOnlyCollection<string> ImporterNames => importersByName.Keys;
+
+    /// <summary>The full path of the source of <paramref name="manifest"/> imported into the asset file at
+    /// <paramref name="assetFile"/>; null when none is.</summary>
+    public string FindSource(ContentManifest manifest, string projectDirectory, string assetFile)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentException.ThrowIfNullOrEmpty(projectDirectory);
+        if (string.IsNullOrEmpty(assetFile))
+        {
+            return null;
+        }
+
+        var assetFull = Path.GetFullPath(assetFile);
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        foreach (var asset in manifest.Assets)
+        {
+            var sourceFull = Path.GetFullPath(Path.Combine(projectDirectory, asset.Source));
+            if (ResolveImporter(asset, sourceFull) is not { } importer)
+            {
+                continue;
+            }
+
+            var logicalName = string.IsNullOrEmpty(asset.LogicalName) ? Normalize(asset.Source) : Normalize(asset.LogicalName);
+            var writer = writersByImporter[importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name];
+            if (string.Equals(Path.GetFullPath(GetAssetFilePath(projectDirectory, sourceFull, logicalName, writer)),
+                    assetFull, comparison))
+            {
+                return sourceFull;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The name of the importer that takes the file at <paramref name="sourcePath"/> by its extension; null when
+    /// none does.</summary>
+    public string GetImporterName(string sourcePath) =>
+        importersByExtension.GetValueOrDefault(Path.GetExtension(sourcePath ?? string.Empty)) is { } importer
+            ? importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name
+            : null;
+
+    /// <summary>The settings the importer named <paramref name="importerName"/> reads; empty for an importer not
+    /// registered.</summary>
+    public IReadOnlyList<ImportSetting> GetSettings(string importerName) =>
+        importerName != null && importersByName.TryGetValue(importerName, out var importer) ? importer.Settings : [];
+
+    /// <summary>The parameters an asset of the importer named <paramref name="importerName"/> is imported with when the
+    /// manifest gives it none and its asset file records none - it has no asset file yet, or one that cannot be read.
+    /// Null or empty: the importer's own defaults.</summary>
+    public void SetDefaultParameters(string importerName, IReadOnlyDictionary<string, string> parameters)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(importerName);
+        if (parameters == null || parameters.Count == 0)
+        {
+            defaultsByImporter.Remove(importerName);
+            return;
+        }
+
+        defaultsByImporter[importerName] = new Dictionary<string, string>(parameters);
+    }
 
     /// <summary>
     /// Adds entries for every supported source file found under <paramref name="projectDirectory"/> that is
@@ -88,8 +153,10 @@ public sealed class ContentBuilder
 
     /// <summary>Imports each asset an importer takes into its asset file beside it (<c>Ship.dae.aemf</c> beside
     /// <c>Ship.dae</c>; for a source outside the project, under <c>obj/assets</c>) when there is none yet, it cannot be
-    /// read, or the source or its settings changed - not when only the format or the importer did - and copies the
-    /// asset file to the output directory. An asset no importer takes is copied there as it is. What was built from an
+    /// read, or the source changed, or the manifest gives it settings other than those it was imported with - not when
+    /// only the format or the importer did - and copies the asset file to the output directory. Imported again, it keeps
+    /// the settings its asset file records unless the manifest gives some; a new one takes the defaults set by
+    /// <see cref="SetDefaultParameters"/>. An asset no importer takes is copied there as it is. What was built from an
     /// asset no longer listed is deleted from the output. One build or <see cref="Import"/> of a project runs at a time,
     /// in all processes of the user: another waits for it.</summary>
     public BuildResult Build(ContentManifest manifest, string projectDirectory, Action<string> log = null)
@@ -158,9 +225,9 @@ public sealed class ContentBuilder
 
             try
             {
-                var reason = ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory,
+                var imported = ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory,
                     outputDirectory, intermediateDirectory, log);
-                if (reason == null && !cache.IsStale(asset.Source, assetFull, asset.Parameters, cookedFull))
+                if (imported == null && !cache.IsStale(asset.Source, assetFull, asset.Parameters, cookedFull))
                 {
                     log($"  [up-to-date] {asset.Source}");
                     result.Skipped++;
@@ -171,9 +238,9 @@ public sealed class ContentBuilder
                 File.Copy(assetFull, cookedFull, true);
                 var written = CopyCompanions(assetFull, cookedDirectory, outputDirectory, sourceFull, log);
                 cache.Update(asset.Source, assetFull, asset.Parameters, cookedRelative, written);
-                if (reason != null)
+                if (imported is { } done)
                 {
-                    result.Cooked++;
+                    result.AddImported(done);
                 }
                 else
                 {
@@ -257,13 +324,13 @@ public sealed class ContentBuilder
             try
             {
                 if (ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory, outputDirectory,
-                        intermediateDirectory, log) == null)
+                        intermediateDirectory, log) is { } imported)
                 {
-                    result.Skipped++;
+                    result.AddImported(imported);
                 }
                 else
                 {
-                    result.Cooked++;
+                    result.Skipped++;
                 }
             }
             catch (Exception ex)
@@ -271,6 +338,70 @@ public sealed class ContentBuilder
                 log($"{sourceFull} : error ACB004: {ex.Message}");
                 result.Failed++;
             }
+        }
+
+        return result;
+    }
+
+    /// <summary>Imports the asset of <paramref name="manifest"/> whose source is the file at <paramref name="source"/>
+    /// into its asset file, up to date or not, with <paramref name="parameters"/> - with the manifest's when it gives the
+    /// asset some, which a build would go back to. Waits for the project's lock as <see cref="Import"/> does. A source
+    /// the manifest does not list, or no importer takes, is an error in the result.</summary>
+    public BuildResult ImportAsset(ContentManifest manifest, string projectDirectory, string source,
+        IReadOnlyDictionary<string, string> parameters, Action<string> log = null)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentException.ThrowIfNullOrEmpty(projectDirectory);
+        ArgumentException.ThrowIfNullOrEmpty(source);
+        log ??= _ => { };
+        var result = new BuildResult();
+        using var projectLock = ProjectLock.Take(projectDirectory);
+
+        var sourceFull = Path.GetFullPath(source);
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var asset = manifest.Assets.FirstOrDefault(listed =>
+            string.Equals(Path.GetFullPath(Path.Combine(projectDirectory, listed.Source)), sourceFull, comparison));
+        var importer = asset == null ? null : ResolveImporter(asset, sourceFull);
+        if (importer == null)
+        {
+            log(!string.IsNullOrEmpty(asset?.Importer)
+                ? $"{sourceFull} : error ACB002: no importer is named '{asset.Importer}'"
+                : $"{sourceFull} : error ACB012: the project imports no asset from this file");
+            result.Failed++;
+            return result;
+        }
+
+        if (!File.Exists(sourceFull))
+        {
+            log($"{sourceFull} : error ACB001: the source file is missing");
+            result.Failed++;
+            return result;
+        }
+
+        var outputDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.OutputDirectory));
+        var intermediateDirectory = Path.GetFullPath(Path.Combine(projectDirectory, manifest.IntermediateDirectory));
+        var logicalName = string.IsNullOrEmpty(asset.LogicalName) ? Normalize(asset.Source) : Normalize(asset.LogicalName);
+        if (!BuildCache.IsInside(outputDirectory, Path.Combine(outputDirectory, logicalName)))
+        {
+            log($"{sourceFull} : error ACB008: the file lies outside the project; link it under a path inside");
+            result.Failed++;
+            return result;
+        }
+
+        var writer = writersByImporter[importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name];
+        var assetFull = GetAssetFilePath(projectDirectory, sourceFull, logicalName, writer);
+        try
+        {
+            if (ImportIfNeeded(asset, importer, sourceFull, logicalName, assetFull, projectDirectory, outputDirectory,
+                    intermediateDirectory, log, parameters ?? new Dictionary<string, string>()) is { } imported)
+            {
+                result.AddImported(imported);
+            }
+        }
+        catch (Exception ex)
+        {
+            log($"{sourceFull} : error ACB004: {ex.Message}");
+            result.Failed++;
         }
 
         return result;
@@ -285,9 +416,9 @@ public sealed class ContentBuilder
             : Path.Combine(projectDirectory, "obj", "assets", logicalName + writer.OutputExtension);
 
     // Imports the source into its asset file when it needs it and says why; null when the asset file is up to date.
-    private string ImportIfNeeded(ContentAsset asset, IContentImporter importer, string sourceFull, string logicalName,
-        string assetFull, string projectDirectory, string outputDirectory, string intermediateDirectory,
-        Action<string> log)
+    private ImportedAsset? ImportIfNeeded(ContentAsset asset, IContentImporter importer, string sourceFull,
+        string logicalName, string assetFull, string projectDirectory, string outputDirectory,
+        string intermediateDirectory, Action<string> log, IReadOnlyDictionary<string, string> asked = null)
     {
         var importerName = importer.GetType().GetCustomAttribute<ContentImporterAttribute>().Name;
         var file = new FileInfo(sourceFull);
@@ -295,20 +426,34 @@ public sealed class ContentBuilder
         var length = file.Length;
         string hash = null;
         string Hash() => hash ??= AssetSource.ComputeHash(sourceFull);
-        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, asset.Parameters, log);
-        if (reason == null)
+        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, asset.Parameters,
+            defaultsByImporter.GetValueOrDefault(importerName), asked == null ? log : _ => { }, out var hadThumbnail,
+            out var parameters, out var keptAsItIs);
+        if (asked != null)
+        {
+            if (keptAsItIs != null)
+            {
+                throw new InvalidDataException(keptAsItIs.Replace("; import its source again", string.Empty) +
+                                               "; a newer engine wrote it, and this one does not write over it");
+            }
+
+            reason = ImportReason.Asked;
+            parameters = asset.Parameters is { Count: > 0 } ? asset.Parameters : asked;
+        }
+
+        if (reason is not { } why)
         {
             return null;
         }
 
-        log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({reason})");
+        log($"  [import] {asset.Source} -> {Path.GetFileName(assetFull)} ({Describe(why)})");
         List<(string From, string To)> companions = [];
         var context = new ContentBuildContext
         {
             ProjectDirectory = projectDirectory,
             OutputDirectory = outputDirectory,
             IntermediateDirectory = intermediateDirectory,
-            Parameters = asset.Parameters,
+            Parameters = parameters,
             Log = log,
             CopyAlongside = (from, to) => companions.Add((from, to))
         };
@@ -322,12 +467,21 @@ public sealed class ContentBuilder
             Written = written,
             Length = length,
             Importer = importerName,
-            Parameters = asset.Parameters == null ? new() : new(asset.Parameters),
+            Parameters = new(parameters),
             EngineVersion = EngineVersion,
             Companions = companions.Select(companion => Normalize(companion.To)).Distinct().ToList()
         });
-        return reason;
+        return new ImportedAsset(assetFull, why, hadThumbnail);
     }
+
+    private static string Describe(ImportReason reason) => reason switch
+    {
+        ImportReason.New => "new",
+        ImportReason.SourceChanged => "source changed",
+        ImportReason.SettingsChanged => "settings changed",
+        ImportReason.Unreadable => "unreadable",
+        _ => "asked"
+    };
 
     private HashSet<string> GetImportTargets(ContentManifest manifest, string projectDirectory)
     {
@@ -345,12 +499,19 @@ public sealed class ContentBuilder
         return targets;
     }
 
-    private static string GetImportReason(string assetFull, string sourceFull, DateTime sourceWritten, long sourceLength,
-        Func<string> sourceHash, string importerName, IReadOnlyDictionary<string, string> parameters, Action<string> log)
+    private static ImportReason? GetImportReason(string assetFull, string sourceFull, DateTime sourceWritten,
+        long sourceLength, Func<string> sourceHash, string importerName,
+        IReadOnlyDictionary<string, string> manifestParameters, IReadOnlyDictionary<string, string> defaults,
+        Action<string> log, out bool hadThumbnail, out IReadOnlyDictionary<string, string> parameters,
+        out string keptAsItIs)
     {
+        hadThumbnail = false;
+        keptAsItIs = null;
+        var givenByManifest = manifestParameters is { Count: > 0 };
+        parameters = givenByManifest ? manifestParameters : defaults ?? new Dictionary<string, string>();
         if (!File.Exists(assetFull))
         {
-            return "new";
+            return ImportReason.New;
         }
 
         AssetFile file;
@@ -361,12 +522,15 @@ public sealed class ContentBuilder
         catch (AssetFormatException exception) when (exception.WrittenVersion != null)
         {
             log($"{sourceFull} : warning ACB009: {exception.Message}");
+            keptAsItIs = exception.WrittenVersion > AssetFile.FormatVersion ? exception.Message : null;
             return null;
         }
         catch (AssetFormatException)
         {
-            return "unreadable";
+            return ImportReason.Unreadable;
         }
+
+        hadThumbnail = (file.Sections & AssetFileSection.Thumbnail) != 0;
 
         if (file.Version != AssetFile.FormatVersion)
         {
@@ -375,15 +539,20 @@ public sealed class ContentBuilder
         }
 
         var source = file.Source;
-        if (source == null || (source.Written != sourceWritten || source.Length != sourceLength) && source.Hash != sourceHash())
+        var sameImporter = source != null && string.Equals(source.Importer, importerName, StringComparison.OrdinalIgnoreCase);
+        if (sameImporter && !givenByManifest)
         {
-            return "source changed";
+            parameters = source.Parameters ?? new Dictionary<string, string>();
         }
 
-        return string.Equals(source.Importer, importerName, StringComparison.OrdinalIgnoreCase)
-               && HaveSameParameters(source.Parameters, parameters)
+        if (source == null || (source.Written != sourceWritten || source.Length != sourceLength) && source.Hash != sourceHash())
+        {
+            return ImportReason.SourceChanged;
+        }
+
+        return sameImporter && (!givenByManifest || HaveSameParameters(source.Parameters, manifestParameters))
             ? null
-            : "settings changed";
+            : ImportReason.SettingsChanged;
     }
 
     private static bool HaveSameParameters(IReadOnlyDictionary<string, string> recorded,
@@ -433,11 +602,42 @@ public sealed class ContentBuilder
         return written;
     }
 
+    /// <summary>Puts <paramref name="png"/> into the asset file at <paramref name="assetFile"/> as its thumbnail, the
+    /// rest of the file as it was, under the lock of the content project in <paramref name="projectDirectory"/> - null
+    /// for a file in no project - so no import writes the file meanwhile. Nothing is written, and false given, when the
+    /// file is gone, was written again since <paramref name="written"/> (its last write time, in UTC, when the picture was
+    /// taken of it), or is of an older format version, whose body this engine does not write.</summary>
+    public static bool WriteThumbnail(string projectDirectory, string assetFile, byte[] png, DateTime written)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(assetFile);
+        ArgumentNullException.ThrowIfNull(png);
+
+        using var projectLock = projectDirectory == null ? null : ProjectLock.Take(projectDirectory);
+        if (!File.Exists(assetFile) || File.GetLastWriteTimeUtc(assetFile) != written)
+        {
+            return false;
+        }
+
+        var file = AssetFile.Read(assetFile, AssetFileSection.All);
+        if (file.Version != AssetFile.FormatVersion)
+        {
+            return false;
+        }
+
+        file.Thumbnail = png;
+        Replace(assetFile, file);
+        return true;
+    }
+
     private static void WriteAssetFile(string path, IContentWriter writer, object content, AssetSource source)
     {
         using var body = new MemoryStream();
         writer.Write(body, content);
+        Replace(path, new AssetFile { Source = source, Body = body.ToArray() });
+    }
 
+    private static void Replace(string path, AssetFile file)
+    {
         // Hidden and named afresh, so no content glob lists it and no other writer meets it.
         var writing = Path.Combine(Path.GetDirectoryName(path),
             $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.writing");
@@ -446,7 +646,7 @@ public sealed class ContentBuilder
         {
             using (var stream = File.Create(writing))
             {
-                new AssetFile { Source = source, Body = body.ToArray() }.WriteTo(stream);
+                file.WriteTo(stream);
             }
 
             File.Move(writing, path, true);

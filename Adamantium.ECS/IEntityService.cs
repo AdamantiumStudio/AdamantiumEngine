@@ -18,7 +18,11 @@ public interface IEntityService : IUpdateService, IRenderService
     bool IsUpdateService { get; }
     
     bool IsRenderingService { get; }
-    
+
+    /// <summary>Whether the service takes part in the frame: an inactive one is not updated, drawn or presented - a
+    /// sleeping one costs nothing - and is only told the frame ended.</summary>
+    bool IsActive { get; set; }
+
     EntityServiceType ServiceType { get; }
 
     void Initialize();
