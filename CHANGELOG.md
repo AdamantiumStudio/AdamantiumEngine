@@ -17,8 +17,11 @@ All packages share one version.
   was drawn. `ForwardPlusRenderingProcessor` takes its camera, the roots it draws and its lights from overridable
   members (`ViewCamera`, `DrawnEntities`, `DirectionalLights`, `PointLights`, `SpotLights`).
 - `EntityService.IsActive`: a service not active is passed by in the frame - not updated, drawn or presented - and only
-  told the frame ended. `EntityServiceManager.HasActiveRenderingService`: a universe with no outputs still draws its
-  frame while one is active.
+  told the frame ended; a service taken out with its output stops at once, so the frame it goes in no longer draws on
+  an output already let go. `EntityServiceManager.HasActiveRenderingService`: a universe with no outputs still draws
+  its frame while one is active; services added but not yet joined are unloaded with the rest.
+  `Universe.CreateAssetService`: an asset service set up as the universe's, whose loads its maker unloads alone.
+  `OffscreenOutput.ReadFrame` waits for the frames of its own device, not for the whole GPU.
 - `ContentBuilder.WriteThumbnail`: a picture put into an asset file, the rest of the file kept, under the content
   project's lock, unless the file was written again since the picture was taken of it. `BuildResult.Imported`: the
   assets a build imported (`ImportedAsset`), each with why (`ImportReason`) and whether the asset file it replaced had
