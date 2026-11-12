@@ -1,4 +1,5 @@
 ﻿using System;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.MVVM;
 
 namespace Adamantium.Engine.Compiler.Converter.Configs
@@ -60,6 +61,14 @@ namespace Adamantium.Engine.Compiler.Converter.Configs
       {
          get { return fileName; }
       }
+
+      /// <summary>The axis the source is taken to be up along instead of the one its format or file says; null keeps the
+      /// file's.</summary>
+      public UpAxis? SourceUpAxis { get; set; }
+
+      /// <summary>Whether normals are computed for every mesh, those the file gives replaced; otherwise only for a mesh
+      /// without them.</summary>
+      public bool RecalculateNormals { get; set; }
 
       public bool ConvertToVulkan
       {

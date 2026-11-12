@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Adamantium.Content.Pipeline;
 
 /// <summary>
@@ -6,5 +8,8 @@ namespace Adamantium.Content.Pipeline;
 /// </summary>
 public interface IContentImporter
 {
+    /// <summary>The settings the importer reads from <see cref="ContentBuildContext.Parameters"/>.</summary>
+    IReadOnlyList<ImportSetting> Settings => [];
+
     object Import(string sourcePath, ContentBuildContext context);
 }

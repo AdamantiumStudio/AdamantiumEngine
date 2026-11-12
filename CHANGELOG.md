@@ -16,6 +16,18 @@ All packages share one version.
   project's lock, unless the file was written again since the picture was taken of it. `BuildResult.Imported`: the
   assets a build imported (`ImportedAsset`), each with why (`ImportReason`) and whether the asset file it replaced had
   a thumbnail - which the new one has not.
+- Import settings an importer declares (`IContentImporter.Settings`, `ImportSetting` - a name, its kind
+  (`ImportSettingKind`: a switch, a number, a choice of `ImportSettingChoice`), its default and how it is said), so a
+  tool can offer them without knowing the importer; `ContentBuilder.GetSettings`, `GetImporterName` and
+  `ImporterNames`. The model importer reads four: `Scale` - the whole model from its root - `UpAxis` (as the file says,
+  Y or Z), `Normals` (from the file, computed where it has none, or always computed) and `Animations` (the clips
+  imported or left out, the skin kept in its bind pose); a value it cannot take is warned about (ACB011) and its default
+  taken. `ModelConverter.ImportFile` takes a `ConversionConfig`, which gains `SourceUpAxis` and `RecalculateNormals`.
+- `ContentBuilder.SetDefaultParameters`: what a source with no asset file yet is imported with, for an asset the
+  manifest gives no settings. `ContentBuilder.ImportAsset`: one asset of a manifest imported anew, up to date or not,
+  with the settings asked for - with the manifest's when it gives some - and never over an asset file a newer engine
+  wrote. `ContentBuilder.FindSource`: the source an asset file was imported from. `AssetFile.Sections`: the sections a
+  file has, read or not - whether it has a thumbnail is known without reading the picture.
 - `GeometryOverlay`: two areas (`RingArea` - rings under a fill rule) combined by an `AreaCombineMode` (union,
   intersection, difference, xor), or one area's rings turned into the simple rings bounding what its rule fills
   (`Outline`). Rings crossing, touching or lying along one another are cut where they meet - found by a line swept
@@ -201,6 +213,9 @@ All packages share one version.
 
 ### Changed
 
+- A source changed is imported again with the settings its asset file records, unless the manifest gives the asset
+  some; an asset file is imported again for its settings only when the manifest's differ from those it records. It was
+  imported with the manifest's every time, which were none for an asset the manifest did not set up.
 - Glyphs reach the atlas sooner and for less: the MSDF of a glyph is computed by code optimized from its first call,
   where it ran unoptimized for seconds while an application started, a glyph of Segoe UI taking 100-500 ms instead of
   2. A batch of glyphs no longer splits each glyph's rows across every core inside the batch's own parallel loop, and a
@@ -240,7 +255,8 @@ All packages share one version.
 
 - `MeshGeometryCache` lets a mesh's GPU buffers go once the mesh is collected - when no other live mesh has the same
   content and no frame in flight draws with them - instead of keeping every mesh ever drawn, and its buffers, for as
-  long as the processor lived: a model taken out of the scene kept its geometry on the GPU.
+  long as the processor lived: a model taken out of the scene kept its geometry on the GPU. It goes in the next frame
+  (`MeshGeometryCache.ReleaseCollected`), one that draws no mesh too.
 - A Wavefront `.obj` whose faces name positions alone, or positions and texture coordinates without normals, is read
   corner by corner as written; its indices were read one or two to a corner instead of three, and the model came out
   torn or empty.

@@ -21,4 +21,11 @@
         <ProjectReference Include="..\..\Adamantium.Content.Build\Adamantium.Content.Build.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- A model with clips: the compiler tests' skinned figure, used where it lies. -->
+        <Content Include="..\Adamantium.Engine.CompilerTests\GltfData\RiggedFigure\**" LinkBase="Models\RiggedFigure">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
 </Project>

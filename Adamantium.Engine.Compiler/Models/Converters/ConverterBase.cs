@@ -48,6 +48,11 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
             return null;
          }
 
+         if (Config.SourceUpAxis is { } upAxis)
+         {
+            UpAxis = upAxis;
+         }
+
          AssembleModel();
          return SceneDataContainer;
       }
@@ -111,14 +116,15 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
                   mesh.ReverseWinding();
                }
 
-               // Only when the file gave none: averaging over triangles erases the hard edges the artist authored
-               // those normals for.
-               if (mesh.Normals.Length != mesh.Points.Length)
+               // Unless asked, only when the file gave none: averaging over triangles erases the hard edges the
+               // artist authored those normals for.
+               if (Config.RecalculateNormals || mesh.Normals.Length != mesh.Points.Length)
                {
                   mesh.CalculateNormals();
                }
 
-               if (Config.CalculateTangentsBitangentsIfNotPresent && mesh.Tangents.Length != mesh.Points.Length)
+               if (Config.CalculateTangentsBitangentsIfNotPresent &&
+                   (Config.RecalculateNormals || mesh.Tangents.Length != mesh.Points.Length))
                {
                   mesh.CalculateTangentsAndBinormals();
                }

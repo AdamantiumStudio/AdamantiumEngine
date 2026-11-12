@@ -19,8 +19,8 @@ namespace Adamantium.Engine.Rendering;
 /// The render layer's GPU geometry. A mesh in a vertex format maps to the geometry of its content: meshes with the same
 /// vertices and indices share one set of buffers, found by a hash of what would be uploaded, so their copies draw as one
 /// instanced call. A mesh is hashed again only when its version moves. The cache does not keep a mesh alive: once a mesh
-/// is collected, its geometry is let go on the next call, when no other mesh shares it and no frame in flight draws with
-/// it. Owned and disposed by the processor that draws with it, and used from its thread alone.
+/// is collected, its geometry is let go on the next call or <see cref="ReleaseCollected"/>, when no other mesh shares it
+/// and no frame in flight draws with it. Owned and disposed by the processor that draws with it, and used from its thread alone.
 /// </summary>
 public sealed class MeshGeometryCache : DisposableObject
 {
@@ -44,7 +44,12 @@ public sealed class MeshGeometryCache : DisposableObject
     {
         ReleaseCollected();
 
-        var geometries = _meshes.GetValue(mesh, _ => new MeshGeometries(_collected));
+        if (!_meshes.TryGetValue(mesh, out var geometries))
+        {
+            geometries = new MeshGeometries(_collected);
+            _meshes.Add(mesh, geometries);
+        }
+
         var known = geometries.Find(vertexType);
         if (known.Geometry != null && known.Version == mesh.Version)
         {
@@ -85,7 +90,9 @@ public sealed class MeshGeometryCache : DisposableObject
         return geometry;
     }
 
-    private void ReleaseCollected()
+    /// <summary>Lets go of the geometry of the meshes collected since: called once a frame by whoever draws, so it goes
+    /// in a frame that draws no mesh too.</summary>
+    public void ReleaseCollected()
     {
         while (_collected.TryDequeue(out var geometry))
         {

@@ -185,6 +185,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     public override void Draw(AppTime appTime)
     {
+        geometryCache?.ReleaseCollected();
         ActiveCamera = Window.Camera;
         if (ActiveCamera == null || !prepared)
         {

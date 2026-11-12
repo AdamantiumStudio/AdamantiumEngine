@@ -31,6 +31,9 @@ public sealed class AssetFile
     /// <summary>The format version the file was read in; <see cref="FormatVersion"/> for one made here.</summary>
     public ushort Version { get; private set; } = FormatVersion;
 
+    /// <summary>The sections the file read has, read or not; none for one made here.</summary>
+    public AssetFileSection Sections { get; private set; }
+
     /// <summary>A PNG picture of the asset; null when it has none.</summary>
     public byte[] Thumbnail { get; set; }
 
@@ -96,6 +99,11 @@ public sealed class AssetFile
         var read = AssetFileSection.None;
         foreach (var (section, offset, length) in entries)
         {
+            if (IsKnown(section))
+            {
+                file.Sections |= section;
+            }
+
             if (!IsKnown(section) || (sections & section) == 0)
             {
                 continue;

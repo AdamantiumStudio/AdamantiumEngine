@@ -107,6 +107,204 @@ public class ContentBuilderTests
     }
 
     [Test]
+    public void ANewModel_IsImportedWithTheDefaultParameters_AndRecordsThem()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var builder = new ContentBuilder();
+        builder.SetDefaultParameters("Model", new Dictionary<string, string> { ["Scale"] = "3" });
+
+        var result = Import(builder, "Models/triangle.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
+            Assert.That(RecordedParameters("Models/triangle.obj"), Is.EqualTo(new Dictionary<string, string> { ["Scale"] = "3" }));
+        });
+    }
+
+    [Test]
+    public void ChangedDefaults_DoNotImportAModelAgain()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Import(new ContentBuilder(), "Models/triangle.obj");
+        var builder = new ContentBuilder();
+        builder.SetDefaultParameters("Model", new Dictionary<string, string> { ["Scale"] = "3" });
+
+        var result = Import(builder, "Models/triangle.obj");
+
+        Assert.That(result.Cooked, Is.EqualTo(0), result.ToString());
+    }
+
+    [Test]
+    public void AChangedSource_IsImportedAgainWithTheParametersItsAssetFileRecords_NotTheDefaults()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var first = new ContentBuilder();
+        first.SetDefaultParameters("Model", new Dictionary<string, string> { ["Scale"] = "2" });
+        Import(first, "Models/triangle.obj");
+        Write("Models/triangle.obj", Triangle + "v 0 0 1\n");
+        var builder = new ContentBuilder();
+        builder.SetDefaultParameters("Model", new Dictionary<string, string> { ["Scale"] = "5" });
+
+        var result = Import(builder, "Models/triangle.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Imported.Single().Reason, Is.EqualTo(ImportReason.SourceChanged), result.ToString());
+            Assert.That(RecordedParameters("Models/triangle.obj"), Is.EqualTo(new Dictionary<string, string> { ["Scale"] = "2" }));
+        });
+    }
+
+    [Test]
+    public void ImportAsset_ImportsAnUpToDateAsset_WithTheParametersAsked()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Import(new ContentBuilder(), "Models/triangle.obj");
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = new ContentBuilder().ImportAsset(manifest, _project, Path.Combine(_project, "Models", "triangle.obj"),
+            new Dictionary<string, string> { ["Scale"] = "4", ["UpAxis"] = "Z" });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Imported.Single().Reason, Is.EqualTo(ImportReason.Asked), result.ToString());
+            Assert.That(RecordedParameters("Models/triangle.obj"),
+                Is.EqualTo(new Dictionary<string, string> { ["Scale"] = "4", ["UpAxis"] = "Z" }));
+            Assert.That(Import(new ContentBuilder(), "Models/triangle.obj").Cooked, Is.EqualTo(0));
+        });
+    }
+
+    [Test]
+    public void ImportAsset_TakesTheManifestsParameters_WhenItGivesSome()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        manifest.Assets[0].Parameters["Scale"] = "2";
+
+        new ContentBuilder().ImportAsset(manifest, _project, Path.Combine(_project, "Models", "triangle.obj"),
+            new Dictionary<string, string> { ["Scale"] = "4" });
+
+        Assert.That(RecordedParameters("Models/triangle.obj"), Is.EqualTo(new Dictionary<string, string> { ["Scale"] = "2" }));
+    }
+
+    [Test]
+    public void ImportAsset_LeavesAnAssetFileOfANewerFormatAsItIs()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Import(new ContentBuilder(), "Models/triangle.obj");
+        var asset = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        var bytes = File.ReadAllBytes(asset);
+        bytes[4] = AssetFile.FormatVersion + 1;
+        File.WriteAllBytes(asset, bytes);
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        List<string> log = [];
+
+        var result = new ContentBuilder().ImportAsset(manifest, _project, Path.Combine(_project, "Models", "triangle.obj"),
+            new Dictionary<string, string>(), log.Add);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Failed, Is.EqualTo(1), result.ToString());
+            Assert.That(log, Has.One.Contains("error ACB004"));
+            Assert.That(File.ReadAllBytes(asset), Is.EqualTo(bytes));
+        });
+    }
+
+    [Test]
+    public void AnAssetFile_SaysWhichSectionsItHas_WithoutReadingThem()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Import(new ContentBuilder(), "Models/triangle.obj");
+        var asset = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        ContentBuilder.WriteThumbnail(_project, asset, [1, 2, 3], File.GetLastWriteTimeUtc(asset));
+
+        var file = AssetFile.Read(asset, AssetFileSection.Source);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(file.Sections, Is.EqualTo(AssetFileSection.Thumbnail | AssetFileSection.Source | AssetFileSection.Body));
+            Assert.That(file.Thumbnail, Is.Null);
+        });
+    }
+
+    [Test]
+    public void ImportAsset_OfAFileTheManifestDoesNotList_Fails()
+    {
+        Write("Models/triangle.obj", Triangle);
+        List<string> log = [];
+
+        var result = new ContentBuilder().ImportAsset(Manifest(), _project, Path.Combine(_project, "Models", "triangle.obj"),
+            null, log.Add);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Failed, Is.EqualTo(1));
+            Assert.That(log, Has.One.Contains("error ACB012"));
+            Assert.That(File.Exists(Path.Combine(_project, "Models", "triangle.obj.aemf")), Is.False);
+        });
+    }
+
+    [Test]
+    public void FindSource_GivesTheSourceAnAssetFileWasImportedFrom_BesideItOrLinked()
+    {
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+        manifest.Assets.Add(new ContentAsset { Source = "../Shared/b.obj", LogicalName = "Models/b.obj" });
+        var builder = new ContentBuilder();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(builder.FindSource(manifest, _project, Path.Combine(_project, "Models", "triangle.obj.aemf")),
+                Is.EqualTo(Path.Combine(_project, "Models", "triangle.obj")));
+            Assert.That(builder.FindSource(manifest, _project, Path.Combine(_project, "obj", "assets", "Models", "b.obj.aemf")),
+                Is.EqualTo(Path.GetFullPath(Path.Combine(_project, "..", "Shared", "b.obj"))));
+            Assert.That(builder.FindSource(manifest, _project, Path.Combine(_project, "Models", "other.obj.aemf")), Is.Null);
+            Assert.That(builder.ImporterNames, Is.EquivalentTo((string[])["Model"]));
+        });
+    }
+
+    [Test]
+    public void TheModelImporter_DeclaresItsSettings()
+    {
+        var builder = new ContentBuilder();
+
+        var settings = builder.GetSettings(builder.GetImporterName("ship.glb"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(builder.GetImporterName("ship.glb"), Is.EqualTo("Model"));
+            Assert.That(builder.GetImporterName("notes.txt"), Is.Null);
+            Assert.That(settings.Select(setting => setting.Name), Is.EqualTo((string[])["Scale", "UpAxis", "Normals", "Animations"]));
+            Assert.That(settings.Select(setting => setting.Kind), Is.EqualTo((ImportSettingKind[])
+                [ImportSettingKind.Number, ImportSettingKind.Choice, ImportSettingKind.Choice, ImportSettingKind.Toggle]));
+            Assert.That(settings[1].Choices.Select(choice => choice.Value), Is.EqualTo((string[])["File", "Y", "Z"]));
+            Assert.That(builder.GetSettings("Nothing"), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void AModelWithASettingItCannotRead_IsImportedWithTheDefault_AndAWarning()
+    {
+        Write("Models/triangle.obj", Triangle);
+        var builder = new ContentBuilder();
+        builder.SetDefaultParameters("Model", new Dictionary<string, string> { ["Scale"] = "-1", ["UpAxis"] = "W" });
+        List<string> log = [];
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = builder.Import(manifest, _project, log.Add);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Cooked, Is.EqualTo(1), result.ToString());
+            Assert.That(log.Count(line => line.Contains("warning ACB011")), Is.EqualTo(2));
+        });
+    }
+
+    [Test]
     public void AnAssetFileOfAnotherFormatVersion_IsKeptAsItIs_WithAWarning()
     {
         Write("Models/triangle.obj", Triangle);
@@ -711,6 +909,16 @@ public class ContentBuilderTests
         manifest.SetSources(sources);
         return new ContentBuilder().Build(manifest, _project);
     }
+
+    private BuildResult Import(ContentBuilder builder, params string[] sources)
+    {
+        var manifest = Manifest();
+        manifest.SetSources(sources);
+        return builder.Import(manifest, _project);
+    }
+
+    private Dictionary<string, string> RecordedParameters(string source) =>
+        AssetFile.Read(Path.Combine(_project, source + ".aemf"), AssetFileSection.Source).Source.Parameters;
 
     private ContentManifest Manifest()
     {

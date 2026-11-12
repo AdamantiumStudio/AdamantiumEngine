@@ -21,10 +21,8 @@ namespace Adamantium.Engine.Snapshots;
 /// surface, and one model at a time, framed by a camera made for it. Driven frame by frame by the service.</summary>
 internal sealed class SnapshotUniverse : Universe
 {
-    // Front, above and to the right of the model: -Z is the front, -Y is up.
     private static readonly Vector3<double> ViewDirection = Vector3.Normalize(new Vector3<double>(1, -0.8, -1.2));
 
-    // How much of the half-width of the view the farthest corner may take.
     private const double Fill = 0.92;
 
     private readonly OffscreenOutput _output;
@@ -45,20 +43,20 @@ internal sealed class SnapshotUniverse : Universe
     /// loaded are gone again when this returns.</summary>
     public Image Take(string assetPath)
     {
-        var options = new AssetLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
-        var scene = Assets.Load<SceneData>(assetPath, options);
-        var model = EntityWorld.CreateEntityFromTemplate(new EntityImportTemplate(scene, Assets, Vector3<double>.Zero))
-            .GetAwaiter().GetResult();
+        Entity model = null;
         Entity cameraEntity = null;
         try
         {
+            var options = new AssetLoadOptions { AllowDuplication = false, IgnoreRootDirectory = true };
+            var scene = Assets.Load<SceneData>(assetPath, options);
+            model = EntityWorld.CreateEntityFromTemplate(new EntityImportTemplate(scene, Assets, Vector3<double>.Zero))
+                .GetAwaiter().GetResult();
             if (model == null)
             {
                 return null;
             }
 
             EntityWorld.EntityManager.AddEntity(model);
-            // The model joins the world and gets its world transforms first; only then is it known where it stands.
             RunFrame();
 
             if (model.GetDiameter() <= 0)
@@ -72,7 +70,11 @@ internal sealed class SnapshotUniverse : Universe
         }
         finally
         {
-            EntityWorld.EntityManager.RemoveEntity(model);
+            if (model != null)
+            {
+                EntityWorld.EntityManager.RemoveEntity(model);
+            }
+
             if (cameraEntity != null)
             {
                 _output.Camera = _output.OwnCamera;
@@ -80,7 +82,6 @@ internal sealed class SnapshotUniverse : Universe
                 EntityWorld.EntityManager.RemoveEntity(cameraEntity);
             }
 
-            // A frame without them, and one waited for, before what they drew with is let go.
             RunFrame();
             GraphicsDeviceService.MainGraphicsDevice.DeviceWaitIdle();
             Assets.Unload();
@@ -108,7 +109,6 @@ internal sealed class SnapshotUniverse : Universe
         _lights.AddLight(fill);
     }
 
-    // A whole frame, as a host drives one: its end is where services join and the frame is shown.
     private void RunFrame()
     {
         RunOnce(default);
@@ -126,8 +126,6 @@ internal sealed class SnapshotUniverse : Universe
         });
     }
 
-    // A camera of its own for the model, so no other snapshot's camera turns it, aimed at the middle of the model's bounds
-    // and standing just far enough back for every corner of them to be in view, with a margin around.
     private Entity Frame(Entity model)
     {
         var corners = WorldCorners(model);
@@ -157,7 +155,6 @@ internal sealed class SnapshotUniverse : Universe
         EntityWorld.EntityManager.AddEntity(entity);
         _output.Camera = camera;
         camera.SetFreeLookAt(center);
-        // No input service here to bring its matrices up to date each frame; it never moves, so once is enough.
         camera.Update(default);
         return entity;
     }
