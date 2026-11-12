@@ -39,7 +39,7 @@ public class ToolsServiceTests
     public void AToolChanged_WakesTheUniverse_WhileItsWatcherWatchesTheService()
     {
         var universe = new TestUniverse();
-        var watcher = new UniverseWatcher(Wake) { IsWatching = true };
+        var watcher = new UniverseWatcher(Wake, _ => Wake()) { IsWatching = true };
         universe.Satellites.Add(new Selection());
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
         universe.Satellites.Add<IUniverseWatcher>(watcher);

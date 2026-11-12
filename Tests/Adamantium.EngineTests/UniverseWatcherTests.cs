@@ -16,6 +16,7 @@ namespace Adamantium.EngineTests;
 public class UniverseWatcherTests
 {
     private int wakes;
+    private UniverseOutput wokenOutput;
     private UniverseWatcher watcher;
     private EntityWorld world;
     private Entity model;
@@ -24,7 +25,8 @@ public class UniverseWatcherTests
     public void SetUp()
     {
         wakes = 0;
-        watcher = new UniverseWatcher(Wake);
+        wokenOutput = null;
+        watcher = new UniverseWatcher(Wake, output => wokenOutput = output);
         world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         model = new Entity(null, "Model");
         world.EntityManager.AddEntity(model);
@@ -120,6 +122,31 @@ public class UniverseWatcherTests
             Assert.That(idle, Is.EqualTo((1, false)), "the one wake is from before; nothing after it");
             Assert.That(wakes, Is.EqualTo(2), "watching again listens to the world it was given");
         });
+    }
+
+    [Test]
+    public void AFrameOfOneOutput_WakesThatOutputAlone_AndOwesNoFrameOfTheOthers()
+    {
+        var output = new OffscreenOutput(4, 4);
+
+        watcher.Invalidate(output);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(wokenOutput, Is.SameAs(output));
+            Assert.That(wakes, Is.Zero);
+            Assert.That(watcher.Owes, Is.False);
+        });
+    }
+
+    [Test]
+    public void WhileTheUniverseDrawsEveryFrame_AFrameOfOneOutputAsksNothing()
+    {
+        watcher.IsWatching = false;
+
+        watcher.Invalidate(new OffscreenOutput(4, 4));
+
+        Assert.That(wokenOutput, Is.Null);
     }
 
     [Test]

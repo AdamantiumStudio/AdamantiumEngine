@@ -23,6 +23,9 @@ All packages share one version.
   its frame while one is active; services added but not yet joined are unloaded with the rest.
   `Universe.CreateAssetService`: an asset service set up as the universe's, whose loads its maker unloads alone.
   `OffscreenOutput.ReadFrame` waits for the frames of its own device, not for the whole GPU.
+- `IUniverseOutputWatcher`, the universe's watcher in its `Satellites` under this name too: `Invalidate(output)` asks
+  for a frame of one output alone. The services that asked the universe for frames - `TransformService` and the
+  screenshots - ask its watcher.
 - `ContentBuilder.WriteThumbnail`: a picture put into an asset file, the rest of the file kept, under the content
   project's lock, unless the file was written again since the picture was taken of it. `BuildResult.Imported`: the
   assets a build imported (`ImportedAsset`), each with why (`ImportReason`) and whether the asset file it replaced had

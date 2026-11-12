@@ -122,10 +122,11 @@ public class Universe : IUniverse
             
         platform = new UniversePlatform(this);
         EntityWorld = new EntityWorld(Container, Satellites);
-        watcher = new UniverseWatcher(Invalidate);
+        watcher = new UniverseWatcher(Invalidate, Invalidate);
         watcher.Watch(EntityWorld);
 
         Satellites.Add<IUniverseWatcher>(watcher);
+        Satellites.Add<IUniverseOutputWatcher>(watcher);
         Satellites.Add<IUniverse>(this);
         Satellites.Add<IAdamantiumApplication>(this);
         Satellites.Add<IUniversePlatform>(platform);

@@ -17,6 +17,7 @@ public class TestUniverse : IUniverse
         Satellites = new Satellites();
         Container = new AdamantiumDependencyContainer();
         EntityWorld = new EntityWorld(Container, Satellites);
+        Satellites.Add<IUniverseOutputWatcher>(new UniverseWatcher(Invalidate, Invalidate));
     }
 
     public EntityWorld EntityWorld { get; }
