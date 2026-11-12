@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- `GeometryOverlay`: two areas (`RingArea` - rings under a fill rule) combined by an `AreaCombineMode` (union,
+  intersection, difference, xor), or one area's rings turned into the simple rings bounding what its rule fills
+  (`Outline`). Rings crossing, touching or lying along one another are cut where they meet - found by a line swept
+  across them, however long their edges - points nearer than a ten-billionth of the size taken as one, and the result
+  is simple rings crossing nowhere, each with its filled side on its left. `RingFill.Fill` triangulates any rings by a fill rule: rings that keep
+  clear of each other (`RingContacts.AnyMeet`) by how they nest, found by a sweep, the others through the overlay; each
+  face by clipping ears, a face the clipping does not cover whole by the trapezoids between its edges.
 - `SamplerStates.PixelatedClampToEdge`: a picture enlarged in hard squares - the nearest texel - and reduced smoothly,
   clamped to the edge; what a PDF image with `/Interpolate false` asks for.
 - Glyphs placed by the caller (`TextLayout.ProcessGlyphs`, `PositionedGlyph`): each by its index in the font and its pen
@@ -222,6 +229,26 @@ All packages share one version.
 
 ### Fixed
 
+- `Polygon.FillIndirect` fills rings that meet as the fill rule says of every point: a hole touching its outer ring at a
+  point - at a corner too - holes touching or sharing sides, rings lying on one another, and a ring crossing another
+  only through its corners. Rings that meet are laid over one another (`GeometryOverlay`) and the faces they bound
+  filled (`RingFill`); before, which ring lay in which was told by a point the rings could share, a hole at a corner
+  was lost in the cut, coincident rings were filled once, and a crossing through corners went unseen. Under non-zero a
+  ring inside a hole, and a hole inside a ring running the same way as the one around it, fill as their winding says;
+  before, the first was dropped and the second filled over. A ring passing one point twice, turning back along itself
+  or traced round twice fills as it runs - its repeated corners were dropped before it was filled - and a contour of
+  two points no longer sends the others back to the old cut, which filled a touching hole. Far from the origin - map
+  coordinates in metres - areas are measured from a corner of the ring, so a hole there no longer fills under non-zero
+  and rings touching there no longer vanish; a ring with a coordinate not a finite number is left out rather than
+  emptying the fill. No triangle of no area comes out of a fan or a clipped face, so the first triangle tells which way
+  all of them turn. Huge coordinates (past 1e100) are brought near one by a power of two, which loses no digit, so
+  they no longer overflow. Measured in Release on one machine, before → after, even-odd unless named: 400 ring-and-hole
+  letters 38 → 23-34 ms (non-zero 32 → 17-19 ms); 8000 squares in a row 1.3 s → 60 ms; 3000 square rings with square
+  holes and one square touching them (non-zero) 1.3 s → 180 ms; 4000 rectangles on one base (non-zero) 56 s → 0.3 s;
+  8000 squares one inside another sharing a side 3.7 s → 0.18 s; 32 000 squares one inside another 46 s → 0.9 s;
+  16 000 thin triangles ending at one point (non-zero) 9.4 s with nothing filled → 0.5 s; three families of 150 thin
+  strips crossing three at a point (non-zero) 12.5 min → 1.2 s. Small shapes fill about as before: a 2000-point star
+  9.4 → 8.5-11 ms, a 1000-point ring with a hole (non-zero) 1.0 → 1.3 ms.
 - Text laid in a frame as wide as the width given but for the frame's float - rounded up so text set to its edge does
   not wrap - ends its lines at that width, as without a frame: a paragraph going round a picture beside none of its
   lines is laid exactly as one with no picture.
@@ -285,6 +312,14 @@ All packages share one version.
 - A frame that could not begin - the device lost, the fence wait failed, the presenter not ready - no longer leaves its
   device counted as drawing: everything retired after it waited on that device for good.
 - A retired resource that fails to dispose no longer keeps the others retired with it from being disposed.
+
+### Removed
+
+- `ContourProcessingHelper`, and the cut of crossing contours `Polygon.FillIndirect` fell back to: every fill goes
+  through `RingFill`, which fills crossing contours by the overlay.
+- `Polygon.ProcessedContours`: copies of the contours, made on every `FillIndirect` call. Stroke the contours you
+  gave instead. The copies were cut into segments, which merged a ring's repeated corners, so a ring passing one point
+  twice came out closed by a side it never had.
 
 ## 0.1.0-alpha.5 - 2026-11-03
 
