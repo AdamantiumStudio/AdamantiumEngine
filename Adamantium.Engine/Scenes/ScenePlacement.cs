@@ -13,6 +13,13 @@ public abstract class ScenePlacement
     [XmlIgnore]
     public UInt128 Uid { get; set; }
 
+    [XmlAttribute("Uid"), EditorBrowsable(EditorBrowsableState.Never)]
+    public string UidText
+    {
+        get => SceneText.Format(Uid);
+        set => Uid = SceneText.ParseId(value);
+    }
+
     [XmlAttribute]
     public string Name { get; set; } = "";
 
@@ -28,13 +35,6 @@ public abstract class ScenePlacement
     /// <summary>Which way it faces, relative to its parent.</summary>
     [XmlIgnore]
     public QuaternionF Rotation { get; set; } = QuaternionF.Identity;
-
-    [XmlAttribute("Uid"), EditorBrowsable(EditorBrowsableState.Never)]
-    public string UidText
-    {
-        get => SceneText.Format(Uid);
-        set => Uid = SceneText.ParseId(value);
-    }
 
     [XmlAttribute("Parent"), EditorBrowsable(EditorBrowsableState.Never)]
     public string ParentText

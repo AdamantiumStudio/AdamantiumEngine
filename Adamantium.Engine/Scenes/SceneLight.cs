@@ -13,6 +13,13 @@ public sealed class SceneLight : ScenePlacement
     [XmlIgnore]
     public Vector3F Color { get; set; } = Vector3F.One;
 
+    [XmlAttribute("Color"), EditorBrowsable(EditorBrowsableState.Never)]
+    public string ColorText
+    {
+        get => SceneText.Format(Color);
+        set => Color = Vector3F.Parse(value);
+    }
+
     [XmlAttribute]
     public float Intensity { get; set; } = 1;
 
@@ -35,11 +42,4 @@ public sealed class SceneLight : ScenePlacement
     /// <summary>The side of its shadow map, in texels.</summary>
     [XmlAttribute]
     public int ShadowMapResolution { get; set; }
-
-    [XmlAttribute("Color"), EditorBrowsable(EditorBrowsableState.Never)]
-    public string ColorText
-    {
-        get => SceneText.Format(Color);
-        set => Color = Vector3F.Parse(value);
-    }
 }
