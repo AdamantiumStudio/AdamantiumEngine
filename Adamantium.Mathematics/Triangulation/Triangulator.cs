@@ -281,6 +281,11 @@ namespace Adamantium.Mathematics.Triangulation
 
         private static void AddTriangleClockwise(List<Vector3<double>> triangles, Vector2<double> a, Vector2<double> b, Vector2<double> c)
         {
+            if (Vector2<double>.Determinant(b - a, c - a) == 0)
+            {
+                return;
+            }
+
             if (MathHelper.Polyline.IsClockwise(a, b, c))
             {
                 triangles.Add((Vector3<double>)a);
