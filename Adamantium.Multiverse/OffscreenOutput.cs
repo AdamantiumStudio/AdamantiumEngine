@@ -45,9 +45,9 @@ public sealed class OffscreenOutput : UniverseOutput
     public override Vector2F PointerScreenPosition => Vector2F.Zero;
 
     /// <summary>
-    /// The last frame drawn into the output, in its pixel format; null before the universe has taken the output in. Waits
-    /// until the GPU is done with the output's work, so call it after the frame, on the universe's thread or with its
-    /// loop held.
+    /// The last frame drawn into the output, in its pixel format; null before it has a device. Waits for the frames of
+    /// the output's own device alone - not the whole GPU - so call it after the frame was submitted, on the thread that
+    /// draws it.
     /// </summary>
     public Image ReadFrame()
     {
@@ -56,7 +56,7 @@ public sealed class OffscreenOutput : UniverseOutput
             return null;
         }
 
-        GraphicsDevice.DeviceWaitIdle();
+        GraphicsDevice.WaitForFramesInFlight(ulong.MaxValue);
         return frame.ToImage();
     }
 

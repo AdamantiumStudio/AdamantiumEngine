@@ -94,14 +94,8 @@ public class Universe : IUniverse
         IsFixedTimeStep = false;
         DesiredFPS = 60;
         Satellites = new Satellites();
-        Assets = new AssetService(Container, Satellites);
-        // Cooked artifacts win over raw source.
-        Assets.Resolvers.Add(new CookedAssetResolver());
-        Assets.Resolvers.Add(new FileSystemAssetResolver());
-        // The texture reader takes its device from the Satellites at load time, when it exists.
-        Assets.Readers.Add(typeof(SceneData), new SceneDataAssetReader());
-        Assets.Readers.Add(typeof(Texture), new TextureAssetReader());
-            
+        Assets = CreateAssetService();
+
         ModelConverter = new ModelConverter();
         unloadContentCollector = new DisposeCollector();
         ShutDownMode = ShutDownMode.OnMainWindowClosed;
@@ -295,12 +289,27 @@ public class Universe : IUniverse
         EntityWorld.Reset();
     }
 
+    /// <summary>An asset service that loads as <see cref="Assets"/> does - cooked artifacts first, models and textures
+    /// on this universe's devices - but keeps what it loads apart, so whoever made it unloads it alone.</summary>
+    public AssetService CreateAssetService()
+    {
+        var assets = new AssetService(Container, Satellites);
+        // Cooked artifacts win over raw source.
+        assets.Resolvers.Add(new CookedAssetResolver());
+        assets.Resolvers.Add(new FileSystemAssetResolver());
+        // The texture reader takes its device from the Satellites at load time, when it exists.
+        assets.Readers.Add(typeof(SceneData), new SceneDataAssetReader());
+        assets.Readers.Add(typeof(Texture), new TextureAssetReader());
+        return assets;
+    }
+
     private void RemoveRenderProcessor(UniverseOutput window)
     {
         lock (drawSystems)
         {
             if (drawSystems.Remove(window, out var system))
             {
+                system.IsActive = false;
                 EntityWorld.RemoveService(system);
             }
         }
@@ -901,7 +910,7 @@ public class Universe : IUniverse
 
     private bool ExecuteDrawSequence2(AppTime time)
     {
-        if (!platform.HasOutputs) return false;
+        if (!platform.HasOutputs && !EntityWorld.ServiceManager.HasActiveRenderingService) return false;
 
         var drawn = false;
         if (BeginScene())

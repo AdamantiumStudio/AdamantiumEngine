@@ -22,6 +22,7 @@ namespace Adamantium.ECS
 
         private ExecutionType drawExecutionType;
         [Bindable] private bool isVisible;
+        private volatile bool isActive = true;
 
         protected IEventAggregator EventAggregator { get; }
 
@@ -33,6 +34,16 @@ namespace Adamantium.ECS
         
         public abstract bool IsUpdateService { get; }
         public abstract bool IsRenderingService { get; }
+
+        /// <summary>Whether the service takes part in the frame: an inactive one is not updated, drawn or presented - a
+        /// sleeping one costs nothing - and is only told the frame ended. Active from the start; set from any thread.
+        /// </summary>
+        public bool IsActive
+        {
+            get => isActive;
+            set => isActive = value;
+        }
+
         public abstract EntityServiceType ServiceType { get; }
         
         protected AppTime AppTime { get; set; }

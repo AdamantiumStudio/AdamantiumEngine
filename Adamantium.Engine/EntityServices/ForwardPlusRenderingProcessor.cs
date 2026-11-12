@@ -44,6 +44,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private BasicEffect basicEffect;
     private MeshGeometryCache geometryCache;
     private bool prepared;
+    private bool entityFailed;
     private readonly Dictionary<MeshDrawKey, MeshDrawGroup> groups = new();
     private readonly List<MeshDrawGroup> groupsDrawn = [];
     private readonly Stack<MeshDrawGroup> spareGroups = new();
@@ -154,7 +155,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         prepared = false;
         GraphicsDevice.ClearColor = ClearColor;
-        var camera = Window.Camera;
+        var camera = ViewCamera;
         if (camera == null || effect == null)
         {
             return;
@@ -183,10 +184,20 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         prepared = true;
     }
 
+    /// <summary>Whether the last frame drew its meshes through: false when it had no camera, its frame was not prepared,
+    /// or drawing failed.</summary>
+    public bool DrewFrame { get; private set; }
+
+    /// <summary>Lets go of the GPU geometry of the meshes collected since: done each frame drawn, and by a processor that
+    /// sleeps, so what it drew last does not stay.</summary>
+    public void ReleaseCollectedGeometry() => geometryCache?.ReleaseCollected();
+
     public override void Draw(AppTime appTime)
     {
+        DrewFrame = false;
+        entityFailed = false;
         geometryCache?.ReleaseCollected();
-        ActiveCamera = Window.Camera;
+        ActiveCamera = ViewCamera;
         if (ActiveCamera == null || !prepared)
         {
             return;
@@ -202,7 +213,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         cameraPosition = ActiveCamera.WorldPosition.As<float>();
         try
         {
-            foreach (var entity in Entities)
+            foreach (var entity in DrawnEntities)
             {
                 OnDraw(entity);
             }
@@ -212,6 +223,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             DrawCalls = groupsDrawn.Count + wires.Count + colliders.Count;
             DrawGroups();
             DrawLines();
+            DrewFrame = !entityFailed;
         }
         catch (Exception exception)
         {
@@ -223,13 +235,29 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
+    /// <summary>The camera the view is drawn through: the output's.</summary>
+    protected virtual Camera ViewCamera => Window.Camera;
+
+    /// <summary>The roots of what is drawn: the world's.</summary>
+    protected virtual IReadOnlyList<Entity> DrawnEntities => Entities;
+
+    /// <summary>The directional lights the view is lit by: the universe's <see cref="LightManager"/>'s.</summary>
+    protected virtual IReadOnlyList<Light> DirectionalLights => Lights.DirectionalLights;
+
+    /// <summary>The point lights the view is lit by: the universe's <see cref="LightManager"/>'s.</summary>
+    protected virtual IReadOnlyList<Light> PointLights => Lights.PointLights;
+
+    /// <summary>The spot lights the view is lit by: the universe's <see cref="LightManager"/>'s.</summary>
+    protected virtual IReadOnlyList<Light> SpotLights => Lights.SpotLights;
+
+    private LightManager Lights => lightManager ??= EntityWorld.Satellites.Get<LightManager>();
+
     private int CollectLights(Camera camera)
     {
-        lightManager ??= EntityWorld.Satellites.Get<LightManager>();
-        var count = Append(lightManager.DirectionalLights, camera, 0);
+        var count = Append(DirectionalLights, camera, 0);
         var directional = count;
-        count = Append(lightManager.PointLights, camera, count);
-        count = Append(lightManager.SpotLights, camera, count);
+        count = Append(PointLights, camera, count);
+        count = Append(SpotLights, camera, count);
         LightCount = count;
         return directional;
     }
@@ -276,6 +304,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
         catch (Exception exception)
         {
+            entityFailed = true;
             Log.Logger.Error(exception, "Draw failed for entity {Entity}", entity.Name);
         }
         finally

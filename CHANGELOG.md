@@ -7,11 +7,18 @@ All packages share one version.
 
 ### Added
 
-- `ModelSnapshotService` (`IModelSnapshotService`): a model drawn alone to a PNG for its asset's thumbnail - in its
-  bind pose, from the front, above and to the right, every corner of its bounds in view, over a transparent ground - in
-  a small universe of its own, on the devices of the universe it serves. `OffscreenOutput`: an output of a universe
-  with no surface, drawn into a texture of a fixed size that `ReadFrame` reads back. `RenderingService.WritesAlpha`:
-  the surfaces drawn write their alpha, so a frame cleared transparent keeps only what was drawn.
+- `ScreenshotRenderingService` with its `ScreenshotRenderingProcessor`: screenshots of entities, taken in the universe
+  the service is made in (`Create`). An entity put in its queue (`Enqueue`) - one no world holds, so nothing else draws
+  it - is drawn alone, one a frame, into an output of the service's own, from the front, above and to the right, every
+  corner of its bounds in view, over a transparent ground, in the light of a `ScreenshotLighting` of its own (`Studio`
+  by default) and none of the world's; the task completes with the picture. Asleep while its queue is empty.
+  `OffscreenOutput`: an output with no surface, drawn into a texture of a fixed size that `ReadFrame` reads back.
+  `RenderingService.WritesAlpha`: the surfaces drawn write their alpha, so a frame cleared transparent keeps only what
+  was drawn. `ForwardPlusRenderingProcessor` takes its camera, the roots it draws and its lights from overridable
+  members (`ViewCamera`, `DrawnEntities`, `DirectionalLights`, `PointLights`, `SpotLights`).
+- `EntityService.IsActive`: a service not active is passed by in the frame - not updated, drawn or presented - and only
+  told the frame ended. `EntityServiceManager.HasActiveRenderingService`: a universe with no outputs still draws its
+  frame while one is active.
 - `ContentBuilder.WriteThumbnail`: a picture put into an asset file, the rest of the file kept, under the content
   project's lock, unless the file was written again since the picture was taken of it. `BuildResult.Imported`: the
   assets a build imported (`ImportedAsset`), each with why (`ImportReason`) and whether the asset file it replaced had
