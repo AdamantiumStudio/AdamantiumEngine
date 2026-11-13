@@ -17,12 +17,13 @@ using Serilog;
 
 namespace Adamantium.Engine.Screenshots;
 
-/// <summary>Takes the screenshot of one entity at a time, handed to it by its <see cref="ScreenshotRenderingService"/>,
-/// with a rendering of its own - <see cref="ScreenshotEffect"/>: the colors or textures of its materials in a few
-/// directional lights and an even light, nothing of the scene's passes. It aims a camera of its own so every corner of
-/// the entity's bounds is in view - from the front, above and to the right - works out where the entity and its children
-/// stand for that camera, as no world does it for an entity in none, and draws the meshes of that branch over a
-/// transparent ground. The GPU geometry it made goes with the entity, once the screenshot is done.</summary>
+/// <summary>Takes one screenshot at a time, handed to it by its <see cref="ScreenshotRenderingService"/>, with a
+/// rendering of its own - <see cref="ScreenshotEffect"/>: the colors or textures of the materials in a few directional
+/// lights and an even light, nothing of the scene's passes. Of an entity: it aims a camera of its own so every corner of
+/// the entity's bounds is in view - from the front, above and to the right. Of a whole scene: a camera of its own stands
+/// where the camera given stands and looks as it looks. Either way it works out where what it draws stands for that
+/// camera - no world does it for its camera - and draws those meshes over a transparent ground. The GPU geometry it made
+/// goes once the screenshot is done.</summary>
 public sealed class ScreenshotRenderingProcessor : RenderingProcessor
 {
     private static readonly Vector3<double> ViewDirection = Vector3.Normalize(new Vector3<double>(1, -0.8, -1.2));
@@ -36,7 +37,7 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
     private ScreenshotLight[] _lights = [];
     private ScreenshotEffect _effect;
     private MeshGeometryCache _geometry;
-    private Entity _target;
+    private readonly List<Entity> _targets = [];
     private Camera _camera;
     private ScreenshotLighting _lighting = ScreenshotLighting.Studio();
     private ScreenshotLighting _frameLighting;
@@ -48,7 +49,7 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
         set => Volatile.Write(ref _lighting, value ?? ScreenshotLighting.Studio());
     }
 
-    /// <summary>Whether the last frame drew the entity taken through, every mesh of it.</summary>
+    /// <summary>Whether the last frame drew what was taken through, every mesh of it.</summary>
     public bool DrewFrame { get; private set; }
 
     /// <summary>Makes <paramref name="entity"/> what the next frame draws, the camera aimed at it; false, and nothing
@@ -63,14 +64,29 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
 
         _camera = Aim(entity, bounds);
         Place(entity, _camera);
-        _target = entity;
+        _targets.Add(entity);
         return true;
     }
 
-    /// <summary>Lets go of the entity taken, its camera and the GPU geometry made for it.</summary>
+    /// <summary>Makes all of <paramref name="scene"/> what the next frame draws, seen as <paramref name="viewpoint"/>
+    /// sees it - from where it stands, looking where it looks, with its field of view and projection - in the shape of
+    /// this processor's output. On the world's thread.</summary>
+    public void Take(Scene scene, Camera viewpoint)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(viewpoint);
+        _camera = CopyOf(viewpoint);
+        foreach (var root in scene.RootEntities)
+        {
+            Place(root, _camera);
+            _targets.Add(root);
+        }
+    }
+
+    /// <summary>Lets go of what was taken, its camera and the GPU geometry made for it.</summary>
     public void Release()
     {
-        _target = null;
+        _targets.Clear();
         _camera = null;
         ActiveCamera = null;
         _geometry?.Clear();
@@ -99,7 +115,7 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
     public override void Draw(AppTime appTime)
     {
         DrewFrame = false;
-        if (_target == null || _camera == null || _effect == null)
+        if (_camera == null || _effect == null)
         {
             return;
         }
@@ -108,12 +124,16 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
         try
         {
             SetLights();
-            DrawBranch(_target);
+            foreach (var target in _targets)
+            {
+                DrawBranch(target);
+            }
+
             DrewFrame = true;
         }
         catch (Exception exception)
         {
-            Log.Logger.Error(exception, "The screenshot of {Entity} failed", _target.Name);
+            Log.Logger.Error(exception, "The screenshot of {Count} entities failed", _targets.Count);
         }
         finally
         {
@@ -231,6 +251,20 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
         camera.ZNear = (float)Math.Max(distance - radius * 1.5, distance / 1000);
         camera.ZFar = (float)(distance + radius * 1.5);
         camera.SetFreeLookAt(center);
+        camera.Update(default);
+        return camera;
+    }
+
+    // A camera of the processor's own, where the one given stands and looking as it looks, in the output's shape.
+    private Camera CopyOf(Camera viewpoint)
+    {
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Screenshot camera", viewpoint.WorldPosition,
+            Vector3<double>.ForwardLH, -Vector3<double>.Up, Window.Width, Window.Height, viewpoint.ZNear, viewpoint.ZFar);
+        var camera = cameraEntity.GetComponent<Camera>();
+        camera.Rotation = viewpoint.Rotation;
+        camera.Fov = viewpoint.Fov;
+        camera.OrthoScale = viewpoint.OrthoScale;
+        camera.ProjectionType = viewpoint.ProjectionType;
         camera.Update(default);
         return camera;
     }
