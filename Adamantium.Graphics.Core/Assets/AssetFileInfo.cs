@@ -23,6 +23,9 @@ public sealed class AssetFileInfo
     private static readonly HashSet<string> SoundExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".wav", ".ogg", ".mp3", ".flac" };
 
+    /// <summary>The extension of a scene file - the engine's <c>SceneFile.FileExtension</c>.</summary>
+    public const string SceneExtension = ".ascene";
+
     private readonly Lazy<AssetSource> source;
 
     public AssetFileInfo(string filePath)
@@ -50,7 +53,7 @@ public sealed class AssetFileInfo
     public AssetSource Source => source.Value;
 
     /// <summary>The asset's picture, decoded anew on each call and kept by no one here: a model's from its asset file, an
-    /// image's first frame. Given <paramref name="maxPixelSize"/>, it is decoded no larger than that on a side when its
+    /// image's first frame, a scene's from the .png of its name beside it. Given <paramref name="maxPixelSize"/>, it is decoded no larger than that on a side when its
     /// format can be shrunk - so nothing larger is held at all. Null for a kind with none, an asset file with none yet,
     /// or a file that cannot be read.</summary>
     public IRawBitmap ReadThumbnail(uint maxPixelSize = 0)
@@ -63,6 +66,8 @@ public sealed class AssetFileInfo
                     ? BitmapLoader.Load(new MemoryStream(png, false))
                     : null,
                 AssetKind.Image => BitmapLoader.Load(FilePath, ImageTypes[Path.GetExtension(FilePath)]),
+                AssetKind.Scene when File.Exists(Path.ChangeExtension(FilePath, ".png")) =>
+                    BitmapLoader.Load(Path.ChangeExtension(FilePath, ".png"), ImageFileType.Png),
                 _ => null
             };
             return bitmap == null ? null : CopyFirstFrame(bitmap, maxPixelSize);
@@ -89,6 +94,11 @@ public sealed class AssetFileInfo
         if (FontExtensions.Contains(extension))
         {
             return AssetKind.Font;
+        }
+
+        if (string.Equals(extension, SceneExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            return AssetKind.Scene;
         }
 
         return SoundExtensions.Contains(extension) ? AssetKind.Sound : AssetKind.Other;

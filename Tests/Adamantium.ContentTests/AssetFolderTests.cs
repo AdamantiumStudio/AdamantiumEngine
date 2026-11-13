@@ -104,6 +104,27 @@ public class AssetFolderTests
         Assert.That((thumbnail.Width, thumbnail.Height), Is.EqualTo((256u, 128u)));
     }
 
+    // A scene file is a scene, its picture the .png of its name the editor writes beside it as it saves it.
+    [Test]
+    public void AScene_GivesThePictureBesideIt_AndNoneWithoutOne()
+    {
+        Touch("Arena.ascene");
+        Touch("Hangar.ascene");
+        File.WriteAllBytes(Path.Combine(_folder, "Arena.png"), CreatePng(16, 8));
+
+        var assets = CreateService().GetAssets(_folder);
+        var arena = assets.Single(asset => asset.Name == "Arena.ascene");
+        var hangar = assets.Single(asset => asset.Name == "Hangar.ascene");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(arena.Kind, Is.EqualTo(AssetKind.Scene));
+            var picture = arena.ReadThumbnail();
+            Assert.That((picture?.Width, picture?.Height), Is.EqualTo(((uint?)16, (uint?)8)));
+            Assert.That(hangar.ReadThumbnail(), Is.Null);
+        });
+    }
+
     [Test]
     public void AnAssetsName_OrdersTheList()
     {

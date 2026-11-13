@@ -19,7 +19,7 @@ namespace Adamantium.Engine.Scenes;
 public sealed class SceneFile
 {
     /// <summary>The extension of a scene file.</summary>
-    public const string FileExtension = ".ascene";
+    public const string FileExtension = Graphics.Core.Assets.AssetFileInfo.SceneExtension;
 
     /// <summary>The version of the format this engine writes; a file of a later one is refused.</summary>
     public const int FormatVersion = 1;

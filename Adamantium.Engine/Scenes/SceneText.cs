@@ -6,8 +6,8 @@ using Adamantium.Mathematics;
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>How a scene file writes its values: numbers in the invariant culture, a vector's or a quaternion's numbers
-/// separated by ", ", an id as 32 hexadecimal digits.</summary>
-internal static class SceneText
+/// separated by ", ", an id as 32 hexadecimal digits - what the editor's own section writes too.</summary>
+public static class SceneText
 {
     public static string Format<T>(Vector2<T> value) where T : unmanaged, INumber<T> =>
         Join(value.X, value.Y);

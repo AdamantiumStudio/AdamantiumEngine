@@ -12,5 +12,8 @@ public enum AssetKind
 
     Font,
 
-    Sound
+    Sound,
+
+    /// <summary>A scene file (.ascene), its picture a .png of its name beside it.</summary>
+    Scene
 }
