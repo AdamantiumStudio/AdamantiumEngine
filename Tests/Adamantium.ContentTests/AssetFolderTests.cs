@@ -104,13 +104,15 @@ public class AssetFolderTests
         Assert.That((thumbnail.Width, thumbnail.Height), Is.EqualTo((256u, 128u)));
     }
 
-    // A scene file is a scene, its picture the .png of its name the editor writes beside it as it saves it.
+    // A scene file is a scene, its picture the .png of its name the editor writes beside it as it saves it - listed as
+    // the scene's, not apart; a picture with no scene of its name is an image like any other.
     [Test]
-    public void AScene_GivesThePictureBesideIt_AndNoneWithoutOne()
+    public void AScene_GivesThePictureBesideIt_ListedAsItsOwn_AndNoneWithoutOne()
     {
         Touch("Arena.ascene");
         Touch("Hangar.ascene");
         File.WriteAllBytes(Path.Combine(_folder, "Arena.png"), CreatePng(16, 8));
+        File.WriteAllBytes(Path.Combine(_folder, "Poster.png"), CreatePng(16, 8));
 
         var assets = CreateService().GetAssets(_folder);
         var arena = assets.Single(asset => asset.Name == "Arena.ascene");
@@ -118,6 +120,7 @@ public class AssetFolderTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(assets.Select(asset => asset.Name), Is.EqualTo(new[] { "Arena.ascene", "Hangar.ascene", "Poster.png" }));
             Assert.That(arena.Kind, Is.EqualTo(AssetKind.Scene));
             var picture = arena.ReadThumbnail();
             Assert.That((picture?.Width, picture?.Height), Is.EqualTo(((uint?)16, (uint?)8)));

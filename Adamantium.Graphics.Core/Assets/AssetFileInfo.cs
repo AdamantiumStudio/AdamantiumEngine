@@ -26,6 +26,10 @@ public sealed class AssetFileInfo
     /// <summary>The extension of a scene file - the engine's <c>SceneFile.FileExtension</c>.</summary>
     public const string SceneExtension = ".ascene";
 
+    /// <summary>The picture of the scene in <paramref name="sceneFile"/>: a .png of its name beside it, which the editor
+    /// writes as it saves the scene; listed as part of the scene, not apart.</summary>
+    public static string SceneThumbnailOf(string sceneFile) => Path.ChangeExtension(sceneFile, ".png");
+
     private readonly Lazy<AssetSource> source;
 
     public AssetFileInfo(string filePath)
@@ -66,8 +70,8 @@ public sealed class AssetFileInfo
                     ? BitmapLoader.Load(new MemoryStream(png, false))
                     : null,
                 AssetKind.Image => BitmapLoader.Load(FilePath, ImageTypes[Path.GetExtension(FilePath)]),
-                AssetKind.Scene when File.Exists(Path.ChangeExtension(FilePath, ".png")) =>
-                    BitmapLoader.Load(Path.ChangeExtension(FilePath, ".png"), ImageFileType.Png),
+                AssetKind.Scene when File.Exists(SceneThumbnailOf(FilePath)) =>
+                    BitmapLoader.Load(SceneThumbnailOf(FilePath), ImageFileType.Png),
                 _ => null
             };
             return bitmap == null ? null : CopyFirstFrame(bitmap, maxPixelSize);
