@@ -268,6 +268,24 @@ namespace Adamantium.ECS.Components
 
         private static float Eased(double done) => (float)(done * done * (3 - 2 * done));
 
+        /// <summary>
+        /// Shows <paramref name="type"/> from the next frame with no flowing into it, as a camera put back as it was: a
+        /// flat one at <paramref name="orthoScale"/>, not sized from the focus as a change of projection sizes it; at the
+        /// focus's size when no scale is given (zero).
+        /// </summary>
+        public void ShowProjectionAtOnce(CameraProjectionType type, Vector2F orthoScale)
+        {
+            ProjectionType = type;
+            if (type != CameraProjectionType.Perspective)
+            {
+                OrthoScale = orthoScale.X > 0 && orthoScale.Y > 0 ? orthoScale : OrthoScaleAt(FocusDepth());
+            }
+
+            shownProjection = type;
+            projectionShown = true;
+            blending = false;
+        }
+
         private void StartProjectionChange(CameraProjectionType from, CameraProjectionType to)
         {
             var shown = blending ? blendedProjection : BlendableProjection(from);
