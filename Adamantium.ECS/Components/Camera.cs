@@ -798,6 +798,60 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        /// <summary>
+        /// Wheel notches as <see cref="Zoom"/>, toward what is under <paramref name="pixel"/> rather than the middle of
+        /// the view: that point stays under the pixel, as a canvas zooms to the pointer. <paramref name="depth"/> is how
+        /// far ahead it is along the camera's forward axis - what the pointer is over, or the focus distance over
+        /// nothing. A flat view scales and slides across so the point keeps its place; a free camera in perspective
+        /// moves along the ray through the pixel, as far as <see cref="Zoom"/> would toward its focus; a camera orbiting
+        /// a subject comes nearer it, as before.
+        /// </summary>
+        public void ZoomAt(double notches, Vector2F pixel, double depth)
+        {
+            if (Type != CameraType.Free)
+            {
+                Zoom(notches);
+                return;
+            }
+
+            if (ProjectionType == CameraProjectionType.Ortho)
+            {
+                // A pixel is 1 / scale units across: the point (pixel - middle) pixels from the middle keeps its place
+                // when the camera slides toward it by what the pixels it is away from the middle shrank by.
+                var before = OrthoScale;
+                ScaleOrtho(Math.Pow(ZoomStep, notches));
+                var after = OrthoScale;
+                if (after == before)
+                {
+                    return;
+                }
+
+                TranslateRight((pixel.X - Width / 2.0) * (1.0 / before.X - 1.0 / after.X));
+                TranslateUp((pixel.Y - Height / 2.0) * (1.0 / before.Y - 1.0 / after.Y));
+                return;
+            }
+
+            var direction = Vector3.Normalize(PickRay.FromCamera(this, pixel).Ray.Direction.As<double>());
+            var ahead = Vector3<double>.Dot(direction, Forward);
+            if (ahead <= 1e-6)
+            {
+                Zoom(notches);
+                return;
+            }
+
+            // A share of the way along the ray to the point, the way counted no shorter than the focus floor, so the
+            // wheel still moves the camera on past a point at its feet.
+            var floor = Math.Max(FocusFloor, ZNear * 2);
+            var reach = Math.Max(depth, floor) / ahead;
+            var step = reach * (1 - Math.Pow(ZoomStep, -notches));
+            Owner.Transform.Position += Vector3<double>.Multiply(direction, step);
+            var focus = FocusDistance - step * ahead;
+            if (focus >= floor || focus > FocusDistance)
+            {
+                FocusDistance = Math.Min(focus, ZFar / 2);
+            }
+        }
+
         /// <inheritdoc />
         public override void RotateRelativeXY(float angleX, float angleY)
         {
