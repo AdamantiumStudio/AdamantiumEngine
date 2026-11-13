@@ -20,6 +20,7 @@ public sealed class EntityManager
     private readonly List<Entity> entitiesToRemove;
     private readonly List<Entity> branchesToRemove;
     private readonly List<Entity> entitiesReowned;
+    private readonly Dictionary<Entity, Scene> entitiesMoved = new();
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
 
@@ -61,11 +62,20 @@ public sealed class EntityManager
     }
 
     /// <summary>A new empty scene of the world, with an id of its own; until it is removed.</summary>
-    public Scene CreateScene(string name)
+    public Scene CreateScene(string name) => CreateScene(name, UidGenerator.Generate());
+
+    /// <summary>A new empty scene of the world with the id <paramref name="uid"/> - the one its scene file keeps; until
+    /// it is removed. The world holds one scene with an id at most.</summary>
+    public Scene CreateScene(string name, UInt128 uid)
     {
-        var scene = new Scene(World, name, UidGenerator.Generate());
+        var scene = new Scene(World, name, uid);
         lock (syncObject)
         {
+            if (scenes.Exists(each => each.Uid == uid))
+            {
+                throw new InvalidOperationException($"The world has a scene with the id {uid} already.");
+            }
+
             scenes.Add(scene);
         }
 
@@ -104,6 +114,8 @@ public sealed class EntityManager
                 RemoveEntity(root);
             }
         }
+
+        scene.RaiseRemoved();
     }
 
     internal void SyncEntities()
@@ -156,7 +168,64 @@ public sealed class EntityManager
 
                 entitiesReowned.Clear();
             }
+
+            if (entitiesMoved.Count > 0)
+            {
+                foreach (var move in entitiesMoved)
+                {
+                    MoveToSceneInternal(move.Key, move.Value);
+                }
+
+                entitiesMoved.Clear();
+            }
         }
+    }
+
+    /// <summary>Moves the root <paramref name="root"/> with its tree to <paramref name="scene"/> of the same world, from
+    /// the next frame: as an output's own camera follows the output to the scene it shows. Nothing for an entity outside
+    /// the world or hanging under an owner - a branch is in its owner's scene.</summary>
+    public void MoveToScene(Entity root, Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(scene);
+        if (scene.World != World)
+        {
+            throw new ArgumentException("The scene is another world's.", nameof(scene));
+        }
+
+        lock (syncObject)
+        {
+            if (scene.IsRemoved)
+            {
+                throw new InvalidOperationException($"The scene '{scene.Name}' is removed.");
+            }
+
+            if (entitiesToAdd.Contains(root))
+            {
+                root.SetScene(scene);
+            }
+            else if (availableEntities.ContainsKey(root.Uid))
+            {
+                entitiesMoved[root] = scene;
+            }
+        }
+
+        root.NotifyUpdated();
+    }
+
+    private void MoveToSceneInternal(Entity root, Scene scene)
+    {
+        var home = root.OwnScene;
+        if (!availableEntities.ContainsKey(root.Uid) || root.Owner != null || home == scene || scene.IsRemoved)
+        {
+            return;
+        }
+
+        home?.Roots.Remove(root);
+        LeaveCameras(root, home);
+        root.SetScene(scene);
+        scene.Roots.Add(root);
+        JoinCameras(root, scene);
     }
 
     private void AddEntityInternal(Entity entity)
@@ -671,9 +740,11 @@ public sealed class EntityManager
 
     public void Reset()
     {
+        List<Scene> removed;
         lock (syncObject)
         {
             entitiesReowned.Clear();
+            entitiesMoved.Clear();
             foreach (var entity in availableEntities.Values)
             {
                 entity.SetScene(null);
@@ -687,6 +758,7 @@ public sealed class EntityManager
                 scene.IsRemoved = scene != MainScene;
             }
 
+            removed = scenes.FindAll(scene => scene != MainScene);
             scenes.Clear();
             scenes.Add(MainScene);
             availableEntities.Clear();
@@ -694,8 +766,13 @@ public sealed class EntityManager
             entityParametersMap.Clear();
             availableProjectionTypes.Clear();
         }
+
+        foreach (var scene in removed)
+        {
+            scene.RaiseRemoved();
+        }
     }
-    
+
     public event EventHandler<EntityEventArgs> EntityAdded;
     public event EventHandler<EntityEventArgs> EntityRemoved;
     public event EventHandler<EntityGroupEventArgs> GroupCreated;

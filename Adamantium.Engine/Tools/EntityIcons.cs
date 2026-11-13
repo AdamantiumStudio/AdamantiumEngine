@@ -25,7 +25,9 @@ public class EntityIcons : EditorProcessor
     /// <summary>The size icons have unless set otherwise, in points.</summary>
     public const float DefaultPixels = 36;
 
-    private readonly Entity root = new(null, nameof(EntityIcons));
+    private readonly Dictionary<Scene, Entity> roots = new();
+    private readonly List<Scene> scenesGone = [];
+    private Entity collectingInto;
     private readonly Entity pointIcon = new PointLightIconTemplate().BuildEntity(null, "Point light");
     private readonly Entity spotIcon = new SpotLightIconTemplate().BuildEntity(null, "Spot light");
     private readonly Entity directionalIcon = new DirectionalLightIconTemplate().BuildEntity(null, "Directional light");
@@ -50,13 +52,20 @@ public class EntityIcons : EditorProcessor
 
     public override void Update(AppTime appTime)
     {
+        // Each scene shown has icons of its own, which only the outputs showing it draw.
         seen.Clear();
-        foreach (var root in Tools.EntityWorld.MainScene.RootEntities.AsSpan())
+        foreach (var scene in Tools.Observatory.ShownScenes)
         {
-            root?.TraverseInDepth(Collect);
+            collectingInto = RootOf(scene);
+            foreach (var entity in scene.RootEntities.AsSpan())
+            {
+                entity?.TraverseInDepth(Collect);
+            }
         }
 
+        collectingInto = null;
         DropGone();
+        DropRemovedScenes();
 
         var cameras = Tools.Observatory.CurrentCameras;
         foreach (var (target, icon) in iconOf)
@@ -82,7 +91,10 @@ public class EntityIcons : EditorProcessor
 
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
-        overlay.DrawFlatInScene(root);
+        if (overlay.Scene is { } scene && roots.TryGetValue(scene, out var icons))
+        {
+            overlay.DrawFlatInScene(icons);
+        }
     }
 
     /// <summary>The icon that stands for <paramref name="target"/> in the scene, or null when it shows none.</summary>
@@ -90,7 +102,12 @@ public class EntityIcons : EditorProcessor
 
     public override PickHit PickEntity(in PickRay ray)
     {
-        var hit = root.Pick(ray, PickMode.MeshColliders);
+        if (Tools.Scene is not { } scene || !roots.TryGetValue(scene, out var icons))
+        {
+            return default;
+        }
+
+        var hit = icons.Pick(ray, PickMode.MeshColliders);
         if (!hit.IsHit || !targetOf.TryGetValue(hit.Entity, out var target))
         {
             return default;
@@ -104,7 +121,7 @@ public class EntityIcons : EditorProcessor
         var half = Pixels * camera.PixelsPerPoint / 2;
         foreach (var target in iconOf.Keys)
         {
-            if (target == camera.Owner)
+            if (target == camera.Owner || target.Scene != Tools.Scene)
             {
                 continue;
             }
@@ -133,9 +150,17 @@ public class EntityIcons : EditorProcessor
         }
 
         seen.Add(entity);
-        if (!iconOf.TryGetValue(entity, out var icon))
+        if (iconOf.TryGetValue(entity, out var icon))
         {
-            icon = Instance(root, look);
+            // Gone over to another scene: its icon goes with it.
+            if (icon.Owner != collectingInto)
+            {
+                Tools.EntityWorld.EntityManager.SetOwner(icon, collectingInto);
+            }
+        }
+        else
+        {
+            icon = Instance(collectingInto, look);
             icon.AddComponent(new BoxCollider());
             iconOf[entity] = icon;
             targetOf[icon] = entity;
@@ -237,6 +262,34 @@ public class EntityIcons : EditorProcessor
             targetOf.Remove(icon);
             raysOf.Remove(gone[i]);
             Tools.EntityWorld.EntityManager.RemoveOwner(icon);
+        }
+    }
+
+    private Entity RootOf(Scene scene)
+    {
+        if (!roots.TryGetValue(scene, out var icons))
+        {
+            icons = new Entity(null, $"{nameof(EntityIcons)} of {scene.Name}");
+            roots[scene] = icons;
+        }
+
+        return icons;
+    }
+
+    private void DropRemovedScenes()
+    {
+        scenesGone.Clear();
+        foreach (var scene in roots.Keys)
+        {
+            if (scene.IsRemoved)
+            {
+                scenesGone.Add(scene);
+            }
+        }
+
+        foreach (var scene in scenesGone)
+        {
+            roots.Remove(scene);
         }
     }
 

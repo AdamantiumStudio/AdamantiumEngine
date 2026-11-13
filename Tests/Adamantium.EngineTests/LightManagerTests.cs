@@ -14,7 +14,7 @@ public class LightManagerTests
     public void AnAddedLight_IsListedFromTheNextFrame_ByItsKind()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
         var spot = new LightTemplate().BuildEntity(null, "Spot", LightType.Spot);
 
         lights.AddLight(spot);
@@ -33,7 +33,7 @@ public class LightManagerTests
     public void ARemovedLight_LeavesTheListsAndTheWorld()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
         var point = new LightTemplate().BuildEntity(null, "Point", LightType.Point);
         lights.AddLight(point);
         NextFrame(universe);
@@ -52,7 +52,7 @@ public class LightManagerTests
     public void ARemovedLight_StaysInTheWorldUntilTheFrameEnds()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
         var point = new LightTemplate().BuildEntity(null, "Point", LightType.Point);
         lights.AddLight(point);
         NextFrame(universe);
@@ -66,7 +66,7 @@ public class LightManagerTests
     public void AnEntityWithoutALight_IsNotTakenIn()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
 
         lights.AddLight(new Entity(null, "Not a light"));
         NextFrame(universe);

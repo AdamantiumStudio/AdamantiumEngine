@@ -67,7 +67,7 @@ public class SceneIndexPickingTests
     [Test]
     public void TheIndex_FindsWhatTheWalkFinds()
     {
-        var index = universe.EntityWorld.Satellites.Get<SceneIndex>();
+        var index = universe.EntityWorld.MainScene.Index;
         var hits = 0;
         for (int x = 0; x < 800; x += 37)
         {
@@ -92,7 +92,7 @@ public class SceneIndexPickingTests
     [Test]
     public void TheIndex_FollowsAMove_AndForgetsWhatWent()
     {
-        var index = universe.EntityWorld.Satellites.Get<SceneIndex>();
+        var index = universe.EntityWorld.MainScene.Index;
         var cube = cubes.Find(c => c.Visible && c.IsEnabled && c.Owner == null);
         var target = new Vector3<double>(40, 3, 10);
         var ray = PickRay.FromCamera(camera, PixelOf(target));

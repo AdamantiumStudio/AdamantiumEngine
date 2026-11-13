@@ -33,7 +33,12 @@ public class ToolsService : EntityService, INotifyUniverse
 
     public Observatory Observatory { get; private set; }
 
-    public Selection Selection { get; private set; }
+    /// <summary>The scene the tools work in: the one of the output under the pointer, else of the one taking the
+    /// keyboard, else the last one worked in - the main scene to begin with. Found at the start of every frame.</summary>
+    public Scene Scene { get; private set; }
+
+    /// <summary>What is selected in <see cref="Scene"/>.</summary>
+    public Selection Selection => Scene.Selection;
 
     /// <summary>The tool in use: one at a time, or none. Set from any thread; the change takes effect with the next frame.</summary>
     public ToolProcessor Tool
@@ -83,10 +88,7 @@ public class ToolsService : EntityService, INotifyUniverse
         return removing ? Selection.ChosenToRemove(form.Entity) : Selection.ChosenByClick(form.Entity);
     }
 
-    private PickHit PickForm(in PickRay ray) =>
-        EntityWorld.Satellites.TryGet<SceneIndex>(out var index)
-            ? Picking.PickMeshes(index, ray, withDisabled: true)
-            : Picking.Pick(EntityWorld.MainScene.RootEntities, ray, PickMode.Triangles, withDisabled: true);
+    private PickHit PickForm(in PickRay ray) => Picking.PickMeshes(Scene.Index, ray, withDisabled: true);
 
     private PickHit PickShown(in PickRay ray)
     {
@@ -147,7 +149,7 @@ public class ToolsService : EntityService, INotifyUniverse
     {
         var viewProjection = camera.ViewMatrix * camera.ProjectionMatrix;
         var middle = PickRay.FromCamera(camera, frame.Center);
-        var roots = EntityWorld.MainScene.RootEntities;
+        var roots = Scene.RootEntities;
         for (int i = 0; i < roots.Count; i++)
         {
             FrameTree(roots[i], camera, in frame, in viewProjection, in middle, into);
@@ -297,11 +299,17 @@ public class ToolsService : EntityService, INotifyUniverse
     public override void Initialize()
     {
         Observatory = EntityWorld.Satellites.Get<Observatory>();
-        Selection = EntityWorld.Satellites.Get<Selection>();
+        Scene = EntityWorld.MainScene;
         if (EntityWorld.Satellites.TryGet(out watcher))
         {
             watcher.Watch(this);
         }
+    }
+
+    private Scene WorkedIn()
+    {
+        var scene = Observatory?.PointerScene ?? Observatory?.KeyboardScene ?? Scene;
+        return scene is { IsRemoved: false } ? scene : EntityWorld.MainScene;
     }
 
     public override void UnloadContent()
@@ -323,6 +331,7 @@ public class ToolsService : EntityService, INotifyUniverse
 
         IsPointerTaken = false;
         Hovered = null;
+        Scene = WorkedIn();
         base.Update(appTime);
 
         var cameras = Observatory?.CurrentCameras ?? [];

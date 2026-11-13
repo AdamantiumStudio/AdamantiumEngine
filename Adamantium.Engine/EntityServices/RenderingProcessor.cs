@@ -27,7 +27,11 @@ public class RenderingProcessor : EntityProcessor<RenderingService>, IDisposable
     protected Camera ActiveCamera { get; set; }
     protected bool ShowDebugOutput { get; set; }
 
-    public IReadOnlyList<Entity> Entities => EntityWorld.MainScene.RootEntities;
+    /// <summary>The scene the processor's output shows - the one scene it works with; null for none.</summary>
+    public Scene Scene => Window?.Scene;
+
+    /// <summary>The roots of <see cref="Scene"/>; none without one.</summary>
+    public IReadOnlyList<Entity> Entities => (IReadOnlyList<Entity>)Scene?.RootEntities ?? [];
 
     public RenderingProcessor()
     {

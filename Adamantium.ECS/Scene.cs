@@ -19,6 +19,8 @@ public sealed class Scene
         Roots = new TrackingCollection<Entity>();
         RootEntities = new ReadOnlyTrackingCollection<Entity>(Roots);
         Cameras = new EntityGroup(nameof(Cameras));
+        Index = new SceneIndex();
+        Selection = new Selection();
         Satellites = new Satellites();
     }
 
@@ -38,11 +40,22 @@ public sealed class Scene
     /// the scene, and leaves with it; on the world's thread.</summary>
     public EntityGroup Cameras { get; }
 
-    /// <summary>The scene's one-of-a-kind objects - its lights, its selection.</summary>
+    /// <summary>Where the meshes of the scene stand, kept by whoever walks its transforms while it is shown.</summary>
+    public SceneIndex Index { get; }
+
+    /// <summary>What is selected in the scene: each scene its own.</summary>
+    public Selection Selection { get; }
+
+    /// <summary>The scene's other one-of-a-kind objects - its lights.</summary>
     public Satellites Satellites { get; }
 
     /// <summary>Whether the scene is gone from its world: removed, with its trees.</summary>
     public bool IsRemoved { get; internal set; }
+
+    /// <summary>Raised once, as the scene is removed from its world - for what serves it alone to let go.</summary>
+    public event EventHandler Removed;
+
+    internal void RaiseRemoved() => Removed?.Invoke(this, EventArgs.Empty);
 
     internal TrackingCollection<Entity> Roots { get; }
 

@@ -24,7 +24,8 @@ public class InputService : EntityService
 
     private Entity userControlledEntity;
     //private AudioManager audioManager;
-    private Selection selection;
+    // What is selected in the scene the keys work in: of the output taking the keyboard.
+    private Selection Selection => (observatory.KeyboardScene ?? EntityWorld.MainScene).Selection;
     private Observatory observatory;
     private readonly InputAction move;
     private readonly InputAction rise;
@@ -55,7 +56,6 @@ public class InputService : EntityService
 
     public InputService(EntityWorld world) : base(world)
     {
-        selection = EntityWorld.Satellites.Get<Selection>();
         observatory = EntityWorld.Satellites.Get<Observatory>();
         EntityWorld.EntityManager.EntityRemoved += EntityManagerEntityRemoved;
         //audioManager = new AudioManager();
@@ -128,7 +128,7 @@ public class InputService : EntityService
     /// </summary>
     public override void Update(AppTime appTime)
     {
-        userControlledEntity = selection.Current ?? UserControlledEntity;
+        userControlledEntity = Selection.Current ?? UserControlledEntity;
 
         if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera))
         {
@@ -159,14 +159,18 @@ public class InputService : EntityService
         UpdateIdleCameras(appTime);
     }
 
+    // The cameras of the scenes shown that no output looks through - one travelling to its subject, say.
     private void UpdateIdleCameras(AppTime appTime)
     {
-        var cameras = EntityWorld.MainScene.Cameras;
-        for (int i = 0; i < cameras.Count; i++)
+        foreach (var scene in observatory.ShownScenes)
         {
-            if (cameras[i].GetComponent<Camera>() is { } camera && !Contains(observatory.CurrentCameras, camera))
+            var cameras = scene.Cameras;
+            for (int i = 0; i < cameras.Count; i++)
             {
-                camera.Update(appTime);
+                if (cameras[i].GetComponent<Camera>() is { } camera && !Contains(observatory.CurrentCameras, camera))
+                {
+                    camera.Update(appTime);
+                }
             }
         }
     }
@@ -248,7 +252,8 @@ public class InputService : EntityService
 
     private double DepthUnder(Camera camera, Vector2F pixel)
     {
-        var hit = Picking.Pick(EntityWorld.MainScene.RootEntities, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
+        var roots = (observatory.PointerScene ?? EntityWorld.MainScene).RootEntities;
+        var hit = Picking.Pick(roots, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
         if (hit.IsHit)
         {
             var depth = Vector3F.Dot(hit.Point, camera.Forward.As<float>());
@@ -353,10 +358,10 @@ public class InputService : EntityService
 
         if (follow.IsPressed)
         {
-            if (selection.Current?.GetComponent<Camera>() is { } selectedCamera)
+            if (Selection.Current?.GetComponent<Camera>() is { } selectedCamera)
             {
                 output.Camera = selectedCamera;
-                selection.Current = null;
+                Selection.Current = null;
             }
             else
             {
@@ -399,7 +404,7 @@ public class InputService : EntityService
     {
         if (wireframe.IsPressed)
         {
-            selection.Current?.SetWireFrame();
+            Selection.Current?.SetWireFrame();
         }
 
         if (screenshot.IsPressed)

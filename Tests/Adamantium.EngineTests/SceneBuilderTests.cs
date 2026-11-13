@@ -92,9 +92,28 @@ public class SceneBuilderTests
 
     private async Task<IReadOnlyList<Entity>> Build(SceneFile scene)
     {
-        var entities = await new SceneBuilder(universe.EntityWorld, assets).Build(scene);
+        var entities = await new SceneBuilder(universe.EntityWorld.MainScene, assets).Build(scene);
         universe.EntityWorld.ForceUpdate();
         return entities;
+    }
+
+    // Built into a scene of its own, a file stands there alone, and is written back with that scene's id.
+    [Test]
+    public async Task ASceneBuiltIntoAnotherScene_StandsThereAlone_AndIsWrittenWithItsId()
+    {
+        var arena = universe.EntityWorld.CreateScene("Arena", 0xA4E7A);
+        await new SceneBuilder(arena, assets).Build(Sample());
+        universe.EntityWorld.ForceUpdate();
+
+        var back = SceneCapture.Capture(arena);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Uid, Is.EqualTo((UInt128)0xA4E7A));
+            Assert.That(back.Models.Select(model => model.Name), Is.EqualTo(new[] { "Robot A", "Robot B" }));
+            Assert.That(universe.EntityWorld.MainScene.RootEntities, Is.Empty);
+            Assert.That(SceneCapture.Capture(universe.EntityWorld.MainScene).Models, Is.Empty);
+        });
     }
 
     [Test]
@@ -102,7 +121,7 @@ public class SceneBuilderTests
     {
         await Build(Sample());
 
-        var back = SceneCapture.Capture(universe.EntityWorld);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
         Assert.Multiple(() =>
         {
@@ -186,7 +205,7 @@ public class SceneBuilderTests
         scene.Models.Add(new SceneModel { Uid = 3, Name = "Gone", Asset = MissingAsset, Position = new Vector3<double>(1, 2, 3) });
 
         await Build(scene);
-        var back = SceneCapture.Capture(universe.EntityWorld);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
         var gone = back.Models.Single(model => model.Uid == 3);
         Assert.Multiple(() =>
@@ -209,7 +228,7 @@ public class SceneBuilderTests
         universe.EntityWorld.EntityManager.AddEntity(view);
 
         await Build(Sample());
-        var back = SceneCapture.Capture(universe.EntityWorld);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
         Assert.That(back.Cameras.Select(each => each.Name), Is.EqualTo(new[] { "Intro" }));
     }
@@ -250,7 +269,7 @@ public class SceneBuilderTests
         Assert.Multiple(() =>
         {
             Assert.That(again, Is.Empty);
-            Assert.That(SceneCapture.Capture(universe.EntityWorld).Models, Has.Count.EqualTo(2));
+            Assert.That(SceneCapture.Capture(universe.EntityWorld.MainScene).Models, Has.Count.EqualTo(2));
         });
     }
 
@@ -263,7 +282,7 @@ public class SceneBuilderTests
         scene.Behaviours.Add(new SceneBehaviour { On = 1, Type = "ModB.Hum" });
 
         await Build(scene);
-        var back = SceneCapture.Capture(universe.EntityWorld);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
         Assert.That(back.Behaviours.Select(entry => entry.Type), Is.EqualTo(new[] { "ModA.Glow", "ModB.Hum" }));
     }
@@ -278,7 +297,7 @@ public class SceneBuilderTests
         scene.Behaviours.Add(entry);
         await Build(scene);
 
-        var back = SceneCapture.Capture(universe.EntityWorld);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
         using var stream = new MemoryStream();
         back.Write(stream);
 
@@ -300,7 +319,7 @@ public class SceneBuilderTests
         universe.EntityWorld.EntityManager.SetOwner(lamp, body);
         universe.EntityWorld.ForceUpdate();
 
-        var written = SceneCapture.Capture(universe.EntityWorld).Lights.Single();
+        var written = SceneCapture.Capture(universe.EntityWorld.MainScene).Lights.Single();
 
         Assert.Multiple(() =>
         {
@@ -331,7 +350,7 @@ public class SceneBuilderTests
         }
 
         await Build(scene);
-        var back = SceneCapture.Capture(universe.EntityWorld);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
         Assert.That(back.Lights.Select(light => light.OuterSpotAngle), Is.EqualTo(Enumerable.Range(1, 89).Select(a => (float)a)));
     }

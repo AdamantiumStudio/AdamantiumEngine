@@ -15,7 +15,7 @@ using Serilog;
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>
-/// Puts a <see cref="SceneFile"/> into a world: every entry an entity with the entry's id, the models loaded by the
+/// Puts a <see cref="SceneFile"/> into a scene of a world: every entry an entity with the entry's id, the models loaded by the
 /// asset service - all at once, each asset once however many times it stands in the scene - lights, cameras, spawn
 /// points, groups, empty entities and shapes made as the file describes them, the game's components set on what they
 /// are on. A model that does not load stays as an empty entity naming its asset, so writing the scene back keeps it.
@@ -27,14 +27,18 @@ public sealed class SceneBuilder
     private const int DefaultViewWidth = 800;
     private const int DefaultViewHeight = 600;
 
+    private readonly Scene target;
     private readonly EntityWorld world;
     private readonly IAssetService assets;
 
-    public SceneBuilder(EntityWorld world, IAssetService assets)
+    /// <summary>Builds into <paramref name="target"/>: its lights are its <see cref="LightManager"/>'s, if it has one.
+    /// </summary>
+    public SceneBuilder(Scene target, IAssetService assets)
     {
-        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(assets);
-        this.world = world;
+        this.target = target;
+        world = target.World;
         this.assets = assets;
     }
 
@@ -82,7 +86,7 @@ public sealed class SceneBuilder
         ArgumentNullException.ThrowIfNull(models);
 
         var byId = new Dictionary<UInt128, Entity>();
-        var made = new List<(ScenePlacement Entry, Entity Entity)>();
+        var made = new List<Made>();
         var inWorld = WorldIds();
 
         foreach (var model in Admitted(scene.Models, byId, inWorld)) Keep(model, MakeModel(model, models), byId, made);
@@ -92,8 +96,10 @@ public sealed class SceneBuilder
         foreach (var marker in Admitted(scene.Markers, byId, inWorld)) Keep(marker, MakeMarker(marker), byId, made);
         foreach (var shape in Admitted(scene.Shapes, byId, inWorld)) Keep(shape, MakeShape(shape), byId, made);
 
-        foreach (var (entry, entity) in made)
+        foreach (var each in made)
         {
+            var entry = each.Entry;
+            var entity = each.Entity;
             if (entry.Parent is not { } parent) continue;
 
             if (byId.TryGetValue(parent, out var owner) && !IsWithin(owner, entity))
@@ -120,10 +126,11 @@ public sealed class SceneBuilder
             }
         }
 
-        world.Satellites.TryGet(out LightManager lights);
+        target.Satellites.TryGet(out LightManager lights);
         var entities = new List<Entity>(made.Count);
-        foreach (var (_, entity) in made)
+        foreach (var each in made)
         {
+            var entity = each.Entity;
             entities.Add(entity);
             if (lights != null && entity.ContainsComponent<Light>())
             {
@@ -131,7 +138,7 @@ public sealed class SceneBuilder
             }
             else if (entity.Owner == null)
             {
-                world.EntityManager.AddEntity(entity);
+                world.EntityManager.AddEntity(entity, target);
             }
         }
 
@@ -191,12 +198,14 @@ public sealed class SceneBuilder
         return admitted;
     }
 
-    private static void Keep(ScenePlacement entry, Entity entity, Dictionary<UInt128, Entity> byId,
-        List<(ScenePlacement, Entity)> made)
+    private static void Keep(ScenePlacement entry, Entity entity, Dictionary<UInt128, Entity> byId, List<Made> made)
     {
         byId.Add(entry.Uid, entity);
-        made.Add((entry, entity));
+        made.Add(new Made(entry, entity));
     }
+
+    // An entry of the file and the entity made for it.
+    private readonly record struct Made(ScenePlacement Entry, Entity Entity);
 
     // The import template makes the model's entities at once; its task is done when it returns.
     private Entity MakeModel(SceneModel entry, IReadOnlyDictionary<string, SceneData> models)

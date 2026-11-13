@@ -1147,7 +1147,8 @@ public class Universe : IUniverse
         entity.Transform.Position = new Vector3<double>(0, -3, -20);
         var camera = entity.GetComponent<Camera>();
         camera.SetFreeLookAt(Vector3<double>.Zero);
-        EntityWorld.EntityManager.AddEntity(entity);
+        output.Scene ??= EntityWorld.MainScene;
+        EntityWorld.EntityManager.AddEntity(entity, output.Scene);
         output.OwnCamera = camera;
         output.Camera = camera;
     }

@@ -29,6 +29,8 @@ namespace Adamantium.ECS
 
         public Scene CreateScene(string name) => EntityManager.CreateScene(name);
 
+        public Scene CreateScene(string name, UInt128 uid) => EntityManager.CreateScene(name, uid);
+
         public void RemoveScene(Scene scene) => EntityManager.RemoveScene(scene);
 
         public EntityManager EntityManager { get; }

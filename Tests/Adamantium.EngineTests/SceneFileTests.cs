@@ -73,6 +73,22 @@ public class SceneFileTests
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    // The scene keeps its own id across saving; a new scene's file has none until its scene is saved.
+    [Test]
+    public void TheScenesId_IsReadBack_AndAFileWithoutOneHasNone()
+    {
+        var scene = Sample();
+        scene.Uid = Robot;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(WriteAndRead(scene).Uid, Is.EqualTo(Robot));
+            Assert.That(Text(scene), Does.Contain("<Scene Version=\"1\" Uid=\"123456789abcdef00fedcba987654321\""));
+            Assert.That(WriteAndRead(new SceneFile()).Uid, Is.Null);
+            Assert.That(Text(new SceneFile()), Does.Not.Contain("Uid="));
+        });
+    }
+
     [Test]
     public void AScene_ReadBack_IsTheSceneWritten()
     {

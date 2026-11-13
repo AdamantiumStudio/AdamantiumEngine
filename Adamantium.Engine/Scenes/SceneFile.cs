@@ -29,6 +29,21 @@ public sealed class SceneFile
     [XmlAttribute]
     public int Version { get; set; } = FormatVersion;
 
+    /// <summary>The scene's own id, which it keeps across saving: the scene shown from the file is made with it. Null
+    /// for a file without one - a new scene's - whose scene gets a new id.</summary>
+    [XmlIgnore]
+    public UInt128? Uid { get; set; }
+
+    [XmlAttribute("Uid"), EditorBrowsable(EditorBrowsableState.Never)]
+    public string UidText
+    {
+        get => Uid is { } uid ? SceneText.Format(uid) : null;
+        set => Uid = string.IsNullOrEmpty(value) ? null : SceneText.ParseId(value);
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeUidText() => Uid != null;
+
     [XmlArray("Models"), XmlArrayItem("Model")]
     public List<SceneModel> Models { get; set; } = [];
 

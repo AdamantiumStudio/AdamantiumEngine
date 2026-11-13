@@ -302,6 +302,27 @@ public class EntityManagerTests
         });
     }
 
+    // A scene file keeps its scene's id: the scene is made with it, and once only in a world.
+    [Test]
+    public void ASceneMadeWithAnId_KeepsIt_AndTheWorldHoldsItOnce()
+    {
+        var world = new TestUniverse().EntityWorld;
+        var id = (UInt128)0x5EED;
+
+        var arena = world.CreateScene("Arena", id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(arena.Uid, Is.EqualTo(id));
+            Assert.That(() => world.CreateScene("Arena again", id), Throws.InvalidOperationException);
+            Assert.That(world.Scenes, Is.EqualTo(new[] { world.MainScene, arena }));
+        });
+
+        world.RemoveScene(arena);
+
+        Assert.That(world.CreateScene("Arena", id).Uid, Is.EqualTo(id), "free again once removed");
+    }
+
     [Test]
     public void TheMainScene_IsNeverRemoved()
     {

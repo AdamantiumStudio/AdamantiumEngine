@@ -40,7 +40,6 @@ public class ToolsServiceTests
     {
         var universe = new TestUniverse();
         universe.Watcher.IsWatching = true;
-        universe.Satellites.Add(new Selection());
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
         var tools = new ToolsService(universe.EntityWorld);
         tools.Initialize();

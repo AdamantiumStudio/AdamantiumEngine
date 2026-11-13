@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Multiverse;
 
@@ -25,6 +26,25 @@ public static class UniverseCameras
             if (camera != null && !cameras.Contains(camera))
             {
                 cameras.Add(camera);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fills <paramref name="scenes"/> with the scene each visible output looking through a camera shows now - once,
+    /// however many outputs show it. A scene nobody sees is not in it: nothing runs it.
+    /// </summary>
+    public static void CollectShownScenes(this IUniverse universe, List<Scene> scenes)
+    {
+        scenes.Clear();
+        var outputs = universe.Outputs;
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            var output = outputs[i];
+            if (output.IsVisible && output.Camera != null && output.Scene is { IsRemoved: false } scene
+                && !scenes.Contains(scene))
+            {
+                scenes.Add(scene);
             }
         }
     }

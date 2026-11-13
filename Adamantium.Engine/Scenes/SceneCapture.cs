@@ -9,24 +9,24 @@ using Serilog;
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>
-/// Writes what stands in a world into a <see cref="SceneFile"/>: a model's root - an entity naming its asset
+/// Writes what stands in a scene of a world into a <see cref="SceneFile"/>, with the scene's id: a model's root - an entity naming its asset
 /// (<see cref="Entity.Source"/>) - as the model, where and which way, nothing of its parts; a light, a camera, a spawn
 /// point, a group or an empty entity, a procedural shape by its recipe, whole; the game's components on any of them.
 /// What stands inside something the scene does not keep - a model's part - is written in the nearest entry it stands
 /// in, placed as it stands. The cameras the universe's outputs own are the editor's view, not the scene's, and are left
-/// out, as is whatever else stands in the world. Called on the world's thread, after the world took in what was added.
+/// out, as is whatever else stands in the scene. Called on the world's thread, after the world took in what was added.
 /// </summary>
 public static class SceneCapture
 {
     // Degrees written to this many decimals: turned to radians and back in floats, a whole angle comes back a hair off.
     private const int AngleDecimals = 4;
 
-    public static SceneFile Capture(EntityWorld world)
+    public static SceneFile Capture(Scene source)
     {
-        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(source);
 
         var ownCameras = new HashSet<Camera>();
-        if (world.Satellites.TryGet(out IUniverse universe))
+        if (source.World.Satellites.TryGet(out IUniverse universe))
         {
             foreach (var output in universe.Outputs)
             {
@@ -34,17 +34,19 @@ public static class SceneCapture
             }
         }
 
-        var scene = new SceneFile();
-        var stack = new Stack<(Entity Entity, Entity Placed)>();
-        var roots = world.MainScene.RootEntities;
+        var scene = new SceneFile { Uid = source.Uid };
+        var stack = new Stack<Visit>();
+        var roots = source.RootEntities;
         for (var i = roots.Count - 1; i >= 0; i--)
         {
-            stack.Push((roots[i], null));
+            stack.Push(new Visit(roots[i], null));
         }
 
         while (stack.Count > 0)
         {
-            var (entity, placed) = stack.Pop();
+            var visit = stack.Pop();
+            var entity = visit.Entity;
+            var placed = visit.Placed;
             var entry = Entry(entity, ownCameras);
             if (entry != null)
             {
@@ -66,12 +68,15 @@ public static class SceneCapture
 
             for (var i = entity.Dependencies.Count - 1; i >= 0; i--)
             {
-                stack.Push((entity.Dependencies[i], placed));
+                stack.Push(new Visit(entity.Dependencies[i], placed));
             }
         }
 
         return scene;
     }
+
+    // An entity still to write, and the nearest entry it stands in; null for none.
+    private readonly record struct Visit(Entity Entity, Entity Placed);
 
     private static ScenePlacement Entry(Entity entity, HashSet<Camera> ownCameras)
     {
