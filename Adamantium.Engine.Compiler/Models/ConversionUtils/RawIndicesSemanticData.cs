@@ -13,6 +13,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
             RawIndices = new List<int>();
             Offset = new Offset();
             VertexType = new List<int>();
+            SmoothingGroups = new List<int>();
             MeshTopology = PrimitiveType.Undefined;
         }
 
@@ -34,6 +35,10 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
         public Offset Offset { get; set; }
 
         public List<int> VertexType { get; set; }
+
+        /// <summary>The smoothing group of each face, beside <see cref="VertexType"/>: 0 for none. Filled by .obj only.
+        /// </summary>
+        public List<int> SmoothingGroups { get; set; }
 
         public PrimitiveType MeshTopology { get; set; }
     }

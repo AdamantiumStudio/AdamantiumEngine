@@ -141,6 +141,109 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
       }
 
 
+      /// <summary>
+      /// Normals for faces in smoothing groups (<c>s</c>) where the file gave none, written into its normals as
+      /// <c>vn</c> would be: a corner faces in one group share takes their normals together, each weighted by its
+      /// face's angle there, so how a face is cut into triangles does not tilt it; a face in no group keeps its own.
+      /// Groups span the whole file, across objects and materials, so the containers of all its meshes come at once.
+      /// A file naming no groups is left to the flat normals made for one given none.
+      /// </summary>
+      internal void SmoothGroups(IReadOnlyList<IndicesContainer> containers, ObjGeometryData geometryData)
+      {
+         var smoothed = new List<IndicesContainer>();
+         foreach (var container in containers)
+         {
+            if (!container.Semantic.HasFlag(VertexSemantic.Normal) && container.SmoothingGroups.Count > 0
+                && container.SmoothingGroups.Count * 3 == container.Positions.Count)
+            {
+               smoothed.Add(container);
+            }
+         }
+
+         var sums = new Dictionary<GroupCorner, Vector3<double>>();
+         foreach (var container in smoothed)
+         {
+            for (int triangle = 0; triangle < container.SmoothingGroups.Count; triangle++)
+            {
+               var group = container.SmoothingGroups[triangle];
+               if (group == 0)
+               {
+                  continue;
+               }
+
+               var normal = FaceNormal(container, triangle, geometryData);
+               for (int corner = 0; corner < 3; corner++)
+               {
+                  var key = new GroupCorner(container.Positions[triangle * 3 + corner], group);
+                  sums.TryGetValue(key, out var sum);
+                  sums[key] = sum + normal * CornerAngle(container, triangle, corner, geometryData);
+               }
+            }
+         }
+
+         var written = new Dictionary<GroupCorner, int>();
+         foreach (var container in smoothed)
+         {
+            var normals = new List<int>(container.Positions.Count);
+            for (int triangle = 0; triangle < container.SmoothingGroups.Count; triangle++)
+            {
+               var group = container.SmoothingGroups[triangle];
+               if (group == 0)
+               {
+                  var flat = AddNormal(geometryData, FaceNormal(container, triangle, geometryData));
+                  normals.Add(flat);
+                  normals.Add(flat);
+                  normals.Add(flat);
+                  continue;
+               }
+
+               for (int corner = 0; corner < 3; corner++)
+               {
+                  var key = new GroupCorner(container.Positions[triangle * 3 + corner], group);
+                  if (!written.TryGetValue(key, out var index))
+                  {
+                     index = AddNormal(geometryData, sums[key]);
+                     written[key] = index;
+                  }
+
+                  normals.Add(index);
+               }
+            }
+
+            container.Normals = normals;
+            container.Semantic |= VertexSemantic.Normal;
+         }
+      }
+
+      // A position as the faces of one smoothing group share it.
+      private readonly record struct GroupCorner(int Position, int Group);
+
+      // Out of the side the triangle is counterclockwise from, as .obj winds a face's front.
+      private static Vector3<double> FaceNormal(IndicesContainer container, int triangle, ObjGeometryData geometryData)
+      {
+         var first = geometryData.Positions[container.Positions[triangle * 3]];
+         var second = geometryData.Positions[container.Positions[triangle * 3 + 1]];
+         var third = geometryData.Positions[container.Positions[triangle * 3 + 2]];
+         return Vector3<double>.Normalize(Vector3<double>.Cross(second - first, third - first));
+      }
+
+      private static double CornerAngle(IndicesContainer container, int triangle, int corner,
+         ObjGeometryData geometryData)
+      {
+         var at = geometryData.Positions[container.Positions[triangle * 3 + corner]];
+         var next = geometryData.Positions[container.Positions[triangle * 3 + (corner + 1) % 3]];
+         var previous = geometryData.Positions[container.Positions[triangle * 3 + (corner + 2) % 3]];
+         var toNext = Vector3<double>.Normalize(next - at);
+         var toPrevious = Vector3<double>.Normalize(previous - at);
+         return Math.Acos(Math.Clamp(Vector3<double>.Dot(toNext, toPrevious), -1, 1));
+      }
+
+      private static int AddNormal(ObjGeometryData geometryData, Vector3<double> normal)
+      {
+         geometryData.Normals.Add(Vector3<double>.Normalize(normal).As<float>());
+         return geometryData.Normals.Count - 1;
+      }
+
       private Vector3F ParseFloatString(string str)
       {
          Vector3F color = new Vector3F();
