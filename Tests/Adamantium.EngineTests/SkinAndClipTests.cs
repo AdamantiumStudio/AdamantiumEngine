@@ -592,7 +592,7 @@ public class SkinAndClipTests
 
     private static Entity Import(SceneData scene, out Entity leg, out Entity hip, out Entity knee)
     {
-        var model = new EntityImportTemplate(scene, null, Vector3<double>.Zero).BuildEntity(new Entity()).Result;
+        var model = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity());
         leg = model.Dependencies.Single(e => e.Name.StartsWith("Leg"));
         hip = model.Dependencies.Single(e => e.Name.StartsWith("Hip"));
         knee = hip.Dependencies.Single();

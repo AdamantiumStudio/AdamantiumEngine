@@ -43,12 +43,11 @@ public class EntityImportTemplate : IEntityTemplate
         //this.camera = camera;
     }
 
-    public Task<Entity> BuildEntity(Entity owner)
-    {
-        return ImportEntity(owner);
-    }
+    public Task<Entity> BuildEntity(Entity owner) => Task.FromResult(Build(owner));
 
-    private Task<Entity> ImportEntity(Entity owner)
+    /// <summary>Makes <paramref name="owner"/> the model, its parts under it, at once: nothing of it waits. Null when
+    /// there is no model data, or it could not be made - logged.</summary>
+    public Entity Build(Entity owner)
     {
         try
         {
@@ -185,7 +184,7 @@ public class EntityImportTemplate : IEntityTemplate
                 transform.Pivot = Vector3F.TransformCoordinate(entity.GetLocalCenter(), transform.GetLocalMatrixF()).As<double>();
             });
             owner.Transform.Position += initialPosition;
-            return Task.FromResult(owner);
+            return owner;
         }
         catch (Exception exception)
         {

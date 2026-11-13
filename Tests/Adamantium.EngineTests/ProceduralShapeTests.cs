@@ -172,7 +172,7 @@ public class ProceduralShapeTests
     public void AChangedParameter_MakesTheMeshAgainInPlace_OnceAndOnlyThen()
     {
         var shape = new CubeShape();
-        var entity = new ShapeTemplate(shape).BuildEntity(new Entity(null, "Cube")).GetAwaiter().GetResult();
+        var entity = new ShapeTemplate(shape).Build(new Entity(null, "Cube"));
         var mesh = entity.GetComponent<MeshData>().Mesh;
         var untouched = mesh.Points;
 
@@ -213,7 +213,7 @@ public class ProceduralShapeTests
     [Test]
     public void ACapsule_IsHeldByACapsule_StandingAsItDoes()
     {
-        var entity = new ShapeTemplate(new CapsuleShape()).BuildEntity(new Entity(null, "Capsule")).GetAwaiter().GetResult();
+        var entity = new ShapeTemplate(new CapsuleShape()).Build(new Entity(null, "Capsule"));
 
         var collider = entity.GetComponent<Collider>();
 
@@ -230,8 +230,8 @@ public class ProceduralShapeTests
     [Test]
     public void ACubeAndASphere_KeepTheirBox()
     {
-        var cube = new ShapeTemplate(new CubeShape()).BuildEntity(new Entity(null, "Cube")).GetAwaiter().GetResult();
-        var sphere = new ShapeTemplate(new SphereShape()).BuildEntity(new Entity(null, "Sphere")).GetAwaiter().GetResult();
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        var sphere = new ShapeTemplate(new SphereShape()).Build(new Entity(null, "Sphere"));
 
         Assert.Multiple(() =>
         {

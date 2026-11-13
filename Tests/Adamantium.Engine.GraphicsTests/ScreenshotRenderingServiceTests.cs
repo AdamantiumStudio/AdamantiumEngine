@@ -187,9 +187,7 @@ public class ScreenshotRenderingServiceTests
     {
         var options = new AssetLoadOptions { AllowDuplication = true, IgnoreRootDirectory = true };
         var scene = _universe.Assets.Load<SceneData>(Figure, options);
-        return _universe.EntityWorld
-            .CreateEntityFromTemplate(new EntityImportTemplate(scene, _universe.Assets, Vector3<double>.Zero))
-            .GetAwaiter().GetResult();
+        return new EntityImportTemplate(scene, _universe.Assets, Vector3<double>.Zero).Build(new Entity());
     }
 
     private Image Take(Entity entity)

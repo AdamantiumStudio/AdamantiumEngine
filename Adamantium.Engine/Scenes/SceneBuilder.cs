@@ -207,7 +207,6 @@ public sealed class SceneBuilder
     // An entry of the file and the entity made for it.
     private readonly record struct Made(ScenePlacement Entry, Entity Entity);
 
-    // The import template makes the model's entities at once; its task is done when it returns.
     private Entity MakeModel(SceneModel entry, IReadOnlyDictionary<string, SceneData> models)
     {
         var entity = new Entity(null, entry.Name, entry.Uid) { IconKey = EntityIconKeys.Model };
@@ -215,7 +214,7 @@ public sealed class SceneBuilder
         {
             try
             {
-                new EntityImportTemplate(data, assets, Vector3<double>.Zero).BuildEntity(entity).GetAwaiter().GetResult();
+                new EntityImportTemplate(data, assets, Vector3<double>.Zero).Build(entity);
             }
             catch (Exception exception)
             {
@@ -279,7 +278,6 @@ public sealed class SceneBuilder
         return entity;
     }
 
-    // The shape template makes the mesh at once; its task is done when it returns.
     private static Entity MakeShape(SceneShape entry)
     {
         var entity = new Entity(null, entry.Name, entry.Uid);
@@ -294,7 +292,7 @@ public sealed class SceneBuilder
         {
             var shape = (ProceduralShape)Activator.CreateInstance(type);
             ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
-            new ShapeTemplate(shape).BuildEntity(entity).GetAwaiter().GetResult();
+            new ShapeTemplate(shape).Build(entity);
             entity.AddComponent(new Material { DiffuseColor = entry.Color });
         }
 

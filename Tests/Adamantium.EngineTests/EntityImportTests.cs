@@ -274,7 +274,7 @@ public class EntityImportTests
 
     private static Entity Import(SceneData scene, Vector3<double> at)
     {
-        return new EntityImportTemplate(scene, null, at).BuildEntity(new Entity()).Result;
+        return new EntityImportTemplate(scene, null, at).Build(new Entity());
     }
 
     private static Mesh Box(double half, double offsetY = 0, double offsetZ = 0)
