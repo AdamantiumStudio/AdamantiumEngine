@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.Engine.Compiler.Converter.Configs;
+using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
@@ -29,7 +30,31 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
          {
             indicesContainer = Triangulate(rawIndices.Semantic, indicesContainer, rawIndices.VertexType);
          }
+
+         indicesContainer.SmoothingGroups = SmoothingGroupsOfTriangles(rawIndices);
          return indicesContainer;
+      }
+
+      // A face of n corners fans into n - 2 triangles, each in the face's group.
+      private static List<int> SmoothingGroupsOfTriangles(RawIndicesSemanticData rawIndices)
+      {
+         var groups = new List<int>();
+         if (rawIndices.MeshTopology != PrimitiveType.TriangleList
+             || rawIndices.SmoothingGroups.Count != rawIndices.VertexType.Count
+             || rawIndices.SmoothingGroups.All(group => group == 0))
+         {
+            return groups;
+         }
+
+         for (int face = 0; face < rawIndices.VertexType.Count; face++)
+         {
+            for (int triangle = 0; triangle < rawIndices.VertexType[face] - 2; triangle++)
+            {
+               groups.Add(rawIndices.SmoothingGroups[face]);
+            }
+         }
+
+         return groups;
       }
 
       //Splits the interleaved index stream of COLLADA 1.4.0/1.4.1 and .obj into one array per semantic

@@ -26,6 +26,7 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
         private const string NORMAL = "vn ";
         private const string UV = "vt ";
         private const string FACES = "f ";
+        private const string SMOOTHING = "s ";
 
         private readonly ObjDataContainer dataContainer;
         public ObjFileParser(String filePath) : base(filePath)
@@ -71,6 +72,8 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
             Offset offset = new Offset();
             ulong offsetIndex = 0;
             int repeatingIndex = 0;
+            // The group the faces that follow are in, until the next s: it holds across o, g and usemtl. 0 is none.
+            int smoothingGroup = 0;
 
             for (int i = 0; i < fileContent.Count; i++)
             {
@@ -150,10 +153,19 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
                     }
                     semanticData.MaterialId = line.Substring(USEMTL.Length);
                     semanticData.Offset = offset;
-                    if (geometryData != null && !geometryData.GeometrySemantic.Contains(semanticData))
+                    // With no o or g before it, the faces under a material went into no mesh and were lost.
+                    var mesh = EnsureMesh(ref geometryData);
+                    if (!mesh.GeometrySemantic.Contains(semanticData))
                     {
-                        geometryData?.GeometrySemantic.Add(semanticData);
+                        mesh.GeometrySemantic.Add(semanticData);
                     }
+                }
+
+                else if (line.StartsWith(SMOOTHING))
+                {
+                    // "s off" or "s 0" ends smoothing; any other number is a group.
+                    smoothingGroup = Int32.TryParse(line.Substring(SMOOTHING.Length).Trim(), NumberStyles.Integer,
+                        CultureInfo.InvariantCulture, out var group) ? group : 0;
                 }
 
                 else if (line.StartsWith(FACES))
@@ -172,6 +184,7 @@ namespace Adamantium.Engine.Compiler.Converter.Parsers
 
                     semanticData.RawIndices.AddRange(corners);
                     semanticData.VertexType.Add(indicesCount);
+                    semanticData.SmoothingGroups.Add(smoothingGroup);
                     if (semanticData.MeshTopology == PrimitiveType.Undefined)
                     {
                         var topology = indicesCount >= 3 ? PrimitiveType.TriangleList : PrimitiveType.LineList;
