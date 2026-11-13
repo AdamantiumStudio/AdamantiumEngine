@@ -210,12 +210,13 @@ public class InputService : EntityService
                 -look.Vector.X * currentCamera.MouseSensitivity * LookPerPixel);
         }
 
-        // The wheel zooms toward what is under the pointer, as a canvas does; with no pointer to go by, the middle.
+        // The wheel zooms toward what is under the pointer, as a canvas does - where the wheel was turned, when the host
+        // says; with no pointer to go by, the middle.
         if (zoom.Value != 0)
         {
             if (observatory.PointerInput is { CanLocatePointer: true } input)
             {
-                var pixel = input.RelativePosition;
+                var pixel = input.WheelPosition ?? input.RelativePosition;
                 currentCamera.ZoomAt(zoom.Value, pixel, DepthUnder(currentCamera, pixel));
             }
             else
