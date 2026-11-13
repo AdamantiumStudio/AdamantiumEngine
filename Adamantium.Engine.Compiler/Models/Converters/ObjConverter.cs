@@ -29,9 +29,30 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
          }
 
          SceneDataContainer.Models = SceneDataContainer.CreateMesh(null, "", Path.GetFileNameWithoutExtension(dataContainer.FileName));
-         foreach (var mesh in dataContainer.Meshes)
+         // Every mesh's faces first: smoothing groups span the whole file, so the normals are worked out over all of them.
+         var meshes = new List<ObjMeshData>(dataContainer.Meshes.Values);
+         var containersOfMeshes = new List<List<IndicesContainer>>();
+         foreach (var meshData in meshes)
          {
-            ParseData(mesh.Value);
+            var containers = new List<IndicesContainer>();
+            foreach (var indices in meshData.GeometrySemantic)
+            {
+               containers.Add(executor.DistributeIndices(indices));
+            }
+
+            containersOfMeshes.Add(containers);
+         }
+
+         var allContainers = new List<IndicesContainer>();
+         foreach (var containers in containersOfMeshes)
+         {
+            allContainers.AddRange(containers);
+         }
+
+         executor.SmoothGroups(allContainers, dataContainer.GeometryData);
+         for (int i = 0; i < meshes.Count; i++)
+         {
+            executor.ConstructMeshGeometry(SceneDataContainer, containersOfMeshes[i], dataContainer.GeometryData, meshes[i]);
          }
 
          foreach (var material in dataContainer.Materials)
@@ -39,19 +60,6 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
             ParseData(material.Value);
          }
       }
-
-      private void ParseData(ObjMeshData meshData)
-      {
-         List<IndicesContainer> indicesContainers = new List<IndicesContainer>();
-         //Vertex indices
-         foreach (var indices in meshData.GeometrySemantic)
-         {
-            indicesContainers.Add(executor.DistributeIndices(indices));
-         }
-
-         executor.ConstructMeshGeometry(SceneDataContainer, indicesContainers, dataContainer.GeometryData, meshData);
-      }
-
 
       private void ParseData(ObjMaterialData materialData)
       {

@@ -17,6 +17,7 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
          UV2 = new List<int>();
          UV3 = new List<int>();
          Colors = new List<int>();
+         SmoothingGroups = new List<int>();
       }
 
       public List<int> Positions { get; set; }
@@ -32,6 +33,9 @@ namespace Adamantium.Engine.Compiler.Models.ConversionUtils
       public List<int> UV3 { get; set; }
 
       public List<int> Colors { get; set; }
+
+      /// <summary>The smoothing group of each triangle, 0 for none; empty when the file names no groups.</summary>
+      public List<int> SmoothingGroups { get; set; }
 
       public VertexSemantic Semantic { get; set; }
 
