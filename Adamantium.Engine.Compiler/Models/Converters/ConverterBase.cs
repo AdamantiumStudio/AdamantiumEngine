@@ -116,9 +116,14 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
                   mesh.ReverseWinding();
                }
 
-               // Unless asked, only when the file gave none: averaging over triangles erases the hard edges the
-               // artist authored those normals for.
-               if (Config.RecalculateNormals || mesh.Normals.Length != mesh.Points.Length)
+               // The file gave none: flat, as glTF asks and as OBJ shades a face in no smoothing group - averaged over
+               // the corners welded above, a box was shaded like a ball. Recalculated only when asked otherwise:
+               // averaging erases the hard edges the artist authored the normals for.
+               if (mesh.Normals.Length != mesh.Points.Length)
+               {
+                  mesh.CalculateFlatNormals();
+               }
+               else if (Config.RecalculateNormals)
                {
                   mesh.CalculateNormals();
                }
