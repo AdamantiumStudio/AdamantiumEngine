@@ -64,6 +64,58 @@ public class CameraProjectionChangeTests
         });
     }
 
+    // Put back as it was - an editor reopening a scene - a flat view is as zoomed as it was kept, at once: no flowing
+    // from the perspective, and no scale made from the focus over the one kept.
+    [Test]
+    public void AFlatViewPutBack_IsAtItsKeptScale_AtOnce()
+    {
+        var camera = FreeCamera();
+        var kept = new Vector2F(194.5f, 194.5f);
+
+        camera.ShowProjectionAtOnce(CameraProjectionType.Ortho, kept);
+        Step(camera, 16);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.OrthoScale, Is.EqualTo(kept));
+            Assert.That(camera.ProjectionMatrix, Is.EqualTo(camera.OrthoProjection), "flat already, not flowing there");
+            Assert.That(camera.FocusDistance, Is.EqualTo(Focus), "the focus is left as it was");
+        });
+    }
+
+    [Test]
+    public void AFlatViewPutBackWithNoScale_IsAsLargeAsTheFocusPlane()
+    {
+        var camera = FreeCamera();
+        var point = OnFocusPlane(camera);
+        var before = Shown(camera, point);
+
+        camera.ShowProjectionAtOnce(CameraProjectionType.Ortho, Vector2F.Zero);
+        Step(camera, 16);
+
+        Assert.That(Vector2F.Distance(Shown(camera, point), before), Is.LessThan(1e-3f));
+    }
+
+    [Test]
+    public void APerspectivePutBack_ShowsAtOnce()
+    {
+        var camera = FreeCamera();
+        camera.ProjectionTransitionTime = 0;
+        camera.ProjectionType = CameraProjectionType.Ortho;
+        Step(camera, 16);
+        camera.ProjectionTransitionTime = 1000;
+        var standing = camera.WorldPosition;
+
+        camera.ShowProjectionAtOnce(CameraProjectionType.Perspective, Vector2F.Zero);
+        Step(camera, 16);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.ProjectionMatrix, Is.EqualTo(camera.PerspectiveProjection));
+            Assert.That(camera.WorldPosition, Is.EqualTo(standing), "where it was put, not stepped to match the flat view");
+        });
+    }
+
     [Test]
     public void ComingBackFromAZoomedFlatView_StepsToWhereThePlaneIsAsLarge()
     {
