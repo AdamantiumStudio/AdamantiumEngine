@@ -339,6 +339,51 @@ namespace Adamantium.Win32
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CloseHandle(IntPtr hObject);
 
+        /// <summary>For <see cref="CreateDesktopW"/>: every right on the desktop.</summary>
+        public const uint DesktopAllAccess = 0x10000000;
+
+        /// <summary>A desktop of the window station this process runs in, by name: made when there is none, opened when
+        /// there is. Windows on it are seen by no one unless something switches the input to it, and its foreground is its
+        /// own. Zero on failure; the handle is let go of with <see cref="CloseDesktop"/>, and the desktop goes once no
+        /// handle and no thread holds it.</summary>
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr CreateDesktopW(string desktopName, IntPtr device, IntPtr deviceMode, uint flags,
+            uint desiredAccess, IntPtr securityAttributes);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseDesktop(IntPtr desktop);
+
+        /// <summary>For <see cref="CreateProcessW"/>: the environment block is UTF-16.</summary>
+        public const uint CreateUnicodeEnvironment = 0x00000400;
+
+        /// <summary>For <see cref="CreateProcessW"/>: the first thread waits until <see cref="ResumeThread"/>.</summary>
+        public const uint CreateSuspended = 0x00000004;
+
+        /// <summary>For <see cref="CreateProcessW"/>: a console application gets no console, rather than the caller's.
+        /// </summary>
+        public const uint CreateNoWindow = 0x08000000;
+
+        /// <summary>Lets a thread started suspended run. Returns its previous suspend count, or <c>uint.MaxValue</c> on
+        /// failure.</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint ResumeThread(IntPtr thread);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+        /// <summary>Starts a process. <paramref name="commandLine"/> must be writable - the call may change it in place -
+        /// and <paramref name="environment"/> is a block of <c>name=value</c> strings, each ended by a zero and the block by
+        /// one more (<see cref="CreateUnicodeEnvironment"/>), or zero for this process's own. Both handles in
+        /// <paramref name="processInformation"/> are the caller's to close.</summary>
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CreateProcessW(string applicationName, char[] commandLine, IntPtr processAttributes,
+            IntPtr threadAttributes, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint creationFlags,
+            char[] environment, string currentDirectory, ref STARTUPINFO startupInfo,
+            out PROCESS_INFORMATION processInformation);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
