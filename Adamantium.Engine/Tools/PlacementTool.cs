@@ -63,8 +63,12 @@ public sealed class PlacementTool : ToolProcessor
     /// scene shows by an icon; null for none.</summary>
     public Entity Icon { get; init; }
 
-    /// <summary>A click placed the ghost at <see cref="Position"/>, on <see cref="Under"/>; raised on the universe's
-    /// thread.</summary>
+    /// <summary>The scene of the output the ghost stands over - what is placed goes into it; null while over none.
+    /// </summary>
+    public Scene Scene { get; private set; }
+
+    /// <summary>A click placed the ghost at <see cref="Position"/>, on <see cref="Under"/>, in <see cref="Scene"/>;
+    /// raised on the universe's thread.</summary>
     public event EventHandler Placed;
 
     /// <summary>The tool is done: it placed without Shift held, or Esc gave up; raised once, on the universe's thread.</summary>
@@ -74,6 +78,7 @@ public sealed class PlacementTool : ToolProcessor
     {
         Position = null;
         Under = null;
+        Scene = null;
         onSurface = false;
         if (finished)
         {
@@ -138,6 +143,7 @@ public sealed class PlacementTool : ToolProcessor
         var ray = PickRay.FromCamera(camera, pointer);
         // On what the output it is placed over shows.
         var scene = _guidedOutput?.Scene ?? Tools.Scene;
+        Scene = scene;
         if (TryFindSurface(scene.RootEntities, Ground(), camera, ray, out var point, out var hit))
         {
             onSurface = true;
