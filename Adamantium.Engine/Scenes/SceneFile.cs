@@ -65,6 +65,14 @@ public sealed class SceneFile
     [XmlArray("Behaviours"), XmlArrayItem("Behaviour")]
     public List<SceneBehaviour> Behaviours { get; set; } = [];
 
+    /// <summary>What the editor keeps of how the scene was worked on - its views' cameras, the selection - last in the
+    /// file, as the editor wrote it; nothing of the engine's, which neither reads nor writes it. Null for none.</summary>
+    [XmlAnyElement(EditorSection)]
+    public XmlElement Editor { get; set; }
+
+    /// <summary>The name of the <see cref="Editor"/> section's element.</summary>
+    public const string EditorSection = "Editor";
+
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeModels() => Models.Count > 0;
 
@@ -106,7 +114,12 @@ public sealed class SceneFile
     public static SceneFile Read(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null };
+        // The layout between elements is the writer's, never data: kept, it would pile up in the editor's section with
+        // every save.
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, IgnoreWhitespace = true
+        };
         SceneFile scene;
         try
         {

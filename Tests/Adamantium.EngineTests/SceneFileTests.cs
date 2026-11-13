@@ -89,6 +89,27 @@ public class SceneFileTests
         });
     }
 
+    // The editor's section comes back as it was written, whatever is in it; a file without one has none.
+    [Test]
+    public void TheEditorsSection_IsReadBackAsWritten_AndAFileWithoutOneHasNone()
+    {
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml("<Editor><View Name=\"Top\" Position=\"0, -30, 0\" /><Selected Uid=\"1\" /></Editor>");
+        var scene = Sample();
+        scene.Editor = document.DocumentElement;
+
+        var back = WriteAndRead(scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Editor?.OuterXml, Is.EqualTo(document.DocumentElement.OuterXml));
+            Assert.That(Text(back), Is.EqualTo(Text(scene)), "saved again, the file is the same");
+            Assert.That(back.Models, Has.Count.EqualTo(scene.Models.Count), "the scene itself unchanged");
+            Assert.That(WriteAndRead(Sample()).Editor, Is.Null);
+            Assert.That(Text(Sample()), Does.Not.Contain("<Editor"));
+        });
+    }
+
     [Test]
     public void AScene_ReadBack_IsTheSceneWritten()
     {
