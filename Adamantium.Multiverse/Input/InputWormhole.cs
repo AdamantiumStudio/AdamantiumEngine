@@ -26,6 +26,7 @@ public class InputWormhole
     private bool isPointerHeld;
     private Vector2F rawMouseDelta;
     private int mouseWheelDelta;
+    private Vector2F? wheelPosition;
     private Vector2F gesturePan;
     private float gesturePinch;
     private float gestureRotation;
@@ -177,6 +178,10 @@ public class InputWormhole
 
     public int MouseWheelDelta => IsMouseEnabled ? mouseWheelDelta : 0;
 
+    /// <summary>Where the wheel was last turned this frame, over the surface in its pixels - where the turn happened, not
+    /// where the pointer has got to since; null when it was not turned, or the host did not say where.</summary>
+    public Vector2F? WheelPosition => IsMouseEnabled ? wheelPosition : null;
+
     /// <summary>How far gestures of fingers moved this frame, in the output's units.</summary>
     public Vector2F GesturePan => IsMouseEnabled ? gesturePan : Vector2F.Zero;
 
@@ -313,6 +318,7 @@ public class InputWormhole
     {
         absolutePosition = output.PointerScreenPosition;
         mouseWheelDelta = 0;
+        wheelPosition = null;
         rawMouseDelta = Vector2F.Zero;
 
         for (int i = 0; i < mouseButtons.Length; ++i)
@@ -336,6 +342,7 @@ public class InputWormhole
                         break;
                     case InputType.Wheel:
                         mouseWheelDelta += mouseInput.WheelDelta;
+                        wheelPosition = mouseInput.Position ?? wheelPosition;
                         break;
                     case InputType.RawDelta:
                         rawMouseDelta += mouseInput.Delta;

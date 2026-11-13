@@ -56,9 +56,9 @@ public class TestOutput : UniverseOutput
         OnMouseInput(new MouseInput { InputType = InputType.RawDelta, Delta = new Vector2F(x, y) });
     }
 
-    public void Wheel(int delta)
+    public void Wheel(int delta, Vector2F? at = null)
     {
-        OnMouseInput(new MouseInput { InputType = InputType.Wheel, WheelDelta = delta });
+        OnMouseInput(new MouseInput { InputType = InputType.Wheel, WheelDelta = delta, Position = at });
     }
 
     public void Gesture(Vector2F translation, float scale, float rotation)

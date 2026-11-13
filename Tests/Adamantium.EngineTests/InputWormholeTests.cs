@@ -21,6 +21,38 @@ public class InputWormholeTests
         Assert.That(output.Input.IsMouseButtonDown(MouseButton.Left), Is.False);
     }
 
+    // Where the wheel was turned, not where the pointer has got to by the frame: a gesture made inside the application
+    // never moves the system cursor, and a hand may have moved on.
+    [Test]
+    public void AWheelTurn_KeepsWhereItWasTurned_ForItsFrame()
+    {
+        var output = new TestOutput { Pointer = new Vector2F(700, 500) };
+
+        output.Wheel(120, new Vector2F(100, 50));
+        output.Wheel(120, new Vector2F(110, 60));
+        output.Frame();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(output.Input.WheelPosition, Is.EqualTo(new Vector2F(110, 60)), "the last turn's place");
+            Assert.That(output.Input.RelativePosition, Is.EqualTo(new Vector2F(700, 500)), "the pointer, where it is now");
+        });
+
+        output.Frame();
+        Assert.That(output.Input.WheelPosition, Is.Null, "no turn this frame");
+    }
+
+    [Test]
+    public void AWheelTurnThatSaysNoPlace_LeavesThePointerToGoBy()
+    {
+        var output = new TestOutput();
+
+        output.Wheel(120);
+        output.Frame();
+
+        Assert.That(output.Input.WheelPosition, Is.Null);
+    }
+
     [Test]
     public void GesturesOfAFrame_AddUp_AndAreGoneTheNextFrame()
     {
