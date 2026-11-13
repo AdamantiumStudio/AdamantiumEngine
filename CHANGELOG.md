@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.CreateDesktopW`/`CloseDesktop` and `CreateProcessW` (with `STARTUPINFO` and `PROCESS_INFORMATION`): a
+  desktop of its own, seen by no one, and a process started on it - what UI automation runs a driven application on.
 - Scene files (`.ascene`, `SceneFile`): a scene in readable XML - what stands in it, where and which way it faces. The
   models by their asset names, nothing more of them (`SceneModel`: position, rotation, scale); what no file holds
   described whole, each kind in a section of its own: lights (`SceneLight`), cameras (`SceneCamera`: its rotation the
