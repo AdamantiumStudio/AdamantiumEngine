@@ -67,7 +67,7 @@ public class SceneIndexPickingTests
     [Test]
     public void TheIndex_FindsWhatTheWalkFinds()
     {
-        var index = universe.EntityWorld.Satellites.Get<SceneIndex>();
+        var index = universe.EntityWorld.MainScene.Index;
         var hits = 0;
         for (int x = 0; x < 800; x += 37)
         {
@@ -76,7 +76,7 @@ public class SceneIndexPickingTests
                 var ray = PickRay.FromCamera(camera, new Vector2F(x, y));
                 foreach (var withDisabled in new[] { false, true })
                 {
-                    var walked = Picking.Pick(universe.EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: withDisabled);
+                    var walked = Picking.Pick(universe.EntityWorld.MainScene.RootEntities, ray, PickMode.Triangles, withDisabled: withDisabled);
                     var indexed = Picking.PickMeshes(index, ray, withDisabled);
 
                     Assert.That(indexed.Entity, Is.SameAs(walked.Entity), $"pixel {x},{y}, disabled too: {withDisabled}");
@@ -92,7 +92,7 @@ public class SceneIndexPickingTests
     [Test]
     public void TheIndex_FollowsAMove_AndForgetsWhatWent()
     {
-        var index = universe.EntityWorld.Satellites.Get<SceneIndex>();
+        var index = universe.EntityWorld.MainScene.Index;
         var cube = cubes.Find(c => c.Visible && c.IsEnabled && c.Owner == null);
         var target = new Vector3<double>(40, 3, 10);
         var ray = PickRay.FromCamera(camera, PixelOf(target));

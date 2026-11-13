@@ -88,11 +88,18 @@ public class AssetService : DisposableObject, IAssetService
             .ToList();
         var paths = new HashSet<string>(files, FileNameComparer);
 
+        // A model's source is its asset file's, a scene's picture its scene's: each listed once, as the asset it is of.
         return files
-            .Where(file => !paths.Contains(file + AssetFile.FileExtension))
+            .Where(file => !paths.Contains(file + AssetFile.FileExtension) && !IsSceneThumbnail(file, paths))
             .Select(file => new AssetFileInfo(file))
             .OrderBy(asset => asset.Name, FileNameComparer)
             .ToList();
+    }
+
+    private static bool IsSceneThumbnail(string file, HashSet<string> paths)
+    {
+        var scene = Path.ChangeExtension(file, AssetFileInfo.SceneExtension);
+        return paths.Contains(scene) && FileNameComparer.Equals(AssetFileInfo.SceneThumbnailOf(scene), file);
     }
 
     public T Load<T>(string assetName, object options = null) => (T)Load(typeof(T), assetName, options);

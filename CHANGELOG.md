@@ -7,6 +7,30 @@ All packages share one version.
 
 ### Added
 
+- Scene files (`.ascene`, `SceneFile`): a scene in readable XML - what stands in it, where and which way it faces. The
+  models by their asset names, nothing more of them (`SceneModel`: position, rotation, scale); what no file holds
+  described whole, each kind in a section of its own: lights (`SceneLight`), cameras (`SceneCamera`: its rotation the
+  way it faces, its `CameraType`), spawn points (`SceneSpawnPoint`), groups and empty entities (`SceneMarker`),
+  procedural shapes by their recipes (`SceneShape`: the shape's type, its parameters, its color), the components of the
+  game's code (`SceneBehaviour`: its type and the values of its fields). Every entry has an id; an entry stands in
+  another by that one's id, so the file stays flat. A component or a shape whose type is not loaded is written back as
+  it was read. A file of a later version is refused. `SceneBuilder` puts a scene into a world - each model asset loaded
+  once, all at once; a model that does not load stays naming its asset; an entry with an id taken already, in the file
+  or in the world, is left out; a rotation that is none is taken as none - and `SceneCapture` writes a world back into
+  a scene - what stands in a model's part is written in the model, where it stands; the cameras the outputs own are
+  left out. A running universe loads a scene's models anywhere (`SceneBuilder.LoadModelsAsync`) and builds it on its
+  own thread (`Build(scene, models)`, which completes at once).
+- `FileSystemAssetResolver(root)`: a relative asset path taken from a folder of the caller's - a content project's own
+  folder, say - instead of the application's.
+- `Behaviour`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
+  are what a scene keeps of it. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedBehaviours`
+  and `UnloadedShape` stand for components and shapes whose code is not loaded. `Entity(owner, name, uid)`: an entity
+  with a given id.
+- `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
+  `CameraType.Parse`: the type its `ToString` names.
+- `Vector3<T>.Parse`, `Vector4<T>.Parse`, `Quaternion<T>.Parse`: read from text as `Vector2<T>.Parse` does, so markup
+  takes them too.
+
 - `ScreenshotRenderingService` with its `ScreenshotRenderingProcessor`: screenshots of entities, taken in the universe
   the service is made in (`Create`). An entity put in its queue (`Enqueue`) - one no world holds, so nothing else draws
   it - is drawn alone, one a frame, into an output of the service's own, from the front, above and to the right, every
@@ -232,6 +256,8 @@ All packages share one version.
 
 ### Changed
 
+- `LightManager.AddLight`: a light standing in another entity joins the world with that entity's root, not as a root
+  of its own.
 - `IUniverseWatcher` moved from `Adamantium.ECS` to `Adamantium.Multiverse`, beside the outputs it now asks frames of.
 - A source changed is imported again with the settings its asset file records, unless the manifest gives the asset
   some; an asset file is imported again for its settings only when the manifest's differ from those it records. It was

@@ -20,10 +20,16 @@ public class SelectionOutline : EditorProcessor
     /// <summary>How wide the outline is, in points: pixels at 100% scale.</summary>
     public float Pixels { get; set; } = 2;
 
+    // What is selected in the scene the output shows; what the pointer is over only in that scene.
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
-        var selection = Tools.Selection;
-        if (Tools.Hovered is { } hovered && !selection.Contains(hovered))
+        if (overlay.Scene is not { } scene)
+        {
+            return;
+        }
+
+        var selection = scene.Selection;
+        if (Tools.Hovered is { } hovered && hovered.Scene == scene && !selection.Contains(hovered))
         {
             overlay.DrawOutline(hovered, HoverColor, Pixels);
             if (Find<EntityIcons>()?.IconOf(hovered) is { } icon)

@@ -18,12 +18,15 @@ public class ShapeTemplate : IEntityTemplate
         this.shape = shape;
     }
 
-    public Task<Entity> BuildEntity(Entity owner)
+    public Task<Entity> BuildEntity(Entity owner) => Task.FromResult(Build(owner));
+
+    /// <summary>Makes <paramref name="owner"/> draw the shape, at once: nothing of it waits.</summary>
+    public Entity Build(Entity owner)
     {
         owner.AddComponent(new MeshData { Mesh = shape.Build() });
         owner.AddComponent(shape.CreateCollider());
         owner.AddComponent(shape);
         owner.IconKey = EntityIconKeys.Mesh;
-        return Task.FromResult(owner);
+        return owner;
     }
 }

@@ -53,13 +53,9 @@ public struct Vector2<T> : IEquatable<Vector2<T>>, IFormattable where T : unmana
     /// <exception cref="FormatException"><paramref name="value"/> does not hold two numbers.</exception>
     public static Vector2<T> Parse(string value)
     {
-        var parts = value.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length != 2)
-        {
-            throw new FormatException($"\"{value}\" must hold two numbers (\"x y\" or \"x,y\"), but holds {parts.Length}.");
-        }
-
-        return new Vector2<T>(T.Parse(parts[0], CultureInfo.InvariantCulture), T.Parse(parts[1], CultureInfo.InvariantCulture));
+        Span<T> numbers = stackalloc T[2];
+        MarkupNumbers.Parse(value, numbers, "x y");
+        return new Vector2<T>(numbers);
     }
 
     /// <summary>All zero.</summary>

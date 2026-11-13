@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.ECS;
 
-namespace Adamantium.Engine;
+namespace Adamantium.ECS;
 
 /// <summary>
-/// What the editor has selected: one entity or several, one of them current - the last one chosen. It outlives any tool:
-/// switching tools keeps it. Each selected entity is marked <see cref="Entity.IsSelected"/>.
+/// What is selected in one scene (<see cref="Scene.Selection"/>): one entity or several, one of them current - the last
+/// one chosen. It outlives any tool: switching tools keeps it. Each selected entity is marked
+/// <see cref="Entity.IsSelected"/>.
 /// </summary>
 public class Selection
 {

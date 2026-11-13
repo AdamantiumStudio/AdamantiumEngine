@@ -9,8 +9,9 @@ using Adamantium.Multiverse.Input;
 namespace Adamantium.Engine;
 
 /// <summary>
-/// The editor's view of the universe: its outputs, the ones taking keyboard and pointer, and the cameras seen through
-/// them. An immutable snapshot taken once per frame after the outputs settle, readable from any thread.
+/// The editor's view of the universe: its outputs, the ones taking keyboard and pointer, the cameras seen through them
+/// and the scenes they show - which output shows which scene is the output's own (<see cref="UniverseOutput.Scene"/>).
+/// An immutable snapshot taken once per frame after the outputs settle, readable from any thread.
 /// </summary>
 public class Observatory : IInputRouting
 {
@@ -21,6 +22,7 @@ public class Observatory : IInputRouting
     private readonly List<UniverseOutput>[] scratchByState = new List<UniverseOutput>[StateCount];
     private readonly List<Camera> scratchCurrentCameras = [];
     private readonly List<Camera> scratchAllCameras = [];
+    private readonly List<Scene> scratchShownScenes = [];
     private volatile Snapshot snapshot;
 
     public Observatory(IUniverse universe, EntityWorld entityWorld)
@@ -67,6 +69,31 @@ public class Observatory : IInputRouting
     /// paused. May differ from <see cref="KeyboardOutput"/>.
     /// </summary>
     public UniverseOutput PointerOutput => snapshot.PointerOutput;
+
+    /// <summary>The scene of <see cref="PointerOutput"/>: the one a click works in; null with no such output.</summary>
+    public Scene PointerScene => PointerOutput?.Scene;
+
+    /// <summary>The scene of <see cref="KeyboardOutput"/>: the one a key works in; null with no such output.</summary>
+    public Scene KeyboardScene => KeyboardOutput?.Scene;
+
+    /// <summary>The scene each visible output shows, each once: the scenes that run now.</summary>
+    public IReadOnlyList<Scene> ShownScenes => snapshot.ShownScenes;
+
+    /// <summary>The outputs showing <paramref name="scene"/>, visible or not.</summary>
+    public IReadOnlyList<UniverseOutput> OutputsOf(Scene scene)
+    {
+        var outputs = snapshot.Outputs;
+        var showing = new List<UniverseOutput>();
+        for (int i = 0; i < outputs.Length; i++)
+        {
+            if (outputs[i].Scene == scene)
+            {
+                showing.Add(outputs[i]);
+            }
+        }
+
+        return showing;
+    }
 
     public InputWormhole KeyboardInput => KeyboardOutput?.Input;
 
@@ -135,6 +162,7 @@ public class Observatory : IInputRouting
             }
         }
         universe.CollectCurrentCameras(scratchCurrentCameras);
+        universe.CollectShownScenes(scratchShownScenes);
 
         var current = snapshot;
         if (current != null
@@ -143,7 +171,8 @@ public class Observatory : IInputRouting
             && SameItems(current.Outputs, scratchOutputs)
             && SameStates(current.ByState)
             && SameItems(current.CurrentCameras, scratchCurrentCameras)
-            && SameItems(current.AllCameras, scratchAllCameras))
+            && SameItems(current.AllCameras, scratchAllCameras)
+            && SameItems(current.ShownScenes, scratchShownScenes))
         {
             return;
         }
@@ -160,7 +189,8 @@ public class Observatory : IInputRouting
             keyboardOutput,
             pointerOutput,
             scratchCurrentCameras.ToArray(),
-            scratchAllCameras.ToArray());
+            scratchAllCameras.ToArray(),
+            scratchShownScenes.ToArray());
     }
 
     private bool SameStates(UniverseOutput[][] published)
@@ -200,7 +230,8 @@ public class Observatory : IInputRouting
             UniverseOutput keyboardOutput,
             UniverseOutput pointerOutput,
             Camera[] currentCameras,
-            Camera[] allCameras)
+            Camera[] allCameras,
+            Scene[] shownScenes)
         {
             Outputs = outputs;
             ByState = byState;
@@ -208,7 +239,10 @@ public class Observatory : IInputRouting
             PointerOutput = pointerOutput;
             CurrentCameras = currentCameras;
             AllCameras = allCameras;
+            ShownScenes = shownScenes;
         }
+
+        public Scene[] ShownScenes { get; }
 
         public UniverseOutput[] Outputs { get; }
 

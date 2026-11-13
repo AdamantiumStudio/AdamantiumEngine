@@ -57,8 +57,10 @@ public class TestUniverse : IUniverse
 
     public bool IsPaused => false;
 
+    // As the universe gives an output the main scene as it comes.
     public void Add(UniverseOutput output)
     {
+        output.Scene ??= EntityWorld.MainScene;
         outputs.Add(output);
     }
 

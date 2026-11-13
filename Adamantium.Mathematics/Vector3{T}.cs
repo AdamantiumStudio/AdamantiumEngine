@@ -69,6 +69,16 @@ public struct Vector3<T> : IEquatable<Vector3<T>>, IFormattable where T : unmana
     /// <summary>The size of the vector in bytes.</summary>
     public static int SizeInBytes => Unsafe.SizeOf<Vector3<T>>();
 
+    /// <summary>The vector written as "x y z" or "x, y, z", the numbers in the invariant culture - as markup gives it.
+    /// </summary>
+    /// <exception cref="FormatException"><paramref name="value"/> does not hold three numbers.</exception>
+    public static Vector3<T> Parse(string value)
+    {
+        Span<T> numbers = stackalloc T[3];
+        MarkupNumbers.Parse(value, numbers, "x y z");
+        return new Vector3<T>(numbers);
+    }
+
     /// <summary>All zero.</summary>
     public static Vector3<T> Zero => default;
 

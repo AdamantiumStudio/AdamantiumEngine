@@ -14,7 +14,7 @@ public class LightManagerTests
     public void AnAddedLight_IsListedFromTheNextFrame_ByItsKind()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
         var spot = new LightTemplate().BuildEntity(null, "Spot", LightType.Spot);
 
         lights.AddLight(spot);
@@ -26,24 +26,24 @@ public class LightManagerTests
         Assert.That(lights.SpotLights, Is.EqualTo(new[] { spot.GetComponent<Light>() }));
         Assert.That(lights.PointLights, Is.Empty);
         Assert.That(lights.DirectionalLights, Is.Empty);
-        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(spot));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(spot));
     }
 
     [Test]
     public void ARemovedLight_LeavesTheListsAndTheWorld()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
         var point = new LightTemplate().BuildEntity(null, "Point", LightType.Point);
         lights.AddLight(point);
         NextFrame(universe);
-        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(point));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(point));
 
         lights.RemoveLight(point);
         NextFrame(universe);
 
         Assert.That(lights.Lights, Is.Empty);
-        Assert.That(universe.EntityWorld.RootEntities, Does.Not.Contain(point));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Not.Contain(point));
     }
 
     // The frame already running keeps its entities, as it keeps its lights: a light deleted from the application's thread
@@ -52,27 +52,27 @@ public class LightManagerTests
     public void ARemovedLight_StaysInTheWorldUntilTheFrameEnds()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
         var point = new LightTemplate().BuildEntity(null, "Point", LightType.Point);
         lights.AddLight(point);
         NextFrame(universe);
 
         lights.RemoveLight(point);
 
-        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(point));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(point));
     }
 
     [Test]
     public void AnEntityWithoutALight_IsNotTakenIn()
     {
         var universe = new TestUniverse();
-        var lights = new LightManager(universe, universe.EntityWorld);
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
 
         lights.AddLight(new Entity(null, "Not a light"));
         NextFrame(universe);
 
         Assert.That(lights.Lights, Is.Empty);
-        Assert.That(universe.EntityWorld.RootEntities, Is.Empty);
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Is.Empty);
     }
 
     private static void NextFrame(TestUniverse universe)

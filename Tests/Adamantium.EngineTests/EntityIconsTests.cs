@@ -20,7 +20,6 @@ public class EntityIconsTests
         var output = new TestOutput();
         universe.Add(output);
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
-        universe.Satellites.Add(new Selection());
         var own = CameraEntity("Own");
         var scene = CameraEntity("Scene");
         universe.EntityWorld.EntityManager.AddEntity(own);

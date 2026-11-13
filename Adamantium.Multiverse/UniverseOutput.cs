@@ -1,5 +1,6 @@
 ﻿using Adamantium.Core;
 using Adamantium.Core.Events;
+using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Multiverse.Events;
 using Adamantium.Multiverse.Input;
@@ -425,6 +426,26 @@ namespace Adamantium.Multiverse
         /// <summary>The camera the universe made for the output when it came: its own, not a camera of the scene, and it
         /// leaves the scene with the output. Null until then.</summary>
         public Camera OwnCamera { get; internal set; }
+
+        /// <summary>The scene the output shows: the universe gives it the main scene of its world as it comes. Another
+        /// one set takes <see cref="OwnCamera"/> along from the next frame; the other cameras of
+        /// <see cref="Cameras"/> are the caller's to change. Null - an output outside the universe - shows no scene.
+        /// </summary>
+        public Scene Scene
+        {
+            get => scene;
+            set
+            {
+                if (scene == value) return;
+                scene = value;
+                if (value != null && OwnCamera?.Owner is { } own)
+                {
+                    value.World.EntityManager.MoveToScene(own, value);
+                }
+            }
+        }
+
+        private volatile Scene scene;
 
         /// <summary>
         /// The viewpoint the output shows now. Setting a camera the output does not have yet adds it to <see cref="Cameras"/>.

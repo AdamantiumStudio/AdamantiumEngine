@@ -21,7 +21,18 @@ namespace Adamantium.ECS
             ServiceManager.FrameEnded += FrameEnded;
         }
 
-        public ReadOnlyTrackingCollection<Entity> RootEntities => EntityManager.RootEntities;
+        /// <summary>The scene the world is made with, never removed: see <see cref="EntityManager.MainScene"/>.</summary>
+        public Scene MainScene => EntityManager.MainScene;
+
+        /// <summary>The world's scenes, <see cref="MainScene"/> first: see <see cref="EntityManager.Scenes"/>.</summary>
+        public IReadOnlyList<Scene> Scenes => EntityManager.Scenes;
+
+        public Scene CreateScene(string name) => EntityManager.CreateScene(name);
+
+        public Scene CreateScene(string name, UInt128 uid) => EntityManager.CreateScene(name, uid);
+
+        public void RemoveScene(Scene scene) => EntityManager.RemoveScene(scene);
+
         public EntityManager EntityManager { get; }
         public EntityServiceManager ServiceManager { get; }
         public IDependencyResolver DependencyResolver { get; }
@@ -119,11 +130,16 @@ namespace Adamantium.ECS
             WorldReseted?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>Adds the roots of every scene of <paramref name="world"/> to <see cref="MainScene"/>, and its groups.
+        /// </summary>
         public void Merge(EntityWorld world)
         {
-            foreach (var entity in world.EntityManager.RootEntities)
+            foreach (var scene in world.Scenes)
             {
-                EntityManager.AddEntity(entity);
+                foreach (var entity in scene.RootEntities)
+                {
+                    EntityManager.AddEntity(entity);
+                }
             }
 
             foreach (var group in world.EntityManager.GetAllGroups())

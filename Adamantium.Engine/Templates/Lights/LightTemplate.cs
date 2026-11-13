@@ -9,24 +9,22 @@ public class LightTemplate
 {
     public Entity BuildEntity(Entity owner, string name, LightType type)
     {
-        switch (type)
-        {
-            case LightType.Directional:
-                return BuildSubEntity(owner, name, new Light(LightType.Directional));
-            case LightType.Point:
-                return BuildSubEntity(owner, name, new Light(LightType.Point));
-            case LightType.Spot:
-                return BuildSubEntity(owner, name, new Light(LightType.Spot));
-            default:
-                throw new NotSupportedException(nameof(type));
-        }
+        var entity = new Entity(owner, name);
+        Build(entity, type);
+        return entity;
     }
 
-    protected Entity BuildSubEntity(Entity owner, String name, Light light)
+    /// <summary>Makes <paramref name="entity"/> a light of <paramref name="type"/>; the light it is given.</summary>
+    public Light Build(Entity entity, LightType type)
     {
-        var entity = new Entity(owner, name);
+        ArgumentNullException.ThrowIfNull(entity);
+        if (type is not (LightType.Directional or LightType.Point or LightType.Spot))
+        {
+            throw new NotSupportedException(nameof(type));
+        }
+
+        var light = new Light(type);
         entity.AddComponent(light);
-            
-        return entity;
+        return light;
     }
 }

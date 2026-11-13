@@ -4,6 +4,8 @@ using System.IO;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS;
+using Adamantium.ECS.Components;
+using Adamantium.ECS.Components.Extensions;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Imaging;
@@ -93,7 +95,7 @@ public class ScreenshotRenderingServiceTests
         {
             Assert.That(pictured, Is.Not.Null);
             Assert.That(nothing, Is.Null);
-            Assert.That(_universe.EntityWorld.RootEntities, Does.Not.Contain(figure));
+            Assert.That(_universe.EntityWorld.MainScene.RootEntities, Does.Not.Contain(figure));
         });
     }
 
@@ -114,13 +116,78 @@ public class ScreenshotRenderingServiceTests
         });
     }
 
+    // A scene's thumbnail: all of the scene as the editor's camera sees it - what is in front of it drawn, nothing when
+    // it looks away.
+    [Test]
+    public void AScene_IsPictured_AsTheCameraGivenSeesIt()
+    {
+        var arena = _universe.EntityWorld.CreateScene("Arena");
+        var figure = LoadFigure();
+        _universe.EntityWorld.EntityManager.AddEntity(figure, arena);
+        RunFrame();
+        var center = figure.GetCenterAbsolute();
+        var from = center + Vector3.Normalize(new Vector3<double>(0, -0.3, -1)) * (figure.GetDiameter() * 1.5);
+        var facing = View(from, center);
+        var away = View(from, from + (from - center));
+
+        var seen = Take(arena, facing);
+        var nothing = Take(arena, away);
+        OpaqueBounds(seen, "screenshot-scene.png");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpaquePixels(seen), Is.GreaterThan(Size * Size / 50), "the figure in front of the camera");
+            Assert.That(OpaquePixels(nothing), Is.Zero, "the camera looking away from it");
+            Assert.That(arena.RootEntities, Does.Contain(figure), "the scene keeps what it holds");
+        });
+    }
+
+    private static Camera View(Vector3<double> from, Vector3<double> at)
+    {
+        var entity = new CameraTemplate().BuildEntity(null, "View", from, Vector3<double>.ForwardLH, -Vector3<double>.Up,
+            Size, Size, 0.1f, 1000f);
+        var camera = entity.GetComponent<Camera>();
+        camera.SetFreeLookAt(at);
+        camera.Update(default);
+        return camera;
+    }
+
+    private Image Take(Scene scene, Camera viewpoint)
+    {
+        var picture = _screenshots.Enqueue(scene, viewpoint);
+        for (var frame = 0; frame < MostFrames && !picture.IsCompleted; frame++)
+        {
+            RunFrame();
+        }
+
+        Assert.That(picture.IsCompleted, Is.True, $"no picture in {MostFrames} frames");
+        return picture.GetAwaiter().GetResult();
+    }
+
+    private static int OpaquePixels(Image picture)
+    {
+        using var stream = new MemoryStream();
+        picture.Save(stream, ImageFileType.Png);
+        stream.Position = 0;
+        var bitmap = BitmapLoader.Load(stream);
+        var pixels = bitmap.GetRawPixels(0);
+        var opaque = 0;
+        for (var alpha = 3; alpha < pixels.Length; alpha += 4)
+        {
+            if (pixels[alpha] >= 128)
+            {
+                opaque++;
+            }
+        }
+
+        return opaque;
+    }
+
     private Entity LoadFigure()
     {
         var options = new AssetLoadOptions { AllowDuplication = true, IgnoreRootDirectory = true };
         var scene = _universe.Assets.Load<SceneData>(Figure, options);
-        return _universe.EntityWorld
-            .CreateEntityFromTemplate(new EntityImportTemplate(scene, _universe.Assets, Vector3<double>.Zero))
-            .GetAwaiter().GetResult();
+        return new EntityImportTemplate(scene, _universe.Assets, Vector3<double>.Zero).Build(new Entity());
     }
 
     private Image Take(Entity entity)

@@ -21,6 +21,7 @@ public class TransformService : EntityService
     private readonly List<(Entity Entity, Mesh Mesh, Skin Skin)> skins = [];
     private bool worldMoved;
     private SceneIndex index;
+    private readonly List<Scene> shownScenes = [];
 
     public Boolean IsPaused { get; set; }
 
@@ -38,23 +39,30 @@ public class TransformService : EntityService
     {
         universe = EntityWorld.Satellites.Get<IUniverse>();
         frames = EntityWorld.Satellites.Get<IUniverseWatcher>();
-        if (!EntityWorld.Satellites.TryGet(out index))
-        {
-            index = new SceneIndex();
-            EntityWorld.Satellites.Add(index);
-        }
     }
 
+    // Each scene a visible output shows, for the cameras of the outputs showing it; a scene nobody sees waits.
     public override void Update(AppTime appTime)
     {
-        var entities = Entities;
+        universe.CollectShownScenes(shownScenes);
+        foreach (var scene in shownScenes)
+        {
+            UpdateScene(scene, appTime);
+        }
+
+        shownScenes.Clear();
+    }
+
+    private void UpdateScene(Scene scene, AppTime appTime)
+    {
         try
         {
-            CollectViewpoints();
+            CollectViewpoints(scene);
             worldMoved = false;
             skins.Clear();
+            index = scene.Index;
             index.BeginFrame();
-            foreach (var entity in entities)
+            foreach (var entity in scene.RootEntities)
             {
                 Transform(entity, appTime);
             }
@@ -65,11 +73,12 @@ public class TransformService : EntityService
         }
         catch (Exception ex)
         {
-            Log.Logger.Error(ex, "Transform update failed");
+            Log.Logger.Error(ex, "Transform update of the scene {Scene} failed", scene.Name);
         }
         finally
         {
             ForgetViewpoints();
+            index = null;
         }
     }
         
@@ -198,7 +207,7 @@ public class TransformService : EntityService
         index.Place(entity, mesh, box);
     }
 
-    private void CollectViewpoints()
+    private void CollectViewpoints(Scene scene)
     {
         viewpointCount = 0;
         var outputs = universe.Outputs;
@@ -206,7 +215,7 @@ public class TransformService : EntityService
         {
             var output = outputs[i];
             var camera = output.Camera;
-            if (!output.IsVisible || camera == null)
+            if (!output.IsVisible || camera == null || output.Scene != scene)
             {
                 continue;
             }

@@ -15,10 +15,10 @@ using Image = Adamantium.Imaging.Image;
 namespace Adamantium.Engine.Screenshots;
 
 /// <summary>
-/// Takes screenshots of entities, one a frame, in the universe whose world it is a service of: an entity put in its
-/// queue - one that belongs to no world, so nothing else draws it - is handed to its <see cref="ScreenshotRenderingProcessor"/>,
-/// which takes the screenshot into an output of the service's own with no surface; the service reads the frame back
-/// once it was submitted.
+/// Takes screenshots, one a frame, in the universe whose world it is a service of: an entity put in its queue - one
+/// that belongs to no world, so nothing else draws it - or a scene of the world with the camera to see it as, is handed
+/// to its <see cref="ScreenshotRenderingProcessor"/>, which takes the screenshot into an output of the service's own with
+/// no surface; the service reads the frame back once it was submitted.
 /// Inactive while its queue is empty, so the frame passes it by; a universe that runs no frames - paused - takes no
 /// screenshots until it runs again. A change of device cancels the screenshots waiting: what their entities were loaded
 /// with went with the old one. Made by <see cref="Create"/>.
@@ -67,7 +67,18 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
     public Task<Image> Enqueue(Entity entity, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        var shot = new Shot(entity);
+        return Enqueue(new Shot { Entity = entity }, cancellation);
+    }
+
+    public Task<Image> Enqueue(Scene scene, Camera viewpoint, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(viewpoint);
+        return Enqueue(new Shot { Scene = scene, Viewpoint = viewpoint }, cancellation);
+    }
+
+    private Task<Image> Enqueue(Shot shot, CancellationToken cancellation)
+    {
         if (cancellation.CanBeCanceled)
         {
             shot.Registration = cancellation.Register(() => shot.Picture.TrySetCanceled(cancellation));
@@ -130,7 +141,12 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
 
             try
             {
-                if (_processor.Take(next.Entity))
+                if (next.Scene != null)
+                {
+                    _processor.Take(next.Scene, next.Viewpoint);
+                    _current = next;
+                }
+                else if (_processor.Take(next.Entity))
                 {
                     _current = next;
                 }
@@ -267,11 +283,14 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
         _processor.Release();
     }
 
+    // A screenshot asked for: of an entity, or of a scene as a camera sees it.
     private sealed class Shot
     {
-        public Shot(Entity entity) => Entity = entity;
+        public Entity Entity { get; set; }
 
-        public Entity Entity { get; private set; }
+        public Scene Scene { get; set; }
+
+        public Camera Viewpoint { get; set; }
 
         public TaskCompletionSource<Image> Picture { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -281,6 +300,8 @@ public sealed class ScreenshotRenderingService : RenderingService, IScreenshotRe
         {
             Registration.Dispose();
             Entity = null;
+            Scene = null;
+            Viewpoint = null;
         }
     }
 }

@@ -255,7 +255,6 @@ public class PlacementToolTests
         var output = new TestOutput();
         universe.Add(output);
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
-        universe.Satellites.Add(new Selection());
         var scene = new ToolScene();
         scene.LookFrom(new Vector3<double>(0, -10, -20), Vector3<double>.Zero);
         output.Camera = scene.Camera;

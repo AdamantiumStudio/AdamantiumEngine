@@ -35,7 +35,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         BufferUsageFlags.StorageBuffer | BufferUsageFlags.ShaderDeviceAddress;
 
     private readonly ClusterLight[] frameLights = new ClusterLight[MaxLights];
-    private LightManager lightManager;
     private Buffer[] clusterCounts = [];
     private Buffer[] clusterLists = [];
     private ForwardPlusEffect effect;
@@ -198,7 +197,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         wireEffect?.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
         trianglesCounted = 0;
         trianglesInScene = 0;
-        sceneIndex = EntityWorld.Satellites.TryGet<SceneIndex>(out var index) ? index : null;
+        sceneIndex = Scene?.Index;
         cameraPosition = ActiveCamera.WorldPosition.As<float>();
         try
         {
@@ -225,7 +224,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private int CollectLights(Camera camera)
     {
-        lightManager ??= EntityWorld.Satellites.Get<LightManager>();
+        // The lights of the scene the output shows; a scene without them is lit by none.
+        if (Scene is not { } scene || !scene.Satellites.TryGet<LightManager>(out var lightManager))
+        {
+            LightCount = 0;
+            return 0;
+        }
+
         var count = Append(lightManager.DirectionalLights, camera, 0);
         var directional = count;
         count = Append(lightManager.PointLights, camera, count);

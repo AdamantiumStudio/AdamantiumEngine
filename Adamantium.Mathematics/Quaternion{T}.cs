@@ -73,6 +73,16 @@ public struct Quaternion<T> : IEquatable<Quaternion<T>>, IFormattable where T : 
     /// <summary>The size of the quaternion in bytes.</summary>
     public static int SizeInBytes => Unsafe.SizeOf<Quaternion<T>>();
 
+    /// <summary>The quaternion written as "x y z w" or "x, y, z, w", the numbers in the invariant culture - as markup
+    /// gives it.</summary>
+    /// <exception cref="FormatException"><paramref name="value"/> does not hold four numbers.</exception>
+    public static Quaternion<T> Parse(string value)
+    {
+        Span<T> numbers = stackalloc T[4];
+        MarkupNumbers.Parse(value, numbers, "x y z w");
+        return new Quaternion<T>(numbers);
+    }
+
     /// <summary>All zero.</summary>
     public static Quaternion<T> Zero => default;
 

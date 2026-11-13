@@ -71,7 +71,7 @@ public class CameraGizmo
         }
 
         var entity = new CameraTemplate().BuildEntity(null, name, position, Vector3<double>.ForwardLH, -Vector3<double>.Up, output.Width, output.Height, DefaultZNear, DefaultZFar);
-        entityWorld.EntityManager.AddEntity(entity);
+        entityWorld.EntityManager.AddEntity(entity, output.Scene);
         var camera = entity.GetComponent<Camera>();
         output.Camera = camera;
         return camera;

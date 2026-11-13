@@ -23,7 +23,6 @@ public class UserControlledEntityTests
     {
         universe = new TestUniverse();
         universe.Satellites.Add<IUniverse>(universe);
-        universe.Satellites.Add(new Selection());
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
         universe.Satellites.Add(new InputActions());
         manager = universe.EntityWorld.EntityManager;

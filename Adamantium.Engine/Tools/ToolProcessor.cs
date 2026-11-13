@@ -33,6 +33,7 @@ public abstract class ToolProcessor : EditorProcessor
     private readonly List<Held> held = [];
     private IReadOnlyList<Entity> groupItems;
     private Vector3<double> groupStart;
+    private Scene targetScene;
 
     protected ToolProcessor(params Handles[] own)
     {
@@ -54,6 +55,7 @@ public abstract class ToolProcessor : EditorProcessor
 
     public override void Update(AppTime appTime)
     {
+        targetScene = Tools.Scene;
         var target = TargetOf(Tools.Selection);
         CollectActive(target);
 
@@ -303,8 +305,14 @@ public abstract class ToolProcessor : EditorProcessor
     protected bool Modifier(Keys key) =>
         Tools.Observatory.PointerInput?.IsKeyDown(key) == true || Tools.Observatory.KeyboardInput?.IsKeyDown(key) == true;
 
+    // The handles stand on what is selected in the scene worked in: only its outputs show them.
     public override void DrawOverlay(EditorOverlayProcessor overlay)
     {
+        if (overlay.Scene != targetScene)
+        {
+            return;
+        }
+
         for (int i = 0; i < active.Count; i++)
         {
             active[i].Draw(overlay);

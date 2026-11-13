@@ -31,8 +31,7 @@ public class ThirdPersonDragTests
     {
         universe = new TestUniverse();
         universe.Satellites.Add<IUniverse>(universe);
-        selection = new Selection();
-        universe.Satellites.Add(selection);
+        selection = universe.EntityWorld.MainScene.Selection;
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
 
         output = new TestOutput();

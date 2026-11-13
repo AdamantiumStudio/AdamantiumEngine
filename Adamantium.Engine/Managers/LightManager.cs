@@ -13,12 +13,14 @@ using Adamantium.Multiverse;
 namespace Adamantium.Engine.Managers;
 
 /// <summary>
-/// The lights of a universe. A light is added and removed here rather than through the entity manager, and the lists
-/// stand as they were when the frame's outputs settled: a light added meanwhile lights the scene from the next frame.
+/// The lights of one scene, one of its <see cref="Scene.Satellites"/>: what the outputs showing it are lit by. A light
+/// is added and removed here rather than through the entity manager, and the lists stand as they were when the frame's
+/// outputs settled: a light added meanwhile lights the scene from the next frame.
 /// </summary>
 public class LightManager
 {
-    private readonly EntityWorld entityWorld;
+    private readonly IUniverse universe;
+    private readonly Scene scene;
     private readonly List<Light> lights = [];
     private readonly object syncObject = new();
     private readonly EntityGroup lightsGroup = new("Lights");
@@ -26,13 +28,25 @@ public class LightManager
     private readonly MeshData pointLightRenderer;
     private bool lightsDirty = true;
 
-    public LightManager(IUniverse universe, EntityWorld entityWorld)
+    /// <summary>The lights of <paramref name="scene"/>, put among its satellites.</summary>
+    public LightManager(IUniverse universe, Scene scene)
     {
-        this.entityWorld = entityWorld;
-        entityWorld.EntityManager.AddGroup(lightsGroup);
+        ArgumentNullException.ThrowIfNull(universe);
+        ArgumentNullException.ThrowIfNull(scene);
+        this.universe = universe;
+        this.scene = scene;
         spotLightRenderer = new SpotLightMeshTemplate().BuildEntity().GetComponent<MeshData>();
         pointLightRenderer = new PointLightMeshTemplate().BuildEntity().GetComponent<MeshData>();
         universe.OutputsSettled += OnOutputsSettled;
+        scene.Removed += OnSceneRemoved;
+        scene.Satellites.Add(this);
+    }
+
+    // Gone with its scene: it follows the universe's frames no more.
+    private void OnSceneRemoved(object sender, EventArgs e)
+    {
+        scene.Removed -= OnSceneRemoved;
+        universe.OutputsSettled -= OnOutputsSettled;
     }
 
     /// <summary>Every light, as the current frame sees it.</summary>
@@ -57,7 +71,8 @@ public class LightManager
         return light;
     }
 
-    /// <summary>Puts <paramref name="light"/> in the world as a light; an entity without a <see cref="Light"/> is ignored.</summary>
+    /// <summary>Puts <paramref name="light"/> in the scene as a light; an entity without a <see cref="Light"/> is ignored.
+    /// One standing in another entity joins the scene with that entity's root, not on its own.</summary>
     public void AddLight(Entity light)
     {
         var component = light.GetComponent<Light>();
@@ -73,7 +88,10 @@ public class LightManager
             lightsDirty = true;
         }
 
-        entityWorld.EntityManager.AddEntity(light);
+        if (light.Owner == null)
+        {
+            scene.World.EntityManager.AddEntity(light, scene);
+        }
     }
 
     /// <summary>Takes <paramref name="light"/> out of the lights and out of the world.</summary>
@@ -90,7 +108,7 @@ public class LightManager
             }
         }
 
-        entityWorld.EntityManager.RemoveEntity(light);
+        scene.World.EntityManager.RemoveEntity(light);
     }
 
     public bool Contains(Entity light)

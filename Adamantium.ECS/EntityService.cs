@@ -65,9 +65,6 @@ namespace Adamantium.ECS
             PropertyChanged += OnPropertyChanged;
         }
 
-        // TODO: check does this property should return all available entities
-        public IReadOnlyList<Entity> Entities => EntityWorld.RootEntities;
-
         /// <summary>
         /// Gets the name of this component.
         /// </summary>
