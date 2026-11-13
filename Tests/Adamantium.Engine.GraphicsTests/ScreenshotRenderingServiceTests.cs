@@ -93,7 +93,7 @@ public class ScreenshotRenderingServiceTests
         {
             Assert.That(pictured, Is.Not.Null);
             Assert.That(nothing, Is.Null);
-            Assert.That(_universe.EntityWorld.RootEntities, Does.Not.Contain(figure));
+            Assert.That(_universe.EntityWorld.MainScene.RootEntities, Does.Not.Contain(figure));
         });
     }
 

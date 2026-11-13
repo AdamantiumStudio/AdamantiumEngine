@@ -86,7 +86,7 @@ public class ToolsService : EntityService, INotifyUniverse
     private PickHit PickForm(in PickRay ray) =>
         EntityWorld.Satellites.TryGet<SceneIndex>(out var index)
             ? Picking.PickMeshes(index, ray, withDisabled: true)
-            : Picking.Pick(EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: true);
+            : Picking.Pick(EntityWorld.MainScene.RootEntities, ray, PickMode.Triangles, withDisabled: true);
 
     private PickHit PickShown(in PickRay ray)
     {
@@ -147,7 +147,7 @@ public class ToolsService : EntityService, INotifyUniverse
     {
         var viewProjection = camera.ViewMatrix * camera.ProjectionMatrix;
         var middle = PickRay.FromCamera(camera, frame.Center);
-        var roots = EntityWorld.RootEntities;
+        var roots = EntityWorld.MainScene.RootEntities;
         for (int i = 0; i < roots.Count; i++)
         {
             FrameTree(roots[i], camera, in frame, in viewProjection, in middle, into);

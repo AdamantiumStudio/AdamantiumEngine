@@ -36,7 +36,7 @@ public static class SceneCapture
 
         var scene = new SceneFile();
         var stack = new Stack<(Entity Entity, Entity Placed)>();
-        var roots = world.EntityManager.RootEntities;
+        var roots = world.MainScene.RootEntities;
         for (var i = roots.Count - 1; i >= 0; i--)
         {
             stack.Push((roots[i], null));

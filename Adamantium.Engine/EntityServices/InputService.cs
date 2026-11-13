@@ -161,7 +161,7 @@ public class InputService : EntityService
 
     private void UpdateIdleCameras(AppTime appTime)
     {
-        var cameras = EntityWorld.EntityManager.Cameras;
+        var cameras = EntityWorld.MainScene.Cameras;
         for (int i = 0; i < cameras.Count; i++)
         {
             if (cameras[i].GetComponent<Camera>() is { } camera && !Contains(observatory.CurrentCameras, camera))
@@ -191,9 +191,10 @@ public class InputService : EntityService
         var entity = camera.Owner;
         if (entity?.Owner == null || camera.Type.IsThirdPerson() || camera.Type == CameraType.FirstPerson) return;
 
+        var scene = entity.Scene;
         entity.Transform.Position = entity.Transform.WorldPosition;
         EntityWorld.EntityManager.RemoveOwner(entity);
-        EntityWorld.EntityManager.AddEntity(entity);
+        EntityWorld.EntityManager.AddEntity(entity, scene);
     }
 
     private void HandlePointer(Camera currentCamera)
@@ -247,7 +248,7 @@ public class InputService : EntityService
 
     private double DepthUnder(Camera camera, Vector2F pixel)
     {
-        var hit = Picking.Pick(EntityWorld.RootEntities, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
+        var hit = Picking.Pick(EntityWorld.MainScene.RootEntities, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
         if (hit.IsHit)
         {
             var depth = Vector3F.Dot(hit.Point, camera.Forward.As<float>());

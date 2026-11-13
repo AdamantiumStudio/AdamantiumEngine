@@ -136,7 +136,7 @@ public sealed class PlacementTool : ToolProcessor
         }
 
         var ray = PickRay.FromCamera(camera, pointer);
-        if (TryFindSurface(Tools.EntityWorld.RootEntities, Ground(), camera, ray, out var point, out var hit))
+        if (TryFindSurface(Tools.EntityWorld.MainScene.RootEntities, Ground(), camera, ray, out var point, out var hit))
         {
             onSurface = true;
             if (hit != null)

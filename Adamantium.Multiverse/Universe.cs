@@ -977,7 +977,7 @@ public class Universe : IUniverse
         deviceResourcesLost = true;
     }
 
-    // Textures died with the old device and are loaded again; the scene itself stays.
+    // Textures died with the old device and are loaded again in every scene, shown or not; the scenes themselves stay.
     private void ReloadMaterialTextures()
     {
         var options = new AssetLoadOptions
@@ -986,17 +986,20 @@ public class Universe : IUniverse
             IgnoreRootDirectory = true
         };
 
-        var roots = EntityWorld.RootEntities;
-        for (int i = 0; i < roots.Count; i++)
+        foreach (var scene in EntityWorld.Scenes)
         {
-            roots[i].TraverseByLayer(entity =>
+            var roots = scene.RootEntities;
+            for (int i = 0; i < roots.Count; i++)
             {
-                var material = entity.GetComponent<Material>();
-                if (material?.Texture is { IsDisposed: true } && !string.IsNullOrEmpty(material.TexturePath))
+                roots[i].TraverseByLayer(entity =>
                 {
-                    material.Texture = Assets.Load<Texture>(material.TexturePath, options);
-                }
-            });
+                    var material = entity.GetComponent<Material>();
+                    if (material?.Texture is { IsDisposed: true } && !string.IsNullOrEmpty(material.TexturePath))
+                    {
+                        material.Texture = Assets.Load<Texture>(material.TexturePath, options);
+                    }
+                });
+            }
         }
     }
 

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Adamantium.Core.Collections;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Templates;
+using Adamantium.Graphics.Core;
 
 namespace Adamantium.ECS;
 
@@ -12,7 +13,7 @@ public sealed class EntityManager
 {
     private object syncObject = new object();
 
-    private readonly TrackingCollection<Entity> rootEntities;
+    private readonly List<Scene> scenes;
     private readonly Dictionary<UInt128, Entity> availableEntities;
     private readonly Dictionary<String, EntityGroup> entitiesByGroup;
     private readonly List<Entity> entitiesToAdd;
@@ -24,8 +25,9 @@ public sealed class EntityManager
 
     internal EntityManager(EntityWorld world)
     {
-        rootEntities = new TrackingCollection<Entity>();
-        RootEntities = new ReadOnlyTrackingCollection<Entity>(rootEntities);
+        World = world;
+        MainScene = new Scene(world, nameof(MainScene), UidGenerator.Generate());
+        scenes = [MainScene];
         availableEntities = new Dictionary<UInt128, Entity>();
         entitiesByGroup = new Dictionary<String, EntityGroup>();
         entitiesToAdd = new List<Entity>();
@@ -34,36 +36,75 @@ public sealed class EntityManager
         entitiesReowned = new List<Entity>();
         entityParametersMap = new Dictionary<UInt128, EntityParameters>();
         availableProjectionTypes = new List<CameraProjectionType>();
-        joinCameras = entity =>
-        {
-            if (entity.GetComponent<CameraBase>() != null)
-            {
-                Cameras.Add(entity);
-            }
-        };
-        leaveCameras = entity => Cameras.Remove(entity);
-        Cameras = CreateGroup(nameof(Cameras));
-
-        World = world;
     }
 
-    private readonly Action<Entity> joinCameras;
-    private readonly Action<Entity> leaveCameras;
-
-    /// <summary>The world's cameras, wherever they hang in its trees: an entity with a camera joins as its tree joins
-    /// the world, and leaves with it; on the world's thread. The world's own group: it is never removed.</summary>
-    public EntityGroup Cameras { get; }
-    
     internal void InitializeResources()
     {
     }
 
     public EntityWorld World { get; }
 
-    /// <summary>The roots of the world's tree: its entities with no owner, raising a change as they are added and
-    /// removed, so a view can bind to them. One given an owner - a camera following a model - becomes a branch of its
-    /// owner's tree and leaves them, and comes back once it has none. The changes come on the world's thread.</summary>
-    public ReadOnlyTrackingCollection<Entity> RootEntities { get; }
+    /// <summary>The scene the world is made with, which is never removed: the one an entity added with no scene
+    /// goes to, so a world showing one scene works with it alone.</summary>
+    public Scene MainScene { get; }
+
+    /// <summary>The world's scenes, <see cref="MainScene"/> first: a copy, readable from any thread.</summary>
+    public IReadOnlyList<Scene> Scenes
+    {
+        get
+        {
+            lock (syncObject)
+            {
+                return scenes.ToArray();
+            }
+        }
+    }
+
+    /// <summary>A new empty scene of the world, with an id of its own; until it is removed.</summary>
+    public Scene CreateScene(string name)
+    {
+        var scene = new Scene(World, name, UidGenerator.Generate());
+        lock (syncObject)
+        {
+            scenes.Add(scene);
+        }
+
+        return scene;
+    }
+
+    /// <summary>The scene with the id <paramref name="uid"/>; null if the world has none.</summary>
+    public Scene FindScene(UInt128 uid)
+    {
+        lock (syncObject)
+        {
+            return scenes.Find(scene => scene.Uid == uid);
+        }
+    }
+
+    /// <summary>Takes <paramref name="scene"/> out of the world at once - nothing more is added to it - and its trees
+    /// with it from the next frame. <see cref="MainScene"/> is never removed.</summary>
+    public void RemoveScene(Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (scene == MainScene)
+        {
+            throw new InvalidOperationException("The main scene of a world is never removed.");
+        }
+
+        lock (syncObject)
+        {
+            if (!scenes.Remove(scene))
+            {
+                return;
+            }
+
+            scene.IsRemoved = true;
+            foreach (var root in scene.Roots)
+            {
+                RemoveEntity(root);
+            }
+        }
+    }
 
     internal void SyncEntities()
     {
@@ -120,17 +161,41 @@ public sealed class EntityManager
 
     private void AddEntityInternal(Entity entity)
     {
+        // Its scene was removed before it came in: it never joins.
+        if (entity.OwnScene is not { IsRemoved: false } scene)
+        {
+            entity.SetScene(null);
+            return;
+        }
+
         if (availableEntities.TryAdd(entity.Uid, entity))
         {
             PlaceByOwner(entity);
-            entity.TraverseInDepth(joinCameras);
+            JoinCameras(entity, entity.Scene ?? scene);
             OnEntityAdded(entity);
         }
     }
 
+    private static void JoinCameras(Entity tree, Scene scene)
+    {
+        tree.TraverseInDepth(entity =>
+        {
+            if (entity.GetComponent<CameraBase>() != null)
+            {
+                scene.Cameras.Add(entity);
+            }
+        });
+    }
+
+    private static void LeaveCameras(Entity tree, Scene scene)
+    {
+        if (scene == null) return;
+        tree.TraverseInDepth(entity => scene.Cameras.Remove(entity));
+    }
+
     /// <summary>Hangs <paramref name="entity"/> under <paramref name="owner"/> - with <see cref="RemoveOwner"/>, the one
-    /// way an entity changes owner. A root given an owner leaves <see cref="RootEntities"/>: from the next frame, on the
-    /// world's thread.</summary>
+    /// way an entity changes owner. A root given an owner leaves its scene's <see cref="Scene.RootEntities"/>, and moves
+    /// to the owner's scene if that is another one: from the next frame, on the world's thread.</summary>
     public void SetOwner(Entity entity, Entity owner)
     {
         if (entity == null || entity.Owner == owner) return;
@@ -142,24 +207,32 @@ public sealed class EntityManager
         }
     }
 
-    /// <summary>Takes <paramref name="entity"/> off its owner; one of the world's comes back among
-    /// <see cref="RootEntities"/> from the next frame.</summary>
+    /// <summary>Takes <paramref name="entity"/> off its owner; one of the world's comes back among the
+    /// <see cref="Scene.RootEntities"/> of the scene it was in from the next frame.</summary>
     public void RemoveOwner(Entity entity) => SetOwner(entity, null);
 
-    // A root while it has no owner; with one it is a branch of its owner's tree.
+    // A root of its scene while it has no owner; with one it is a branch of its owner's tree, in its owner's scene.
     private void PlaceByOwner(Entity entity)
     {
         if (!availableEntities.ContainsKey(entity.Uid)) return;
 
-        var held = entity.Owner != null;
-        var isRoot = rootEntities.Contains(entity);
-        if (!held && !isRoot)
+        var home = entity.OwnScene;
+        if (entity.Owner == null)
         {
-            rootEntities.Add(entity);
+            if (home != null && !home.Roots.Contains(entity))
+            {
+                home.Roots.Add(entity);
+            }
+
+            return;
         }
-        else if (held && isRoot)
+
+        home?.Roots.Remove(entity);
+        if (entity.Owner.Scene is { } ownerScene && ownerScene != home)
         {
-            rootEntities.Remove(entity);
+            LeaveCameras(entity, home);
+            entity.SetScene(ownerScene);
+            JoinCameras(entity, ownerScene);
         }
     }
     
@@ -177,9 +250,11 @@ public sealed class EntityManager
     {
         if (!availableEntities.Remove(entity.Uid)) return;
 
-        entity.SetWorld(null);
-        rootEntities.Remove(entity);
-        entity.TraverseInDepth(leaveCameras);
+        var home = entity.OwnScene;
+        var scene = entity.Scene ?? home;
+        entity.SetScene(null);
+        home?.Roots.Remove(entity);
+        LeaveCameras(entity, scene);
         OnEntityRemoved(entity);
 
         // Its tree goes with it: an entity of the world it holds - a camera following it - leaves the world too.
@@ -191,8 +266,9 @@ public sealed class EntityManager
 
     private void RemoveBranch(Entity branch)
     {
+        var scene = branch.Scene;
         branch.Owner = null;
-        branch.TraverseInDepth(leaveCameras);
+        LeaveCameras(branch, scene);
         OnEntityRemoved(branch);
         branch.TraverseInDepth(held =>
         {
@@ -225,20 +301,36 @@ public sealed class EntityManager
         }
     }
 
-    public void AddEntity(Entity root, CameraProjectionType projectionType = CameraProjectionType.Perspective)
+    /// <summary>Adds <paramref name="root"/> with its tree to <paramref name="scene"/> - to <see cref="MainScene"/> if
+    /// none is given - from the next frame. Nothing for one already in the world.</summary>
+    public void AddEntity(
+        Entity root,
+        Scene scene = null,
+        CameraProjectionType projectionType = CameraProjectionType.Perspective)
     {
         if (root == null)
         {
             return;
         }
 
+        scene ??= MainScene;
+        if (scene.World != World)
+        {
+            throw new ArgumentException("The scene is another world's.", nameof(scene));
+        }
+
         lock (syncObject)
         {
+            if (scene.IsRemoved)
+            {
+                throw new InvalidOperationException($"The scene '{scene.Name}' is removed.");
+            }
+
             if (availableEntities.ContainsKey(root.Uid)) return;
 
             SetCameraProjectionType(root, projectionType);
             entitiesToAdd.Add(root);
-            root.SetWorld(World);
+            root.SetScene(scene);
         }
 
         root.NotifyUpdated();
@@ -300,14 +392,17 @@ public sealed class EntityManager
         entity.NotifyUpdated();
     }
 
-    /// <summary>Takes every root out of the world, and with each its tree.</summary>
+    /// <summary>Takes every root of every scene out of the world, and with each its tree; the scenes stay.</summary>
     public void RemoveAllEntities()
     {
         lock (syncObject)
         {
-            foreach (var root in rootEntities)
+            foreach (var scene in scenes)
             {
-                RemoveEntity(root);
+                foreach (var root in scene.Roots)
+                {
+                    RemoveEntity(root);
+                }
             }
         }
     }
@@ -390,7 +485,7 @@ public sealed class EntityManager
 
         lock (syncObject)
         {
-            if (entitiesByGroup.TryGetValue(groupName, out var group) && group != Cameras)
+            if (entitiesByGroup.TryGetValue(groupName, out var group))
             {
                 entitiesByGroup.Remove(groupName);
                 OnGroupRemoved(group);
@@ -579,16 +674,23 @@ public sealed class EntityManager
         lock (syncObject)
         {
             entitiesReowned.Clear();
-            rootEntities.Clear();
             foreach (var entity in availableEntities.Values)
             {
-                entity.SetWorld(null);
+                entity.SetScene(null);
             }
 
+            // Only the main scene outlives a reset, empty.
+            foreach (var scene in scenes)
+            {
+                scene.Roots.Clear();
+                scene.Cameras.Clear();
+                scene.IsRemoved = scene != MainScene;
+            }
+
+            scenes.Clear();
+            scenes.Add(MainScene);
             availableEntities.Clear();
             entitiesByGroup.Clear();
-            Cameras.Clear();
-            entitiesByGroup.Add(Cameras.Name, Cameras);
             entityParametersMap.Clear();
             availableProjectionTypes.Clear();
         }

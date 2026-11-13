@@ -54,7 +54,7 @@ namespace Adamantium.ECS
         }
 
         private Entity owner;
-        private EntityWorld world;
+        private Scene scene;
         private readonly UInt128 uid;
         private UInt128 rootUid;
         private readonly TrackingCollection<Entity> dependencies;
@@ -121,11 +121,17 @@ namespace Adamantium.ECS
             }
         }
 
-        /// <summary>The world this entity is part of: its root's, once the root is added to one; null outside any.
-        /// </summary>
-        public EntityWorld World => owner != null ? owner.World : world;
+        /// <summary>The world this entity is part of: its scene's; null outside any.</summary>
+        public EntityWorld World => Scene?.World;
 
-        internal void SetWorld(EntityWorld value) => world = value;
+        /// <summary>The scene this entity is part of: its root's, once the root is added to one; null outside any.
+        /// </summary>
+        public Scene Scene => owner != null ? owner.Scene : scene;
+
+        // A root's own scene, kept while it hangs under an owner: the one it comes back to once it has none.
+        internal Scene OwnScene => scene;
+
+        internal void SetScene(Scene value) => scene = value;
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>
         public void NotifyUpdated() => World?.Changed(UniverseChangedEventArgs.OneFrame);

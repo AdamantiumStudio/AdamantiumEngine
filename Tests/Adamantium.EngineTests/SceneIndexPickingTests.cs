@@ -76,7 +76,7 @@ public class SceneIndexPickingTests
                 var ray = PickRay.FromCamera(camera, new Vector2F(x, y));
                 foreach (var withDisabled in new[] { false, true })
                 {
-                    var walked = Picking.Pick(universe.EntityWorld.RootEntities, ray, PickMode.Triangles, withDisabled: withDisabled);
+                    var walked = Picking.Pick(universe.EntityWorld.MainScene.RootEntities, ray, PickMode.Triangles, withDisabled: withDisabled);
                     var indexed = Picking.PickMeshes(index, ray, withDisabled);
 
                     Assert.That(indexed.Entity, Is.SameAs(walked.Entity), $"pixel {x},{y}, disabled too: {withDisabled}");

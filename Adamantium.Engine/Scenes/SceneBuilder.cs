@@ -138,14 +138,17 @@ public sealed class SceneBuilder
         return entities;
     }
 
-    // The ids of every entity of the world, roots and what stands in them.
+    // The ids of every entity of the world - in every scene, ids are the world's - roots and what stands in them.
     private HashSet<UInt128> WorldIds()
     {
         var ids = new HashSet<UInt128>();
         var stack = new Stack<Entity>();
-        foreach (var root in world.EntityManager.RootEntities)
+        foreach (var each in world.Scenes)
         {
-            stack.Push(root);
+            foreach (var root in each.RootEntities)
+            {
+                stack.Push(root);
+            }
         }
 
         while (stack.Count > 0)

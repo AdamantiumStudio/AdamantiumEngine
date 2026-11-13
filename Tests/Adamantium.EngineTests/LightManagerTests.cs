@@ -26,7 +26,7 @@ public class LightManagerTests
         Assert.That(lights.SpotLights, Is.EqualTo(new[] { spot.GetComponent<Light>() }));
         Assert.That(lights.PointLights, Is.Empty);
         Assert.That(lights.DirectionalLights, Is.Empty);
-        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(spot));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(spot));
     }
 
     [Test]
@@ -37,13 +37,13 @@ public class LightManagerTests
         var point = new LightTemplate().BuildEntity(null, "Point", LightType.Point);
         lights.AddLight(point);
         NextFrame(universe);
-        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(point));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(point));
 
         lights.RemoveLight(point);
         NextFrame(universe);
 
         Assert.That(lights.Lights, Is.Empty);
-        Assert.That(universe.EntityWorld.RootEntities, Does.Not.Contain(point));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Not.Contain(point));
     }
 
     // The frame already running keeps its entities, as it keeps its lights: a light deleted from the application's thread
@@ -59,7 +59,7 @@ public class LightManagerTests
 
         lights.RemoveLight(point);
 
-        Assert.That(universe.EntityWorld.RootEntities, Does.Contain(point));
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(point));
     }
 
     [Test]
@@ -72,7 +72,7 @@ public class LightManagerTests
         NextFrame(universe);
 
         Assert.That(lights.Lights, Is.Empty);
-        Assert.That(universe.EntityWorld.RootEntities, Is.Empty);
+        Assert.That(universe.EntityWorld.MainScene.RootEntities, Is.Empty);
     }
 
     private static void NextFrame(TestUniverse universe)

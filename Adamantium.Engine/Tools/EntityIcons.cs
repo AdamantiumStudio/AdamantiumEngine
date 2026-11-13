@@ -51,7 +51,7 @@ public class EntityIcons : EditorProcessor
     public override void Update(AppTime appTime)
     {
         seen.Clear();
-        foreach (var root in Tools.EntityWorld.RootEntities.AsSpan())
+        foreach (var root in Tools.EntityWorld.MainScene.RootEntities.AsSpan())
         {
             root?.TraverseInDepth(Collect);
         }

@@ -27,7 +27,7 @@ public class RenderingProcessor : EntityProcessor<RenderingService>, IDisposable
     protected Camera ActiveCamera { get; set; }
     protected bool ShowDebugOutput { get; set; }
 
-    public IReadOnlyList<Entity> Entities => EntityWorld.RootEntities;
+    public IReadOnlyList<Entity> Entities => EntityWorld.MainScene.RootEntities;
 
     public RenderingProcessor()
     {

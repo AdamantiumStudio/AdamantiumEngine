@@ -66,7 +66,7 @@ namespace Adamantium.ECS
         }
 
         // TODO: check does this property should return all available entities
-        public IReadOnlyList<Entity> Entities => EntityWorld.RootEntities;
+        public IReadOnlyList<Entity> Entities => EntityWorld.MainScene.RootEntities;
 
         /// <summary>
         /// Gets the name of this component.
