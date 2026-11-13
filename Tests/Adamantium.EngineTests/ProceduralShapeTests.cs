@@ -139,6 +139,27 @@ public class ProceduralShapeTests
         });
     }
 
+    // A cube is flat: each corner of a face has that face's normal, out of the cube - not one shared with the faces
+    // beside it, nor none.
+    [Test]
+    public void ACubesNormals_AreItsFacesNormals()
+    {
+        var mesh = new CubeShape().Build();
+
+        Assert.That(mesh.Normals, Has.Length.EqualTo(mesh.Points.Length));
+        for (int i = 0; i < mesh.Points.Length; i++)
+        {
+            var normal = mesh.Normals[i].As<double>();
+            var point = mesh.Points[i];
+            var along = Math.Max(Math.Abs(normal.X), Math.Max(Math.Abs(normal.Y), Math.Abs(normal.Z)));
+            Assert.Multiple(() =>
+            {
+                Assert.That(along, Is.EqualTo(1).Within(1e-4), $"vertex {i} at {point}: {normal} lies along an axis");
+                Assert.That(Vector3<double>.Dot(normal, point), Is.GreaterThan(0), $"vertex {i} at {point}: {normal} points out");
+            });
+        }
+    }
+
     [Test]
     public void AStretchedSphere_HasTheNormalsOfAnEllipsoid()
     {
