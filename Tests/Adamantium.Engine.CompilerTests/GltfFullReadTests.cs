@@ -220,7 +220,8 @@ public class GltfFullReadTests
     }
 
     // Data a mesh has no array for is kept by its name, and stays with its vertex when like vertices are joined: the
-    // last vertex repeats the first but for its _ID, so it is kept apart.
+    // last vertex repeats the first but for its _ID, so it is kept apart. Both triangles face the same way: given no
+    // normals the mesh gets flat ones, and triangles facing apart would split their shared corners besides.
     [TestCase(false)]
     [TestCase(true)]
     public void EveryOtherAttribute_IsKeptByItsName_WithItsVertex(bool baked)
@@ -230,7 +231,7 @@ public class GltfFullReadTests
         var ids = asset.Floats("SCALAR", 10, 11, 12, 13);
         var uv4 = asset.Floats("VEC2", 0, 0, 1, 0, 0, 1, 0, 0);
         var color1 = asset.Floats("VEC4", 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1);
-        var indices = asset.UShorts(0, 1, 2, 3, 2, 1);
+        var indices = asset.UShorts(0, 1, 2, 3, 1, 2);
         asset.Scene(asset.Node(new JsonObject
         {
             ["mesh"] = asset.Mesh(GltfTestAsset.Primitive(positions, indices,

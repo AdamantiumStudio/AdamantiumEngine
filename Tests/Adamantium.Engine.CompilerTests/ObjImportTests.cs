@@ -162,6 +162,54 @@ f 1/1 2/2 3/3
             });
         }
 
+        // A box of eight shared corners with no normals of its own - the owner's box.obj: in no smoothing group, every
+        // face is flat, each of its corners with the normal of its face. Averaged over the shared corners, the normals
+        // pointed along the box's diagonals and it was lit like a ball. This box is wound inside out, so its normals face
+        // in, as its winding says; which way does not matter here, only that each is its face's.
+        [Test]
+        public void ABoxGivenNoNormals_HasFlatFaces()
+        {
+            var scene = Import(@"
+v -1 -1 -3
+v 1 -1 -3
+v 1 1 -3
+v -1 1 -3
+v -1 -1 3
+v 1 -1 3
+v 1 1 3
+v -1 1 3
+f 1 2 3 4
+f 5 8 7 6
+f 1 5 6 2
+f 2 6 7 3
+f 3 7 8 4
+f 5 1 4 8
+");
+
+            var mesh = SingleMesh(scene);
+            var center = new Vector3<double>(
+                (mesh.Points.Max(point => point.X) + mesh.Points.Min(point => point.X)) / 2,
+                (mesh.Points.Max(point => point.Y) + mesh.Points.Min(point => point.Y)) / 2,
+                (mesh.Points.Max(point => point.Z) + mesh.Points.Min(point => point.Z)) / 2);
+            var halfSize = new Vector3<double>(
+                (mesh.Points.Max(point => point.X) - mesh.Points.Min(point => point.X)) / 2,
+                (mesh.Points.Max(point => point.Y) - mesh.Points.Min(point => point.Y)) / 2,
+                (mesh.Points.Max(point => point.Z) - mesh.Points.Min(point => point.Z)) / 2);
+            Assert.That(mesh.Normals, Has.Length.EqualTo(mesh.Points.Length));
+            Assert.That(mesh.Points, Has.Length.EqualTo(24), "four corners a face, six faces");
+            for (int i = 0; i < mesh.Points.Length; i++)
+            {
+                var normal = mesh.Normals[i].As<double>();
+                var outward = mesh.Points[i] - center;
+                var along = Math.Max(Math.Abs(normal.X), Math.Max(Math.Abs(normal.Y), Math.Abs(normal.Z)));
+                Assert.That(along, Is.EqualTo(1).Within(1e-4), $"vertex {i}: {normal} lies along an axis");
+                // On the face the normal is across: there the corner sits on the box's side along that axis.
+                var side = Math.Abs(normal.X) > 0.5 ? halfSize.X : Math.Abs(normal.Y) > 0.5 ? halfSize.Y : halfSize.Z;
+                Assert.That(Math.Abs(Vector3<double>.Dot(normal, outward)), Is.EqualTo(side).Within(1e-4),
+                    $"vertex {i} at {mesh.Points[i]}: {normal} is across its own face");
+            }
+        }
+
         private static Mesh SingleMesh(SceneData scene)
         {
             Assert.That(scene, Is.Not.Null, "the import returned nothing");

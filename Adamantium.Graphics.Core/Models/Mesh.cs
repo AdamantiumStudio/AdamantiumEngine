@@ -1319,6 +1319,40 @@ public class Mesh
         return this;
     }
 
+    /// <summary>Flat normals, each triangle's own: a corner shared by triangles facing apart becomes one vertex per
+    /// face, while corners of triangles facing alike stay one - what glTF asks of a mesh given no normals, and how OBJ
+    /// shades a face in no smoothing group. Averaging them instead (<see cref="CalculateNormals"/>) shades a box like a
+    /// ball.</summary>
+    public Mesh CalculateFlatNormals()
+    {
+        if (MeshTopology != PrimitiveType.TriangleList || Points.Length < 3 || Indices.Length % 3 != 0)
+            return this;
+
+        // Every corner its own vertex, carrying all the corner's data along.
+        var oldCount = Points.Length;
+        var corners = new List<int>(Indices);
+        Points = Pick(Points, corners, oldCount);
+        UV0 = Pick(UV0, corners, oldCount);
+        UV1 = Pick(UV1, corners, oldCount);
+        UV2 = Pick(UV2, corners, oldCount);
+        UV3 = Pick(UV3, corners, oldCount);
+        Colors = Pick(Colors, corners, oldCount);
+        JointIndices = Pick(JointIndices, corners, oldCount);
+        JointWeights = Pick(JointWeights, corners, oldCount);
+        CarryOver(corners, oldCount);
+        var separate = new int[corners.Count];
+        for (int i = 0; i < separate.Length; i++)
+        {
+            separate[i] = i;
+        }
+
+        Indices = separate;
+        CalculateNormals(smoothNormals: false);
+
+        // Corners alike again - the same place, the same face direction, the same data - are one vertex once more.
+        return Optimize(recalculateNormals: false, recalculateTangents: false);
+    }
+
     public Mesh CalculateTangentsAndBinormals(int uvChannel = 0)
     {
         if (MeshTopology == PrimitiveType.TriangleList && Semantic.HasFlag(VertexSemantic.UV0)
