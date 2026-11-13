@@ -38,19 +38,17 @@ public sealed class SceneBuilder
         this.assets = assets;
     }
 
-    /// <summary>Builds <paramref name="scene"/> and adds it to the world; the entities made for its entries, section by
-    /// section in the file's order.</summary>
-    public async Task<IReadOnlyList<Entity>> Build(SceneFile scene)
+    /// <summary>Loads the models of <paramref name="scene"/>, then builds it: for a world no frame is running in. A
+    /// running universe loads with <see cref="LoadModelsAsync"/> anywhere and builds on its own thread.</summary>
+    public async Task<IReadOnlyList<Entity>> Build(SceneFile scene) => Build(scene, await LoadModelsAsync(scene));
+
+    /// <summary>The models <paramref name="scene"/> stands, by asset name, each loaded once, all at once; null for one
+    /// that did not load. From any thread.</summary>
+    public async Task<IReadOnlyDictionary<string, SceneData>> LoadModelsAsync(SceneFile scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-
-        var byId = new Dictionary<UInt128, Entity>();
-        var made = new List<(ScenePlacement Entry, Entity Entity)>();
-        var inWorld = WorldIds();
-
-        var models = Admitted(scene.Models, byId, inWorld);
         var loads = new Dictionary<string, Task<SceneData>>(StringComparer.Ordinal);
-        foreach (var model in models)
+        foreach (var model in scene.Models)
         {
             if (!string.IsNullOrEmpty(model.Asset) && !loads.ContainsKey(model.Asset))
             {
@@ -58,16 +56,41 @@ public sealed class SceneBuilder
             }
         }
 
-        foreach (var model in models)
+        var loaded = new Dictionary<string, SceneData>(StringComparer.Ordinal);
+        foreach (var (asset, load) in loads)
         {
-            Keep(model, await MakeModel(model, loads), byId, made);
+            try
+            {
+                loaded[asset] = await load;
+            }
+            catch (Exception exception)
+            {
+                Log.Logger.Error(exception, "Scene: the model {Asset} did not load", asset);
+                loaded[asset] = null;
+            }
         }
 
+        return loaded;
+    }
+
+    /// <summary>Builds <paramref name="scene"/> with its <paramref name="models"/> loaded already and adds it to the
+    /// world; the entities made for its entries, section by section in the file's order. On the world's thread, between
+    /// its frames: it looks at what the world holds to keep ids apart.</summary>
+    public IReadOnlyList<Entity> Build(SceneFile scene, IReadOnlyDictionary<string, SceneData> models)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(models);
+
+        var byId = new Dictionary<UInt128, Entity>();
+        var made = new List<(ScenePlacement Entry, Entity Entity)>();
+        var inWorld = WorldIds();
+
+        foreach (var model in Admitted(scene.Models, byId, inWorld)) Keep(model, MakeModel(model, models), byId, made);
         foreach (var light in Admitted(scene.Lights, byId, inWorld)) Keep(light, MakeLight(light), byId, made);
         foreach (var camera in Admitted(scene.Cameras, byId, inWorld)) Keep(camera, MakeCamera(camera), byId, made);
         foreach (var point in Admitted(scene.SpawnPoints, byId, inWorld)) Keep(point, MakeSpawnPoint(point), byId, made);
         foreach (var marker in Admitted(scene.Markers, byId, inWorld)) Keep(marker, MakeMarker(marker), byId, made);
-        foreach (var shape in Admitted(scene.Shapes, byId, inWorld)) Keep(shape, await MakeShape(shape), byId, made);
+        foreach (var shape in Admitted(scene.Shapes, byId, inWorld)) Keep(shape, MakeShape(shape), byId, made);
 
         foreach (var (entry, entity) in made)
         {
@@ -172,22 +195,19 @@ public sealed class SceneBuilder
         made.Add((entry, entity));
     }
 
-    private async Task<Entity> MakeModel(SceneModel entry, Dictionary<string, Task<SceneData>> loads)
+    // The import template makes the model's entities at once; its task is done when it returns.
+    private Entity MakeModel(SceneModel entry, IReadOnlyDictionary<string, SceneData> models)
     {
         var entity = new Entity(null, entry.Name, entry.Uid) { IconKey = EntityIconKeys.Model };
-        if (!string.IsNullOrEmpty(entry.Asset))
+        if (!string.IsNullOrEmpty(entry.Asset) && models.TryGetValue(entry.Asset, out var data) && data != null)
         {
             try
             {
-                var data = await loads[entry.Asset];
-                if (data != null)
-                {
-                    await new EntityImportTemplate(data, assets, Vector3<double>.Zero).BuildEntity(entity);
-                }
+                new EntityImportTemplate(data, assets, Vector3<double>.Zero).BuildEntity(entity).GetAwaiter().GetResult();
             }
             catch (Exception exception)
             {
-                Log.Logger.Error(exception, "Scene: the model {Asset} of {Name} did not load", entry.Asset, entry.Name);
+                Log.Logger.Error(exception, "Scene: the model {Asset} of {Name} could not be made", entry.Asset, entry.Name);
             }
         }
 
@@ -247,7 +267,8 @@ public sealed class SceneBuilder
         return entity;
     }
 
-    private static async Task<Entity> MakeShape(SceneShape entry)
+    // The shape template makes the mesh at once; its task is done when it returns.
+    private static Entity MakeShape(SceneShape entry)
     {
         var entity = new Entity(null, entry.Name, entry.Uid);
         var type = ComponentFields.FindType<ProceduralShape>(entry.Type);
@@ -261,7 +282,7 @@ public sealed class SceneBuilder
         {
             var shape = (ProceduralShape)Activator.CreateInstance(type);
             ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
-            await new ShapeTemplate(shape).BuildEntity(entity);
+            new ShapeTemplate(shape).BuildEntity(entity).GetAwaiter().GetResult();
             entity.AddComponent(new Material { DiffuseColor = entry.Color });
         }
 

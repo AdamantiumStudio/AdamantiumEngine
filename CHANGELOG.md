@@ -18,7 +18,10 @@ All packages share one version.
   once, all at once; a model that does not load stays naming its asset; an entry with an id taken already, in the file
   or in the world, is left out; a rotation that is none is taken as none - and `SceneCapture` writes a world back into
   a scene - what stands in a model's part is written in the model, where it stands; the cameras the outputs own are
-  left out.
+  left out. A running universe loads a scene's models anywhere (`SceneBuilder.LoadModelsAsync`) and builds it on its
+  own thread (`Build(scene, models)`, which completes at once).
+- `FileSystemAssetResolver(root)`: a relative asset path taken from a folder of the caller's - a content project's own
+  folder, say - instead of the application's.
 - `Behaviour`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
   are what a scene keeps of it. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedBehaviours`
   and `UnloadedShape` stand for components and shapes whose code is not loaded. `Entity(owner, name, uid)`: an entity
