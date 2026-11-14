@@ -36,6 +36,11 @@ All packages share one version.
   with a given id.
 - `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
   `CameraType.Parse`: the type its `ToString` names.
+- `SceneCapture.Keeps(entity)`: whether a scene keeps that entity - a model whole, a light, a camera, a shape, a group,
+  a spawn point - and so its game components.
+- `Adamantium.Engine.Generators` brings its own build rules: a project's `**/*.fx` and `**/*.fxh` are effect files by
+  default, the `.fxh` of the projects it references can be included, and the shader compiler is found in the
+  `Adamantium.Vulkan.Slang` package - no Vulkan SDK. `Adamantium.FX` builds on the same rules.
 - `Vector3<T>.Parse`, `Vector4<T>.Parse`, `Quaternion<T>.Parse`: read from text as `Vector2<T>.Parse` does, so markup
   takes them too.
 
@@ -326,6 +331,10 @@ All packages share one version.
 - `SceneBuilder`: a game component or a shape whose code throws as it is made no longer fails the whole scene - its
   entry is kept as it was read; a second component of one type on an entity is kept as it was read instead of dropped,
   so writing the scene back no longer loses it.
+- `PropertyAccessors` no longer keeps the types it read alive: a type of code loaded to be unloaded again (a
+  collectible load context) goes once nothing else holds it.
+- An inspector no longer shows a component's bookkeeping (`Owner`, `Uid`, `Name`, `IsExpanded`, `Initialized`,
+  `Initializing` are `[Browsable(false)]`).
 - `MeshGeometryCache` lets a mesh's GPU buffers go itself once the mesh was not drawn for a while
   (`ReleaseUnused`, called each frame by the processors that draw; `KeepUnused`, five seconds by default) - when no
   other mesh kept has the same content and no frame in flight draws with them - instead of keeping every mesh ever
