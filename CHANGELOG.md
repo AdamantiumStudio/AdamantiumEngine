@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
+  of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
 - PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
   (`/CreationDate`), read back as `PdfAnnotation.Subject` and `Created`; `PdfAnnotationTypes.Stamp`, an annotation
   shown by its appearance alone.
