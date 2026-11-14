@@ -24,7 +24,7 @@ internal static class SceneBehaviors
 
         if (entity.ContainsComponent(type))
         {
-            Log.Logger.Warning("Scene: {Name} has a {Type} already, and an entity has one of each; the second is kept as it was read",
+            Log.Logger.Warning("Scene: {Name} already has a {Type}, and an entity can have only one of each; the second one is kept unloaded",
                 entity.Name, entry.Type);
             Keep(entity, entry);
             return;
@@ -39,7 +39,7 @@ internal static class SceneBehaviors
         catch (Exception exception) when (exception is TargetInvocationException or TypeInitializationException)
         {
             var thrown = exception.InnerException ?? exception;
-            Log.Logger.Error(thrown, "Scene: {Type} on {Name} could not be made; it is kept as it was read",
+            Log.Logger.Error(thrown, "Scene: could not create {Type} on {Name}; its saved values are kept unloaded",
                 entry.Type, entity.Name);
             problems.Add(new BehaviorProblem(entity, entry.Type, thrown));
             Keep(entity, entry);
