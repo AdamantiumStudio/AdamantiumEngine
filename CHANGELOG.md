@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
+  next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
   of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
 - PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
@@ -19,7 +21,7 @@ All packages share one version.
   described whole, each kind in a section of its own: lights (`SceneLight`), cameras (`SceneCamera`: its rotation the
   way it faces, its `CameraType`), spawn points (`SceneSpawnPoint`), groups and empty entities (`SceneMarker`),
   procedural shapes by their recipes (`SceneShape`: the shape's type, its parameters, its color), the components of the
-  game's code (`SceneBehaviour`: its type and the values of its fields). Every entry has an id; an entry stands in
+  game's code (`SceneGameComponent`: its type and the values of its fields). Every entry has an id; an entry stands in
   another by that one's id, so the file stays flat. A component or a shape whose type is not loaded is written back as
   it was read. A file of a later version is refused. `SceneBuilder` puts a scene into a world - each model asset loaded
   once, all at once; a model that does not load stays naming its asset; an entry with an id taken already, in the file
@@ -29,12 +31,32 @@ All packages share one version.
   own thread (`Build(scene, models)`, which completes at once).
 - `FileSystemAssetResolver(root)`: a relative asset path taken from a folder of the caller's - a content project's own
   folder, say - instead of the application's.
-- `Behaviour`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
-  are what a scene keeps of it. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedBehaviours`
-  and `UnloadedShape` stand for components and shapes whose code is not loaded. `Entity(owner, name, uid)`: an entity
+- `GameComponent`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
+  are what a scene keeps of it - not named `Behavior`, the name of the UI's behaviors. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedGameComponents`
+  and `UnloadedShape` stand for components and shapes whose code is not loaded.
+- `EntityWorld.Code` (`WorldCode`): the code a world finds the types of its scenes' entries in - the game's and its
+  mods' assemblies given to it, then the application's own; an assembly of a collectible load context counts only while
+  given, so code replaced or unloaded is not found again. `SceneCode.Replace(world, leaving, arriving)`: moves the
+  game's components of every scene of a world from one build of its code to the next, through their scene entries -
+  their fields' values kept, an entry whose type the new code lacks kept as it was. `SceneBuilder.Problems` and the
+  result of `Replace` (`GameComponentProblem`): the components whose code threw; their entries are kept. `Entity(owner, name, uid)`: an entity
   with a given id.
 - `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
   `CameraType.Parse`: the type its `ToString` names.
+- `[MovedFrom("Game.Turret")]`: a full name a component's class had before. A world's code finds the class by it when
+  no class has that name now, so a component renamed or moved keeps the values its scenes gave it, and a scene saved
+  again writes the new name; two classes claiming one former name take nothing. `SceneCode.Load(entity, entry, type)`:
+  makes an entry kept for a component whose code is not loaded a component of another type, with the fields that type
+  has. `SceneCode.Add(entity, type)`: puts a new component of the game's code on an entity, and leaves the entity as it
+  was when the component's code throws; `SceneCode.Remove(entity, entry)` takes off the entry of one whose code is not
+  loaded. `UnloadedGameComponents` keeps its entries unchanged once made - another one takes
+  its place - so a thread reading it while the world's thread changes it reads one whole set; a copied entity keeps
+  them. A world's code remembers what each name was found to be until the code is replaced.
+- `SceneCapture.Keeps(entity)`: whether a scene keeps that entity - a model whole, a light, a camera, a shape, a group,
+  a spawn point - and so its game components.
+- `Adamantium.Engine.Generators` brings its own build rules: a project's `**/*.fx` and `**/*.fxh` are effect files by
+  default, the `.fxh` of the projects it references can be included, and the shader compiler is found in the
+  `Adamantium.Vulkan.Slang` package - no Vulkan SDK. `Adamantium.FX` builds on the same rules.
 - `Vector3<T>.Parse`, `Vector4<T>.Parse`, `Quaternion<T>.Parse`: read from text as `Vector2<T>.Parse` does, so markup
   takes them too.
 
@@ -324,6 +346,20 @@ All packages share one version.
 
 ### Fixed
 
+- `SceneCapture` no longer writes what was taken out of the world but leaves only with the next frame. A view's own
+  camera, its view gone while no frame runs - a scene's tab behind another - was written as a camera of the scene, and
+  the editor marked the scene changed.
+- `SceneBuilder`: a game component or a shape whose code throws as it is made no longer fails the whole scene - its
+  entry is kept as it was read; a second component of one type on an entity is kept as it was read instead of dropped,
+  so writing the scene back no longer loses it.
+- A game component whose code throws as it is put on an entity - its `Initialize` - keeps its scene entry, and the
+  components and entities after it still load or move to new code; before, the throw ended the whole move.
+  `Entity.AddComponent` no longer leaves the required components of a component whose `Initialize` threw to be added
+  again with the next component.
+- `PropertyAccessors` no longer keeps the types it read alive: a type of code loaded to be unloaded again (a
+  collectible load context) goes once nothing else holds it.
+- An inspector no longer shows a component's bookkeeping (`Owner`, `Uid`, `Name`, `IsExpanded`, `Initialized`,
+  `Initializing` are `[Browsable(false)]`).
 - `MeshGeometryCache` lets a mesh's GPU buffers go itself once the mesh was not drawn for a while
   (`ReleaseUnused`, called each frame by the processors that draw; `KeepUnused`, five seconds by default) - when no
   other mesh kept has the same content and no frame in flight draws with them - instead of keeping every mesh ever

@@ -25,6 +25,7 @@ namespace Adamantium.ECS.Components
         private readonly UInt128 uid;
         private bool initialized;
 
+        [System.ComponentModel.Browsable(false)]
         public Entity Owner
         {
             get => owner;
@@ -58,13 +59,16 @@ namespace Adamantium.ECS.Components
             initialized = true;
         }
 
+        [System.ComponentModel.Browsable(false)]
         public UInt128 Uid => uid;
-        
+
         [Bindable]
+        [System.ComponentModel.Browsable(false)]
         public partial string Name { get; set; }
 
         /// <summary>Whether an inspector shows the component's section open; open to begin with.</summary>
         [Bindable]
+        [System.ComponentModel.Browsable(false)]
         public partial bool IsExpanded { get; set; }
 
         protected void Traverse(Action<Entity> action)
@@ -140,7 +144,10 @@ namespace Adamantium.ECS.Components
             return owner.ContainsComponent<T>();
         }
 
+        [System.ComponentModel.Browsable(false)]
         public bool Initialized => initialized;
+
+        [System.ComponentModel.Browsable(false)]
         public bool Initializing { get; private set; }
 
         public virtual IComponent Clone()

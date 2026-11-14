@@ -16,11 +16,13 @@
     </PropertyGroup>
 
     <!-- An analyzer, not a library: the generator and every assembly it loads go to analyzers/dotnet/cs, nothing goes to
-         lib, and nothing is a package dependency - the consumer's compiler loads all of it from this one folder. -->
+         lib - the consumer's compiler loads all of it from this one folder - and the rules that hand it the project's
+         effects go to build. The one package dependency is the Slang runtime, restored for its path alone: none of its
+         assets reach the consumer. -->
     <PropertyGroup>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <DevelopmentDependency>true</DevelopmentDependency>
-        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <AdamantiumSlangVersion>1.1.0</AdamantiumSlangVersion>
         <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackAnalyzerAssemblies</TargetsForTfmSpecificContentInPackage>
         <!-- dotnet pack no-build: the references are resolved from what is already built instead of being built again. -->
         <BuildProjectReferences Condition="'$(NoBuild)' == 'true'">false</BuildProjectReferences>
@@ -52,7 +54,7 @@
          <!--Generator dependencies-->
 		
 		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="2.0.0" GeneratePathProperty="true" PrivateAssets="all" />
-		<PackageReference Include="Adamantium.Vulkan.Slang" Version="1.1.0" GeneratePathProperty="true" PrivateAssets="all" />
+		<PackageReference Include="Adamantium.Vulkan.Slang" Version="$(AdamantiumSlangVersion)" GeneratePathProperty="true" PrivateAssets="compile;runtime;native;analyzers;build;buildtransitive" />
         <PackageReference Include="QuantumBinding.Utils" Version="3.0.1" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack.Annotations" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
@@ -97,13 +99,25 @@
 		</ItemGroup>
     </Target>
 
+    <ItemGroup>
+        <None Include="build\**" Pack="true" PackagePath="build\" />
+    </ItemGroup>
+
     <!-- The same set a project reference hands the compiler: the generator, the engine assemblies it references and the
-         package assemblies listed above. -->
+         package assemblies listed above; and beside the rules, the Slang version they find the runtime by. -->
     <Target Name="PackAnalyzerAssemblies" DependsOnTargets="ResolveReferences;GetDependencyTargetPaths">
+        <PropertyGroup>
+            <_AdamantiumVersionsFile>$(IntermediateOutputPath)Adamantium.Engine.Generators.Versions.props</_AdamantiumVersionsFile>
+        </PropertyGroup>
+        <WriteLinesToFile File="$(_AdamantiumVersionsFile)"
+                          Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;AdamantiumSlangVersion Condition=&quot;'%24(AdamantiumSlangVersion)' == ''&quot;&gt;$(AdamantiumSlangVersion)&lt;/AdamantiumSlangVersion&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
+                          Overwrite="true"
+                          WriteOnlyWhenDifferent="true" />
         <ItemGroup>
             <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers/dotnet/cs" />
             <TfmSpecificPackageFile Include="@(ReferencePath)" Condition="'%(ReferencePath.ReferenceSourceTarget)' == 'ProjectReference'" PackagePath="analyzers/dotnet/cs" />
             <TfmSpecificPackageFile Include="@(TargetPathWithTargetPlatformMoniker)" Condition="'%(TargetPathWithTargetPlatformMoniker.IncludeRuntimeDependency)' == 'false'" PackagePath="analyzers/dotnet/cs" />
+            <TfmSpecificPackageFile Include="$(_AdamantiumVersionsFile)" PackagePath="build" />
         </ItemGroup>
     </Target>
 

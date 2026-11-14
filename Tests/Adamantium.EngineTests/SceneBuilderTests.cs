@@ -78,15 +78,15 @@ public class SceneBuilderTests
         crate.Values.Add(new SceneValue(nameof(CubeShape.Size), "1, 0.5, 1"));
         scene.Shapes.Add(crate);
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 30, Name = "Start", Position = new Vector3<double>(0, 0, 5) });
-        var patrol = new SceneBehaviour { On = 1, Type = typeof(Patrol).FullName };
+        var patrol = new SceneGameComponent { On = 1, Type = typeof(Patrol).FullName };
         patrol.Values.Add(new SceneValue(nameof(Patrol.Speed), "2.5"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Route), "A, B"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Goal), "1, 2, 3"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Mode), nameof(PatrolMode.Loop)));
-        scene.Behaviours.Add(patrol);
-        var unloaded = new SceneBehaviour { On = 30, Type = "SomeMod.Unknown" };
+        scene.GameComponents.Add(patrol);
+        var unloaded = new SceneGameComponent { On = 30, Type = "SomeMod.Unknown" };
         unloaded.Values.Add(new SceneValue("Glow", "0, 1, 0"));
-        scene.Behaviours.Add(unloaded);
+        scene.GameComponents.Add(unloaded);
         return scene;
     }
 
@@ -157,7 +157,7 @@ public class SceneBuilderTests
 
             Assert.That(back.SpawnPoints.Single().Position, Is.EqualTo(new Vector3<double>(0, 0, 5)));
 
-            var patrol = back.Behaviours.Single(entry => entry.Type == typeof(Patrol).FullName);
+            var patrol = back.GameComponents.Single(entry => entry.Type == typeof(Patrol).FullName);
             Assert.That(patrol.On, Is.EqualTo((UInt128)1));
             Assert.That(patrol.Values, Is.EquivalentTo(new[]
             {
@@ -165,7 +165,7 @@ public class SceneBuilderTests
                 new SceneValue(nameof(Patrol.Goal), "1, 2, 3"), new SceneValue(nameof(Patrol.Mode), "Loop")
             }));
 
-            var unloaded = back.Behaviours.Single(entry => entry.Type == "SomeMod.Unknown");
+            var unloaded = back.GameComponents.Single(entry => entry.Type == "SomeMod.Unknown");
             Assert.That((unloaded.On, unloaded.Values.Single()), Is.EqualTo(((UInt128)30, new SceneValue("Glow", "0, 1, 0"))));
         });
     }
@@ -233,6 +233,30 @@ public class SceneBuilderTests
         Assert.That(back.Cameras.Select(each => each.Name), Is.EqualTo(new[] { "Intro" }));
     }
 
+    // A view gone takes its own camera out only with the next frame - a frame that does not come while no view is
+    // shown, as when the scene's tab is behind another: until then the camera is no output's and still stands there.
+    [Test]
+    public async Task WhatWasTakenOut_IsNotWritten_ThoughItLeavesOnlyWithTheNextFrame()
+    {
+        var entities = await Build(Sample());
+        var view = new Entity(null, "Main camera for a view gone");
+        view.AddComponent(new Camera(Vector3<double>.ForwardLH, -Vector3<double>.Up, 45, 4, 4, 0.1f, 100));
+        universe.EntityWorld.EntityManager.AddEntity(view);
+        universe.EntityWorld.ForceUpdate();
+
+        universe.EntityWorld.EntityManager.RemoveEntity(view);
+        universe.EntityWorld.EntityManager.RemoveEntity(entities.Single(entity => entity.Name == "Props"));
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(view));
+            Assert.That(back.Cameras.Select(each => each.Name), Is.EqualTo(new[] { "Intro" }));
+            Assert.That(back.Markers, Is.Empty);
+            Assert.That(back.Shapes, Is.Empty, "what stands in what was taken out goes with it");
+        });
+    }
+
     [Test]
     public async Task ParentsThatGoRoundInACircle_PutNoEntityInItself()
     {
@@ -278,13 +302,13 @@ public class SceneBuilderTests
     {
         var scene = new SceneFile();
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start" });
-        scene.Behaviours.Add(new SceneBehaviour { On = 1, Type = "ModA.Glow" });
-        scene.Behaviours.Add(new SceneBehaviour { On = 1, Type = "ModB.Hum" });
+        scene.GameComponents.Add(new SceneGameComponent { On = 1, Type = "ModA.Glow" });
+        scene.GameComponents.Add(new SceneGameComponent { On = 1, Type = "ModB.Hum" });
 
         await Build(scene);
         var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
-        Assert.That(back.Behaviours.Select(entry => entry.Type), Is.EqualTo(new[] { "ModA.Glow", "ModB.Hum" }));
+        Assert.That(back.GameComponents.Select(entry => entry.Type), Is.EqualTo(new[] { "ModA.Glow", "ModB.Hum" }));
     }
 
     [Test]
@@ -292,16 +316,16 @@ public class SceneBuilderTests
     {
         var scene = new SceneFile();
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start" });
-        var entry = new SceneBehaviour { On = 1, Type = typeof(FastWalker).FullName };
+        var entry = new SceneGameComponent { On = 1, Type = typeof(FastWalker).FullName };
         entry.Values.Add(new SceneValue(nameof(FastWalker.Speed), "7"));
-        scene.Behaviours.Add(entry);
+        scene.GameComponents.Add(entry);
         await Build(scene);
 
         var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
         using var stream = new MemoryStream();
         back.Write(stream);
 
-        Assert.That(back.Behaviours.Single().Values.Select(value => value.Name),
+        Assert.That(back.GameComponents.Single().Values.Select(value => value.Name),
             Is.EquivalentTo(new[] { nameof(FastWalker.Speed) }));
     }
 
@@ -382,75 +406,4 @@ public class SceneBuilderTests
         Assert.That(entities[0].Name, Is.EqualTo(""));
     }
 
-    public class Walker : Behaviour
-    {
-        public virtual double Speed { get; set; }
-    }
-
-    public sealed class FastWalker : Walker
-    {
-        public override double Speed { get; set; }
-
-        public string Type { get; set; } = "runner";
-    }
-
-    public enum PatrolMode
-    {
-        Once,
-        Loop
-    }
-
-    public sealed class Patrol : Behaviour
-    {
-        public double Speed { get; set; }
-
-        public string Route { get; set; }
-
-        public Vector3F Goal { get; set; }
-
-        public PatrolMode Mode { get; set; }
-
-        public int Reached { get; private set; }
-    }
-
-    private sealed class CountingAssets : IAssetService
-    {
-        public Dictionary<string, SceneData> Models { get; } = new();
-
-        public Dictionary<string, int> Loads { get; } = new();
-
-        public IDependencyResolver ServiceProvider => null;
-
-        public Satellites Satellites { get; } = new();
-
-        public bool Exists(string assetName) => Models.ContainsKey(assetName);
-
-        public string Resolve(string assetName) => null;
-
-        public IReadOnlyList<AssetFileInfo> GetAssets(string folder) => [];
-
-        public void Embed(string assetName, byte[] data)
-        {
-        }
-
-        public T Load<T>(string assetName, object options = null) => LoadAsync<T>(assetName, options).Result;
-
-        public Task<T> LoadAsync<T>(string assetName, object options = null)
-        {
-            Loads[assetName] = Loads.GetValueOrDefault(assetName) + 1;
-            return Models.TryGetValue(assetName, out var model)
-                ? Task.FromResult((T)(object)model)
-                : Task.FromException<T>(new FileNotFoundException(assetName));
-        }
-
-        public object Load(Type assetType, string assetName, object options = null) => null;
-
-        public void Unload()
-        {
-        }
-
-        public bool Unload<T>(string assetName) => false;
-
-        public bool Unload(Type assetType, string assetName) => false;
-    }
 }

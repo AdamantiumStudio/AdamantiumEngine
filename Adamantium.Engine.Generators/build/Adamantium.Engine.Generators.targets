@@ -1,0 +1,31 @@
+<Project>
+
+  <!-- The Slang runtime the effects compile with comes in its package, so no Vulkan SDK is needed. A project that names
+       the package itself gives its path; otherwise it is found where NuGet restored the version this package depends on.
+       Debug builds carry each effect's source path, so a running app can recompile it when it changes. -->
+  <PropertyGroup>
+    <AdamantiumSlangPath Condition="'$(AdamantiumSlangPath)' == '' And '$(NuGetPackageRoot)' != '' And '$(AdamantiumSlangVersion)' != ''">$([MSBuild]::NormalizeDirectory('$(NuGetPackageRoot)', 'adamantium.vulkan.slang', '$(AdamantiumSlangVersion)'))</AdamantiumSlangPath>
+    <AdamantiumShaderHotReload Condition="'$(AdamantiumShaderHotReload)' == '' And '$(Configuration)' == 'Debug'">true</AdamantiumShaderHotReload>
+  </PropertyGroup>
+
+  <!-- The generator places each effect's class by the project's root and the folder its .fx sits in. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="ProjectDir" />
+    <CompilerVisibleProperty Include="AdamantiumSlangPath" />
+    <CompilerVisibleProperty Include="AdamantiumShaderHotReload" />
+  </ItemGroup>
+
+  <!-- The headers of the projects this one references, at any depth, can be included by its effects; its own come first.
+       In a target, after the references are resolved. -->
+  <Target Name="_AdamantiumReferencedEffectHeaders"
+          AfterTargets="ResolveProjectReferences"
+          BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun;CoreCompile">
+    <ItemGroup>
+      <_AdamantiumReferencedProject Include="@(_ResolvedProjectReferencePaths->'%(MSBuildSourceProjectFile)')" />
+      <_AdamantiumReferencedHeader Include="%(_AdamantiumReferencedProject.RootDir)%(_AdamantiumReferencedProject.Directory)**\*.fxh" />
+      <AdditionalFiles Include="@(_AdamantiumReferencedHeader)" Exclude="@(AdditionalFiles)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
