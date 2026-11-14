@@ -43,6 +43,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     private Dictionary<PdfObjectId, int> _pageIndexes;
     private IReadOnlyList<PdfOutlineItem> _outline;
     private Dictionary<string, PdfObject> _namedDestinations;
+    private string _password;
 
     private PdfDocument(ReadOnlyMemory<byte> data, PdfReadOptions options)
     {
@@ -249,6 +250,13 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     public static PdfDocument Open(string path, PdfReadOptions options = null) => Open(File.ReadAllBytes(path), options);
 
+    /// <summary>The same file opened again, with the options and the password that opened this one: a document of its
+    /// own for another thread, as a document is read by one thread at a time. The bytes are shared, not copied.
+    /// </summary>
+    public PdfDocument Reopen() => new(_data, _password == null
+        ? _options
+        : new PdfReadOptions { Password = _password, DecodeLimits = _options.DecodeLimits });
+
     public static PdfDocument Open(Stream stream, PdfReadOptions options = null)
     {
         using var copy = new MemoryStream();
@@ -269,6 +277,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
             return false;
         }
 
+        _password = password;
         var encrypt = _encryptNumber >= 0 ? _objects.GetValueOrDefault(_encryptNumber) : null;
         ForgetReadObjects();
         if (encrypt != null)

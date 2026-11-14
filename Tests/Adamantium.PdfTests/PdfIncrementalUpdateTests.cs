@@ -81,6 +81,17 @@ public class PdfIncrementalUpdateTests
         return Encoding.ASCII.GetString(document.Decode(stream).Data.Span);
     }
 
+    // Nothing to write after the file: no empty section either - a mark file saved with nothing changed is the same file.
+    [Test]
+    public void AnUpdateWithNothingInIt_WritesTheFileAsItWas()
+    {
+        var original = Pages().Build("/Root 1 0 R");
+        var update = new PdfIncrementalUpdate(PdfDocument.Open(original));
+
+        Assert.That(update.HasChanges, Is.False);
+        Assert.That(update.Write(), Is.EqualTo(original));
+    }
+
     [Test]
     public void AnAnnotationAddedAfterATableIsReadBack()
     {
@@ -123,6 +134,31 @@ public class PdfIncrementalUpdateTests
         Assert.That(reopened.IsRepaired, Is.False);
         Assert.That(reopened.PageCount, Is.EqualTo(1));
         AssertSquare(reopened.Pages[0].Annotations.Single(), "mark-1");
+    }
+
+    // A document of its own over the same file - for another thread - opened as this one was: by the password that
+    // opened it, though that was given after opening.
+    [Test]
+    public void AReopenedDocument_IsAnotherOne_OpenedByTheSamePassword()
+    {
+        var encryption = new PdfTestEncryption(4, "user", "owner");
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R >>");
+        builder.Add(PdfFileBuilder.Stream(string.Empty, encryption.Encrypt(4, Encoding.ASCII.GetBytes("0 0 m S"))));
+        builder.Add(encryption.Dictionary);
+        var document = PdfDocument.Open(builder.Build("/Root 1 0 R /Encrypt 5 0 R /ID " + encryption.IdArray));
+        Assert.That(document.Authenticate("user"), Is.True);
+
+        var again = document.Reopen();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(again, Is.Not.SameAs(document));
+            Assert.That(again.IsAuthenticated, Is.True);
+            Assert.That(again.Pages[0].GetContents().ToArray(), Is.EqualTo(Encoding.ASCII.GetBytes("0 0 m S")));
+        });
     }
 
     [TestCase(3)]
