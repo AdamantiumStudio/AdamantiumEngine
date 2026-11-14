@@ -45,7 +45,9 @@ public sealed class WorldCode
     public bool IsGiven(Assembly assembly) => Contains(_assemblies, assembly);
 
     /// <summary>The type named <paramref name="fullName"/> deriving from <typeparamref name="T"/> that can be made - not
-    /// abstract, with a public constructor taking nothing; null when the code has none.</summary>
+    /// abstract, with a public constructor taking nothing; when no type has that name, the one of the given assemblies
+    /// that says it had it (<see cref="MovedFromAttribute"/>) - unless more than one says so. Null when the code has
+    /// none.</summary>
     public Type FindType<T>(string fullName)
     {
         if (string.IsNullOrEmpty(fullName))
@@ -68,7 +70,36 @@ public sealed class WorldCode
                 return type;
         }
 
-        return null;
+        return FindMovedType<T>(fullName);
+    }
+
+    // Two types claiming one former name is a mistake in the code; taking either would put the values on a guess.
+    private Type FindMovedType<T>(string fullName)
+    {
+        Type found = null;
+        foreach (var type in GetGivenTypes<T>())
+        {
+            if (!HadName(type, fullName))
+                continue;
+
+            if (found != null)
+                return null;
+
+            found = type;
+        }
+
+        return found;
+    }
+
+    private static bool HadName(Type type, string fullName)
+    {
+        foreach (var moved in type.GetCustomAttributes<MovedFromAttribute>(false))
+        {
+            if (string.Equals(moved.FullName, fullName, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>The types deriving from <typeparamref name="T"/> that can be made, of the given assemblies alone - what

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+using Adamantium.ECS;
 using Adamantium.ECS.Components;
 
 namespace Adamantium.EngineTests;
@@ -26,6 +27,18 @@ internal sealed class TestGameCode
     public TestGameCode AddComponent(string fullName, params TestGameField[] fields)
     {
         var type = DefineComponent(fullName, fields);
+        type.DefineDefaultConstructor(MethodAttributes.Public);
+        Assembly = type.CreateType().Assembly;
+        return this;
+    }
+
+    /// <summary>Adds a component named <paramref name="fullName"/> with <paramref name="fields"/> that says it was named
+    /// <paramref name="formerName"/> before.</summary>
+    public TestGameCode AddMovedComponent(string fullName, string formerName, params TestGameField[] fields)
+    {
+        var type = DefineComponent(fullName, fields);
+        type.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(MovedFromAttribute).GetConstructor([typeof(string)])!, [formerName]));
         type.DefineDefaultConstructor(MethodAttributes.Public);
         Assembly = type.CreateType().Assembly;
         return this;

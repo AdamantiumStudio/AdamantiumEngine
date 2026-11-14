@@ -30,23 +30,34 @@ internal static class SceneBehaviors
             return;
         }
 
-        Behavior behavior;
-        try
+        var behavior = Make(entity, entry, type, problems);
+        if (behavior == null)
         {
-            behavior = (Behavior)Activator.CreateInstance(type);
-            ComponentFields.Read(entry.Values, behavior, typeof(Behavior));
-        }
-        catch (Exception exception) when (exception is TargetInvocationException or TypeInitializationException)
-        {
-            var thrown = exception.InnerException ?? exception;
-            Log.Logger.Error(thrown, "Scene: could not create {Type} on {Name}; its saved values are kept unloaded",
-                entry.Type, entity.Name);
-            problems.Add(new BehaviorProblem(entity, entry.Type, thrown));
             Keep(entity, entry);
             return;
         }
 
         entity.AddComponent(behavior);
+    }
+
+    /// <summary>A component of <paramref name="type"/> with the fields <paramref name="entry"/> keeps, by name; null when
+    /// its code throws - then the throw is added to <paramref name="problems"/>.</summary>
+    public static Behavior Make(Entity entity, SceneBehavior entry, Type type, List<BehaviorProblem> problems)
+    {
+        try
+        {
+            var behavior = (Behavior)Activator.CreateInstance(type);
+            ComponentFields.Read(entry.Values, behavior, typeof(Behavior));
+            return behavior;
+        }
+        catch (Exception exception) when (exception is TargetInvocationException or TypeInitializationException)
+        {
+            var thrown = exception.InnerException ?? exception;
+            Log.Logger.Error(thrown, "Scene: could not create {Type} on {Name}; its saved values are kept unloaded",
+                type.FullName, entity.Name);
+            problems.Add(new BehaviorProblem(entity, entry.Type, thrown));
+            return null;
+        }
     }
 
     /// <summary>The entry the scene writes for <paramref name="behavior"/> on the entity <paramref name="on"/>.</summary>

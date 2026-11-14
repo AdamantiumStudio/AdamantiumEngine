@@ -36,6 +36,11 @@ All packages share one version.
   with a given id.
 - `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
   `CameraType.Parse`: the type its `ToString` names.
+- `[MovedFrom("Game.Turret")]`: a full name a component's class had before. A world's code finds the class by it when
+  no class has that name now, so a component renamed or moved keeps the values its scenes gave it, and a scene saved
+  again writes the new name; two classes claiming one former name take nothing. `SceneCode.Load(entity, entry, type)`:
+  makes an entry kept for a component whose code is not loaded a component of another type, with the fields that type
+  has.
 - `SceneCapture.Keeps(entity)`: whether a scene keeps that entity - a model whole, a light, a camera, a shape, a group,
   a spawn point - and so its game components.
 - `Adamantium.Engine.Generators` brings its own build rules: a project's `**/*.fx` and `**/*.fxh` are effect files by

@@ -163,6 +163,93 @@ public class SceneCodeTests
         Assert.That(speeds, Is.EquivalentTo(new[] { "1", "2" }));
     }
 
+    // A component renamed in code, the new class saying the name it had: the entry under the old name becomes it, with
+    // its values, and is written back under the new name.
+    [Test]
+    public async Task AComponentRenamedWithItsFormerName_TakesTheEntry_AndIsWrittenUnderItsNewName()
+    {
+        var first = Code("Game.First", new TestGameField("Speed", typeof(double))).Assembly;
+        _world.Code.Replace([], [first]);
+        await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
+        var second = new TestGameCode("Game.Second")
+            .AddMovedComponent("Game.AI.Guard", PatrolType, new TestGameField("Speed", typeof(double))).Assembly;
+
+        SceneCode.Replace(_world, [first], [second]);
+
+        var guard = StartPoint().Components.OfType<Behavior>().Single();
+        var back = SceneCapture.Capture(_world.MainScene).Behaviors.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(guard.GetType().FullName, Is.EqualTo("Game.AI.Guard"));
+            Assert.That(guard.GetType().GetProperty("Speed").GetValue(guard), Is.EqualTo(2.5));
+            Assert.That(back.Type, Is.EqualTo("Game.AI.Guard"));
+        });
+    }
+
+    // Two classes saying they had one name: the values go to neither - a guess would put them on the wrong one.
+    [Test]
+    public void TwoClassesClaimingOneFormerName_TakeNothing()
+    {
+        var code = new TestGameCode("Game.Twice")
+            .AddMovedComponent("Game.Guard", PatrolType)
+            .AddMovedComponent("Game.Sentry", PatrolType).Assembly;
+
+        _world.Code.Replace([], [code]);
+
+        Assert.That(_world.Code.FindType<Behavior>(PatrolType), Is.Null);
+    }
+
+    // ...and a class of that name now wins over one that only had it.
+    [Test]
+    public void AClassOfTheNameNow_WinsOverOneThatHadIt()
+    {
+        var code = new TestGameCode("Game.Both").AddComponent(PatrolType).AddMovedComponent("Game.Guard", PatrolType).Assembly;
+
+        _world.Code.Replace([], [code]);
+
+        Assert.That(_world.Code.FindType<Behavior>(PatrolType).FullName, Is.EqualTo(PatrolType));
+    }
+
+    // An entry loaded as another component - the class renamed without saying so: the fields that class has, by name;
+    // the entry is no longer kept.
+    [Test]
+    public async Task AnEntryLoadedAsAnotherComponent_TakesItsFields_AndIsNoLongerKept()
+    {
+        await Build(PatrolAtStart(new SceneValue("Speed", "3"), new SceneValue("Route", "A")));
+        var code = new TestGameCode("Game.Renamed").AddComponent("Game.Guard", new TestGameField("Speed", typeof(double))).Assembly;
+        _world.Code.Replace([], [code]);
+        var entry = StartPoint().GetComponent<UnloadedBehaviors>().Entries.Single();
+
+        var problem = SceneCode.Load(StartPoint(), entry, _world.Code.FindType<Behavior>("Game.Guard"));
+
+        var guard = StartPoint().Components.OfType<Behavior>().Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem, Is.Null);
+            Assert.That(guard.GetType().GetProperty("Speed").GetValue(guard), Is.EqualTo(3.0));
+            Assert.That(StartPoint().ContainsComponent<UnloadedBehaviors>(), Is.False);
+        });
+    }
+
+    // ...and one whose code throws keeps its entry.
+    [Test]
+    public async Task AnEntryLoadedAsAComponentThatThrows_StaysAnEntry()
+    {
+        await Build(PatrolAtStart(new SceneValue("Speed", "3")));
+        var code = new TestGameCode("Game.Failing").AddThrowingComponent("Game.Guard").Assembly;
+        _world.Code.Replace([], [code]);
+        var entry = StartPoint().GetComponent<UnloadedBehaviors>().Entries.Single();
+
+        var problem = SceneCode.Load(StartPoint(), entry, _world.Code.FindType<Behavior>("Game.Guard"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem?.Exception, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(StartPoint().GetComponent<UnloadedBehaviors>().Entries, Is.EqualTo(new[] { entry }));
+            Assert.That(StartPoint().Components.OfType<Behavior>(), Is.Empty);
+        });
+    }
+
     [Test]
     public void TheGivenCode_IsListed_TheApplicationsIsNot()
     {

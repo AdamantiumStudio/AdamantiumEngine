@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Adamantium.ECS;
@@ -32,6 +33,39 @@ public static class SceneCode
         }
 
         return problems;
+    }
+
+    /// <summary>Makes the component <paramref name="entity"/> keeps as <paramref name="entry"/> - one whose type the code
+    /// does not have, renamed, say - a component of <paramref name="type"/>: the fields of the entry that type has, by
+    /// name; the entry is no longer kept. On the world's thread. Returns the problem when the type's code throws; the
+    /// entry stays then.</summary>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is no component of the game's code, or the entity has
+    /// one of it already.</exception>
+    public static BehaviorProblem Load(Entity entity, SceneBehavior entry, Type type)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(type);
+        if (!typeof(Behavior).IsAssignableFrom(type) || type.IsAbstract)
+            throw new ArgumentException($"{type.FullName} is not a component of the game's code.", nameof(type));
+
+        if (entity.ContainsComponent(type))
+            throw new ArgumentException($"{entity.Name} already has a {type.FullName}.", nameof(type));
+
+        if (entity.GetComponent<UnloadedBehaviors>() is not { } unloaded || !unloaded.Entries.Contains(entry))
+            throw new ArgumentException($"{entity.Name} does not keep that entry.", nameof(entry));
+
+        var problems = new List<BehaviorProblem>(1);
+        var behavior = SceneBehaviors.Make(entity, entry, type, problems);
+        if (behavior == null)
+            return problems[0];
+
+        unloaded.Entries.Remove(entry);
+        if (unloaded.Entries.Count == 0)
+            entity.RemoveComponent(unloaded);
+
+        entity.AddComponent(behavior);
+        return null;
     }
 
     private static List<Entity> CollectEntities(EntityWorld world)
