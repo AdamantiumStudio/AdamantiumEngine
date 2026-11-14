@@ -51,10 +51,10 @@ public class SceneFileTests
         scene.Shapes.Add(floor);
         scene.SpawnPoints.Add(new SceneSpawnPoint
             { Uid = 30, Name = "Player start", Position = new Vector3<double>(0, 0, 5) });
-        var patrol = new SceneBehaviour { On = Robot, Type = "Game.Patrol" };
+        var patrol = new SceneBehavior { On = Robot, Type = "Game.Patrol" };
         patrol.Values.Add(new SceneValue("Speed", "2"));
         patrol.Values.Add(new SceneValue("Route", "A, B, C"));
-        scene.Behaviours.Add(patrol);
+        scene.Behaviors.Add(patrol);
         return scene;
     }
 
@@ -153,7 +153,7 @@ public class SceneFileTests
 
             Assert.That(read.SpawnPoints[0].Position, Is.EqualTo(new Vector3<double>(0, 0, 5)));
 
-            var patrol = read.Behaviours[0];
+            var patrol = read.Behaviors[0];
             Assert.That(patrol.On, Is.EqualTo(Robot));
             Assert.That(patrol.Type, Is.EqualTo("Game.Patrol"));
             Assert.That(patrol.Values,
@@ -166,16 +166,16 @@ public class SceneFileTests
     {
         const string text = """
             <Scene Version="1">
-              <Behaviours>
-                <Behaviour On="00000000000000000000000000000001" Type="SomeMod.Unknown" Glow="0, 1, 0" Mode="Pulse" />
-              </Behaviours>
+              <Behaviors>
+                <Behavior On="00000000000000000000000000000001" Type="SomeMod.Unknown" Glow="0, 1, 0" Mode="Pulse" />
+              </Behaviors>
             </Scene>
             """;
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
 
         var again = WriteAndRead(SceneFile.Read(stream));
 
-        Assert.That(again.Behaviours[0].Values,
+        Assert.That(again.Behaviors[0].Values,
             Is.EqualTo(new[] { new SceneValue("Glow", "0, 1, 0"), new SceneValue("Mode", "Pulse") }));
     }
 
@@ -211,7 +211,7 @@ public class SceneFileTests
         Assert.Multiple(() =>
         {
             Assert.That(text, Does.Not.Contain("Rotation=").And.Not.Contain("Scale=").And.Not.Contain("Parent="));
-            Assert.That(text, Does.Not.Contain("<Lights").And.Not.Contain("<Behaviours"));
+            Assert.That(text, Does.Not.Contain("<Lights").And.Not.Contain("<Behaviors"));
             Assert.That(text, Does.Not.Contain("xmlns"));
         });
     }

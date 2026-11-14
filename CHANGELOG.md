@@ -14,7 +14,7 @@ All packages share one version.
   described whole, each kind in a section of its own: lights (`SceneLight`), cameras (`SceneCamera`: its rotation the
   way it faces, its `CameraType`), spawn points (`SceneSpawnPoint`), groups and empty entities (`SceneMarker`),
   procedural shapes by their recipes (`SceneShape`: the shape's type, its parameters, its color), the components of the
-  game's code (`SceneBehaviour`: its type and the values of its fields). Every entry has an id; an entry stands in
+  game's code (`SceneBehavior`: its type and the values of its fields). Every entry has an id; an entry stands in
   another by that one's id, so the file stays flat. A component or a shape whose type is not loaded is written back as
   it was read. A file of a later version is refused. `SceneBuilder` puts a scene into a world - each model asset loaded
   once, all at once; a model that does not load stays naming its asset; an entry with an id taken already, in the file
@@ -24,9 +24,15 @@ All packages share one version.
   own thread (`Build(scene, models)`, which completes at once).
 - `FileSystemAssetResolver(root)`: a relative asset path taken from a folder of the caller's - a content project's own
   folder, say - instead of the application's.
-- `Behaviour`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
-  are what a scene keeps of it. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedBehaviours`
-  and `UnloadedShape` stand for components and shapes whose code is not loaded. `Entity(owner, name, uid)`: an entity
+- `Behavior`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
+  are what a scene keeps of it. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedBehaviors`
+  and `UnloadedShape` stand for components and shapes whose code is not loaded.
+- `EntityWorld.Code` (`WorldCode`): the code a world finds the types of its scenes' entries in - the game's and its
+  mods' assemblies given to it, then the application's own; an assembly of a collectible load context counts only while
+  given, so code replaced or unloaded is not found again. `SceneCode.Replace(world, leaving, arriving)`: moves the
+  game's components of every scene of a world from one build of its code to the next, through their scene entries -
+  their fields' values kept, an entry whose type the new code lacks kept as it was. `SceneBuilder.Problems` and the
+  result of `Replace` (`BehaviorProblem`): the components whose code threw; their entries are kept. `Entity(owner, name, uid)`: an entity
   with a given id.
 - `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
   `CameraType.Parse`: the type its `ToString` names.
@@ -317,6 +323,9 @@ All packages share one version.
 
 ### Fixed
 
+- `SceneBuilder`: a game component or a shape whose code throws as it is made no longer fails the whole scene - its
+  entry is kept as it was read; a second component of one type on an entity is kept as it was read instead of dropped,
+  so writing the scene back no longer loses it.
 - `MeshGeometryCache` lets a mesh's GPU buffers go itself once the mesh was not drawn for a while
   (`ReleaseUnused`, called each frame by the processors that draw; `KeepUnused`, five seconds by default) - when no
   other mesh kept has the same content and no frame in flight draws with them - instead of keeping every mesh ever

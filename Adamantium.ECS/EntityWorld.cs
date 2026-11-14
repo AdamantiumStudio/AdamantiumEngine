@@ -37,6 +37,10 @@ namespace Adamantium.ECS
         public EntityServiceManager ServiceManager { get; }
         public IDependencyResolver DependencyResolver { get; }
 
+        /// <summary>The code the world finds the types of its scenes' entries in: the game's and its mods' assemblies,
+        /// then the application's own.</summary>
+        public WorldCode Code { get; } = new();
+
         /// <summary>
         /// The one-of-a-kind objects of whoever owns this world - its universe, or the application.
         /// </summary>

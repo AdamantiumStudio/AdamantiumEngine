@@ -62,8 +62,8 @@ public sealed class SceneFile
     [XmlArray("Shapes"), XmlArrayItem("Shape")]
     public List<SceneShape> Shapes { get; set; } = [];
 
-    [XmlArray("Behaviours"), XmlArrayItem("Behaviour")]
-    public List<SceneBehaviour> Behaviours { get; set; } = [];
+    [XmlArray("Behaviors"), XmlArrayItem("Behavior")]
+    public List<SceneBehavior> Behaviors { get; set; } = [];
 
     /// <summary>What the editor keeps of how the scene was worked on - its views' cameras, the selection - last in the
     /// file, as the editor wrote it; nothing of the engine's, which neither reads nor writes it. Null for none.</summary>
@@ -92,7 +92,7 @@ public sealed class SceneFile
     public bool ShouldSerializeSpawnPoints() => SpawnPoints.Count > 0;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool ShouldSerializeBehaviours() => Behaviours.Count > 0;
+    public bool ShouldSerializeBehaviors() => Behaviors.Count > 0;
 
     /// <summary>Reads the scene file at <paramref name="path"/>.</summary>
     /// <exception cref="InvalidDataException">The file is not a scene file, or one of a later version.</exception>

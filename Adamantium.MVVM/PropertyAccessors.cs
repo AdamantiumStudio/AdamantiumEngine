@@ -11,14 +11,15 @@ namespace Adamantium.MVVM;
 /// properties and commands it generates for them) and every class under a base marked
 /// <see cref="DescribePropertiesAttribute"/>. What no description holds - another type, a property another generator
 /// adds, a struct's member, an interface's member, a field - is reached through reflection, and
-/// <see cref="ReachedThroughReflection"/> says so once per type.</summary>
+/// <see cref="ReachedThroughReflection"/> says so once per type. A collectible type - of code loaded to be unloaded
+/// again - is never kept alive by what is known of it.</summary>
 public static class PropertyAccessors
 {
     private static readonly object RegistrationLock = new();
-    private static readonly Dictionary<Type, Func<PropertyAccessor[]>[]> Described = new();
-    private static readonly ConcurrentDictionary<Type, byte> Reflected = new();
-    private static volatile ConcurrentDictionary<Type, PropertyAccessor[]> declared = new();
-    private static volatile ConcurrentDictionary<(Type Type, string Name), PropertyAccessor> found = new();
+    private static readonly TypeCache<Func<PropertyAccessor[]>[]> Described = new();
+    private static readonly TypeCache<object> Reflected = new();
+    private static volatile TypeCache<PropertyAccessor[]> declared = new();
+    private static volatile TypeCache<ConcurrentDictionary<string, PropertyAccessor>> found = new();
     private static volatile bool stale;
 
     /// <summary>Told the first time a type is reached through reflection; raised on the thread that looked. What a
@@ -35,7 +36,7 @@ public static class PropertyAccessors
 
         lock (RegistrationLock)
         {
-            Described[type] = Described.TryGetValue(type, out var descriptions) ? [.. descriptions, declared] : [declared];
+            Described.Set(type, Described.TryGetValue(type, out var descriptions) ? [.. descriptions, declared] : [declared]);
             stale = true;
         }
     }
@@ -48,7 +49,8 @@ public static class PropertyAccessors
         ArgumentNullException.ThrowIfNull(name);
 
         Refresh();
-        return found.GetOrAdd((type, name), static key => Resolve(key.Type, key.Name));
+        var ofType = found.GetOrAdd(type, static _ => new ConcurrentDictionary<string, PropertyAccessor>(StringComparer.Ordinal));
+        return ofType.GetOrAdd(name, static (key, owner) => Resolve(owner, key), type);
     }
 
     /// <summary>The value of the property or field named <paramref name="name"/> on <paramref name="target"/>; null
@@ -143,8 +145,8 @@ public static class PropertyAccessors
         {
             if (stale)
             {
-                declared = new ConcurrentDictionary<Type, PropertyAccessor[]>();
-                found = new ConcurrentDictionary<(Type Type, string Name), PropertyAccessor>();
+                declared = new TypeCache<PropertyAccessor[]>();
+                found = new TypeCache<ConcurrentDictionary<string, PropertyAccessor>>();
                 stale = false;
             }
         }
@@ -180,7 +182,8 @@ public static class PropertyAccessors
             }
         }
 
-        return known.GetOrAdd(type, [.. joined]);
+        PropertyAccessor[] made = [.. joined];
+        return known.GetOrAdd(type, _ => made);
     }
 
     private static PropertyAccessor FromProperty(PropertyInfo property)
@@ -192,7 +195,8 @@ public static class PropertyAccessors
 
     private static void Report(Type type)
     {
-        if (!Reflected.TryAdd(type, 0))
+        var mark = new object();
+        if (!ReferenceEquals(Reflected.GetOrAdd(type, _ => mark), mark))
         {
             return;
         }

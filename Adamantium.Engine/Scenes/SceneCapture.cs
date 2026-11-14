@@ -57,10 +57,10 @@ public static class SceneCapture
                 }
 
                 Add(scene, entry);
-                AddBehaviours(scene, entity);
+                AddBehaviors(scene, entity);
                 placed = entity;
             }
-            else if (entity.ContainsComponent<Behaviour>() || entity.ContainsComponent<UnloadedBehaviours>())
+            else if (entity.ContainsComponent<Behavior>() || entity.ContainsComponent<UnloadedBehaviors>())
             {
                 Log.Logger.Warning("Scene: {Name} is nothing the scene keeps; the game's components on it are not kept",
                     entity.Name);
@@ -184,23 +184,21 @@ public static class SceneCapture
         }
     }
 
-    private static void AddBehaviours(SceneFile scene, Entity entity)
+    private static void AddBehaviors(SceneFile scene, Entity entity)
     {
         foreach (var component in entity.Components)
         {
             switch (component)
             {
-                case UnloadedBehaviours unloaded:
+                case UnloadedBehaviors unloaded:
                     foreach (var kept in unloaded.Entries)
                     {
-                        scene.Behaviours.Add(kept.CopyOn(entity.Uid));
+                        scene.Behaviors.Add(kept.CopyOn(entity.Uid));
                     }
 
                     break;
-                case Behaviour behaviour:
-                    var entry = new SceneBehaviour { On = entity.Uid, Type = behaviour.GetType().FullName };
-                    ComponentFields.Write(behaviour, typeof(Behaviour), entry.Values, SceneBehaviour.OwnAttributes);
-                    scene.Behaviours.Add(entry);
+                case Behavior behavior:
+                    scene.Behaviors.Add(SceneBehaviors.Write(behavior, entity.Uid));
                     break;
             }
         }

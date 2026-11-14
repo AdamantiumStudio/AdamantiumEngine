@@ -1,0 +1,12 @@
+<Project>
+
+  <Import Project="$(MSBuildThisFileDirectory)Adamantium.Engine.Generators.Versions.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)Adamantium.Engine.Generators.Versions.props')" />
+
+  <!-- Every effect (.fx) and header (.fxh) of the project is read by the effects generator. Here, before the project's
+       own items, so the project can Remove what it does not want. -->
+  <ItemGroup>
+    <AdditionalFiles Include="**\*.fx;**\*.fxh" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+  </ItemGroup>
+
+</Project>

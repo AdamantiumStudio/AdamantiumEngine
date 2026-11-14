@@ -22,9 +22,11 @@
 
     <PropertyGroup>
         <AdamantiumSlangPath>$(PKGAdamantium_Vulkan_Slang)</AdamantiumSlangPath>
-        <!-- Debug builds carry each effect's source path, so a running app can recompile it when it changes. -->
-        <AdamantiumShaderHotReload Condition="'$(AdamantiumShaderHotReload)' == '' And '$(Configuration)' == 'Debug'">true</AdamantiumShaderHotReload>
     </PropertyGroup>
+
+    <!-- The rules the engine's generators package hands every project that uses it: its effects and headers, and what
+         the generator is told of the project. -->
+    <Import Project="..\Adamantium.Engine.Generators\build\Adamantium.Engine.Generators.props" />
 
     <ItemGroup>
         <ProjectReference Include="..\Adamantium.Core\Adamantium.Core.csproj" />
@@ -37,15 +39,9 @@
         <ProjectReference Include="..\Adamantium.Core.Shared\Adamantium.Core.Shared.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
+    <Import Project="..\Adamantium.Engine.Generators\build\Adamantium.Engine.Generators.targets" />
+
     <ItemGroup>
-        <AdditionalFiles Include="$(ProjectDir)**\*.fx" />
-        <AdditionalFiles Include="$(ProjectDir)**\*.fxh" />
-        <CompilerVisibleProperty Include="RootNamespace" />
-        <!-- The generator places each effect's class by the folder its .fx sits in, and needs the project root. -->
-        <CompilerVisibleProperty Include="ProjectDir" />
-        <!-- Where the Slang runtime is, so shaders build without the Vulkan SDK installed. -->
-        <CompilerVisibleProperty Include="AdamantiumSlangPath" />
-        <CompilerVisibleProperty Include="AdamantiumShaderHotReload" />
         <AdditionalFiles Remove="obj\**" />
     </ItemGroup>
 

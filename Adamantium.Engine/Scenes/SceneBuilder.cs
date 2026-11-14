@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading.Tasks;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
@@ -41,6 +42,9 @@ public sealed class SceneBuilder
         world = target.World;
         this.assets = assets;
     }
+
+    /// <summary>The game's components the last build could not make - their code threw; their entries are kept.</summary>
+    public IReadOnlyList<BehaviorProblem> Problems { get; private set; } = [];
 
     /// <summary>Loads the models of <paramref name="scene"/>, then builds it: for a world no frame is running in. A
     /// running universe loads with <see cref="LoadModelsAsync"/> anywhere and builds on its own thread.</summary>
@@ -88,6 +92,8 @@ public sealed class SceneBuilder
         var byId = new Dictionary<UInt128, Entity>();
         var made = new List<Made>();
         var inWorld = WorldIds();
+        var problems = new List<BehaviorProblem>();
+        Problems = problems;
 
         foreach (var model in Admitted(scene.Models, byId, inWorld)) Keep(model, MakeModel(model, models), byId, made);
         foreach (var light in Admitted(scene.Lights, byId, inWorld)) Keep(light, MakeLight(light), byId, made);
@@ -113,11 +119,11 @@ public sealed class SceneBuilder
             }
         }
 
-        foreach (var entry in scene.Behaviours)
+        foreach (var entry in scene.Behaviors)
         {
             if (byId.TryGetValue(entry.On, out var entity))
             {
-                AddBehaviour(entity, entry);
+                SceneBehaviors.Attach(entity, entry, world.Code, problems);
             }
             else
             {
@@ -278,20 +284,16 @@ public sealed class SceneBuilder
         return entity;
     }
 
-    private static Entity MakeShape(SceneShape entry)
+    private Entity MakeShape(SceneShape entry)
     {
         var entity = new Entity(null, entry.Name, entry.Uid);
-        var type = ComponentFields.FindType<ProceduralShape>(entry.Type);
-        if (type == null)
+        var shape = MakeShapeComponent(entry);
+        if (shape == null)
         {
-            Log.Logger.Warning("Scene: the shape {Type} of {Name} is not loaded; it is kept as it was read",
-                entry.Type, entry.Name);
             entity.AddComponent(new UnloadedShape(entry));
         }
         else
         {
-            var shape = (ProceduralShape)Activator.CreateInstance(type);
-            ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
             new ShapeTemplate(shape).Build(entity);
             entity.AddComponent(new Material { DiffuseColor = entry.Color });
         }
@@ -302,33 +304,30 @@ public sealed class SceneBuilder
         return entity;
     }
 
-    private static void AddBehaviour(Entity entity, SceneBehaviour entry)
+    private ProceduralShape MakeShapeComponent(SceneShape entry)
     {
-        var type = ComponentFields.FindType<Behaviour>(entry.Type);
+        var type = world.Code.FindType<ProceduralShape>(entry.Type);
         if (type == null)
         {
-            var unloaded = entity.GetComponent<UnloadedBehaviours>();
-            if (unloaded == null)
-            {
-                unloaded = new UnloadedBehaviours();
-                entity.AddComponent(unloaded);
-            }
-
-            unloaded.Entries.Add(entry);
-            return;
+            Log.Logger.Warning("Scene: the shape {Type} of {Name} is not loaded; it is kept as it was read",
+                entry.Type, entry.Name);
+            return null;
         }
 
-        if (entity.ContainsComponent(type))
+        try
         {
-            Log.Logger.Warning("Scene: {Name} has a {Type} already, and an entity has one of each; the second is left out",
-                entity.Name, entry.Type);
-            return;
+            var shape = (ProceduralShape)Activator.CreateInstance(type);
+            ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
+            return shape;
         }
-
-        var behaviour = (Behaviour)Activator.CreateInstance(type);
-        ComponentFields.Read(entry.Values, behaviour, typeof(Behaviour));
-        entity.AddComponent(behaviour);
+        catch (Exception exception) when (exception is TargetInvocationException or TypeInitializationException)
+        {
+            Log.Logger.Error(exception.InnerException ?? exception,
+                "Scene: the shape {Type} of {Name} could not be made; it is kept as it was read", entry.Type, entry.Name);
+            return null;
+        }
     }
+
 
     private static void Place(Entity entity, ScenePlacement entry)
     {

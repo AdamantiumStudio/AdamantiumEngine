@@ -15,25 +15,6 @@ namespace Adamantium.Engine.Scenes;
 /// most derived type has it. Read back through <see cref="TypeParser"/>, as markup reads its values.</summary>
 internal static class ComponentFields
 {
-    /// <summary>The loaded type of <paramref name="fullName"/> that derives from <typeparamref name="T"/> and can be
-    /// made; null when no loaded assembly has one.</summary>
-    public static Type FindType<T>(string fullName)
-    {
-        if (string.IsNullOrEmpty(fullName)) return null;
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var type = assembly.GetType(fullName, false);
-            if (type != null && typeof(T).IsAssignableFrom(type) && !type.IsAbstract &&
-                type.GetConstructor(Type.EmptyTypes) != null)
-            {
-                return type;
-            }
-        }
-
-        return null;
-    }
-
     /// <summary>Adds the fields of <paramref name="component"/> declared above <paramref name="below"/> to
     /// <paramref name="values"/>; one named as an attribute the entry has of its own (<paramref name="taken"/>) is
     /// logged and left out.</summary>
@@ -57,7 +38,8 @@ internal static class ComponentFields
     }
 
     /// <summary>Sets <paramref name="values"/> on <paramref name="component"/>; a field the type no longer has, or a value
-    /// it cannot take, is logged and left out.</summary>
+    /// it cannot take, is logged and left out. A setter that throws stops it with a
+    /// <see cref="TargetInvocationException"/>.</summary>
     public static void Read(IReadOnlyList<SceneValue> values, Component component, Type below)
     {
         var properties = new Dictionary<string, PropertyInfo>(StringComparer.Ordinal);
@@ -81,10 +63,10 @@ internal static class ComponentFields
                 property.SetValue(component, TypeParser.Parse(value.Text, property.PropertyType));
             }
             catch (Exception exception) when (exception is FormatException or OverflowException or ArgumentException
-                                                  or InvalidOperationException or TargetInvocationException)
+                                                  or InvalidOperationException)
             {
                 Log.Logger.Warning("Scene: {Type}.{Field} does not take \"{Value}\": {Reason}",
-                    typeName, value.Name, value.Text, exception.InnerException?.Message ?? exception.Message);
+                    typeName, value.Name, value.Text, exception.Message);
             }
         }
     }
