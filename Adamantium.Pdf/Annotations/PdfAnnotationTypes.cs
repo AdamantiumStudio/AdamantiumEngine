@@ -15,6 +15,9 @@ public static class PdfAnnotationTypes
     public const string Squiggly = "Squiggly";
     public const string StrikeOut = "StrikeOut";
     public const string Ink = "Ink";
+
+    /// <summary>A picture shown by its appearance alone - nothing a viewer would draw again from other entries.</summary>
+    public const string Stamp = "Stamp";
     public const string Link = "Link";
     public const string Widget = "Widget";
     public const string Popup = "Popup";

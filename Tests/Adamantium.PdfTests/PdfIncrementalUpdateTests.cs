@@ -42,6 +42,8 @@ public class PdfIncrementalUpdateTests
             Name = name,
             Contents = text,
             Author = "Тестер",
+            Subject = "Трещина (стена)",
+            Created = new DateTimeOffset(2026, 11, 8, 9, 30, 0, TimeSpan.FromHours(3)),
             Modified = new DateTimeOffset(2026, 11, 9, 20, 5, 0, TimeSpan.FromHours(3)),
             Color = [1, 0, 0],
             Opacity = 0.5,
@@ -61,6 +63,9 @@ public class PdfIncrementalUpdateTests
         Assert.That(annotation.Name, Is.EqualTo(name));
         Assert.That(annotation.Contents, Is.EqualTo(text));
         Assert.That(annotation.Author, Is.EqualTo("Тестер"));
+        Assert.That(annotation.Subject, Is.EqualTo("Трещина (стена)"));
+        Assert.That(annotation.Created, Is.EqualTo(new DateTimeOffset(2026, 11, 8, 9, 30, 0, TimeSpan.FromHours(3))));
+        Assert.That(annotation.Modified, Is.EqualTo(new DateTimeOffset(2026, 11, 9, 20, 5, 0, TimeSpan.FromHours(3))));
         Assert.That(annotation.Flags, Is.EqualTo(4));
         Assert.That(annotation.Measure.FormatDistance(10, 0), Is.EqualTo("5.00 m"));
         var data = annotation.ExtensionData(Key);

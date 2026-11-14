@@ -35,6 +35,12 @@ public sealed class PdfNewAnnotation
 
     public string Author { get; init; }
 
+    /// <summary>What it is about in a few words (<c>Subj</c>); a viewer's list of comments heads it with this.</summary>
+    public string Subject { get; init; }
+
+    /// <summary>When it was made (<c>CreationDate</c>).</summary>
+    public DateTimeOffset? Created { get; init; }
+
     /// <summary>When it was last changed (<c>M</c>).</summary>
     public DateTimeOffset? Modified { get; init; }
 
@@ -107,6 +113,12 @@ public sealed class PdfNewAnnotation
         SetText(dictionary, PdfAnnotationKeys.Name, Name);
         SetText(dictionary, PdfAnnotationKeys.Contents, Contents);
         SetText(dictionary, PdfAnnotationKeys.Title, Author);
+        SetText(dictionary, PdfAnnotationKeys.Subject, Subject);
+        if (Created is { } created)
+        {
+            dictionary.Set(PdfAnnotationKeys.CreationDate, PdfString.FromText(PdfDate.Format(created)));
+        }
+
         if (Modified is { } modified)
         {
             dictionary.Set(PdfAnnotationKeys.Modified, PdfString.FromText(PdfDate.Format(modified)));
