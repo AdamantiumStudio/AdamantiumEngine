@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
+  of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
+- PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
+  (`/CreationDate`), read back as `PdfAnnotation.Subject` and `Created`; `PdfAnnotationTypes.Stamp`, an annotation
+  shown by its appearance alone.
 - `Win32Interop.CreateDesktopW`/`CloseDesktop` and `CreateProcessW` (with `STARTUPINFO` and `PROCESS_INFORMATION`): a
   desktop of its own, seen by no one, and a process started on it - what UI automation runs a driven application on.
 - Scene files (`.ascene`, `SceneFile`): a scene in readable XML - what stands in it, where and which way it faces. The
@@ -278,6 +283,8 @@ All packages share one version.
 
 ### Changed
 
+- `PdfIncrementalUpdate.Write` with nothing added, replaced or freed writes the file as it was, byte for byte, rather
+  than the file and an empty section after it.
 - `LightManager.AddLight`: a light standing in another entity joins the world with that entity's root, not as a root
   of its own.
 - `IUniverseWatcher` moved from `Adamantium.ECS` to `Adamantium.Multiverse`, beside the outputs it now asks frames of.

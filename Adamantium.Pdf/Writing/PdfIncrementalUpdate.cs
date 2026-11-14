@@ -218,11 +218,18 @@ public sealed class PdfIncrementalUpdate
         return output.ToArray();
     }
 
-    /// <summary>Writes the file, then the update after it, to <paramref name="output"/>.</summary>
+    /// <summary>Writes the file, then the update after it, to <paramref name="output"/>; an update with no
+    /// <see cref="HasChanges"/> writes the file as it was, byte for byte.</summary>
     public void Write(Stream output)
     {
         ArgumentNullException.ThrowIfNull(output);
         var data = Document.Data.Span;
+        if (!HasChanges)
+        {
+            output.Write(data);
+            return;
+        }
+
         using var section = new MemoryStream();
         if (data.Length > 0 && data[^1] is not ((byte)'\n' or (byte)'\r'))
         {

@@ -50,6 +50,12 @@ public sealed class PdfAnnotation
     /// <summary>Who made it (<c>T</c>), or null.</summary>
     public string Author => Text(PdfAnnotationKeys.Title);
 
+    /// <summary>What it is about in a few words (<c>Subj</c>), or null.</summary>
+    public string Subject => Text(PdfAnnotationKeys.Subject);
+
+    /// <summary>When it was made (<c>CreationDate</c>), or null.</summary>
+    public DateTimeOffset? Created => PdfDate.Parse(Text(PdfAnnotationKeys.CreationDate));
+
     /// <summary>When it was last changed (<c>M</c>), or null.</summary>
     public DateTimeOffset? Modified => PdfDate.Parse(Text(PdfAnnotationKeys.Modified));
 
