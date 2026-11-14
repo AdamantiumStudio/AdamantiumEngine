@@ -435,6 +435,25 @@ public sealed class EntityManager
         return availableProjectionTypes.ToArray();
     }
 
+    /// <summary>Whether <paramref name="entity"/>, or what it stands in, was taken out with <see cref="RemoveEntity"/>
+    /// and leaves with the next frame: still in the world until then, but no longer of it.</summary>
+    public bool IsBeingRemoved(Entity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        lock (syncObject)
+        {
+            for (var current = entity; current != null; current = current.Owner)
+            {
+                if (entitiesToRemove.Contains(current) || branchesToRemove.Contains(current))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Takes <paramref name="entity"/> out of the world with its tree, from the next frame: one of the world's
     /// own, or any part of its trees - a mesh of a model. Nothing for one outside the world.</summary>
     public void RemoveEntity(Entity entity)

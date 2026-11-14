@@ -233,6 +233,30 @@ public class SceneBuilderTests
         Assert.That(back.Cameras.Select(each => each.Name), Is.EqualTo(new[] { "Intro" }));
     }
 
+    // A view gone takes its own camera out only with the next frame - a frame that does not come while no view is
+    // shown, as when the scene's tab is behind another: until then the camera is no output's and still stands there.
+    [Test]
+    public async Task WhatWasTakenOut_IsNotWritten_ThoughItLeavesOnlyWithTheNextFrame()
+    {
+        var entities = await Build(Sample());
+        var view = new Entity(null, "Main camera for a view gone");
+        view.AddComponent(new Camera(Vector3<double>.ForwardLH, -Vector3<double>.Up, 45, 4, 4, 0.1f, 100));
+        universe.EntityWorld.EntityManager.AddEntity(view);
+        universe.EntityWorld.ForceUpdate();
+
+        universe.EntityWorld.EntityManager.RemoveEntity(view);
+        universe.EntityWorld.EntityManager.RemoveEntity(entities.Single(entity => entity.Name == "Props"));
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(universe.EntityWorld.MainScene.RootEntities, Does.Contain(view));
+            Assert.That(back.Cameras.Select(each => each.Name), Is.EqualTo(new[] { "Intro" }));
+            Assert.That(back.Markers, Is.Empty);
+            Assert.That(back.Shapes, Is.Empty, "what stands in what was taken out goes with it");
+        });
+    }
+
     [Test]
     public async Task ParentsThatGoRoundInACircle_PutNoEntityInItself()
     {

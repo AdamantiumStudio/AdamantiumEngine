@@ -14,7 +14,8 @@ namespace Adamantium.Engine.Scenes;
 /// point, a group or an empty entity, a procedural shape by its recipe, whole; the game's components on any of them.
 /// What stands inside something the scene does not keep - a model's part - is written in the nearest entry it stands
 /// in, placed as it stands. The cameras the universe's outputs own are the editor's view, not the scene's, and are left
-/// out, as is whatever else stands in the scene. Called on the world's thread, after the world took in what was added.
+/// out, as is whatever else stands in the scene, and what was taken out and leaves with the next frame. Called on the
+/// world's thread, after the world took in what was added.
 /// </summary>
 public static class SceneCapture
 {
@@ -51,11 +52,19 @@ public static class SceneCapture
             stack.Push(new Visit(roots[i], null));
         }
 
+        var entities = source.World.EntityManager;
         while (stack.Count > 0)
         {
             var visit = stack.Pop();
             var entity = visit.Entity;
             var placed = visit.Placed;
+
+            // Taken out and leaving with the next frame - as a view's own camera, its view gone - with its tree.
+            if (entities.IsBeingRemoved(entity))
+            {
+                continue;
+            }
+
             var entry = Entry(entity, ownCameras);
             if (entry != null)
             {

@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
+  next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
   of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
 - PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
@@ -344,6 +346,9 @@ All packages share one version.
 
 ### Fixed
 
+- `SceneCapture` no longer writes what was taken out of the world but leaves only with the next frame. A view's own
+  camera, its view gone while no frame runs - a scene's tab behind another - was written as a camera of the scene, and
+  the editor marked the scene changed.
 - `SceneBuilder`: a game component or a shape whose code throws as it is made no longer fails the whole scene - its
   entry is kept as it was read; a second component of one type on an entity is kept as it was read instead of dropped,
   so writing the scene back no longer loses it.
