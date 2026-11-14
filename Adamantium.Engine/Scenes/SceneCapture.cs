@@ -21,6 +21,15 @@ public static class SceneCapture
     // Degrees written to this many decimals: turned to radians and back in floats, a whole angle comes back a hair off.
     private const int AngleDecimals = 4;
 
+    /// <summary>Whether the scene keeps <paramref name="entity"/> as an entry of its own - a model's root, a light, a
+    /// camera, a spawn point, a group, an empty entity or a shape - and so keeps the game's components on it; a model's
+    /// part is not kept.</summary>
+    public static bool Keeps(Entity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        return Entry(entity, []) != null;
+    }
+
     public static SceneFile Capture(Scene source)
     {
         ArgumentNullException.ThrowIfNull(source);
