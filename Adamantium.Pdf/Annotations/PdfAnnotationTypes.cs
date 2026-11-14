@@ -21,4 +21,7 @@ public static class PdfAnnotationTypes
     public const string Link = "Link";
     public const string Widget = "Widget";
     public const string Popup = "Popup";
+
+    /// <summary>3D artwork, shown by its poster until it comes to life (<see cref="PdfAnnotation.Artwork3D"/>).</summary>
+    public const string ThreeD = "3D";
 }

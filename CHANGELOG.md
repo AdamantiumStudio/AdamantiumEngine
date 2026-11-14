@@ -11,6 +11,11 @@ All packages share one version.
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
   of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
+- 3D annotations: `PdfAnnotation.Artwork3D` (`PdfAnnotationTypes.ThreeD`) reads the artwork (`Pdf3DArtwork`, ISO
+  32000-1 13.6) - the model's stream, the annotation's own or another's through a `3DRef`, its format (U3D or PRC) and
+  its bytes; its views (`Pdf3DView`: camera, centre of orbit, perspective or orthographic projection, background,
+  render mode, lighting, or a view node of the model) and the one it opens on; when it comes to life and goes back to
+  its poster (`Pdf3DActivation`), the part of the annotation it is shown in, and whether it may be turned.
 - PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
   (`/CreationDate`), read back as `PdfAnnotation.Subject` and `Created`; `PdfAnnotationTypes.Stamp`, an annotation
   shown by its appearance alone.

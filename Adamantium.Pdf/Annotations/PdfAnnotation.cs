@@ -3,6 +3,7 @@ using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Measurement;
 using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
+using Adamantium.Pdf.ThreeD;
 
 namespace Adamantium.Pdf.Annotations;
 
@@ -64,6 +65,11 @@ public sealed class PdfAnnotation
 
     /// <summary>The file a file attachment annotation holds (<c>FS</c>), or null.</summary>
     public PdfAttachment Attachment => PdfAttachment.From(null, Dictionary["FS"], _document);
+
+    /// <summary>The 3D artwork of a 3D annotation (<see cref="PdfAnnotationTypes.ThreeD"/>), or null for another kind or
+    /// one that names no 3D stream.</summary>
+    public Pdf3DArtwork Artwork3D =>
+        Subtype == PdfAnnotationTypes.ThreeD ? Pdf3DArtwork.From(Dictionary, _document) : null;
 
     /// <summary>Its normal appearance (<c>AP</c> <c>N</c>) - the one of its state (<c>AS</c>) when it has several;
     /// null when it has none.</summary>
