@@ -15,7 +15,7 @@ public static class SceneCode
     /// entity keeps whose type the code now has becomes a component again, its fields from the entry. Either list may be
     /// empty. On the world's thread, between its frames. Returns the components whose code threw; their entries are
     /// kept.</summary>
-    public static IReadOnlyList<BehaviorProblem> Replace(EntityWorld world, IReadOnlyList<Assembly> leaving,
+    public static IReadOnlyList<GameComponentProblem> Replace(EntityWorld world, IReadOnlyList<Assembly> leaving,
         IReadOnlyList<Assembly> arriving)
     {
         var entities = CollectEntities(world);
@@ -26,7 +26,7 @@ public static class SceneCode
 
         world.Code.Replace(leaving, arriving);
 
-        var problems = new List<BehaviorProblem>();
+        var problems = new List<GameComponentProblem>();
         foreach (var entity in entities)
         {
             Reattach(entity, world.Code, problems);
@@ -41,21 +41,21 @@ public static class SceneCode
     /// entry stays then.</summary>
     /// <exception cref="ArgumentException"><paramref name="type"/> is no component of the game's code, or the entity has
     /// one of it already.</exception>
-    public static BehaviorProblem Load(Entity entity, SceneBehavior entry, Type type)
+    public static GameComponentProblem Load(Entity entity, SceneGameComponent entry, Type type)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(type);
         CheckMadeType(entity, type);
-        if (!SceneBehaviors.Keeps(entity, entry))
+        if (!SceneGameComponents.Keeps(entity, entry))
             throw new ArgumentException($"{entity.Name} does not keep that entry.", nameof(entry));
 
-        var problems = new List<BehaviorProblem>(1);
-        var behavior = SceneBehaviors.Make(entity, entry, type, problems);
-        if (behavior == null || !SceneBehaviors.TryAdd(entity, behavior, type.FullName, problems))
+        var problems = new List<GameComponentProblem>(1);
+        var gameComponent = SceneGameComponents.Make(entity, entry, type, problems);
+        if (gameComponent == null || !SceneGameComponents.TryAdd(entity, gameComponent, type.FullName, problems))
             return problems[0];
 
-        SceneBehaviors.Drop(entity, entry);
+        SceneGameComponents.Drop(entity, entry);
         return null;
     }
 
@@ -64,15 +64,15 @@ public static class SceneCode
     /// </summary>
     /// <exception cref="ArgumentException"><paramref name="type"/> is no component of the game's code that can be
     /// made, or the entity has one of it already.</exception>
-    public static BehaviorProblem Add(Entity entity, Type type)
+    public static GameComponentProblem Add(Entity entity, Type type)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(type);
         CheckMadeType(entity, type);
 
-        var problems = new List<BehaviorProblem>(1);
-        var behavior = SceneBehaviors.Make(entity, new SceneBehavior { On = entity.Uid, Type = type.FullName }, type, problems);
-        if (behavior == null || !SceneBehaviors.TryAdd(entity, behavior, type.FullName, problems))
+        var problems = new List<GameComponentProblem>(1);
+        var gameComponent = SceneGameComponents.Make(entity, new SceneGameComponent { On = entity.Uid, Type = type.FullName }, type, problems);
+        if (gameComponent == null || !SceneGameComponents.TryAdd(entity, gameComponent, type.FullName, problems))
             return problems[0];
 
         return null;
@@ -80,16 +80,16 @@ public static class SceneCode
 
     /// <summary>Takes off <paramref name="entity"/> the entry it keeps for a component whose code is not loaded: the
     /// component is gone from the scene. On the world's thread.</summary>
-    public static void Remove(Entity entity, SceneBehavior entry)
+    public static void Remove(Entity entity, SceneGameComponent entry)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(entry);
-        SceneBehaviors.Drop(entity, entry);
+        SceneGameComponents.Drop(entity, entry);
     }
 
     private static void CheckMadeType(Entity entity, Type type)
     {
-        if (!typeof(Behavior).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters ||
+        if (!typeof(GameComponent).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters ||
             type.GetConstructor(Type.EmptyTypes) == null)
             throw new ArgumentException($"{type.FullName} is not a component of the game's code that can be made.", nameof(type));
 
@@ -124,36 +124,36 @@ public static class SceneCode
 
     private static void Detach(Entity entity, IReadOnlyList<Assembly> leaving)
     {
-        List<Behavior> leavingBehaviors = null;
+        List<GameComponent> leavingGameComponents = null;
         foreach (var component in entity.Components)
         {
-            if (component is Behavior behavior && IsAmong(leaving, behavior.GetType().Assembly))
+            if (component is GameComponent gameComponent && IsAmong(leaving, gameComponent.GetType().Assembly))
             {
-                leavingBehaviors ??= [];
-                leavingBehaviors.Add(behavior);
+                leavingGameComponents ??= [];
+                leavingGameComponents.Add(gameComponent);
             }
         }
 
-        if (leavingBehaviors == null)
+        if (leavingGameComponents == null)
             return;
 
-        foreach (var behavior in leavingBehaviors)
+        foreach (var gameComponent in leavingGameComponents)
         {
-            SceneBehaviors.Keep(entity, SceneBehaviors.Write(behavior, entity.Uid));
-            entity.RemoveComponent(behavior);
+            SceneGameComponents.Keep(entity, SceneGameComponents.Write(gameComponent, entity.Uid));
+            entity.RemoveComponent(gameComponent);
         }
     }
 
-    private static void Reattach(Entity entity, WorldCode code, List<BehaviorProblem> problems)
+    private static void Reattach(Entity entity, WorldCode code, List<GameComponentProblem> problems)
     {
-        var unloaded = entity.GetComponent<UnloadedBehaviors>();
+        var unloaded = entity.GetComponent<UnloadedGameComponents>();
         if (unloaded == null)
             return;
 
         entity.RemoveComponent(unloaded);
         foreach (var entry in unloaded.Entries)
         {
-            SceneBehaviors.Attach(entity, entry, code, problems);
+            SceneGameComponents.Attach(entity, entry, code, problems);
         }
     }
 

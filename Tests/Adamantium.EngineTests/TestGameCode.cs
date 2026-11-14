@@ -8,7 +8,7 @@ using Adamantium.ECS.Components;
 namespace Adamantium.EngineTests;
 
 /// <summary>Builds an assembly standing for one build of the game's code: components of the game, each a
-/// <see cref="Behavior"/> with public fields, in a collectible context of its own - as the editor loads the game.</summary>
+/// <see cref="GameComponent"/> with public fields, in a collectible context of its own - as the editor loads the game.</summary>
 internal sealed class TestGameCode
 {
     private readonly ModuleBuilder _module;
@@ -68,7 +68,7 @@ internal sealed class TestGameCode
         var constructor = type.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, Type.EmptyTypes);
         var code = constructor.GetILGenerator();
         code.Emit(OpCodes.Ldarg_0);
-        code.Emit(OpCodes.Call, typeof(Behavior).GetConstructor(
+        code.Emit(OpCodes.Call, typeof(GameComponent).GetConstructor(
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, Type.EmptyTypes));
         code.Emit(OpCodes.Ldstr, "The component's own code failed.");
         code.Emit(OpCodes.Newobj, typeof(InvalidOperationException).GetConstructor([typeof(string)]));
@@ -80,7 +80,7 @@ internal sealed class TestGameCode
     private TypeBuilder DefineComponent(string fullName, IReadOnlyList<TestGameField> fields)
     {
         var type = _module.DefineType(fullName, TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.Sealed,
-            typeof(Behavior));
+            typeof(GameComponent));
         foreach (var field in fields)
         {
             DefineProperty(type, field);

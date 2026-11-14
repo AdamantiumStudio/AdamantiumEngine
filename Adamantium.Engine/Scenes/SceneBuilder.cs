@@ -44,7 +44,7 @@ public sealed class SceneBuilder
     }
 
     /// <summary>The game's components the last build could not make - their code threw; their entries are kept.</summary>
-    public IReadOnlyList<BehaviorProblem> Problems { get; private set; } = [];
+    public IReadOnlyList<GameComponentProblem> Problems { get; private set; } = [];
 
     /// <summary>Loads the models of <paramref name="scene"/>, then builds it: for a world no frame is running in. A
     /// running universe loads with <see cref="LoadModelsAsync"/> anywhere and builds on its own thread.</summary>
@@ -92,7 +92,7 @@ public sealed class SceneBuilder
         var byId = new Dictionary<UInt128, Entity>();
         var made = new List<Made>();
         var inWorld = WorldIds();
-        var problems = new List<BehaviorProblem>();
+        var problems = new List<GameComponentProblem>();
         Problems = problems;
 
         foreach (var model in Admitted(scene.Models, byId, inWorld)) Keep(model, MakeModel(model, models), byId, made);
@@ -119,11 +119,11 @@ public sealed class SceneBuilder
             }
         }
 
-        foreach (var entry in scene.Behaviors)
+        foreach (var entry in scene.GameComponents)
         {
             if (byId.TryGetValue(entry.On, out var entity))
             {
-                SceneBehaviors.Attach(entity, entry, world.Code, problems);
+                SceneGameComponents.Attach(entity, entry, world.Code, problems);
             }
             else
             {

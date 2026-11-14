@@ -2,7 +2,7 @@ using Adamantium.ECS.Components;
 
 namespace Adamantium.EngineTests;
 
-public sealed class Patrol : Behavior
+public sealed class Patrol : GameComponent
 {
     public double Speed { get; set; }
 

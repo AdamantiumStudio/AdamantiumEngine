@@ -8,14 +8,14 @@ using Serilog;
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>Moves the game's components between an entity and their scene entries.</summary>
-internal static class SceneBehaviors
+internal static class SceneGameComponents
 {
     /// <summary>Puts the component <paramref name="entry"/> describes on <paramref name="entity"/>, its type found in
     /// <paramref name="code"/>. The entry is kept on the entity instead when the type is not loaded, the entity has one
     /// of that type already, or its code throws - then the throw is added to <paramref name="problems"/>.</summary>
-    public static void Attach(Entity entity, SceneBehavior entry, WorldCode code, List<BehaviorProblem> problems)
+    public static void Attach(Entity entity, SceneGameComponent entry, WorldCode code, List<GameComponentProblem> problems)
     {
-        var type = code.FindType<Behavior>(entry.Type);
+        var type = code.FindType<GameComponent>(entry.Type);
         if (type == null)
         {
             Keep(entity, entry);
@@ -30,21 +30,21 @@ internal static class SceneBehaviors
             return;
         }
 
-        var behavior = Make(entity, entry, type, problems);
-        if (behavior == null || !TryAdd(entity, behavior, entry.Type, problems))
+        var gameComponent = Make(entity, entry, type, problems);
+        if (gameComponent == null || !TryAdd(entity, gameComponent, entry.Type, problems))
         {
             Keep(entity, entry);
         }
     }
 
-    /// <summary>Puts <paramref name="behavior"/> on <paramref name="entity"/>; false when its code throws as it is
+    /// <summary>Puts <paramref name="gameComponent"/> on <paramref name="entity"/>; false when its code throws as it is
     /// added - its <c>Initialize</c>, say - then it is taken off again and the throw added to
     /// <paramref name="problems"/>.</summary>
-    public static bool TryAdd(Entity entity, Behavior behavior, string type, List<BehaviorProblem> problems)
+    public static bool TryAdd(Entity entity, GameComponent gameComponent, string type, List<GameComponentProblem> problems)
     {
         try
         {
-            entity.AddComponent(behavior);
+            entity.AddComponent(gameComponent);
             return true;
         }
         catch (Exception exception)
@@ -52,46 +52,46 @@ internal static class SceneBehaviors
             // The game's own code: whatever it throws is its fault, and must cost the scene no more than this component.
             Log.Logger.Error(exception, "Scene: {Type} on {Name} threw as it was added; its saved values are kept unloaded",
                 type, entity.Name);
-            problems.Add(new BehaviorProblem(entity, type, exception));
-            entity.RemoveComponent(behavior);
+            problems.Add(new GameComponentProblem(entity, type, exception));
+            entity.RemoveComponent(gameComponent);
             return false;
         }
     }
 
     /// <summary>A component of <paramref name="type"/> with the fields <paramref name="entry"/> keeps, by name; null when
     /// its code throws - then the throw is added to <paramref name="problems"/>.</summary>
-    public static Behavior Make(Entity entity, SceneBehavior entry, Type type, List<BehaviorProblem> problems)
+    public static GameComponent Make(Entity entity, SceneGameComponent entry, Type type, List<GameComponentProblem> problems)
     {
         try
         {
-            var behavior = (Behavior)Activator.CreateInstance(type);
-            ComponentFields.Read(entry.Values, behavior, typeof(Behavior));
-            return behavior;
+            var gameComponent = (GameComponent)Activator.CreateInstance(type);
+            ComponentFields.Read(entry.Values, gameComponent, typeof(GameComponent));
+            return gameComponent;
         }
         catch (Exception exception) when (exception is TargetInvocationException or TypeInitializationException)
         {
             var thrown = exception.InnerException ?? exception;
             Log.Logger.Error(thrown, "Scene: could not create {Type} on {Name}; its saved values are kept unloaded",
                 type.FullName, entity.Name);
-            problems.Add(new BehaviorProblem(entity, entry.Type, thrown));
+            problems.Add(new GameComponentProblem(entity, entry.Type, thrown));
             return null;
         }
     }
 
-    /// <summary>The entry the scene writes for <paramref name="behavior"/> on the entity <paramref name="on"/>.</summary>
-    public static SceneBehavior Write(Behavior behavior, UInt128 on)
+    /// <summary>The entry the scene writes for <paramref name="gameComponent"/> on the entity <paramref name="on"/>.</summary>
+    public static SceneGameComponent Write(GameComponent gameComponent, UInt128 on)
     {
-        var entry = new SceneBehavior { On = on, Type = behavior.GetType().FullName };
-        ComponentFields.Write(behavior, typeof(Behavior), entry.Values, SceneBehavior.OwnAttributes);
+        var entry = new SceneGameComponent { On = on, Type = gameComponent.GetType().FullName };
+        ComponentFields.Write(gameComponent, typeof(GameComponent), entry.Values, SceneGameComponent.OwnAttributes);
         return entry;
     }
 
     /// <summary>Keeps <paramref name="entry"/> on <paramref name="entity"/> as it was read, among its
-    /// <see cref="UnloadedBehaviors"/>.</summary>
-    public static void Keep(Entity entity, SceneBehavior entry)
+    /// <see cref="UnloadedGameComponents"/>.</summary>
+    public static void Keep(Entity entity, SceneGameComponent entry)
     {
-        var unloaded = entity.GetComponent<UnloadedBehaviors>();
-        var entries = new List<SceneBehavior>();
+        var unloaded = entity.GetComponent<UnloadedGameComponents>();
+        var entries = new List<SceneGameComponent>();
         if (unloaded != null)
         {
             entries.AddRange(unloaded.Entries);
@@ -99,18 +99,18 @@ internal static class SceneBehaviors
         }
 
         entries.Add(entry);
-        entity.AddComponent(new UnloadedBehaviors(entries));
+        entity.AddComponent(new UnloadedGameComponents(entries));
     }
 
     /// <summary>Takes <paramref name="entry"/> out of those <paramref name="entity"/> keeps.</summary>
-    public static void Drop(Entity entity, SceneBehavior entry)
+    public static void Drop(Entity entity, SceneGameComponent entry)
     {
-        if (entity.GetComponent<UnloadedBehaviors>() is not { } unloaded)
+        if (entity.GetComponent<UnloadedGameComponents>() is not { } unloaded)
         {
             return;
         }
 
-        var kept = new List<SceneBehavior>(unloaded.Entries.Count);
+        var kept = new List<SceneGameComponent>(unloaded.Entries.Count);
         foreach (var each in unloaded.Entries)
         {
             if (!ReferenceEquals(each, entry))
@@ -122,14 +122,14 @@ internal static class SceneBehaviors
         entity.RemoveComponent(unloaded);
         if (kept.Count > 0)
         {
-            entity.AddComponent(new UnloadedBehaviors(kept));
+            entity.AddComponent(new UnloadedGameComponents(kept));
         }
     }
 
     /// <summary>Whether <paramref name="entity"/> keeps <paramref name="entry"/>.</summary>
-    public static bool Keeps(Entity entity, SceneBehavior entry)
+    public static bool Keeps(Entity entity, SceneGameComponent entry)
     {
-        if (entity.GetComponent<UnloadedBehaviors>() is not { } unloaded)
+        if (entity.GetComponent<UnloadedGameComponents>() is not { } unloaded)
         {
             return false;
         }
