@@ -46,26 +46,46 @@ public static class SceneCode
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(type);
-        if (!typeof(Behavior).IsAssignableFrom(type) || type.IsAbstract)
-            throw new ArgumentException($"{type.FullName} is not a component of the game's code.", nameof(type));
-
-        if (entity.ContainsComponent(type))
-            throw new ArgumentException($"{entity.Name} already has a {type.FullName}.", nameof(type));
-
-        if (entity.GetComponent<UnloadedBehaviors>() is not { } unloaded || !unloaded.Entries.Contains(entry))
+        CheckMadeType(entity, type);
+        if (!SceneBehaviors.Keeps(entity, entry))
             throw new ArgumentException($"{entity.Name} does not keep that entry.", nameof(entry));
 
         var problems = new List<BehaviorProblem>(1);
         var behavior = SceneBehaviors.Make(entity, entry, type, problems);
-        if (behavior == null)
+        if (behavior == null || !SceneBehaviors.TryAdd(entity, behavior, type.FullName, problems))
             return problems[0];
 
-        unloaded.Entries.Remove(entry);
-        if (unloaded.Entries.Count == 0)
-            entity.RemoveComponent(unloaded);
-
-        entity.AddComponent(behavior);
+        SceneBehaviors.Drop(entity, entry);
         return null;
+    }
+
+    /// <summary>Puts a new component of <paramref name="type"/> on <paramref name="entity"/>, its fields as its code
+    /// sets them. On the world's thread. Returns the problem when the type's code throws; the entity is left as it was.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is no component of the game's code that can be
+    /// made, or the entity has one of it already.</exception>
+    public static BehaviorProblem Add(Entity entity, Type type)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(type);
+        CheckMadeType(entity, type);
+
+        var problems = new List<BehaviorProblem>(1);
+        var behavior = SceneBehaviors.Make(entity, new SceneBehavior { On = entity.Uid, Type = type.FullName }, type, problems);
+        if (behavior == null || !SceneBehaviors.TryAdd(entity, behavior, type.FullName, problems))
+            return problems[0];
+
+        return null;
+    }
+
+    private static void CheckMadeType(Entity entity, Type type)
+    {
+        if (!typeof(Behavior).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters ||
+            type.GetConstructor(Type.EmptyTypes) == null)
+            throw new ArgumentException($"{type.FullName} is not a component of the game's code that can be made.", nameof(type));
+
+        if (entity.ContainsComponent(type))
+            throw new ArgumentException($"{entity.Name} already has a {type.FullName}.", nameof(type));
     }
 
     private static List<Entity> CollectEntities(EntityWorld world)
@@ -121,15 +141,11 @@ public static class SceneCode
         if (unloaded == null)
             return;
 
-        var entries = new List<SceneBehavior>(unloaded.Entries);
-        unloaded.Entries.Clear();
-        foreach (var entry in entries)
+        entity.RemoveComponent(unloaded);
+        foreach (var entry in unloaded.Entries)
         {
             SceneBehaviors.Attach(entity, entry, code, problems);
         }
-
-        if (unloaded.Entries.Count == 0)
-            entity.RemoveComponent(unloaded);
     }
 
     private static bool IsAmong(IReadOnlyList<Assembly> assemblies, Assembly assembly)

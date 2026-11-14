@@ -255,21 +255,29 @@ namespace Adamantium.ECS
                     }
                 }
 
-                foreach (var pendingComponent in pendingComponents)
+                // Emptied however it ends: a component whose Initialize throws must not leave the next AddComponent to
+                // add and initialize its required components a second time.
+                try
                 {
-                    if (pendingComponent is IComponent pending)
+                    foreach (var pendingComponent in pendingComponents)
                     {
-                        componentCollection.Add(pending);
+                        if (pendingComponent is IComponent pending)
+                        {
+                            componentCollection.Add(pending);
+                        }
+                        pendingComponent.Initialize();
                     }
-                    pendingComponent.Initialize();
-                }
 
-                componentCollection.Add(component);
-                if (component is IInitializable initializable)
-                {
-                    initializable.Initialize();
+                    componentCollection.Add(component);
+                    if (component is IInitializable initializable)
+                    {
+                        initializable.Initialize();
+                    }
                 }
-                pendingComponents.Clear();
+                finally
+                {
+                    pendingComponents.Clear();
+                }
             }
         }
 

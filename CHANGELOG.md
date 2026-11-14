@@ -40,7 +40,10 @@ All packages share one version.
   no class has that name now, so a component renamed or moved keeps the values its scenes gave it, and a scene saved
   again writes the new name; two classes claiming one former name take nothing. `SceneCode.Load(entity, entry, type)`:
   makes an entry kept for a component whose code is not loaded a component of another type, with the fields that type
-  has.
+  has. `SceneCode.Add(entity, type)`: puts a new component of the game's code on an entity, and leaves the entity as it
+  was when the component's code throws. `UnloadedBehaviors` keeps its entries unchanged once made - another one takes
+  its place - so a thread reading it while the world's thread changes it reads one whole set; a copied entity keeps
+  them. A world's code remembers what each name was found to be until the code is replaced.
 - `SceneCapture.Keeps(entity)`: whether a scene keeps that entity - a model whole, a light, a camera, a shape, a group,
   a spawn point - and so its game components.
 - `Adamantium.Engine.Generators` brings its own build rules: a project's `**/*.fx` and `**/*.fxh` are effect files by
@@ -336,6 +339,10 @@ All packages share one version.
 - `SceneBuilder`: a game component or a shape whose code throws as it is made no longer fails the whole scene - its
   entry is kept as it was read; a second component of one type on an entity is kept as it was read instead of dropped,
   so writing the scene back no longer loses it.
+- A game component whose code throws as it is put on an entity - its `Initialize` - keeps its scene entry, and the
+  components and entities after it still load or move to new code; before, the throw ended the whole move.
+  `Entity.AddComponent` no longer leaves the required components of a component whose `Initialize` threw to be added
+  again with the next component.
 - `PropertyAccessors` no longer keeps the types it read alive: a type of code loaded to be unloaded again (a
   collectible load context) goes once nothing else holds it.
 - An inspector no longer shows a component's bookkeeping (`Owner`, `Uid`, `Name`, `IsExpanded`, `Initialized`,

@@ -250,6 +250,64 @@ public class SceneCodeTests
         });
     }
 
+    // A component whose own code throws as it is put on the entity - its Initialize - keeps its entry; the components
+    // after it on the entity, and the entities after it, still move to the new code.
+    [Test]
+    public async Task AComponentThatThrowsAsItIsAdded_KeepsItsEntry_AndTheRestMove()
+    {
+        var scene = PatrolAtStart(new SceneValue("Speed", "2.5"));
+        scene.Behaviors.Add(new SceneBehavior { On = Start, Type = "Game.Spinner" });
+        scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 2, Name = "Exit" });
+        scene.Behaviors.Add(new SceneBehavior { On = 2, Type = "Game.Spinner" });
+        await Build(scene);
+        var code = new TestGameCode("Game.Failing")
+            .AddComponentThrowingOnInitialize(PatrolType, new TestGameField("Speed", typeof(double)))
+            .AddComponent("Game.Spinner").Assembly;
+
+        var problems = SceneCode.Replace(_world, [], [code]);
+
+        var exit = _world.MainScene.RootEntities.Single(entity => entity.Uid == 2);
+        var back = SceneCapture.Capture(_world.MainScene).Behaviors;
+        Assert.Multiple(() =>
+        {
+            Assert.That(problems.Select(problem => problem.Type), Is.EqualTo(new[] { PatrolType }));
+            Assert.That(problems[0].Exception, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(StartPoint().Components.OfType<Behavior>().Select(each => each.GetType().FullName),
+                Is.EqualTo(new[] { "Game.Spinner" }));
+            Assert.That(exit.Components.OfType<Behavior>().Select(each => each.GetType().FullName),
+                Is.EqualTo(new[] { "Game.Spinner" }));
+            Assert.That(back.Single(entry => entry.Type == PatrolType).Values, Is.EqualTo(new[] { new SceneValue("Speed", "2.5") }));
+        });
+    }
+
+    // A new component put on an entity: one whose own code throws as it is added leaves the entity as it was.
+    [Test]
+    public async Task AComponentAddedThatThrows_LeavesTheEntityAsItWas()
+    {
+        await Build(PatrolAtStart());
+        var code = new TestGameCode("Game.Adding").AddComponentThrowingOnInitialize("Game.Guard").Assembly;
+        _world.Code.Replace([], [code]);
+
+        var problem = SceneCode.Add(StartPoint(), _world.Code.FindType<Behavior>("Game.Guard"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem?.Exception, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(StartPoint().Components.OfType<Behavior>(), Is.Empty);
+        });
+    }
+
+    // A copy of an entity keeps the components whose code is not loaded, written on the copy.
+    [Test]
+    public async Task ACopiedEntity_KeepsItsComponentsNotLoaded()
+    {
+        await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
+
+        var copy = (UnloadedBehaviors)StartPoint().GetComponent<UnloadedBehaviors>().Clone();
+
+        Assert.That(copy.Entries.Single().Values, Is.EqualTo(new[] { new SceneValue("Speed", "2.5") }));
+    }
+
     [Test]
     public void TheGivenCode_IsListed_TheApplicationsIsNot()
     {

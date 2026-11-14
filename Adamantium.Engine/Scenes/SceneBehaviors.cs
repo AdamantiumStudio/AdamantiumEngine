@@ -31,13 +31,31 @@ internal static class SceneBehaviors
         }
 
         var behavior = Make(entity, entry, type, problems);
-        if (behavior == null)
+        if (behavior == null || !TryAdd(entity, behavior, entry.Type, problems))
         {
             Keep(entity, entry);
-            return;
         }
+    }
 
-        entity.AddComponent(behavior);
+    /// <summary>Puts <paramref name="behavior"/> on <paramref name="entity"/>; false when its code throws as it is
+    /// added - its <c>Initialize</c>, say - then it is taken off again and the throw added to
+    /// <paramref name="problems"/>.</summary>
+    public static bool TryAdd(Entity entity, Behavior behavior, string type, List<BehaviorProblem> problems)
+    {
+        try
+        {
+            entity.AddComponent(behavior);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            // The game's own code: whatever it throws is its fault, and must cost the scene no more than this component.
+            Log.Logger.Error(exception, "Scene: {Type} on {Name} threw as it was added; its saved values are kept unloaded",
+                type, entity.Name);
+            problems.Add(new BehaviorProblem(entity, type, exception));
+            entity.RemoveComponent(behavior);
+            return false;
+        }
     }
 
     /// <summary>A component of <paramref name="type"/> with the fields <paramref name="entry"/> keeps, by name; null when
@@ -73,12 +91,57 @@ internal static class SceneBehaviors
     public static void Keep(Entity entity, SceneBehavior entry)
     {
         var unloaded = entity.GetComponent<UnloadedBehaviors>();
-        if (unloaded == null)
+        var entries = new List<SceneBehavior>();
+        if (unloaded != null)
         {
-            unloaded = new UnloadedBehaviors();
-            entity.AddComponent(unloaded);
+            entries.AddRange(unloaded.Entries);
+            entity.RemoveComponent(unloaded);
         }
 
-        unloaded.Entries.Add(entry);
+        entries.Add(entry);
+        entity.AddComponent(new UnloadedBehaviors(entries));
+    }
+
+    /// <summary>Takes <paramref name="entry"/> out of those <paramref name="entity"/> keeps.</summary>
+    public static void Drop(Entity entity, SceneBehavior entry)
+    {
+        if (entity.GetComponent<UnloadedBehaviors>() is not { } unloaded)
+        {
+            return;
+        }
+
+        var kept = new List<SceneBehavior>(unloaded.Entries.Count);
+        foreach (var each in unloaded.Entries)
+        {
+            if (!ReferenceEquals(each, entry))
+            {
+                kept.Add(each);
+            }
+        }
+
+        entity.RemoveComponent(unloaded);
+        if (kept.Count > 0)
+        {
+            entity.AddComponent(new UnloadedBehaviors(kept));
+        }
+    }
+
+    /// <summary>Whether <paramref name="entity"/> keeps <paramref name="entry"/>.</summary>
+    public static bool Keeps(Entity entity, SceneBehavior entry)
+    {
+        if (entity.GetComponent<UnloadedBehaviors>() is not { } unloaded)
+        {
+            return false;
+        }
+
+        foreach (var each in unloaded.Entries)
+        {
+            if (ReferenceEquals(each, entry))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

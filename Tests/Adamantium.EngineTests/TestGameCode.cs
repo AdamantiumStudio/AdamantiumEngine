@@ -44,6 +44,23 @@ internal sealed class TestGameCode
         return this;
     }
 
+    /// <summary>Adds a component named <paramref name="fullName"/> with <paramref name="fields"/> whose
+    /// <see cref="Component.Initialize"/> throws - as it is put on an entity.</summary>
+    public TestGameCode AddComponentThrowingOnInitialize(string fullName, params TestGameField[] fields)
+    {
+        var type = DefineComponent(fullName, fields);
+        type.DefineDefaultConstructor(MethodAttributes.Public);
+        var initialize = type.DefineMethod(nameof(Component.Initialize),
+            MethodAttributes.Public | MethodAttributes.Virtual | MethodAttributes.HideBySig, null, Type.EmptyTypes);
+        var code = initialize.GetILGenerator();
+        code.Emit(OpCodes.Ldstr, "The component's own initialization failed.");
+        code.Emit(OpCodes.Newobj, typeof(InvalidOperationException).GetConstructor([typeof(string)])!);
+        code.Emit(OpCodes.Throw);
+        type.DefineMethodOverride(initialize, typeof(Component).GetMethod(nameof(Component.Initialize))!);
+        Assembly = type.CreateType().Assembly;
+        return this;
+    }
+
     /// <summary>Adds a component named <paramref name="fullName"/> whose constructor throws.</summary>
     public TestGameCode AddThrowingComponent(string fullName)
     {

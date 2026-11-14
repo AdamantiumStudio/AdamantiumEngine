@@ -11,6 +11,12 @@ namespace Adamantium.ECS;
 public sealed class WorldCode
 {
     private readonly object _lock = new();
+
+    // What a name was found to be - a type, or none - for each base type asked about, and the former names the given
+    // types claim: both for the code given now, let go when it is replaced. A scene names the same few types many times,
+    // and a miss would otherwise walk every assembly of the application, and every type of the game, each time.
+    private readonly Dictionary<Type, Dictionary<string, Type>> _found = [];
+    private readonly Dictionary<Type, Dictionary<string, Type>> _formerNames = [];
     private IReadOnlyList<Assembly> _assemblies = [];
 
     /// <summary>The assemblies given, in the order they are searched.</summary>
@@ -38,6 +44,8 @@ public sealed class WorldCode
             }
 
             _assemblies = kept;
+            _found.Clear();
+            _formerNames.Clear();
         }
     }
 
@@ -47,12 +55,32 @@ public sealed class WorldCode
     /// <summary>The type named <paramref name="fullName"/> deriving from <typeparamref name="T"/> that can be made - not
     /// abstract, with a public constructor taking nothing; when no type has that name, the one of the given assemblies
     /// that says it had it (<see cref="MovedFromAttribute"/>) - unless more than one says so. Null when the code has
-    /// none.</summary>
+    /// none. What a name is found to be is remembered until the code given is replaced.</summary>
     public Type FindType<T>(string fullName)
     {
         if (string.IsNullOrEmpty(fullName))
             return null;
 
+        lock (_lock)
+        {
+            if (!_found.TryGetValue(typeof(T), out var byName))
+            {
+                byName = new Dictionary<string, Type>(StringComparer.Ordinal);
+                _found[typeof(T)] = byName;
+            }
+
+            if (!byName.TryGetValue(fullName, out var type))
+            {
+                type = Search<T>(fullName);
+                byName[fullName] = type;
+            }
+
+            return type;
+        }
+    }
+
+    private Type Search<T>(string fullName)
+    {
         foreach (var assembly in _assemblies)
         {
             var type = FindMadeType<T>(assembly, fullName);
@@ -73,33 +101,34 @@ public sealed class WorldCode
         return FindMovedType<T>(fullName);
     }
 
-    // Two types claiming one former name is a mistake in the code; taking either would put the values on a guess.
     private Type FindMovedType<T>(string fullName)
     {
-        Type found = null;
-        foreach (var type in GetGivenTypes<T>())
+        if (!_formerNames.TryGetValue(typeof(T), out var byFormerName))
         {
-            if (!HadName(type, fullName))
-                continue;
-
-            if (found != null)
-                return null;
-
-            found = type;
+            byFormerName = FormerNames<T>();
+            _formerNames[typeof(T)] = byFormerName;
         }
 
-        return found;
+        return byFormerName.TryGetValue(fullName, out var type) ? type : null;
     }
 
-    private static bool HadName(Type type, string fullName)
+    // Two types claiming one former name is a mistake in the code; taking either would put the values on a guess, so the
+    // name stands for none.
+    private Dictionary<string, Type> FormerNames<T>()
     {
-        foreach (var moved in type.GetCustomAttributes<MovedFromAttribute>(false))
+        var byFormerName = new Dictionary<string, Type>(StringComparer.Ordinal);
+        foreach (var type in GetGivenTypes<T>())
         {
-            if (string.Equals(moved.FullName, fullName, StringComparison.Ordinal))
-                return true;
+            foreach (var moved in type.GetCustomAttributes<MovedFromAttribute>(false))
+            {
+                if (string.IsNullOrEmpty(moved.FullName))
+                    continue;
+
+                byFormerName[moved.FullName] = byFormerName.ContainsKey(moved.FullName) ? null : type;
+            }
         }
 
-        return false;
+        return byFormerName;
     }
 
     /// <summary>The types deriving from <typeparamref name="T"/> that can be made, of the given assemblies alone - what
