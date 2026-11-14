@@ -41,7 +41,8 @@ All packages share one version.
   again writes the new name; two classes claiming one former name take nothing. `SceneCode.Load(entity, entry, type)`:
   makes an entry kept for a component whose code is not loaded a component of another type, with the fields that type
   has. `SceneCode.Add(entity, type)`: puts a new component of the game's code on an entity, and leaves the entity as it
-  was when the component's code throws. `UnloadedBehaviors` keeps its entries unchanged once made - another one takes
+  was when the component's code throws; `SceneCode.Remove(entity, entry)` takes off the entry of one whose code is not
+  loaded. `UnloadedBehaviors` keeps its entries unchanged once made - another one takes
   its place - so a thread reading it while the world's thread changes it reads one whole set; a copied entity keeps
   them. A world's code remembers what each name was found to be until the code is replaced.
 - `SceneCapture.Keeps(entity)`: whether a scene keeps that entity - a model whole, a light, a camera, a shape, a group,

@@ -78,6 +78,15 @@ public static class SceneCode
         return null;
     }
 
+    /// <summary>Takes off <paramref name="entity"/> the entry it keeps for a component whose code is not loaded: the
+    /// component is gone from the scene. On the world's thread.</summary>
+    public static void Remove(Entity entity, SceneBehavior entry)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(entry);
+        SceneBehaviors.Drop(entity, entry);
+    }
+
     private static void CheckMadeType(Entity entity, Type type)
     {
         if (!typeof(Behavior).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters ||
