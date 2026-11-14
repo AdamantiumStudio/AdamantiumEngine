@@ -261,6 +261,8 @@ All packages share one version.
 
 ### Changed
 
+- `PdfIncrementalUpdate.Write` with nothing added, replaced or freed writes the file as it was, byte for byte, rather
+  than the file and an empty section after it.
 - `LightManager.AddLight`: a light standing in another entity joins the world with that entity's root, not as a root
   of its own.
 - `IUniverseWatcher` moved from `Adamantium.ECS` to `Adamantium.Multiverse`, beside the outputs it now asks frames of.

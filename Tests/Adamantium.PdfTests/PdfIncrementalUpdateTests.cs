@@ -81,6 +81,17 @@ public class PdfIncrementalUpdateTests
         return Encoding.ASCII.GetString(document.Decode(stream).Data.Span);
     }
 
+    // Nothing to write after the file: no empty section either - a mark file saved with nothing changed is the same file.
+    [Test]
+    public void AnUpdateWithNothingInIt_WritesTheFileAsItWas()
+    {
+        var original = Pages().Build("/Root 1 0 R");
+        var update = new PdfIncrementalUpdate(PdfDocument.Open(original));
+
+        Assert.That(update.HasChanges, Is.False);
+        Assert.That(update.Write(), Is.EqualTo(original));
+    }
+
     [Test]
     public void AnAnnotationAddedAfterATableIsReadBack()
     {
