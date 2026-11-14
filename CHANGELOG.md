@@ -11,6 +11,10 @@ All packages share one version.
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
   of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
+- `PdfIncrementalUpdate.RotatePage(page, rotation)`: a page turned by quarters, written as its own `/Rotate` over one
+  it inherits; a page already turned so is left as it is. A page turned and annotated in one update is written once,
+  with both. `PdfDocument.Continues(earlier)`: whether a document is an earlier one's file again, as it was or saved
+  by an update - what keeps a viewer's place when the file it shows is saved and opened again.
 - PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
   (`/CreationDate`), read back as `PdfAnnotation.Subject` and `Created`; `PdfAnnotationTypes.Stamp`, an annotation
   shown by its appearance alone.
