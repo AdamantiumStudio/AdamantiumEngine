@@ -21,6 +21,7 @@ internal static class PdfAnnotationKeys
     public const string Opacity = "CA";
     public const string Title = "T";
     public const string CreationDate = "CreationDate";
+    public const string Subject = "Subj";
     public const string Line = "L";
     public const string LineEndings = "LE";
     public const string Vertices = "Vertices";

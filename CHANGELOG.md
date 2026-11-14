@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
+  (`/CreationDate`), read back as `PdfAnnotation.Subject` and `Created`; `PdfAnnotationTypes.Stamp`, an annotation
+  shown by its appearance alone.
 - `Win32Interop.CreateDesktopW`/`CloseDesktop` and `CreateProcessW` (with `STARTUPINFO` and `PROCESS_INFORMATION`): a
   desktop of its own, seen by no one, and a process started on it - what UI automation runs a driven application on.
 - Scene files (`.ascene`, `SceneFile`): a scene in readable XML - what stands in it, where and which way it faces. The
