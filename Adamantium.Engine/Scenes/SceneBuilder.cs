@@ -132,17 +132,12 @@ public sealed class SceneBuilder
             }
         }
 
-        target.Satellites.TryGet(out LightManager lights);
         var entities = new List<Entity>(made.Count);
         foreach (var each in made)
         {
             var entity = each.Entity;
             entities.Add(entity);
-            if (lights != null && entity.ContainsComponent<Light>())
-            {
-                lights.AddLight(entity);
-            }
-            else if (entity.Owner == null)
+            if (entity.Owner == null)
             {
                 world.EntityManager.AddEntity(entity, target);
             }

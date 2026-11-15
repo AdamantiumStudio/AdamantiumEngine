@@ -13,14 +13,16 @@ using Adamantium.Multiverse;
 namespace Adamantium.Engine.Managers;
 
 /// <summary>
-/// The lights of one scene, one of its <see cref="Scene.Satellites"/>: what the outputs showing it are lit by. A light
-/// is added and removed here rather than through the entity manager, and the lists stand as they were when the frame's
+/// The lights of one scene, one of its <see cref="Scene.Satellites"/>: what the outputs showing it are lit by. It follows
+/// the world: every light that comes into the scene - on its own, inside a model, put back by an undo - is listed, and
+/// every one that leaves is not, whatever brought it in or took it out. The lists stand as they were when the frame's
 /// outputs settled: a light added meanwhile lights the scene from the next frame.
 /// </summary>
 public class LightManager
 {
     private readonly IUniverse universe;
     private readonly Scene scene;
+    private readonly EntityManager entities;
     private readonly List<Light> lights = [];
     private readonly object syncObject = new();
     private readonly EntityGroup lightsGroup = new("Lights");
@@ -28,25 +30,34 @@ public class LightManager
     private readonly MeshData pointLightRenderer;
     private bool lightsDirty = true;
 
-    /// <summary>The lights of <paramref name="scene"/>, put among its satellites.</summary>
+    /// <summary>The lights of <paramref name="scene"/>, put among its satellites; the lights already in it are listed.
+    /// </summary>
     public LightManager(IUniverse universe, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(universe);
         ArgumentNullException.ThrowIfNull(scene);
         this.universe = universe;
         this.scene = scene;
+        entities = scene.World.EntityManager;
         spotLightRenderer = new SpotLightMeshTemplate().BuildEntity().GetComponent<MeshData>();
         pointLightRenderer = new PointLightMeshTemplate().BuildEntity().GetComponent<MeshData>();
         universe.OutputsSettled += OnOutputsSettled;
+        entities.EntityAdded += OnEntityAdded;
+        entities.EntityRemoved += OnEntityRemoved;
         scene.Removed += OnSceneRemoved;
         scene.Satellites.Add(this);
+        foreach (var root in scene.RootEntities)
+        {
+            Take(root);
+        }
     }
 
-    // Gone with its scene: it follows the universe's frames no more.
     private void OnSceneRemoved(object sender, EventArgs e)
     {
         scene.Removed -= OnSceneRemoved;
         universe.OutputsSettled -= OnOutputsSettled;
+        entities.EntityAdded -= OnEntityAdded;
+        entities.EntityRemoved -= OnEntityRemoved;
     }
 
     /// <summary>Every light, as the current frame sees it.</summary>
@@ -71,65 +82,20 @@ public class LightManager
         return light;
     }
 
-    /// <summary>Puts <paramref name="light"/> in the scene as a light; an entity without a <see cref="Light"/> is ignored.
-    /// One standing in another entity joins the scene with that entity's root, not on its own.</summary>
+    /// <summary>Puts <paramref name="light"/> in the scene, as adding it to the world does; an entity without a
+    /// <see cref="Light"/> is ignored, and one standing in another entity joins the scene with that entity's root.
+    /// </summary>
     public void AddLight(Entity light)
     {
-        var component = light.GetComponent<Light>();
-        if (component == null)
+        if (light.GetComponent<Light>() != null && light.Owner == null)
         {
-            return;
-        }
-
-        lightsGroup.Add(light);
-        lock (syncObject)
-        {
-            lights.Add(component);
-            lightsDirty = true;
-        }
-
-        if (light.Owner == null)
-        {
-            scene.World.EntityManager.AddEntity(light, scene);
+            entities.AddEntity(light, scene);
         }
     }
 
-    /// <summary>Puts <paramref name="light"/>, taken out with <see cref="RemoveLight"/>, back among the lights and where it
-    /// stood in the world: under <paramref name="owner"/>, or among the scene's roots with none, at
-    /// <paramref name="index"/>.</summary>
-    public void ReturnLight(Entity light, Entity owner, int index)
-    {
-        if (light.GetComponent<Light>() is not { } component)
-        {
-            return;
-        }
-
-        lightsGroup.Add(light);
-        lock (syncObject)
-        {
-            lights.Add(component);
-            lightsDirty = true;
-        }
-
-        scene.World.EntityManager.ReturnEntity(light, owner, scene, index);
-    }
-
-    /// <summary>Takes <paramref name="light"/> out of the lights and out of the world.</summary>
-    public void RemoveLight(Entity light)
-    {
-        lightsGroup.Remove(light);
-        var component = light.GetComponent<Light>();
-        if (component != null)
-        {
-            lock (syncObject)
-            {
-                lights.Remove(component);
-                lightsDirty = true;
-            }
-        }
-
-        scene.World.EntityManager.RemoveEntity(light);
-    }
+    /// <summary>Takes <paramref name="light"/> out of the world, as removing it does: it leaves the lights with it.
+    /// </summary>
+    public void RemoveLight(Entity light) => entities.RemoveEntity(light);
 
     public bool Contains(Entity light)
     {
@@ -144,6 +110,48 @@ public class LightManager
     public void DrawSpotLightMesh(GraphicsDevice device, MeshGeometryCache geometryCache, AppTime appTime)
     {
         geometryCache.DrawMesh(device, spotLightRenderer);
+    }
+
+    private void OnEntityAdded(object sender, EntityEventArgs e)
+    {
+        if (e.Entity.Scene == scene)
+        {
+            Take(e.Entity);
+        }
+    }
+
+    private void OnEntityRemoved(object sender, EntityEventArgs e) => Drop(e.Entity);
+
+    private void Take(Entity tree)
+    {
+        tree.TraverseInDepth(entity =>
+        {
+            if (entity.GetComponent<Light>() is not { } light || lightsGroup.Contains(entity))
+                return;
+
+            lightsGroup.Add(entity);
+            lock (syncObject)
+            {
+                lights.Add(light);
+                lightsDirty = true;
+            }
+        });
+    }
+
+    private void Drop(Entity tree)
+    {
+        tree.TraverseInDepth(entity =>
+        {
+            if (!lightsGroup.Contains(entity))
+                return;
+
+            lightsGroup.Remove(entity);
+            lock (syncObject)
+            {
+                lights.Remove(entity.GetComponent<Light>());
+                lightsDirty = true;
+            }
+        });
     }
 
     private void OnOutputsSettled(object sender, EventArgs e)
