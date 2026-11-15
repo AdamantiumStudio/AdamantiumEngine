@@ -22,5 +22,7 @@ public class ForwardPlusWireEffectTests
         var technique = effect.Techniques["ForwardPlusWire"];
         Assert.That(technique.Passes["Colored"], Is.Not.Null);
         Assert.That(technique.Passes["Textured"], Is.Not.Null);
+        Assert.That(technique.Passes["SkinnedColored"], Is.Not.Null);
+        Assert.That(technique.Passes["SkinnedTextured"], Is.Not.Null);
     }
 }
