@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.Core.DependencyInjection;
+using Serilog;
 
 namespace Adamantium.ECS
 {
@@ -142,13 +143,24 @@ namespace Adamantium.ECS
             }
         }
 
+        /// <summary>Updates each active service. One that throws and <see cref="EntityService.SleepsWhenUpdateFails"/> is
+        /// put to sleep, so as not to throw again every frame, and the others go on.</summary>
         public void Update(AppTime appTime)
         {
             foreach (var handler in _snapshot)
             {
-                if (handler.IsActive)
+                if (!handler.IsActive)
+                    continue;
+
+                try
                 {
                     handler.Update(appTime);
+                }
+                catch (Exception exception) when (handler.SleepsWhenUpdateFails)
+                {
+                    Log.Logger.Error(exception, "The service {Service} failed to update and is put to sleep",
+                        handler.GetType().FullName);
+                    handler.IsActive = false;
                 }
             }
         }
@@ -216,9 +228,11 @@ namespace Adamantium.ECS
             SyncServices();
         }
 
+        /// <summary>Puts in the services added and takes out those removed since the last frame ended, as the end of a
+        /// frame does. On the world's thread, between its frames.</summary>
         // The lock guards only the collection edits; service callbacks run outside it, or the render thread deadlocks. A
         // service leaves the snapshot before its unload and enters it after its init, so it is never drawn half-made.
-        internal void SyncServices()
+        public void SyncServices()
         {
             EntityService[] toRemove, toAdd;
             lock (syncObject)

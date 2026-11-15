@@ -1,33 +1,36 @@
-using System;
 using System.Collections.Generic;
 using Adamantium.ECS.Components;
 
 namespace Adamantium.ECS;
 
-/// <summary>The logic of the game's or a mod's code: what acts on its components while the game plays a scene. One of
-/// each kind the world's code brings is made for the scene played when the game starts (<see cref="GameRun"/>) and let go
-/// when it stops; none runs while a scene is edited. A kind needs a public constructor taking nothing.</summary>
-public abstract class GameService
+/// <summary>The logic of the game's or a mod's code: a service of the world that acts on the game's components while
+/// the game plays a scene. One of each kind is made with the code that brings it and let go with it; it sleeps
+/// (<see cref="EntityService.IsActive"/> false) until a game plays (<see cref="GameRun"/>), and sleeps again on pause and
+/// when the game stops. A kind needs a public constructor taking the world.</summary>
+public abstract class GameService : EntityService
 {
-    /// <summary>The scene played.</summary>
+    protected GameService(EntityWorld world) : base(world)
+    {
+        IsActive = false;
+    }
+
+    /// <summary>The scene played; none while no game plays.</summary>
     public Scene Scene { get; internal set; }
 
-    /// <summary>The world the scene is in.</summary>
-    public EntityWorld World => Scene?.World;
+    public sealed override bool IsUpdateService => true;
 
-    /// <summary>How long the game has played, its pauses left out.</summary>
-    public TimeSpan PlayTime { get; internal set; }
+    public sealed override bool IsRenderingService => false;
 
-    /// <summary>The seconds the frame played took.</summary>
-    public double FrameTime { get; internal set; }
+    public sealed override EntityServiceType ServiceType => EntityServiceType.Update;
 
-    /// <summary>Called once when the game starts, before its first frame.</summary>
+    /// <summary>The game's code failing does not stop the frame: the service sleeps for the rest of the game.</summary>
+    public sealed override bool SleepsWhenUpdateFails => true;
+
+    /// <summary>Called once when a game starts, before its first frame: the place to begin the service's state anew.
+    /// </summary>
     public virtual void Start()
     {
     }
-
-    /// <summary>Called on every frame the game plays, on the world's thread.</summary>
-    public abstract void Update();
 
     /// <summary>Called once when the game stops.</summary>
     public virtual void Stop()

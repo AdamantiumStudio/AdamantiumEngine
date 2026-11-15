@@ -1,3 +1,4 @@
+using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.Mathematics;
 
@@ -7,17 +8,21 @@ namespace Adamantium.EngineTests;
 /// and says when it was started and stopped.</summary>
 public sealed class PushingService : GameService
 {
+    public PushingService(EntityWorld world) : base(world)
+    {
+    }
+
     public bool Started { get; private set; }
 
     public bool Stopped { get; private set; }
 
     public override void Start() => Started = true;
 
-    public override void Update()
+    public override void Update(AppTime appTime)
     {
         foreach (var pushed in Each<Pushed>())
         {
-            pushed.Owner.Transform.Position += new Vector3<double>(pushed.Speed * FrameTime, 0, 0);
+            pushed.Owner.Transform.Position += new Vector3<double>(pushed.Speed * appTime.FrameTime, 0, 0);
         }
     }
 

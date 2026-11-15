@@ -1,97 +1,103 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.Core;
 using Serilog;
 
 namespace Adamantium.ECS;
 
-/// <summary>The game playing a scene: one service of each kind the world's code brings (<see cref="GameService"/>), made
-/// for the scene when the game starts and let go when it stops. A service of the world, run every frame while it plays;
-/// paused, it is not, and the time it was paused is not played. A game service that throws is told, and taken out of the
-/// run so as not to throw again every frame.</summary>
-public sealed class GameRun : EntityService
+/// <summary>The game playing a scene: wakes the world's game services (<see cref="GameService"/>) for it, puts them to
+/// sleep on pause, and when it stops. The world runs them as any service of its own; one that throws - or fails to start
+/// - sleeps for the rest of the game. One game at a time plays in a world.</summary>
+public sealed class GameRun
 {
     private readonly List<GameService> _services = [];
-    private TimeSpan _playTime;
+    private readonly HashSet<GameService> _failed = [];
+    private bool _paused;
 
-    private GameRun(EntityWorld world, Scene scene) : base(world)
+    private GameRun(Scene scene)
     {
         Scene = scene;
-        Name = $"Game of {scene.Name}";
     }
 
     /// <summary>The scene played.</summary>
     public Scene Scene { get; }
 
-    /// <summary>The game services playing it.</summary>
+    /// <summary>The game services given the scene, those that failed to start among them.</summary>
     public IReadOnlyList<GameService> Services => _services;
 
-    /// <summary>Whether the game is paused: its services wait, and its time stands still.</summary>
+    /// <summary>Whether the game is paused: its services sleep. One asleep already when the game pauses - put to sleep
+    /// by the world for throwing, or by itself - is not woken when it goes on. On the world's thread.</summary>
     public bool IsPaused
     {
-        get => !IsActive;
-        set => IsActive = !value;
+        get => _paused;
+        set
+        {
+            if (_paused == value)
+                return;
+
+            _paused = value;
+            foreach (var service in _services)
+            {
+                if (value)
+                {
+                    // The world put to sleep a service that threw: it is out of the game, not woken on going on.
+                    if (!service.IsActive)
+                        _failed.Add(service);
+
+                    service.IsActive = false;
+                }
+                else if (!_failed.Contains(service))
+                {
+                    service.IsActive = true;
+                }
+            }
+        }
     }
 
-    /// <summary>How long the game has played, its pauses left out.</summary>
-    public TimeSpan PlayTime => _playTime;
-
-    public override bool IsUpdateService => true;
-
-    public override bool IsRenderingService => false;
-
-    public override EntityServiceType ServiceType => EntityServiceType.Update;
-
-    /// <summary>Starts the game on <paramref name="scene"/>: makes one service of each kind the world's code brings, starts
-    /// each, and puts the run among the world's services, which run it from the next frame. On the world's thread.
-    /// </summary>
+    /// <summary>Starts the game on <paramref name="scene"/>: gives each game service of its world the scene, starts it
+    /// and wakes it; the world runs them from the next frame. On the world's thread.</summary>
+    /// <exception cref="InvalidOperationException">A game plays in the world already.</exception>
     public static GameRun Start(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var run = new GameRun(scene.World, scene);
-        foreach (var type in scene.World.Code.GetGivenTypes<GameService>())
+        var services = scene.World.GetServices<GameService>();
+        foreach (var service in services)
         {
+            if (service.Scene != null)
+                throw new InvalidOperationException($"A game plays {service.Scene.Name} in this world already.");
+        }
+
+        var run = new GameRun(scene);
+        foreach (var service in services)
+        {
+            // In the game even when it fails to start - asleep, and told when the game stops - so the scene is taken
+            // from it then, and no other game starts in the world meanwhile.
+            service.Scene = scene;
+            run._services.Add(service);
             try
             {
-                var service = (GameService)Activator.CreateInstance(type);
-                service.Scene = scene;
-                run._services.Add(service);
+                service.Start();
             }
             catch (Exception exception)
             {
-                Log.Logger.Error(exception, "The game service {Service} could not be made", type.FullName);
+                Log.Logger.Error(exception, "The game service {Service} failed to start and sleeps for the game",
+                    service.GetType().FullName);
+                run._failed.Add(service);
+                continue;
             }
+
+            service.IsActive = true;
         }
 
-        for (var i = 0; i < run._services.Count; i++)
-        {
-            if (!run.Call(run._services[i], "start", static started => started.Start()))
-                i--;
-        }
-
-        scene.World.AddService(run);
         return run;
     }
 
-    public override void Update(AppTime appTime)
-    {
-        _playTime += TimeSpan.FromSeconds(appTime.FrameTime);
-        for (var i = 0; i < _services.Count; i++)
-        {
-            var service = _services[i];
-            service.PlayTime = _playTime;
-            service.FrameTime = appTime.FrameTime;
-            if (!Call(service, "update", static updated => updated.Update()))
-                i--;
-        }
-    }
-
-    /// <summary>Stops the game: tells each service, lets them go, and takes the run out of the world's services. On the
-    /// world's thread.</summary>
+    /// <summary>Stops the game: puts its services to sleep, tells each, and takes the scene from them. On the world's
+    /// thread.</summary>
     public void Stop()
     {
         foreach (var service in _services)
         {
+            service.IsActive = false;
             try
             {
                 service.Stop();
@@ -100,26 +106,11 @@ public sealed class GameRun : EntityService
             {
                 Log.Logger.Error(exception, "The game service {Service} failed to stop", service.GetType().FullName);
             }
+
+            service.Scene = null;
         }
 
         _services.Clear();
-        EntityWorld.RemoveService(this);
-    }
-
-    // False when the service threw, and was taken out.
-    private bool Call(GameService service, string what, Action<GameService> call)
-    {
-        try
-        {
-            call(service);
-            return true;
-        }
-        catch (Exception exception)
-        {
-            Log.Logger.Error(exception, "The game service {Service} failed to {What} and is taken out of the game",
-                service.GetType().FullName, what);
-            _services.Remove(service);
-            return false;
-        }
+        _failed.Clear();
     }
 }

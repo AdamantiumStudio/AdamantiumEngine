@@ -2,12 +2,13 @@ using System;
 using System.Linq;
 using Adamantium.Core;
 using Adamantium.ECS;
+using Adamantium.Engine.Scenes;
 using NUnit.Framework;
 
 namespace Adamantium.EngineTests;
 
-/// <summary>The game playing a scene in the editor: the services the game's code brings, made for that scene alone when it
-/// starts and let go when it stops.</summary>
+/// <summary>The game's services: made with the code that brings them, asleep while a scene is edited, woken for the
+/// scene a game plays, and run by the world as its own.</summary>
 [TestFixture]
 public class GameRunTests
 {
@@ -19,25 +20,55 @@ public class GameRunTests
     {
         _universe = new TestUniverse();
         _world = _universe.EntityWorld;
-        _world.Code.Replace([], [typeof(GameRunTests).Assembly]);
+        SceneCode.Replace(_world, [], [typeof(GameRunTests).Assembly]);
+        NextFrame();
     }
 
     [Test]
-    public void AGame_MakesOneServiceOfEachKindTheCodeBrings_ForItsScene_AndStartsThem()
+    public void TheCode_BringsOneServiceOfEachKind_AsleepUntilAGamePlays()
+    {
+        var entity = Placed(_world.MainScene, 1);
+
+        Frame(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_world.GetServices<GameService>().Select(service => service.GetType()),
+                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService) }));
+            Assert.That(_world.GetServices<GameService>().Any(service => service.IsActive), Is.False);
+            Assert.That(entity.Transform.Position.X, Is.Zero);
+        });
+    }
+
+    [Test]
+    public void TheServicesOfLeavingCode_LeaveTheWorld()
+    {
+        var pushing = _world.GetService<PushingService>();
+
+        SceneCode.Replace(_world, [typeof(GameRunTests).Assembly], []);
+        NextFrame();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_world.GetServices<GameService>(), Is.Empty);
+            Assert.That(pushing.IsActive, Is.False);
+        });
+    }
+
+    [Test]
+    public void AGame_GivesTheServicesItsScene_StartsAndWakesThem()
     {
         var scene = _world.MainScene;
 
         var run = GameRun.Start(scene);
-        NextFrame();
 
-        var pushing = run.Services.OfType<PushingService>().Single();
+        var pushing = _world.GetService<PushingService>();
         Assert.Multiple(() =>
         {
-            Assert.That(run.Services.Select(service => service.GetType()),
-                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService) }));
+            Assert.That(run.Services, Is.EquivalentTo(_world.GetServices<GameService>()));
             Assert.That(pushing.Scene, Is.SameAs(scene));
             Assert.That(pushing.Started, Is.True);
-            Assert.That(_world.GetServices<GameRun>(), Is.EqualTo(new[] { run }));
+            Assert.That(pushing.IsActive, Is.True);
         });
     }
 
@@ -49,61 +80,185 @@ public class GameRunTests
         var edited = _world.CreateScene("Edited");
         var inPlay = Placed(played, 2);
         var inEdit = Placed(edited, 2);
-        var run = GameRun.Start(played);
+        GameRun.Start(played);
 
-        run.Update(new AppTime { FrameTime = 0.5 });
-        run.Update(new AppTime { FrameTime = 0.5 });
+        Frame(0.5);
+        Frame(0.5);
 
         Assert.Multiple(() =>
         {
             Assert.That(inPlay.Transform.Position.X, Is.EqualTo(2).Within(1e-9));
             Assert.That(inEdit.Transform.Position.X, Is.Zero);
-            Assert.That(run.PlayTime, Is.EqualTo(TimeSpan.FromSeconds(1)));
         });
     }
 
     [Test]
-    public void AServiceThatThrows_IsTakenOutOfTheGame_AndTheOthersPlayOn()
+    public void AServiceThatThrows_IsPutToSleep_AndTheOthersPlayOn_EvenAfterAPause()
+    {
+        var entity = Placed(_world.MainScene, 1);
+        var run = GameRun.Start(_world.MainScene);
+        var throwing = _world.GetService<ThrowingService>();
+
+        Frame(1);
+        Frame(1);
+        run.IsPaused = true;
+        run.IsPaused = false;
+        Frame(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(throwing.Updates, Is.EqualTo(1));
+            Assert.That(throwing.IsActive, Is.False);
+            Assert.That(entity.Transform.Position.X, Is.EqualTo(3).Within(1e-9));
+        });
+    }
+
+    // An engine service that throws fails the frame, as before, and the universe runs the next one: it is not put to
+    // sleep, or one bad frame would take the camera or the tools away for good.
+    [Test]
+    public void AnEngineServiceThatThrows_FailsTheFrame_AndStaysAwake()
+    {
+        var failing = new FailingEngineService(_world);
+        _world.AddService(failing);
+        NextFrame();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(() => Frame(1), Throws.InvalidOperationException);
+            Assert.That(failing.IsActive, Is.True);
+        });
+    }
+
+    [Test]
+    public void APausedGame_StandsStill_AndGoesOnWhenLetGo()
     {
         var entity = Placed(_world.MainScene, 1);
         var run = GameRun.Start(_world.MainScene);
 
-        run.Update(new AppTime { FrameTime = 1 });
-        run.Update(new AppTime { FrameTime = 1 });
+        run.IsPaused = true;
+        Frame(1);
+        var paused = entity.Transform.Position.X;
+        run.IsPaused = false;
+        Frame(1);
 
         Assert.Multiple(() =>
         {
-            Assert.That(run.Services.OfType<ThrowingService>(), Is.Empty);
-            Assert.That(entity.Transform.Position.X, Is.EqualTo(2).Within(1e-9));
+            Assert.That(paused, Is.Zero);
+            Assert.That(entity.Transform.Position.X, Is.EqualTo(1).Within(1e-9));
         });
     }
 
     [Test]
-    public void AStoppedGame_TellsItsServices_AndLeavesTheWorld()
+    public void AStoppedGame_TellsItsServices_PutsThemToSleep_AndTakesItsScene()
     {
+        var entity = Placed(_world.MainScene, 1);
         var run = GameRun.Start(_world.MainScene);
-        NextFrame();
-        var pushing = run.Services.OfType<PushingService>().Single();
+        var pushing = _world.GetService<PushingService>();
 
         run.Stop();
-        NextFrame();
+        Frame(1);
 
         Assert.Multiple(() =>
         {
             Assert.That(pushing.Stopped, Is.True);
+            Assert.That(pushing.IsActive, Is.False);
+            Assert.That(pushing.Scene, Is.Null);
             Assert.That(run.Services, Is.Empty);
-            Assert.That(_world.GetServices<GameRun>(), Is.Empty);
+            Assert.That(entity.Transform.Position.X, Is.Zero);
+            Assert.That(_world.GetServices<GameService>(), Has.Length.EqualTo(2));
         });
     }
 
     [Test]
-    public void APausedGame_IsNotRunByTheWorld()
+    public void CodeReplacedTwiceBetweenFrames_LeavesOneServiceOfEachKind_TheNewest()
     {
+        var first = _world.GetService<PushingService>();
+
+        SceneCode.Replace(_world, [typeof(GameRunTests).Assembly], []);
+        SceneCode.Replace(_world, [], [typeof(GameRunTests).Assembly]);
+        var second = _world.GetService<PushingService>();
+        SceneCode.Replace(_world, [typeof(GameRunTests).Assembly], []);
+        SceneCode.Replace(_world, [], [typeof(GameRunTests).Assembly]);
+        NextFrame();
+
+        var services = _world.GetServices<GameService>();
+        Assert.Multiple(() =>
+        {
+            Assert.That(services.Select(service => service.GetType()),
+                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService) }));
+            Assert.That(services, Does.Not.Contain(first));
+            Assert.That(services, Does.Not.Contain(second));
+        });
+    }
+
+    // A build lands and Play is pressed before the next frame: the game plays the new code's services.
+    [Test]
+    public void AGameStartedRightAfterTheCodeIsReplaced_PlaysTheNewServices()
+    {
+        var old = _world.GetService<PushingService>();
+        SceneCode.Replace(_world, [typeof(GameRunTests).Assembly], [typeof(GameRunTests).Assembly]);
+
         var run = GameRun.Start(_world.MainScene);
 
-        run.IsPaused = true;
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.Services, Does.Not.Contain(old));
+            Assert.That(run.Services.OfType<PushingService>().Single().Started, Is.True);
+            Assert.That(old.Started, Is.False);
+        });
+    }
 
-        Assert.That(run.IsActive, Is.False);
+    [Test]
+    public void AServiceThatFailsToStart_SleepsThroughTheGame_AndIsToldWhenItStops()
+    {
+        var throwing = _world.GetService<ThrowingService>();
+        throwing.FailsToStart = true;
+
+        var run = GameRun.Start(_world.MainScene);
+        run.IsPaused = true;
+        run.IsPaused = false;
+        Frame(1);
+        var sceneWhilePlaying = throwing.Scene;
+        run.Stop();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(throwing.Updates, Is.Zero);
+            Assert.That(throwing.IsActive, Is.False);
+            Assert.That(sceneWhilePlaying, Is.SameAs(_world.MainScene));
+            Assert.That(throwing.Stopped, Is.True);
+            Assert.That(throwing.Scene, Is.Null);
+        });
+    }
+
+    [Test]
+    public void AGameStoppedWhilePaused_LeavesTheNextOneAwake()
+    {
+        var entity = Placed(_world.MainScene, 1);
+        var first = GameRun.Start(_world.MainScene);
+        first.IsPaused = true;
+        first.Stop();
+
+        GameRun.Start(_world.MainScene);
+        Frame(1);
+
+        Assert.That(entity.Transform.Position.X, Is.EqualTo(1).Within(1e-9));
+    }
+
+    [Test]
+    public void OneGameAtATime_PlaysInAWorld()
+    {
+        var first = GameRun.Start(_world.MainScene);
+
+        Assert.That(() => GameRun.Start(_world.CreateScene("Other")), Throws.InvalidOperationException);
+
+        first.Stop();
+        Assert.That(() => GameRun.Start(_world.MainScene).Stop(), Throws.Nothing);
+    }
+
+    private void Frame(double seconds)
+    {
+        _world.ServiceManager.Update(new AppTime { FrameTime = seconds });
     }
 
     private Entity Placed(Scene scene, double speed)
