@@ -75,13 +75,16 @@ public class PrcImportTests
     [TestCase("lines.prc", "Curve")]
     public void AsymptoteExactGeometry_IsToldPerItemAndNotDrawn(string name, string item)
     {
-        var scene = Import(File.ReadAllBytes(GetGeneratedPath(name)), out var notes);
+        var scene = Import(File.ReadAllBytes(GetGeneratedPath(name)), out var notes, out var remarks);
 
         Assert.Multiple(() =>
         {
             Assert.That(GetAllMeshes(scene), Is.Empty);
-            Assert.That(notes, Has.Some.Contains($"representation item {item} has exact geometry alone"));
-            Assert.That(notes, Has.Some.Contains("B-rep topology, curves and surfaces"));
+            Assert.That(notes, Has.Some.Contains($"representation item {item} has exact geometry alone"),
+                "an item drawn by its exact geometry alone is not drawn: a loss");
+            Assert.That(remarks, Has.Some.Contains("B-rep topology, curves and surfaces"),
+                "that the file has exact geometry at all leaves nothing out where a tessellation is drawn");
+            Assert.That(notes, Has.None.Contains("B-rep topology, curves and surfaces"));
         });
     }
 
@@ -328,7 +331,7 @@ public class PrcImportTests
         ]);
         var bytes = PrcTestFile.CreateSingle(globals, tree, PrcTestEntities.CreateTessellations([tessellation]), 4).ToArray();
 
-        var scene = Import(bytes, out var notes);
+        var scene = Import(bytes, out var notes, out var remarks);
 
         var assembly = scene.Models.Dependencies.Single();
         var left = assembly.Dependencies.Single(model => model.Name == "Left");
@@ -344,7 +347,9 @@ public class PrcImportTests
             Assert.That(right.Dependencies.Single().Meshes, Has.Count.EqualTo(1), "the prototype's part, shown again");
             Assert.That(IsNear(body.Position, ToEngine(new Vector3F(0, 0, 7))), $"the body stands at {body.Position}, by its coordinate system");
             Assert.That(body.Name, Is.EqualTo("Body"));
-            Assert.That(notes, Has.Some.Contains("set not to be shown").And.Contains("Hidden"));
+            Assert.That(remarks, Has.Some.Contains("set not to be shown").And.Contains("Hidden"),
+                "the file keeps it out of sight: a remark, not a loss");
+            Assert.That(notes, Has.None.Contains("set not to be shown"));
         });
 
         var turned = Vector3.Transform(ToEngine(Vector3F.UnitX), left.Rotation);
@@ -366,7 +371,7 @@ public class PrcImportTests
         var bytes = PrcTestFile.CreateSingle(PrcTestEntities.CreateGlobals(Colors), tree, PrcTestEntities.CreateTessellations([CreateTriangleTessellation()]), 2,
             unit: 1, unitFromCad: modelFromCad).ToArray();
 
-        var scene = Import(bytes, out var notes);
+        var scene = Import(bytes, out var notes, out var remarks);
 
         var part = scene.Models.Dependencies.Single().Dependencies.Single();
         Assert.Multiple(() =>
@@ -375,8 +380,9 @@ public class PrcImportTests
             Assert.That(part.Scale, Is.EqualTo(Vector3F.One), "a location scales between units itself; the import adds no scale");
             Assert.That(GetAllMeshes(scene).Single().Points.Select(point => point.As<float>()),
                 Has.Some.Matches<Vector3F>(point => IsNear(point, ToEngine(new Vector3F(1, 0, 0)))), "the points as written");
-            Assert.That(notes.Any(note => note.Contains("not to be measured")), Is.EqualTo(toldNotMeasured));
-            Assert.That(notes, Has.None.Contains("unit other than"));
+            Assert.That(remarks.Any(note => note.Contains("not to be measured")), Is.EqualTo(toldNotMeasured));
+            Assert.That(notes, Has.None.Contains("not to be measured"));
+            Assert.That(notes.Concat(remarks), Has.None.Contains("unit other than"));
         });
     }
 
@@ -404,7 +410,7 @@ public class PrcImportTests
         ]);
         var bytes = PrcTestFile.CreateSingle(globals, tree, PrcTestEntities.CreateTessellations([CreateTriangleTessellation()]), 2).ToArray();
 
-        var scene = Import(bytes, out var notes);
+        var scene = Import(bytes, out var notes, out var remarks);
 
         var bracket = scene.Models.Dependencies.Single().Dependencies.Single();
         var body = bracket.Dependencies.Single(model => model.Name == "Body");
@@ -418,8 +424,9 @@ public class PrcImportTests
             Assert.That(GetRgb(scene.Materials[moved.Meshes.Single().MaterialID]), Is.EqualTo(new Vector3F(1, 0, 0)).Using<Vector3F>(IsNear),
                 "a reference of no style leaves the style");
             Assert.That(IsNear(moved.Position, ToEngine(new Vector3F(0, 0, 9))), $"Moved stands at {moved.Position}, by the reference's coordinate system");
-            Assert.That(notes, Has.Some.Contains("takes away or hides by reference").And.Contains("Spare"));
-            Assert.That(notes, Has.Some.Contains("1 redefinitions by reference of entities of type 237 meet no entity"));
+            Assert.That(remarks, Has.Some.Contains("takes away or hides by reference").And.Contains("Spare"));
+            Assert.That(remarks, Has.Some.Contains("1 redefinitions by reference of entities of type 237 meet no entity"));
+            Assert.That(notes, Is.Empty, "what the file takes away or redefines in vain leaves nothing it shows out");
         });
     }
 
@@ -558,7 +565,7 @@ public class PrcImportTests
         var bytes = PrcTestFile.CreateSingle(PrcTestEntities.CreateGlobals(Colors), tree, PrcTestEntities.CreateTessellations([CreateTriangleTessellation()]), 1)
             .ToArray();
 
-        var scene = Import(bytes, out var notes);
+        var scene = Import(bytes, out var notes, out var remarks);
 
         var cameras = scene.CameraData.Values.ToList();
         var camera = cameras.Single(candidate => candidate.Name == "Lit");
@@ -587,9 +594,11 @@ public class PrcImportTests
             Assert.That(bulb.LightType, Is.EqualTo(LightType.Point));
             Assert.That(IsNear(bulb.Position, ToEngine(new Vector3F(10, 0, 5))), $"the bulb hangs at {bulb.Position}");
             Assert.That(bulb.LinearAttenuation, Is.EqualTo(0.1f).Within(1e-6f));
-            Assert.That(notes, Has.Some.Contains("views of the file are kept as their cameras"));
-            Assert.That(notes, Has.Some.Contains("clipping planes"));
-            Assert.That(notes.Where(note => note.Contains("left after the end") || note.Contains("meet no entity")), Is.Empty);
+            Assert.That(remarks, Has.Some.Contains("views of the file are kept as their cameras"));
+            Assert.That(remarks, Has.Some.Contains("clipping planes"));
+            Assert.That(notes, Has.None.Contains("views of the file").And.None.Contains("clipping planes"),
+                "what views and scenes set is theirs, not the model's: nothing the model shows is missing");
+            Assert.That(notes.Concat(remarks).Where(note => note.Contains("left after the end") || note.Contains("meet no entity")), Is.Empty);
         });
     }
 
@@ -832,11 +841,14 @@ public class PrcImportTests
         return PrcTestFile.CreateSingle(globals ?? PrcTestEntities.CreateGlobals(Colors), tree, PrcTestEntities.CreateTessellations(tessellations), 1).ToArray();
     }
 
-    private static SceneData Import(byte[] bytes, out List<string> notes)
+    private static SceneData Import(byte[] bytes, out List<string> notes) => Import(bytes, out notes, out _);
+
+    private static SceneData Import(byte[] bytes, out List<string> notes, out List<string> remarks)
     {
         var converter = new PrcConverter("test.prc", bytes, new ConversionConfig(true));
         var scene = converter.StartConversion();
         notes = converter.UnsupportedFeatures;
+        remarks = converter.Remarks;
         return scene;
     }
 

@@ -197,7 +197,7 @@ public class U3dConverter : ConverterBase
     {
         if (node.Visibility == 0)
         {
-            Tell($"model node {node.Name} is set not to be seen; its meshes are left out");
+            Remark($"model node {node.Name} is set not to be seen; its meshes are left out");
             return;
         }
 
@@ -577,18 +577,18 @@ public class U3dConverter : ConverterBase
         {
             if (resource.FogEnabled)
             {
-                Tell($"the fog of view {resource.Name} is left out");
+                Remark($"the fog of view {resource.Name} is left out");
             }
 
             if (resource.PassCount > 1 || resource.RootNodeName.Length > 0)
             {
-                Tell($"view {resource.Name} renders a part of the scene, or in passes; the camera sees all of it");
+                Remark($"view {resource.Name} renders a part of the scene, or in passes; the camera sees all of it");
             }
         }
 
         if (view.BackdropCount > 0 || view.OverlayCount > 0)
         {
-            Tell($"the backdrops and overlays of view node {node.Name} are left out");
+            Remark($"the backdrops and overlays of view node {node.Name} are left out");
         }
 
         world.Decompose(out _, out var rotation, out var translation);
@@ -618,7 +618,7 @@ public class U3dConverter : ConverterBase
                 camera.XMag = camera.YMag * (aspect > 0 ? aspect : 1);
                 break;
             default:
-                Tell($"view node {node.Name} projects with one- or two-point perspective; it is kept without its field of view");
+                Remark($"view node {node.Name} projects with one- or two-point perspective; it is kept without its field of view");
                 break;
         }
 

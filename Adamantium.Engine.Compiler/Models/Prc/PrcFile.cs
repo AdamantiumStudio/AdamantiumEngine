@@ -160,7 +160,7 @@ internal sealed class PrcFile
         structure.TopologicalContextCount = (int)geometry.ReadUnsignedInteger();
         if (structure.TopologicalContextCount > 0)
         {
-            _notes.Tell("exact geometry - B-rep topology, curves and surfaces of the geometry section - is not read; " +
+            _notes.Remark("exact geometry - B-rep topology, curves and surfaces of the geometry section - is not read; " +
                         "a representation item shows its tessellation only");
         }
     }

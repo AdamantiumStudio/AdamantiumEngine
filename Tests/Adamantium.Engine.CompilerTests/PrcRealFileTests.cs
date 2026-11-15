@@ -47,6 +47,11 @@ public class PrcRealFileTests
                     TestContext.Out.WriteLine("    " + note);
                 }
 
+                foreach (var remark in converter.Remarks)
+                {
+                    TestContext.Out.WriteLine("    (remark) " + remark);
+                }
+
                 var name = Path.GetFileName(path);
                 Assert.Multiple(() =>
                 {

@@ -26,9 +26,15 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 
       /// <summary>What the file has that the import cannot do. Filled in by the parse, read by whoever started the
       /// import: half a model lost in silence looks whole right up until someone notices it is not.</summary>
-      public List<String> UnsupportedFeatures => Notes.All;
+      public List<String> UnsupportedFeatures => Notes.Unsupported;
 
-      /// <summary>The notes behind <see cref="UnsupportedFeatures"/>, each told once; a file reader is handed them.</summary>
+      /// <summary>What the import read as the file says, or the file itself keeps out of sight, or the scene data has no
+      /// place for - hidden entities, views kept as cameras, exact geometry beside the tessellation drawn. Worth a log,
+      /// not a warning: nothing the model shows is missing for them.</summary>
+      public List<String> Remarks => Notes.Remarks;
+
+      /// <summary>The notes behind <see cref="UnsupportedFeatures"/> and <see cref="Remarks"/>, each told once; a file
+      /// reader is handed them.</summary>
       private protected ImportNotes Notes { get; } = new();
 
       protected Boolean IsCanceled { get; set; }
@@ -58,6 +64,9 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 
       /// <summary>Adds <paramref name="feature"/> to <see cref="UnsupportedFeatures"/> unless it is there already.</summary>
       protected void Tell(string feature) => Notes.Tell(feature);
+
+      /// <summary>Adds <paramref name="remark"/> to <see cref="Remarks"/> unless it is there already.</summary>
+      protected void Remark(string remark) => Notes.Remark(remark);
 
       /// <summary><paramref name="id"/> the first time, then with the count of its uses appended - skipping any ID
       /// already given - so a node shown in several places gets a model ID of its own in each.</summary>

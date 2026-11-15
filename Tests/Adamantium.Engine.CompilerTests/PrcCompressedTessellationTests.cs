@@ -240,7 +240,8 @@ public class PrcCompressedTessellationTests
         Assert.Multiple(() =>
         {
             Assert.That(decoded.OrderBy(text => text), Is.EqualTo(expected));
-            Assert.That(notes.All, Is.Empty);
+            Assert.That(notes.Unsupported, Is.Empty);
+            Assert.That(notes.Remarks, Is.Empty);
         });
     }
 
