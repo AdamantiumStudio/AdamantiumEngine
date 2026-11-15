@@ -61,7 +61,7 @@ namespace Adamantium.ECS
             Interlocked.CompareExchange(ref _found, grown, found);
         }
 
-        private void ForgetFound() => Volatile.Write(ref _found, []);
+        private void ForgetFound() => Volatile.Write(ref _found, new object[Math.Max(1, Volatile.Read(ref _found).Length)]);
 
         /// <summary>
         /// Gets all the components of the specified type or derived type.

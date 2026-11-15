@@ -23,6 +23,8 @@ public sealed class EntityManager
     private readonly Dictionary<Entity, Scene> entitiesMoved = new();
     private readonly List<ReturnedEntity> _entitiesReturned = [];
     private readonly Dictionary<Entity, int> _entitiesPlacedAt = new();
+    private readonly HashSet<Entity> _ownersChanged = [];
+    private readonly List<Entity> _following = [];
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
 
@@ -124,6 +126,11 @@ public sealed class EntityManager
     {
         lock (syncObject)
         {
+            foreach (var scene in scenes)
+            {
+                scene.Components.EndFrame();
+            }
+
             if (entitiesToRemove.Count > 0)
             {
                 foreach (var entity in entitiesToRemove)
@@ -200,7 +207,44 @@ public sealed class EntityManager
 
                 entitiesMoved.Clear();
             }
+
+            if (_ownersChanged.Count > 0)
+            {
+                _following.AddRange(_ownersChanged);
+                _ownersChanged.Clear();
+                foreach (var entity in _following)
+                {
+                    FollowOwnersIndex(entity);
+                }
+
+                _following.Clear();
+            }
         }
+    }
+
+    /// <summary>Notes that <paramref name="entity"/> was given another owner, from any thread: at the next sync, on the
+    /// world's thread, it joins the index of components its owner is in, or leaves the one it was in.</summary>
+    internal void NoteOwnerChanged(Entity entity)
+    {
+        lock (syncObject)
+        {
+            _ownersChanged.Add(entity);
+        }
+    }
+
+    private void FollowOwnersIndex(Entity entity)
+    {
+        SceneComponents index = null;
+        if (entity.Owner != null)
+            index = entity.Owner.ComponentIndex;
+        else if (availableEntities.ContainsKey(entity.Uid) && entity.OwnScene is { IsRemoved: false } home)
+            index = home.Components;
+
+        if (index == entity.ComponentIndex)
+            return;
+
+        entity.ComponentIndex?.Leave(entity);
+        index?.Join(entity);
     }
 
     /// <summary>Moves the root <paramref name="root"/> with its tree to <paramref name="scene"/> of the same world, from
@@ -881,6 +925,7 @@ public sealed class EntityManager
         {
             entitiesReowned.Clear();
             entitiesMoved.Clear();
+            _ownersChanged.Clear();
             foreach (var entity in availableEntities.Values)
             {
                 entity.SetScene(null);

@@ -10,9 +10,10 @@ All packages share one version.
 - `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
   services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
   `With<T1, T2>()` the entities with both, `CountOf<T>()` how many; walked with `foreach` through struct enumerators,
-  nothing allocated. Entities disabled in their tree are skipped. Kept as trees come into a scene and leave it, as
-  branches are hung under its entities, and as components are added and taken off; a component taken out during a
-  walk leaves a gap closed when the walk ends. On the world's thread. Measured on 10 000 entities, one in a hundred
+  nothing allocated; a pair selection gives each entity once, with its first component of each type. Entities disabled
+  in their tree are skipped. Kept as trees come into a scene and leave it, as components are added and taken off, and -
+  at the world's next sync, from whatever thread the owner changed - as branches are hung under its entities or taken
+  off; a component taken out during a walk leaves a gap closed when the walk ends. On the world's thread. Measured on 10 000 entities, one in a hundred
   with the component: 3.7 us against 507 us for a tree walk, 0 bytes against 56 KB.
 - `Entity.IsEnabledInTree`: whether the entity and every entity it hangs under are enabled, kept as they change.
 

@@ -17,6 +17,8 @@ internal sealed class ComponentPool
 
     public int Count { get; private set; }
 
+    public int Live { get; private set; }
+
     public bool HasGaps { get; private set; }
 
     public void Add(IComponent component, Entity owner)
@@ -31,6 +33,7 @@ internal sealed class ComponentPool
         Owners[Count] = owner;
         _positions[component] = Count;
         Count++;
+        Live++;
     }
 
     // True when it was here.
@@ -39,6 +42,7 @@ internal sealed class ComponentPool
         if (!_positions.Remove(component, out var at))
             return false;
 
+        Live--;
         if (leaveGap)
         {
             Items[at] = null;

@@ -115,7 +115,7 @@ namespace Adamantium.ECS
                 owner = value;
                 rootUid = GetRoot().rootUid;
                 RefreshEnabledInTree();
-                FollowOwnersIndex();
+                (World ?? before)?.EntityManager.NoteOwnerChanged(this);
                 before?.Changed(UniverseChangedEventArgs.OneFrame);
                 if (World != before)
                 {
@@ -180,18 +180,6 @@ namespace Adamantium.ECS
                 if (child != null)
                     stack.Push(child);
             }
-        }
-
-        private void FollowOwnersIndex()
-        {
-            var index = owner != null
-                ? owner.ComponentIndex
-                : ComponentIndex == scene?.Components ? ComponentIndex : null;
-            if (index == ComponentIndex)
-                return;
-
-            ComponentIndex?.Leave(this);
-            index?.Join(this);
         }
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>

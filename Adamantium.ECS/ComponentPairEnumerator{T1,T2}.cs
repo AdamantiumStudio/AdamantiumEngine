@@ -10,13 +10,15 @@ public struct ComponentPairEnumerator<T1, T2> : IDisposable
     where T2 : class, IComponent
 {
     private readonly SceneComponents _index;
+    private readonly bool _walksSecond;
     private PoolWalk _walk;
     private ComponentPair<T1, T2> _current;
     private bool _ended;
 
-    internal ComponentPairEnumerator(SceneComponents index, ComponentPool[] pools)
+    internal ComponentPairEnumerator(SceneComponents index, ComponentPool[] pools, bool walksSecond)
     {
         _index = index;
+        _walksSecond = walksSecond;
         _walk = new PoolWalk(pools);
         _current = default;
         _ended = false;
@@ -30,7 +32,10 @@ public struct ComponentPairEnumerator<T1, T2> : IDisposable
         while (_walk.MoveNext())
         {
             var owner = _walk.Owner;
-            if (owner.GetComponent<T1>() is { } first && owner.GetComponent<T2>() is { } second)
+            var first = owner.GetComponent<T1>();
+            var second = owner.GetComponent<T2>();
+            var walked = _walksSecond ? (IComponent)second : first;
+            if (first != null && second != null && ReferenceEquals(walked, _walk.Component))
             {
                 _current = new ComponentPair<T1, T2>(owner, first, second);
                 return true;

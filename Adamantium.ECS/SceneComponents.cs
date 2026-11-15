@@ -36,11 +36,12 @@ public sealed class SceneComponents
     {
         var first = GetPoolsOf(typeof(T1));
         var second = GetPoolsOf(typeof(T2));
-        return new ComponentPairSelection<T1, T2>(this, Count(second) < Count(first) ? second : first);
+        var walksSecond = Count(second) < Count(first);
+        return new ComponentPairSelection<T1, T2>(this, walksSecond ? second : first, walksSecond);
     }
 
     /// <summary>How many components of type <typeparamref name="T"/>, or derived from it, the scene holds - its disabled
-    /// entities' among them.</summary>
+    /// entities' among them, those taken out during a walk not.</summary>
     public int CountOf<T>() where T : class, IComponent => Count(GetPoolsOf(typeof(T)));
 
     // Puts in the tree under root: its entities, their components, and from now on what is added to them.
@@ -104,9 +105,27 @@ public sealed class SceneComponents
 
     internal void EndWalk()
     {
-        if (--_walks > 0)
+        if (_walks == 0)
             return;
 
+        _walks--;
+        if (_walks == 0)
+            CloseGaps();
+    }
+
+    /// <summary>Ends the walks a frame left behind - an enumerator never disposed - so the gaps they kept open close; at
+    /// the world's sync, between frames, when no walk goes on.</summary>
+    internal void EndFrame()
+    {
+        if (_walks == 0)
+            return;
+
+        _walks = 0;
+        CloseGaps();
+    }
+
+    private void CloseGaps()
+    {
         foreach (var pool in _gapped)
         {
             pool.CloseGaps();
@@ -210,7 +229,7 @@ public sealed class SceneComponents
         var count = 0;
         foreach (var pool in pools)
         {
-            count += pool.Count;
+            count += pool.Live;
         }
 
         return count;

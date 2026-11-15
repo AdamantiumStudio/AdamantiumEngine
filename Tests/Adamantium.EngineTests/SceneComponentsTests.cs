@@ -80,17 +80,123 @@ public class SceneComponentsTests
         });
     }
 
-    // Templates hang icons and frames straight under entities already in a scene.
+    // Templates hang icons and frames straight under entities already in a scene, from any thread: the index takes them
+    // in on the world's thread, at its next sync.
     [Test]
-    public void ABranchHungUnderAnEntityOfTheScene_JoinsAtOnce()
+    public void ABranchHungUnderAnEntityOfTheScene_JoinsFromTheNextFrame()
     {
         var root = new Entity(null, "Root");
         _manager.AddEntity(root);
         NextFrame();
 
         var branch = Marked("Branch", root);
+        var beforeSync = _world.MainScene.Components.CountOf<Marker>();
+        NextFrame();
 
-        Assert.That(Collect(_world.MainScene.Components.Of<Marker>()), Is.EqualTo(new[] { branch }));
+        Assert.Multiple(() =>
+        {
+            Assert.That(beforeSync, Is.Zero);
+            Assert.That(Collect(_world.MainScene.Components.Of<Marker>()), Is.EqualTo(new[] { branch }));
+        });
+    }
+
+    // Given an owner in another scene and let go of before the frame: it stays in its own scene's index.
+    [Test]
+    public void AnEntityGivenAnOwnerAndLetGoInOneFrame_StaysInItsScenesIndex()
+    {
+        var other = _world.CreateScene("Other");
+        var owner = new Entity(null, "Owner");
+        var entity = Marked("Entity");
+        _manager.AddEntity(owner, other);
+        _manager.AddEntity(entity);
+        NextFrame();
+
+        _manager.SetOwner(entity, owner);
+        _manager.RemoveOwner(entity);
+        NextFrame();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Collect(_world.MainScene.Components.Of<Marker>()), Is.EqualTo(new[] { entity }));
+            Assert.That(other.Components.CountOf<Marker>(), Is.Zero);
+        });
+    }
+
+    [Test]
+    public void AnEntityPutBack_ComesBackIntoTheIndex()
+    {
+        var root = Marked("Root");
+        _manager.AddEntity(root);
+        NextFrame();
+        var index = _manager.GetSiblingIndex(root);
+        _manager.RemoveEntity(root);
+        NextFrame();
+
+        _manager.ReturnEntity(root, null, _world.MainScene, index);
+        NextFrame();
+
+        Assert.That(Collect(_world.MainScene.Components.Of<Marker>()), Is.EqualTo(new[] { root }));
+    }
+
+    // An entity with two components of a base type came out twice, whichever of the two types was walked.
+    [Test]
+    public void APairSelection_GivesEachEntityOnce_WithItsFirstComponentOfEachType()
+    {
+        var entity = Marked("Entity");
+        entity.AddComponent(new Light());
+        var other = Marked("Other");
+        other.AddComponent(new Light());
+        _manager.AddEntity(entity);
+        _manager.AddEntity(other);
+        NextFrame();
+        var index = _world.MainScene.Components;
+
+        var walkingTransforms = CollectPairs(index.With<ActivatableComponent, Transform>());
+        var walkingLights = CollectPairs(index.With<ActivatableComponent, Light>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(walkingTransforms, Is.EquivalentTo(new[] { entity.GetComponent<ActivatableComponent>(), other.GetComponent<ActivatableComponent>() }));
+            Assert.That(walkingLights, Is.EquivalentTo(walkingTransforms));
+        });
+    }
+
+    private static List<ActivatableComponent> CollectPairs<T2>(ComponentPairSelection<ActivatableComponent, T2> selection)
+        where T2 : class, IComponent
+    {
+        var firsts = new List<ActivatableComponent>();
+        foreach (var pair in selection)
+        {
+            firsts.Add(pair.First);
+        }
+
+        return firsts;
+    }
+
+    // A walk left without Dispose would keep every later removal a gap: the next sync ends it.
+    [Test]
+    public void AWalkNeverDisposed_IsEndedAtTheNextSync()
+    {
+        var first = Marked("First");
+        var second = Marked("Second");
+        _manager.AddEntity(first);
+        _manager.AddEntity(second);
+        NextFrame();
+        var index = _world.MainScene.Components;
+
+        var abandoned = index.Of<Marker>().GetEnumerator();
+        abandoned.MoveNext();
+        first.RemoveComponent<Marker>();
+        var countedDuringWalk = index.CountOf<Marker>();
+        NextFrame();
+        second.RemoveComponent<Marker>();
+        second.AddComponent(new Marker());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(countedDuringWalk, Is.EqualTo(1), "a gap is not counted");
+            Assert.That(Collect(index.Of<Marker>()), Is.EqualTo(new[] { second }));
+        });
     }
 
     [Test]
@@ -196,25 +302,24 @@ public class SceneComponentsTests
             _manager.AddEntity(entity);
         }
 
+        var added = new Entity(null, "Added");
+        _manager.AddEntity(added);
         NextFrame();
         var index = _world.MainScene.Components;
         var walked = new List<Entity>();
-        var added = Marked("Added");
 
         foreach (var marker in index.Of<Marker>())
         {
             walked.Add(marker.Owner);
             if (walked.Count == 1)
             {
-                // Taken out ahead of the walk, and one comes in.
                 foreach (var other in entities)
                 {
                     if (other != marker.Owner && entities.IndexOf(other) % 2 == 0)
                         other.RemoveComponent<Marker>();
                 }
 
-                _manager.AddEntity(added);
-                NextFrame();
+                added.AddComponent(new Marker());
             }
         }
 
