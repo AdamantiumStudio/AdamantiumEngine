@@ -6,8 +6,7 @@ using System.Threading;
 
 namespace Adamantium.Engine.Compiler.Models.U3d;
 
-/// <summary>A U3D file (ECMA-363) read into its palettes by name, a later object of a name replacing the earlier; what is
-/// left out is listed in <see cref="Notes"/>.</summary>
+/// <summary>A U3D file (ECMA-363) read into its palettes by name, a later object of a name replacing the earlier.</summary>
 internal sealed class U3dFile
 {
     /// <summary>The profile bit of a file whose compressed fields are written plain.</summary>
@@ -19,9 +18,14 @@ internal sealed class U3dFile
     private const uint KnownProfileBits = 0x2 | NoCompressionProfile | DefinedUnitsProfile;
     private const uint Utf8 = 106;
 
-    private readonly ImportNotes _notes = new();
+    private readonly ImportNotes _notes;
     private readonly Dictionary<uint, U3dExtension> _extensionBlocks = [];
     private readonly Dictionary<string, int> _nodeIndex = new(StringComparer.Ordinal);
+
+    private U3dFile(ImportNotes notes)
+    {
+        _notes = notes;
+    }
 
     internal short MajorVersion { get; private set; }
 
@@ -55,12 +59,9 @@ internal sealed class U3dFile
 
     internal Dictionary<string, U3dViewResource> Views { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>What the file has that the reader leaves out, each said once.</summary>
-    internal IReadOnlyList<string> Notes => _notes.All;
-
-    /// <summary>Reads <paramref name="bytes"/>. Throws <see cref="InvalidDataException"/> for bytes that are not U3D,
-    /// are cut short or are broken, naming the block and where it starts.</summary>
-    internal static U3dFile Read(byte[] bytes, CancellationToken cancellationToken)
+    /// <summary>Reads <paramref name="bytes"/>, telling <paramref name="notes"/> what it leaves out. Throws
+    /// <see cref="InvalidDataException"/> for bytes that are not U3D, are cut short or are broken, naming the block.</summary>
+    internal static U3dFile Read(byte[] bytes, CancellationToken cancellationToken, ImportNotes notes)
     {
         ArgumentNullException.ThrowIfNull(bytes);
         if (bytes.Length < 4 || BitConverter.ToUInt32(bytes, 0) != U3dBlockTypes.FileHeader)
@@ -68,7 +69,7 @@ internal sealed class U3dFile
             throw new InvalidDataException("This is not a U3D file: it does not start with a U3D file header block");
         }
 
-        var file = new U3dFile();
+        var file = new U3dFile(notes);
         var header = U3dBlockReader.ReadBlock(bytes, 0, bytes.Length);
         var end = file.ReadHeader(header, bytes.Length);
         var pending = new Stack<U3dPendingBlock>();

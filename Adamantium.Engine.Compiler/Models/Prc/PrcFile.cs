@@ -17,13 +17,15 @@ internal sealed class PrcFile
     private const int GeometrySection = 4;
     private const int MaximumInflatedBytes = 1 << 30;
 
-    private readonly ImportNotes _notes = new();
+    private readonly ImportNotes _notes;
     private readonly List<uint[]> _sectionOffsets = [];
+    private readonly Dictionary<PrcUniqueId, PrcFileStructure> _structureById = new();
     private uint _modelFileStart;
     private uint _modelFileEnd;
 
-    private PrcFile()
+    private PrcFile(ImportNotes notes)
     {
+        _notes = notes;
     }
 
     internal uint MinimalVersionForRead { get; private set; }
@@ -42,14 +44,12 @@ internal sealed class PrcFile
 
     internal List<byte[]> UncompressedFiles { get; } = [];
 
-    internal IReadOnlyList<string> Notes => _notes.All;
-
-    /// <summary>Reads <paramref name="bytes"/>; corrupt data throws <see cref="InvalidDataException"/> naming the
-    /// section and where in it.</summary>
-    internal static PrcFile Read(byte[] bytes, CancellationToken cancellationToken)
+    /// <summary>Reads <paramref name="bytes"/>, telling <paramref name="notes"/> what it leaves out; corrupt data throws
+    /// <see cref="InvalidDataException"/> naming the section and where in it.</summary>
+    internal static PrcFile Read(byte[] bytes, CancellationToken cancellationToken, ImportNotes notes)
     {
         ArgumentNullException.ThrowIfNull(bytes);
-        var file = new PrcFile();
+        var file = new PrcFile(notes);
         var header = new PrcHeaderReader(bytes);
         file.ReadHeader(header);
         foreach (var structure in file.FileStructures)
@@ -62,6 +62,9 @@ internal sealed class PrcFile
         file.ReadModelFile(bytes);
         return file;
     }
+
+    /// <summary>The file structure of <paramref name="id"/>, the first of it when several share it; null for none.</summary>
+    internal PrcFileStructure FindStructure(PrcUniqueId id) => id != null && _structureById.TryGetValue(id, out var structure) ? structure : null;
 
     private void ReadHeader(PrcHeaderReader header)
     {
@@ -101,7 +104,9 @@ internal sealed class PrcFile
             }
 
             _sectionOffsets.Add(offsets);
-            FileStructures.Add(new PrcFileStructure { Index = index, Id = id });
+            var structure = new PrcFileStructure { Index = index, Id = id };
+            FileStructures.Add(structure);
+            _structureById.TryAdd(id, structure);
         }
 
         _modelFileStart = header.ReadUnsignedInteger("the model file's start");

@@ -126,6 +126,20 @@ public class U3dImportTests
     }
 
     [Test]
+    public void ANodeShownTwice_NeverTakesTheIdOfANodeNamedLikeItsCopy()
+    {
+        var file = new U3dTestFile(true);
+        U3dTestBlocks.WriteGroupNode(file, "Wheel", [CreateParent(string.Empty, Vector3F.Zero), CreateParent(string.Empty, Vector3F.One)]);
+        U3dTestBlocks.WriteGroupNode(file, "Wheel (2)", [CreateParent(string.Empty, Vector3F.Zero)]);
+
+        var scene = Import(file.ToArray(), out _);
+
+        var ids = scene.Models.Dependencies.Select(model => model.ID).ToList();
+        Assert.That(ids, Is.Unique);
+        Assert.That(ids, Has.Count.EqualTo(3));
+    }
+
+    [Test]
     public void PointSet_GivesItsPoints([Values(false, true)] bool compressed)
     {
         var random = new Random(7);

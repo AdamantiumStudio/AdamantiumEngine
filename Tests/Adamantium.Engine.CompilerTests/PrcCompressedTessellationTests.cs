@@ -86,6 +86,32 @@ public class PrcCompressedTessellationTests
     }
 
     [Test]
+    public void HuffmanArrayOfACodeOfNoBits_NamingMoreValuesThanTheSectionHolds_Throws()
+    {
+        const int bitNumber = 6;
+        List<bool> stream = [];
+        void Put(long value, int count)
+        {
+            for (var bit = 0; bit < count; bit++)
+            {
+                stream.Add(((value >> bit) & 1) != 0);
+            }
+        }
+
+        Put(1, bitNumber + 1);
+        Put(1, 8);
+        Put(5, bitNumber);
+        Put(0, 1);
+        Put(0x7FFFFFFF, 32);
+        var writer = new PrcTestBitWriter();
+        writer.WriteBoolean(true);
+        PrcTestArrayWriter.WriteWords(writer, stream);
+
+        Assert.That(() => new PrcBitReader(writer.ToArray(), "test").ReadCharacterArray(bitNumber, false, "values"),
+            Throws.TypeOf<InvalidDataException>().With.Message.Contains("values of the Huffman coded"));
+    }
+
+    [Test]
     public void Tetrahedron_ComesBackWithItsPointsTrianglesAndNormals([Values] bool huffman, [Values] bool planar)
     {
         var mesh = CreateTetrahedron([0.0, 0.0, 0.0], planar ? 4 : 1);

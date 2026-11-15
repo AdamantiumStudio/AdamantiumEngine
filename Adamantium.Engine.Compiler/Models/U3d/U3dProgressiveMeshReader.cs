@@ -143,6 +143,7 @@ internal static class U3dProgressiveMeshReader
 
         var moved = ReadStayOrMove(reader, geometry, splitFaces, splitPosition, newFaces);
         List<int[]> movedAttributes = [];
+        var splitTexturesOfLayer = new Dictionary<int, List<int>>();
         foreach (var face in moved)
         {
             var primitive = geometry.Primitives[face];
@@ -161,7 +162,12 @@ internal static class U3dProgressiveMeshReader
 
             for (var layer = 0; layer < description.TextureLayerCount; layer++)
             {
-                var used = GetUsedAt(geometry, splitFaces, splitPosition, FirstTextureSlot + layer);
+                if (!splitTexturesOfLayer.TryGetValue(layer, out var used))
+                {
+                    used = GetUsedAt(geometry, splitFaces, splitPosition, FirstTextureSlot + layer);
+                    splitTexturesOfLayer.Add(layer, used);
+                }
+
                 changes[FirstTextureSlot + layer] = ReadChange(reader, TextureChange, newTextures, used, geometry);
             }
 

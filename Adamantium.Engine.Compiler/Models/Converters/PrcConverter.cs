@@ -29,7 +29,6 @@ public class PrcConverter : ConverterBase
     private const uint NoLayer = 0xFFFF;
     private const uint DiffuseMapping = 0x0001;
 
-    private readonly ImportNotes _meshNotes = new();
     private readonly Dictionary<string, List<string>> _grouped = new(StringComparer.Ordinal);
     private readonly HashSet<PrcEntityReference> _applied = [];
     private readonly HashSet<PrcEntityReference> _redefinitions = [];
@@ -49,12 +48,7 @@ public class PrcConverter : ConverterBase
 
     protected override void Convert()
     {
-        _file = PrcFile.Read(ReadFileBytes(), CancellationToken);
-        foreach (var note in _file.Notes)
-        {
-            Tell(note);
-        }
-
+        _file = PrcFile.Read(ReadFileBytes(), CancellationToken, Notes);
         var unit = FindValidUnit();
         if (unit is { } valid)
         {
@@ -74,10 +68,6 @@ public class PrcConverter : ConverterBase
         BuildTree();
         TellUnapplied();
         TellGrouped();
-        foreach (var note in _meshNotes.All)
-        {
-            Tell(note);
-        }
     }
 
     private void TellWithName(string feature, string name)
@@ -121,7 +111,7 @@ public class PrcConverter : ConverterBase
         var pending = new Stack<PrcOccurrenceSlot>();
         for (var index = _file.Roots.Count - 1; index >= 0; index--)
         {
-            var structure = _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(_file.Roots[index].FileStructure));
+            var structure = _file.FindStructure(_file.Roots[index].FileStructure);
             if (structure != null)
             {
                 pending.Push(new PrcOccurrenceSlot(structure, _file.Roots[index].Occurrence));
@@ -160,7 +150,7 @@ public class PrcConverter : ConverterBase
             return;
         }
 
-        var structure = id == null ? from : _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(id));
+        var structure = id == null ? from : _file.FindStructure(id);
         if (structure != null)
         {
             pending.Push(new PrcOccurrenceSlot(structure, index));
@@ -173,7 +163,7 @@ public class PrcConverter : ConverterBase
         for (var index = _file.Roots.Count - 1; index >= 0; index--)
         {
             var root = _file.Roots[index];
-            var structure = _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(root.FileStructure));
+            var structure = _file.FindStructure(root.FileStructure);
             if (structure == null)
             {
                 Tell($"a root product occurrence lies in file structure {root.FileStructure}, which the file does not hold");
@@ -404,6 +394,7 @@ public class PrcConverter : ConverterBase
         PrcFilterPass passed, string name, out PrcFilterPass admitted)
     {
         admitted = passed;
+        var isLayered = entity.Graphics.LayerIndex >= 0 || !isContainer;
         var layer = entity.Graphics.LayerIndex < 0 ? NoLayer : (uint)entity.Graphics.LayerIndex;
         var key = new PrcEntityKey(structure.Id, entity.UniqueId);
         for (var node = owner; node != null; node = node.Owner)
@@ -415,7 +406,7 @@ public class PrcConverter : ConverterBase
 
             foreach (var active in node.Context.Filters)
             {
-                if (active.Layers.Count > 0 && active.Filter.LayersInclusive != active.Layers.Contains(layer))
+                if (isLayered && active.Layers.Count > 0 && active.Filter.LayersInclusive != active.Layers.Contains(layer))
                 {
                     TellWithName("entities the display filter of a product occurrence takes away by their layer are left out", name);
                     return true;
@@ -478,7 +469,7 @@ public class PrcConverter : ConverterBase
             return from;
         }
 
-        var found = _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(id));
+        var found = _file.FindStructure(id);
         if (found == null)
         {
             Tell($"the {what} of product occurrence {name} lies in file structure {id}, which the file does not hold");
@@ -591,7 +582,7 @@ public class PrcConverter : ConverterBase
         switch (structure.Tessellations[item.TessellationIndex])
         {
             case Prc3DTessellation tessellation:
-                var groups = PrcMeshBuilder.Build3D(tessellation, face => GetFaceMaterial(structure, face, style), _meshNotes);
+                var groups = PrcMeshBuilder.Build3D(tessellation, face => GetFaceMaterial(structure, face, style), Notes);
                 foreach (var group in groups.OrderBy(entry => entry.Key, StringComparer.Ordinal))
                 {
                     if (group.Value.Indices.Count == 0)
@@ -676,7 +667,7 @@ public class PrcConverter : ConverterBase
         }
 
         var start = GetStyleColor(style);
-        var meshes = PrcMeshBuilder.BuildMarkup(markup, index => GetColor(structure, index), start, _meshNotes);
+        var meshes = PrcMeshBuilder.BuildMarkup(markup, index => GetColor(structure, index), start, Notes);
         var material = GetMarkupMaterial();
         PrcMeshData[] parts = [meshes.Lines, meshes.Triangles, meshes.Points];
         foreach (var data in parts)

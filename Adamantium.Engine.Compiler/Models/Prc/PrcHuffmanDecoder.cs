@@ -57,6 +57,11 @@ internal static class PrcHuffmanDecoder
             throw owner.CreateCorruptException($"the Huffman coded {what} names {count} values, more than its {stream.Remaining} bits of codes can hold");
         }
 
+        if (tree.ShortestCode == 0)
+        {
+            owner.CheckCount(count, 1, $"values of the Huffman coded {what}");
+        }
+
         var values = new int[count];
         for (var index = 0; index < values.Length; index++)
         {

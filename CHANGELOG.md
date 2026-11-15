@@ -15,7 +15,8 @@ All packages share one version.
   shaders as materials with their material's colors, opacity and reflectivity and their first texture's PNG or JPEG;
   lights and views as lights and cameras; the units of the file header. What it reads past - animation, bones, CLOD
   and subdivision modifiers, glyphs, extensions, references to other files - is listed in `UnsupportedFeatures`.
-  `ModelConverterFactory.GetConverter(fileName, bytes, config)`: a model read from memory, a PDF's 3D artwork.
+  `ModelConverterFactory.GetConverter(fileName, bytes, config)`: a model read from memory, a PDF's 3D artwork. The
+  content pipeline's `ModelImporter` takes `.u3d` and `.prc` files.
 - PRC import (`PrcConverter`, `.prc`, PRC Format Specification 8137, the format CAD systems put in PDF 3D artwork): the
   bit-level types - UnsignedInteger, Integer, String, and Double through the specification's table of frequent doubles
   and exponents (`PrcBitReader`); the header with every section's offset, each section inflated on its own; the schema

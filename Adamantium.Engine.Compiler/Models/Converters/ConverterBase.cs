@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Adamantium.Engine.Compiler.Converter.Configs;
 using Adamantium.Engine.Compiler.Converter.Parsers;
+using Adamantium.Engine.Compiler.Models;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
@@ -13,8 +14,8 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
    public abstract class ConverterBase
    {
       private readonly byte[] _fileBytes;
-      private readonly HashSet<string> _told = new(StringComparer.Ordinal);
       private readonly Dictionary<string, int> _idUses = new(StringComparer.Ordinal);
+      private readonly HashSet<string> _usedIds = new(StringComparer.Ordinal);
 
       protected ConversionConfig Config { get; }
       protected UpAxis UpAxis { get; set; }
@@ -25,7 +26,10 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 
       /// <summary>What the file has that the import cannot do. Filled in by the parse, read by whoever started the
       /// import: half a model lost in silence looks whole right up until someone notices it is not.</summary>
-      public List<String> UnsupportedFeatures { get; } = new List<String>();
+      public List<String> UnsupportedFeatures => Notes.All;
+
+      /// <summary>The notes behind <see cref="UnsupportedFeatures"/>, each told once; a file reader is handed them.</summary>
+      private protected ImportNotes Notes { get; } = new();
 
       protected Boolean IsCanceled { get; set; }
 
@@ -53,21 +57,23 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
       protected byte[] ReadFileBytes() => _fileBytes ?? File.ReadAllBytes(FilePath);
 
       /// <summary>Adds <paramref name="feature"/> to <see cref="UnsupportedFeatures"/> unless it is there already.</summary>
-      protected void Tell(string feature)
-      {
-         if (_told.Add(feature))
-         {
-            UnsupportedFeatures.Add(feature);
-         }
-      }
+      protected void Tell(string feature) => Notes.Tell(feature);
 
-      /// <summary><paramref name="id"/> the first time, then with the count of its uses appended, so a node shown in
-      /// several places gets a model ID of its own in each.</summary>
+      /// <summary><paramref name="id"/> the first time, then with the count of its uses appended - skipping any ID
+      /// already given - so a node shown in several places gets a model ID of its own in each.</summary>
       protected string CreateUniqueId(string id)
       {
-         _idUses.TryGetValue(id, out var count);
-         _idUses[id] = ++count;
-         return count == 1 ? id : $"{id} ({count})";
+         var count = _idUses.GetValueOrDefault(id);
+         string candidate;
+         do
+         {
+            count++;
+            candidate = count == 1 ? id : $"{id} ({count})";
+         }
+         while (!_usedIds.Add(candidate));
+
+         _idUses[id] = count;
+         return candidate;
       }
 
       /// <summary>Returns null only when the file could not be parsed at all. A parse error goes up: there used to

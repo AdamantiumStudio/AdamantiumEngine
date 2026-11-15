@@ -453,8 +453,11 @@ public class PrcImportTests
         string[] byLayer = ["Kept", "No layer"];
         string[] byName = ["Kept"];
         string[] notLayer = ["Kept", "Named", "No layer"];
+        string[] onLayer3 = ["Kept", "Named"];
         Assert.Multiple(() =>
         {
+            Assert.That(GetShown(PrcTestEntities.CreateFilter("Layer 3", true, true, [3])), Is.EqualTo(onLayer3),
+                "the occurrence holding them is on no layer, and a layer filter keeps containers for what is under them");
             Assert.That(GetShown(PrcTestEntities.CreateFilter("Layers", true, true, [3, 0xFFFF], false, [33])), Is.EqualTo(byLayer),
                 "kept on layer 3 and on none, Named taken away by name; the inactive filter does nothing");
             Assert.That(GetShown(PrcTestEntities.CreateFilter("Only", true, false, [], true, [31])), Is.EqualTo(byName),

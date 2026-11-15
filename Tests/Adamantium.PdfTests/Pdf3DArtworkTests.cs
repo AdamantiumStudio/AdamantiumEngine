@@ -163,6 +163,22 @@ public class Pdf3DArtworkTests
     }
 
     [Test]
+    public void AViewItOpensOnByReference_IsTheViewItLists()
+    {
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Annots [4 0 R] >>");
+        builder.Add("<< /Type /Annot /Subtype /3D /Rect [0 0 100 100] /3DD 5 0 R /3DV 7 0 R >>");
+        builder.Add(PdfFileBuilder.Stream("/Type /3D /Subtype /U3D /VA [6 0 R 7 0 R]", Encoding.ASCII.GetBytes("x")));
+        builder.Add("<< /XN (Front) >>");
+        builder.Add("<< /XN (Side) >>");
+        var artwork = PdfDocument.Open(builder.Build("/Root 1 0 R")).Pages[0].Annotations[0].Artwork3D;
+
+        Assert.That(artwork.DefaultView, Is.SameAs(artwork.Views[1]));
+    }
+
+    [Test]
     public void AnotherKind_OrOneWithNoModel_HasNoArtwork()
     {
         var builder = new PdfFileBuilder();

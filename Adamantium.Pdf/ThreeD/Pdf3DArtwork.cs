@@ -81,6 +81,7 @@ public sealed class Pdf3DArtwork
         }
 
         List<Pdf3DView> views = [];
+        var viewOfDictionary = new Dictionary<PdfDictionary, Pdf3DView>(ReferenceEqualityComparer.Instance);
         if (document.Resolve(stream.Dictionary[ViewsKey]) is PdfArray listed)
         {
             foreach (var item in listed)
@@ -88,17 +89,18 @@ public sealed class Pdf3DArtwork
                 if (Pdf3DView.From(item, document) is { } view)
                 {
                     views.Add(view);
+                    viewOfDictionary.TryAdd((PdfDictionary)document.Resolve(item), view);
                 }
             }
         }
 
-        var streamDefault = PickView(stream.Dictionary[StreamDefaultViewKey], views, null, document);
+        var streamDefault = PickView(stream.Dictionary[StreamDefaultViewKey], views, viewOfDictionary, null, document);
         return new Pdf3DArtwork(document, stream)
         {
             Format = PdfValues.Name(stream.Dictionary[SubtypeKey], document),
             IsShared = shared,
             Views = views,
-            DefaultView = PickView(annotation[DefaultViewKey], views, streamDefault, document) ?? streamDefault ??
+            DefaultView = PickView(annotation[DefaultViewKey], views, viewOfDictionary, streamDefault, document) ?? streamDefault ??
                           (views.Count > 0 ? views[0] : null),
             Activation = Pdf3DActivation.From(annotation[ActivationKey], document),
             ViewBox = PdfRectangle.From(annotation[ViewBoxKey], document),
@@ -106,8 +108,8 @@ public sealed class Pdf3DArtwork
         };
     }
 
-    private static Pdf3DView PickView(PdfObject value, List<Pdf3DView> views, Pdf3DView streamDefault,
-        IPdfObjectResolver resolver)
+    private static Pdf3DView PickView(PdfObject value, List<Pdf3DView> views, Dictionary<PdfDictionary, Pdf3DView> viewOfDictionary,
+        Pdf3DView streamDefault, IPdfObjectResolver resolver)
     {
         switch (resolver.Resolve(value))
         {
@@ -122,8 +124,8 @@ public sealed class Pdf3DArtwork
             case PdfString name:
                 var wanted = name.ToText();
                 return views.Find(view => view.Name == wanted || view.InternalName == wanted);
-            case PdfDictionary:
-                return Pdf3DView.From(value, resolver);
+            case PdfDictionary dictionary:
+                return viewOfDictionary.TryGetValue(dictionary, out var listedView) ? listedView : Pdf3DView.From(value, resolver);
             default:
                 return null;
         }

@@ -40,12 +40,7 @@ public class U3dConverter : ConverterBase
 
     protected override void Convert()
     {
-        _file = U3dFile.Read(ReadFileBytes(), CancellationToken);
-        foreach (var note in _file.Notes)
-        {
-            Tell(note);
-        }
-
+        _file = U3dFile.Read(ReadFileBytes(), CancellationToken, Notes);
         if (_file.UnitsScalingFactor is { } units)
         {
             SceneDataContainer.Units = new SceneData.Unit(UnitType.Meter, (float)units);
