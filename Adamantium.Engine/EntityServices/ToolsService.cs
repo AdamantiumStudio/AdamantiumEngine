@@ -53,6 +53,12 @@ public class ToolsService : EntityService, INotifyUniverse
 
     public event EventHandler<UniverseChangedEventArgs> UniverseChanged;
 
+    /// <summary>Raised on the world's thread when a gesture of a tool has changed entities: a handle let go after a drag,
+    /// with how each entity stood before the press and after the release.</summary>
+    public event EventHandler<EntityEditEventArgs> Edited;
+
+    internal void TellEdited(EntityEdit edit) => Edited?.Invoke(this, new EntityEditEventArgs(edit));
+
     /// <summary>Whether something over the scene has taken the pointer this frame; the tool then leaves it alone.</summary>
     public bool IsPointerTaken { get; private set; }
 

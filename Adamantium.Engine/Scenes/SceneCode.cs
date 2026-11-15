@@ -87,6 +87,19 @@ public static class SceneCode
         SceneGameComponents.Drop(entity, entry);
     }
 
+    /// <summary>Puts back on <paramref name="entity"/> the entry taken off with <see cref="Remove"/> or made a component
+    /// with <see cref="Load"/> - as an undo does: the component whose code is not loaded is in the scene again. On the
+    /// world's thread. Nothing for an entry the entity keeps already.</summary>
+    public static void Restore(Entity entity, SceneGameComponent entry)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(entry);
+        if (!SceneGameComponents.Keeps(entity, entry))
+        {
+            SceneGameComponents.Keep(entity, entry);
+        }
+    }
+
     private static void CheckMadeType(Entity entity, Type type)
     {
         if (!typeof(GameComponent).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters ||
