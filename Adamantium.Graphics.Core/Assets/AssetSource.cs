@@ -25,6 +25,9 @@ public sealed class AssetSource
     /// <summary>The name of the importer that read it.</summary>
     public string Importer { get; set; }
 
+    /// <summary>The importer's revision when it read it; 0 for an asset file made before importers had one.</summary>
+    public int ImporterRevision { get; set; }
+
     /// <summary>The import settings it was read with.</summary>
     public Dictionary<string, string> Parameters { get; set; } = new();
 

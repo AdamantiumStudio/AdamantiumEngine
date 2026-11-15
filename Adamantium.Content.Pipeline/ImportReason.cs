@@ -16,5 +16,8 @@ public enum ImportReason
     Unreadable,
 
     /// <summary>It was asked for, up to date or not.</summary>
-    Asked
+    Asked,
+
+    /// <summary>Its importer makes something else of the same source now than when its asset file was made.</summary>
+    ImporterRevised
 }

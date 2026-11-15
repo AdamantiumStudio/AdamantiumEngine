@@ -1706,12 +1706,12 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
-                            (position.X, position.Y, position.Z) = (-position.X, -position.Z, position.Y);
+                            (position.Y, position.Z) = (-position.Z, position.Y);
                             Points[i] = position;
 
                             ConvertUVs(i);
                         }
-                        TurnNormals(n => new Vector3F(-n.X, -n.Z, n.Y));
+                        TurnNormals(n => new Vector3F(n.X, -n.Z, n.Y));
                         break;
                 }
                 break;
@@ -1734,12 +1734,13 @@ public class Mesh
                         for (int i = 0; i < Points.Length; i++)
                         {
                             position = Points[i];
+                            position.X = -position.X;
                             position.Y = -position.Y;
                             Points[i] = position;
 
                             ConvertUVs(i);
                         }
-                        TurnNormals(n => new Vector3F(n.X, -n.Y, n.Z));
+                        TurnNormals(n => new Vector3F(-n.X, -n.Y, n.Z));
                         break;
                 }
                 break;
@@ -1750,10 +1751,13 @@ public class Mesh
                     case UpAxis.Y_DOWN_RH:
                         for (int i = 0; i < Points.Length; i++)
                         {
-                            Points[i] = -Points[i];
+                            position = Points[i];
+                            position.Y = -position.Y;
+                            position.Z = -position.Z;
+                            Points[i] = position;
                             ConvertUVs(i);
                         }
-                        TurnNormals(n => -n);
+                        TurnNormals(n => new Vector3F(n.X, -n.Y, -n.Z));
                         break;
                 }
                 break;

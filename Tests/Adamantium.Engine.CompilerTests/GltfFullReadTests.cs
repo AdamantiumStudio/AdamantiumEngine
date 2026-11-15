@@ -197,8 +197,8 @@ public class GltfFullReadTests
         Assert.That(scene.Controllers[GltfConverter.NodeId(meshNode)].SkeletonRoot, Is.EqualTo(GltfConverter.NodeId(hip)));
     }
 
-    // The file's tangents are kept, turned as the normals are; the handedness stays, the mirror and the turned-over v
-    // undoing each other.
+    // The file's tangents are kept, turned as the normals are; the handedness turns over with v, which the engine
+    // counts from the top - the turn into its axes is no mirror.
     [TestCase(false)]
     [TestCase(true)]
     public void TheFilesTangents_AreKept_InTheEnginesAxes(bool baked)
@@ -216,7 +216,7 @@ public class GltfFullReadTests
 
         var along = Vector3F.TransformNormal(Vector3F.UnitX, AxisConversion.Between(UpAxis.Y_UP_RH_FRONT_Z, UpAxis.Y_DOWN_RH));
         Assert.That(mesh.Tangents.Select(t => (t.X, t.Y, t.Z, t.W)).OrderBy(t => t.W),
-            Is.EqualTo(new[] { (along.X, along.Y, along.Z, -1f), (along.X, along.Y, along.Z, 1f), (along.X, along.Y, along.Z, 1f) }));
+            Is.EqualTo(new[] { (along.X, along.Y, along.Z, -1f), (along.X, along.Y, along.Z, -1f), (along.X, along.Y, along.Z, 1f) }));
     }
 
     // Data a mesh has no array for is kept by its name, and stays with its vertex when like vertices are joined: the
