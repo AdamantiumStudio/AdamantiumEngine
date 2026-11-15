@@ -25,6 +25,10 @@ All packages share one version.
   its bytes; its views (`Pdf3DView`: camera, centre of orbit, perspective or orthographic projection, background,
   render mode, lighting, or a view node of the model) and the one it opens on; when it comes to life and goes back to
   its poster (`Pdf3DActivation`), the part of the annotation it is shown in, and whether it may be turned.
+- `PdfIncrementalUpdate.RotatePage(page, rotation)`: a page turned by quarters, written as its own `/Rotate` over one
+  it inherits; a page already turned so is left as it is. A page turned and annotated in one update is written once,
+  with both. `PdfDocument.Continues(earlier)`: whether a document is an earlier one's file again, as it was or saved
+  by an update - what keeps a viewer's place when the file it shows is saved and opened again.
 - PDF annotations: `PdfNewAnnotation.Subject` (`/Subj`, what a viewer's list of comments heads it with) and `Created`
   (`/CreationDate`), read back as `PdfAnnotation.Subject` and `Created`; `PdfAnnotationTypes.Stamp`, an annotation
   shown by its appearance alone.

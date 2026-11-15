@@ -23,6 +23,7 @@ public sealed class PdfIncrementalUpdate
     private readonly SortedDictionary<int, int> _freed = [];
     private readonly Dictionary<int, PdfArray> _annotationArrays = [];
     private readonly Dictionary<int, PdfArray> _sharedAnnotationArrays = [];
+    private readonly Dictionary<int, PdfDictionary> _pages = [];
     private int _next;
 
     public PdfIncrementalUpdate(PdfDocument document)
@@ -159,6 +160,30 @@ public sealed class PdfIncrementalUpdate
 
             Remove(own);
         }
+    }
+
+    /// <summary>Turns <paramref name="page"/> to <paramref name="rotation"/> degrees clockwise, a multiple of 90,
+    /// written as the page's own <c>/Rotate</c> (ISO 32000-2, 7.7.3.3), over one it inherits too. A page already turned
+    /// so is left as it is.</summary>
+    public void RotatePage(PdfPage page, int rotation)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        if (rotation % 90 != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rotation), "A page is turned by a multiple of 90 degrees.");
+        }
+
+        var id = PageId(page);
+        var turned = (rotation % 360 + 360) % 360;
+        var dictionary = PageDictionary(page, id);
+        var now = dictionary[PdfKeys.Rotate] is PdfInteger own ? (int)((own.Value % 360 + 360) % 360) : page.Rotation;
+        if (now == turned)
+        {
+            return;
+        }
+
+        dictionary.Set(PdfKeys.Rotate, new PdfInteger(turned));
+        Replace(id, dictionary);
     }
 
     /// <summary>Declares in the catalog the developer extension of <paramref name="prefix"/> (ISO 32000-2, 7.12):
@@ -356,17 +381,30 @@ public sealed class PdfIncrementalUpdate
         writer.Write($"startxref\n{at}\n%%EOF\n");
     }
 
+    private static PdfObjectId PageId(PdfPage page) => page.Id ?? throw new PdfException(
+        "The page is written into its parent, not as an object of its own; it cannot be changed.");
+
+    private PdfDictionary PageDictionary(PdfPage page, PdfObjectId id)
+    {
+        if (!_pages.TryGetValue(id.Number, out var dictionary))
+        {
+            dictionary = Copy(Get(id) as PdfDictionary ?? page.Dictionary);
+            _pages[id.Number] = dictionary;
+        }
+
+        return dictionary;
+    }
+
     private PdfArray AnnotationsOf(PdfPage page)
     {
         ArgumentNullException.ThrowIfNull(page);
-        var id = page.Id ?? throw new PdfException(
-            "The page is written into its parent, not as an object of its own; it cannot be changed.");
+        var id = PageId(page);
         if (_annotationArrays.TryGetValue(id.Number, out var known))
         {
             return known;
         }
 
-        var dictionary = Copy(Get(id) as PdfDictionary ?? page.Dictionary);
+        var dictionary = PageDictionary(page, id);
         PdfArray annotations;
         if (dictionary[PdfKeys.Annots] is PdfReference reference && Get(reference.Id) is PdfArray shared)
         {
