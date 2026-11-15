@@ -12,6 +12,7 @@ public sealed class Pdf3DProjection
     private const string OrthographicBindingKey = "OB";
     private const string Orthographic = "O";
     private const string WidthBinding = "W";
+    private const string AbsoluteBinding = "Absolute";
 
     /// <summary>Perspective, or orthographic (<c>Subtype</c> <c>P</c> or <c>O</c>).</summary>
     public Pdf3DProjectionKind Kind { get; init; }
@@ -19,11 +20,14 @@ public sealed class Pdf3DProjection
     /// <summary>The perspective's full field of view, in degrees, 0 to 180 (<c>FOV</c>).</summary>
     public double FieldOfView { get; init; }
 
-    /// <summary>The orthographic projection's scale (<c>OS</c>): world units to the binding's length; 1 by default.</summary>
+    /// <summary>The orthographic projection's scale (<c>OS</c>), applied to the near plane's x and y on top of its
+    /// binding's; 1 by default.</summary>
     public double Scale { get; init; } = 1;
 
-    /// <summary>What an orthographic scale is a fraction of (<c>OB</c>): <c>W</c> width, <c>H</c> height, <c>Min</c> or
-    /// <c>Max</c> of the two, <c>Absolute</c>; or what a perspective's field of view spans (<c>PS</c>).</summary>
+    /// <summary>How the near plane of an orthographic projection is fitted to the annotation (<c>OB</c>): to its width
+    /// <c>W</c>, its height <c>H</c>, the lesser <c>Min</c> or greater <c>Max</c> of the two, or not at all,
+    /// <c>Absolute</c> - one unit of the artwork a unit of the annotation - the default; for a perspective, the side
+    /// its field of view spans (<c>PS</c>), <c>W</c> by default.</summary>
     public string Binding { get; init; }
 
     /// <summary>The projection of a <c>P</c> dictionary; perspective with a 90 degree field of view, as the format
@@ -42,7 +46,7 @@ public sealed class Pdf3DProjection
             FieldOfView = PdfValues.Number(dictionary[FieldOfViewKey], resolver, 90),
             Scale = PdfValues.Number(dictionary[OrthographicScaleKey], resolver, 1),
             Binding = orthographic
-                ? PdfValues.Name(dictionary[OrthographicBindingKey], resolver) ?? WidthBinding
+                ? PdfValues.Name(dictionary[OrthographicBindingKey], resolver) ?? AbsoluteBinding
                 : PdfValues.Name(dictionary[PerspectiveScalingKey], resolver) ?? WidthBinding,
         };
     }
