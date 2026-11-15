@@ -12,6 +12,8 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
 {
    public abstract class ConverterBase
    {
+      private readonly byte[] fileBytes;
+
       protected ConversionConfig Config { get; }
       protected UpAxis UpAxis { get; set; }
       protected string FileName { get; }
@@ -28,13 +30,25 @@ namespace Adamantium.Engine.Compiler.Converter.Converters
       protected ModelFileParser Parser { get; set; }
 
       protected ConverterBase(string filePath, ConversionConfig config, UpAxis upAxis = UpAxis.Y_UP_RH)
+         : this(filePath, null, config, upAxis)
       {
+      }
+
+      /// <summary>A converter of <paramref name="fileBytes"/> in place of the file at <paramref name="filePath"/>: a
+      /// model carried inside another file - a PDF's 3D artwork - has bytes and no file of its own. The path still
+      /// names the model and says where whatever it refers to lies. Null bytes read the file.</summary>
+      protected ConverterBase(string filePath, byte[] fileBytes, ConversionConfig config, UpAxis upAxis)
+      {
+         this.fileBytes = fileBytes;
          Config = config;
          UpAxis = upAxis;
          FilePath = filePath;
          FileName = Path.GetFileName(filePath);
          SceneDataContainer = new SceneData {Name = FileName};
       }
+
+      /// <summary>The model's bytes: those the converter was given, or else the file's.</summary>
+      protected byte[] ReadFileBytes() => fileBytes ?? File.ReadAllBytes(FilePath);
 
       /// <summary>Returns null only when the file could not be parsed at all. A parse error goes up: there used to
       /// be a MessageBox with a stack trace here - on a build machine it hung the process forever, and the caller

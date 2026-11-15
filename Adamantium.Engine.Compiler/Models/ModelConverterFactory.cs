@@ -22,10 +22,25 @@ namespace Adamantium.Engine.Compiler.Converter
             case ".gltf":
             case ".glb":
                return new GltfConverter(filePath, config);
+            case ".u3d":
+               return new U3dConverter(filePath, config);
             default:
                throw new NotSupportedException("This converter type is not supported");
          }
-         
+
+      }
+
+      /// <summary>The converter of a model held in memory - one carried inside another file, a PDF's 3D artwork say -
+      /// by the extension of <paramref name="fileName"/>, the name it goes by.</summary>
+      public static ConverterBase GetConverter(string fileName, byte[] bytes, ConversionConfig config)
+      {
+         ArgumentNullException.ThrowIfNull(bytes);
+         var extension = Path.GetExtension(fileName).ToLowerInvariant();
+         return extension switch
+         {
+            ".u3d" => new U3dConverter(fileName, bytes, config),
+            _ => throw new NotSupportedException($"A {extension} model is not read from memory")
+         };
       }
    }
 }

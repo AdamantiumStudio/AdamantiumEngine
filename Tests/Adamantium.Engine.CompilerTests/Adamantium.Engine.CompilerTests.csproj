@@ -55,6 +55,14 @@
       </Content>
     </ItemGroup>
 
+    <!-- U3D files written by MeshLab's exporter (Intel's U3D library), compressed as real files are. -->
+    <ItemGroup>
+      <Content Include="U3dData\**">
+        <Link>CompilerU3d\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
     <ItemGroup>
       <Content Include="EffectsData\structs.ui.fxh">
         <Link>CompilerEffects\structs.ui.fxh</Link>

@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- U3D import (`U3dConverter`, `.u3d`, ECMA-363 4th edition): the bit encoding of clause 10 - static and dynamic
+  contexts, compressed U8/U16/U32, the no compression profile (`U3dBitReader`, `U3dContext`); blocks with their
+  padding and meta data (`U3dBlockReader`, `U3dBlock`); modifier chains; the node graph as the model tree, a node of
+  several parents under each, one of none under the other nodes; CLOD meshes - their base mesh and their resolution
+  updates, which is all MeshLab's files have - point sets and line sets, a mesh a shading ID; lit texture
+  shaders as materials with their material's colours, opacity and reflectivity and their first texture's PNG or JPEG;
+  lights and views as lights and cameras; the units of the file header. What it reads past - animation, bones, CLOD
+  and subdivision modifiers, glyphs, extensions, references to other files - is listed in `UnsupportedFeatures`.
+  `ModelConverterFactory.GetConverter(fileName, bytes, config)`: a model read from memory, a PDF's 3D artwork.
 - `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
