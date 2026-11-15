@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using Adamantium.Core.Collections;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core;
@@ -9,7 +10,10 @@ namespace Adamantium.ECS
 {
     public class EntityComponentCollection : TrackingCollection<IComponent>
     {
+        private static readonly object Missing = new();
+
         private readonly Entity entity;
+        private object[] _found = [];
 
         public EntityComponentCollection(Entity entity)
         {
@@ -17,20 +21,47 @@ namespace Adamantium.ECS
         }
 
         /// <summary>The first component of the type or a derived one, or null. Read without the lock: every processor asks
-        /// this of every entity each frame, and the components change rarely.</summary>
+        /// this of every entity each frame, and the components change rarely. Each type is looked for once, and its answer
+        /// kept until the components change.</summary>
         public T Get<T>() where T : class, IComponent
+        {
+            var found = Volatile.Read(ref _found);
+            var slot = ComponentSlot<T>.Index;
+            if (slot < found.Length && found[slot] is { } known)
+                return known as T;
+
+            var component = Find<T>();
+            Remember(found, slot, (object)component ?? Missing);
+            return component;
+        }
+
+        private T Find<T>() where T : class, IComponent
         {
             var items = AsSpan();
             for (int i = 0; i < items.Length; i++)
             {
                 if (items[i] is T component)
-                {
                     return component;
-                }
             }
 
             return null;
         }
+
+        private void Remember(object[] found, int slot, object answer)
+        {
+            if (slot < found.Length)
+            {
+                found[slot] = answer;
+                return;
+            }
+
+            var grown = new object[Math.Max(slot + 1, found.Length * 2)];
+            Array.Copy(found, grown, found.Length);
+            grown[slot] = answer;
+            Interlocked.CompareExchange(ref _found, grown, found);
+        }
+
+        private void ForgetFound() => Volatile.Write(ref _found, []);
 
         /// <summary>
         /// Gets all the components of the specified type or derived type.
@@ -78,27 +109,36 @@ namespace Adamantium.ECS
 
         public T GetInChildren<T>() where T : class, IComponent
         {
-            var stack = new Stack<Entity>();
-            stack.Push(entity);
-            while (stack.Count > 0)
+            var stack = Entity.StackPool.Get();
+            try
             {
-                var current = stack.Pop();
-
-                if (current != entity)
+                stack.Push(entity);
+                while (stack.Count > 0)
                 {
-                    var component = current.GetComponent<T>();
-                    if (component != null)
+                    var current = stack.Pop();
+
+                    if (current != entity)
                     {
-                        return component;
+                        var component = current.GetComponent<T>();
+                        if (component != null)
+                        {
+                            return component;
+                        }
+                    }
+
+                    foreach (var child in current.Dependencies.AsSpan())
+                    {
+                        if (child != null)
+                            stack.Push(child);
                     }
                 }
 
-                for (int i = 0; i < current.Dependencies.Count; i++)
-                {
-                    stack.Push(current.Dependencies[i]);
-                }
+                return default(T);
             }
-            return default(T);
+            finally
+            {
+                Entity.StackPool.Return(stack);
+            }
         }
 
         public T[] GetAllInParents<T>() where T : class, IComponent
@@ -120,24 +160,33 @@ namespace Adamantium.ECS
 
         public T[] GetAllInChildren<T>() where T : class, IComponent
         {
-            List<T> childrenComponents = new List<T>();
-            var stack = new Stack<Entity>();
-            stack.Push(entity);
-            while (stack.Count > 0)
+            List<T> childrenComponents = [];
+            var stack = Entity.StackPool.Get();
+            try
             {
-                var current = stack.Pop();
-
-                if (current != entity)
+                stack.Push(entity);
+                while (stack.Count > 0)
                 {
-                    var components = current.GetComponents<T>();
-                    childrenComponents.AddRange(components);
-                }
+                    var current = stack.Pop();
 
-                foreach (var dependency in current.Dependencies)
-                {
-                    stack.Push(dependency);
+                    if (current != entity)
+                    {
+                        var components = current.GetComponents<T>();
+                        childrenComponents.AddRange(components);
+                    }
+
+                    foreach (var child in current.Dependencies.AsSpan())
+                    {
+                        if (child != null)
+                            stack.Push(child);
+                    }
                 }
             }
+            finally
+            {
+                Entity.StackPool.Return(stack);
+            }
+
             return childrenComponents.ToArray();
         }
 
@@ -177,6 +226,7 @@ namespace Adamantium.ECS
             HandleComponent(index, item, false);
 
             base.InsertItem(index, item);
+            ForgetFound();
 
             entity?.OnComponentChanged(null, item, ComponentChangedAction.Added);
         }
@@ -196,6 +246,7 @@ namespace Adamantium.ECS
             }
 
             base.RemoveItem(index);
+            ForgetFound();
 
             entity?.OnComponentChanged(oldComponent, null, ComponentChangedAction.Removed);
 
@@ -214,18 +265,20 @@ namespace Adamantium.ECS
             HandleComponent(index, item, true);
 
             base.SetItem(index, item);
+            ForgetFound();
 
             entity?.OnComponentChanged(oldComponent, item, ComponentChangedAction.Replaced);
         }
 
         protected override void ClearItems()
         {
-            for (int i = 0; i < Count; i++)
+            for (var i = Count - 1; i >= 0; i--)
             {
                 RemoveItem(i);
             }
 
             base.ClearItems();
+            ForgetFound();
         }
 
         private void HandleComponent<T>(int index, T component, bool isReplacing) where T : IComponent

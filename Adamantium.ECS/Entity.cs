@@ -36,12 +36,7 @@ namespace Adamantium.ECS
             dependencies = new TrackingCollection<Entity>();
             dependenciesReadOnly = new ReadOnlyTrackingCollection<Entity>(dependencies);
             this.uid = uid;
-            Owner = owner;
             rootUid = uid;
-            if (Owner != null)
-            {
-                rootUid = GetRoot().rootUid;
-            }
             IsEnabled = true;
             Visible = true;
             IsExpanded = true;
@@ -51,6 +46,7 @@ namespace Adamantium.ECS
             componentCollection = new EntityComponentCollection(this);
             componentCollection.Add(Transform);
             readOnlyComponents = new ReadOnlyTrackingCollection<IComponent>(componentCollection);
+            Owner = owner;
         }
 
         private Entity owner;
@@ -62,6 +58,7 @@ namespace Adamantium.ECS
         private EntityComponentCollection componentCollection;
         private ReadOnlyTrackingCollection<IComponent> readOnlyComponents;
         private List<IInitializable> pendingComponents = new List<IInitializable>();
+        private bool _enabledInTree;
 
         public Transform Transform { get; internal set; }
 
@@ -89,6 +86,10 @@ namespace Adamantium.ECS
         [Bindable]
         public partial bool IsEnabled { get; set; }
 
+        /// <summary>Whether the entity and every entity it hangs under are enabled - what the scene's
+        /// <see cref="Scene.Components"/> selections go by. Kept as <see cref="IsEnabled"/> and the owner change.</summary>
+        public bool IsEnabledInTree => _enabledInTree;
+
         [Bindable]
         public partial bool IsSelected { get; set; }
 
@@ -113,6 +114,8 @@ namespace Adamantium.ECS
                 OnOwnerChanged(owner, value);
                 owner = value;
                 rootUid = GetRoot().rootUid;
+                RefreshEnabledInTree();
+                FollowOwnersIndex();
                 before?.Changed(UniverseChangedEventArgs.OneFrame);
                 if (World != before)
                 {
@@ -132,6 +135,64 @@ namespace Adamantium.ECS
         internal Scene OwnScene => scene;
 
         internal void SetScene(Scene value) => scene = value;
+
+        // The index of components the entity is in: its scene's, once it has joined.
+        internal SceneComponents ComponentIndex { get; set; }
+
+        partial void OnIsEnabledChanged(bool value) => RefreshEnabledInTree();
+
+        private void RefreshEnabledInTree()
+        {
+            if (!SetEnabledInTree(this))
+                return;
+
+            var stack = StackPool.Get();
+            try
+            {
+                PushChildren(stack, this);
+                while (stack.Count > 0)
+                {
+                    var current = stack.Pop();
+                    if (SetEnabledInTree(current))
+                        PushChildren(stack, current);
+                }
+            }
+            finally
+            {
+                StackPool.Return(stack);
+            }
+        }
+
+        private static bool SetEnabledInTree(Entity entity)
+        {
+            var enabled = entity.IsEnabled && (entity.owner == null || entity.owner._enabledInTree);
+            if (enabled == entity._enabledInTree)
+                return false;
+
+            entity._enabledInTree = enabled;
+            return true;
+        }
+
+        private static void PushChildren(Stack<Entity> stack, Entity entity)
+        {
+            foreach (var child in entity.dependencies.AsSpan())
+            {
+                if (child != null)
+                    stack.Push(child);
+            }
+        }
+
+        private void FollowOwnersIndex()
+        {
+            var index = owner != null
+                ? owner.ComponentIndex
+                : ComponentIndex == scene?.Components ? ComponentIndex : null;
+            if (index == ComponentIndex)
+                return;
+
+            ComponentIndex?.Leave(this);
+            index?.Join(this);
+        }
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>
         public void NotifyUpdated() => World?.Changed(UniverseChangedEventArgs.OneFrame);
@@ -362,7 +423,7 @@ namespace Adamantium.ECS
         // Rent a scratch Stack/Queue from a shared pool instead of allocating one per traversal (that was GC churn). The
         // pool hands each caller its own instance - so reentrant AND concurrent traversals are safe - and the policy clears
         // it on Return, keeping no Entity references alive in the pool.
-        private static readonly ObjectPool<Stack<Entity>> StackPool =
+        internal static readonly ObjectPool<Stack<Entity>> StackPool =
             new DefaultObjectPool<Stack<Entity>>(new CollectionPoolPolicy<Stack<Entity>>(s => s.Clear()));
         private static readonly ObjectPool<Queue<Entity>> QueuePool =
             new DefaultObjectPool<Queue<Entity>>(new CollectionPoolPolicy<Queue<Entity>>(q => q.Clear()));

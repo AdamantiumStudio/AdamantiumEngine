@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
+  services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
+  `With<T1, T2>()` the entities with both, `CountOf<T>()` how many; walked with `foreach` through struct enumerators,
+  nothing allocated. Entities disabled in their tree are skipped. Kept as trees come into a scene and leave it, as
+  branches are hung under its entities, and as components are added and taken off; a component taken out during a
+  walk leaves a gap closed when the walk ends. On the world's thread. Measured on 10 000 entities, one in a hundred
+  with the component: 3.7 us against 507 us for a tree walk, 0 bytes against 56 KB.
+- `Entity.IsEnabledInTree`: whether the entity and every entity it hangs under are enabled, kept as they change.
+
 - U3D import (`U3dConverter`, `.u3d`, ECMA-363 4th edition): the bit encoding of clause 10 - static and dynamic
   contexts, compressed U8/U16/U32, the no compression profile (`U3dBitReader`, `U3dContext`); blocks with their
   padding and meta data (`U3dBlockReader`, `U3dBlock`); modifier chains; the node graph as the model tree, a node of
@@ -339,6 +348,12 @@ All packages share one version.
 
 ### Changed
 
+- `Entity.GetComponent<T>()` looks for each type once and keeps the answer until the entity's components change: 13
+  times faster on entities of six components, still without a lock and without allocating. `GetInChildren` and
+  `GetAllInChildren` walk with pooled stacks instead of a new one each call.
+- `Scene.Cameras` is kept by the scene's components index: a camera given to an entity already in the scene joins it,
+  and an entity whose last camera is taken off leaves it.
+- `Entity` takes its owner last in its constructor, once its components are made.
 - `LightManager` follows the world: every light that comes into its scene - on its own, inside a model, put back with
   `EntityManager.ReturnEntity` - is listed, and every one that leaves is not, from the entity manager's `EntityAdded`
   and `EntityRemoved`; the lights already in the scene are listed when it is made. `AddLight` and `RemoveLight` only add
@@ -404,6 +419,8 @@ All packages share one version.
 
 ### Fixed
 
+- `EntityComponentCollection.Clear` takes off and tells of every component; it stepped over every second one, which
+  left without the event and still owned.
 - Imported models are no longer shown as their mirror images. The way from a file's axes into the engine's
   (`AxisConversion.Between`, `Mesh.ChangeCoordinateSystem`) was a reflection for every source - Z up `(x, -z, y)`,
   Y up `(-x, -y, z)`, glTF `(x, -y, -z)` now - while the engine's axes are right-handed as its cameras show them: a

@@ -244,10 +244,10 @@ public sealed class EntityManager
         }
 
         home?.Roots.Remove(root);
-        LeaveCameras(root, home);
+        LeaveScene(root, home);
         root.SetScene(scene);
         scene.Roots.Add(root);
-        JoinCameras(root, scene);
+        JoinScene(root, scene);
     }
 
     private void AddEntityInternal(Entity entity)
@@ -262,27 +262,14 @@ public sealed class EntityManager
         if (availableEntities.TryAdd(entity.Uid, entity))
         {
             PlaceByOwner(entity);
-            JoinCameras(entity, entity.Scene ?? scene);
+            JoinScene(entity, entity.Scene ?? scene);
             OnEntityAdded(entity);
         }
     }
 
-    private static void JoinCameras(Entity tree, Scene scene)
-    {
-        tree.TraverseInDepth(entity =>
-        {
-            if (entity.GetComponent<CameraBase>() != null)
-            {
-                scene.Cameras.Add(entity);
-            }
-        });
-    }
+    private static void JoinScene(Entity tree, Scene scene) => scene.Components.Join(tree);
 
-    private static void LeaveCameras(Entity tree, Scene scene)
-    {
-        if (scene == null) return;
-        tree.TraverseInDepth(entity => scene.Cameras.Remove(entity));
-    }
+    private static void LeaveScene(Entity tree, Scene scene) => scene?.Components.Leave(tree);
 
     /// <summary>Hangs <paramref name="entity"/> under <paramref name="owner"/> - with <see cref="RemoveOwner"/>, the one
     /// way an entity changes owner. A root given an owner leaves its scene's <see cref="Scene.RootEntities"/>, and moves
@@ -321,9 +308,9 @@ public sealed class EntityManager
         home?.Roots.Remove(entity);
         if (entity.Owner.Scene is { } ownerScene && ownerScene != home)
         {
-            LeaveCameras(entity, home);
+            LeaveScene(entity, home);
             entity.SetScene(ownerScene);
-            JoinCameras(entity, ownerScene);
+            JoinScene(entity, ownerScene);
         }
     }
     
@@ -345,7 +332,7 @@ public sealed class EntityManager
         var scene = entity.Scene ?? home;
         entity.SetScene(null);
         home?.Roots.Remove(entity);
-        LeaveCameras(entity, scene);
+        LeaveScene(entity, scene);
         OnEntityRemoved(entity);
 
         // Its tree goes with it: an entity of the world it holds - a camera following it - leaves the world too.
@@ -359,7 +346,7 @@ public sealed class EntityManager
     {
         var scene = branch.Scene;
         branch.Owner = null;
-        LeaveCameras(branch, scene);
+        LeaveScene(branch, scene);
         OnEntityRemoved(branch);
         branch.TraverseInDepth(held =>
         {
@@ -592,7 +579,7 @@ public sealed class EntityManager
 
             entity.Owner = owner;
             owner.MoveDependency(entity, returned.Index);
-            JoinCameras(entity, owner.Scene);
+            JoinScene(entity, owner.Scene);
             OnEntityAdded(entity);
             return;
         }
@@ -606,7 +593,7 @@ public sealed class EntityManager
         SetCameraProjectionType(entity, CameraProjectionType.Perspective);
         entity.SetScene(scene);
         scene.Roots.Insert(Math.Clamp(returned.Index, 0, scene.Roots.Count), entity);
-        JoinCameras(entity, scene);
+        JoinScene(entity, scene);
         OnEntityAdded(entity);
     }
 
@@ -902,8 +889,8 @@ public sealed class EntityManager
             // Only the main scene outlives a reset, empty.
             foreach (var scene in scenes)
             {
+                scene.Components.Clear();
                 scene.Roots.Clear();
-                scene.Cameras.Clear();
                 scene.IsRemoved = scene != MainScene;
             }
 
