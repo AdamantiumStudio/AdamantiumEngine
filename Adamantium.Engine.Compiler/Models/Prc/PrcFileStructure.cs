@@ -38,15 +38,12 @@ internal sealed class PrcFileStructure
     /// <summary>The index of the root product occurrence among <see cref="Occurrences"/>.</summary>
     internal int RootIndex { get; set; } = -1;
 
-    /// <summary>The tessellation section's entities in order; one this reader does not read is a
-    /// <see cref="PrcUnreadTessellation"/>, and those past one it cannot step over are missing.</summary>
+    /// <summary>The tessellation section's entities in order, a highly compressed one rebuilt as a regular 3D
+    /// tessellation; one this reader does not read is a <see cref="PrcUnreadTessellation"/>.</summary>
     internal List<PrcTessellation> Tessellations { get; } = [];
 
     /// <summary>How many tessellations the section says it holds.</summary>
     internal int DeclaredTessellationCount { get; set; }
-
-    /// <summary>The index of the first highly compressed tessellation, where the section stopped being read; -1 for none.</summary>
-    internal int FirstCompressedTessellation { get; set; } = -1;
 
     /// <summary>How many topological contexts the exact geometry section holds.</summary>
     internal int TopologicalContextCount { get; set; }

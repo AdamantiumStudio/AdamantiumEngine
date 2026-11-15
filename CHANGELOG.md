@@ -24,9 +24,14 @@ All packages share one version.
   locations, prototypes and external data, part definitions, representation items, sets nested, placed by their
   coordinate systems - as the model tree; regular 3D tessellation (triangles, fans, stripes, one normal a face or a
   vertex, vertex colours), wire tessellation and markup tessellation (polylines, triangles, quads, polygons, points,
-  matrix blocks) as meshes; point sets. What it leaves out - highly compressed tessellation, whose Huffman-coded
-  arrays the specification does not lay out, the exact geometry of B-rep bodies, hidden and removed entities, views,
-  filters, lights and cameras, textures, markup text - is listed in `UnsupportedFeatures`, B-rep-only items by name.
+  matrix blocks) as meshes; point sets. Highly compressed tessellation (PRC_TYPE_TESS_3D_Compressed): the plain and
+  Huffman coded character, short, integer and indice arrays (`PrcBitReader`); the mesh rebuilt
+  by its traversal - edges on a stack, the right neighbour pushed before the left, new points along axes built from
+  the points before them in the specification's arithmetic, several traversals in one tessellation - with its stored
+  normals (planar faces, references to a vertex's earlier normals) or the winding of recalculated ones, line
+  attributes, vertex colours and texture coordinates. What it leaves out - the exact geometry of B-rep bodies, hidden
+  and removed entities, views, filters, lights and cameras, textures, markup text - is listed in `UnsupportedFeatures`,
+  B-rep-only items by name.
 - `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document

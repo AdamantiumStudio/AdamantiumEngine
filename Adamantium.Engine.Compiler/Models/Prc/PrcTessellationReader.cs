@@ -4,9 +4,8 @@ using Adamantium.Mathematics;
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
 /// <summary>Reads a file structure's tessellation section (PRC_TYPE_ASM_FileStructureTessellation): regular 3D
-/// tessellations with their faces, wire tessellations and markup tessellations. A highly compressed tessellation
-/// (PRC_TYPE_TESS_3D_Compressed) is not read: its arrays are Huffman coded in a form the specification does not give,
-/// so not even its length is known, and the section is read no further.</summary>
+/// tessellations with their faces, highly compressed tessellations (PRC_TYPE_TESS_3D_Compressed) rebuilt into the same
+/// form, wire tessellations and markup tessellations.</summary>
 internal static class PrcTessellationReader
 {
     /// <summary>The tessellation types of a face in the order their counts follow one another: triangles, fans and
@@ -48,8 +47,9 @@ internal static class PrcTessellationReader
                     structure.Tessellations.Add(ReadMarkup(reader));
                     break;
                 case PrcTypes.Tessellation3DCompressed:
-                    structure.FirstCompressedTessellation = index;
-                    return;
+                    var compressed = PrcCompressedTessellationReader.Read(reader);
+                    structure.Tessellations.Add(PrcCompressedMeshDecoder.Decode(compressed, reader));
+                    break;
                 default:
                     reader.SkipUnknown(type, "a tessellation");
                     structure.Tessellations.Add(new PrcUnreadTessellation { Type = type });

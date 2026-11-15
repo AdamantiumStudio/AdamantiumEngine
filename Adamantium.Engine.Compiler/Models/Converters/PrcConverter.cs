@@ -16,13 +16,14 @@ namespace Adamantium.Engine.Compiler.Models.Converters;
 /// its bytes, as CAD systems write it. The model file's root product occurrences become the model tree, each occurrence
 /// a node placed by its location, its sons, prototype and external data under it, its part's representation items -
 /// sets nested, items placed by their coordinate systems - as nodes with the meshes of their tessellations: a regular 3D
-/// tessellation's triangles, fans and stripes, a wire tessellation's polylines, a point set's points. Markups become line
+/// tessellation's triangles, fans and stripes, a highly compressed tessellation's mesh rebuilt from its traversal, a
+/// wire tessellation's polylines, a point set's points. Markups become line
 /// and triangle meshes from their markup tessellations, under a node of their own. A mesh is drawn by the material of its
 /// style - a plain colour, or a material of the globals - inherited down the tree when an entity has none; a colour index
 /// of a style or a material names the colour's first component in the globals' colour array, so it is three times the
 /// colour's place in it. PRC is Z up
-/// and right-handed; its unit is the model file's, in millimetres. What is not read - highly compressed tessellation,
-/// the exact geometry of B-rep bodies, hidden or removed entities - is told in <see cref="ConverterBase.UnsupportedFeatures"/>.</summary>
+/// and right-handed; its unit is the model file's, in millimetres. What is not read - the exact geometry of B-rep
+/// bodies, hidden or removed entities - is told in <see cref="ConverterBase.UnsupportedFeatures"/>.</summary>
 public class PrcConverter : ConverterBase
 {
     private const int MaximumNodeAppearances = 1_000_000;
@@ -374,16 +375,7 @@ public class PrcConverter : ConverterBase
 
         if (item.TessellationIndex >= structure.Tessellations.Count)
         {
-            if (item.TessellationIndex < structure.DeclaredTessellationCount)
-            {
-                TellOf("representation items show a tessellation that is not read - highly compressed, or past one that is " +
-                       "in its section - and are not drawn", name);
-            }
-            else
-            {
-                Tell($"representation item {name} shows tessellation {item.TessellationIndex}, which file structure {structure.Index} does not hold");
-            }
-
+            Tell($"representation item {name} shows tessellation {item.TessellationIndex}, which file structure {structure.Index} does not hold");
             return;
         }
 

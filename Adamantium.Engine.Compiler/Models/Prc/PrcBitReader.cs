@@ -8,8 +8,9 @@ namespace Adamantium.Engine.Compiler.Models.Prc;
 /// section's inflated bytes are a stream of bits, the first bit the highest of its byte, and a value may start at any
 /// bit. A Boolean is one bit, a Character eight, an UnsignedInteger groups of eight bits each behind a 1 and ended by a
 /// 0, an Integer the same with the sign of its last byte, a Double a prefix code from the table of frequent doubles and
-/// exponents followed by what the code leaves out, a String a flag, a length and its UTF-8 bytes. Reading past the end
-/// of the section throws, naming the section and the bit.</summary>
+/// exponents followed by what the code leaves out, a String a flag, a length and its UTF-8 bytes. The arrays of
+/// compressed tessellation - CharacterArray, ShortArray, CompressedIntegerArray, CompressedIndiceArray - are plain or
+/// Huffman coded. Reading past the end of the section throws, naming the section and the bit.</summary>
 public sealed class PrcBitReader
 {
     /// <summary>The fewest bits a Double takes: the code of zero.</summary>
@@ -270,6 +271,107 @@ public sealed class PrcBitReader
         return BitConverter.UInt32BitsToSingle(value);
     }
 
+    /// <summary><paramref name="count"/> Booleans, one bit each.</summary>
+    public bool[] ReadBooleans(int count, string what)
+    {
+        if (count < 0)
+        {
+            throw Corrupt($"it names {count} {what}");
+        }
+
+        CheckCount((ulong)count, 1, what);
+        var values = new bool[count];
+        for (var index = 0; index < count; index++)
+        {
+            values[index] = ReadBit() != 0;
+        }
+
+        return values;
+    }
+
+    /// <summary>A CharacterArray (WriteCharacterArray): a flag saying whether it is Huffman coded, then the
+    /// characters - each of <paramref name="bitNumber"/> bits when coded, of eight when plain. A
+    /// <paramref name="signed"/> array holds them in two's complement in that width.</summary>
+    public int[] ReadCharacterArray(int bitNumber, bool signed, string what) =>
+        ReadCharacterArray(bitNumber, signed, ReadBit() != 0, what);
+
+    /// <summary>A CharacterArray whose flag is not stored: <paramref name="compressed"/> says whether it is Huffman
+    /// coded.</summary>
+    public int[] ReadCharacterArray(int bitNumber, bool signed, bool compressed, string what)
+    {
+        if (compressed)
+        {
+            return PrcHuffmanDecoder.Decode(ReadHuffmanPayload(what), bitNumber, signed, this, what);
+        }
+
+        var count = ReadCount(8, what);
+        var values = new int[count];
+        for (var index = 0; index < count; index++)
+        {
+            var character = ReadCharacter();
+            values[index] = signed ? (sbyte)character : character;
+        }
+
+        return values;
+    }
+
+    /// <summary>A ShortArray (WriteShortArray): a flag saying whether it is Huffman coded, then the values - each of
+    /// <paramref name="bitNumber"/> bits when coded, else two Characters, the lowest byte first.</summary>
+    public int[] ReadShortArray(int bitNumber, string what)
+    {
+        if (ReadBit() != 0)
+        {
+            return PrcHuffmanDecoder.Decode(ReadHuffmanPayload(what), bitNumber, false, this, what);
+        }
+
+        var count = ReadCount(16, what);
+        var values = new int[count];
+        for (var index = 0; index < count; index++)
+        {
+            var low = ReadCharacter();
+            values[index] = low | (ReadCharacter() << 8);
+        }
+
+        return values;
+    }
+
+    /// <summary>A CompressedIntegerArray (WriteCompressedIntegerArray): a CharacterArray of six-bit widths, then
+    /// each integer as an IntegerWithVariableBitNumber of its width.</summary>
+    public int[] ReadCompressedIntegerArray(string what)
+    {
+        var widths = ReadCharacterArray(6, false, what);
+        var values = new int[widths.Length];
+        for (var index = 0; index < widths.Length; index++)
+        {
+            values[index] = ReadIntegerWithVariableBitNumber(widths[index]);
+        }
+
+        return values;
+    }
+
+    /// <summary>A CompressedIndiceArray (WriteCompressedIndiceArray) whose compression flag is stored.</summary>
+    public int[] ReadCompressedIndiceArray(string what) => ReadCompressedIndiceArray(ReadBit() != 0, what);
+
+    /// <summary>A CompressedIndiceArray: a signed CharacterArray of six-bit steps - the first index's width, then by
+    /// how much each width differs from the one before - then the first index, and each difference to the next, as
+    /// an IntegerWithVariableBitNumber of its width.</summary>
+    public int[] ReadCompressedIndiceArray(bool compressed, string what)
+    {
+        var steps = ReadCharacterArray(6, true, compressed, what);
+        var values = new int[steps.Length];
+        var width = 0;
+        var previous = 0;
+        for (var index = 0; index < steps.Length; index++)
+        {
+            width = index == 0 ? steps[0] : width + steps[index];
+            var read = ReadIntegerWithVariableBitNumber(width);
+            previous = index == 0 ? read : previous + read;
+            values[index] = previous;
+        }
+
+        return values;
+    }
+
     /// <summary>Whether all that is left is the padding a section ends with: zero bits filling its last byte, and at
     /// most one zero byte more.</summary>
     public bool IsAtPadding
@@ -302,6 +404,29 @@ public sealed class PrcBitReader
         }
 
         bitPosition += count;
+    }
+
+    private PrcHuffmanPayload ReadHuffmanPayload(string what)
+    {
+        var words = ReadCount(32, what);
+        if (words == 0)
+        {
+            return new PrcHuffmanPayload([], 0);
+        }
+
+        var payload = new byte[words * 4];
+        for (var index = 0; index < payload.Length; index++)
+        {
+            payload[index] = ReadCharacter();
+        }
+
+        var usedInLastWord = ReadUnsignedInteger();
+        if (usedInLastWord > 32)
+        {
+            throw Corrupt($"the Huffman coded {what} uses {usedInLastWord} bits of its last 32-bit word");
+        }
+
+        return new PrcHuffmanPayload(payload, (words - 1L) * 32 + usedInLastWord);
     }
 
     private PrcDoubleCode ReadDoubleCode()

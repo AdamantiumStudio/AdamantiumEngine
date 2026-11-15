@@ -358,12 +358,18 @@ public class PrcImportTests
     }
 
     [Test]
-    public void CompressedTessellation_IsToldAndTheSectionReadNoFurther()
+    public void CompressedTessellation_IsDrawnAndTheSectionReadOn()
     {
         double[] points = [0, 0, 0, 1, 0, 0, 0, 1, 0];
         var regular = PrcTestEntities.Tessellation3D(points, [0, 0, 1], [0, 0, 0, 3, 0, 6],
             [new PrcTestFace { UsedEntities = PrcTessellationReader.Triangle, Sizes = [1] }]);
-        var bytes = PartFile([regular, PrcTestEntities.Compressed(), regular], writer =>
+        var square = new PrcTestMesh();
+        square.Points.AddRange([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]);
+        square.AddTriangle(0, 1, 2, 0);
+        square.AddTriangle(0, 2, 3, 0);
+        square.CornerNormals = [[[0, 0, 1], [0, 0, 1], [0, 0, 1]], [[0, 0, 1], [0, 0, 1], [0, 0, 1]]];
+        var compressed = PrcTestCompressedTessellation.Entity(square, 0.01, true);
+        var bytes = PartFile([regular, compressed, regular], writer =>
         {
             PrcTestEntities.PolyBrep(writer, "Drawn", 0, 0);
             PrcTestEntities.PolyBrep(writer, "Compressed", 0, 1);
@@ -374,9 +380,8 @@ public class PrcImportTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(AllMeshes(scene).Count(), Is.EqualTo(1));
-            Assert.That(notes, Has.Some.Contains("2 tessellations of 1 file structures are not read").And.Contains("type 173"));
-            Assert.That(notes, Has.Some.Contains("2 representation items show a tessellation that is not read").And.Contains("Compressed, After"));
+            Assert.That(AllMeshes(scene).Select(mesh => mesh.Indices.Length / 3), Is.EquivalentTo(new[] { 1, 2, 1 }));
+            Assert.That(notes, Has.None.Contains("173").And.None.Contains("not read").And.None.Contains("left after the end"));
         });
     }
 

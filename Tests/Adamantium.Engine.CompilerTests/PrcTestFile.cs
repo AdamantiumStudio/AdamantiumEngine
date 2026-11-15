@@ -544,16 +544,6 @@ internal static class PrcTestEntities
         writer.WriteCharacter(0);
     };
 
-    /// <summary>A highly compressed tessellation's start: its type and a few of its fields, which no reader can step
-    /// over.</summary>
-    public static Action<PrcTestBitWriter> Compressed() => writer =>
-    {
-        writer.WriteUnsignedInteger(PrcTypes.Tessellation3DCompressed);
-        writer.WriteBoolean(false);
-        writer.WriteBoolean(true);
-        writer.WriteDouble(0.01);
-    };
-
     /// <summary>A markup of the part or product, drawn by markup tessellation <paramref name="tessellation"/>.</summary>
     public static Action<PrcTestBitWriter> Markups(string name, int tessellation) => writer =>
     {

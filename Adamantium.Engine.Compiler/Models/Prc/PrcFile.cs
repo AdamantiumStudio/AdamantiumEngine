@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Threading;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
@@ -64,7 +63,6 @@ internal sealed class PrcFile
 
         cancellationToken.ThrowIfCancellationRequested();
         file.ReadModelFile(bytes);
-        file.TellCompressedTessellations();
         return file;
     }
 
@@ -153,20 +151,6 @@ internal sealed class PrcFile
             notes.Tell("exact geometry - B-rep topology, curves and surfaces of the geometry section - is not read; " +
                        "a representation item shows its tessellation only");
         }
-    }
-
-    private void TellCompressedTessellations()
-    {
-        var structures = FileStructures.Where(structure => structure.FirstCompressedTessellation >= 0).ToList();
-        if (structures.Count == 0)
-        {
-            return;
-        }
-
-        var unread = structures.Sum(structure => structure.DeclaredTessellationCount - structure.Tessellations.Count);
-        notes.Tell($"{unread} tessellations of {structures.Count} file structures are not read: from the first highly compressed one " +
-                   "(PRC_TYPE_TESS_3D_Compressed, type 173) on, as the specification gives no layout for the Huffman-coded " +
-                   "arrays that tessellation holds - so not even its length is known - nor how a reader rebuilds the mesh from it");
     }
 
     private void ReadModelFile(byte[] bytes)
