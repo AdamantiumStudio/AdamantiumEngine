@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- `GameService`: the logic of a game's or a mod's code, acting on its components while a scene is played - `Start`,
+  `Update` every frame, `Stop`; the scene played, the time played and the frame's; `Each<T>()` walks the scene's
+  components of a kind. A kind needs a constructor taking nothing, and is found in the world's code as components are.
+  `GameRun.Start(scene)` plays a scene: one service of each kind, a world service while it plays, paused through
+  `IsPaused`, the services told and let go on `Stop`; a service that throws is taken out of the run.
+- `Entity.CopyTree(copies)`: a copy of an entity's tree under its own names, each entity put in `copies` against its
+  copy - what a scene played on a copy of itself needs to keep what was played.
+
 - U3D import (`U3dConverter`, `.u3d`, ECMA-363 4th edition): the bit encoding of clause 10 - static and dynamic
   contexts, compressed U8/U16/U32, the no compression profile (`U3dBitReader`, `U3dContext`); blocks with their
   padding and meta data (`U3dBlockReader`, `U3dBlock`); modifier chains; the node graph as the model tree, a node of
