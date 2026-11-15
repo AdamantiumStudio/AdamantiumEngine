@@ -53,6 +53,10 @@ public class InputService : EntityService
     private Vector2F panFrom;
     private Camera panCamera;
     private double panDepth;
+    private const double SteeringQuietSeconds = 0.3;
+    private Camera _steered;
+    private EditedState _steeredBefore;
+    private double _steeringQuietFor;
 
     public InputService(EntityWorld world) : base(world)
     {
@@ -102,6 +106,11 @@ public class InputService : EntityService
     /// <summary>The camera's actions - moving, turning, following, the speed keys - to rebind or switch off together.</summary>
     public InputActionMap CameraActions { get; }
 
+    /// <summary>Raised on the world's thread when the mouse or the keys have steered a camera of a scene - one an output
+    /// looks through, not an output's own - from the press to the release, with how it stood before and after. The
+    /// wheel, which has no release, ends its gesture once it has been still for a moment.</summary>
+    public event EventHandler<EntityEditEventArgs> CameraSteered;
+
     public Boolean InstrumentsEnabled { get; set; }
 
     public override void UnloadContent()
@@ -129,6 +138,7 @@ public class InputService : EntityService
     public override void Update(AppTime appTime)
     {
         userControlledEntity = Selection.Current ?? UserControlledEntity;
+        FollowSteering(appTime);
 
         if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera))
         {
@@ -160,6 +170,91 @@ public class InputService : EntityService
     }
 
     // The cameras of the scenes shown that no output looks through - one travelling to its subject, say.
+    private void FollowSteering(AppTime appTime)
+    {
+        var steered = SteeredSceneCamera();
+        if (_steered != null)
+        {
+            if (steered == _steered)
+            {
+                _steeringQuietFor = 0;
+                return;
+            }
+
+            _steeringQuietFor += appTime.FrameTime;
+            if (steered == null && _steeringQuietFor < SteeringQuietSeconds)
+            {
+                return;
+            }
+
+            EndSteering();
+        }
+
+        if (steered?.Owner is { } entity)
+        {
+            _steered = steered;
+            _steeredBefore = EditedState.Of(entity);
+            _steeringQuietFor = 0;
+        }
+    }
+
+    private void EndSteering()
+    {
+        var camera = _steered;
+        _steered = null;
+        if (camera.Owner is not { } entity)
+        {
+            return;
+        }
+
+        var after = EditedState.Of(entity);
+        if (after != _steeredBefore)
+        {
+            CameraSteered?.Invoke(this,
+                new EntityEditEventArgs(new EntityEdit([new EditedEntity(entity, _steeredBefore, after)])));
+        }
+    }
+
+    private Camera SteeredSceneCamera()
+    {
+        if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera)
+            && IsSceneCamera(pointerCamera)
+            && (look.IsDown || zoom.Value != 0 || twist.Value != 0
+                || observatory.PointerInput is { CanLocatePointer: true } input && input.IsMouseButtonDown(MouseButton.Middle)))
+        {
+            return pointerCamera;
+        }
+
+        if (observatory.KeyboardOutput is { Camera: { } keyboardCamera } && observatory.Controls(keyboardCamera)
+            && IsSceneCamera(keyboardCamera)
+            && (move.Vector.X != 0 || move.Vector.Y != 0 || turn.Vector.X != 0 || turn.Vector.Y != 0 || roll.Value != 0
+                || rise.Value != 0))
+        {
+            return keyboardCamera;
+        }
+
+        return null;
+    }
+
+    private bool IsSceneCamera(Camera camera)
+    {
+        if (camera.Owner?.Scene == null)
+        {
+            return false;
+        }
+
+        var outputs = observatory.Outputs;
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            if (outputs[i].OwnCamera == camera)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void UpdateIdleCameras(AppTime appTime)
     {
         foreach (var scene in observatory.ShownScenes)

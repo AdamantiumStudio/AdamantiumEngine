@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Adamantium.Core;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
@@ -309,6 +310,45 @@ public class MultipleSelectionTests
         {
             Assert.That(movedLeft.Length(), Is.GreaterThan(0.1), "they move");
             Assert.That((movedLeft - movedRight).Length(), Is.LessThan(1e-4), "together");
+        });
+    }
+
+    // An edit the editor can take back: told once the button is let go, not frame by frame, with both entities.
+    [Test]
+    public void ADrag_IsToldOnceLetGo_AndPutsBackEitherWay()
+    {
+        selection.Select([left, right]);
+        tools.Tool = new MoveTool();
+        Frame();
+        var startLeft = left.Transform.Position;
+        var startRight = right.Transform.Position;
+        List<EntityEdit> edits = [];
+        tools.Edited += (_, e) => edits.Add(e.Edit);
+        var grab = PixelOf((startLeft + startRight) / 2) + new Vector2F(60, 0);
+        output.Pointer = grab;
+        Frame();
+        output.Button(MouseButton.Left, InputType.Down);
+        Frame();
+        output.Pointer = grab + new Vector2F(40, 0);
+        Frame();
+        var toldWhileDragging = edits.Count;
+        output.Button(MouseButton.Left, InputType.Up);
+        Frame();
+        var movedLeft = left.Transform.Position;
+
+        edits[0].ApplyBefore();
+        var backLeft = left.Transform.Position;
+        var backRight = right.Transform.Position;
+        edits[0].ApplyAfter();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(toldWhileDragging, Is.Zero, "nothing while dragging");
+            Assert.That(edits, Has.Count.EqualTo(1), "once, when let go");
+            Assert.That(edits[0].Entities.Select(edited => edited.Entity), Is.EquivalentTo(new[] { left, right }));
+            Assert.That(backLeft, Is.EqualTo(startLeft));
+            Assert.That(backRight, Is.EqualTo(startRight));
+            Assert.That(left.Transform.Position, Is.EqualTo(movedLeft));
         });
     }
 
