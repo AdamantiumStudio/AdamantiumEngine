@@ -16,6 +16,17 @@ All packages share one version.
   lights and views as lights and cameras; the units of the file header. What it reads past - animation, bones, CLOD
   and subdivision modifiers, glyphs, extensions, references to other files - is listed in `UnsupportedFeatures`.
   `ModelConverterFactory.GetConverter(fileName, bytes, config)`: a model read from memory, a PDF's 3D artwork.
+- PRC import (`PrcConverter`, `.prc`, PRC Format Specification 8137, the format CAD systems put in PDF 3D artwork): the
+  bit-level types - UnsignedInteger, Integer, String, and Double through the specification's table of frequent doubles
+  and exponents (`PrcBitReader`); the header with every section's offset, each section inflated on its own; the schema
+  at the start of the globals and the model file, run to step over what newer versions added and entities of types
+  this reader does not know; the globals' colours, materials and styles; the tree - product occurrences with their
+  locations, prototypes and external data, part definitions, representation items, sets nested, placed by their
+  coordinate systems - as the model tree; regular 3D tessellation (triangles, fans, stripes, one normal a face or a
+  vertex, vertex colours), wire tessellation and markup tessellation (polylines, triangles, quads, polygons, points,
+  matrix blocks) as meshes; point sets. What it leaves out - highly compressed tessellation, whose Huffman-coded
+  arrays the specification does not lay out, the exact geometry of B-rep bodies, hidden and removed entities, views,
+  filters, lights and cameras, textures, markup text - is listed in `UnsupportedFeatures`, B-rep-only items by name.
 - `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document

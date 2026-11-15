@@ -32,6 +32,7 @@
     <ItemGroup>
       <ProjectReference Include="..\..\Adamantium.Engine.Compiler\Adamantium.Engine.Compiler.csproj" />
       <ProjectReference Include="..\..\Adamantium.EffectsCompiler\Adamantium.EffectsCompiler.csproj" />
+      <ProjectReference Include="..\..\Adamantium.Pdf\Adamantium.Pdf.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -59,6 +60,14 @@
     <ItemGroup>
       <Content Include="U3dData\**">
         <Link>CompilerU3d\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
+    <!-- PRC files Asymptote wrote from the .asy scenes beside them, which are the truth the tests check against. -->
+    <ItemGroup>
+      <Content Include="PrcData\**">
+        <Link>CompilerPrc\%(RecursiveDir)%(Filename)%(Extension)</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
     </ItemGroup>

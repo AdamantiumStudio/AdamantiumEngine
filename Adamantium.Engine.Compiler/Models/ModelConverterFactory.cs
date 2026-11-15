@@ -24,6 +24,8 @@ namespace Adamantium.Engine.Compiler.Converter
                return new GltfConverter(filePath, config);
             case ".u3d":
                return new U3dConverter(filePath, config);
+            case ".prc":
+               return new PrcConverter(filePath, config);
             default:
                throw new NotSupportedException("This converter type is not supported");
          }
@@ -39,6 +41,7 @@ namespace Adamantium.Engine.Compiler.Converter
          return extension switch
          {
             ".u3d" => new U3dConverter(fileName, bytes, config),
+            ".prc" => new PrcConverter(fileName, bytes, config),
             _ => throw new NotSupportedException($"A {extension} model is not read from memory")
          };
       }

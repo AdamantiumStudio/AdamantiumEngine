@@ -1,0 +1,449 @@
+using System.Collections.Generic;
+
+namespace Adamantium.Engine.Compiler.Models.Prc;
+
+/// <summary>Reads a file structure's tree section (PRC_TYPE_ASM_FileStructureTree): the part definitions with their
+/// representation items, the product occurrences, the markups of both, and the file structure's internal data naming the
+/// root occurrence. Sets of representation items and sets of annotations nest; they are read with stacks of their own.
+/// Where the specification's tables leave the layout open, it is the one CAD writers' files have: a leader carries a
+/// flag and a typed reference for its linked item and for its next leader rather than arrays; a markup linked item is an
+/// entity reference, a flag with a typed reference to the occurrence it belongs to, and four flags; the root occurrence's
+/// index is stored plus one.</summary>
+internal static class PrcTreeReader
+{
+    internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
+    {
+        var reader = new PrcEntityReader(bits, structure.Schema, notes);
+        reader.Expect(PrcTypes.FileStructureTree, "the tree");
+        reader.ReadContentPrcBase(PrcTypes.FileStructureTree);
+        var parts = bits.ReadCount(8, "part definitions");
+        for (var index = 0; index < parts; index++)
+        {
+            var type = bits.ReadUnsignedInteger();
+            if (type != PrcTypes.PartDefinition)
+            {
+                reader.SkipUnknown(type, "a part definition");
+                structure.Parts.Add(new PrcPartDefinition { Type = type });
+                continue;
+            }
+
+            structure.Parts.Add(ReadPartDefinition(reader));
+        }
+
+        var occurrences = bits.ReadCount(8, "product occurrences");
+        for (var index = 0; index < occurrences; index++)
+        {
+            var type = bits.ReadUnsignedInteger();
+            if (type != PrcTypes.ProductOccurrence)
+            {
+                reader.SkipUnknown(type, "a product occurrence");
+                structure.Occurrences.Add(new PrcProductOccurrence { Type = type });
+                continue;
+            }
+
+            structure.Occurrences.Add(ReadProductOccurrence(reader));
+        }
+
+        reader.Expect(PrcTypes.FileStructure, "the file structure's internal data");
+        reader.ReadContentPrcBase(PrcTypes.FileStructure);
+        bits.ReadUnsignedInteger();
+        structure.RootIndex = (int)bits.ReadUnsignedInteger() - 1;
+        reader.EndOf(PrcTypes.FileStructure);
+        reader.EndOf(PrcTypes.FileStructureTree);
+        reader.SkipUserData();
+        reader.CheckEnd();
+    }
+
+    private static PrcPartDefinition ReadPartDefinition(PrcEntityReader reader)
+    {
+        var bits = reader.Bits;
+        var part = new PrcPartDefinition { Type = PrcTypes.PartDefinition };
+        reader.ReadPrcBaseWithGraphics(part);
+        reader.SkipDoubles(6);
+        var items = bits.ReadCount(8, "representation items");
+        ReadRepresentationItems(reader, part.Items, items);
+        part.Markups = ReadMarkupData(reader);
+        part.ViewCount = bits.ReadCount(8, "views");
+        for (var view = 0; view < part.ViewCount; view++)
+        {
+            reader.SkipView();
+        }
+
+        reader.EndOf(PrcTypes.PartDefinition);
+        reader.SkipUserData();
+        return part;
+    }
+
+    private static PrcProductOccurrence ReadProductOccurrence(PrcEntityReader reader)
+    {
+        var bits = reader.Bits;
+        var start = new PrcTreeEntity { Type = PrcTypes.ProductOccurrence };
+        reader.ReadPrcBaseWithGraphics(start);
+        var partIndex = (int)bits.ReadUnsignedInteger() - 1;
+        var prototypeIndex = (int)bits.ReadUnsignedInteger() - 1;
+        PrcUniqueId prototypeStructure = null;
+        if (prototypeIndex >= 0 && !bits.ReadBoolean())
+        {
+            prototypeStructure = reader.ReadCompressedUniqueId();
+        }
+
+        var externalIndex = (int)bits.ReadUnsignedInteger() - 1;
+        PrcUniqueId externalStructure = null;
+        if (externalIndex >= 0 && !bits.ReadBoolean())
+        {
+            externalStructure = reader.ReadCompressedUniqueId();
+        }
+
+        var sons = new List<int>(bits.ReadCount(1, "son occurrences"));
+        for (var son = 0; son < sons.Capacity; son++)
+        {
+            sons.Add((int)bits.ReadUnsignedInteger());
+        }
+
+        var occurrence = new PrcProductOccurrence
+        {
+            Type = PrcTypes.ProductOccurrence,
+            Name = start.Name,
+            Graphics = start.Graphics,
+            PartIndex = partIndex,
+            PrototypeIndex = prototypeIndex,
+            PrototypeFileStructure = prototypeStructure,
+            ExternalIndex = externalIndex,
+            ExternalFileStructure = externalStructure,
+            Behavior = bits.ReadCharacter()
+        };
+        occurrence.Sons.AddRange(sons);
+        foreach (var attribute in start.Attributes)
+        {
+            occurrence.Attributes[attribute.Key] = attribute.Value;
+        }
+
+        occurrence.UnitFromCad = bits.ReadBoolean();
+        occurrence.Unit = bits.ReadDouble();
+        bits.ReadCharacter();
+        bits.ReadInteger();
+        if (bits.ReadBoolean())
+        {
+            occurrence.Location = reader.ReadTransformationEntity();
+        }
+
+        occurrence.EntityReferenceCount = bits.ReadCount(8, "entity references");
+        for (var reference = 0; reference < occurrence.EntityReferenceCount; reference++)
+        {
+            reader.SkipEntityReference();
+        }
+
+        occurrence.Markups = ReadMarkupData(reader);
+        occurrence.ViewCount = bits.ReadCount(8, "views");
+        for (var view = 0; view < occurrence.ViewCount; view++)
+        {
+            reader.SkipView();
+        }
+
+        if (bits.ReadBoolean())
+        {
+            reader.SkipFilter();
+        }
+
+        occurrence.FilterCount = bits.ReadCount(8, "display filters");
+        for (var filter = 0; filter < occurrence.FilterCount; filter++)
+        {
+            reader.SkipFilter();
+        }
+
+        occurrence.SceneDisplayParameterCount = bits.ReadCount(8, "scene display parameters");
+        for (var scene = 0; scene < occurrence.SceneDisplayParameterCount; scene++)
+        {
+            reader.SkipSceneDisplayParameters();
+        }
+
+        reader.EndOf(PrcTypes.ProductOccurrence);
+        reader.SkipUserData();
+        return occurrence;
+    }
+
+    /// <summary>Reads <paramref name="count"/> representation items into <paramref name="into"/>, each with its type
+    /// code; the items of a set go into the set, read with a stack rather than by recursion.</summary>
+    internal static void ReadRepresentationItems(PrcEntityReader reader, List<PrcRepresentationItem> into, int count)
+    {
+        var bits = reader.Bits;
+        var pending = new Stack<PrcPendingItems>();
+        pending.Push(new PrcPendingItems(null, into, count));
+        while (pending.Count > 0)
+        {
+            var level = pending.Peek();
+            if (level.Remaining == 0)
+            {
+                pending.Pop();
+                if (level.Set != null)
+                {
+                    reader.EndOf(PrcTypes.Set);
+                    reader.SkipUserData();
+                }
+
+                continue;
+            }
+
+            level.Remaining--;
+            var type = bits.ReadUnsignedInteger();
+            if (type is < PrcTypes.BrepModel or > PrcTypes.CoordinateSystem)
+            {
+                reader.SkipUnknown(type, "a representation item");
+                continue;
+            }
+
+            var item = new PrcRepresentationItem { Type = type };
+            level.Into.Add(item);
+            ReadRepresentationItemContent(reader, item);
+            if (type == PrcTypes.Set)
+            {
+                var children = bits.ReadCount(8, "items of a set");
+                pending.Push(new PrcPendingItems(item, item.Items, children));
+                continue;
+            }
+
+            ReadRepresentationItemRest(reader, item);
+        }
+    }
+
+    /// <summary>A PRC_TYPE_RI_CoordinateSystem, its type code read.</summary>
+    internal static PrcRepresentationItem ReadCoordinateSystem(PrcEntityReader reader)
+    {
+        var item = new PrcRepresentationItem { Type = PrcTypes.CoordinateSystem };
+        ReadRepresentationItemContent(reader, item);
+        ReadRepresentationItemRest(reader, item);
+        return item;
+    }
+
+    private static void ReadRepresentationItemContent(PrcEntityReader reader, PrcRepresentationItem item)
+    {
+        reader.ReadPrcBaseWithGraphics(item);
+        item.CoordinateSystemIndex = (int)reader.Bits.ReadUnsignedInteger() - 1;
+        item.TessellationIndex = (int)reader.Bits.ReadUnsignedInteger() - 1;
+        reader.EndOf(PrcTypes.RepresentationItemContent);
+    }
+
+    private static void ReadRepresentationItemRest(PrcEntityReader reader, PrcRepresentationItem item)
+    {
+        var bits = reader.Bits;
+        switch (item.Type)
+        {
+            case PrcTypes.BrepModel:
+                ReadBody(reader, item);
+                item.IsClosed = bits.ReadBoolean();
+                break;
+            case PrcTypes.RepresentationCurve or PrcTypes.Plane:
+                ReadBody(reader, item);
+                break;
+            case PrcTypes.Direction:
+                if (bits.ReadBoolean())
+                {
+                    item.Points.Add(reader.ReadVector3d());
+                }
+
+                item.Points.Add(reader.ReadVector3d());
+                break;
+            case PrcTypes.PointSet:
+                var points = bits.ReadCount(3 * PrcBitReader.ShortestDouble, "points");
+                for (var point = 0; point < points; point++)
+                {
+                    item.Points.Add(reader.ReadVector3d());
+                }
+
+                break;
+            case PrcTypes.PolyBrepModel:
+                item.IsClosed = bits.ReadBoolean();
+                break;
+            case PrcTypes.CoordinateSystem:
+                item.Transform = reader.ReadTransformationEntity();
+                break;
+        }
+
+        reader.EndOf(item.Type);
+        reader.SkipUserData();
+    }
+
+    private static void ReadBody(PrcEntityReader reader, PrcRepresentationItem item)
+    {
+        if (reader.Bits.ReadBoolean())
+        {
+            item.ContextIndex = (int)reader.Bits.ReadUnsignedInteger();
+            item.BodyIndex = (int)reader.Bits.ReadUnsignedInteger();
+        }
+    }
+
+    private static PrcMarkupData ReadMarkupData(PrcEntityReader reader)
+    {
+        var bits = reader.Bits;
+        var data = new PrcMarkupData { LinkedItemCount = bits.ReadCount(8, "markup linked items") };
+        for (var item = 0; item < data.LinkedItemCount; item++)
+        {
+            reader.Expect(PrcTypes.MarkupLinkedItem, "a markup linked item");
+            reader.SkipContentEntityReference(PrcTypes.MarkupLinkedItem);
+            if (bits.ReadBoolean())
+            {
+                reader.SkipReferenceData();
+            }
+
+            for (var flag = 0; flag < 4; flag++)
+            {
+                bits.ReadBoolean();
+            }
+
+            reader.EndOf(PrcTypes.MarkupLinkedItem);
+            reader.SkipUserData();
+        }
+
+        var leaders = bits.ReadCount(8, "leaders");
+        for (var leader = 0; leader < leaders; leader++)
+        {
+            reader.Expect(PrcTypes.Leader, "a leader");
+            data.Leaders.Add(ReadMarkup(reader, PrcTypes.Leader));
+        }
+
+        var markups = bits.ReadCount(8, "markups");
+        for (var markup = 0; markup < markups; markup++)
+        {
+            reader.Expect(PrcTypes.MarkupItem, "a markup");
+            data.Markups.Add(ReadMarkup(reader, PrcTypes.MarkupItem));
+        }
+
+        data.AnnotationCount = bits.ReadCount(8, "annotation entities");
+        SkipAnnotations(reader, data.AnnotationCount);
+        return data;
+    }
+
+    private static PrcMarkup ReadMarkup(PrcEntityReader reader, uint type)
+    {
+        var bits = reader.Bits;
+        var holder = new PrcTreeEntity { Type = type };
+        reader.ReadPrcBaseWithGraphics(holder);
+        uint markupType = 0;
+        uint subType = 0;
+        if (type == PrcTypes.MarkupItem)
+        {
+            markupType = bits.ReadUnsignedInteger();
+            subType = bits.ReadUnsignedInteger();
+            var linked = bits.ReadCount(4, "linked items of a markup");
+            for (var item = 0; item < linked; item++)
+            {
+                reader.SkipReferenceUniqueIdentifier();
+            }
+
+            var leaders = bits.ReadCount(4, "leaders of a markup");
+            for (var leader = 0; leader < leaders; leader++)
+            {
+                reader.SkipReferenceUniqueIdentifier();
+            }
+        }
+        else
+        {
+            if (bits.ReadBoolean())
+            {
+                reader.SkipReferenceData();
+            }
+
+            if (bits.ReadBoolean())
+            {
+                reader.SkipReferenceData();
+            }
+        }
+
+        var markup = new PrcMarkup
+        {
+            Type = type,
+            Name = holder.Name,
+            Graphics = holder.Graphics,
+            MarkupType = markupType,
+            SubType = subType,
+            TessellationIndex = (int)bits.ReadUnsignedInteger() - 1
+        };
+        reader.EndOf(type);
+        reader.SkipUserData();
+        return markup;
+    }
+
+    private static void SkipAnnotations(PrcEntityReader reader, int count)
+    {
+        var bits = reader.Bits;
+        var pending = new Stack<PrcPendingAnnotations>();
+        pending.Push(new PrcPendingAnnotations(count, false));
+        while (pending.Count > 0)
+        {
+            var level = pending.Peek();
+            if (level.Remaining == 0)
+            {
+                pending.Pop();
+                if (level.InSet)
+                {
+                    reader.EndOf(PrcTypes.AnnotationSet);
+                    reader.SkipUserData();
+                }
+
+                continue;
+            }
+
+            level.Remaining--;
+            var type = bits.ReadUnsignedInteger();
+            switch (type)
+            {
+                case PrcTypes.AnnotationItem:
+                    reader.SkipPrcBaseWithGraphics(type);
+                    reader.SkipReferenceUniqueIdentifier();
+                    reader.EndOf(type);
+                    reader.SkipUserData();
+                    break;
+                case PrcTypes.AnnotationSet:
+                    reader.SkipPrcBaseWithGraphics(type);
+                    pending.Push(new PrcPendingAnnotations(bits.ReadCount(8, "entities of an annotation set"), true));
+                    break;
+                case PrcTypes.AnnotationReference:
+                    reader.SkipPrcBaseWithGraphics(type);
+                    var linked = bits.ReadCount(4, "items of an annotation reference");
+                    for (var item = 0; item < linked; item++)
+                    {
+                        reader.SkipReferenceUniqueIdentifier();
+                    }
+
+                    reader.EndOf(type);
+                    reader.SkipUserData();
+                    break;
+                default:
+                    reader.SkipUnknown(type, "an annotation entity");
+                    break;
+            }
+        }
+    }
+}
+
+/// <summary>The representation items still to be read at one level of nesting: the set they belong to (null at the
+/// top), the list they go into, and how many are left.</summary>
+internal sealed class PrcPendingItems
+{
+    internal PrcPendingItems(PrcRepresentationItem set, List<PrcRepresentationItem> into, int remaining)
+    {
+        Set = set;
+        Into = into;
+        Remaining = remaining;
+    }
+
+    internal PrcRepresentationItem Set { get; }
+
+    internal List<PrcRepresentationItem> Into { get; }
+
+    internal int Remaining { get; set; }
+}
+
+/// <summary>The annotation entities still to be read at one level of nesting, and whether they are a set's.</summary>
+internal sealed class PrcPendingAnnotations
+{
+    internal PrcPendingAnnotations(int remaining, bool inSet)
+    {
+        Remaining = remaining;
+        InSet = inSet;
+    }
+
+    internal int Remaining { get; set; }
+
+    internal bool InSet { get; }
+}
