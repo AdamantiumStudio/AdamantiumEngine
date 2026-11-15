@@ -101,6 +101,23 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        /// <summary>How it places its entity, as one value. Set, it puts back exactly what was taken, the pivot with it -
+        /// unlike setting <see cref="Pivot"/>, which keeps the entity where it stands.</summary>
+        public TransformState State
+        {
+            get => new(Position, Rotation, ScaleFactor, pivot, PivotRotation);
+            set
+            {
+                pivot = value.PivotOffset;
+                Position = value.Position;
+                Rotation = value.Rotation;
+                ScaleFactor = value.ScaleFactor;
+                PivotRotation = value.PivotRotation;
+                IsWorldDirty = true;
+                RaisePropertyChanged(nameof(Pivot));
+            }
+        }
+
         private void ShiftPivot(Vector3F offset)
         {
             if (offset == Vector3F.Zero)

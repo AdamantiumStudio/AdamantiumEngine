@@ -34,6 +34,8 @@ public abstract class ToolProcessor : EditorProcessor
     private IReadOnlyList<Entity> groupItems;
     private Vector3<double> groupStart;
     private Scene targetScene;
+    private readonly List<Entity> _edited = [];
+    private readonly List<EditedState> _editedBefore = [];
 
     protected ToolProcessor(params Handles[] own)
     {
@@ -97,6 +99,7 @@ public abstract class ToolProcessor : EditorProcessor
                         return;
                     }
 
+                    BeginEdit(target);
                     dragged.BeginDrag(target, null, pressRay.Moved(fromEye));
                     dragBegun = true;
                 }
@@ -111,6 +114,7 @@ public abstract class ToolProcessor : EditorProcessor
             }
 
             dragged = null;
+            EndEdit();
         }
 
         if (Tools.IsPointerTaken || input.IsMouseButtonDown(MouseButton.Right))
@@ -141,6 +145,7 @@ public abstract class ToolProcessor : EditorProcessor
                 HoldGroup();
             }
 
+            BeginEdit(target);
             dragged.BeginDrag(target, hit.Entity, ray);
             return;
         }
@@ -323,7 +328,55 @@ public abstract class ToolProcessor : EditorProcessor
     {
         Highlight(null, null);
         dragged = null;
+        EndEdit();
         active.Clear();
+    }
+
+    private void BeginEdit(Entity target)
+    {
+        _edited.Clear();
+        _editedBefore.Clear();
+        if (target == group)
+        {
+            for (int i = 0; i < held.Count; i++)
+            {
+                _edited.Add(held[i].Entity);
+            }
+        }
+        else if (target != null)
+        {
+            _edited.Add(target);
+        }
+
+        for (int i = 0; i < _edited.Count; i++)
+        {
+            _editedBefore.Add(EditedState.Of(_edited[i]));
+        }
+    }
+
+    private void EndEdit()
+    {
+        if (_edited.Count == 0)
+        {
+            return;
+        }
+
+        List<EditedEntity> changed = [];
+        for (int i = 0; i < _edited.Count; i++)
+        {
+            var after = EditedState.Of(_edited[i]);
+            if (after != _editedBefore[i])
+            {
+                changed.Add(new EditedEntity(_edited[i], _editedBefore[i], after));
+            }
+        }
+
+        _edited.Clear();
+        _editedBefore.Clear();
+        if (changed.Count > 0)
+        {
+            Tools.TellEdited(new EntityEdit(changed));
+        }
     }
 
     private void CollectActive(Entity target)

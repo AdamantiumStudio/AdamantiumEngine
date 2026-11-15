@@ -94,6 +94,26 @@ public class LightManager
         }
     }
 
+    /// <summary>Puts <paramref name="light"/>, taken out with <see cref="RemoveLight"/>, back among the lights and where it
+    /// stood in the world: under <paramref name="owner"/>, or among the scene's roots with none, at
+    /// <paramref name="index"/>.</summary>
+    public void ReturnLight(Entity light, Entity owner, int index)
+    {
+        if (light.GetComponent<Light>() is not { } component)
+        {
+            return;
+        }
+
+        lightsGroup.Add(light);
+        lock (syncObject)
+        {
+            lights.Add(component);
+            lightsDirty = true;
+        }
+
+        scene.World.EntityManager.ReturnEntity(light, owner, scene, index);
+    }
+
     /// <summary>Takes <paramref name="light"/> out of the lights and out of the world.</summary>
     public void RemoveLight(Entity light)
     {

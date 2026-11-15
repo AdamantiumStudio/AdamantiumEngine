@@ -341,6 +341,16 @@ namespace Adamantium.ECS
             dependencies.Remove(entity);
         }
 
+        internal void MoveDependency(Entity entity, int index)
+        {
+            var from = dependencies.IndexOf(entity);
+            var to = Math.Clamp(index, 0, dependencies.Count - 1);
+            if (from >= 0 && from != to)
+            {
+                dependencies.Move(from, to);
+            }
+        }
+
         internal void OnComponentChanged(IComponent oldComponent, IComponent newComponent, ComponentChangedAction action)
         {
             ComponentsChanged?.Invoke(this, new EntityComponentEventArgs(this, oldComponent, newComponent, action));
