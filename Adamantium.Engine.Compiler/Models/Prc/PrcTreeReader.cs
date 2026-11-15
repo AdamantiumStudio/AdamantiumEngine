@@ -3,8 +3,9 @@ using System.Collections.Generic;
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
 /// <summary>Reads a file structure's tree section (PRC_TYPE_ASM_FileStructureTree): the part definitions with their
-/// representation items, the product occurrences, the markups of both, and the file structure's internal data naming the
-/// root occurrence. Sets of representation items and sets of annotations nest; they are read with stacks of their own.
+/// representation items, the product occurrences with the entities they redefine by reference, their filters and scene
+/// display parameters, the markups and views of both, and the file structure's internal data naming the root
+/// occurrence. Sets of representation items and sets of annotations nest; they are read with stacks of their own.
 /// Where the specification's tables leave the layout open, it is the one CAD writers' files have: a leader carries a
 /// flag and a typed reference for its linked item and for its next leader rather than arrays; a markup linked item is an
 /// entity reference, a flag with a typed reference to the occurrence it belongs to, and four flags; the root occurrence's
@@ -13,7 +14,7 @@ internal static class PrcTreeReader
 {
     internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
     {
-        var reader = new PrcEntityReader(bits, structure.Schema, notes);
+        var reader = new PrcEntityReader(bits, structure.Schema, notes) { AuthoringVersion = structure.AuthoringVersion };
         reader.Expect(PrcTypes.FileStructureTree, "the tree");
         reader.ReadContentPrcBase(PrcTypes.FileStructureTree);
         var parts = bits.ReadCount(8, "part definitions");
@@ -63,10 +64,10 @@ internal static class PrcTreeReader
         var items = bits.ReadCount(8, "representation items");
         ReadRepresentationItems(reader, part.Items, items);
         part.Markups = ReadMarkupData(reader);
-        part.ViewCount = bits.ReadCount(8, "views");
-        for (var view = 0; view < part.ViewCount; view++)
+        var views = bits.ReadCount(8, "views");
+        for (var view = 0; view < views; view++)
         {
-            reader.SkipView();
+            part.Views.Add(reader.ReadView());
         }
 
         reader.EndOf(PrcTypes.PartDefinition);
@@ -110,7 +111,8 @@ internal static class PrcTreeReader
             PrototypeFileStructure = prototypeStructure,
             ExternalIndex = externalIndex,
             ExternalFileStructure = externalStructure,
-            Behavior = bits.ReadCharacter()
+            Behavior = bits.ReadCharacter(),
+            UniqueId = start.UniqueId
         };
         occurrence.Sons.AddRange(sons);
         foreach (var attribute in start.Attributes)
@@ -127,34 +129,34 @@ internal static class PrcTreeReader
             occurrence.Location = reader.ReadTransformationEntity();
         }
 
-        occurrence.EntityReferenceCount = bits.ReadCount(8, "entity references");
-        for (var reference = 0; reference < occurrence.EntityReferenceCount; reference++)
+        var references = bits.ReadCount(8, "entity references");
+        for (var reference = 0; reference < references; reference++)
         {
-            reader.SkipEntityReference();
+            occurrence.EntityReferences.Add(reader.ReadEntityReference());
         }
 
         occurrence.Markups = ReadMarkupData(reader);
-        occurrence.ViewCount = bits.ReadCount(8, "views");
-        for (var view = 0; view < occurrence.ViewCount; view++)
+        var views = bits.ReadCount(8, "views");
+        for (var view = 0; view < views; view++)
         {
-            reader.SkipView();
+            occurrence.Views.Add(reader.ReadView());
         }
 
         if (bits.ReadBoolean())
         {
-            reader.SkipFilter();
+            occurrence.EntityFilter = reader.ReadFilter();
         }
 
-        occurrence.FilterCount = bits.ReadCount(8, "display filters");
-        for (var filter = 0; filter < occurrence.FilterCount; filter++)
+        var filters = bits.ReadCount(8, "display filters");
+        for (var filter = 0; filter < filters; filter++)
         {
-            reader.SkipFilter();
+            occurrence.DisplayFilters.Add(reader.ReadFilter());
         }
 
-        occurrence.SceneDisplayParameterCount = bits.ReadCount(8, "scene display parameters");
-        for (var scene = 0; scene < occurrence.SceneDisplayParameterCount; scene++)
+        var scenes = bits.ReadCount(8, "scene display parameters");
+        for (var scene = 0; scene < scenes; scene++)
         {
-            reader.SkipSceneDisplayParameters();
+            occurrence.SceneDisplayParameters.Add(reader.ReadSceneDisplayParameters());
         }
 
         reader.EndOf(PrcTypes.ProductOccurrence);
@@ -279,10 +281,10 @@ internal static class PrcTreeReader
         for (var item = 0; item < data.LinkedItemCount; item++)
         {
             reader.Expect(PrcTypes.MarkupLinkedItem, "a markup linked item");
-            reader.SkipContentEntityReference(PrcTypes.MarkupLinkedItem);
+            reader.ReadContentEntityReference(PrcTypes.MarkupLinkedItem);
             if (bits.ReadBoolean())
             {
-                reader.SkipReferenceData();
+                reader.ReadReferenceData();
             }
 
             for (var flag = 0; flag < 4; flag++)
@@ -327,25 +329,25 @@ internal static class PrcTreeReader
             var linked = bits.ReadCount(4, "linked items of a markup");
             for (var item = 0; item < linked; item++)
             {
-                reader.SkipReferenceUniqueIdentifier();
+                reader.ReadReferenceUniqueIdentifier();
             }
 
             var leaders = bits.ReadCount(4, "leaders of a markup");
             for (var leader = 0; leader < leaders; leader++)
             {
-                reader.SkipReferenceUniqueIdentifier();
+                reader.ReadReferenceUniqueIdentifier();
             }
         }
         else
         {
             if (bits.ReadBoolean())
             {
-                reader.SkipReferenceData();
+                reader.ReadReferenceData();
             }
 
             if (bits.ReadBoolean())
             {
-                reader.SkipReferenceData();
+                reader.ReadReferenceData();
             }
         }
 
@@ -354,6 +356,7 @@ internal static class PrcTreeReader
             Type = type,
             Name = holder.Name,
             Graphics = holder.Graphics,
+            UniqueId = holder.UniqueId,
             MarkupType = markupType,
             SubType = subType,
             TessellationIndex = (int)bits.ReadUnsignedInteger() - 1
@@ -388,21 +391,21 @@ internal static class PrcTreeReader
             switch (type)
             {
                 case PrcTypes.AnnotationItem:
-                    reader.SkipPrcBaseWithGraphics(type);
-                    reader.SkipReferenceUniqueIdentifier();
+                    reader.SkipPrcBaseWithGraphics();
+                    reader.ReadReferenceUniqueIdentifier();
                     reader.EndOf(type);
                     reader.SkipUserData();
                     break;
                 case PrcTypes.AnnotationSet:
-                    reader.SkipPrcBaseWithGraphics(type);
+                    reader.SkipPrcBaseWithGraphics();
                     pending.Push(new PrcPendingAnnotations(bits.ReadCount(8, "entities of an annotation set"), true));
                     break;
                 case PrcTypes.AnnotationReference:
-                    reader.SkipPrcBaseWithGraphics(type);
+                    reader.SkipPrcBaseWithGraphics();
                     var linked = bits.ReadCount(4, "items of an annotation reference");
                     for (var item = 0; item < linked; item++)
                     {
-                        reader.SkipReferenceUniqueIdentifier();
+                        reader.ReadReferenceUniqueIdentifier();
                     }
 
                     reader.EndOf(type);

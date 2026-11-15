@@ -1,17 +1,21 @@
+using System;
 using System.Collections.Generic;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
 /// <summary>Reads a file structure's globals section (PRC_TYPE_ASM_FileStructureGlobals): the schema at its start,
-/// then the colours, pictures, texture definitions, materials, line patterns, styles, fill patterns and reference
-/// coordinate systems its tree draws with.</summary>
+/// then the markup fonts, colours, pictures, texture definitions, materials, line patterns, styles, fill patterns and
+/// reference coordinate systems its tree draws with. A texture definition is read as the errata lay it out: a mapping
+/// operator's transformation only for mapping type 3, a destination blend after each non-zero source blend, no wrapping
+/// mode before the s, t and r ones; its 2D transformation's rotation is its x axis alone - the y axis that turned a
+/// quarter, or back when mirrored - as the errata measure it, while two non-orthogonal axes are both stored.</summary>
 internal static class PrcGlobalsReader
 {
     internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
     {
         structure.Schema = PrcSchema.Read(bits);
-        var reader = new PrcEntityReader(bits, structure.Schema, notes);
+        var reader = new PrcEntityReader(bits, structure.Schema, notes) { AuthoringVersion = structure.AuthoringVersion };
         reader.Expect(PrcTypes.FileStructureGlobals, "the globals");
         reader.ReadContentPrcBase(PrcTypes.FileStructureGlobals);
         var referenced = bits.ReadCount(4, "referenced file structures");
@@ -22,7 +26,7 @@ internal static class PrcGlobalsReader
 
         bits.ReadDouble();
         bits.ReadDouble();
-        ReadFonts(reader);
+        ReadFonts(reader, structure);
         var colours = bits.ReadCount(3 * PrcBitReader.ShortestDouble, "colours");
         for (var index = 0; index < colours; index++)
         {
@@ -77,20 +81,20 @@ internal static class PrcGlobalsReader
         reader.CheckEnd();
     }
 
-    private static void ReadFonts(PrcEntityReader reader)
+    private static void ReadFonts(PrcEntityReader reader, PrcFileStructure structure)
     {
         var bits = reader.Bits;
         bits.ReadString();
         var fonts = bits.ReadCount(3, "fonts");
         for (var font = 0; font < fonts; font++)
         {
-            bits.ReadString();
+            var name = bits.ReadString();
             bits.ReadUnsignedInteger();
             var keys = bits.ReadCount(9, "font keys");
             for (var key = 0; key < keys; key++)
             {
-                bits.ReadUnsignedInteger();
-                bits.ReadCharacter();
+                var size = (int)bits.ReadUnsignedInteger() - 1;
+                structure.Fonts.Add(new PrcFont { Name = name, Size = size, Attributes = bits.ReadCharacter() });
             }
         }
     }
@@ -112,27 +116,24 @@ internal static class PrcGlobalsReader
 
     private static PrcTextureDefinition ReadTextureDefinition(PrcEntityReader reader)
     {
-        const int mappingOperator = 4;
-        const int blendFunction = 4;
-        const int alphaTest = 0x2;
-
         var bits = reader.Bits;
         reader.Expect(PrcTypes.TextureDefinition, "a texture definition");
         var name = reader.ReadContentPrcBase(PrcTypes.TextureDefinition);
         var picture = (int)bits.ReadUnsignedInteger() - 1;
         var dimension = bits.ReadCharacter();
         var mapping = bits.ReadInteger();
-        if (mapping == mappingOperator)
+        var mappingOperator = 0;
+        if (mapping == PrcTextureDefinition.MappingOperator)
         {
-            bits.ReadInteger();
+            mappingOperator = bits.ReadInteger();
             if (bits.ReadBoolean())
             {
                 reader.ReadTransformation3d();
             }
         }
 
-        bits.ReadUnsignedInteger();
-        var intensities = bits.ReadCount(2, "texture intensities");
+        var attributes = bits.ReadUnsignedInteger();
+        var intensities = bits.ReadCount(PrcBitReader.ShortestDouble, "texture intensities");
         reader.SkipDoubles(intensities);
         var components = bits.ReadCount(8, "texture components");
         for (var component = 0; component < components; component++)
@@ -140,73 +141,133 @@ internal static class PrcGlobalsReader
             bits.ReadCharacter();
         }
 
-        if (bits.ReadInteger() == blendFunction)
+        var function = bits.ReadInteger();
+        if (function == PrcTextureDefinition.FunctionBlend)
         {
             reader.SkipDoubles(4);
         }
 
-        bits.ReadInteger();
-        bits.ReadInteger();
+        if (bits.ReadInteger() != 0)
+        {
+            bits.ReadInteger();
+        }
+
+        if (bits.ReadInteger() != 0)
+        {
+            bits.ReadInteger();
+        }
+
         var applying = bits.ReadCharacter();
-        if ((applying & alphaTest) != 0)
+        var alphaReference = 0d;
+        if ((applying & PrcTextureDefinition.ApplyingAlphaTest) != 0)
         {
             bits.ReadInteger();
-            bits.ReadDouble();
+            alphaReference = bits.ReadDouble();
         }
 
-        bits.ReadInteger();
-        if (dimension > 1)
-        {
-            bits.ReadInteger();
-        }
-
+        var wrapS = bits.ReadInteger();
+        var wrapT = dimension > 1 ? bits.ReadInteger() : PrcTextureDefinition.WrapUnknown;
         if (dimension > 2)
         {
             bits.ReadInteger();
         }
 
+        PrcTextureTransformation transformation = null;
         if (bits.ReadBoolean())
         {
             reader.Expect(PrcTypes.TextureTransformation, "a texture transformation");
+            var flipS = bits.ReadBoolean();
+            var flipT = bits.ReadBoolean();
             bits.ReadBoolean();
-            bits.ReadBoolean();
-            bits.ReadBoolean();
-            ReadTransformation2d(reader);
+            transformation = new PrcTextureTransformation { FlipS = flipS, FlipT = flipT, Matrix = ReadTransformation2d(reader) };
             reader.EndOf(PrcTypes.TextureTransformation);
         }
 
         reader.EndOf(PrcTypes.TextureDefinition);
-        reader.Tell("the texture definitions of the globals are read past; their textures are not laid");
-        return new PrcTextureDefinition { Name = name, PictureIndex = picture };
+        return new PrcTextureDefinition
+        {
+            Name = name,
+            PictureIndex = picture,
+            Dimension = dimension,
+            MappingType = mapping,
+            MappingOperatorKind = mappingOperator,
+            MappingAttributes = attributes,
+            Function = function,
+            ApplyingMode = applying,
+            AlphaTestReference = alphaReference,
+            WrapS = wrapS,
+            WrapT = wrapT,
+            Transformation = transformation
+        };
     }
 
-    private static void ReadTransformation2d(PrcEntityReader reader)
+    private static Matrix4x4<double> ReadTransformation2d(PrcEntityReader reader)
     {
+        const int translate = 0x01;
+        const int rotate = 0x02;
+        const int mirror = 0x04;
+        const int scale = 0x08;
+        const int nonUniformScale = 0x10;
+        const int nonOrthogonal = 0x20;
+        const int homogeneous = 0x40;
+
         var bits = reader.Bits;
         var behavior = bits.ReadCharacter();
-        if ((behavior & 0x01) != 0)
+        var originX = 0d;
+        var originY = 0d;
+        if ((behavior & translate) != 0)
         {
-            reader.SkipDoubles(2);
+            originX = bits.ReadDouble();
+            originY = bits.ReadDouble();
         }
 
-        if ((behavior & 0x20) != 0 || (behavior & 0x02) != 0)
+        var xAxisX = 1d;
+        var xAxisY = 0d;
+        var yAxisX = 0d;
+        var yAxisY = 1d;
+        if ((behavior & nonOrthogonal) != 0)
         {
-            reader.SkipDoubles(4);
+            xAxisX = bits.ReadDouble();
+            xAxisY = bits.ReadDouble();
+            yAxisX = bits.ReadDouble();
+            yAxisY = bits.ReadDouble();
+        }
+        else if ((behavior & rotate) != 0)
+        {
+            xAxisX = bits.ReadDouble();
+            xAxisY = bits.ReadDouble();
+            var turn = (behavior & mirror) != 0 ? -1 : 1;
+            yAxisX = -xAxisY * turn;
+            yAxisY = xAxisX * turn;
         }
 
-        if ((behavior & 0x10) != 0)
+        var scaleX = 1d;
+        var scaleY = 1d;
+        if ((behavior & nonUniformScale) != 0)
         {
-            reader.SkipDoubles(2);
+            scaleX = bits.ReadDouble();
+            scaleY = bits.ReadDouble();
         }
-        else if ((behavior & 0x08) != 0)
+        else if ((behavior & scale) != 0)
         {
-            reader.SkipDoubles(1);
+            scaleX = scaleY = bits.ReadDouble();
         }
 
-        if ((behavior & 0x40) != 0)
+        var homogeneousX = 0d;
+        var homogeneousY = 0d;
+        var homogeneousW = 1d;
+        if ((behavior & homogeneous) != 0)
         {
-            reader.SkipDoubles(3);
+            homogeneousX = bits.ReadDouble();
+            homogeneousY = bits.ReadDouble();
+            homogeneousW = bits.ReadDouble();
         }
+
+        return new Matrix4x4<double>(
+            xAxisX * scaleX, xAxisY * scaleX, 0, homogeneousX,
+            yAxisX * scaleY, yAxisY * scaleY, 0, homogeneousY,
+            0, 0, 1, 0,
+            originX, originY, 0, homogeneousW);
     }
 
     private static PrcMaterial ReadMaterial(PrcEntityReader reader)
@@ -237,10 +298,10 @@ internal static class PrcGlobalsReader
                     Name = reader.ReadContentPrcBase(type),
                     IsTextureApplication = true,
                     MaterialGenericIndex = (int)bits.ReadUnsignedInteger() - 1,
-                    TextureDefinitionIndex = (int)bits.ReadUnsignedInteger() - 1
+                    TextureDefinitionIndex = (int)bits.ReadUnsignedInteger() - 1,
+                    NextTextureIndex = (int)bits.ReadUnsignedInteger() - 1,
+                    TextureCoordinateSet = Math.Max(0, (int)bits.ReadUnsignedInteger() - 1)
                 };
-                bits.ReadUnsignedInteger();
-                bits.ReadUnsignedInteger();
                 reader.EndOf(type);
                 return application;
             default:

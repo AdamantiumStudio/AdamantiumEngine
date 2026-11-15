@@ -137,6 +137,16 @@ internal sealed class PrcFile
                 $"PRC {name} needs a reader of version {structure.MinimalVersionForRead}; this one reads version {PrcSchema.ReaderVersion}");
         }
 
+        header.UniqueId($"the identifier of {name}");
+        header.UniqueId($"the application's identifier of {name}");
+        var files = header.UnsignedInteger($"the count of uncompressed files of {name}");
+        header.CheckCount(files, 4, $"uncompressed files of {name}");
+        for (var index = 0; index < files; index++)
+        {
+            var size = header.UnsignedInteger($"an uncompressed file's size in {name}");
+            structure.UncompressedFiles.Add(header.Bytes(size, $"an uncompressed file of {name}"));
+        }
+
         var globalsBits = Inflate(bytes, offsets, GlobalsSection, $"globals of {name}");
         PrcGlobalsReader.Read(globalsBits, structure, notes);
         PrcTreeReader.Read(Inflate(bytes, offsets, TreeSection, $"tree of {name}"), structure, notes);

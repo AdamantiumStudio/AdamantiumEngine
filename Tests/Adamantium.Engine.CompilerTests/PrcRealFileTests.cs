@@ -58,6 +58,8 @@ public class PrcRealFileTests
                     Assert.That(converter.UnsupportedFeatures, Has.None.Contains("compressed tessellation stores more"), name);
                     Assert.That(converter.UnsupportedFeatures, Has.None.Contains("compressed tessellation has fewer"), name);
                     CheckMeshes(scene, name);
+                    CheckTextures(scene, name);
+                    CheckCameras(scene, name);
                 });
             }
         }
@@ -89,6 +91,37 @@ public class PrcRealFileTests
             {
                 pending.Push(child);
             }
+        }
+    }
+
+    private static void CheckTextures(SceneData scene, string name)
+    {
+        foreach (var material in scene.Materials.Values.Where(material => material.BaseColorTexture != null))
+        {
+            Assert.That(scene.Textures.ContainsKey(material.BaseColorTexture.Texture), Is.True,
+                $"{name}: material {material.ID} lays texture {material.BaseColorTexture.Texture}, which the scene does not hold");
+        }
+
+        foreach (var texture in scene.Textures.Values)
+        {
+            Assert.That(scene.Images.TryGetValue(texture.Image, out var image), Is.True, $"{name}: texture {texture.ID} shows no image");
+            var size = PrcTestImages.SizeOf(image.Data, image.MimeType);
+            Assert.That(size, Is.Not.Null, $"{name}: image {image.ID} is not the {image.MimeType} it says it is");
+            Assert.That(size.Width is > 0 and <= 16384 && size.Height is > 0 and <= 16384, Is.True,
+                $"{name}: image {image.ID} is {size.Width} by {size.Height}");
+        }
+    }
+
+    private static void CheckCameras(SceneData scene, string name)
+    {
+        foreach (var camera in scene.CameraData.Values)
+        {
+            var translation = camera.Translation;
+            var rotation = camera.Rotation;
+            Assert.That(float.IsFinite(translation.X) && float.IsFinite(translation.Y) && float.IsFinite(translation.Z), Is.True,
+                $"{name}: camera {camera.Name} stands nowhere");
+            var length = Math.Sqrt(rotation.X * rotation.X + rotation.Y * rotation.Y + rotation.Z * rotation.Z + rotation.W * rotation.W);
+            Assert.That(Math.Abs(length - 1), Is.LessThan(1e-3), $"{name}: camera {camera.Name} is turned by a rotation of length {length}");
         }
     }
 
@@ -137,6 +170,7 @@ public class PrcRealFileTests
             }
         }
 
-        return $"{nodes} nodes, {meshes} meshes, {triangles} triangles, {lines} lines, {scene.Materials.Count} materials";
+        return $"{nodes} nodes, {meshes} meshes, {triangles} triangles, {lines} lines, {scene.Materials.Count} materials, " +
+               $"{scene.Textures.Count} textures, {scene.CameraData.Count} cameras, {scene.LightData.Count} lights, unit {scene.Units.Value} m";
     }
 }

@@ -49,6 +49,76 @@ internal sealed class PrcMeshData
 
         Indices.Add(vertex);
     }
+
+    /// <summary>Gives each corner of <see cref="Indices"/> its normal from <paramref name="cornerNormals"/>: a vertex
+    /// whose corners take different normals is split into one vertex for each.</summary>
+    internal void SetCornerNormals(IReadOnlyList<Vector3F> cornerNormals)
+    {
+        var points = new List<Vector3<double>>(Points);
+        var colors = new List<Color>(Colors);
+        var textures = new List<Vector2F>(TextureCoordinates);
+        var indices = new List<int>(Indices);
+        var split = new Dictionary<PrcCornerNormalKey, int>();
+        Points.Clear();
+        Normals.Clear();
+        Colors.Clear();
+        TextureCoordinates.Clear();
+        Indices.Clear();
+        vertexOf.Clear();
+        for (var corner = 0; corner < indices.Count; corner++)
+        {
+            var old = indices[corner];
+            var key = new PrcCornerNormalKey(old, cornerNormals[corner]);
+            if (!split.TryGetValue(key, out var vertex))
+            {
+                vertex = Points.Count;
+                split.Add(key, vertex);
+                Points.Add(points[old]);
+                Normals.Add(cornerNormals[corner]);
+                Colors.Add(colors[old]);
+                TextureCoordinates.Add(textures[old]);
+            }
+
+            Indices.Add(vertex);
+        }
+
+        HasNormals = true;
+    }
+
+    /// <summary>Lays <paramref name="transformation"/> on every texture coordinate: s and t inverted as it says, then
+    /// its matrix.</summary>
+    internal void TransformTextureCoordinates(PrcTextureTransformation transformation)
+    {
+        for (var index = 0; index < TextureCoordinates.Count; index++)
+        {
+            var coordinate = TextureCoordinates[index];
+            var textureS = transformation.FlipS ? 1 - coordinate.X : coordinate.X;
+            var textureT = transformation.FlipT ? 1 - coordinate.Y : coordinate.Y;
+            var moved = Vector3<double>.TransformCoordinate(new Vector3<double>(textureS, textureT, 0), transformation.Matrix);
+            TextureCoordinates[index] = new Vector2F((float)moved.X, (float)moved.Y);
+        }
+    }
+}
+
+/// <summary>A vertex of a mesh with one of the normals its corners take: what tells the vertices it splits into.</summary>
+internal readonly struct PrcCornerNormalKey : IEquatable<PrcCornerNormalKey>
+{
+    internal PrcCornerNormalKey(int vertex, Vector3F normal)
+    {
+        Vertex = vertex;
+        Normal = normal;
+    }
+
+    internal int Vertex { get; }
+
+    internal Vector3F Normal { get; }
+
+    public bool Equals(PrcCornerNormalKey other) =>
+        Vertex == other.Vertex && Normal.X.Equals(other.Normal.X) && Normal.Y.Equals(other.Normal.Y) && Normal.Z.Equals(other.Normal.Z);
+
+    public override bool Equals(object other) => other is PrcCornerNormalKey key && Equals(key);
+
+    public override int GetHashCode() => HashCode.Combine(Vertex, Normal.X, Normal.Y, Normal.Z);
 }
 
 /// <summary>What makes a vertex of a PRC mesh: the indices of its point, normal and texture coordinates, and for a
@@ -99,6 +169,7 @@ internal static class PrcMeshBuilder
     private const uint MarkupFrameDraw = 7;
     private const uint MarkupFixedSize = 8;
     private const uint MarkupColor = 11;
+    private const uint MarkupFont = 13;
     private const uint MarkupText = 14;
     private const uint MarkupPoints = 15;
     private const uint MarkupPolygon = 16;
@@ -126,6 +197,11 @@ internal static class PrcMeshBuilder
             var cursor = new PrcFaceCursor(tessellation, face, mesh, notes, tessellation.MustRecalculateNormals ? next : face.StartTriangulated);
             cursor.Read(ref corner);
             next = cursor.Position;
+        }
+
+        if (tessellation.MustRecalculateNormals)
+        {
+            PrcCreaseNormals.Apply(meshes.Values, tessellation.CreaseAngle);
         }
 
         return meshes;
@@ -196,8 +272,9 @@ internal static class PrcMeshBuilder
     }
 
     /// <summary>The meshes of a markup tessellation - its lines and its filled triangles - drawn in the colours its
-    /// colour entities give; <paramref name="colorOf"/> turns a colour index of the globals into a colour. Text and
-    /// what is drawn in screen space are told and left out.</summary>
+    /// colour entities give; <paramref name="colorOf"/> turns a colour index of the globals into a colour. Its texts are
+    /// kept as they are written - the string, the font entity before it, the size and where it stands - not drawn;
+    /// what is drawn in screen space is told and left out.</summary>
     internal static PrcMarkupMeshes BuildMarkup(PrcMarkupTessellation markup, Func<uint, Color> colorOf, Color startColor, PrcNotes notes)
     {
         var meshes = new PrcMarkupMeshes();
@@ -207,6 +284,7 @@ internal static class PrcMeshBuilder
         var modes = new Stack<uint>();
         var transform = Matrix4x4<double>.Identity;
         var color = startColor;
+        var font = -1;
         var screenSpace = 0;
         long next = 0;
         var position = 0;
@@ -331,8 +409,26 @@ internal static class PrcMeshBuilder
                     }
 
                     break;
-                case MarkupText:
-                    notes.Tell("the text of markups is left out");
+                case MarkupFont when inner > 0:
+                    font = (int)codes[position];
+                    break;
+                case MarkupText when screenSpace == 0 && inner > 0:
+                    var index = (int)Math.Min(codes[position], int.MaxValue);
+                    meshes.Texts.Add(new PrcMarkupText
+                    {
+                        Text = index < markup.Texts.Count ? markup.Texts[index] : null,
+                        FontIndex = font,
+                        Width = doubles > 0 ? coordinates[next] : 0,
+                        Height = doubles > 1 ? coordinates[next + 1] : 0,
+                        Position = Vector3<double>.TransformCoordinate(Vector3<double>.Zero, transform)
+                    });
+                    if (index >= markup.Texts.Count)
+                    {
+                        notes.Tell("a markup text entity names a string its tessellation does not hold");
+                    }
+
+                    break;
+                case MarkupFont or MarkupText:
                     break;
                 case MarkupPattern:
                     notes.Tell("the fill patterns of markups are left out");
@@ -408,6 +504,23 @@ internal sealed class PrcMarkupMeshes
     internal PrcMeshData Triangles { get; } = new(PrimitiveType.TriangleList) { HasNormals = false, HasColors = true };
 
     internal PrcMeshData Points { get; } = new(PrimitiveType.PointList) { HasNormals = false, HasColors = true };
+
+    internal List<PrcMarkupText> Texts { get; } = [];
+}
+
+/// <summary>A text of a markup tessellation: the string, the font key of the globals it is written in (-1 for none
+/// given), its width and height in the model's units, and the point it starts at.</summary>
+internal sealed class PrcMarkupText
+{
+    internal string Text { get; init; }
+
+    internal int FontIndex { get; init; }
+
+    internal double Width { get; init; }
+
+    internal double Height { get; init; }
+
+    internal Vector3<double> Position { get; init; }
 }
 
 /// <summary>Walks the triangulated data of one face of a 3D tessellation: for each kind of triangulation its flags

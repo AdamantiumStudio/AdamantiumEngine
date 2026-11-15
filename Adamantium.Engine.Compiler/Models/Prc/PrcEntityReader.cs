@@ -27,6 +27,9 @@ internal sealed class PrcEntityReader
 
     internal PrcSchema Schema { get; }
 
+    /// <summary>The authoring version of what is read, which decides fields later versions added.</summary>
+    internal uint AuthoringVersion { get; init; } = PrcSchema.ReaderVersion;
+
     internal void Tell(string note) => notes.Tell(note);
 
     /// <summary>Steps over what versions newer than this reader added to <paramref name="type"/>.</summary>
@@ -45,9 +48,14 @@ internal sealed class PrcEntityReader
     /// <summary>ContentPRCBase: the attributes, the name, and for a type that can be referenced the CAD and PRC
     /// identifiers.</summary>
     internal string ReadContentPrcBase(uint type, Dictionary<string, string> attributes = null) =>
-        ReadContentPrcBase(type, PrcTypes.IsReferenceable(type), attributes);
+        ReadContentPrcBase(PrcTypes.IsReferenceable(type), attributes, null);
 
-    private string ReadContentPrcBase(uint type, bool referenceable, Dictionary<string, string> attributes)
+    /// <summary>ContentPRCBase into <paramref name="entity"/>: its attributes, its name, and for a type that can be
+    /// referenced its PRC unique identifier.</summary>
+    internal void ReadContentPrcBase(PrcTreeEntity entity) =>
+        entity.Name = ReadContentPrcBase(PrcTypes.IsReferenceable(entity.Type), entity.Attributes, entity);
+
+    private string ReadContentPrcBase(bool referenceable, Dictionary<string, string> attributes, PrcTreeEntity into)
     {
         ReadAttributes(attributes);
         var name = ReadName();
@@ -55,7 +63,11 @@ internal sealed class PrcEntityReader
         {
             Bits.ReadUnsignedInteger();
             Bits.ReadUnsignedInteger();
-            Bits.ReadUnsignedInteger();
+            var uniqueId = Bits.ReadUnsignedInteger();
+            if (into != null)
+            {
+                into.UniqueId = uniqueId;
+            }
         }
 
         EndOf(PrcTypes.PrcBase);
@@ -66,14 +78,14 @@ internal sealed class PrcEntityReader
     /// with graphics can - then the graphics or the current ones.</summary>
     internal void ReadPrcBaseWithGraphics(PrcTreeEntity entity)
     {
-        entity.Name = ReadContentPrcBase(entity.Type, true, entity.Attributes);
+        entity.Name = ReadContentPrcBase(true, entity.Attributes, entity);
         entity.Graphics = ReadGraphics();
     }
 
     /// <summary>The base content and graphics of an entity whose content is not kept.</summary>
-    internal void SkipPrcBaseWithGraphics(uint type)
+    internal void SkipPrcBaseWithGraphics()
     {
-        ReadContentPrcBase(type, true, null);
+        ReadContentPrcBase(true, null, null);
         ReadGraphics();
     }
 
@@ -274,35 +286,33 @@ internal sealed class PrcEntityReader
     /// <summary>A reference to an entity by its unique identifier (ReferenceUniqueIdentifier, the content of
     /// PRC_TYPE_MISC_ReferenceOnPRCBase): the target's type, whether it is in this file structure, the file structure
     /// it is in when not, its identifier there.</summary>
-    internal void SkipReferenceOnPrcBaseContent()
+    internal PrcReferenceTarget ReadReferenceOnPrcBaseContent()
     {
-        Bits.ReadUnsignedInteger();
-        if (!Bits.ReadBoolean())
-        {
-            ReadCompressedUniqueId();
-        }
-
-        Bits.ReadUnsignedInteger();
+        var type = Bits.ReadUnsignedInteger();
+        var fileStructure = Bits.ReadBoolean() ? null : ReadCompressedUniqueId();
+        var target = new PrcReferenceTarget { Type = type, FileStructure = fileStructure, UniqueId = Bits.ReadUnsignedInteger() };
         EndOf(PrcTypes.ReferenceOnPrcBase);
+        return target;
     }
 
     /// <summary>A ReferenceUniqueIdentifier with its type code.</summary>
-    internal void SkipReferenceUniqueIdentifier()
+    internal PrcReferenceTarget ReadReferenceUniqueIdentifier()
     {
         Expect(PrcTypes.ReferenceOnPrcBase, "a reference");
-        SkipReferenceOnPrcBaseContent();
+        return ReadReferenceOnPrcBaseContent();
     }
 
     /// <summary>The content of PRC_TYPE_MISC_ReferenceOnTopology: the topological type, and when the target has a body
     /// the file structure, context, body and indices that locate it.</summary>
-    internal void SkipReferenceOnTopologyContent()
+    internal PrcReferenceTarget ReadReferenceOnTopologyContent()
     {
-        Bits.ReadUnsignedInteger();
+        var type = Bits.ReadUnsignedInteger();
+        PrcUniqueId fileStructure = null;
         if (Bits.ReadBoolean())
         {
             if (!Bits.ReadBoolean())
             {
-                ReadCompressedUniqueId();
+                fileStructure = ReadCompressedUniqueId();
             }
 
             Bits.ReadUnsignedInteger();
@@ -315,44 +325,59 @@ internal sealed class PrcEntityReader
         }
 
         EndOf(PrcTypes.ReferenceOnTopology);
+        return new PrcReferenceTarget { Type = type, FileStructure = fileStructure, IsTopology = true };
     }
 
-    /// <summary>ReferenceData: a reference on a PRC base or on topology, with its type code.</summary>
-    internal void SkipReferenceData()
+    /// <summary>ReferenceData: a reference on a PRC base or on topology, with its type code; null for one of a type this
+    /// reader does not know.</summary>
+    internal PrcReferenceTarget ReadReferenceData()
     {
         var type = Bits.ReadUnsignedInteger();
         switch (type)
         {
             case PrcTypes.ReferenceOnPrcBase:
-                SkipReferenceOnPrcBaseContent();
-                break;
+                return ReadReferenceOnPrcBaseContent();
             case PrcTypes.ReferenceOnTopology:
-                SkipReferenceOnTopologyContent();
-                break;
+                return ReadReferenceOnTopologyContent();
             default:
                 SkipUnknown(type, "a reference");
-                break;
+                return null;
         }
     }
 
-    /// <summary>ContentEntityReference: base content and graphics, a local coordinate system, and the reference.</summary>
-    internal void SkipContentEntityReference(uint type)
+    /// <summary>ContentEntityReference: base content and graphics, a local coordinate system - stored plus one, as the
+    /// file's other indices are - and the reference.</summary>
+    internal PrcEntityReference ReadContentEntityReference(uint type)
     {
-        SkipPrcBaseWithGraphics(type);
-        Bits.ReadUnsignedInteger();
-        if (Bits.ReadBoolean())
+        var holder = new PrcTreeEntity { Type = type };
+        ReadPrcBaseWithGraphics(holder);
+        var coordinateSystem = (int)Bits.ReadUnsignedInteger() - 1;
+        var target = Bits.ReadBoolean() ? ReadReferenceData() : null;
+        var reference = new PrcEntityReference
         {
-            SkipReferenceData();
+            Type = type,
+            Name = holder.Name,
+            Graphics = holder.Graphics,
+            UniqueId = holder.UniqueId,
+            CoordinateSystemIndex = coordinateSystem,
+            Target = target
+        };
+        foreach (var attribute in holder.Attributes)
+        {
+            reference.Attributes[attribute.Key] = attribute.Value;
         }
+
+        return reference;
     }
 
     /// <summary>A PRC_TYPE_MISC_EntityReference with its type code.</summary>
-    internal void SkipEntityReference()
+    internal PrcEntityReference ReadEntityReference()
     {
         Expect(PrcTypes.EntityReference, "an entity reference");
-        SkipContentEntityReference(PrcTypes.EntityReference);
+        var reference = ReadContentEntityReference(PrcTypes.EntityReference);
         EndOf(PrcTypes.EntityReference);
         SkipUserData();
+        return reference;
     }
 
     /// <summary>An entity of a type this reader does not read here, stepped over by the file's schema.</summary>
@@ -364,69 +389,134 @@ internal sealed class PrcEntityReader
 
     /// <summary>A PRC_TYPE_ASM_Filter with its type code: its base content, whether it is active, its layer filter
     /// and its entity filter.</summary>
-    internal void SkipFilter()
+    internal PrcFilter ReadFilter()
     {
         Expect(PrcTypes.Filter, "a filter");
-        ReadContentPrcBase(PrcTypes.Filter);
-        Bits.ReadBoolean();
-        Bits.ReadBoolean();
-        var layers = Bits.ReadCount(1, "layers of a filter");
-        for (var layer = 0; layer < layers; layer++)
+        var holder = new PrcTreeEntity { Type = PrcTypes.Filter };
+        ReadContentPrcBase(holder);
+        var isActive = Bits.ReadBoolean();
+        var layersInclusive = Bits.ReadBoolean();
+        var layers = new List<uint>(Bits.ReadCount(1, "layers of a filter"));
+        for (var layer = 0; layer < layers.Capacity; layer++)
         {
-            Bits.ReadUnsignedInteger();
+            layers.Add(Bits.ReadUnsignedInteger());
         }
 
-        Bits.ReadBoolean();
-        var entities = Bits.ReadCount(8, "entities of a filter");
-        for (var entity = 0; entity < entities; entity++)
+        var entitiesInclusive = Bits.ReadBoolean();
+        var references = new List<PrcEntityReference>(Bits.ReadCount(8, "entities of a filter"));
+        for (var entity = 0; entity < references.Capacity; entity++)
         {
-            SkipEntityReference();
+            references.Add(ReadEntityReference());
         }
 
         EndOf(PrcTypes.Filter);
         SkipUserData();
+        var filter = new PrcFilter
+        {
+            Type = PrcTypes.Filter,
+            Name = holder.Name,
+            UniqueId = holder.UniqueId,
+            IsActive = isActive,
+            LayersInclusive = layersInclusive,
+            EntitiesInclusive = entitiesInclusive
+        };
+        filter.Layers.AddRange(layers);
+        filter.Entities.AddRange(references);
+        return filter;
     }
 
-    /// <summary>A light of a scene with its type code.</summary>
-    internal void SkipLight()
+    /// <summary>A light of a scene with its type code: its base content, its ambient, diffuse and specular colours -
+    /// three, not the four of the specification's tables, as the errata have it - and what its kind adds; a directional
+    /// light's intensity from authoring version 8030. Null for a type this reader does not know.</summary>
+    internal PrcLight ReadLight()
     {
+        const uint directionalIntensityVersion = 8030;
+
         var type = Bits.ReadUnsignedInteger();
         if (type is < PrcTypes.AmbientLight or > PrcTypes.SpotLight)
         {
             SkipUnknown(type, "a light");
-            return;
+            return null;
         }
 
-        ReadContentPrcBase(type);
-        for (var colour = 0; colour < 4; colour++)
-        {
-            Bits.ReadUnsignedInteger();
-        }
-
+        var name = ReadContentPrcBase(type);
+        var ambient = (int)Bits.ReadUnsignedInteger() - 1;
+        var diffuse = (int)Bits.ReadUnsignedInteger() - 1;
+        var specular = (int)Bits.ReadUnsignedInteger() - 1;
+        var location = Vector3<double>.Zero;
+        var direction = new Vector3<double>(0, 0, -1);
+        var constant = 1d;
+        var linear = 0d;
+        var quadratic = 0d;
+        var intensity = 1d;
+        var angle = 0d;
+        var exponent = 0d;
         switch (type)
         {
             case PrcTypes.PointLight:
-                SkipDoubles(3 + 3);
+                location = ReadVector3d();
+                constant = Bits.ReadDouble();
+                linear = Bits.ReadDouble();
+                quadratic = Bits.ReadDouble();
                 break;
             case PrcTypes.DirectionalLight:
-                SkipDoubles(3 + 1);
+                direction = ReadVector3d();
+                if (AuthoringVersion >= directionalIntensityVersion)
+                {
+                    intensity = Bits.ReadDouble();
+                }
+
                 break;
             case PrcTypes.SpotLight:
-                SkipDoubles(3 + 3 + 3 + 2);
+                location = ReadVector3d();
+                constant = Bits.ReadDouble();
+                linear = Bits.ReadDouble();
+                quadratic = Bits.ReadDouble();
+                direction = ReadVector3d();
+                angle = Bits.ReadDouble();
+                exponent = Bits.ReadDouble();
                 break;
         }
 
         EndOf(type);
+        return new PrcLight
+        {
+            Type = type,
+            Name = name,
+            AmbientIndex = ambient,
+            DiffuseIndex = diffuse,
+            SpecularIndex = specular,
+            Location = location,
+            Direction = direction,
+            ConstantAttenuation = constant,
+            LinearAttenuation = linear,
+            QuadraticAttenuation = quadratic,
+            Intensity = intensity,
+            FallOffAngle = angle,
+            FallOffExponent = exponent
+        };
     }
 
     /// <summary>A PRC_TYPE_GRAPH_Camera with its type code.</summary>
-    internal void SkipCamera()
+    internal PrcCamera ReadCamera()
     {
         Expect(PrcTypes.Camera, "a camera");
-        ReadContentPrcBase(PrcTypes.Camera);
-        Bits.ReadBoolean();
-        SkipDoubles(3 * 3 + 6);
+        var camera = new PrcCamera
+        {
+            Name = ReadContentPrcBase(PrcTypes.Camera),
+            IsOrthographic = Bits.ReadBoolean(),
+            Position = ReadVector3d(),
+            LookAt = ReadVector3d(),
+            Up = ReadVector3d(),
+            FieldOfViewX = Bits.ReadDouble(),
+            FieldOfViewY = Bits.ReadDouble(),
+            Aspect = Bits.ReadDouble(),
+            Near = Bits.ReadDouble(),
+            Far = Bits.ReadDouble(),
+            Zoom = Bits.ReadDouble()
+        };
         EndOf(PrcTypes.Camera);
+        return camera;
     }
 
     /// <summary>A PRC_TYPE_SURF_Plane with its type code, as views and clipping planes have it: its content, its
@@ -454,34 +544,40 @@ internal sealed class PrcEntityReader
     }
 
     /// <summary>A PRC_TYPE_GRAPH_SceneDisplayParameters with its type code.</summary>
-    internal void SkipSceneDisplayParameters()
+    internal PrcSceneDisplayParameters ReadSceneDisplayParameters()
     {
         Expect(PrcTypes.SceneDisplayParameters, "scene display parameters");
-        ReadContentPrcBase(PrcTypes.SceneDisplayParameters);
-        Bits.ReadBoolean();
+        var scene = new PrcSceneDisplayParameters
+        {
+            Name = ReadContentPrcBase(PrcTypes.SceneDisplayParameters),
+            IsActive = Bits.ReadBoolean()
+        };
         var lights = Bits.ReadCount(4, "lights");
-        for (var light = 0; light < lights; light++)
+        for (var index = 0; index < lights; index++)
         {
-            SkipLight();
+            if (ReadLight() is { } light)
+            {
+                scene.Lights.Add(light);
+            }
         }
 
         if (Bits.ReadBoolean())
         {
-            SkipCamera();
+            scene.Camera = ReadCamera();
         }
 
         if (Bits.ReadBoolean())
         {
-            ReadVector3d();
+            scene.RotationCenter = ReadVector3d();
         }
 
-        var planes = Bits.ReadCount(8, "clipping planes");
-        for (var plane = 0; plane < planes; plane++)
+        scene.ClippingPlaneCount = Bits.ReadCount(8, "clipping planes");
+        for (var plane = 0; plane < scene.ClippingPlaneCount; plane++)
         {
             SkipPlaneSurface();
         }
 
-        Bits.ReadUnsignedInteger();
+        scene.BackgroundStyleIndex = (int)Bits.ReadUnsignedInteger() - 1;
         Bits.ReadUnsignedInteger();
         var defaults = Bits.ReadCount(2, "default styles");
         for (var style = 0; style < defaults; style++)
@@ -490,45 +586,48 @@ internal sealed class PrcEntityReader
             Bits.ReadUnsignedInteger();
         }
 
-        Bits.ReadBoolean();
+        scene.IsAbsolute = Bits.ReadBoolean();
         EndOf(PrcTypes.SceneDisplayParameters);
+        return scene;
     }
 
     /// <summary>A PRC_TYPE_MKP_View with its type code: the annotations it groups, its plane, its scene, and the
     /// linked items and filters version 8016 added.</summary>
-    internal void SkipView()
+    internal PrcView ReadView()
     {
         Expect(PrcTypes.View, "a view");
-        SkipPrcBaseWithGraphics(PrcTypes.View);
+        var view = new PrcView { Type = PrcTypes.View };
+        ReadPrcBaseWithGraphics(view);
         var annotations = Bits.ReadCount(4, "annotations of a view");
         for (var annotation = 0; annotation < annotations; annotation++)
         {
-            SkipReferenceUniqueIdentifier();
+            view.Annotations.Add(ReadReferenceUniqueIdentifier());
         }
 
         SkipPlaneSurface();
         if (Bits.ReadBoolean())
         {
-            SkipSceneDisplayParameters();
+            view.Scene = ReadSceneDisplayParameters();
         }
 
-        Bits.ReadBoolean();
-        Bits.ReadBoolean();
+        view.IsAnnotationView = Bits.ReadBoolean();
+        view.IsDefault = Bits.ReadBoolean();
         Bits.ReadBoolean();
         var linked = Bits.ReadCount(4, "linked items of a view");
         for (var item = 0; item < linked; item++)
         {
-            SkipReferenceUniqueIdentifier();
+            view.LinkedItems.Add(ReadReferenceUniqueIdentifier());
         }
 
         var filters = Bits.ReadCount(4, "filters of a view");
         for (var filter = 0; filter < filters; filter++)
         {
-            SkipFilter();
+            view.Filters.Add(ReadFilter());
         }
 
         EndOf(PrcTypes.View);
         SkipUserData();
+        return view;
     }
 }
 

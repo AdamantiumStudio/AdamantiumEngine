@@ -29,9 +29,20 @@ All packages share one version.
   by its traversal - edges on a stack, the right neighbour pushed before the left, new points along axes built from
   the points before them in the specification's arithmetic, several traversals in one tessellation - with its stored
   normals (planar faces, references to a vertex's earlier normals) or the winding of recalculated ones, line
-  attributes, vertex colours and texture coordinates. What it leaves out - the exact geometry of B-rep bodies, hidden
-  and removed entities, views, filters, lights and cameras, textures, markup text - is listed in `UnsupportedFeatures`,
-  B-rep-only items by name.
+  attributes, vertex colours and texture coordinates. Normals a tessellation asks to be recalculated are smoothed where
+  triangles meet within its crease angle and part past it. The file is read in the first unit a CAD system gave - the
+  model file's, else the first product occurrence's down the tree (PRC 5.6) - the locations already scaling between
+  the occurrences' own units. A product occurrence's entity references redefine the entities under it - their style,
+  their visibility, their place by a coordinate system of the globals - and its active display filter takes away
+  entities by their layers or by name. Texture applications lay their diffuse texture - the PNG or JPEG picture each
+  file structure's header embeds, with its wrapping and its texture transformation (a rotation by its x axis alone,
+  as the errata measure it) laid on the coordinates - as the material's base colour texture, replacing or modulating
+  its colour. The cameras of views and of scene display parameters become cameras named after them, placed in their
+  occurrence; their lights - ambient, point, directional and spot, of three colours as the errata have them - lights;
+  markup texts are kept on their nodes' mesh data with their font, size and place. What it leaves out - the exact
+  geometry of B-rep bodies, hidden and removed entities, what a view shows beyond its camera, clipping planes and
+  backgrounds, texture levels other than the diffuse one, pictures of raw pixels, the drawing of markup text - is
+  listed in `UnsupportedFeatures`, B-rep-only items by name.
 - `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document

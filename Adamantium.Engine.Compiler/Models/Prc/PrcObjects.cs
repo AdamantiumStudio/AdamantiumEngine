@@ -103,13 +103,35 @@ internal sealed class PrcMaterial
     internal int MaterialGenericIndex { get; init; } = -1;
 
     internal int TextureDefinitionIndex { get; init; } = -1;
+
+    /// <summary>For a texture application, the texture application of the next level of texture; -1 for none.</summary>
+    internal int NextTextureIndex { get; init; } = -1;
+
+    /// <summary>For a texture application, which of a vertex's sets of texture coordinates it is read with.</summary>
+    internal int TextureCoordinateSet { get; init; }
 }
 
-/// <summary>A picture of the globals (PRC_TYPE_GRAPH_Picture), held in one of the file's uncompressed files.</summary>
+/// <summary>A font key of the globals' markup fonts (FontKeysSameFont): the font's family name, a size and its
+/// attributes - bold, italic, underlined and the rest.</summary>
+internal sealed class PrcFont
+{
+    internal string Name { get; init; }
+
+    internal int Size { get; init; }
+
+    internal byte Attributes { get; init; }
+}
+
+/// <summary>A picture of the globals (PRC_TYPE_GRAPH_Picture), held in one of the file's uncompressed files: PNG,
+/// JPEG, or flate-compressed pixels of one to four components.</summary>
 internal sealed class PrcPicture
 {
     internal const int Png = 0;
     internal const int Jpeg = 1;
+    internal const int RgbBytes = 2;
+    internal const int RgbaBytes = 3;
+    internal const int GreyBytes = 4;
+    internal const int GreyAlphaBytes = 5;
 
     internal string Name { get; init; }
 
@@ -122,15 +144,77 @@ internal sealed class PrcPicture
     internal uint Height { get; init; }
 }
 
-/// <summary>A texture definition of the globals (PRC_TYPE_GRAPH_TextureDefinition): the picture it lays.</summary>
+/// <summary>A texture definition of the globals (PRC_TYPE_GRAPH_TextureDefinition): the picture it lays, how its
+/// texture coordinates are found, what of the picture it applies and how, how it wraps, and how its coordinates are
+/// transformed. Enumerated values are those of the specification, from 0 for unknown.</summary>
 internal sealed class PrcTextureDefinition
 {
+    /// <summary>Coordinates stored on the 3D tessellation.</summary>
+    internal const int MappingStored = 1;
+
+    /// <summary>Coordinates worked out by a mapping operator.</summary>
+    internal const int MappingOperator = 3;
+
+    internal const int FunctionModulate = 1;
+    internal const int FunctionReplace = 2;
+    internal const int FunctionBlend = 3;
+    internal const int FunctionDecal = 4;
+
+    internal const int WrapUnknown = 0;
+    internal const int WrapRepeat = 1;
+    internal const int WrapClampToBorder = 2;
+    internal const int WrapClamp = 3;
+    internal const int WrapClampToEdge = 4;
+    internal const int WrapMirroredRepeat = 5;
+
+    /// <summary>The texture's alpha is tested against <see cref="AlphaTestReference"/>.</summary>
+    internal const int ApplyingAlphaTest = 0x2;
+
+    /// <summary>The red, green, blue and alpha components of the mapping attributes.</summary>
+    internal const uint ComponentsRgba = 0x000F;
+
     internal string Name { get; init; }
 
     internal int PictureIndex { get; init; }
+
+    internal int Dimension { get; init; }
+
+    internal int MappingType { get; init; }
+
+    internal int MappingOperatorKind { get; init; }
+
+    /// <summary>Which components of the picture are applied (PRC_TEXTURE_MAPPING_*).</summary>
+    internal uint MappingAttributes { get; init; }
+
+    internal int Function { get; init; }
+
+    internal byte ApplyingMode { get; init; }
+
+    internal double AlphaTestReference { get; init; }
+
+    internal int WrapS { get; init; }
+
+    internal int WrapT { get; init; }
+
+    /// <summary>How the texture coordinates are transformed; null for not at all.</summary>
+    internal PrcTextureTransformation Transformation { get; init; }
 }
 
-/// <summary>An entity of the tree, the part all of them share: its name, attributes and graphics.</summary>
+/// <summary>A texture transformation (PRC_TYPE_GRAPH_TextureTransformation): a 2D transformation of the texture
+/// coordinates, which s and t it inverts first.</summary>
+internal sealed class PrcTextureTransformation
+{
+    internal bool FlipS { get; init; }
+
+    internal bool FlipT { get; init; }
+
+    /// <summary>The 2D transformation in a row-vector matrix: s and t axes in its first two rows, the translation in its
+    /// last, the homogeneous part in its last column; (s, t, 0, 1) times it.</summary>
+    internal Matrix4x4<double> Matrix { get; init; } = Matrix4x4<double>.Identity;
+}
+
+/// <summary>An entity of the tree, the part all of them share: its name, attributes, graphics and the identifier other
+/// entities refer to it by.</summary>
 internal class PrcTreeEntity
 {
     internal uint Type { get; init; }
@@ -139,7 +223,153 @@ internal class PrcTreeEntity
 
     internal PrcGraphics Graphics { get; set; } = PrcGraphics.Default;
 
+    /// <summary>The entity's PRC unique identifier in its file structure; 0 for none.</summary>
+    internal uint UniqueId { get; set; }
+
     internal Dictionary<string, string> Attributes { get; } = new(StringComparer.Ordinal);
+}
+
+/// <summary>What a reference points at (ReferenceData): the type of the target, the file structure it lies in, and
+/// its unique identifier there; or, for a reference on topology, a face of a body.</summary>
+internal sealed class PrcReferenceTarget
+{
+    internal uint Type { get; init; }
+
+    /// <summary>The file structure the target lies in; null for the referring entity's own.</summary>
+    internal PrcUniqueId FileStructure { get; init; }
+
+    internal uint UniqueId { get; init; }
+
+    internal bool IsTopology { get; init; }
+}
+
+/// <summary>A reference to an entity with what it redefines of it (PRC_TYPE_MISC_EntityReference): its own graphics -
+/// the style and visibility it gives the target - and a coordinate system of the globals it places the target by.</summary>
+internal sealed class PrcEntityReference : PrcTreeEntity
+{
+    /// <summary>A reference coordinate system of the globals; -1 for none.</summary>
+    internal int CoordinateSystemIndex { get; init; } = -1;
+
+    /// <summary>The entity referred to; null for none.</summary>
+    internal PrcReferenceTarget Target { get; init; }
+}
+
+/// <summary>A filter of entities (PRC_TYPE_ASM_Filter): which layers and which entities it keeps or takes away, and
+/// whether it is the active one.</summary>
+internal sealed class PrcFilter : PrcTreeEntity
+{
+    internal bool IsActive { get; init; }
+
+    /// <summary>Whether the layers are the ones kept rather than the ones taken away.</summary>
+    internal bool LayersInclusive { get; init; }
+
+    internal List<uint> Layers { get; } = [];
+
+    /// <summary>Whether the entities are the ones kept rather than the ones taken away.</summary>
+    internal bool EntitiesInclusive { get; init; }
+
+    internal List<PrcEntityReference> Entities { get; } = [];
+}
+
+/// <summary>A light of a scene (PRC_TYPE_GRAPH_*Light): its colours as indices of the globals' colour components, and
+/// for a point, directional or spot light where it is, where it shines and how it fades.</summary>
+internal sealed class PrcLight
+{
+    internal uint Type { get; init; }
+
+    internal string Name { get; init; }
+
+    internal int AmbientIndex { get; init; } = -1;
+
+    internal int DiffuseIndex { get; init; } = -1;
+
+    internal int SpecularIndex { get; init; } = -1;
+
+    internal Vector3<double> Location { get; init; }
+
+    internal Vector3<double> Direction { get; init; }
+
+    internal double ConstantAttenuation { get; init; } = 1;
+
+    internal double LinearAttenuation { get; init; }
+
+    internal double QuadraticAttenuation { get; init; }
+
+    internal double Intensity { get; init; } = 1;
+
+    /// <summary>A spot light's half angle in degrees.</summary>
+    internal double FallOffAngle { get; init; }
+
+    internal double FallOffExponent { get; init; }
+}
+
+/// <summary>A camera (PRC_TYPE_GRAPH_Camera): where it is, what it looks at, which way is up, its field of view in
+/// radians - or for an orthographic one its scale - its aspect, clipping distances and zoom.</summary>
+internal sealed class PrcCamera
+{
+    internal string Name { get; init; }
+
+    internal bool IsOrthographic { get; init; }
+
+    internal Vector3<double> Position { get; init; }
+
+    internal Vector3<double> LookAt { get; init; }
+
+    internal Vector3<double> Up { get; init; }
+
+    internal double FieldOfViewX { get; init; }
+
+    internal double FieldOfViewY { get; init; }
+
+    internal double Aspect { get; init; }
+
+    internal double Near { get; init; }
+
+    internal double Far { get; init; }
+
+    internal double Zoom { get; init; }
+}
+
+/// <summary>Scene display parameters (PRC_TYPE_GRAPH_SceneDisplayParameters): the lights and camera of a scene,
+/// whether it is the active one, its centre of rotation, clipping planes and default styles, and whether what it
+/// places is placed absolutely rather than in its sub-assembly.</summary>
+internal sealed class PrcSceneDisplayParameters
+{
+    internal string Name { get; init; }
+
+    internal bool IsActive { get; init; }
+
+    internal List<PrcLight> Lights { get; } = [];
+
+    /// <summary>Null for none.</summary>
+    internal PrcCamera Camera { get; set; }
+
+    /// <summary>Null for none.</summary>
+    internal Vector3<double>? RotationCenter { get; set; }
+
+    internal int ClippingPlaneCount { get; set; }
+
+    internal int BackgroundStyleIndex { get; set; } = -1;
+
+    internal bool IsAbsolute { get; set; }
+}
+
+/// <summary>A view (PRC_TYPE_MKP_View): annotations shown together on a plane, with the scene they are seen in, the
+/// items they link and the filters they show the model by.</summary>
+internal sealed class PrcView : PrcTreeEntity
+{
+    internal List<PrcReferenceTarget> Annotations { get; } = [];
+
+    /// <summary>Null for none.</summary>
+    internal PrcSceneDisplayParameters Scene { get; set; }
+
+    internal bool IsAnnotationView { get; set; }
+
+    internal bool IsDefault { get; set; }
+
+    internal List<PrcReferenceTarget> LinkedItems { get; } = [];
+
+    internal List<PrcFilter> Filters { get; } = [];
 }
 
 /// <summary>A product occurrence (PRC_TYPE_ASM_ProductOccurence): a node of the assembly, its part, prototype or
@@ -172,15 +402,20 @@ internal sealed class PrcProductOccurrence : PrcTreeEntity
     /// <summary>Where it stands in its father, as a row-vector matrix; null for none.</summary>
     internal Matrix4x4F? Location { get; set; }
 
-    internal int EntityReferenceCount { get; set; }
+    /// <summary>Entities under it it redefines - their place, style or visibility.</summary>
+    internal List<PrcEntityReference> EntityReferences { get; } = [];
 
     internal PrcMarkupData Markups { get; set; }
 
-    internal int ViewCount { get; set; }
+    internal List<PrcView> Views { get; } = [];
 
-    internal int FilterCount { get; set; }
+    /// <summary>The filter applied to what its prototype loads; null for none.</summary>
+    internal PrcFilter EntityFilter { get; set; }
 
-    internal int SceneDisplayParameterCount { get; set; }
+    /// <summary>The filters it can be shown by, at most one of them active.</summary>
+    internal List<PrcFilter> DisplayFilters { get; } = [];
+
+    internal List<PrcSceneDisplayParameters> SceneDisplayParameters { get; } = [];
 }
 
 /// <summary>A part definition (PRC_TYPE_ASM_PartDefinition): its representation items and its markups.</summary>
@@ -190,7 +425,7 @@ internal sealed class PrcPartDefinition : PrcTreeEntity
 
     internal PrcMarkupData Markups { get; set; }
 
-    internal int ViewCount { get; set; }
+    internal List<PrcView> Views { get; } = [];
 }
 
 /// <summary>A representation item (PRC_TYPE_RI_*): what it shows - its tessellation, its body in the exact geometry,
@@ -254,6 +489,10 @@ internal sealed class Prc3DTessellation : PrcTessellation
     internal bool HasFaces { get; set; }
 
     internal bool MustRecalculateNormals { get; set; }
+
+    /// <summary>When normals are recalculated, the angle between two triangles, in degrees, up to which they share
+    /// their normals.</summary>
+    internal double CreaseAngle { get; set; }
 
     internal double[] Normals { get; set; } = [];
 

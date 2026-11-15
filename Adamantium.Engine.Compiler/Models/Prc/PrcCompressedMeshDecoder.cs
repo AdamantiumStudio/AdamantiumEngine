@@ -221,7 +221,8 @@ internal sealed class PrcCompressedMeshDecoder
         {
             Type = PrcTypes.Tessellation3DCompressed,
             HasFaces = data.HasFaces,
-            MustRecalculateNormals = data.MustRecalculateNormals
+            MustRecalculateNormals = data.MustRecalculateNormals,
+            CreaseAngle = data.CreaseAngle
         };
         tessellation.Coordinates = Flatten(points);
         if (normals != null)

@@ -17,7 +17,13 @@ internal sealed class PrcFileStructure
 
     internal PrcSchema Schema { get; set; } = PrcSchema.Empty;
 
+    /// <summary>The private files the file structure's header embeds - the PNG or JPEG data its pictures name.</summary>
+    internal List<byte[]> UncompressedFiles { get; } = [];
+
     internal List<PrcUniqueId> ReferencedFileStructures { get; } = [];
+
+    /// <summary>The fonts of markup text, each key of each font in turn, as a markup's font entity numbers them.</summary>
+    internal List<PrcFont> Fonts { get; } = [];
 
     internal List<Vector3<double>> Colors { get; } = [];
 

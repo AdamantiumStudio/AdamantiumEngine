@@ -28,7 +28,7 @@ internal static class PrcTessellationReader
 
     internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
     {
-        var reader = new PrcEntityReader(bits, structure.Schema, notes);
+        var reader = new PrcEntityReader(bits, structure.Schema, notes) { AuthoringVersion = structure.AuthoringVersion };
         reader.Expect(PrcTypes.FileStructureTessellation, "the tessellation section");
         reader.ReadContentPrcBase(PrcTypes.FileStructureTessellation);
         structure.DeclaredTessellationCount = bits.ReadCount(8, "tessellations");
@@ -101,7 +101,7 @@ internal static class PrcTessellationReader
         if (tessellation.MustRecalculateNormals)
         {
             bits.ReadCharacter();
-            bits.ReadDouble();
+            tessellation.CreaseAngle = bits.ReadDouble();
         }
 
         tessellation.Normals = ReadDoubles(bits, "normal coordinates");
