@@ -254,7 +254,10 @@ namespace Adamantium.ECS
                 {
                     if (activeServices.ContainsKey(service.Uid)) continue;
                 }
-                if (appService.IsRunning)
+                // A world not yet given its application - not initialized - keeps the service waiting, as one whose
+                // application has not started does.
+                var running = appService is { IsRunning: true };
+                if (running)
                 {
                     service.Initialize();
                     service.LoadContent();
@@ -263,7 +266,8 @@ namespace Adamantium.ECS
                 {
                     activeServices[service.Uid] = service;
                     services.Add(service);
-                    if (!appService.IsRunning) pendingServices.Add(service);
+                    if (!running)
+                        pendingServices.Add(service);
                     RepublishSnapshot();
                 }
                 OnServiceAdded(service);
