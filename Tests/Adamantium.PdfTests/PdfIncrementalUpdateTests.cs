@@ -445,4 +445,104 @@ public class PdfIncrementalUpdateTests
         Assert.That(PdfDate.Parse("not a date"), Is.Null);
         Assert.That(PdfDate.Parse(""), Is.Null);
     }
+
+    // A page turned by hand is written turned, its sheet as wide as it was tall, and what was on it stays.
+    [Test]
+    [TestCase(90, 90)]
+    [TestCase(-90, 270)]
+    [TestCase(540, 180)]
+    public void APageTurnedIsReadBackTurned(int rotation, int expected)
+    {
+        var document = PdfDocument.Open(Pages().Build("/Root 1 0 R"));
+        var update = new PdfIncrementalUpdate(document);
+
+        update.RotatePage(document.Pages[0], rotation);
+        var page = PdfDocument.Open(update.Write()).Pages[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.Rotation, Is.EqualTo(expected));
+            Assert.That(page.Width, Is.EqualTo(expected % 180 == 0 ? 600 : 800));
+            Assert.That(page.GetContents().ToArray(), Is.EqualTo(Encoding.ASCII.GetBytes("0 0 m 100 100 l S")));
+        });
+    }
+
+    // Turned and marked in one update, either first: the page is written once, with both.
+    [Test]
+    [TestCase(true)]
+    [TestCase(false)]
+    public void APageTurnedAndAnnotatedInOneUpdateKeepsBoth(bool turnedFirst)
+    {
+        var document = PdfDocument.Open(Pages().Build("/Root 1 0 R"));
+        var update = new PdfIncrementalUpdate(document);
+
+        if (turnedFirst)
+        {
+            update.RotatePage(document.Pages[0], 90);
+        }
+
+        update.AddAnnotation(document.Pages[0], Square("mark-1"));
+        if (!turnedFirst)
+        {
+            update.RotatePage(document.Pages[0], 90);
+        }
+
+        var page = PdfDocument.Open(update.Write()).Pages[0];
+
+        Assert.That(page.Rotation, Is.EqualTo(90));
+        AssertSquare(page.Annotations.Single(), "mark-1");
+    }
+
+    // A turn the page inherits is its turn: asked for again, nothing is written; another one is the page's own.
+    [Test]
+    public void APageAlreadyTurnedSoIsLeftAsItIs_AnotherTurnOverridesTheInheritedOne()
+    {
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] >>");
+        var original = builder.Build("/Root 1 0 R");
+        var document = PdfDocument.Open(original);
+        var update = new PdfIncrementalUpdate(document);
+
+        update.RotatePage(document.Pages[0], 450);
+
+        Assert.That(update.HasChanges, Is.False, "turned so already, through its parent");
+        Assert.That(update.Write(), Is.EqualTo(original));
+
+        update.RotatePage(document.Pages[0], 180);
+        Assert.That(PdfDocument.Open(update.Write()).Pages[0].Rotation, Is.EqualTo(180));
+    }
+
+    [Test]
+    public void APageIsTurnedOnlyByQuarters()
+    {
+        var document = PdfDocument.Open(Pages().Build("/Root 1 0 R"));
+        var update = new PdfIncrementalUpdate(document);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => update.RotatePage(document.Pages[0], 45));
+        Assert.That(update.HasChanges, Is.False);
+    }
+
+    // A file saved by an update continues the one it was saved from, and the same file opened again too; another file,
+    // or the earlier one read after the later, does not.
+    [Test]
+    public void AFileSavedByAnUpdate_ContinuesTheOneItWasSavedFrom()
+    {
+        var original = Pages().Build("/Root 1 0 R");
+        var document = PdfDocument.Open(original);
+        var update = new PdfIncrementalUpdate(document);
+        update.RotatePage(document.Pages[0], 90);
+        var saved = PdfDocument.Open(update.Write());
+        var other = PdfDocument.Open(Pages("/Rotate 90").Build("/Root 1 0 R"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.Continues(document), Is.True);
+            Assert.That(PdfDocument.Open(original).Continues(document), Is.True, "the same bytes");
+            Assert.That(document.Continues(saved), Is.False, "the earlier one after the later");
+            Assert.That(other.Continues(document), Is.False, "another file");
+            Assert.That(saved.Continues(null), Is.False);
+        });
+    }
 }

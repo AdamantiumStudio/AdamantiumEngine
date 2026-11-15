@@ -257,6 +257,12 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         ? _options
         : new PdfReadOptions { Password = _password, DecodeLimits = _options.DecodeLimits });
 
+    /// <summary>Whether this is <paramref name="earlier"/>'s file again, as it was or with changes written after its
+    /// bytes (ISO 32000-2, 7.5.6) - the same file saved by an incremental update - and not another file.</summary>
+    public bool Continues(PdfDocument earlier) =>
+        earlier != null && _data.Length >= earlier._data.Length &&
+        _data.Span[..earlier._data.Length].SequenceEqual(earlier._data.Span);
+
     public static PdfDocument Open(Stream stream, PdfReadOptions options = null)
     {
         using var copy = new MemoryStream();
