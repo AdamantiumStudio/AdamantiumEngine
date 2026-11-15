@@ -78,6 +78,28 @@ public class CameraSteeringTests
         });
     }
 
+    // An isometric view switched on and taken back flows back as it flowed: only the switch is set back, not the turn the
+    // camera is making on its own.
+    [Test]
+    public void AnIsometricViewTakenBack_SetsOnlyTheSwitch()
+    {
+        var entity = camera.Owner;
+        var before = EditedState.Of(entity);
+        camera.IsIsometric = true;
+        var after = EditedState.Of(entity);
+        var edit = new EntityEdit([new EditedEntity(entity, before, after)]);
+        var turning = Quaternion.CreateFromAxisAngle<float>(new Vector3F(0, 1, 0), 0.3f);
+        camera.Rotation = turning;
+
+        edit.ApplyBefore();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.IsIsometric, Is.False);
+            Assert.That(camera.Rotation, Is.EqualTo(turning), "the camera's own turn is left to it");
+        });
+    }
+
     private void Frame()
     {
         universe.EntityWorld.ForceUpdate();

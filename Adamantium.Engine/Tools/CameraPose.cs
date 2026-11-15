@@ -23,13 +23,38 @@ public readonly record struct CameraPose(
     public static CameraPose Of(Camera camera) => new(camera.Rotation, camera.FocusDistance, camera.ProjectionType,
         camera.OrthoScale, camera.Fov, camera.IsIsometric);
 
-    /// <summary>Makes <paramref name="camera"/> look so at once, with no flowing into it; on the world's thread.</summary>
-    public void ApplyTo(Camera camera)
+    /// <summary>Makes <paramref name="camera"/> look so where it differs from <paramref name="from"/> - the pose a step
+    /// takes it from - on the world's thread. The projection and the isometric view change as the camera changes them
+    /// when asked, flowing into the new one; the rest at once. What the step did not change is left as it is.</summary>
+    public void ApplyTo(Camera camera, CameraPose from)
     {
-        camera.Rotation = Rotation;
-        camera.FocusDistance = FocusDistance;
-        camera.Fov = FieldOfView;
-        camera.ShowProjectionAtOnce(Projection, OrthoScale);
-        camera.IsIsometric = IsIsometric;
+        if (Rotation != from.Rotation)
+        {
+            camera.Rotation = Rotation;
+        }
+
+        if (FocusDistance != from.FocusDistance)
+        {
+            camera.FocusDistance = FocusDistance;
+        }
+
+        if (FieldOfView != from.FieldOfView)
+        {
+            camera.Fov = FieldOfView;
+        }
+
+        if (Projection != from.Projection)
+        {
+            camera.ProjectionType = Projection;
+        }
+        else if (Projection != CameraProjectionType.Perspective && OrthoScale != from.OrthoScale)
+        {
+            camera.OrthoScale = OrthoScale;
+        }
+
+        if (IsIsometric != from.IsIsometric)
+        {
+            camera.IsIsometric = IsIsometric;
+        }
     }
 }

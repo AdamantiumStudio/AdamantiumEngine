@@ -19,18 +19,23 @@ public readonly record struct EditedState(TransformState Transform, LightReach? 
             camera == null ? null : CameraPose.Of(camera));
     }
 
-    /// <summary>Puts <paramref name="entity"/> back as this state has it; on the world's thread.</summary>
-    public void ApplyTo(Entity entity)
+    /// <summary>Puts <paramref name="entity"/> as this state has it where it differs from <paramref name="from"/> - the
+    /// state a step takes it from - on the world's thread; what the step did not change is left as it is.</summary>
+    public void ApplyTo(Entity entity, EditedState from)
     {
-        entity.Transform.State = Transform;
-        if (Light is { } reach && entity.GetComponent<Light>() is { } light)
+        if (Transform != from.Transform)
+        {
+            entity.Transform.State = Transform;
+        }
+
+        if (Light is { } reach && Light != from.Light && entity.GetComponent<Light>() is { } light)
         {
             reach.ApplyTo(light);
         }
 
-        if (Camera is { } pose && entity.GetComponent<Camera>() is { } camera)
+        if (Camera is { } pose && from.Camera is { } fromPose && entity.GetComponent<Camera>() is { } camera)
         {
-            pose.ApplyTo(camera);
+            pose.ApplyTo(camera, fromPose);
         }
 
         entity.NotifyUpdated();

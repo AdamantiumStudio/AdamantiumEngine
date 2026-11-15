@@ -14,21 +14,22 @@ public sealed class EntityEdit
     /// <summary>The entities changed.</summary>
     public IReadOnlyList<EditedEntity> Entities { get; }
 
-    /// <summary>Puts every entity back as it stood before the gesture; on the world's thread.</summary>
+    /// <summary>Puts back on every entity what the gesture changed, as it stood before; on the world's thread. A camera's
+    /// projection and isometric view flow back as they flowed.</summary>
     public void ApplyBefore()
     {
         foreach (var edited in Entities)
         {
-            edited.Before.ApplyTo(edited.Entity);
+            edited.Before.ApplyTo(edited.Entity, edited.After);
         }
     }
 
-    /// <summary>Puts every entity as the gesture left it; on the world's thread.</summary>
+    /// <summary>Puts on every entity what the gesture changed, as it left it; on the world's thread.</summary>
     public void ApplyAfter()
     {
         foreach (var edited in Entities)
         {
-            edited.After.ApplyTo(edited.Entity);
+            edited.After.ApplyTo(edited.Entity, edited.Before);
         }
     }
 }
