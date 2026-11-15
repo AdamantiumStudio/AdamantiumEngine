@@ -404,6 +404,13 @@ All packages share one version.
 
 ### Fixed
 
+- Imported models are no longer shown as their mirror images. The way from a file's axes into the engine's
+  (`AxisConversion.Between`, `Mesh.ChangeCoordinateSystem`) was a reflection for every source - Z up `(x, -z, y)`,
+  Y up `(-x, -y, z)`, glTF `(x, -y, -z)` now - while the engine's axes are right-handed as its cameras show them: a
+  letter read backwards, the triangles' winding turned round so the faces still looked right. The file's up still
+  comes out as -Y and its front as -Z. The model importer is at revision 2 (`IContentImporter.Revision`,
+  `AssetSource.ImporterRevision`, `ImportReason.ImporterRevised`): an asset file an earlier importer made is imported
+  again.
 - `SceneCapture` no longer writes what was taken out of the world but leaves only with the next frame. A view's own
   camera, its view gone while no frame runs - a scene's tab behind another - was written as a camera of the scene, and
   the editor marked the scene changed.

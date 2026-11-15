@@ -112,9 +112,9 @@ public class U3dImportTests
         {
             Assert.That(root.Dependencies.Select(model => model.ID), Is.EqualTo(rootIds));
             Assert.That(underCar.ID, Is.EqualTo("Wheel"));
-            Assert.That(IsNear(car.Position, new Vector3F(-1, -3, 2)), $"the car stands at {car.Position}");
-            Assert.That(IsNear(underCar.Position, new Vector3F(0, -1, 0)), $"the wheel stands at {underCar.Position}");
-            Assert.That(IsNear(underWorld.Position, new Vector3F(-5, 0, 0)), $"the other wheel stands at {underWorld.Position}");
+            Assert.That(IsNear(car.Position, ToEngine(new Vector3F(1, 2, 3))), $"the car stands at {car.Position}");
+            Assert.That(IsNear(underCar.Position, ToEngine(new Vector3F(0, 0, 1))), $"the wheel stands at {underCar.Position}");
+            Assert.That(IsNear(underWorld.Position, ToEngine(new Vector3F(5, 0, 0))), $"the other wheel stands at {underWorld.Position}");
             Assert.That(underCar.Meshes, Has.Count.EqualTo(1));
             Assert.That(underWorld.Meshes, Has.Count.EqualTo(1));
             Assert.That(underCar.Meshes[0], Is.Not.SameAs(underWorld.Meshes[0]), "each copy has meshes of its own");
@@ -457,8 +457,8 @@ public class U3dImportTests
                 for (var corner = 0; corner < 3; corner++)
                 {
                     var point = mesh.Points[mesh.Indices[index + corner]].As<float>();
-                    corners[corner] = FindNearest(truth.Positions, new Vector3F(-point.X, point.Z, -point.Y));
-                    seen.Add(corners[corner]);
+                    corners[2 - corner] = FindNearest(truth.Positions, FromEngine(point));
+                    seen.Add(corners[2 - corner]);
                 }
 
                 decoded.Add(GetFaceKey(corners));
@@ -648,7 +648,9 @@ public class U3dImportTests
     private static Vector3F CreateRandomVector(Random random, float size) =>
         new((random.NextSingle() * 2 - 1) * size, (random.NextSingle() * 2 - 1) * size, (random.NextSingle() * 2 - 1) * size);
 
-    private static Vector3F ToEngine(Vector3F u3d) => new(-u3d.X, -u3d.Z, u3d.Y);
+    private static Vector3F ToEngine(Vector3F u3d) => new(u3d.X, -u3d.Z, u3d.Y);
+
+    private static Vector3F FromEngine(Vector3F engine) => new(engine.X, engine.Z, -engine.Y);
 
     private static bool IsNear(Vector3F expected, Vector3F actual, float tolerance = Tolerance) =>
         MathF.Abs(expected.X - actual.X) <= tolerance && MathF.Abs(expected.Y - actual.Y) <= tolerance &&

@@ -156,6 +156,32 @@ public class ContentBuilderTests
     }
 
     [Test]
+    public void AnAssetAnEarlierImporterMade_IsImportedAgain_AndThenLeftAlone()
+    {
+        Write("Models/triangle.obj", Triangle);
+        Import(new ContentBuilder(), "Models/triangle.obj");
+        var assetPath = Path.Combine(_project, "Models", "triangle.obj.aemf");
+        var file = AssetFile.Read(assetPath, AssetFileSection.Thumbnail | AssetFileSection.Source | AssetFileSection.Body);
+        var revision = file.Source.ImporterRevision;
+        file.Source.ImporterRevision = 1;
+        using (var stream = File.Create(assetPath))
+        {
+            file.WriteTo(stream);
+        }
+
+        var again = Import(new ContentBuilder(), "Models/triangle.obj");
+        var then = Import(new ContentBuilder(), "Models/triangle.obj");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(revision, Is.EqualTo(2), "the model importer's revision is recorded");
+            Assert.That(again.Imported.Single().Reason, Is.EqualTo(ImportReason.ImporterRevised), again.ToString());
+            Assert.That(AssetFile.Read(assetPath, AssetFileSection.Source).Source.ImporterRevision, Is.EqualTo(2));
+            Assert.That(then.Cooked, Is.EqualTo(0), "up to date once imported again");
+        });
+    }
+
+    [Test]
     public void ImportAsset_ImportsAnUpToDateAsset_WithTheParametersAsked()
     {
         Write("Models/triangle.obj", Triangle);

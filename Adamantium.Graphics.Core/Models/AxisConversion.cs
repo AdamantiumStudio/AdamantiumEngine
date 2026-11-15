@@ -6,7 +6,8 @@ namespace Adamantium.Graphics.Core.Models;
 /// The basis change between the import's coordinate systems. The very same one
 /// <see cref="Mesh.ChangeCoordinateSystem"/> applies to vertices - and that is the whole point: the mesh was
 /// converted while the skeleton and the animation key frames were not, so in a Y_UP file the bones came out
-/// flipped relative to the model they belong to.
+/// flipped relative to the model they belong to. Into the engine's own system - right-handed, as its cameras show
+/// it - a right-handed file goes by a turn alone: a reflection showed every imported model as its mirror image.
 /// </summary>
 public static class AxisConversion
 {
@@ -25,8 +26,8 @@ public static class AxisConversion
                case UpAxis.Y_UP_RH: return Axes(1, 0, 0, 0, 0, -1, 0, 1, 0);
                //(x, z, y)
                case UpAxis.Y_UP_LH: return Axes(1, 0, 0, 0, 0, 1, 0, 1, 0);
-               //(-x, -z, y): up to -Y, the front (-Y, as Blender and Max face) to -Z - as Y_UP_RH_FRONT_Z goes
-               case UpAxis.Y_DOWN_RH: return Axes(-1, 0, 0, 0, 0, 1, 0, -1, 0);
+               //(x, -z, y): up to -Y, the front (-Y, as Blender and Max face) to -Z - a turn, not a mirror
+               case UpAxis.Y_DOWN_RH: return Axes(1, 0, 0, 0, 0, 1, 0, -1, 0);
             }
             break;
 
@@ -35,16 +36,16 @@ public static class AxisConversion
             {
                //(x, y, -z)
                case UpAxis.Y_UP_LH: return Axes(1, 0, 0, 0, 1, 0, 0, 0, -1);
-               //(x, -y, z)
-               case UpAxis.Y_DOWN_RH: return Axes(1, 0, 0, 0, -1, 0, 0, 0, 1);
+               //(-x, -y, z): up to -Y, the front kept - a half turn round Z, not a mirror
+               case UpAxis.Y_DOWN_RH: return Axes(-1, 0, 0, 0, -1, 0, 0, 0, 1);
             }
             break;
 
          case UpAxis.Y_UP_RH_FRONT_Z:
             switch (to)
             {
-               //(-x, -y, -z): the front turns to -Z, where the engine's models face
-               case UpAxis.Y_DOWN_RH: return Axes(-1, 0, 0, 0, -1, 0, 0, 0, -1);
+               //(x, -y, -z): the front turns to -Z, where the engine's models face - a half turn round X
+               case UpAxis.Y_DOWN_RH: return Axes(1, 0, 0, 0, -1, 0, 0, 0, -1);
             }
             break;
       }
