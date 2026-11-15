@@ -21,6 +21,7 @@ public sealed class EntityManager
     private readonly List<Entity> branchesToRemove;
     private readonly List<Entity> entitiesReowned;
     private readonly Dictionary<Entity, Scene> entitiesMoved = new();
+    private readonly List<ReturnedEntity> _entitiesReturned = [];
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
 
@@ -157,6 +158,16 @@ public sealed class EntityManager
                 }
 
                 entitiesToAdd.Clear();
+            }
+
+            if (_entitiesReturned.Count > 0)
+            {
+                foreach (var returned in _entitiesReturned)
+                {
+                    ReturnEntityInternal(returned);
+                }
+
+                _entitiesReturned.Clear();
             }
 
             if (entitiesReowned.Count > 0)
@@ -478,6 +489,82 @@ public sealed class EntityManager
         }
 
         entity.NotifyUpdated();
+    }
+
+    /// <summary>Where <paramref name="entity"/> stands among its owner's entities, or among its scene's roots when it
+    /// has no owner; -1 when it is in neither.</summary>
+    public int GetSiblingIndex(Entity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        lock (syncObject)
+        {
+            if (entity.Owner is { } owner)
+            {
+                return owner.Dependencies.IndexOf(entity);
+            }
+
+            return entity.OwnScene?.Roots.IndexOf(entity) ?? -1;
+        }
+    }
+
+    /// <summary>Puts <paramref name="entity"/>, taken out of the world with <see cref="RemoveEntity"/>, back where it
+    /// was, from the next frame: under <paramref name="owner"/> at <paramref name="index"/> among its entities, or, with
+    /// no owner, among the roots of <paramref name="scene"/> at <paramref name="index"/>. The same object comes back,
+    /// its components and its tree as they were. Nothing for an entity in the world already.</summary>
+    public void ReturnEntity(Entity entity, Entity owner, Scene scene, int index)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (owner == null)
+        {
+            ArgumentNullException.ThrowIfNull(scene);
+            if (scene.World != World)
+            {
+                throw new ArgumentException("The scene is another world's.", nameof(scene));
+            }
+        }
+
+        lock (syncObject)
+        {
+            _entitiesReturned.Add(new ReturnedEntity(entity, owner, scene, index));
+        }
+
+        entity.NotifyUpdated();
+        owner?.NotifyUpdated();
+    }
+
+    private void ReturnEntityInternal(ReturnedEntity returned)
+    {
+        var entity = returned.Entity;
+        if (InWorld(entity))
+        {
+            return;
+        }
+
+        if (returned.Owner is { } owner)
+        {
+            if (!InWorld(owner))
+            {
+                return;
+            }
+
+            entity.Owner = owner;
+            owner.MoveDependency(entity, returned.Index);
+            JoinCameras(entity, owner.Scene);
+            OnEntityAdded(entity);
+            return;
+        }
+
+        var scene = returned.Scene;
+        if (scene.IsRemoved || !availableEntities.TryAdd(entity.Uid, entity))
+        {
+            return;
+        }
+
+        SetCameraProjectionType(entity, CameraProjectionType.Perspective);
+        entity.SetScene(scene);
+        scene.Roots.Insert(Math.Clamp(returned.Index, 0, scene.Roots.Count), entity);
+        JoinCameras(entity, scene);
+        OnEntityAdded(entity);
     }
 
     /// <summary>Takes every root of every scene out of the world, and with each its tree; the scenes stay.</summary>
