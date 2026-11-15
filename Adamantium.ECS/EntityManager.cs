@@ -22,6 +22,7 @@ public sealed class EntityManager
     private readonly List<Entity> entitiesReowned;
     private readonly Dictionary<Entity, Scene> entitiesMoved = new();
     private readonly List<ReturnedEntity> _entitiesReturned = [];
+    private readonly Dictionary<Entity, int> _entitiesPlacedAt = new();
     private readonly Dictionary<UInt128, EntityParameters> entityParametersMap;
     private readonly List<CameraProjectionType> availableProjectionTypes;
 
@@ -178,6 +179,16 @@ public sealed class EntityManager
                 }
 
                 entitiesReowned.Clear();
+            }
+
+            if (_entitiesPlacedAt.Count > 0)
+            {
+                foreach (var placed in _entitiesPlacedAt)
+                {
+                    PlaceAtInternal(placed.Key, placed.Value);
+                }
+
+                _entitiesPlacedAt.Clear();
             }
 
             if (entitiesMoved.Count > 0)
@@ -530,6 +541,38 @@ public sealed class EntityManager
 
         entity.NotifyUpdated();
         owner?.NotifyUpdated();
+    }
+
+    /// <summary>Moves <paramref name="entity"/> to <paramref name="index"/> among its owner's entities, or among its
+    /// scene's roots when it has none - from the next frame, after the owners and roots changed in this one settle: as an
+    /// entity moved under another and moved back stands where it stood.</summary>
+    public void PlaceAt(Entity entity, int index)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        lock (syncObject)
+        {
+            _entitiesPlacedAt[entity] = index;
+        }
+
+        entity.NotifyUpdated();
+    }
+
+    private void PlaceAtInternal(Entity entity, int index)
+    {
+        if (entity.Owner is { } owner)
+        {
+            owner.MoveDependency(entity, index);
+            return;
+        }
+
+        if (entity.OwnScene is { } scene && scene.Roots.IndexOf(entity) is >= 0 and var from)
+        {
+            var to = Math.Clamp(index, 0, scene.Roots.Count - 1);
+            if (from != to)
+            {
+                scene.Roots.Move(from, to);
+            }
+        }
     }
 
     private void ReturnEntityInternal(ReturnedEntity returned)

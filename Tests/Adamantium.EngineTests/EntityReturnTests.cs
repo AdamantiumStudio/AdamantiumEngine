@@ -67,6 +67,32 @@ public class EntityReturnTests
     }
 
     [Test]
+    public void AnEntity_IsPlacedAtAnIndex_AmongTheRootsAndUnderItsOwner()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var first = new Entity(null, "First");
+        var second = new Entity(null, "Second");
+        var model = new Entity(null, "Model");
+        var part = new Entity(model, "Part");
+        var mesh = new Entity(model, "Mesh");
+        manager.AddEntity(first);
+        manager.AddEntity(second);
+        manager.AddEntity(model);
+        NextFrame(universe);
+
+        manager.PlaceAt(model, 0);
+        manager.PlaceAt(mesh, 0);
+        NextFrame(universe);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(manager.MainScene.RootEntities, Is.EqualTo(new[] { model, first, second }));
+            Assert.That(model.Dependencies, Is.EqualTo(new[] { mesh, part }));
+        });
+    }
+
+    [Test]
     public void AnEntityInTheWorld_IsNotReturnedAgain()
     {
         var universe = new TestUniverse();
