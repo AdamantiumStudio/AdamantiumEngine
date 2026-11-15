@@ -63,6 +63,18 @@ namespace Adamantium.Engine.CompilerTests
                 $"{pair.From} -> {pair.To}");
         }
 
+        /// <summary>The engine's axes are right-handed, as its cameras show them, and so are the files': the way in is a
+        /// turn. A reflection showed every imported model as its mirror image - text read backwards, a left-hand drive
+        /// car right-hand drive - while the winding it turned round kept the faces looking right.</summary>
+        [Test]
+        public void TheWayIntoTheEngine_IsATurn_NotAMirror([ValueSource(nameof(IntoTheEngine))] (UpAxis From, UpAxis To) pair)
+        {
+            var conversion = AxisConversion.Between(pair.From, pair.To);
+
+            Assert.That(conversion.Determinant(), Is.EqualTo(1).Within(1e-6f), $"{pair.From} -> {pair.To}");
+            Assert.That(AxisConversion.MirrorsHandedness(conversion), Is.False);
+        }
+
         /// <summary>The mesh and the matrix agreeing proves nothing if both are wrong: the file's up has to come out as
         /// the engine's, which is -Y. A Z_UP model used to stand on its head.</summary>
         [Test]

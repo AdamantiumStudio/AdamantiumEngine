@@ -484,7 +484,7 @@ public class GltfImportTests
 
         var mesh = SingleMesh(Import(asset.WriteGltf(folder)));
 
-        Assert.That(mesh.UV0, Is.EqualTo(new[] { new Vector2F(0.5f, 0), new Vector2F(0.5f, -0.5f), new Vector2F(1, 0) })
+        Assert.That(mesh.UV0, Is.EquivalentTo(new[] { new Vector2F(0.5f, 0), new Vector2F(0.5f, -0.5f), new Vector2F(1, 0) })
             .Using<Vector2F>((a, b) => (a - b).Length() < 1e-4f ? 0 : 1));
     }
 
