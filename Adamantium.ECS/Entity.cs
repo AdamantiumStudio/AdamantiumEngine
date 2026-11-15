@@ -451,10 +451,20 @@ namespace Adamantium.ECS
             }
         }
 
-        public Entity Duplicate()
+        public Entity Duplicate() => Clone($"{Name} (1)", new Dictionary<Entity, Entity>());
+
+        /// <summary>A copy of this entity and its whole tree, named as they are, each child in its place, every entity
+        /// of the tree put in <paramref name="copies"/> against its copy: a scene played on a copy of itself says what
+        /// each came from.</summary>
+        public Entity CopyTree(Dictionary<Entity, Entity> copies)
         {
-            var root = Copy(null, this, $"{Name} (1)");
-            var entities = new Dictionary<Entity, Entity>();
+            ArgumentNullException.ThrowIfNull(copies);
+            return Clone(Name, copies);
+        }
+
+        private Entity Clone(string rootName, Dictionary<Entity, Entity> entities)
+        {
+            var root = Copy(null, this, rootName);
             var clones = new List<(ICloneableComponent Original, IComponent Clone)>();
             entities.Add(this, root);
             CloneComponents(root, this, clones);
