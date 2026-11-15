@@ -24,7 +24,7 @@ public class U3dBitReaderTests
         writer.WriteF32(-1.5f);
         writer.WriteF64(Math.PI);
         writer.WriteString("Ünï");
-        var expected = new List<byte> { 0xA5 };
+        List<byte> expected = [0xA5];
         expected.AddRange(BitConverter.GetBytes((ushort)0x1234));
         expected.AddRange(BitConverter.GetBytes(0xDEADBEEF));
         expected.AddRange(BitConverter.GetBytes(-1.5f));
@@ -52,16 +52,16 @@ public class U3dBitReaderTests
     public void StaticContexts_RoundTrip([Values(1, 2, 3, 4, 5)] int seed)
     {
         var random = new Random(seed);
-        var contexts = new List<U3dContext>();
-        var values = new List<uint>();
-        var sizes = new List<int>();
+        List<U3dContext> contexts = [];
+        List<uint> values = [];
+        List<int> sizes = [];
         var writer = new U3dTestBitWriter();
         for (var index = 0; index < 4000; index++)
         {
             var range = StaticRanges[random.Next(StaticRanges.Length)];
             var size = range <= 256 && random.Next(3) == 0 ? 1 : range <= 0xFFFF && random.Next(2) == 0 ? 2 : 4;
             var value = (uint)random.NextInt64(range);
-            var context = U3dContext.Static(range);
+            var context = U3dContext.CreateStatic(range);
             if (size == 1)
             {
                 writer.WriteCompressedU8(context, (byte)value);
@@ -94,15 +94,15 @@ public class U3dBitReaderTests
     public void DynamicContexts_RoundTrip([Values(11, 12, 13, 14, 15)] int seed)
     {
         var random = new Random(seed);
-        var names = new[] { "cShading", "cPosDiffX", "cDiffuseColorSign", "cFaceCnt" };
-        var contexts = new List<U3dContext>();
-        var values = new List<uint>();
-        var sizes = new List<int>();
+        string[] names = ["cShading", "cPosDiffX", "cDiffuseColorSign", "cFaceCnt"];
+        List<U3dContext> contexts = [];
+        List<uint> values = [];
+        List<int> sizes = [];
         var writer = new U3dTestBitWriter();
         for (var index = 0; index < 30000; index++)
         {
             var name = names[random.Next(names.Length)];
-            var context = U3dContext.Dynamic(name);
+            var context = U3dContext.CreateDynamic(name);
             var size = name == "cDiffuseColorSign" ? 1 : name == "cFaceCnt" ? 2 : 4;
             uint value = random.Next(20) switch
             {
@@ -144,7 +144,7 @@ public class U3dBitReaderTests
     public void DynamicContext_OfOneValueOverAndOver_HalvesItsCountsAndKeepsReading()
     {
         var writer = new U3dTestBitWriter();
-        var context = U3dContext.Dynamic("cStayMove0");
+        var context = U3dContext.CreateDynamic("cStayMove0");
         for (var index = 0; index < 50000; index++)
         {
             writer.WriteCompressedU8(context, (byte)(index % 997 == 0 ? 1 : 0));
@@ -165,20 +165,21 @@ public class U3dBitReaderTests
     public void NoCompressionProfile_ReadsCompressedFieldsAsPlainValues()
     {
         var writer = new U3dTestBitWriter(true);
-        writer.WriteCompressedU32(U3dContext.Dynamic("cShading"), 7);
-        writer.WriteCompressedU16(U3dContext.Dynamic("cDiffuseCount"), 513);
-        writer.WriteCompressedU8(U3dContext.Static(10), 9);
-        writer.WriteCompressedU32(U3dContext.Static(100), 99);
+        writer.WriteCompressedU32(U3dContext.CreateDynamic("cShading"), 7);
+        writer.WriteCompressedU16(U3dContext.CreateDynamic("cDiffuseCount"), 513);
+        writer.WriteCompressedU8(U3dContext.CreateStatic(10), 9);
+        writer.WriteCompressedU32(U3dContext.CreateStatic(100), 99);
         var bytes = writer.ToArray();
 
-        Assert.That(bytes, Is.EqualTo(new byte[] { 7, 0, 0, 0, 1, 2, 9, 99, 0, 0, 0 }));
+        byte[] plain = [7, 0, 0, 0, 1, 2, 9, 99, 0, 0, 0];
+        Assert.That(bytes, Is.EqualTo(plain));
         var reader = new U3dBitReader(bytes, true);
         Assert.Multiple(() =>
         {
-            Assert.That(reader.ReadCompressedU32(U3dContext.Dynamic("cShading")), Is.EqualTo(7));
-            Assert.That(reader.ReadCompressedU16(U3dContext.Dynamic("cDiffuseCount")), Is.EqualTo(513));
-            Assert.That(reader.ReadCompressedU8(U3dContext.Static(10)), Is.EqualTo(9));
-            Assert.That(reader.ReadCompressedU32(U3dContext.Static(100)), Is.EqualTo(99));
+            Assert.That(reader.ReadCompressedU32(U3dContext.CreateDynamic("cShading")), Is.EqualTo(7));
+            Assert.That(reader.ReadCompressedU16(U3dContext.CreateDynamic("cDiffuseCount")), Is.EqualTo(513));
+            Assert.That(reader.ReadCompressedU8(U3dContext.CreateStatic(10)), Is.EqualTo(9));
+            Assert.That(reader.ReadCompressedU32(U3dContext.CreateStatic(100)), Is.EqualTo(99));
         });
     }
 
@@ -186,9 +187,9 @@ public class U3dBitReaderTests
     public void ReadingPastTheData_Throws()
     {
         var writer = new U3dTestBitWriter();
-        writer.WriteCompressedU32(U3dContext.Dynamic("cShading"), 3);
+        writer.WriteCompressedU32(U3dContext.CreateDynamic("cShading"), 3);
         var reader = new U3dBitReader(writer.ToArray());
-        reader.ReadCompressedU32(U3dContext.Dynamic("cShading"));
+        reader.ReadCompressedU32(U3dContext.CreateDynamic("cShading"));
         Assert.That(() =>
         {
             for (var index = 0; index < 100; index++)
@@ -211,7 +212,7 @@ public class U3dBitReaderTests
     public void ValueFromAnEmptyStaticRange_Throws()
     {
         var reader = new U3dBitReader(new byte[16]);
-        Assert.That(() => reader.ReadCompressedU32(U3dContext.Static(0)), Throws.TypeOf<InvalidDataException>());
+        Assert.That(() => reader.ReadCompressedU32(U3dContext.CreateStatic(0)), Throws.TypeOf<InvalidDataException>());
     }
 
     private static void AssertReadsBack(byte[] bytes, List<U3dContext> contexts, List<uint> values, List<int> sizes)

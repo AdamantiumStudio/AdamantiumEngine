@@ -20,7 +20,7 @@ public class Pdf3DArtworkTests
         "<< /XN (Top) /MS /M /C2W [1 0 0 0 1 0 0 0 -1 0 0 200] /CO 200 /P << /Subtype /O /OS 4 /OB /Max >> >> " +
         "<< /XN (From the model) /MS /U3D /U3DPath (CameraNode) >>]";
 
-    private static PdfDocument Document(string firstAnnotationExtra, string secondAnnotation = null)
+    private static PdfDocument OpenDocument(string firstAnnotationExtra, string secondAnnotation = null)
     {
         var builder = new PdfFileBuilder();
         builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
@@ -39,13 +39,13 @@ public class Pdf3DArtworkTests
         return PdfDocument.Open(builder.Build("/Root 1 0 R"));
     }
 
-    private static Pdf3DArtwork Artwork(PdfDocument document, int index = 0) =>
+    private static Pdf3DArtwork GetArtwork(PdfDocument document, int index = 0) =>
         document.Pages[0].Annotations[index].Artwork3D;
 
     [Test]
     public void AThreeDAnnotation_GivesItsModelItsFormatAndItsBytes()
     {
-        var document = Document("");
+        var document = OpenDocument("");
         var annotation = document.Pages[0].Annotations.Single();
         var artwork = annotation.Artwork3D;
 
@@ -64,14 +64,15 @@ public class Pdf3DArtworkTests
     [Test]
     public void ItsViews_CarryTheirCameraProjectionBackgroundDrawingAndLight()
     {
-        var views = Artwork(Document("")).Views;
+        var views = GetArtwork(OpenDocument("")).Views;
         var iso = views[0];
         var top = views[1];
         var node = views[2];
+        string[] names = ["Iso", "Top", "From the model"];
 
         Assert.Multiple(() =>
         {
-            Assert.That(views.Select(view => view.Name), Is.EqualTo(new[] { "Iso", "Top", "From the model" }));
+            Assert.That(views.Select(view => view.Name), Is.EqualTo(names));
             Assert.That(iso.InternalName, Is.EqualTo("iso"));
             Assert.That(iso.UsesCamera, Is.True);
             Assert.That(iso.Camera.XAxis, Is.EqualTo(new Pdf3DVector(1, 0, 0)));
@@ -103,8 +104,8 @@ public class Pdf3DArtworkTests
         });
     }
 
-    // The annotation's 3DV names the view it opens on - by index, by name, as first or last, as the stream's default, or
-    // written out; without it, the stream's DV; without either, the first.
+    /// <summary>The annotation's 3DV names the view it opens on - by index, by name, as first or last, as the stream's
+    /// default, or written out; without it, the stream's DV; without either, the first.</summary>
     [TestCase("", "Top")]
     [TestCase("/3DV 0", "Iso")]
     [TestCase("/3DV /F", "Iso")]
@@ -116,14 +117,14 @@ public class Pdf3DArtworkTests
     [TestCase("/3DV 9", "Top")]
     public void TheViewItOpensOn_IsTheOneItsEntriesName(string entry, string expected)
     {
-        Assert.That(Artwork(Document(entry)).DefaultView.Name, Is.EqualTo(expected));
+        Assert.That(GetArtwork(OpenDocument(entry)).DefaultView.Name, Is.EqualTo(expected));
     }
 
     [Test]
     public void WhenItComesToLife_AndWhereItIsShown_AreItsOwn()
     {
-        var artwork = Artwork(Document("/3DA << /A /PO /D /PI /TB false /NP true >> /3DB [10 20 290 280] /3DI false"));
-        var defaults = Artwork(Document("")).Activation;
+        var artwork = GetArtwork(OpenDocument("/3DA << /A /PO /D /PI /TB false /NP true >> /3DB [10 20 290 280] /3DI false"));
+        var defaults = GetArtwork(OpenDocument("")).Activation;
 
         Assert.Multiple(() =>
         {
@@ -141,14 +142,15 @@ public class Pdf3DArtworkTests
         });
     }
 
-    // One model, two annotations: the second names the first's stream through a 3DRef and opens on a view of its own.
+    /// <summary>One model, two annotations: the second names the first's stream through a 3DRef and opens on a view of
+    /// its own.</summary>
     [Test]
     public void AnotherAnnotation_SharesTheModelThroughA3DRef()
     {
-        var document = Document("", "<< /Type /Annot /Subtype /3D /Rect [100 450 400 750] " +
-                                    "/3DD << /Type /3DRef /3DD 5 0 R >> /3DV (Iso) >>");
-        var first = Artwork(document);
-        var second = Artwork(document, 1);
+        var document = OpenDocument("", "<< /Type /Annot /Subtype /3D /Rect [100 450 400 750] " +
+                                        "/3DD << /Type /3DRef /3DD 5 0 R >> /3DV (Iso) >>");
+        var first = GetArtwork(document);
+        var second = GetArtwork(document, 1);
 
         Assert.Multiple(() =>
         {

@@ -1,26 +1,24 @@
-using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>Reads the parts many PRC entities share, in one section: the base content and its current name, the
-/// graphics and its current graphics, attributes, user data, references, transformations, cameras, lights, views and
-/// filters - and runs the schema at the end of each type to step over what newer versions added. The current name and
-/// graphics start afresh with each section, as the specification resets them when a section is flushed.</summary>
+/// <summary>Reads the parts many PRC entities of one section share, and steps over what newer versions added by the
+/// schema.</summary>
 internal sealed class PrcEntityReader
 {
     private const int BytesOfUniqueId = 4;
 
-    private readonly PrcNotes notes;
-    private string currentName;
-    private PrcGraphics currentGraphics = PrcGraphics.Default;
+    private readonly ImportNotes _notes;
+    private string _currentName;
+    private PrcGraphics _currentGraphics = PrcGraphics.Default;
 
-    internal PrcEntityReader(PrcBitReader bits, PrcSchema schema, PrcNotes notes)
+    internal PrcEntityReader(PrcBitReader bits, PrcSchema schema, ImportNotes notes)
     {
         Bits = bits;
         Schema = schema;
-        this.notes = notes;
+        _notes = notes;
     }
 
     internal PrcBitReader Bits { get; }
@@ -30,10 +28,10 @@ internal sealed class PrcEntityReader
     /// <summary>The authoring version of what is read, which decides fields later versions added.</summary>
     internal uint AuthoringVersion { get; init; } = PrcSchema.ReaderVersion;
 
-    internal void Tell(string note) => notes.Tell(note);
+    internal void Tell(string note) => _notes.Tell(note);
 
     /// <summary>Steps over what versions newer than this reader added to <paramref name="type"/>.</summary>
-    internal void EndOf(uint type) => Schema.SkipNewData(Bits, type);
+    internal void SkipNewData(uint type) => Schema.SkipNewData(Bits, type);
 
     /// <summary>Reads the type code of the next entity and checks it is <paramref name="expected"/>.</summary>
     internal void Expect(uint expected, string what)
@@ -41,7 +39,7 @@ internal sealed class PrcEntityReader
         var type = Bits.ReadUnsignedInteger();
         if (type != expected)
         {
-            throw Bits.Corrupt($"{what} has type {type} where type {expected} belongs");
+            throw Bits.CreateCorruptException($"{what} has type {type} where type {expected} belongs");
         }
     }
 
@@ -54,25 +52,6 @@ internal sealed class PrcEntityReader
     /// referenced its PRC unique identifier.</summary>
     internal void ReadContentPrcBase(PrcTreeEntity entity) =>
         entity.Name = ReadContentPrcBase(PrcTypes.IsReferenceable(entity.Type), entity.Attributes, entity);
-
-    private string ReadContentPrcBase(bool referenceable, Dictionary<string, string> attributes, PrcTreeEntity into)
-    {
-        ReadAttributes(attributes);
-        var name = ReadName();
-        if (referenceable)
-        {
-            Bits.ReadUnsignedInteger();
-            Bits.ReadUnsignedInteger();
-            var uniqueId = Bits.ReadUnsignedInteger();
-            if (into != null)
-            {
-                into.UniqueId = uniqueId;
-            }
-        }
-
-        EndOf(PrcTypes.PrcBase);
-        return name;
-    }
 
     /// <summary>PRC_TYPE_ROOT_PRCBaseWithGraphics: the base content of an entity that can be referenced - every entity
     /// with graphics can - then the graphics or the current ones.</summary>
@@ -94,14 +73,14 @@ internal sealed class PrcEntityReader
     {
         if (Bits.ReadBoolean())
         {
-            return currentName;
+            return _currentName;
         }
 
-        currentName = Bits.ReadString();
-        return currentName;
+        _currentName = Bits.ReadString();
+        return _currentName;
     }
 
-    /// <summary>The graphics: a flag saying they are the current ones, else a layer, a style and the behaviour bits.</summary>
+    /// <summary>The graphics: a flag saying they are the current ones, else a layer, a style and the behavior bits.</summary>
     internal PrcGraphics ReadGraphics()
     {
         if (!Bits.ReadBoolean())
@@ -110,11 +89,11 @@ internal sealed class PrcEntityReader
             var style = (int)Bits.ReadUnsignedInteger() - 1;
             var low = Bits.ReadCharacter();
             var high = Bits.ReadCharacter();
-            currentGraphics = new PrcGraphics { LayerIndex = layer, StyleIndex = style, Behavior = (ushort)(low | (high << 8)) };
+            _currentGraphics = new PrcGraphics { LayerIndex = layer, StyleIndex = style, Behavior = (ushort)(low | (high << 8)) };
         }
 
-        EndOf(PrcTypes.PrcBaseWithGraphics);
-        return currentGraphics;
+        SkipNewData(PrcTypes.PrcBaseWithGraphics);
+        return _currentGraphics;
     }
 
     /// <summary>AttributeData: a count of PRC_TYPE_MISC_Attribute, each a title and key and value pairs. The values
@@ -133,9 +112,9 @@ internal sealed class PrcEntityReader
                 var kind = Bits.ReadUnsignedInteger();
                 var value = kind switch
                 {
-                    1 => Bits.ReadInteger().ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    2 => Bits.ReadDouble().ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-                    3 => Bits.ReadUnsignedInteger().ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    1 => Bits.ReadInteger().ToString(CultureInfo.InvariantCulture),
+                    2 => Bits.ReadDouble().ToString("R", CultureInfo.InvariantCulture),
+                    3 => Bits.ReadUnsignedInteger().ToString(CultureInfo.InvariantCulture),
                     4 => Bits.ReadString() ?? string.Empty,
                     _ => null
                 };
@@ -145,18 +124,8 @@ internal sealed class PrcEntityReader
                 }
             }
 
-            EndOf(PrcTypes.Attribute);
+            SkipNewData(PrcTypes.Attribute);
         }
-    }
-
-    private string ReadAttributeTitle()
-    {
-        if (Bits.ReadBoolean())
-        {
-            return "#" + Bits.ReadUnsignedInteger().ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        return Bits.ReadString() ?? string.Empty;
     }
 
     /// <summary>UserData: a count of bits and the bits, which only their own application reads.</summary>
@@ -203,7 +172,7 @@ internal sealed class PrcEntityReader
         {
             case PrcTypes.CartesianTransformation:
                 var cartesian = ReadTransformation3d();
-                EndOf(type);
+                SkipNewData(type);
                 return cartesian;
             case PrcTypes.GeneralTransformation:
                 var values = new float[16];
@@ -212,14 +181,14 @@ internal sealed class PrcEntityReader
                     values[index] = (float)Bits.ReadDouble();
                 }
 
-                EndOf(type);
+                SkipNewData(type);
                 return new Matrix4x4F(values);
             default:
-                throw Bits.Corrupt($"a transformation has type {type}");
+                throw Bits.CreateCorruptException($"a transformation has type {type}");
         }
     }
 
-    /// <summary>A 3D Transformation: its behaviour bits, then the parts they name - translation, rotation or non
+    /// <summary>A 3D Transformation: its behavior bits, then the parts they name - translation, rotation or non
     /// orthogonal axes, scale, homogeneous part - as a row-vector matrix (each PRC column a row).</summary>
     internal Matrix4x4F ReadTransformation3d()
     {
@@ -273,7 +242,7 @@ internal sealed class PrcEntityReader
 
         if ((behavior & ~0x7F) != 0)
         {
-            Tell($"a transformation has behaviour bits 0x{behavior:X2} past those of the specification; they are left out");
+            Tell($"a transformation has behavior bits 0x{behavior:X2} past those of the specification; they are left out");
         }
 
         return new Matrix4x4F(
@@ -291,7 +260,7 @@ internal sealed class PrcEntityReader
         var type = Bits.ReadUnsignedInteger();
         var fileStructure = Bits.ReadBoolean() ? null : ReadCompressedUniqueId();
         var target = new PrcReferenceTarget { Type = type, FileStructure = fileStructure, UniqueId = Bits.ReadUnsignedInteger() };
-        EndOf(PrcTypes.ReferenceOnPrcBase);
+        SkipNewData(PrcTypes.ReferenceOnPrcBase);
         return target;
     }
 
@@ -324,7 +293,7 @@ internal sealed class PrcEntityReader
             }
         }
 
-        EndOf(PrcTypes.ReferenceOnTopology);
+        SkipNewData(PrcTypes.ReferenceOnTopology);
         return new PrcReferenceTarget { Type = type, FileStructure = fileStructure, IsTopology = true };
     }
 
@@ -375,7 +344,7 @@ internal sealed class PrcEntityReader
     {
         Expect(PrcTypes.EntityReference, "an entity reference");
         var reference = ReadContentEntityReference(PrcTypes.EntityReference);
-        EndOf(PrcTypes.EntityReference);
+        SkipNewData(PrcTypes.EntityReference);
         SkipUserData();
         return reference;
     }
@@ -409,7 +378,7 @@ internal sealed class PrcEntityReader
             references.Add(ReadEntityReference());
         }
 
-        EndOf(PrcTypes.Filter);
+        SkipNewData(PrcTypes.Filter);
         SkipUserData();
         var filter = new PrcFilter
         {
@@ -425,7 +394,7 @@ internal sealed class PrcEntityReader
         return filter;
     }
 
-    /// <summary>A light of a scene with its type code: its base content, its ambient, diffuse and specular colours -
+    /// <summary>A light of a scene with its type code: its base content, its ambient, diffuse and specular colors -
     /// three, not the four of the specification's tables, as the errata have it - and what its kind adds; a directional
     /// light's intensity from authoring version 8030. Null for a type this reader does not know.</summary>
     internal PrcLight ReadLight()
@@ -478,7 +447,7 @@ internal sealed class PrcEntityReader
                 break;
         }
 
-        EndOf(type);
+        SkipNewData(type);
         return new PrcLight
         {
             Type = type,
@@ -515,7 +484,7 @@ internal sealed class PrcEntityReader
             Far = Bits.ReadDouble(),
             Zoom = Bits.ReadDouble()
         };
-        EndOf(PrcTypes.Camera);
+        SkipNewData(PrcTypes.Camera);
         return camera;
     }
 
@@ -540,7 +509,7 @@ internal sealed class PrcEntityReader
         Bits.ReadUnsignedInteger();
         ReadTransformation3d();
         SkipDoubles(4 + 4);
-        EndOf(PrcTypes.SurfacePlane);
+        SkipNewData(PrcTypes.SurfacePlane);
     }
 
     /// <summary>A PRC_TYPE_GRAPH_SceneDisplayParameters with its type code.</summary>
@@ -587,7 +556,7 @@ internal sealed class PrcEntityReader
         }
 
         scene.IsAbsolute = Bits.ReadBoolean();
-        EndOf(PrcTypes.SceneDisplayParameters);
+        SkipNewData(PrcTypes.SceneDisplayParameters);
         return scene;
     }
 
@@ -625,24 +594,37 @@ internal sealed class PrcEntityReader
             view.Filters.Add(ReadFilter());
         }
 
-        EndOf(PrcTypes.View);
+        SkipNewData(PrcTypes.View);
         SkipUserData();
         return view;
     }
-}
 
-/// <summary>What a read found that the import leaves out, each said once.</summary>
-internal sealed class PrcNotes
-{
-    private readonly HashSet<string> told = new(StringComparer.Ordinal);
-
-    internal List<string> All { get; } = [];
-
-    internal void Tell(string note)
+    private string ReadContentPrcBase(bool referenceable, Dictionary<string, string> attributes, PrcTreeEntity into)
     {
-        if (told.Add(note))
+        ReadAttributes(attributes);
+        var name = ReadName();
+        if (referenceable)
         {
-            All.Add(note);
+            Bits.ReadUnsignedInteger();
+            Bits.ReadUnsignedInteger();
+            var uniqueId = Bits.ReadUnsignedInteger();
+            if (into != null)
+            {
+                into.UniqueId = uniqueId;
+            }
         }
+
+        SkipNewData(PrcTypes.PrcBase);
+        return name;
+    }
+
+    private string ReadAttributeTitle()
+    {
+        if (Bits.ReadBoolean())
+        {
+            return "#" + Bits.ReadUnsignedInteger().ToString(CultureInfo.InvariantCulture);
+        }
+
+        return Bits.ReadString() ?? string.Empty;
     }
 }

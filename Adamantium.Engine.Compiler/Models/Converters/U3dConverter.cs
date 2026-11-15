@@ -12,31 +12,21 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Converters;
 
-/// <summary>Imports a U3D file (ECMA-363, 4th edition) - a <c>.u3d</c> file, or the 3D artwork of a PDF read from its
-/// bytes. The node graph becomes the model tree from the world down, a node with several parents copied under each,
-/// and nodes outside the world go under <see cref="SceneData.OtherNodes"/>; a model node gets the meshes of its model
-/// resource - a CLOD mesh at the full resolution its blocks give, a point set or a line set - one mesh a shading ID,
-/// drawn by the first shader of that ID's shader list. A lit texture shader becomes a material of its name: its
-/// material resource's colours and opacity, its reflectivity as the specular exponent (0 to 128) the spec makes of it,
-/// its first texture layer as the diffuse map, the texture's PNG or JPEG kept as the image's bytes. The default
-/// material and any the file names without defining are lit as the spec's default ambient grey, 0.75, as diffuse.
-/// Light and view nodes become lights and cameras. U3D is Z up and right-handed; its texture coordinates start at the
-/// image's top left, so v is read turned over, as glTF's.</summary>
+/// <summary>Imports a U3D file (ECMA-363, 4th edition) - a <c>.u3d</c> file, or a PDF's 3D artwork from its bytes: the
+/// node graph as the model tree, meshes, materials, textures, lights and cameras.</summary>
 public class U3dConverter : ConverterBase
 {
     private const string OtherNodesId = "otherNodes";
     private const string SpecularAttribute = "SPECULAR_COLOR";
     private const int MaximumNodeAppearances = 1_000_000;
     private const int DrawnTextureLayers = 4;
-    private const float DefaultGrey = 0.75f;
+    private const float DefaultGray = 0.75f;
     private const uint MeshShading = 0x1;
     private const uint LineShading = 0x2;
     private const uint PointShading = 0x4;
 
-    private readonly HashSet<string> told = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> appearancesOf = new(StringComparer.Ordinal);
-    private U3dFile file;
-    private int appearances;
+    private U3dFile _file;
+    private int _appearances;
 
     public U3dConverter(string filePath, ConversionConfig config) : base(filePath, config, UpAxis.Z_UP)
     {
@@ -50,13 +40,13 @@ public class U3dConverter : ConverterBase
 
     protected override void Convert()
     {
-        file = U3dFile.Read(ReadFileBytes(), CancellationToken);
-        foreach (var note in file.Notes)
+        _file = U3dFile.Read(ReadFileBytes(), CancellationToken);
+        foreach (var note in _file.Notes)
         {
             Tell(note);
         }
 
-        if (file.UnitsScalingFactor is { } units)
+        if (_file.UnitsScalingFactor is { } units)
         {
             SceneDataContainer.Units = new SceneData.Unit(UnitType.Meter, (float)units);
         }
@@ -66,21 +56,13 @@ public class U3dConverter : ConverterBase
         BuildTree();
     }
 
-    private void Tell(string feature)
-    {
-        if (told.Add(feature))
-        {
-            UnsupportedFeatures.Add(feature);
-        }
-    }
-
     private void BuildTree()
     {
-        var byName = file.Nodes.ToDictionary(node => node.Name, StringComparer.Ordinal);
+        var byName = _file.Nodes.ToDictionary(node => node.Name, StringComparer.Ordinal);
         var children = new Dictionary<string, List<U3dChildLink>>(StringComparer.Ordinal);
         var parentsInFile = new Dictionary<string, int>(StringComparer.Ordinal);
-        var orphans = new List<U3dNode>();
-        foreach (var node in file.Nodes)
+        List<U3dNode> orphans = [];
+        foreach (var node in _file.Nodes)
         {
             var linked = 0;
             parentsInFile[node.Name] = 0;
@@ -112,8 +94,8 @@ public class U3dConverter : ConverterBase
             }
         }
 
-        var acyclic = Acyclic(children, parentsInFile);
-        foreach (var node in file.Nodes)
+        var acyclic = FindAcyclic(children, parentsInFile);
+        foreach (var node in _file.Nodes)
         {
             if (!acyclic.Contains(node.Name))
             {
@@ -134,7 +116,7 @@ public class U3dConverter : ConverterBase
         }
     }
 
-    private static HashSet<string> Acyclic(Dictionary<string, List<U3dChildLink>> children, Dictionary<string, int> parentsInFile)
+    private static HashSet<string> FindAcyclic(Dictionary<string, List<U3dChildLink>> children, Dictionary<string, int> parentsInFile)
     {
         var remaining = new Dictionary<string, int>(parentsInFile, StringComparer.Ordinal);
         var ready = new Queue<string>(remaining.Where(entry => entry.Value == 0).Select(entry => entry.Key));
@@ -179,14 +161,14 @@ public class U3dConverter : ConverterBase
                 continue;
             }
 
-            if (++appearances > MaximumNodeAppearances)
+            if (++_appearances > MaximumNodeAppearances)
             {
                 Tell($"the node graph shows nodes more than {MaximumNodeAppearances} times over; the rest are left out");
                 return;
             }
 
-            var model = SceneDataContainer.CreateMesh(appearance.Parent, AppearanceId(node.Name), node.Name);
-            model.Extra = ExtraOf(node.MetaData);
+            var model = SceneDataContainer.CreateMesh(appearance.Parent, CreateUniqueId(node.Name), node.Name);
+            model.Extra = CreateExtra(node.MetaData);
             var local = appearance.Link.Transform;
             local.Decompose(out var scale, out var rotation, out var translation);
             model.Scale = scale;
@@ -216,13 +198,6 @@ public class U3dConverter : ConverterBase
         }
     }
 
-    private string AppearanceId(string name)
-    {
-        appearancesOf.TryGetValue(name, out var count);
-        appearancesOf[name] = ++count;
-        return count == 1 ? name : $"{name} ({count})";
-    }
-
     private void AddMeshes(SceneData.Model model, U3dNode node)
     {
         if (node.Visibility == 0)
@@ -236,7 +211,7 @@ public class U3dConverter : ConverterBase
             Tell($"model node {node.Name} is to be seen from the back as well; it is drawn from the front alone");
         }
 
-        if (!file.Geometries.TryGetValue(node.ResourceName, out var geometry))
+        if (!_file.Geometries.TryGetValue(node.ResourceName, out var geometry))
         {
             Tell($"model node {node.Name} shows model resource {node.ResourceName}, which the file does not hold");
             return;
@@ -248,7 +223,7 @@ public class U3dConverter : ConverterBase
             U3dGeometryKind.LineSet => LineShading,
             _ => MeshShading
         };
-        var shading = ShadingOf(file.NodeShading, node.Name, bit) ?? ShadingOf(file.ResourceShading, geometry.Name, bit);
+        var shading = FindShading(_file.NodeShading, node.Name, bit) ?? FindShading(_file.ResourceShading, geometry.Name, bit);
         if (geometry.Kind == U3dGeometryKind.Mesh && geometry.Primitives.Count == 0)
         {
             Tell($"mesh {geometry.Name} has no faces");
@@ -257,17 +232,17 @@ public class U3dConverter : ConverterBase
         foreach (var group in geometry.Primitives.GroupBy(primitive => primitive.ShadingId).OrderBy(group => group.Key))
         {
             var mesh = BuildMesh(geometry, group.Key, group.ToList());
-            mesh.MaterialID = MaterialFor(ShaderOf(shading, group.Key));
+            mesh.MaterialID = GetMaterial(GetShaderName(shading, group.Key));
             model.Meshes.Add(mesh);
         }
     }
 
-    private static U3dShadingModifier ShadingOf(Dictionary<string, U3dShadingModifier> modifiers, string name, uint bit) =>
+    private static U3dShadingModifier FindShading(Dictionary<string, U3dShadingModifier> modifiers, string name, uint bit) =>
         modifiers.TryGetValue(name, out var modifier) && (modifier.Attributes == 0 || (modifier.Attributes & bit) != 0)
             ? modifier
             : null;
 
-    private string ShaderOf(U3dShadingModifier shading, int shadingId)
+    private string GetShaderName(U3dShadingModifier shading, int shadingId)
     {
         if (shading == null || shadingId >= shading.ShaderLists.Count || shading.ShaderLists[shadingId].Length == 0)
         {
@@ -299,10 +274,10 @@ public class U3dConverter : ConverterBase
         }
 
         var vertexOf = new Dictionary<U3dCorner, int>(new U3dCornerComparer());
-        var points = new List<Vector3<double>>();
-        var normals = new List<Vector3F>();
-        var colors = new List<Color>();
-        var specular = new List<float>();
+        List<Vector3<double>> points = [];
+        List<Vector3F> normals = [];
+        List<Color> colors = [];
+        List<float> specular = [];
         var uvs = new List<Vector2F>[layers];
         for (var layer = 0; layer < layers; layer++)
         {
@@ -312,7 +287,7 @@ public class U3dConverter : ConverterBase
         var hasNormals = true;
         var hasColors = description.HasDiffuseColors;
         var hasSpecular = description.HasSpecularColors;
-        var indices = new List<int>();
+        List<int> indices = [];
         foreach (var primitive in primitives)
         {
             foreach (var corner in primitive.Corners)
@@ -369,26 +344,26 @@ public class U3dConverter : ConverterBase
         return mesh;
     }
 
-    private string MaterialFor(string shaderName)
+    private string GetMaterial(string shaderName)
     {
         if (SceneDataContainer.Materials.ContainsKey(shaderName))
         {
             return shaderName;
         }
 
-        file.Shaders.TryGetValue(shaderName, out var shader);
+        _file.Shaders.TryGetValue(shaderName, out var shader);
         if (shader == null && shaderName.Length > 0)
         {
             Tell($"shader {shaderName} is not in the file; what it draws is drawn by the default material");
         }
 
         U3dMaterial resource = null;
-        if (shader != null && !file.Materials.TryGetValue(shader.MaterialName, out resource) && shader.MaterialName.Length > 0)
+        if (shader != null && !_file.Materials.TryGetValue(shader.MaterialName, out resource) && shader.MaterialName.Length > 0)
         {
             Tell($"material {shader.MaterialName} is not in the file; shader {shaderName} is drawn by the default one");
         }
 
-        var material = resource == null ? DefaultMaterial() : MaterialOf(resource);
+        var material = resource == null ? CreateDefaultMaterial() : CreateMaterial(resource);
         material.ID = shaderName;
         material.Name = shaderName.Length == 0 ? "Default" : shaderName;
         if (shader != null)
@@ -400,10 +375,10 @@ public class U3dConverter : ConverterBase
         return shaderName;
     }
 
-    private static SceneData.Material DefaultMaterial() => new()
+    private static SceneData.Material CreateDefaultMaterial() => new()
     {
-        AmbientColor = new Vector4F(DefaultGrey, DefaultGrey, DefaultGrey, 1),
-        DiffuseColor = new Vector4F(DefaultGrey, DefaultGrey, DefaultGrey, 1),
+        AmbientColor = new Vector4F(DefaultGray, DefaultGray, DefaultGray, 1),
+        DiffuseColor = new Vector4F(DefaultGray, DefaultGray, DefaultGray, 1),
         SpecularColor = new Vector4F(0, 0, 0, 1),
         Emission = new Vector4F(0, 0, 0, 1),
         Shininess = 0,
@@ -411,7 +386,7 @@ public class U3dConverter : ConverterBase
         AlphaMode = AlphaMode.Opaque
     };
 
-    private static SceneData.Material MaterialOf(U3dMaterial resource)
+    private static SceneData.Material CreateMaterial(U3dMaterial resource)
     {
         var flags = resource.Attributes;
         var ambient = (flags & U3dMaterial.AmbientFlag) != 0 ? resource.AmbientColor : Vector3F.Zero;
@@ -435,7 +410,7 @@ public class U3dConverter : ConverterBase
 
     private void ApplyShader(SceneData.Material material, U3dShader shader)
     {
-        material.Extra = ExtraOf(shader.MetaData);
+        material.Extra = CreateExtra(shader.MetaData);
         material.Unlit = (shader.Attributes & U3dShader.LightingEnabled) == 0;
         if ((shader.Attributes & U3dShader.AlphaTestEnabled) != 0)
         {
@@ -499,7 +474,7 @@ public class U3dConverter : ConverterBase
     private void ReadTextures()
     {
         var directory = Path.GetDirectoryName(FilePath);
-        foreach (var texture in file.Textures.Values)
+        foreach (var texture in _file.Textures.Values)
         {
             if (texture.Images.Count == 0)
             {
@@ -507,41 +482,41 @@ public class U3dConverter : ConverterBase
                 continue;
             }
 
-            var colour = texture.Images.FirstOrDefault(image => (image.Channels & U3dTextureImage.ColorChannels) != 0)
-                         ?? texture.Images[0];
+            var color = texture.Images.FirstOrDefault(image => (image.Channels & U3dTextureImage.ColorChannels) != 0)
+                        ?? texture.Images[0];
             if (texture.Images.Count > 1)
             {
-                Tell($"texture {texture.Name} is made of {texture.Images.Count} images; only its colour image is kept");
+                Tell($"texture {texture.Name} is made of {texture.Images.Count} images; only its color image is kept");
             }
 
-            var kept = new SceneData.Image { ID = texture.Name, Name = texture.Name, Extra = ExtraOf(texture.MetaData) };
-            if (colour.IsExternal)
+            var kept = new SceneData.Image { ID = texture.Name, Name = texture.Name, Extra = CreateExtra(texture.MetaData) };
+            if (color.IsExternal)
             {
-                if (colour.Urls.Count == 0)
+                if (color.Urls.Count == 0)
                 {
                     Tell($"texture {texture.Name} lies in a file it does not name");
                     continue;
                 }
 
-                kept.ImageName = colour.Urls[0];
-                kept.FilePath = string.IsNullOrEmpty(directory) || Uri.IsWellFormedUriString(colour.Urls[0], UriKind.Absolute)
-                    ? colour.Urls[0]
-                    : Path.Combine(directory, colour.Urls[0]);
+                kept.ImageName = color.Urls[0];
+                kept.FilePath = string.IsNullOrEmpty(directory) || Uri.IsWellFormedUriString(color.Urls[0], UriKind.Absolute)
+                    ? color.Urls[0]
+                    : Path.Combine(directory, color.Urls[0]);
                 if (!File.Exists(kept.FilePath))
                 {
-                    Tell($"the image {colour.Urls[0]} of texture {texture.Name} is not found");
+                    Tell($"the image {color.Urls[0]} of texture {texture.Name} is not found");
                 }
             }
             else
             {
-                var data = colour.Chunks.SelectMany(chunk => chunk).ToArray();
-                if (data.Length != colour.ByteCount)
+                var data = color.Chunks.SelectMany(chunk => chunk).ToArray();
+                if (data.Length != color.ByteCount)
                 {
-                    Tell($"texture {texture.Name} brings {data.Length} bytes of the {colour.ByteCount} its image has");
+                    Tell($"texture {texture.Name} brings {data.Length} bytes of the {color.ByteCount} its image has");
                 }
 
                 kept.Data = data;
-                kept.MimeType = colour.CompressionType switch
+                kept.MimeType = color.CompressionType switch
                 {
                     U3dTextureImage.Png => "image/png",
                     U3dTextureImage.Tiff => "image/tiff",
@@ -555,14 +530,14 @@ public class U3dConverter : ConverterBase
 
     private void AddLight(string id, U3dNode node, Matrix4x4F world)
     {
-        if (!file.Lights.TryGetValue(node.ResourceName, out var resource))
+        if (!_file.Lights.TryGetValue(node.ResourceName, out var resource))
         {
             if (node.ResourceName.Length > 0)
             {
                 Tell($"light node {node.Name} shines light resource {node.ResourceName}, which the file does not hold");
             }
 
-            resource = new U3dLightResource { Color = new Vector3F(DefaultGrey, DefaultGrey, DefaultGrey), Intensity = 1 };
+            resource = new U3dLightResource { Color = new Vector3F(DefaultGray, DefaultGray, DefaultGray), Intensity = 1 };
         }
 
         if ((resource.Attributes & U3dLightResource.Enabled) == 0)
@@ -596,14 +571,14 @@ public class U3dConverter : ConverterBase
             Position = translation,
             Rotation = rotation,
             Scale = scale,
-            Extra = ExtraOf(node.MetaData)
+            Extra = CreateExtra(node.MetaData)
         };
     }
 
     private void AddCamera(string id, U3dNode node, Matrix4x4F world)
     {
         var view = node.View;
-        if (file.Views.TryGetValue(node.ResourceName, out var resource))
+        if (_file.Views.TryGetValue(node.ResourceName, out var resource))
         {
             if (resource.FogEnabled)
             {
@@ -634,7 +609,7 @@ public class U3dConverter : ConverterBase
             AspectRatio = aspect,
             ProjectionType = CameraProjectionType.Perspective,
             FovType = FovType.YFov,
-            Extra = ExtraOf(node.MetaData)
+            Extra = CreateExtra(node.MetaData)
         };
 
         switch (view.ProjectionMode)
@@ -655,7 +630,7 @@ public class U3dConverter : ConverterBase
         SceneDataContainer.CameraData[id] = camera;
     }
 
-    private static ExtraData ExtraOf(IReadOnlyList<U3dMetaDataEntry> metaData)
+    private static ExtraData CreateExtra(IReadOnlyList<U3dMetaDataEntry> metaData)
     {
         if (metaData == null || metaData.Count == 0)
         {
@@ -669,67 +644,5 @@ public class U3dConverter : ConverterBase
         }
 
         return new ExtraData { Data = JsonSerializer.Serialize(values) };
-    }
-}
-
-/// <summary>A node as a child of one of its parents, with where it stands relative to that parent.</summary>
-internal sealed class U3dChildLink
-{
-    internal U3dChildLink(U3dNode node, Matrix4x4F transform)
-    {
-        Node = node;
-        Transform = transform;
-    }
-
-    internal U3dNode Node { get; }
-
-    internal Matrix4x4F Transform { get; }
-}
-
-/// <summary>A node waiting to be placed under the model of its parent, with its parent's place in the world.</summary>
-internal sealed class U3dAppearance
-{
-    internal U3dAppearance(U3dChildLink link, SceneData.Model parent, Matrix4x4F parentWorld)
-    {
-        Link = link;
-        Parent = parent;
-        ParentWorld = parentWorld;
-    }
-
-    internal U3dChildLink Link { get; }
-
-    internal SceneData.Model Parent { get; }
-
-    internal Matrix4x4F ParentWorld { get; }
-}
-
-/// <summary>Corners alike in every index are one vertex.</summary>
-internal sealed class U3dCornerComparer : IEqualityComparer<U3dCorner>
-{
-    public bool Equals(U3dCorner left, U3dCorner right)
-    {
-        if (ReferenceEquals(left, right))
-        {
-            return true;
-        }
-
-        return left != null && right != null && left.Position == right.Position && left.Normal == right.Normal &&
-               left.Diffuse == right.Diffuse && left.Specular == right.Specular &&
-               left.TextureCoordinates.AsSpan().SequenceEqual(right.TextureCoordinates);
-    }
-
-    public int GetHashCode(U3dCorner corner)
-    {
-        var hash = new HashCode();
-        hash.Add(corner.Position);
-        hash.Add(corner.Normal);
-        hash.Add(corner.Diffuse);
-        hash.Add(corner.Specular);
-        foreach (var coordinate in corner.TextureCoordinates)
-        {
-            hash.Add(coordinate);
-        }
-
-        return hash.ToHashCode();
     }
 }

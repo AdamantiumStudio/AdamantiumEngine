@@ -20,32 +20,31 @@ public class U3dImportTests
 {
     private const float Tolerance = 1e-4f;
 
-    private static string RealFile(string name) =>
-        Path.Combine(TestContext.CurrentContext.TestDirectory, "CompilerU3d", name);
-
     [Test]
     public void Cube_GivesPositionsNormalsFacesAndMaterials([Values(false, true)] bool compressed)
     {
-        var scene = Import(CubeFile(compressed), out var notes);
+        var scene = Import(CreateCubeFile(compressed), out var notes);
 
         var box = scene.Models.Dependencies.Single();
+        string[] materials = ["Red", "Glass"];
+        int[] triangleCounts = [8, 4];
         Assert.Multiple(() =>
         {
             Assert.That(notes, Is.Empty);
             Assert.That(box.Name, Is.EqualTo("Box"));
-            Assert.That(box.Meshes.Select(mesh => mesh.MaterialID), Is.EqualTo(new[] { "Red", "Glass" }));
-            Assert.That(box.Meshes.Select(mesh => mesh.Indices.Length / 3), Is.EqualTo(new[] { 8, 4 }));
+            Assert.That(box.Meshes.Select(mesh => mesh.MaterialID), Is.EqualTo(materials));
+            Assert.That(box.Meshes.Select(mesh => mesh.Indices.Length / 3), Is.EqualTo(triangleCounts));
         });
 
-        var corners = CubePositions().Select(Engine).ToList();
-        var axes = CubeNormals().Select(Engine).ToList();
+        var corners = CreateCubePositions().Select(ToEngine).ToList();
+        var axes = CreateCubeNormals().Select(ToEngine).ToList();
         foreach (var mesh in box.Meshes)
         {
             Assert.That(mesh.MeshTopology, Is.EqualTo(PrimitiveType.TriangleList));
             Assert.That(mesh.Normals, Has.Length.EqualTo(mesh.Points.Length));
             foreach (var point in mesh.Points)
             {
-                Assert.That(corners.Any(corner => Near(corner, point.As<float>())), $"{point} is no corner of the cube");
+                Assert.That(corners.Any(corner => IsNear(corner, point.As<float>())), $"{point} is no corner of the cube");
             }
 
             for (var index = 0; index < mesh.Indices.Length; index += 3)
@@ -57,7 +56,7 @@ public class U3dImportTests
                 for (var corner = 0; corner < 3; corner++)
                 {
                     var normal = mesh.Normals[mesh.Indices[index + corner]];
-                    Assert.That(axes.Any(axis => Near(axis, normal)), $"{normal} is no normal of the cube");
+                    Assert.That(axes.Any(axis => IsNear(axis, normal)), $"{normal} is no normal of the cube");
                     Assert.That(Math.Abs(Vector3F.Dot(face, normal)), Is.GreaterThan(0.99f), "the file's normal is the face's");
                 }
             }
@@ -82,24 +81,24 @@ public class U3dImportTests
     [Test]
     public void Compressed_IsSmallerThanPlain()
     {
-        Assert.That(CubeFile(true).Length, Is.LessThan(CubeFile(false).Length));
+        Assert.That(CreateCubeFile(true).Length, Is.LessThan(CreateCubeFile(false).Length));
     }
 
     [Test]
     public void Nodes_BecomeTheModelTreeWithTheirTransforms([Values(false, true)] bool compressed)
     {
         var file = new U3dTestFile(compressed);
-        var metaData = U3dTestFile.MetaData([
+        var metaData = U3dTestFile.CreateMetaData([
             new U3dMetaDataEntry { Key = "Author", Value = "Tests" },
             new U3dMetaDataEntry { Attributes = 0x1, Key = "Blob", BinaryValue = [1, 2, 3] }
         ]);
-        U3dTestBlocks.GroupNode(file, "Car", [Parent(string.Empty, new Vector3F(1, 2, 3))], metaData);
-        file.DeclareBlock(U3dTestBlocks.ModelNode(file, "Wheel",
-            [Parent("Car", new Vector3F(0, 0, 1)), Parent(string.Empty, new Vector3F(5, 0, 0))], "WheelMesh"));
-        U3dTestBlocks.GroupNode(file, "Lonely", []);
-        U3dTestBlocks.GroupNode(file, "LoopA", [Parent("LoopB", Vector3F.Zero)]);
-        U3dTestBlocks.GroupNode(file, "LoopB", [Parent("LoopA", Vector3F.Zero)]);
-        U3dTestBlocks.Mesh(file, Triangle("WheelMesh"));
+        U3dTestBlocks.WriteGroupNode(file, "Car", [CreateParent(string.Empty, new Vector3F(1, 2, 3))], metaData);
+        file.DeclareBlock(U3dTestBlocks.CreateModelNode(file, "Wheel",
+            [CreateParent("Car", new Vector3F(0, 0, 1)), CreateParent(string.Empty, new Vector3F(5, 0, 0))], "WheelMesh"));
+        U3dTestBlocks.WriteGroupNode(file, "Lonely", []);
+        U3dTestBlocks.WriteGroupNode(file, "LoopA", [CreateParent("LoopB", Vector3F.Zero)]);
+        U3dTestBlocks.WriteGroupNode(file, "LoopB", [CreateParent("LoopA", Vector3F.Zero)]);
+        U3dTestBlocks.WriteMesh(file, CreateTriangle("WheelMesh"));
 
         var scene = Import(file.ToArray(), out var notes);
 
@@ -107,17 +106,19 @@ public class U3dImportTests
         var car = root.Dependencies.Single(model => model.Name == "Car");
         var underCar = car.Dependencies.Single();
         var underWorld = root.Dependencies.Single(model => model.Name == "Wheel");
+        string[] rootIds = ["Car", "Wheel (2)"];
+        string[] otherNodes = ["Lonely"];
         Assert.Multiple(() =>
         {
-            Assert.That(root.Dependencies.Select(model => model.ID), Is.EqualTo(new[] { "Car", "Wheel (2)" }));
+            Assert.That(root.Dependencies.Select(model => model.ID), Is.EqualTo(rootIds));
             Assert.That(underCar.ID, Is.EqualTo("Wheel"));
-            Assert.That(Near(car.Position, new Vector3F(-1, -3, 2)), $"the car stands at {car.Position}");
-            Assert.That(Near(underCar.Position, new Vector3F(0, -1, 0)), $"the wheel stands at {underCar.Position}");
-            Assert.That(Near(underWorld.Position, new Vector3F(-5, 0, 0)), $"the other wheel stands at {underWorld.Position}");
+            Assert.That(IsNear(car.Position, new Vector3F(-1, -3, 2)), $"the car stands at {car.Position}");
+            Assert.That(IsNear(underCar.Position, new Vector3F(0, -1, 0)), $"the wheel stands at {underCar.Position}");
+            Assert.That(IsNear(underWorld.Position, new Vector3F(-5, 0, 0)), $"the other wheel stands at {underWorld.Position}");
             Assert.That(underCar.Meshes, Has.Count.EqualTo(1));
             Assert.That(underWorld.Meshes, Has.Count.EqualTo(1));
             Assert.That(underCar.Meshes[0], Is.Not.SameAs(underWorld.Meshes[0]), "each copy has meshes of its own");
-            Assert.That(scene.OtherNodes.Dependencies.Select(model => model.Name), Is.EqualTo(new[] { "Lonely" }));
+            Assert.That(scene.OtherNodes.Dependencies.Select(model => model.Name), Is.EqualTo(otherNodes));
             Assert.That(car.Extra.Data, Does.Contain("\"Author\":\"Tests\"").And.Contain("\"Blob\":\"AQID\""));
             Assert.That(notes, Has.Some.Contains("LoopA").And.Contains("cycle"));
             Assert.That(notes, Has.Some.Contains("LoopB").And.Contains("cycle"));
@@ -128,13 +129,13 @@ public class U3dImportTests
     public void PointSet_GivesItsPoints([Values(false, true)] bool compressed)
     {
         var random = new Random(7);
-        var positions = Enumerable.Range(0, 40).Select(point => RandomVector(random, 5)).ToList();
-        var normals = Enumerable.Range(0, 40).Select(point => Vector3F.Normalize(RandomVector(random, 1))).ToList();
+        var positions = Enumerable.Range(0, 40).Select(point => CreateRandomVector(random, 5)).ToList();
+        var normals = Enumerable.Range(0, 40).Select(point => Vector3F.Normalize(CreateRandomVector(random, 1))).ToList();
         var colors = Enumerable.Range(0, 40)
             .Select(point => new Vector4F(random.NextSingle(), random.NextSingle(), random.NextSingle(), 1)).ToList();
         var file = new U3dTestFile(compressed);
-        file.DeclareBlock(U3dTestBlocks.ModelNode(file, "Cloud", [Parent(string.Empty, Vector3F.Zero)], "Points"));
-        var written = U3dTestBlocks.PointSet(file, "Points", positions, normals, colors, 0.001f);
+        file.DeclareBlock(U3dTestBlocks.CreateModelNode(file, "Cloud", [CreateParent(string.Empty, Vector3F.Zero)], "Points"));
+        var written = U3dTestBlocks.WritePointSet(file, "Points", positions, normals, colors, 0.001f);
 
         var scene = Import(file.ToArray(), out _);
 
@@ -145,8 +146,8 @@ public class U3dImportTests
         Assert.That(points, Has.Count.EqualTo(positions.Count));
         for (var index = 0; index < positions.Count; index++)
         {
-            Assert.That(Near(points[index], Engine(written[index])), $"point {index}: {points[index]}");
-            Assert.That(Near(points[index], Engine(positions[index]), 0.002f), $"point {index} is where it was put");
+            Assert.That(IsNear(points[index], ToEngine(written[index])), $"point {index}: {points[index]}");
+            Assert.That(IsNear(points[index], ToEngine(positions[index]), 0.002f), $"point {index} is where it was put");
         }
     }
 
@@ -156,8 +157,8 @@ public class U3dImportTests
         var positions = Enumerable.Range(0, 12).Select(index => new Vector3F(index, MathF.Sin(index), index * 0.5f)).ToList();
         var normals = positions.Select(position => new Vector3F(0, 0, 1)).ToList();
         var file = new U3dTestFile(compressed);
-        file.DeclareBlock(U3dTestBlocks.ModelNode(file, "Polyline", [Parent(string.Empty, Vector3F.Zero)], "Lines"));
-        var written = U3dTestBlocks.LineSet(file, "Lines", positions, normals, 0.0005f);
+        file.DeclareBlock(U3dTestBlocks.CreateModelNode(file, "Polyline", [CreateParent(string.Empty, Vector3F.Zero)], "Lines"));
+        var written = U3dTestBlocks.WriteLineSet(file, "Lines", positions, normals, 0.0005f);
 
         var scene = Import(file.ToArray(), out _);
 
@@ -166,8 +167,8 @@ public class U3dImportTests
         Assert.That(mesh.Indices, Has.Length.EqualTo((positions.Count - 1) * 2));
         for (var line = 0; line < positions.Count - 1; line++)
         {
-            Assert.That(Near(mesh.Points[mesh.Indices[line * 2]].As<float>(), Engine(written[line])), $"line {line} start");
-            Assert.That(Near(mesh.Points[mesh.Indices[line * 2 + 1]].As<float>(), Engine(written[line + 1])), $"line {line} end");
+            Assert.That(IsNear(mesh.Points[mesh.Indices[line * 2]].As<float>(), ToEngine(written[line])), $"line {line} start");
+            Assert.That(IsNear(mesh.Points[mesh.Indices[line * 2 + 1]].As<float>(), ToEngine(written[line + 1])), $"line {line} end");
         }
     }
 
@@ -175,10 +176,10 @@ public class U3dImportTests
     public void LightAndView_BecomeALightAndACamera([Values(false, true)] bool compressed)
     {
         var file = new U3dTestFile(compressed);
-        U3dTestBlocks.Light(file, "Sun", 3, new Vector3F(1, 0.5f, 0.25f), 30, 2);
-        U3dTestBlocks.View(file, "Look");
-        U3dTestBlocks.LightNode(file, "Lamp", [Parent(string.Empty, new Vector3F(0, 0, 5))], "Sun");
-        U3dTestBlocks.ViewNode(file, "Camera", [Parent(string.Empty, new Vector3F(0, -10, 0))], "Look", 45, 0.5f, 500, 640, 480);
+        U3dTestBlocks.WriteLight(file, "Sun", 3, new Vector3F(1, 0.5f, 0.25f), 30, 2);
+        U3dTestBlocks.WriteView(file, "Look");
+        U3dTestBlocks.WriteLightNode(file, "Lamp", [CreateParent(string.Empty, new Vector3F(0, 0, 5))], "Sun");
+        U3dTestBlocks.WriteViewNode(file, "Camera", [CreateParent(string.Empty, new Vector3F(0, -10, 0))], "Look", 45, 0.5f, 500, 640, 480);
 
         var scene = Import(file.ToArray(), out var notes);
 
@@ -194,21 +195,21 @@ public class U3dImportTests
             Assert.That(light.ConstantAttenuation, Is.EqualTo(1));
             Assert.That(light.LinearAttenuation, Is.EqualTo(0.5f));
             Assert.That(light.QuadraticAttenuation, Is.EqualTo(0.25f));
-            Assert.That(Near(light.Position, new Vector3F(0, -5, 0)), $"the light stands at {light.Position}");
+            Assert.That(IsNear(light.Position, new Vector3F(0, -5, 0)), $"the light stands at {light.Position}");
             Assert.That(camera.ProjectionType, Is.EqualTo(CameraProjectionType.Perspective));
             Assert.That(camera.Fov, Is.EqualTo(45));
             Assert.That(camera.ZNear, Is.EqualTo(0.5f));
             Assert.That(camera.ZFar, Is.EqualTo(500));
             Assert.That(camera.AspectRatio, Is.EqualTo(640f / 480f));
-            Assert.That(Near(camera.Translation, new Vector3F(0, 0, -10)), $"the camera stands at {camera.Translation}");
+            Assert.That(IsNear(camera.Translation, new Vector3F(0, 0, -10)), $"the camera stands at {camera.Translation}");
         });
     }
 
     [Test]
     public void Texture_ItsPngBecomesTheDiffuseImage([Values(false, true)] bool compressed)
     {
-        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4, 5, 6, 7 };
-        var mesh = Triangle("Plane");
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4, 5, 6, 7];
+        var mesh = CreateTriangle("Plane");
         mesh.TextureCoordinates.AddRange([new Vector4F(0, 0, 0, 0), new Vector4F(1, 0, 0, 0), new Vector4F(0, 0.25f, 0, 0)]);
         mesh.ShadingLayers[0] = 1;
         mesh.Faces[0] = new U3dTestFace
@@ -216,24 +217,25 @@ public class U3dImportTests
             ShadingId = 0, Positions = [0, 1, 2], Normals = [0, 0, 0], TextureCoordinates = [0, 1, 2]
         };
         var file = new U3dTestFile(compressed);
-        file.DeclareBlock(U3dTestFile.ModifierChain("Floor", 0,
-            U3dTestBlocks.ModelNode(file, "Floor", [Parent(string.Empty, Vector3F.Zero)], "Plane"),
-            U3dTestBlocks.ShadingModifier(file, "Floor", "Textured")));
-        U3dTestBlocks.Material(file, "Paint", new Vector3F(1, 1, 1), 1, 0);
-        U3dTestBlocks.Shader(file, "Textured", "Paint", "Checker");
-        U3dTestBlocks.Texture(file, "Checker", png);
-        U3dTestBlocks.Mesh(file, mesh);
+        file.DeclareBlock(U3dTestFile.CreateModifierChain("Floor", 0,
+            U3dTestBlocks.CreateModelNode(file, "Floor", [CreateParent(string.Empty, Vector3F.Zero)], "Plane"),
+            U3dTestBlocks.CreateShadingModifier(file, "Floor", "Textured")));
+        U3dTestBlocks.WriteMaterial(file, "Paint", new Vector3F(1, 1, 1), 1, 0);
+        U3dTestBlocks.WriteShader(file, "Textured", "Paint", "Checker");
+        U3dTestBlocks.WriteTexture(file, "Checker", png);
+        U3dTestBlocks.WriteMesh(file, mesh);
 
         var scene = Import(file.ToArray(), out var notes);
 
         var drawn = scene.Models.Dependencies.Single().Meshes.Single();
+        float[] vs = [0f, 0f, 0.25f];
         Assert.Multiple(() =>
         {
             Assert.That(notes, Is.Empty);
             Assert.That(scene.Images["Checker"].Data, Is.EqualTo(png));
             Assert.That(scene.Images["Checker"].MimeType, Is.EqualTo("image/png"));
             Assert.That(scene.Materials["Textured"].DiffuseMap, Is.EqualTo("Checker"));
-            Assert.That(drawn.UV0.Select(uv => uv.Y).OrderBy(value => value), Is.EqualTo(new[] { 0f, 0f, 0.25f }),
+            Assert.That(drawn.UV0.Select(uv => uv.Y).OrderBy(value => value), Is.EqualTo(vs),
                 "v turned over on reading is turned back by the axis change");
         });
     }
@@ -242,7 +244,7 @@ public class U3dImportTests
     public void HeaderUnits_BecomeTheScenesUnits()
     {
         var file = new U3dTestFile(true, 0.001);
-        U3dTestBlocks.GroupNode(file, "Part", [Parent(string.Empty, Vector3F.Zero)]);
+        U3dTestBlocks.WriteGroupNode(file, "Part", [CreateParent(string.Empty, Vector3F.Zero)]);
 
         var scene = Import(file.ToArray(), out _);
 
@@ -253,29 +255,34 @@ public class U3dImportTests
     [Test]
     public void Blocks_ArePaddedToFourBytesAndCarryTheirMetaData()
     {
-        var metaData = U3dTestFile.MetaData([
+        var metaData = U3dTestFile.CreateMetaData([
             new U3dMetaDataEntry { Key = "Name", Value = "Value" },
             new U3dMetaDataEntry { Attributes = 0x3, Key = "Hidden", BinaryValue = [9, 8, 7, 6, 5] }
         ]);
-        var bytes = new List<byte>();
+        List<byte> bytes = [];
         for (var size = 1; size <= 5; size++)
         {
-            bytes.AddRange(U3dTestFile.Block(0x100u + (uint)size, Enumerable.Repeat((byte)size, size).ToArray(),
+            bytes.AddRange(U3dTestFile.CreateBlock(0x100u + (uint)size, Enumerable.Repeat((byte)size, size).ToArray(),
                 size == 3 ? metaData : null));
         }
 
         var blocks = U3dBlockReader.ReadBlocks(bytes.ToArray(), 0, bytes.Count);
 
+        uint[] types = [0x101, 0x102, 0x103, 0x104, 0x105];
+        int[] sizes = [1, 2, 3, 4, 5];
+        byte[] contents = [1, 2, 3, 4, 5];
+        string[] keys = ["Name", "Hidden"];
+        byte[] binary = [9, 8, 7, 6, 5];
         Assert.Multiple(() =>
         {
-            Assert.That(blocks.Select(block => block.Type), Is.EqualTo(new uint[] { 0x101, 0x102, 0x103, 0x104, 0x105 }));
-            Assert.That(blocks.Select(block => block.DataSize), Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+            Assert.That(blocks.Select(block => block.Type), Is.EqualTo(types));
+            Assert.That(blocks.Select(block => block.DataSize), Is.EqualTo(sizes));
             Assert.That(blocks.Select(block => block.Offset % 4), Is.All.EqualTo(0));
-            Assert.That(blocks.Select(block => block.Data.ToArray().Distinct().Single()), Is.EqualTo(new byte[] { 1, 2, 3, 4, 5 }));
-            Assert.That(blocks[2].MetaData.Select(entry => entry.Key), Is.EqualTo(new[] { "Name", "Hidden" }));
+            Assert.That(blocks.Select(block => block.Data.ToArray().Distinct().Single()), Is.EqualTo(contents));
+            Assert.That(blocks[2].MetaData.Select(entry => entry.Key), Is.EqualTo(keys));
             Assert.That(blocks[2].MetaData[0].Value, Is.EqualTo("Value"));
             Assert.That(blocks[2].MetaData[1].IsBinary, Is.True);
-            Assert.That(blocks[2].MetaData[1].BinaryValue, Is.EqualTo(new byte[] { 9, 8, 7, 6, 5 }));
+            Assert.That(blocks[2].MetaData[1].BinaryValue, Is.EqualTo(binary));
             Assert.That(blocks[^1].End, Is.EqualTo(bytes.Count));
         });
     }
@@ -284,15 +291,16 @@ public class U3dImportTests
     public void UnknownAndUnreadBlocks_AreSkippedAndTold()
     {
         var file = new U3dTestFile(true);
-        file.DeclareBlock(U3dTestFile.Block(0x00000777, [1, 2, 3, 4, 5, 6]));
-        file.DeclareBlock(U3dTestFile.Block(U3dBlockTypes.MotionResource, [0, 0]));
-        U3dTestBlocks.GroupNode(file, "After", [Parent(string.Empty, Vector3F.Zero)]);
+        file.DeclareBlock(U3dTestFile.CreateBlock(0x00000777, [1, 2, 3, 4, 5, 6]));
+        file.DeclareBlock(U3dTestFile.CreateBlock(U3dBlockTypes.MotionResource, [0, 0]));
+        U3dTestBlocks.WriteGroupNode(file, "After", [CreateParent(string.Empty, Vector3F.Zero)]);
 
         var scene = Import(file.ToArray(), out var notes);
 
+        string[] names = ["After"];
         Assert.Multiple(() =>
         {
-            Assert.That(scene.Models.Dependencies.Select(model => model.Name), Is.EqualTo(new[] { "After" }));
+            Assert.That(scene.Models.Dependencies.Select(model => model.Name), Is.EqualTo(names));
             Assert.That(notes, Has.Some.Contains("0x00000777"));
             Assert.That(notes, Has.Some.Contains("motion"));
         });
@@ -301,7 +309,7 @@ public class U3dImportTests
     [Test, Timeout(120000)]
     public void CutShort_ThrowsAtEveryLength()
     {
-        var bytes = CubeFile(true);
+        var bytes = CreateCubeFile(true);
         for (var length = 0; length < bytes.Length; length += 3)
         {
             Assert.That(() => Import(bytes[..length], out _), Throws.TypeOf<InvalidDataException>(), $"cut at {length}");
@@ -312,14 +320,14 @@ public class U3dImportTests
     public void BlockDataCutShort_Throws([Values(false, true)] bool compressed)
     {
         var whole = new U3dTestFile(compressed);
-        U3dTestBlocks.Mesh(whole, CubeMesh());
+        U3dTestBlocks.WriteMesh(whole, CreateCubeMesh());
         var bytes = whole.ToArray();
         var blocks = U3dBlockReader.ReadBlocks(bytes, 0, bytes.Length);
         var baseMesh = blocks.Single(block => block.Type == U3dBlockTypes.MeshBaseContinuation);
         var cut = new U3dTestFile(compressed);
-        cut.DeclareBlock(U3dTestFile.Block(U3dBlockTypes.MeshDeclaration,
+        cut.DeclareBlock(U3dTestFile.CreateBlock(U3dBlockTypes.MeshDeclaration,
             blocks.Single(block => block.Type == U3dBlockTypes.MeshDeclaration).Data.ToArray()));
-        cut.ContinueBlock(U3dTestFile.Block(U3dBlockTypes.MeshBaseContinuation, baseMesh.Data[..(baseMesh.DataSize * 2 / 3)].ToArray()));
+        cut.AddContinuationBlock(U3dTestFile.CreateBlock(U3dBlockTypes.MeshBaseContinuation, baseMesh.Data[..(baseMesh.DataSize * 2 / 3)].ToArray()));
 
         Assert.That(() => Import(cut.ToArray(), out _),
             Throws.TypeOf<InvalidDataException>().With.Message.Contains("0xFFFFFF3B"));
@@ -329,8 +337,8 @@ public class U3dImportTests
     public void CountPastTheData_Throws([Values(false, true)] bool compressed)
     {
         var file = new U3dTestFile(compressed);
-        var mesh = Triangle("Huge");
-        U3dTestBlocks.Mesh(file, mesh);
+        var mesh = CreateTriangle("Huge");
+        U3dTestBlocks.WriteMesh(file, mesh);
         var bytes = file.ToArray();
         var blocks = U3dBlockReader.ReadBlocks(bytes, 0, bytes.Length);
         var baseMesh = blocks.Single(block => block.Type == U3dBlockTypes.MeshBaseContinuation);
@@ -343,10 +351,10 @@ public class U3dImportTests
     [Test]
     public void IndexPastItsPool_Throws()
     {
-        var mesh = Triangle("Broken");
+        var mesh = CreateTriangle("Broken");
         mesh.Faces[0] = new U3dTestFace { ShadingId = 0, Positions = [0, 1, 7], Normals = [0, 0, 0] };
         var file = new U3dTestFile(false);
-        U3dTestBlocks.Mesh(file, mesh);
+        U3dTestBlocks.WriteMesh(file, mesh);
 
         Assert.That(() => Import(file.ToArray(), out _),
             Throws.TypeOf<InvalidDataException>().With.Message.Contains("position 7"));
@@ -362,7 +370,7 @@ public class U3dImportTests
     [Test]
     public void Factory_ReadsAU3dFromBytes()
     {
-        var bytes = CubeFile(true);
+        var bytes = CreateCubeFile(true);
         var converter = ModelConverterFactory.GetConverter("artwork.u3d", bytes, new ConversionConfig(true));
 
         Assert.That(converter, Is.TypeOf<U3dConverter>());
@@ -374,9 +382,9 @@ public class U3dImportTests
     [Test]
     public void MeshLabSphere_DecodesItsResolutionUpdatesOntoTheUnitSphere()
     {
-        var bytes = File.ReadAllBytes(RealFile("sphere-colored.u3d"));
+        var bytes = File.ReadAllBytes(GetRealFilePath("sphere-colored.u3d"));
         AssertMeshLabLayout(bytes);
-        var declared = Declared(bytes);
+        var declared = ReadDeclared(bytes);
         Assert.Multiple(() =>
         {
             Assert.That(declared.Attributes, Is.EqualTo(1), "exported with normals excluded");
@@ -388,7 +396,7 @@ public class U3dImportTests
 
         var scene = Import(bytes, out var notes);
 
-        var meshes = AllMeshes(scene).ToList();
+        var meshes = GetAllMeshes(scene).ToList();
         Assert.That(notes, Is.Empty);
         Assert.That(meshes.Sum(mesh => mesh.Indices.Length / 3), Is.EqualTo(declared.FaceCount));
         var radii = meshes.SelectMany(mesh => mesh.Points).Select(point => point.As<float>().Length()).ToList();
@@ -399,9 +407,9 @@ public class U3dImportTests
     [Test]
     public void MeshLabTorus_HeaderBlocksAndDeclaration()
     {
-        var bytes = File.ReadAllBytes(RealFile("torus.u3d"));
+        var bytes = File.ReadAllBytes(GetRealFilePath("torus.u3d"));
         AssertMeshLabLayout(bytes);
-        var declared = Declared(bytes);
+        var declared = ReadDeclared(bytes);
 
         Assert.Multiple(() =>
         {
@@ -421,13 +429,13 @@ public class U3dImportTests
     [TestCase("torus")]
     public void MeshLabFile_DecodesToTheMeshItWasWrittenFrom(string name)
     {
-        var truth = U3dTestIdtf.Read(RealFile(name + ".idtf"));
+        var truth = U3dTestIdtf.Read(GetRealFilePath(name + ".idtf"));
 
-        var scene = Import(File.ReadAllBytes(RealFile(name + ".u3d")), out var notes);
+        var scene = Import(File.ReadAllBytes(GetRealFilePath(name + ".u3d")), out var notes);
 
-        var decoded = new List<string>();
+        List<string> decoded = [];
         var seen = new HashSet<int>();
-        foreach (var mesh in AllMeshes(scene))
+        foreach (var mesh in GetAllMeshes(scene))
         {
             for (var index = 0; index < mesh.Indices.Length; index += 3)
             {
@@ -435,11 +443,11 @@ public class U3dImportTests
                 for (var corner = 0; corner < 3; corner++)
                 {
                     var point = mesh.Points[mesh.Indices[index + corner]].As<float>();
-                    corners[corner] = Nearest(truth.Positions, new Vector3F(-point.X, point.Z, -point.Y));
+                    corners[corner] = FindNearest(truth.Positions, new Vector3F(-point.X, point.Z, -point.Y));
                     seen.Add(corners[corner]);
                 }
 
-                decoded.Add(FaceKey(corners));
+                decoded.Add(GetFaceKey(corners));
             }
         }
 
@@ -448,12 +456,15 @@ public class U3dImportTests
             Assert.That(notes, Is.Empty);
             Assert.That(seen, Has.Count.EqualTo(truth.Positions.Count), "every position of the mesh is decoded");
             Assert.That(decoded.OrderBy(key => key, StringComparer.Ordinal),
-                Is.EqualTo(truth.Faces.Select(FaceKey).OrderBy(key => key, StringComparer.Ordinal)),
+                Is.EqualTo(truth.Faces.Select(GetFaceKey).OrderBy(key => key, StringComparer.Ordinal)),
                 "the faces, each wound as the file was written, are the mesh's");
         });
     }
 
-    private static int Nearest(List<Vector3F> positions, Vector3F point)
+    private static string GetRealFilePath(string name) =>
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "CompilerU3d", name);
+
+    private static int FindNearest(List<Vector3F> positions, Vector3F point)
     {
         var nearest = -1;
         var nearestDistance = float.MaxValue;
@@ -471,7 +482,7 @@ public class U3dImportTests
         return nearest;
     }
 
-    private static string FaceKey(int[] face)
+    private static string GetFaceKey(int[] face)
     {
         var first = Array.IndexOf(face, face.Min());
         return $"{face[first]} {face[(first + 1) % 3]} {face[(first + 2) % 3]}";
@@ -480,11 +491,12 @@ public class U3dImportTests
     private static void AssertMeshLabLayout(byte[] bytes)
     {
         var blocks = U3dBlockReader.ReadBlocks(bytes, 0, bytes.Length);
-        Assert.That(blocks.Select(block => block.Type), Is.EqualTo(new[]
-        {
+        uint[] layout =
+        [
             U3dBlockTypes.FileHeader, U3dBlockTypes.PriorityUpdate, U3dBlockTypes.ModifierChain, U3dBlockTypes.ModifierChain,
             U3dBlockTypes.PriorityUpdate, U3dBlockTypes.MeshProgressiveContinuation
-        }));
+        ];
+        Assert.That(blocks.Select(block => block.Type), Is.EqualTo(layout));
         var header = blocks[0].OpenData(true);
         Assert.Multiple(() =>
         {
@@ -497,7 +509,7 @@ public class U3dImportTests
         });
     }
 
-    private static U3dTestDeclaredMesh Declared(byte[] bytes)
+    private static U3dTestDeclaredMesh ReadDeclared(byte[] bytes)
     {
         foreach (var chain in U3dBlockReader.ReadBlocks(bytes, 0, bytes.Length).Where(block => block.Type == U3dBlockTypes.ModifierChain))
         {
@@ -551,7 +563,7 @@ public class U3dImportTests
         return scene;
     }
 
-    private static IEnumerable<Mesh> AllMeshes(SceneData scene)
+    private static IEnumerable<Mesh> GetAllMeshes(SceneData scene)
     {
         var pending = new Stack<SceneData.Model>();
         pending.Push(scene.Models);
@@ -570,28 +582,28 @@ public class U3dImportTests
         }
     }
 
-    private static byte[] CubeFile(bool compressed)
+    private static byte[] CreateCubeFile(bool compressed)
     {
         var file = new U3dTestFile(compressed);
-        file.DeclareBlock(U3dTestFile.ModifierChain("Box", 0,
-            U3dTestBlocks.ModelNode(file, "Box", [Parent(string.Empty, Vector3F.Zero)], "BoxMesh"),
-            U3dTestBlocks.ShadingModifier(file, "Box", "Red", "Glass")));
-        U3dTestBlocks.Material(file, "RedMaterial", new Vector3F(1, 0, 0), 1, 0.5f);
-        U3dTestBlocks.Material(file, "GlassMaterial", new Vector3F(0, 0, 1), 0.5f, 0);
-        U3dTestBlocks.Shader(file, "Red", "RedMaterial");
-        U3dTestBlocks.Shader(file, "Glass", "GlassMaterial");
-        U3dTestBlocks.Mesh(file, CubeMesh());
+        file.DeclareBlock(U3dTestFile.CreateModifierChain("Box", 0,
+            U3dTestBlocks.CreateModelNode(file, "Box", [CreateParent(string.Empty, Vector3F.Zero)], "BoxMesh"),
+            U3dTestBlocks.CreateShadingModifier(file, "Box", "Red", "Glass")));
+        U3dTestBlocks.WriteMaterial(file, "RedMaterial", new Vector3F(1, 0, 0), 1, 0.5f);
+        U3dTestBlocks.WriteMaterial(file, "GlassMaterial", new Vector3F(0, 0, 1), 0.5f, 0);
+        U3dTestBlocks.WriteShader(file, "Red", "RedMaterial");
+        U3dTestBlocks.WriteShader(file, "Glass", "GlassMaterial");
+        U3dTestBlocks.WriteMesh(file, CreateCubeMesh());
         return file.ToArray();
     }
 
-    private static U3dTestMesh CubeMesh()
+    private static U3dTestMesh CreateCubeMesh()
     {
-        var sides = new[]
-        {
-            new[] { 1, 3, 7, 1, 7, 5 }, new[] { 0, 4, 6, 0, 6, 2 }, new[] { 2, 6, 7, 2, 7, 3 },
-            new[] { 0, 1, 5, 0, 5, 4 }, new[] { 4, 5, 7, 4, 7, 6 }, new[] { 0, 2, 3, 0, 3, 1 }
-        };
-        var faces = new List<U3dTestFace>();
+        int[][] sides =
+        [
+            [1, 3, 7, 1, 7, 5], [0, 4, 6, 0, 6, 2], [2, 6, 7, 2, 7, 3],
+            [0, 1, 5, 0, 5, 4], [4, 5, 7, 4, 7, 6], [0, 2, 3, 0, 3, 1]
+        ];
+        List<U3dTestFace> faces = [];
         for (var side = 0; side < sides.Length; side++)
         {
             for (var triangle = 0; triangle < 2; triangle++)
@@ -608,24 +620,24 @@ public class U3dImportTests
         return new U3dTestMesh
         {
             Name = "BoxMesh",
-            Positions = CubePositions(),
-            Normals = CubeNormals(),
+            Positions = CreateCubePositions(),
+            Normals = CreateCubeNormals(),
             Faces = faces,
             ShadingAttributes = [0, 0],
             ShadingLayers = [0, 0]
         };
     }
 
-    private static List<Vector3F> CubePositions() => Enumerable.Range(0, 8)
+    private static List<Vector3F> CreateCubePositions() => Enumerable.Range(0, 8)
         .Select(index => new Vector3F((index & 1) != 0 ? 1 : -1, (index & 2) != 0 ? 1 : -1, (index & 4) != 0 ? 1 : -1))
         .ToList();
 
-    private static List<Vector3F> CubeNormals() =>
+    private static List<Vector3F> CreateCubeNormals() =>
     [
         new(1, 0, 0), new(-1, 0, 0), new(0, 1, 0), new(0, -1, 0), new(0, 0, 1), new(0, 0, -1)
     ];
 
-    private static U3dTestMesh Triangle(string name) => new()
+    private static U3dTestMesh CreateTriangle(string name) => new()
     {
         Name = name,
         Positions = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)],
@@ -633,29 +645,15 @@ public class U3dImportTests
         Faces = [new U3dTestFace { ShadingId = 0, Positions = [0, 1, 2], Normals = [0, 0, 0] }]
     };
 
-    private static U3dTestParent Parent(string name, Vector3F translation) =>
+    private static U3dTestParent CreateParent(string name, Vector3F translation) =>
         new() { Name = name, Transform = Matrix4x4.CreateTranslation<float>(translation) };
 
-    private static Vector3F RandomVector(Random random, float size) =>
+    private static Vector3F CreateRandomVector(Random random, float size) =>
         new((random.NextSingle() * 2 - 1) * size, (random.NextSingle() * 2 - 1) * size, (random.NextSingle() * 2 - 1) * size);
 
-    private static Vector3F Engine(Vector3F u3d) => new(-u3d.X, -u3d.Z, u3d.Y);
+    private static Vector3F ToEngine(Vector3F u3d) => new(-u3d.X, -u3d.Z, u3d.Y);
 
-    private static bool Near(Vector3F expected, Vector3F actual, float tolerance = Tolerance) =>
+    private static bool IsNear(Vector3F expected, Vector3F actual, float tolerance = Tolerance) =>
         MathF.Abs(expected.X - actual.X) <= tolerance && MathF.Abs(expected.Y - actual.Y) <= tolerance &&
         MathF.Abs(expected.Z - actual.Z) <= tolerance;
-}
-
-/// <summary>What a CLOD Mesh Declaration says of its mesh.</summary>
-internal sealed class U3dTestDeclaredMesh
-{
-    public uint Attributes { get; init; }
-
-    public uint FaceCount { get; init; }
-
-    public uint PositionCount { get; set; }
-
-    public uint MinimumResolution { get; set; }
-
-    public uint FinalMaximumResolution { get; set; }
 }

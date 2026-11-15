@@ -2,13 +2,13 @@ using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.ThreeD;
 
-/// <summary>Colours as 3D views write them: <c>[/DeviceRGB r g b]</c> in a render mode, <c>[r g b]</c> beside a colour
+/// <summary>Colors as 3D views write them: <c>[/DeviceRGB r g b]</c> in a render mode, <c>[r g b]</c> beside a color
 /// space named apart in a background.</summary>
 internal static class Pdf3DColors
 {
-    /// <summary>The colour of <paramref name="value"/>, with or without the colour space before it; null for a name
+    /// <summary>The color of <paramref name="value"/>, with or without the color space before it; null for a name
     /// (a mode's <c>/BG</c>) or anything else.</summary>
-    public static Pdf3DColor From(PdfObject value, IPdfObjectResolver resolver)
+    internal static Pdf3DColor From(PdfObject value, IPdfObjectResolver resolver)
     {
         if (resolver.Resolve(value) is not PdfArray array)
         {

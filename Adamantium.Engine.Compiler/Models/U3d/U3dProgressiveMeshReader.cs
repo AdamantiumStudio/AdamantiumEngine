@@ -3,76 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Adamantium.Mathematics;
+using static Adamantium.Engine.Compiler.Models.U3d.U3dContexts;
+using static Adamantium.Engine.Compiler.Models.U3d.U3dGeometryReader;
 
 namespace Adamantium.Engine.Compiler.Models.U3d;
 
-/// <summary>Reads a CLOD Progressive Mesh Continuation (ECMA-363 9.6.1.3): resolution updates, each adding one position
-/// to the author mesh by splitting it off a position there is - new colours and texture coordinates, new faces between
-/// the two, the faces that move from the split position to the new one, the new position, and the normals of every
-/// position around it. The mesh is kept at the full resolution the block gives.
-/// Which faces the stay-or-move flags are read for, in which order and in which context is what keeps the reading in
-/// step with the writer, and the clause leaves part of it to be read between the lines. As read here: the faces at the
-/// split position from the highest index down. A face whose corner after the split position is the third position of
-/// a new face is predicted by that new face - the right-wound one when both windings have it - to stay when it winds
-/// left, to move when it winds right; failing that, by the new face whose third position is the corner before the
-/// split, the other way round. That is the reverse of the clause's wording, which would predict every such face wrong,
-/// and it is what MeshLab's files - Intel's U3D library - hold, a torus's double-sided first updates among them. Any
-/// other face is predicted from the faces before it that share an edge with it: to move when any of them moved, to
-/// stay when they all stayed. The local list of third positions holds those of the faces at the split position and of
-/// the new faces before, the split position left out, highest first. Predicted normals and colours only shift values,
-/// never the reading.</summary>
+/// <summary>Reads a CLOD Progressive Mesh Continuation (ECMA-363 9.6.1.3): resolution updates that split new positions
+/// off the mesh, kept at the full resolution the block gives.</summary>
 internal static class U3dProgressiveMeshReader
 {
-    private static readonly U3dContext Zero = U3dContext.Dynamic("cZero");
-    private static readonly U3dContext Shading = U3dContext.Dynamic("cShading");
-    private static readonly U3dContext DiffuseCount = U3dContext.Dynamic("cDiffuseCount");
-    private static readonly U3dContext SpecularCount = U3dContext.Dynamic("cSpecularCount");
-    private static readonly U3dContext TextureCount = U3dContext.Dynamic("cTexCoordCount");
-    private static readonly U3dContext DiffuseSigns = U3dContext.Dynamic("cDiffuseColorSign");
-    private static readonly U3dContext SpecularSigns = U3dContext.Dynamic("cSpecularColorSign");
-    private static readonly U3dContext TextureSigns = U3dContext.Dynamic("cTexCoordSign");
-    private static readonly U3dContext ColorRed = U3dContext.Dynamic("cColorDiffR");
-    private static readonly U3dContext ColorGreen = U3dContext.Dynamic("cColorDiffG");
-    private static readonly U3dContext ColorBlue = U3dContext.Dynamic("cColorDiffB");
-    private static readonly U3dContext ColorAlpha = U3dContext.Dynamic("cColorDiffA");
-    private static readonly U3dContext TextureU = U3dContext.Dynamic("cTexCDiffU");
-    private static readonly U3dContext TextureV = U3dContext.Dynamic("cTexCDiffV");
-    private static readonly U3dContext TextureS = U3dContext.Dynamic("cTexCDiffS");
-    private static readonly U3dContext TextureT = U3dContext.Dynamic("cTexCDiffT");
-    private static readonly U3dContext FaceCount = U3dContext.Dynamic("cFaceCnt");
-    private static readonly U3dContext FaceOrientation = U3dContext.Dynamic("cFaceOrnt");
-    private static readonly U3dContext ThirdPositionType = U3dContext.Dynamic("cThrdPosType");
-    private static readonly U3dContext LocalThirdPosition = U3dContext.Dynamic("cLocal3rdPos");
-    private static readonly U3dContext[] StayOrMove =
-    [
-        U3dContext.Dynamic("cStayMove0"), U3dContext.Dynamic("cStayMove1"), U3dContext.Dynamic("cStayMove2"),
-        U3dContext.Dynamic("cStayMove3"), U3dContext.Dynamic("cStayMove4")
-    ];
-    private static readonly U3dContext PositionSigns = U3dContext.Dynamic("cPosDiffSign");
-    private static readonly U3dContext PositionX = U3dContext.Dynamic("cPosDiffX");
-    private static readonly U3dContext PositionY = U3dContext.Dynamic("cPosDiffY");
-    private static readonly U3dContext PositionZ = U3dContext.Dynamic("cPosDiffZ");
-    private static readonly U3dContext NormalCount = U3dContext.Dynamic("cNormlCnt");
-    private static readonly U3dContext NormalSigns = U3dContext.Dynamic("cDiffNormalSign");
-    private static readonly U3dContext NormalX = U3dContext.Dynamic("cDiffNormalX");
-    private static readonly U3dContext NormalY = U3dContext.Dynamic("cDiffNormalY");
-    private static readonly U3dContext NormalZ = U3dContext.Dynamic("cDiffNormalZ");
-    private static readonly U3dContext NormalIndex = U3dContext.Dynamic("cNormlIdx");
-    private static readonly U3dContext ColorDuplicate = U3dContext.Dynamic("cColorDup");
-    private static readonly U3dContext ColorIndexType = U3dContext.Dynamic("cColorIndexType");
-    private static readonly U3dContext ColorIndexLocal = U3dContext.Dynamic("cColorIndexLocal");
-    private static readonly U3dContext ColorIndexGlobal = U3dContext.Dynamic("cColorIndexGlobal");
-    private static readonly U3dContext TextureDuplicate = U3dContext.Dynamic("cTexCDup");
-    private static readonly U3dContext TextureIndexType = U3dContext.Dynamic("cTexCIndexType");
-    private static readonly U3dContext TextureIndexLocal = U3dContext.Dynamic("cTextureIndexLocal");
-    private static readonly U3dContext TextureIndexGlobal = U3dContext.Dynamic("cTextureIndexGlobal");
-    private static readonly U3dChangeContexts DiffuseChange = new("cDiffuseKeepChange", "cDiffuseChangeType",
-        "cDiffuseChangeIndexNew", "cDiffuseChangeIndexLocal", "cDiffuseChangeIndexGlobal");
-    private static readonly U3dChangeContexts SpecularChange = new("cSpecularKeepChange", "cSpecularChangeType",
-        "cSpecularChangeIndexNew", "cSpecularChangeIndexLocal", "cSpecularChangeIndexGlobal");
-    private static readonly U3dChangeContexts TextureChange = new("cTCKeepChange", "cTCChangeType",
-        "cTCChangeIndexNew", "cTCChangeIndexLocal", "cTCChangeIndexGlobal");
-
     private const byte LeftOrientation = 0x1;
     private const byte LocalThird = 0x1;
     private const byte Move = 0x1;
@@ -82,14 +21,41 @@ internal static class U3dProgressiveMeshReader
     private const int NoPrediction = 0;
     private const int MoveFromThird = 1;
     private const int StayFromThird = 2;
-    private const int MoveFromNeighbour = 3;
-    private const int StayFromNeighbour = 4;
+    private const int MoveFromNeighbor = 3;
+    private const int StayFromNeighbor = 4;
     private const int DiffuseSlot = 0;
     private const int SpecularSlot = 1;
     private const int FirstTextureSlot = 2;
     private const int SplitCorner = 0;
     private const int NewCorner = 1;
     private const int ThirdCorner = 2;
+
+    private static readonly U3dContext Zero = U3dContext.CreateDynamic("cZero");
+    private static readonly U3dContext DiffuseCount = U3dContext.CreateDynamic("cDiffuseCount");
+    private static readonly U3dContext SpecularCount = U3dContext.CreateDynamic("cSpecularCount");
+    private static readonly U3dContext TextureCount = U3dContext.CreateDynamic("cTexCoordCount");
+    private static readonly U3dContext FaceCount = U3dContext.CreateDynamic("cFaceCnt");
+    private static readonly U3dContext FaceOrientation = U3dContext.CreateDynamic("cFaceOrnt");
+    private static readonly U3dContext ThirdPositionType = U3dContext.CreateDynamic("cThrdPosType");
+    private static readonly U3dContext LocalThirdPosition = U3dContext.CreateDynamic("cLocal3rdPos");
+    private static readonly U3dContext[] StayOrMove =
+    [
+        U3dContext.CreateDynamic("cStayMove0"), U3dContext.CreateDynamic("cStayMove1"), U3dContext.CreateDynamic("cStayMove2"),
+        U3dContext.CreateDynamic("cStayMove3"), U3dContext.CreateDynamic("cStayMove4")
+    ];
+    private static readonly U3dContext ColorDuplicate = U3dContext.CreateDynamic("cColorDup");
+    private static readonly U3dContext ColorIndexType = U3dContext.CreateDynamic("cColorIndexType");
+    private static readonly U3dContext ColorIndexLocal = U3dContext.CreateDynamic("cColorIndexLocal");
+    private static readonly U3dContext ColorIndexGlobal = U3dContext.CreateDynamic("cColorIndexGlobal");
+    private static readonly U3dContext TextureIndexType = U3dContext.CreateDynamic("cTexCIndexType");
+    private static readonly U3dContext TextureIndexLocal = U3dContext.CreateDynamic("cTextureIndexLocal");
+    private static readonly U3dContext TextureIndexGlobal = U3dContext.CreateDynamic("cTextureIndexGlobal");
+    private static readonly U3dChangeContexts DiffuseChange = new("cDiffuseKeepChange", "cDiffuseChangeType",
+        "cDiffuseChangeIndexNew", "cDiffuseChangeIndexLocal", "cDiffuseChangeIndexGlobal");
+    private static readonly U3dChangeContexts SpecularChange = new("cSpecularKeepChange", "cSpecularChangeType",
+        "cSpecularChangeIndexNew", "cSpecularChangeIndexLocal", "cSpecularChangeIndexGlobal");
+    private static readonly U3dChangeContexts TextureChange = new("cTCKeepChange", "cTCChangeType",
+        "cTCChangeIndexNew", "cTCChangeIndexLocal", "cTCChangeIndexGlobal");
 
     /// <summary>The rest of the block, its name read.</summary>
     internal static void Read(U3dBitReader reader, U3dGeometry geometry)
@@ -129,7 +95,7 @@ internal static class U3dProgressiveMeshReader
     private static void ReadUpdate(U3dBitReader reader, U3dGeometry geometry)
     {
         var current = geometry.Positions.Count;
-        var split = current == 0 ? reader.ReadCompressedU32(Zero) : reader.ReadCompressedU32(U3dContext.Static((uint)current));
+        var split = current == 0 ? reader.ReadCompressedU32(Zero) : reader.ReadCompressedU32(U3dContext.CreateStatic((uint)current));
         if (current > 0 && split >= current)
         {
             throw new InvalidDataException($"Mesh {geometry.Name} splits position {split} off, and it has {current}");
@@ -137,18 +103,18 @@ internal static class U3dProgressiveMeshReader
 
         var splitPosition = current == 0 ? -1 : (int)split;
         var splitFaces = current == 0 ? [] : geometry.FacesAtPosition[splitPosition].OrderByDescending(face => face).ToList();
-        var splitDiffuse = UsedAt(geometry, splitFaces, splitPosition, DiffuseSlot);
-        var splitSpecular = UsedAt(geometry, splitFaces, splitPosition, SpecularSlot);
+        var splitDiffuse = GetUsedAt(geometry, splitFaces, splitPosition, DiffuseSlot);
+        var splitSpecular = GetUsedAt(geometry, splitFaces, splitPosition, SpecularSlot);
         var newDiffuse = ReadNewColors(reader, geometry, true, splitDiffuse);
         var newSpecular = ReadNewColors(reader, geometry, false, splitSpecular);
-        var newTextures = ReadNewTextureCoordinates(reader, geometry, UsedAt(geometry, splitFaces, splitPosition, FirstTextureSlot));
+        var newTextures = ReadNewTextureCoordinates(reader, geometry, GetUsedAt(geometry, splitFaces, splitPosition, FirstTextureSlot));
 
         var newFaceCount = reader.ReadCompressedU32(FaceCount);
         reader.CheckCount(newFaceCount, 1, "new faces");
         var localPositions = splitFaces.SelectMany(face => geometry.Primitives[face].Corners)
             .Select(corner => corner.Position).Where(position => position != splitPosition).Distinct()
             .OrderByDescending(position => position).ToList();
-        var newFaces = new List<U3dNewFace>();
+        List<U3dNewFace> newFaces = [];
         for (var face = 0u; face < newFaceCount; face++)
         {
             var shadingId = ReadShadingId(reader, geometry);
@@ -163,7 +129,7 @@ internal static class U3dProgressiveMeshReader
             }
             else
             {
-                var global = reader.ReadCompressedU32(U3dContext.Static(current == 0 ? 1u : (uint)current));
+                var global = reader.ReadCompressedU32(U3dContext.CreateStatic(current == 0 ? 1u : (uint)current));
                 if (global >= current)
                 {
                     throw new InvalidDataException($"A new face of mesh {geometry.Name} uses position {global} of {current}");
@@ -172,11 +138,11 @@ internal static class U3dProgressiveMeshReader
                 third = (int)global;
             }
 
-            newFaces.Add(new U3dNewFace { ShadingId = shadingId, Left = orientation == LeftOrientation, Third = third });
+            newFaces.Add(new U3dNewFace { ShadingId = shadingId, IsLeft = orientation == LeftOrientation, Third = third });
         }
 
         var moved = ReadStayOrMove(reader, geometry, splitFaces, splitPosition, newFaces);
-        var movedAttributes = new List<int[]>();
+        List<int[]> movedAttributes = [];
         foreach (var face in moved)
         {
             var primitive = geometry.Primitives[face];
@@ -195,14 +161,14 @@ internal static class U3dProgressiveMeshReader
 
             for (var layer = 0; layer < description.TextureLayerCount; layer++)
             {
-                var used = UsedAt(geometry, splitFaces, splitPosition, FirstTextureSlot + layer);
+                var used = GetUsedAt(geometry, splitFaces, splitPosition, FirstTextureSlot + layer);
                 changes[FirstTextureSlot + layer] = ReadChange(reader, TextureChange, newTextures, used, geometry);
             }
 
             movedAttributes.Add(changes);
         }
 
-        var newCorners = new List<U3dCorner[]>();
+        List<U3dCorner[]> newCorners = [];
         foreach (var newFace in newFaces)
         {
             newCorners.Add(ReadNewFaceInfo(reader, geometry, newFace, splitFaces, splitPosition));
@@ -210,11 +176,11 @@ internal static class U3dProgressiveMeshReader
 
         var predicted = splitPosition < 0 ? Vector3F.Zero : geometry.Positions[splitPosition];
         var signs = reader.ReadCompressedU8(PositionSigns);
-        var iq = geometry.PositionInverseQuant;
+        var inverseQuant = geometry.PositionInverseQuant;
         geometry.Positions.Add(new Vector3F(
-            InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(PositionX), iq),
-            InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(PositionY), iq),
-            InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(PositionZ), iq)));
+            Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(PositionX), inverseQuant),
+            Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(PositionY), inverseQuant),
+            Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(PositionZ), inverseQuant)));
         geometry.FacesAtPosition.Add([]);
 
         Apply(geometry, current, splitPosition, moved, movedAttributes, newFaces, newCorners);
@@ -262,9 +228,9 @@ internal static class U3dProgressiveMeshReader
             corners[SplitCorner].Position = splitPosition < 0 ? newPosition : splitPosition;
             corners[NewCorner].Position = newPosition;
             corners[ThirdCorner].Position = newFace.Third;
-            var ordered = newFace.Left
-                ? new[] { corners[SplitCorner], corners[NewCorner], corners[ThirdCorner] }
-                : new[] { corners[NewCorner], corners[SplitCorner], corners[ThirdCorner] };
+            U3dCorner[] ordered = newFace.IsLeft
+                ? [corners[SplitCorner], corners[NewCorner], corners[ThirdCorner]]
+                : [corners[NewCorner], corners[SplitCorner], corners[ThirdCorner]];
             var faceIndex = geometry.Primitives.Count;
             geometry.Primitives.Add(new U3dPrimitive { ShadingId = newFace.ShadingId, Corners = ordered });
             foreach (var position in ordered.Select(corner => corner.Position).Distinct())
@@ -287,25 +253,25 @@ internal static class U3dProgressiveMeshReader
                 continue;
             }
 
-            var next = ThirdAt(newFaces, corners[(splitAt + 1) % 3].Position);
+            var next = FindByThird(newFaces, corners[(splitAt + 1) % 3].Position);
             if (next != null)
             {
-                predictions[index] = next.Left ? StayFromThird : MoveFromThird;
+                predictions[index] = next.IsLeft ? StayFromThird : MoveFromThird;
                 continue;
             }
 
-            var previous = ThirdAt(newFaces, corners[(splitAt + 2) % 3].Position);
+            var previous = FindByThird(newFaces, corners[(splitAt + 2) % 3].Position);
             if (previous != null)
             {
-                predictions[index] = previous.Left ? MoveFromThird : StayFromThird;
+                predictions[index] = previous.IsLeft ? MoveFromThird : StayFromThird;
             }
         }
 
         return predictions;
     }
 
-    private static U3dNewFace ThirdAt(List<U3dNewFace> newFaces, int position) =>
-        newFaces.FirstOrDefault(newFace => newFace.Third == position && !newFace.Left) ??
+    private static U3dNewFace FindByThird(List<U3dNewFace> newFaces, int position) =>
+        newFaces.FirstOrDefault(newFace => newFace.Third == position && !newFace.IsLeft) ??
         newFaces.FirstOrDefault(newFace => newFace.Third == position);
 
     private static List<int> ReadStayOrMove(U3dBitReader reader, U3dGeometry geometry, List<int> splitFaces,
@@ -313,31 +279,31 @@ internal static class U3dProgressiveMeshReader
     {
         var predictions = PredictFromThirds(geometry, splitFaces, splitPosition, newFaces);
         var moves = new bool[splitFaces.Count];
-        var moved = new List<int>();
+        List<int> moved = [];
         for (var index = 0; index < splitFaces.Count; index++)
         {
             var prediction = predictions[index];
             if (prediction == NoPrediction)
             {
-                var neighbourStays = false;
-                var neighbourMoves = false;
+                var neighborStays = false;
+                var neighborMoves = false;
                 var corners = geometry.Primitives[splitFaces[index]].Corners;
                 for (var earlier = 0; earlier < index; earlier++)
                 {
-                    if (SharesEdge(corners, geometry.Primitives[splitFaces[earlier]].Corners))
+                    if (HasSharedEdge(corners, geometry.Primitives[splitFaces[earlier]].Corners))
                     {
-                        neighbourMoves |= moves[earlier];
-                        neighbourStays |= !moves[earlier];
+                        neighborMoves |= moves[earlier];
+                        neighborStays |= !moves[earlier];
                     }
                 }
 
-                if (neighbourMoves)
+                if (neighborMoves)
                 {
-                    prediction = MoveFromNeighbour;
+                    prediction = MoveFromNeighbor;
                 }
-                else if (neighbourStays)
+                else if (neighborStays)
                 {
-                    prediction = StayFromNeighbour;
+                    prediction = StayFromNeighbor;
                 }
             }
 
@@ -351,7 +317,7 @@ internal static class U3dProgressiveMeshReader
         return moved;
     }
 
-    private static bool SharesEdge(U3dCorner[] first, U3dCorner[] second)
+    private static bool HasSharedEdge(U3dCorner[] first, U3dCorner[] second)
     {
         var shared = 0;
         foreach (var corner in first)
@@ -369,7 +335,7 @@ internal static class U3dProgressiveMeshReader
         List<int> splitFaces, int splitPosition)
     {
         var description = geometry.Shadings[newFace.ShadingId];
-        var corners = new[] { new U3dCorner(), new U3dCorner(), new U3dCorner() };
+        U3dCorner[] corners = [new U3dCorner(), new U3dCorner(), new U3dCorner()];
         foreach (var corner in corners)
         {
             corner.TextureCoordinates = Enumerable.Repeat(-1, description.TextureLayerCount).ToArray();
@@ -379,8 +345,8 @@ internal static class U3dProgressiveMeshReader
         if (description.HasDiffuseColors)
         {
             var picked = ReadCornerIndices(reader, geometry, DiffuseSlot, ColorDuplicate, ColorIndexType, ColorIndexLocal,
-                ColorIndexGlobal, UsedAt(geometry, splitFaces, splitPosition, DiffuseSlot),
-                UsedAt(geometry, thirdFaces, newFace.Third, DiffuseSlot));
+                ColorIndexGlobal, GetUsedAt(geometry, splitFaces, splitPosition, DiffuseSlot),
+                GetUsedAt(geometry, thirdFaces, newFace.Third, DiffuseSlot));
             for (var corner = 0; corner < 3; corner++)
             {
                 corners[corner].Diffuse = picked[corner];
@@ -390,8 +356,8 @@ internal static class U3dProgressiveMeshReader
         if (description.HasSpecularColors)
         {
             var picked = ReadCornerIndices(reader, geometry, SpecularSlot, ColorDuplicate, ColorIndexType, ColorIndexLocal,
-                ColorIndexGlobal, UsedAt(geometry, splitFaces, splitPosition, SpecularSlot),
-                UsedAt(geometry, thirdFaces, newFace.Third, SpecularSlot));
+                ColorIndexGlobal, GetUsedAt(geometry, splitFaces, splitPosition, SpecularSlot),
+                GetUsedAt(geometry, thirdFaces, newFace.Third, SpecularSlot));
             for (var corner = 0; corner < 3; corner++)
             {
                 corners[corner].Specular = picked[corner];
@@ -402,8 +368,8 @@ internal static class U3dProgressiveMeshReader
         {
             var slot = FirstTextureSlot + layer;
             var picked = ReadCornerIndices(reader, geometry, slot, TextureDuplicate, TextureIndexType, TextureIndexLocal,
-                TextureIndexGlobal, UsedAt(geometry, splitFaces, splitPosition, slot),
-                UsedAt(geometry, thirdFaces, newFace.Third, slot));
+                TextureIndexGlobal, GetUsedAt(geometry, splitFaces, splitPosition, slot),
+                GetUsedAt(geometry, thirdFaces, newFace.Third, slot));
             for (var corner = 0; corner < 3; corner++)
             {
                 corners[corner].TextureCoordinates[layer] = picked[corner];
@@ -462,19 +428,19 @@ internal static class U3dProgressiveMeshReader
     private static List<int> ReadNewColors(U3dBitReader reader, U3dGeometry geometry, bool diffuse, List<int> atSplit)
     {
         var count = reader.ReadCompressedU16(diffuse ? DiffuseCount : SpecularCount);
-        reader.CheckCount(count, 1, "new colours");
+        reader.CheckCount(count, 1, "new colors");
         var pool = diffuse ? geometry.DiffuseColors : geometry.SpecularColors;
-        var predicted = Average(pool, atSplit);
-        var iq = diffuse ? geometry.DiffuseColorInverseQuant : geometry.SpecularColorInverseQuant;
-        var added = new List<int>();
+        var predicted = GetAverage(pool, atSplit);
+        var inverseQuant = diffuse ? geometry.DiffuseColorInverseQuant : geometry.SpecularColorInverseQuant;
+        List<int> added = [];
         for (var color = 0; color < count; color++)
         {
             var signs = reader.ReadCompressedU8(diffuse ? DiffuseSigns : SpecularSigns);
             pool.Add(new Vector4F(
-                InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(ColorRed), iq),
-                InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(ColorGreen), iq),
-                InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(ColorBlue), iq),
-                InverseQuant(predicted.W, signs, 0x8, reader.ReadCompressedU32(ColorAlpha), iq)));
+                Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(ColorRed), inverseQuant),
+                Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(ColorGreen), inverseQuant),
+                Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(ColorBlue), inverseQuant),
+                Dequantize(predicted.W, signs, 0x8, reader.ReadCompressedU32(ColorAlpha), inverseQuant)));
             added.Add(pool.Count - 1);
         }
 
@@ -485,17 +451,17 @@ internal static class U3dProgressiveMeshReader
     {
         var count = reader.ReadCompressedU16(TextureCount);
         reader.CheckCount(count, 1, "new texture coordinates");
-        var predicted = Average(geometry.TextureCoordinates, atSplit);
-        var iq = geometry.TextureCoordinateInverseQuant;
-        var added = new List<int>();
+        var predicted = GetAverage(geometry.TextureCoordinates, atSplit);
+        var inverseQuant = geometry.TextureCoordinateInverseQuant;
+        List<int> added = [];
         for (var coordinate = 0; coordinate < count; coordinate++)
         {
             var signs = reader.ReadCompressedU8(TextureSigns);
             geometry.TextureCoordinates.Add(new Vector4F(
-                InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(TextureU), iq),
-                InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(TextureV), iq),
-                InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(TextureS), iq),
-                InverseQuant(predicted.W, signs, 0x8, reader.ReadCompressedU32(TextureT), iq)));
+                Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(TextureU), inverseQuant),
+                Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(TextureV), inverseQuant),
+                Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(TextureS), inverseQuant),
+                Dequantize(predicted.W, signs, 0x8, reader.ReadCompressedU32(TextureT), inverseQuant)));
             added.Add(geometry.TextureCoordinates.Count - 1);
         }
 
@@ -504,11 +470,11 @@ internal static class U3dProgressiveMeshReader
 
     private static void ReadNormals(U3dBitReader reader, U3dGeometry geometry, int newPosition)
     {
-        var neighbourhood = geometry.FacesAtPosition[newPosition]
+        var neighborhood = geometry.FacesAtPosition[newPosition]
             .SelectMany(face => geometry.Primitives[face].Corners).Select(corner => corner.Position)
             .Append(newPosition).Distinct().OrderByDescending(position => position).ToList();
-        var iq = geometry.NormalInverseQuant;
-        foreach (var position in neighbourhood)
+        var inverseQuant = geometry.NormalInverseQuant;
+        foreach (var position in neighborhood)
         {
             var faces = geometry.FacesAtPosition[position];
             var count = reader.ReadCompressedU32(NormalCount);
@@ -520,9 +486,9 @@ internal static class U3dProgressiveMeshReader
                 var predicted = normal < predictions.Count ? predictions[normal] : Vector3F.Zero;
                 var signs = reader.ReadCompressedU8(NormalSigns);
                 geometry.Normals.Add(new Vector3F(
-                    InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(NormalX), iq),
-                    InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(NormalY), iq),
-                    InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(NormalZ), iq)));
+                    Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(NormalX), inverseQuant),
+                    Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(NormalY), inverseQuant),
+                    Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(NormalZ), inverseQuant)));
             }
 
             foreach (var face in faces)
@@ -536,8 +502,8 @@ internal static class U3dProgressiveMeshReader
 
     private static List<Vector3F> PredictNormals(U3dGeometry geometry, List<int> faces, int count)
     {
-        var normals = new List<Vector3F>();
-        var weights = new List<int>();
+        List<Vector3F> normals = [];
+        List<int> weights = [];
         foreach (var face in faces)
         {
             var corners = geometry.Primitives[face].Corners;
@@ -579,7 +545,7 @@ internal static class U3dProgressiveMeshReader
         return normals;
     }
 
-    private static List<int> UsedAt(U3dGeometry geometry, IEnumerable<int> faces, int position, int slot)
+    private static List<int> GetUsedAt(U3dGeometry geometry, IEnumerable<int> faces, int position, int slot)
     {
         var used = new SortedSet<int>(Comparer<int>.Create((left, right) => right.CompareTo(left)));
         foreach (var face in faces)
@@ -609,7 +575,7 @@ internal static class U3dProgressiveMeshReader
         return used.ToList();
     }
 
-    private static Vector4F Average(List<Vector4F> pool, List<int> indices)
+    private static Vector4F GetAverage(List<Vector4F> pool, List<int> indices)
     {
         if (indices.Count == 0)
         {
@@ -635,56 +601,4 @@ internal static class U3dProgressiveMeshReader
 
         return list[(int)index];
     }
-
-    private static int ReadShadingId(U3dBitReader reader, U3dGeometry geometry)
-    {
-        var shadingId = reader.ReadCompressedU32(Shading);
-        if (shadingId >= geometry.Shadings.Count)
-        {
-            throw new InvalidDataException(
-                $"Mesh {geometry.Name} draws with shading ID {shadingId}, and it declares {geometry.Shadings.Count}");
-        }
-
-        return (int)shadingId;
-    }
-
-    private static float InverseQuant(float predicted, byte signs, int signBit, uint difference, float inverseQuant)
-    {
-        var sign = (signs & signBit) != 0 ? -1f : 1f;
-        return predicted + sign * difference * inverseQuant;
-    }
-}
-
-/// <summary>A face a resolution update adds: its shading ID, its winding and its third position.</summary>
-internal sealed class U3dNewFace
-{
-    internal int ShadingId { get; init; }
-
-    /// <summary>Split, new, third when left; new, split, third when right.</summary>
-    internal bool Left { get; init; }
-
-    internal int Third { get; init; }
-}
-
-/// <summary>The contexts a moved face's attribute change is read in.</summary>
-internal sealed class U3dChangeContexts
-{
-    internal U3dChangeContexts(string keepChange, string changeType, string indexNew, string indexLocal, string indexGlobal)
-    {
-        KeepChange = U3dContext.Dynamic(keepChange);
-        ChangeType = U3dContext.Dynamic(changeType);
-        IndexNew = U3dContext.Dynamic(indexNew);
-        IndexLocal = U3dContext.Dynamic(indexLocal);
-        IndexGlobal = U3dContext.Dynamic(indexGlobal);
-    }
-
-    internal U3dContext KeepChange { get; }
-
-    internal U3dContext ChangeType { get; }
-
-    internal U3dContext IndexNew { get; }
-
-    internal U3dContext IndexLocal { get; }
-
-    internal U3dContext IndexGlobal { get; }
 }

@@ -10,36 +10,24 @@ namespace Adamantium.Engine.CompilerTests;
 /// bytes, the header's declaration and file sizes worked out from them.</summary>
 internal sealed class U3dTestFile
 {
-    private readonly List<byte[]> declarations = [];
-    private readonly List<byte[]> continuations = [];
+    private readonly List<byte[]> _declarations = [];
+    private readonly List<byte[]> _continuations = [];
 
     public U3dTestFile(bool compressed, double? unitsScalingFactor = null)
     {
-        Compressed = compressed;
+        IsCompressed = compressed;
         UnitsScalingFactor = unitsScalingFactor;
     }
 
-    public bool Compressed { get; }
+    public bool IsCompressed { get; }
 
     public double? UnitsScalingFactor { get; }
 
-    /// <summary>A writer for one block's data, compressing as the file does.</summary>
-    public U3dTestBitWriter Data() => new(!Compressed);
-
-    public void Declare(uint type, U3dTestBitWriter data, byte[] metaData = null) =>
-        declarations.Add(Block(type, data.ToArray(), metaData));
-
-    public void DeclareBlock(byte[] block) => declarations.Add(block);
-
-    public void Continue(uint type, U3dTestBitWriter data) => continuations.Add(Block(type, data.ToArray()));
-
-    public void ContinueBlock(byte[] block) => continuations.Add(block);
-
     /// <summary>A whole block: type, sizes, data, padding, meta data, padding.</summary>
-    public static byte[] Block(uint type, byte[] data, byte[] metaData = null)
+    public static byte[] CreateBlock(uint type, byte[] data, byte[] metaData = null)
     {
         metaData ??= [];
-        var block = new List<byte>();
+        List<byte> block = [];
         block.AddRange(BitConverter.GetBytes(type));
         block.AddRange(BitConverter.GetBytes((uint)data.Length));
         block.AddRange(BitConverter.GetBytes((uint)metaData.Length));
@@ -51,7 +39,7 @@ internal sealed class U3dTestFile
     }
 
     /// <summary>A meta data section of <paramref name="entries"/>.</summary>
-    public static byte[] MetaData(IEnumerable<U3dMetaDataEntry> entries)
+    public static byte[] CreateMetaData(IEnumerable<U3dMetaDataEntry> entries)
     {
         var list = entries.ToList();
         var writer = new U3dTestBitWriter(true);
@@ -78,7 +66,7 @@ internal sealed class U3dTestFile
     }
 
     /// <summary>A Modifier Chain block holding <paramref name="modifiers"/>, whole blocks each.</summary>
-    public static byte[] ModifierChain(string name, uint chainType, params byte[][] modifiers)
+    public static byte[] CreateModifierChain(string name, uint chainType, params byte[][] modifiers)
     {
         var header = new U3dTestBitWriter(true);
         header.WriteString(name);
@@ -92,15 +80,27 @@ internal sealed class U3dTestFile
             data.AddRange(modifier);
         }
 
-        return Block(U3dBlockTypes.ModifierChain, data.ToArray());
+        return CreateBlock(U3dBlockTypes.ModifierChain, data.ToArray());
     }
+
+    /// <summary>A writer for one block's data, compressing as the file does.</summary>
+    public U3dTestBitWriter CreateData() => new(!IsCompressed);
+
+    public void Declare(uint type, U3dTestBitWriter data, byte[] metaData = null) =>
+        _declarations.Add(CreateBlock(type, data.ToArray(), metaData));
+
+    public void DeclareBlock(byte[] block) => _declarations.Add(block);
+
+    public void AddContinuation(uint type, U3dTestBitWriter data) => _continuations.Add(CreateBlock(type, data.ToArray()));
+
+    public void AddContinuationBlock(byte[] block) => _continuations.Add(block);
 
     public byte[] ToArray()
     {
-        var profile = (Compressed ? 0u : 0x4u) | (UnitsScalingFactor.HasValue ? 0x8u : 0u);
+        var profile = (IsCompressed ? 0u : 0x4u) | (UnitsScalingFactor.HasValue ? 0x8u : 0u);
         var headerSize = 12 + (UnitsScalingFactor.HasValue ? 32 : 24);
-        var declarationSize = headerSize + declarations.Sum(block => block.Length);
-        var fileSize = declarationSize + continuations.Sum(block => block.Length);
+        var declarationSize = headerSize + _declarations.Sum(block => block.Length);
+        var fileSize = declarationSize + _continuations.Sum(block => block.Length);
         var header = new U3dTestBitWriter(true);
         header.WriteI16(0);
         header.WriteI16(0);
@@ -113,8 +113,8 @@ internal sealed class U3dTestFile
             header.WriteF64(units);
         }
 
-        var file = new List<byte>(Block(U3dBlockTypes.FileHeader, header.ToArray()));
-        foreach (var block in declarations.Concat(continuations))
+        var file = new List<byte>(CreateBlock(U3dBlockTypes.FileHeader, header.ToArray()));
+        foreach (var block in _declarations.Concat(_continuations))
         {
             file.AddRange(block);
         }

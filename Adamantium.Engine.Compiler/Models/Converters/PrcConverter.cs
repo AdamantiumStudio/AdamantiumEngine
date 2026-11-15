@@ -13,45 +13,29 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Converters;
 
-/// <summary>Imports a PRC file (PRC Format Specification 8137) - a <c>.prc</c> file, or the 3D artwork of a PDF read from
-/// its bytes, as CAD systems write it. The model file's root product occurrences become the model tree, each occurrence
-/// a node placed by its location, its sons, prototype and external data under it, its part's representation items -
-/// sets nested, items placed by their coordinate systems - as nodes with the meshes of their tessellations: a regular 3D
-/// tessellation's triangles, fans and stripes, a highly compressed tessellation's mesh rebuilt from its traversal, a
-/// wire tessellation's polylines, a point set's points; normals a tessellation asks to be recalculated are smoothed up
-/// to its crease angle. Markups become line and triangle meshes from their markup tessellations, under a node of their
-/// own, their texts kept on the node's mesh data. A mesh is drawn by the material of its style - a plain colour, or a
-/// material of the globals, a texture application laying its diffuse texture, a PNG or JPEG picture of the file, on the
-/// tessellation's texture coordinates - inherited down the tree when an entity has none; a colour index of a style or a
-/// material names the colour's first component in the globals' colour array, so it is three times the colour's place in
-/// it. A product occurrence redefines by reference the entities under it - their style, visibility and place, the
-/// occurrence nearest the root having the last say - and its active display filter takes away entities by their
-/// layers - no layer being 65535, as filters write it - or by name; a container is kept for what is named under it.
-/// The cameras of views and scene display parameters become cameras, named after them, their lights lights, placed in
-/// their occurrence and looking, in PRC's axes, along their own +Y with +Z up - along +Z in the engine's. Views of a
-/// prototype are its own, not its occurrence's: redefinitions of them are not told. PRC is Z up and right-handed; its unit is the
-/// first one a CAD system gave, the model file's or else the first occurrence's in the tree, in millimetres - the
-/// locations of occurrences already scale between their own units. What is not read - the exact geometry of B-rep
-/// bodies, hidden or removed entities - is told in <see cref="ConverterBase.UnsupportedFeatures"/>.</summary>
+/// <summary>Imports a PRC file - a <c>.prc</c> file, or a PDF's 3D artwork from its bytes: the product tree, the meshes of
+/// its tessellations, materials, textures, cameras and lights.</summary>
 public class PrcConverter : ConverterBase
 {
+    private const string ViewsKeptAsCameras = "the views of the file are kept as their cameras, named after them; which " +
+                                              "annotations, linked items and filters a view shows is left out - the scene " +
+                                              "data has no views";
+
     private const int MaximumNodeAppearances = 1_000_000;
     private const int MaximumPrototypeChain = 64;
-    private const float DefaultGrey = 0.75f;
+    private const float DefaultGray = 0.75f;
     private const string DefaultMaterialId = "default";
     private const int NamesShown = 5;
     private const uint NoLayer = 0xFFFF;
     private const uint DiffuseMapping = 0x0001;
 
-    private readonly HashSet<string> told = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> appearancesOf = new(StringComparer.Ordinal);
-    private readonly PrcNotes meshNotes = new();
-    private readonly Dictionary<string, List<string>> grouped = new(StringComparer.Ordinal);
-    private readonly HashSet<PrcEntityReference> applied = [];
-    private readonly HashSet<PrcEntityReference> redefinitions = [];
-    private readonly Dictionary<string, PrcTextureTransformation> textureTransformations = new(StringComparer.Ordinal);
-    private PrcFile file;
-    private int appearances;
+    private readonly ImportNotes _meshNotes = new();
+    private readonly Dictionary<string, List<string>> _grouped = new(StringComparer.Ordinal);
+    private readonly HashSet<PrcEntityReference> _applied = [];
+    private readonly HashSet<PrcEntityReference> _redefinitions = [];
+    private readonly Dictionary<string, PrcTextureTransformation> _textureTransformations = new(StringComparer.Ordinal);
+    private PrcFile _file;
+    private int _appearances;
 
     public PrcConverter(string filePath, ConversionConfig config) : base(filePath, config, UpAxis.Z_UP)
     {
@@ -65,22 +49,22 @@ public class PrcConverter : ConverterBase
 
     protected override void Convert()
     {
-        file = PrcFile.Read(ReadFileBytes(), CancellationToken);
-        foreach (var note in file.Notes)
+        _file = PrcFile.Read(ReadFileBytes(), CancellationToken);
+        foreach (var note in _file.Notes)
         {
             Tell(note);
         }
 
-        var unit = ValidUnit();
+        var unit = FindValidUnit();
         if (unit is { } valid)
         {
             SceneDataContainer.Units = new SceneData.Unit(UnitType.Meter, (float)(valid / 1000));
         }
         else
         {
-            if (file.Unit > 0)
+            if (_file.Unit > 0)
             {
-                SceneDataContainer.Units = new SceneData.Unit(UnitType.Meter, (float)(file.Unit / 1000));
+                SceneDataContainer.Units = new SceneData.Unit(UnitType.Meter, (float)(_file.Unit / 1000));
             }
 
             Tell("the file's unit does not come from a CAD system; it is not to be measured by");
@@ -90,26 +74,18 @@ public class PrcConverter : ConverterBase
         BuildTree();
         TellUnapplied();
         TellGrouped();
-        foreach (var note in meshNotes.All)
+        foreach (var note in _meshNotes.All)
         {
             Tell(note);
         }
     }
 
-    private void Tell(string feature)
+    private void TellWithName(string feature, string name)
     {
-        if (told.Add(feature))
-        {
-            UnsupportedFeatures.Add(feature);
-        }
-    }
-
-    private void TellOf(string feature, string name)
-    {
-        if (!grouped.TryGetValue(feature, out var names))
+        if (!_grouped.TryGetValue(feature, out var names))
         {
             names = [];
-            grouped.Add(feature, names);
+            _grouped.Add(feature, names);
         }
 
         names.Add(name);
@@ -117,7 +93,7 @@ public class PrcConverter : ConverterBase
 
     private void TellGrouped()
     {
-        foreach (var group in grouped)
+        foreach (var group in _grouped)
         {
             var shown = string.Join(", ", group.Value.Take(NamesShown));
             var more = group.Value.Count > NamesShown ? $" and {group.Value.Count - NamesShown} more" : string.Empty;
@@ -127,28 +103,28 @@ public class PrcConverter : ConverterBase
 
     private void TellUnapplied()
     {
-        foreach (var kind in redefinitions.Where(reference => !applied.Contains(reference) && reference.Target.Type != PrcTypes.View)
+        foreach (var kind in _redefinitions.Where(reference => !_applied.Contains(reference) && reference.Target.Type != PrcTypes.View)
                      .GroupBy(reference => reference.Target.Type).OrderBy(group => group.Key))
         {
             Tell($"{kind.Count()} redefinitions by reference of entities of type {kind.Key} meet no entity the tree shows; they are left out");
         }
     }
 
-    private double? ValidUnit()
+    private double? FindValidUnit()
     {
-        if (file.UnitFromCad && file.Unit > 0)
+        if (_file.UnitFromCad && _file.Unit > 0)
         {
-            return file.Unit;
+            return _file.Unit;
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Stack<PrcOccurrenceSlot>();
-        for (var index = file.Roots.Count - 1; index >= 0; index--)
+        for (var index = _file.Roots.Count - 1; index >= 0; index--)
         {
-            var structure = file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(file.Roots[index].FileStructure));
+            var structure = _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(_file.Roots[index].FileStructure));
             if (structure != null)
             {
-                pending.Push(new PrcOccurrenceSlot(structure, file.Roots[index].Occurrence));
+                pending.Push(new PrcOccurrenceSlot(structure, _file.Roots[index].Occurrence));
             }
         }
 
@@ -184,7 +160,7 @@ public class PrcConverter : ConverterBase
             return;
         }
 
-        var structure = id == null ? from : file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(id));
+        var structure = id == null ? from : _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(id));
         if (structure != null)
         {
             pending.Push(new PrcOccurrenceSlot(structure, index));
@@ -194,17 +170,17 @@ public class PrcConverter : ConverterBase
     private void BuildTree()
     {
         var pending = new Stack<PrcPendingNode>();
-        for (var index = file.Roots.Count - 1; index >= 0; index--)
+        for (var index = _file.Roots.Count - 1; index >= 0; index--)
         {
-            var root = file.Roots[index];
-            var structure = file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(root.FileStructure));
+            var root = _file.Roots[index];
+            var structure = _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(root.FileStructure));
             if (structure == null)
             {
                 Tell($"a root product occurrence lies in file structure {root.FileStructure}, which the file does not hold");
                 continue;
             }
 
-            pending.Push(PrcPendingNode.ForOccurrence(structure, root.Occurrence, SceneDataContainer.Models, null, null,
+            pending.Push(PrcPendingNode.CreateForOccurrence(structure, root.Occurrence, SceneDataContainer.Models, null, null,
                 Matrix4x4F.Identity, null));
         }
 
@@ -212,7 +188,7 @@ public class PrcConverter : ConverterBase
         {
             CancellationToken.ThrowIfCancellationRequested();
             var node = pending.Pop();
-            if (++appearances > MaximumNodeAppearances)
+            if (++_appearances > MaximumNodeAppearances)
             {
                 Tell($"the tree shows nodes more than {MaximumNodeAppearances} times over; the rest are left out");
                 return;
@@ -246,8 +222,8 @@ public class PrcConverter : ConverterBase
             return;
         }
 
-        var redefinition = RedefinitionOf(node.Owner, structure, occurrence.UniqueId);
-        if (!Shown(occurrence, name, redefinition) || (occurrence.Behavior & PrcProductOccurrence.Suppressed) != 0)
+        var redefinition = FindRedefinition(node.Owner, structure, occurrence.UniqueId);
+        if (!IsShown(occurrence, name, redefinition) || (occurrence.Behavior & PrcProductOccurrence.Suppressed) != 0)
         {
             if ((occurrence.Behavior & PrcProductOccurrence.Suppressed) != 0)
             {
@@ -257,20 +233,20 @@ public class PrcConverter : ConverterBase
             return;
         }
 
-        if (FilteredOut(node.Owner, occurrence, structure, true, node.Admitted, name, out var admitted))
+        if (IsFilteredOut(node.Owner, occurrence, structure, true, node.Admitted, name, out var admitted))
         {
             return;
         }
 
-        var model = SceneDataContainer.CreateMesh(node.Parent, AppearanceId($"{structure.Index}/{node.Occurrence}"), name);
-        model.Extra = ExtraOf(occurrence.Attributes);
-        var location = PlacementOf(redefinition, name) ?? occurrence.Location ?? Matrix4x4F.Identity;
+        var model = SceneDataContainer.CreateMesh(node.Parent, CreateUniqueId($"{structure.Index}/{node.Occurrence}"), name);
+        model.Extra = CreateExtra(occurrence.Attributes);
+        var location = GetPlacement(redefinition, name) ?? occurrence.Location ?? Matrix4x4F.Identity;
         Place(model, location);
         var world = location * node.ParentWorld;
-        var style = StyleFrom(structure, occurrence.Graphics, node.Style, redefinition);
+        var style = ChooseStyle(structure, occurrence.Graphics, node.Style, redefinition);
         ReportOccurrenceContent(occurrence);
 
-        var children = new List<PrcPendingNode>();
+        List<PrcPendingNode> children = [];
         var context = new PrcOccurrenceContext();
         AddRedefinitions(context, structure, occurrence);
         AddFilters(context, structure, occurrence);
@@ -325,7 +301,7 @@ public class PrcConverter : ConverterBase
         AddMarkups(model, structure, occurrence.Markups, style, model.ID, node, admitted);
         foreach (var son in sons)
         {
-            children.Add(PrcPendingNode.ForOccurrence(sonsStructure, son, model, style, node, world, admitted));
+            children.Add(PrcPendingNode.CreateForOccurrence(sonsStructure, son, model, style, node, world, admitted));
         }
 
         if (occurrence.ExternalIndex >= 0)
@@ -333,7 +309,7 @@ public class PrcConverter : ConverterBase
             var external = Resolve(structure, occurrence.ExternalFileStructure, name, "external data");
             if (external != null)
             {
-                children.Add(PrcPendingNode.ForOccurrence(external, occurrence.ExternalIndex, model, style, node, world, admitted));
+                children.Add(PrcPendingNode.CreateForOccurrence(external, occurrence.ExternalIndex, model, style, node, world, admitted));
             }
         }
 
@@ -347,8 +323,7 @@ public class PrcConverter : ConverterBase
     {
         if (occurrence.Views.Count > 0)
         {
-            Tell("the views of the file are kept as their cameras, named after them; which annotations, linked items and " +
-                 "filters a view shows is left out - the scene data has no views");
+            Tell(ViewsKeptAsCameras);
         }
 
         if (occurrence.DisplayFilters.Count(filter => filter.IsActive) > 1)
@@ -372,7 +347,7 @@ public class PrcConverter : ConverterBase
                 continue;
             }
 
-            redefinitions.Add(reference);
+            _redefinitions.Add(reference);
             context.Redefinitions.TryAdd(new PrcEntityKey(reference.Target.FileStructure ?? structure.Id, reference.Target.UniqueId),
                 new PrcRedefinition(reference, structure));
         }
@@ -400,7 +375,7 @@ public class PrcConverter : ConverterBase
         }
     }
 
-    private PrcRedefinition RedefinitionOf(PrcPendingNode owner, PrcFileStructure structure, uint uniqueId)
+    private PrcRedefinition FindRedefinition(PrcPendingNode owner, PrcFileStructure structure, uint uniqueId)
     {
         if (uniqueId == 0)
         {
@@ -419,13 +394,13 @@ public class PrcConverter : ConverterBase
 
         if (found != null)
         {
-            applied.Add(found.Reference);
+            _applied.Add(found.Reference);
         }
 
         return found;
     }
 
-    private bool FilteredOut(PrcPendingNode owner, PrcTreeEntity entity, PrcFileStructure structure, bool isContainer,
+    private bool IsFilteredOut(PrcPendingNode owner, PrcTreeEntity entity, PrcFileStructure structure, bool isContainer,
         PrcFilterPass passed, string name, out PrcFilterPass admitted)
     {
         admitted = passed;
@@ -442,7 +417,7 @@ public class PrcConverter : ConverterBase
             {
                 if (active.Layers.Count > 0 && active.Filter.LayersInclusive != active.Layers.Contains(layer))
                 {
-                    TellOf("entities the display filter of a product occurrence takes away by their layer are left out", name);
+                    TellWithName("entities the display filter of a product occurrence takes away by their layer are left out", name);
                     return true;
                 }
 
@@ -456,7 +431,7 @@ public class PrcConverter : ConverterBase
                 {
                     if (named)
                     {
-                        TellOf("entities the display filter of a product occurrence takes away are left out", name);
+                        TellWithName("entities the display filter of a product occurrence takes away are left out", name);
                         return true;
                     }
 
@@ -467,9 +442,9 @@ public class PrcConverter : ConverterBase
                 {
                     admitted = new PrcFilterPass(active.Filter, admitted);
                 }
-                else if (!PrcFilterPass.Passes(admitted, active.Filter) && !isContainer)
+                else if (!PrcFilterPass.HasFilter(admitted, active.Filter) && !isContainer)
                 {
-                    TellOf("entities the display filter of a product occurrence does not keep are left out", name);
+                    TellWithName("entities the display filter of a product occurrence does not keep are left out", name);
                     return true;
                 }
             }
@@ -478,7 +453,7 @@ public class PrcConverter : ConverterBase
         return false;
     }
 
-    private Matrix4x4F? PlacementOf(PrcRedefinition redefinition, string name)
+    private Matrix4x4F? GetPlacement(PrcRedefinition redefinition, string name)
     {
         if (redefinition == null || redefinition.Reference.CoordinateSystemIndex < 0)
         {
@@ -503,7 +478,7 @@ public class PrcConverter : ConverterBase
             return from;
         }
 
-        var found = file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(id));
+        var found = _file.FileStructures.FirstOrDefault(candidate => candidate.Id.Equals(id));
         if (found == null)
         {
             Tell($"the {what} of product occurrence {name} lies in file structure {id}, which the file does not hold");
@@ -516,22 +491,21 @@ public class PrcConverter : ConverterBase
         List<PrcPendingNode> children, PrcPendingNode owner, Matrix4x4F world, PrcFilterPass passed)
     {
         var name = string.IsNullOrEmpty(part.Name) ? model.Name : part.Name;
-        var redefinition = RedefinitionOf(owner, structure, part.UniqueId);
-        if (!Shown(part, name, redefinition) || FilteredOut(owner, part, structure, true, passed, name, out var admitted))
+        var redefinition = FindRedefinition(owner, structure, part.UniqueId);
+        if (!IsShown(part, name, redefinition) || IsFilteredOut(owner, part, structure, true, passed, name, out var admitted))
         {
             return;
         }
 
-        var partStyle = StyleFrom(structure, part.Graphics, style, redefinition);
+        var partStyle = ChooseStyle(structure, part.Graphics, style, redefinition);
         foreach (var item in part.Items)
         {
-            children.Add(PrcPendingNode.ForItem(structure, item, model, partStyle, owner, world, admitted));
+            children.Add(PrcPendingNode.CreateForItem(structure, item, model, partStyle, owner, world, admitted));
         }
 
         if (part.Views.Count > 0)
         {
-            Tell("the views of the file are kept as their cameras, named after them; which annotations, linked items and " +
-                 "filters a view shows is left out - the scene data has no views");
+            Tell(ViewsKeptAsCameras);
         }
 
         AddViews(part.Views, structure, owner, model, world);
@@ -542,17 +516,17 @@ public class PrcConverter : ConverterBase
     {
         var item = node.Item;
         var structure = node.Structure;
-        var name = string.IsNullOrEmpty(item.Name) ? KindOf(item.Type) : item.Name;
-        var redefinition = RedefinitionOf(node.Owner, structure, item.UniqueId);
-        if (!Shown(item, name, redefinition) ||
-            FilteredOut(node.Owner, item, structure, item.Type == PrcTypes.Set, node.Admitted, name, out var admitted))
+        var name = string.IsNullOrEmpty(item.Name) ? GetKindName(item.Type) : item.Name;
+        var redefinition = FindRedefinition(node.Owner, structure, item.UniqueId);
+        if (!IsShown(item, name, redefinition) ||
+            IsFilteredOut(node.Owner, item, structure, item.Type == PrcTypes.Set, node.Admitted, name, out var admitted))
         {
             return;
         }
 
-        var model = SceneDataContainer.CreateMesh(node.Parent, AppearanceId($"{node.Parent.ID}/{name}"), name);
-        model.Extra = ExtraOf(item.Attributes);
-        if (PlacementOf(redefinition, name) is { } placement)
+        var model = SceneDataContainer.CreateMesh(node.Parent, CreateUniqueId($"{node.Parent.ID}/{name}"), name);
+        model.Extra = CreateExtra(item.Attributes);
+        if (GetPlacement(redefinition, name) is { } placement)
         {
             Place(model, placement);
         }
@@ -572,11 +546,11 @@ public class PrcConverter : ConverterBase
             }
         }
 
-        var style = StyleFrom(structure, item.Graphics, node.Style, redefinition);
+        var style = ChooseStyle(structure, item.Graphics, node.Style, redefinition);
         AddItemMeshes(model, structure, item, name, style);
         for (var index = item.Items.Count - 1; index >= 0; index--)
         {
-            pending.Push(PrcPendingNode.ForItem(structure, item.Items[index], model, style, node.Owner, node.ParentWorld, admitted));
+            pending.Push(PrcPendingNode.CreateForItem(structure, item.Items[index], model, style, node.Owner, node.ParentWorld, admitted));
         }
     }
 
@@ -587,7 +561,7 @@ public class PrcConverter : ConverterBase
         {
             var mesh = new Mesh(PrimitiveType.PointList) { Name = name };
             mesh.SetPoints(item.Points).SetIndices(Enumerable.Range(0, item.Points.Count));
-            mesh.MaterialID = MaterialOf(style);
+            mesh.MaterialID = GetMaterial(style);
             model.Meshes.Add(mesh);
             return;
         }
@@ -617,7 +591,7 @@ public class PrcConverter : ConverterBase
         switch (structure.Tessellations[item.TessellationIndex])
         {
             case Prc3DTessellation tessellation:
-                var groups = PrcMeshBuilder.Build3D(tessellation, face => FaceMaterial(structure, face, style), meshNotes);
+                var groups = PrcMeshBuilder.Build3D(tessellation, face => GetFaceMaterial(structure, face, style), _meshNotes);
                 foreach (var group in groups.OrderBy(entry => entry.Key, StringComparer.Ordinal))
                 {
                     if (group.Value.Indices.Count == 0)
@@ -625,7 +599,7 @@ public class PrcConverter : ConverterBase
                         continue;
                     }
 
-                    if (group.Value.HasTextureCoordinates && textureTransformations.TryGetValue(group.Key, out var transformation))
+                    if (group.Value.HasTextureCoordinates && _textureTransformations.TryGetValue(group.Key, out var transformation))
                     {
                         group.Value.TransformTextureCoordinates(transformation);
                     }
@@ -646,7 +620,7 @@ public class PrcConverter : ConverterBase
                 if (lines.Indices.Count > 0)
                 {
                     var mesh = ToMesh(lines, name);
-                    mesh.MaterialID = MaterialOf(style);
+                    mesh.MaterialID = GetMaterial(style);
                     model.Meshes.Add(mesh);
                 }
 
@@ -672,9 +646,9 @@ public class PrcConverter : ConverterBase
         foreach (var markup in data.Markups.Concat(data.Leaders))
         {
             var name = string.IsNullOrEmpty(markup.Name) ? (markup.Type == PrcTypes.Leader ? "Leader" : "Markup") : markup.Name;
-            var redefinition = RedefinitionOf(owner, structure, markup.UniqueId);
-            if (!Shown(markup, name, redefinition) || markup.TessellationIndex < 0 ||
-                FilteredOut(owner, markup, structure, false, passed, name, out _))
+            var redefinition = FindRedefinition(owner, structure, markup.UniqueId);
+            if (!IsShown(markup, name, redefinition) || markup.TessellationIndex < 0 ||
+                IsFilteredOut(owner, markup, structure, false, passed, name, out _))
             {
                 continue;
             }
@@ -686,9 +660,9 @@ public class PrcConverter : ConverterBase
                 continue;
             }
 
-            holder ??= SceneDataContainer.CreateMesh(model, AppearanceId(id + "/markups"), "Markups");
-            var node = SceneDataContainer.CreateMesh(holder, AppearanceId($"{holder.ID}/{name}"), name);
-            AddMarkupMeshes(node, structure, tessellation, StyleFrom(structure, markup.Graphics, style, redefinition), name);
+            holder ??= SceneDataContainer.CreateMesh(model, CreateUniqueId(id + "/markups"), "Markups");
+            var node = SceneDataContainer.CreateMesh(holder, CreateUniqueId($"{holder.ID}/{name}"), name);
+            AddMarkupMeshes(node, structure, tessellation, ChooseStyle(structure, markup.Graphics, style, redefinition), name);
         }
     }
 
@@ -701,10 +675,11 @@ public class PrcConverter : ConverterBase
             return;
         }
 
-        var start = ColorOfStyle(style);
-        var meshes = PrcMeshBuilder.BuildMarkup(markup, index => ColorAt(structure, index), start, meshNotes);
-        var material = MarkupMaterial();
-        foreach (var data in new[] { meshes.Lines, meshes.Triangles, meshes.Points })
+        var start = GetStyleColor(style);
+        var meshes = PrcMeshBuilder.BuildMarkup(markup, index => GetColor(structure, index), start, _meshNotes);
+        var material = GetMarkupMaterial();
+        PrcMeshData[] parts = [meshes.Lines, meshes.Triangles, meshes.Points];
+        foreach (var data in parts)
         {
             if (data.Indices.Count == 0)
             {
@@ -718,23 +693,24 @@ public class PrcConverter : ConverterBase
 
         if (meshes.Texts.Count > 0)
         {
-            model.MeshExtra = TextsOf(structure, meshes.Texts);
+            model.MeshExtra = CreateTextsExtra(structure, meshes.Texts);
             Tell("the texts of markups are kept on their nodes' mesh data - the string, its font, size and place - not drawn: " +
                  "the file names its fonts and does not hold them");
         }
     }
 
-    private static ExtraData TextsOf(PrcFileStructure structure, List<PrcMarkupText> texts)
+    private static ExtraData CreateTextsExtra(PrcFileStructure structure, List<PrcMarkupText> texts)
     {
-        var written = new List<Dictionary<string, object>>();
+        List<Dictionary<string, object>> written = [];
         foreach (var text in texts)
         {
+            double[] position = [text.Position.X, text.Position.Y, text.Position.Z];
             var entry = new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 ["text"] = text.Text ?? string.Empty,
                 ["width"] = text.Width,
                 ["height"] = text.Height,
-                ["position"] = new[] { text.Position.X, text.Position.Y, text.Position.Z }
+                ["position"] = position
             };
             if (text.FontIndex >= 0 && text.FontIndex < structure.Fonts.Count)
             {
@@ -765,9 +741,9 @@ public class PrcConverter : ConverterBase
         for (var index = 0; index < views.Count; index++)
         {
             var view = views[index];
-            var redefinition = RedefinitionOf(owner, structure, view.UniqueId);
-            var graphics = redefinition != null && redefinition.Reference.Graphics.Behavior != 0xFFFF ? redefinition.Reference.Graphics : view.Graphics;
-            if (graphics.IsRemoved || (graphics.Behavior != 0xFFFF && !graphics.IsShown) || view.Scene == null)
+            var redefinition = FindRedefinition(owner, structure, view.UniqueId);
+            var graphics = redefinition != null && redefinition.Reference.Graphics.HasBehavior ? redefinition.Reference.Graphics : view.Graphics;
+            if (graphics.IsRemoved || (graphics.HasBehavior && !graphics.IsShown) || view.Scene == null)
             {
                 continue;
             }
@@ -783,30 +759,30 @@ public class PrcConverter : ConverterBase
         var placement = scene.IsAbsolute ? Matrix4x4F.Identity : world;
         if (scene.Camera != null)
         {
-            AddCamera(scene.Camera, AppearanceId(id), name, placement);
+            AddCamera(scene.Camera, CreateUniqueId(id), name, placement);
         }
 
         if (withLights)
         {
             for (var index = 0; index < scene.Lights.Count; index++)
             {
-                AddLight(scene.Lights[index], structure, AppearanceId($"{id} light {index}"), name, placement);
+                AddLight(scene.Lights[index], structure, CreateUniqueId($"{id} light {index}"), name, placement);
             }
         }
 
         if (scene.ClippingPlaneCount > 0 || scene.BackgroundStyleIndex >= 0 || scene.RotationCenter != null)
         {
-            Tell("what scenes set beyond their lights and cameras - clipping planes, backgrounds, centres of rotation - is left out: " +
+            Tell("what scenes set beyond their lights and cameras - clipping planes, backgrounds, centers of rotation - is left out: " +
                  "the scene data has no place for it");
         }
     }
 
     private void AddCamera(PrcCamera source, string id, string name, Matrix4x4F world)
     {
-        var position = Transform(source.Position, world);
-        var target = Transform(source.LookAt, world);
+        var position = TransformPoint(source.Position, world);
+        var target = TransformPoint(source.LookAt, world);
         var up = Vector3F.TransformNormal(ToSingle(source.Up), world);
-        if (LookingAlong(position, target - position, up) is not { } placement || !placement.Decompose(out _, out var rotation, out var translation))
+        if (CreateLookAlongMatrix(position, target - position, up) is not { } placement || !placement.Decompose(out _, out var rotation, out var translation))
         {
             Tell($"camera {name} looks at the point it stands on; it is left out");
             return;
@@ -845,18 +821,18 @@ public class PrcConverter : ConverterBase
 
     private void AddLight(PrcLight source, PrcFileStructure structure, string id, string name, Matrix4x4F world)
     {
-        var position = Transform(source.Location, world);
+        var position = TransformPoint(source.Location, world);
         var direction = Vector3F.TransformNormal(ToSingle(source.Direction), world);
         var rotation = QuaternionF.Identity;
         if (source.Type is PrcTypes.DirectionalLight or PrcTypes.SpotLight &&
-            LookingAlong(position, direction, Vector3F.UnitZ) is { } placement && placement.Decompose(out _, out var turned, out _))
+            CreateLookAlongMatrix(position, direction, Vector3F.UnitZ) is { } placement && placement.Decompose(out _, out var turned, out _))
         {
             rotation = turned;
         }
 
-        var colour = source.Type == PrcTypes.AmbientLight && source.AmbientIndex >= 0
-            ? ColorVectorAt(structure, source.AmbientIndex, 1)
-            : ColorVectorAt(structure, source.DiffuseIndex, 1);
+        var color = source.Type == PrcTypes.AmbientLight && source.AmbientIndex >= 0
+            ? GetColorVector(structure, source.AmbientIndex, 1)
+            : GetColorVector(structure, source.DiffuseIndex, 1);
         SceneDataContainer.LightData[id] = new SceneData.Light
         {
             ID = id,
@@ -868,7 +844,7 @@ public class PrcConverter : ConverterBase
                 PrcTypes.SpotLight => LightType.Spot,
                 _ => LightType.Point
             },
-            Color = colour,
+            Color = color,
             Intensity = (float)source.Intensity,
             Position = position,
             Rotation = rotation,
@@ -881,7 +857,7 @@ public class PrcConverter : ConverterBase
         };
     }
 
-    private static Matrix4x4F? LookingAlong(Vector3F position, Vector3F forward, Vector3F up)
+    private static Matrix4x4F? CreateLookAlongMatrix(Vector3F position, Vector3F forward, Vector3F up)
     {
         if (forward.LengthSquared() < 1e-20f)
         {
@@ -904,7 +880,7 @@ public class PrcConverter : ConverterBase
             position.X, position.Y, position.Z, 1);
     }
 
-    private static Vector3F Transform(Vector3<double> point, Matrix4x4F world) => Vector3F.TransformCoordinate(ToSingle(point), world);
+    private static Vector3F TransformPoint(Vector3<double> point, Matrix4x4F world) => Vector3F.TransformCoordinate(ToSingle(point), world);
 
     private static Vector3F ToSingle(Vector3<double> vector) => new((float)vector.X, (float)vector.Y, (float)vector.Z);
 
@@ -930,14 +906,14 @@ public class PrcConverter : ConverterBase
         return mesh;
     }
 
-    private bool Shown(PrcTreeEntity entity, string name, PrcRedefinition redefinition)
+    private bool IsShown(PrcTreeEntity entity, string name, PrcRedefinition redefinition)
     {
-        if (redefinition != null && redefinition.Reference.Graphics.Behavior != 0xFFFF)
+        if (redefinition != null && redefinition.Reference.Graphics.HasBehavior)
         {
             var graphics = redefinition.Reference.Graphics;
             if (graphics.IsRemoved || !graphics.IsShown)
             {
-                TellOf("entities a product occurrence takes away or hides by reference are left out", name);
+                TellWithName("entities a product occurrence takes away or hides by reference are left out", name);
                 return false;
             }
 
@@ -946,13 +922,13 @@ public class PrcConverter : ConverterBase
 
         if (entity.Graphics.IsRemoved)
         {
-            TellOf("entities removed from the tree in the file are left out", name);
+            TellWithName("entities removed from the tree in the file are left out", name);
             return false;
         }
 
-        if (entity.Graphics.Behavior != 0xFFFF && !entity.Graphics.IsShown)
+        if (entity.Graphics.HasBehavior && !entity.Graphics.IsShown)
         {
-            TellOf("entities set not to be shown in the file are left out", name);
+            TellWithName("entities set not to be shown in the file are left out", name);
             return false;
         }
 
@@ -972,14 +948,7 @@ public class PrcConverter : ConverterBase
         model.Position = translation;
     }
 
-    private string AppearanceId(string id)
-    {
-        appearancesOf.TryGetValue(id, out var count);
-        appearancesOf[id] = ++count;
-        return count == 1 ? id : $"{id} ({count})";
-    }
-
-    private PrcStyleChoice StyleFrom(PrcFileStructure structure, PrcGraphics graphics, PrcStyleChoice inherited,
+    private PrcStyleChoice ChooseStyle(PrcFileStructure structure, PrcGraphics graphics, PrcStyleChoice inherited,
         PrcRedefinition redefinition)
     {
         if (redefinition != null && redefinition.Reference.Graphics.StyleIndex >= 0)
@@ -999,7 +968,7 @@ public class PrcConverter : ConverterBase
             : inherited;
     }
 
-    private string FaceMaterial(PrcFileStructure structure, PrcFaceTessellation face, PrcStyleChoice style)
+    private string GetFaceMaterial(PrcFileStructure structure, PrcFaceTessellation face, PrcStyleChoice style)
     {
         if (face.LineAttributes.Length > 1)
         {
@@ -1011,18 +980,18 @@ public class PrcConverter : ConverterBase
             var index = (int)face.LineAttributes[0] - 1;
             if (index >= 0 && index < structure.Styles.Count)
             {
-                return MaterialOf(new PrcStyleChoice(structure, index));
+                return GetMaterial(new PrcStyleChoice(structure, index));
             }
         }
 
-        return MaterialOf(style);
+        return GetMaterial(style);
     }
 
-    private string MaterialOf(PrcStyleChoice style)
+    private string GetMaterial(PrcStyleChoice style)
     {
         if (style == null)
         {
-            return DefaultMaterial();
+            return GetDefaultMaterial();
         }
 
         var id = style.MaterialId;
@@ -1050,9 +1019,9 @@ public class PrcConverter : ConverterBase
         }
         else
         {
-            var colour = ColorVectorAt(structure, definition.ColorOrMaterialIndex);
-            material.DiffuseColor = new Vector4F(colour, opacity);
-            material.AmbientColor = new Vector4F(colour, 1);
+            var color = GetColorVector(structure, definition.ColorOrMaterialIndex);
+            material.DiffuseColor = new Vector4F(color, opacity);
+            material.AmbientColor = new Vector4F(color, 1);
         }
 
         material.Transparency = material.DiffuseColor.W;
@@ -1065,8 +1034,8 @@ public class PrcConverter : ConverterBase
     {
         if (index < 0 || index >= structure.Materials.Count)
         {
-            Tell($"{id} names material {index}, which the globals do not hold; it is drawn grey");
-            material.DiffuseColor = new Vector4F(DefaultGrey, DefaultGrey, DefaultGrey, opacity);
+            Tell($"{id} names material {index}, which the globals do not hold; it is drawn gray");
+            material.DiffuseColor = new Vector4F(DefaultGray, DefaultGray, DefaultGray, opacity);
             return;
         }
 
@@ -1081,10 +1050,10 @@ public class PrcConverter : ConverterBase
         }
 
         material.Name = string.IsNullOrEmpty(definition.Name) ? material.Name : definition.Name;
-        material.AmbientColor = new Vector4F(ColorVectorAt(structure, definition.AmbientIndex), (float)definition.AmbientAlpha);
-        material.DiffuseColor = new Vector4F(ColorVectorAt(structure, definition.DiffuseIndex), (float)definition.DiffuseAlpha * opacity);
-        material.SpecularColor = new Vector4F(ColorVectorAt(structure, definition.SpecularIndex, 0), (float)definition.SpecularAlpha);
-        var emissive = ColorVectorAt(structure, definition.EmissiveIndex, 0);
+        material.AmbientColor = new Vector4F(GetColorVector(structure, definition.AmbientIndex), (float)definition.AmbientAlpha);
+        material.DiffuseColor = new Vector4F(GetColorVector(structure, definition.DiffuseIndex), (float)definition.DiffuseAlpha * opacity);
+        material.SpecularColor = new Vector4F(GetColorVector(structure, definition.SpecularIndex, 0), (float)definition.SpecularAlpha);
+        var emissive = GetColorVector(structure, definition.EmissiveIndex, 0);
         material.Emission = new Vector4F(emissive, (float)definition.EmissiveAlpha);
         material.EmissiveFactor = emissive;
         material.Shininess = (float)definition.Shininess;
@@ -1114,7 +1083,7 @@ public class PrcConverter : ConverterBase
             }
             else
             {
-                Tell($"textures laid other than as the diffuse colour (mapping attributes " +
+                Tell($"textures laid other than as the diffuse color (mapping attributes " +
                      $"0x{structure.TextureDefinitions[definitionIndex].MappingAttributes:X}: bump, opacity, reflection) are left out");
             }
 
@@ -1130,7 +1099,7 @@ public class PrcConverter : ConverterBase
         }
 
         var texture = structure.TextureDefinitions[chosen.TextureDefinitionIndex];
-        var image = ImageOf(structure, texture.PictureIndex);
+        var image = GetImage(structure, texture.PictureIndex);
         if (image == null)
         {
             return;
@@ -1149,7 +1118,7 @@ public class PrcConverter : ConverterBase
 
         if (texture.Function is PrcTextureDefinition.FunctionBlend or PrcTextureDefinition.FunctionDecal)
         {
-            Tell("textures blended with a colour or laid as decals are laid multiplying their material's colour");
+            Tell("textures blended with a color or laid as decals are laid multiplying their material's color");
         }
 
         var textureId = $"texture {structure.Index}/{chosen.TextureDefinitionIndex}";
@@ -1160,7 +1129,7 @@ public class PrcConverter : ConverterBase
                 ID = textureId,
                 Name = string.IsNullOrEmpty(texture.Name) ? textureId : texture.Name,
                 Image = image,
-                Sampler = SamplerOf(texture)
+                Sampler = GetSampler(texture)
             };
         }
 
@@ -1174,11 +1143,11 @@ public class PrcConverter : ConverterBase
         if (texture.Transformation != null && texture.Transformation.Matrix != Matrix4x4<double>.Identity ||
             texture.Transformation is { FlipS: true } or { FlipT: true })
         {
-            textureTransformations[id] = texture.Transformation;
+            _textureTransformations[id] = texture.Transformation;
         }
     }
 
-    private string ImageOf(PrcFileStructure structure, int pictureIndex)
+    private string GetImage(PrcFileStructure structure, int pictureIndex)
     {
         var id = $"picture {structure.Index}/{pictureIndex}";
         if (SceneDataContainer.Images.ContainsKey(id))
@@ -1222,18 +1191,18 @@ public class PrcConverter : ConverterBase
         return id;
     }
 
-    private string SamplerOf(PrcTextureDefinition texture)
+    private string GetSampler(PrcTextureDefinition texture)
     {
         var id = $"sampler {texture.WrapS.ToString(CultureInfo.InvariantCulture)}/{texture.WrapT.ToString(CultureInfo.InvariantCulture)}";
         if (!SceneDataContainer.Samplers.ContainsKey(id))
         {
-            SceneDataContainer.Samplers[id] = new SceneData.Sampler { ID = id, Name = id, WrapS = Wrap(texture.WrapS), WrapT = Wrap(texture.WrapT) };
+            SceneDataContainer.Samplers[id] = new SceneData.Sampler { ID = id, Name = id, WrapS = ConvertWrap(texture.WrapS), WrapT = ConvertWrap(texture.WrapT) };
         }
 
         return id;
     }
 
-    private TextureWrap Wrap(int mode)
+    private TextureWrap ConvertWrap(int mode)
     {
         switch (mode)
         {
@@ -1242,14 +1211,14 @@ public class PrcConverter : ConverterBase
             case PrcTextureDefinition.WrapClamp or PrcTextureDefinition.WrapClampToEdge:
                 return TextureWrap.ClampToEdge;
             case PrcTextureDefinition.WrapClampToBorder:
-                Tell("textures clamped to their border colour are clamped to their edge");
+                Tell("textures clamped to their border color are clamped to their edge");
                 return TextureWrap.ClampToEdge;
             default:
                 return TextureWrap.Repeat;
         }
     }
 
-    private string DefaultMaterial()
+    private string GetDefaultMaterial()
     {
         if (!SceneDataContainer.Materials.ContainsKey(DefaultMaterialId))
         {
@@ -1257,8 +1226,8 @@ public class PrcConverter : ConverterBase
             {
                 ID = DefaultMaterialId,
                 Name = "Default",
-                AmbientColor = new Vector4F(DefaultGrey, DefaultGrey, DefaultGrey, 1),
-                DiffuseColor = new Vector4F(DefaultGrey, DefaultGrey, DefaultGrey, 1),
+                AmbientColor = new Vector4F(DefaultGray, DefaultGray, DefaultGray, 1),
+                DiffuseColor = new Vector4F(DefaultGray, DefaultGray, DefaultGray, 1),
                 SpecularColor = new Vector4F(0, 0, 0, 1),
                 Emission = new Vector4F(0, 0, 0, 1),
                 Transparency = 1,
@@ -1269,7 +1238,7 @@ public class PrcConverter : ConverterBase
         return DefaultMaterialId;
     }
 
-    private string MarkupMaterial()
+    private string GetMarkupMaterial()
     {
         const string id = "markup";
         if (!SceneDataContainer.Materials.ContainsKey(id))
@@ -1291,7 +1260,7 @@ public class PrcConverter : ConverterBase
         return id;
     }
 
-    private Color ColorOfStyle(PrcStyleChoice style)
+    private Color GetStyleColor(PrcStyleChoice style)
     {
         if (style == null)
         {
@@ -1304,16 +1273,16 @@ public class PrcConverter : ConverterBase
         {
             var index = definition.ColorOrMaterialIndex;
             return index >= 0 && index < structure.Materials.Count
-                ? new Color(ColorVectorAt(structure, structure.Materials[index].DiffuseIndex))
+                ? new Color(GetColorVector(structure, structure.Materials[index].DiffuseIndex))
                 : new Color(0, 0, 0, 255);
         }
 
-        return new Color(ColorVectorAt(structure, definition.ColorOrMaterialIndex));
+        return new Color(GetColorVector(structure, definition.ColorOrMaterialIndex));
     }
 
-    private Color ColorAt(PrcFileStructure structure, uint index) => new(ColorVectorAt(structure, (int)index));
+    private Color GetColor(PrcFileStructure structure, uint index) => new(GetColorVector(structure, (int)index));
 
-    private Vector3F ColorVectorAt(PrcFileStructure structure, int index, float missing = DefaultGrey)
+    private Vector3F GetColorVector(PrcFileStructure structure, int index, float missing = DefaultGray)
     {
         if (index < 0)
         {
@@ -1322,15 +1291,15 @@ public class PrcConverter : ConverterBase
 
         if (index % 3 != 0 || index / 3 >= structure.Colors.Count)
         {
-            Tell($"file structure {structure.Index} names colour component {index} of its {structure.Colors.Count} colours; it is drawn grey");
-            return new Vector3F(DefaultGrey, DefaultGrey, DefaultGrey);
+            Tell($"file structure {structure.Index} names color component {index} of its {structure.Colors.Count} colors; it is drawn gray");
+            return new Vector3F(DefaultGray, DefaultGray, DefaultGray);
         }
 
-        var colour = structure.Colors[index / 3];
-        return new Vector3F((float)colour.X, (float)colour.Y, (float)colour.Z);
+        var color = structure.Colors[index / 3];
+        return new Vector3F((float)color.X, (float)color.Y, (float)color.Z);
     }
 
-    private static string KindOf(uint type) => type switch
+    private static string GetKindName(uint type) => type switch
     {
         PrcTypes.BrepModel => "Brep model",
         PrcTypes.RepresentationCurve => "Curve",
@@ -1344,7 +1313,7 @@ public class PrcConverter : ConverterBase
         _ => "Item"
     };
 
-    private static ExtraData ExtraOf(Dictionary<string, string> attributes)
+    private static ExtraData CreateExtra(Dictionary<string, string> attributes)
     {
         if (attributes == null || attributes.Count == 0)
         {
@@ -1353,196 +1322,4 @@ public class PrcConverter : ConverterBase
 
         return new ExtraData { Data = JsonSerializer.Serialize(attributes) };
     }
-}
-
-/// <summary>A node waiting to be placed: a product occurrence or a representation item, the file structure it lies
-/// in, the model it goes under, the style it inherits, the occurrence it hangs under, where its parent stands in the
-/// world and the inclusive filters that kept an entity above it.</summary>
-internal sealed class PrcPendingNode
-{
-    private PrcPendingNode(PrcFileStructure structure, int occurrence, PrcRepresentationItem item, SceneData.Model parent,
-        PrcStyleChoice style, PrcPendingNode owner, Matrix4x4F parentWorld, PrcFilterPass admitted)
-    {
-        Structure = structure;
-        Occurrence = occurrence;
-        Item = item;
-        Parent = parent;
-        Style = style;
-        Owner = owner;
-        ParentWorld = parentWorld;
-        Admitted = admitted;
-    }
-
-    internal PrcFileStructure Structure { get; }
-
-    /// <summary>The occurrence's index in its file structure, as the file gives it; -1 for a representation item.</summary>
-    internal int Occurrence { get; }
-
-    internal PrcRepresentationItem Item { get; }
-
-    internal SceneData.Model Parent { get; }
-
-    /// <summary>The style the node inherits; null for none.</summary>
-    internal PrcStyleChoice Style { get; }
-
-    /// <summary>The occurrence node this one was found under; null at the root.</summary>
-    internal PrcPendingNode Owner { get; }
-
-    /// <summary>Where the model the node goes under stands in the world, as a row-vector matrix.</summary>
-    internal Matrix4x4F ParentWorld { get; }
-
-    /// <summary>The inclusive filters an entity above the node is named by; null for none.</summary>
-    internal PrcFilterPass Admitted { get; }
-
-    /// <summary>For an occurrence node once expanded, what it redefines and filters under it; null before.</summary>
-    internal PrcOccurrenceContext Context { get; set; }
-
-    internal static PrcPendingNode ForOccurrence(PrcFileStructure structure, int occurrence, SceneData.Model parent,
-        PrcStyleChoice style, PrcPendingNode owner, Matrix4x4F parentWorld, PrcFilterPass admitted) =>
-        new(structure, occurrence, null, parent, style, owner, parentWorld, admitted);
-
-    internal static PrcPendingNode ForItem(PrcFileStructure structure, PrcRepresentationItem item, SceneData.Model parent,
-        PrcStyleChoice style, PrcPendingNode owner, Matrix4x4F parentWorld, PrcFilterPass admitted) =>
-        new(structure, -1, item, parent, style, owner, parentWorld, admitted);
-
-    /// <summary>Whether an occurrence above this node is <paramref name="occurrence"/> of <paramref name="structure"/>:
-    /// the tree would then be its own ancestor.</summary>
-    internal bool HasAncestor(PrcFileStructure structure, int occurrence)
-    {
-        for (var node = Owner; node != null; node = node.Owner)
-        {
-            if (node.Structure == structure && node.Occurrence == occurrence)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-}
-
-/// <summary>What a product occurrence does to the entities under it: their redefinitions by reference, by the entity
-/// each is of, and the filters it shows them by.</summary>
-internal sealed class PrcOccurrenceContext
-{
-    internal Dictionary<PrcEntityKey, PrcRedefinition> Redefinitions { get; } = new();
-
-    internal List<PrcActiveFilter> Filters { get; } = [];
-}
-
-/// <summary>An entity reference of a product occurrence with the file structure whose globals its style and
-/// coordinate system index.</summary>
-internal sealed class PrcRedefinition
-{
-    internal PrcRedefinition(PrcEntityReference reference, PrcFileStructure structure)
-    {
-        Reference = reference;
-        Structure = structure;
-    }
-
-    internal PrcEntityReference Reference { get; }
-
-    internal PrcFileStructure Structure { get; }
-}
-
-/// <summary>A filter a product occurrence applies, with the layers and entities it names made ready to look up.</summary>
-internal sealed class PrcActiveFilter
-{
-    internal PrcActiveFilter(PrcFilter filter, PrcFileStructure structure)
-    {
-        Filter = filter;
-        Layers = [.. filter.Layers];
-        foreach (var reference in filter.Entities)
-        {
-            if (reference.Target is { IsTopology: false } target)
-            {
-                Entities.Add(new PrcEntityKey(target.FileStructure ?? structure.Id, target.UniqueId));
-            }
-        }
-    }
-
-    internal PrcFilter Filter { get; }
-
-    internal HashSet<uint> Layers { get; }
-
-    internal HashSet<PrcEntityKey> Entities { get; } = [];
-}
-
-/// <summary>An inclusive filter an entity above a node is named by, and the ones before it.</summary>
-internal sealed class PrcFilterPass
-{
-    internal PrcFilterPass(PrcFilter filter, PrcFilterPass previous)
-    {
-        Filter = filter;
-        Previous = previous;
-    }
-
-    internal PrcFilter Filter { get; }
-
-    internal PrcFilterPass Previous { get; }
-
-    internal static bool Passes(PrcFilterPass pass, PrcFilter filter)
-    {
-        for (var current = pass; current != null; current = current.Previous)
-        {
-            if (current.Filter == filter)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-}
-
-/// <summary>An entity as references name it: the file structure it lies in and its unique identifier there.</summary>
-internal readonly struct PrcEntityKey : IEquatable<PrcEntityKey>
-{
-    internal PrcEntityKey(PrcUniqueId fileStructure, uint uniqueId)
-    {
-        FileStructure = fileStructure;
-        UniqueId = uniqueId;
-    }
-
-    internal PrcUniqueId FileStructure { get; }
-
-    internal uint UniqueId { get; }
-
-    public bool Equals(PrcEntityKey other) => UniqueId == other.UniqueId && Equals(FileStructure, other.FileStructure);
-
-    public override bool Equals(object other) => other is PrcEntityKey key && Equals(key);
-
-    public override int GetHashCode() => HashCode.Combine(FileStructure, UniqueId);
-}
-
-/// <summary>A product occurrence by the file structure it lies in and its index there.</summary>
-internal readonly struct PrcOccurrenceSlot
-{
-    internal PrcOccurrenceSlot(PrcFileStructure structure, int index)
-    {
-        Structure = structure;
-        Index = index;
-    }
-
-    internal PrcFileStructure Structure { get; }
-
-    internal int Index { get; }
-}
-
-/// <summary>A style of a file structure's globals, which a mesh is drawn by.</summary>
-internal sealed class PrcStyleChoice
-{
-    internal PrcStyleChoice(PrcFileStructure structure, int index)
-    {
-        Structure = structure;
-        Index = index;
-    }
-
-    internal PrcFileStructure Structure { get; }
-
-    internal int Index { get; }
-
-    internal PrcStyle Style => Structure.Styles[Index];
-
-    internal string MaterialId => $"style {Structure.Index}/{Index}";
 }

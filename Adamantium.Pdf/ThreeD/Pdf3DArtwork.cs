@@ -5,10 +5,8 @@ using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.ThreeD;
 
-/// <summary>The 3D artwork of a 3D annotation (ISO 32000-1, 13.6): the model's stream - the annotation's own, or the
-/// one another annotation's <c>3DRef</c> names - its format, its views and which one opens, when it comes to life and in
-/// what part of the annotation. The model itself is a file of its own format (<see cref="Format"/>), handed out as bytes
-/// (<see cref="ReadData"/>); the annotation's appearance is its poster.</summary>
+/// <summary>The 3D artwork of a 3D annotation (ISO 32000-1, 13.6): the model's stream and format, its views, activation
+/// and box; the model itself comes out as bytes (<see cref="ReadData"/>).</summary>
 public sealed class Pdf3DArtwork
 {
     private const string ArtworkKey = "3DD";
@@ -82,7 +80,7 @@ public sealed class Pdf3DArtwork
             return null;
         }
 
-        var views = new List<Pdf3DView>();
+        List<Pdf3DView> views = [];
         if (document.Resolve(stream.Dictionary[ViewsKey]) is PdfArray listed)
         {
             foreach (var item in listed)
@@ -94,13 +92,13 @@ public sealed class Pdf3DArtwork
             }
         }
 
-        var streamDefault = Pick(stream.Dictionary[StreamDefaultViewKey], views, null, document);
+        var streamDefault = PickView(stream.Dictionary[StreamDefaultViewKey], views, null, document);
         return new Pdf3DArtwork(document, stream)
         {
             Format = PdfValues.Name(stream.Dictionary[SubtypeKey], document),
             IsShared = shared,
             Views = views,
-            DefaultView = Pick(annotation[DefaultViewKey], views, streamDefault, document) ?? streamDefault ??
+            DefaultView = PickView(annotation[DefaultViewKey], views, streamDefault, document) ?? streamDefault ??
                           (views.Count > 0 ? views[0] : null),
             Activation = Pdf3DActivation.From(annotation[ActivationKey], document),
             ViewBox = PdfRectangle.From(annotation[ViewBoxKey], document),
@@ -108,7 +106,7 @@ public sealed class Pdf3DArtwork
         };
     }
 
-    private static Pdf3DView Pick(PdfObject value, List<Pdf3DView> views, Pdf3DView streamDefault,
+    private static Pdf3DView PickView(PdfObject value, List<Pdf3DView> views, Pdf3DView streamDefault,
         IPdfObjectResolver resolver)
     {
         switch (resolver.Resolve(value))

@@ -26,7 +26,8 @@ internal static class PrcTessellationReader
     /// <summary>The flag a one-normal fan or stripe count carries when the whole run has a single normal.</summary>
     internal const uint SingleNormal = 0x40000000;
 
-    internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
+    /// <summary>Reads the tessellations in <paramref name="bits"/> into <paramref name="structure"/>.</summary>
+    internal static void Read(PrcBitReader bits, PrcFileStructure structure, ImportNotes notes)
     {
         var reader = new PrcEntityReader(bits, structure.Schema, notes) { AuthoringVersion = structure.AuthoringVersion };
         reader.Expect(PrcTypes.FileStructureTessellation, "the tessellation section");
@@ -57,12 +58,12 @@ internal static class PrcTessellationReader
             }
         }
 
-        reader.EndOf(PrcTypes.FileStructureTessellation);
+        reader.SkipNewData(PrcTypes.FileStructureTessellation);
         reader.SkipUserData();
         reader.CheckEnd();
     }
 
-    /// <summary>A PRC_TYPE_TESS_Markup, its type code read: its coordinates, codes, texts, label and behaviour.</summary>
+    /// <summary>A PRC_TYPE_TESS_Markup, its type code read: its coordinates, codes, texts, label and behavior.</summary>
     internal static PrcMarkupTessellation ReadMarkup(PrcEntityReader reader)
     {
         var bits = reader.Bits;
@@ -77,7 +78,7 @@ internal static class PrcTessellationReader
 
         markup.Label = bits.ReadString();
         markup.Behavior = bits.ReadCharacter();
-        reader.EndOf(PrcTypes.TessellationMarkup);
+        reader.SkipNewData(PrcTypes.TessellationMarkup);
         return markup;
     }
 
@@ -86,7 +87,7 @@ internal static class PrcTessellationReader
         var bits = reader.Bits;
         bits.ReadBoolean();
         var coordinates = ReadDoubles(bits, "coordinates");
-        reader.EndOf(PrcTypes.TessellationBase);
+        reader.SkipNewData(PrcTypes.TessellationBase);
         return coordinates;
     }
 
@@ -115,7 +116,7 @@ internal static class PrcTessellationReader
         }
 
         tessellation.TextureCoordinates = ReadDoubles(bits, "texture coordinates");
-        reader.EndOf(PrcTypes.Tessellation3D);
+        reader.SkipNewData(PrcTypes.Tessellation3D);
         return tessellation;
     }
 
@@ -142,7 +143,7 @@ internal static class PrcTessellationReader
             bits.ReadUnsignedInteger();
         }
 
-        reader.EndOf(PrcTypes.TessellationFace);
+        reader.SkipNewData(PrcTypes.TessellationFace);
         return face;
     }
 
@@ -157,8 +158,8 @@ internal static class PrcTessellationReader
             var vertices = 0;
             for (var index = 0; index < wire.WireIndices.Length;)
             {
-                var count = (int)(wire.WireIndices[index] & 0x0FFFFFFF);
-                vertices += count + ((wire.WireIndices[index] & 0x10000000) != 0 ? 1 : 0);
+                var count = (int)(wire.WireIndices[index] & PrcMeshBuilder.WireCountMask);
+                vertices += count + ((wire.WireIndices[index] & PrcMeshBuilder.IsClosing) != 0 ? 1 : 0);
                 index += count + 1;
             }
 
@@ -168,10 +169,10 @@ internal static class PrcTessellationReader
             }
 
             ReadVertexColors(bits, vertices);
-            reader.Tell("the vertex colours of wire tessellations are left out");
+            reader.Tell("the vertex colors of wire tessellations are left out");
         }
 
-        reader.EndOf(PrcTypes.Tessellation3DWire);
+        reader.SkipNewData(PrcTypes.Tessellation3DWire);
         return wire;
     }
 
@@ -208,7 +209,7 @@ internal static class PrcTessellationReader
     {
         if (at >= sizes.Length)
         {
-            throw reader.Bits.Corrupt("a face tessellation has fewer counts than its kinds of triangulation need");
+            throw reader.Bits.CreateCorruptException("a face tessellation has fewer counts than its kinds of triangulation need");
         }
 
         return sizes[at++];
@@ -220,11 +221,11 @@ internal static class PrcTessellationReader
         var perSegment = bits.ReadBoolean();
         if (bits.ReadBoolean())
         {
-            throw bits.Corrupt("vertex colours are stored in the optimised form the specification reserves for future use");
+            throw bits.CreateCorruptException("vertex colors are stored in the optimized form the specification reserves for future use");
         }
 
         var count = perSegment ? vertices / 2 : vertices;
-        bits.CheckCount((ulong)count, 1, "vertex colours");
+        bits.CheckCount((ulong)count, 1, "vertex colors");
         var colors = new List<Color>(count);
         for (var index = 0; index < count; index++)
         {

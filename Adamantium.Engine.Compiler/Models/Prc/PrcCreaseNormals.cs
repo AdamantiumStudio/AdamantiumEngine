@@ -6,22 +6,19 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>Works out the normals a 3D tessellation asks to be recalculated by its crease angle (must_recalculate_normals,
-/// PRC_TYPE_TESS_3D): where triangles meet at a point, those whose normals are within the crease angle of one another
-/// share a normal there, and past it each keeps its own - the edge between them is drawn sharp. A corner's normal is the
-/// normals of its own triangle and of every triangle at its point within the crease angle of it, each weighted by the
-/// angle it makes at the point. Points are met by their place, so faces and meshes of one tessellation smooth into one
-/// another. A crease angle below zero shares no normal: every triangle is drawn flat.</summary>
+/// <summary>Works out recalculated normals: triangles meeting within the crease angle share a normal, past it the edge
+/// stays sharp.</summary>
 internal static class PrcCreaseNormals
 {
-    private const double SmallestLength = 1e-20;
     private const double StraightAngle = 180;
 
+    /// <summary>Sets the corner normals of the triangle meshes by <paramref name="creaseAngle"/>, in degrees; below zero
+    /// every triangle stays flat.</summary>
     internal static void Apply(IEnumerable<PrcMeshData> meshes, double creaseAngle)
     {
         var triangleMeshes = meshes.Where(mesh => mesh.Topology == PrimitiveType.TriangleList).ToList();
         var limit = creaseAngle < 0 ? double.PositiveInfinity : Math.Cos(Math.Min(creaseAngle, StraightAngle) * Math.PI / StraightAngle);
-        var corners = new List<PrcCreaseCorner>();
+        List<PrcCreaseCorner> corners = [];
         var around = new Dictionary<Vector3<double>, List<int>>();
         foreach (var mesh in triangleMeshes)
         {
@@ -30,10 +27,15 @@ internal static class PrcCreaseNormals
                 var first = mesh.Points[mesh.Indices[start]];
                 var second = mesh.Points[mesh.Indices[start + 1]];
                 var third = mesh.Points[mesh.Indices[start + 2]];
-                var normal = Unit(Vector3<double>.Cross(second - first, third - first));
-                AddCorner(corners, around, first, normal, AngleAt(first, second, third));
-                AddCorner(corners, around, second, normal, AngleAt(second, third, first));
-                AddCorner(corners, around, third, normal, AngleAt(third, first, second));
+                var normal = Vector3<double>.Normalize(Vector3<double>.Cross(second - first, third - first));
+                if (!normal.IsNormalized)
+                {
+                    normal = Vector3<double>.Zero;
+                }
+
+                AddCorner(corners, around, first, normal, GetAngleAt(first, second, third));
+                AddCorner(corners, around, second, normal, GetAngleAt(second, third, first));
+                AddCorner(corners, around, third, normal, GetAngleAt(third, first, second));
             }
         }
 
@@ -53,8 +55,8 @@ internal static class PrcCreaseNormals
                     }
                 }
 
-                var smooth = Unit(sum);
-                var chosen = smooth == Vector3<double>.Zero ? own : smooth;
+                var smooth = Vector3<double>.Normalize(sum);
+                var chosen = smooth.IsNormalized ? smooth : own;
                 normals[corner] = new Vector3F((float)chosen.X, (float)chosen.Y, (float)chosen.Z);
             }
         }
@@ -83,31 +85,15 @@ internal static class PrcCreaseNormals
         corners.Add(new PrcCreaseCorner(normal, angle));
     }
 
-    private static double AngleAt(Vector3<double> point, Vector3<double> next, Vector3<double> previous)
+    private static double GetAngleAt(Vector3<double> point, Vector3<double> next, Vector3<double> previous)
     {
-        var toNext = Unit(next - point);
-        var toPrevious = Unit(previous - point);
+        var toNext = Vector3<double>.Normalize(next - point);
+        var toPrevious = Vector3<double>.Normalize(previous - point);
+        if (!toNext.IsNormalized || !toPrevious.IsNormalized)
+        {
+            return 0;
+        }
+
         return Math.Acos(Math.Clamp(Vector3<double>.Dot(toNext, toPrevious), -1, 1));
     }
-
-    private static Vector3<double> Unit(Vector3<double> vector)
-    {
-        var length = Math.Sqrt(Vector3<double>.Dot(vector, vector));
-        return length < SmallestLength ? Vector3<double>.Zero : vector / length;
-    }
-}
-
-/// <summary>A corner of a triangle as the crease normals see it: its triangle's unit normal - zero for a triangle of no
-/// area - and the angle the triangle makes at it, in radians.</summary>
-internal readonly struct PrcCreaseCorner
-{
-    internal PrcCreaseCorner(Vector3<double> normal, double angle)
-    {
-        Normal = normal;
-        Angle = angle;
-    }
-
-    internal Vector3<double> Normal { get; }
-
-    internal double Angle { get; }
 }

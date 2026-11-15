@@ -2,17 +2,12 @@ using System.Collections.Generic;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>Reads a file structure's tree section (PRC_TYPE_ASM_FileStructureTree): the part definitions with their
-/// representation items, the product occurrences with the entities they redefine by reference, their filters and scene
-/// display parameters, the markups and views of both, and the file structure's internal data naming the root
-/// occurrence. Sets of representation items and sets of annotations nest; they are read with stacks of their own.
-/// Where the specification's tables leave the layout open, it is the one CAD writers' files have: a leader carries a
-/// flag and a typed reference for its linked item and for its next leader rather than arrays; a markup linked item is an
-/// entity reference, a flag with a typed reference to the occurrence it belongs to, and four flags; the root occurrence's
-/// index is stored plus one.</summary>
+/// <summary>Reads a file structure's tree section (PRC_TYPE_ASM_FileStructureTree): part definitions and product
+/// occurrences with their markups, views, filters and scenes.</summary>
 internal static class PrcTreeReader
 {
-    internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
+    /// <summary>Reads the tree in <paramref name="bits"/> into <paramref name="structure"/>.</summary>
+    internal static void Read(PrcBitReader bits, PrcFileStructure structure, ImportNotes notes)
     {
         var reader = new PrcEntityReader(bits, structure.Schema, notes) { AuthoringVersion = structure.AuthoringVersion };
         reader.Expect(PrcTypes.FileStructureTree, "the tree");
@@ -49,8 +44,8 @@ internal static class PrcTreeReader
         reader.ReadContentPrcBase(PrcTypes.FileStructure);
         bits.ReadUnsignedInteger();
         structure.RootIndex = (int)bits.ReadUnsignedInteger() - 1;
-        reader.EndOf(PrcTypes.FileStructure);
-        reader.EndOf(PrcTypes.FileStructureTree);
+        reader.SkipNewData(PrcTypes.FileStructure);
+        reader.SkipNewData(PrcTypes.FileStructureTree);
         reader.SkipUserData();
         reader.CheckEnd();
     }
@@ -70,7 +65,7 @@ internal static class PrcTreeReader
             part.Views.Add(reader.ReadView());
         }
 
-        reader.EndOf(PrcTypes.PartDefinition);
+        reader.SkipNewData(PrcTypes.PartDefinition);
         reader.SkipUserData();
         return part;
     }
@@ -159,7 +154,7 @@ internal static class PrcTreeReader
             occurrence.SceneDisplayParameters.Add(reader.ReadSceneDisplayParameters());
         }
 
-        reader.EndOf(PrcTypes.ProductOccurrence);
+        reader.SkipNewData(PrcTypes.ProductOccurrence);
         reader.SkipUserData();
         return occurrence;
     }
@@ -179,7 +174,7 @@ internal static class PrcTreeReader
                 pending.Pop();
                 if (level.Set != null)
                 {
-                    reader.EndOf(PrcTypes.Set);
+                    reader.SkipNewData(PrcTypes.Set);
                     reader.SkipUserData();
                 }
 
@@ -222,7 +217,7 @@ internal static class PrcTreeReader
         reader.ReadPrcBaseWithGraphics(item);
         item.CoordinateSystemIndex = (int)reader.Bits.ReadUnsignedInteger() - 1;
         item.TessellationIndex = (int)reader.Bits.ReadUnsignedInteger() - 1;
-        reader.EndOf(PrcTypes.RepresentationItemContent);
+        reader.SkipNewData(PrcTypes.RepresentationItemContent);
     }
 
     private static void ReadRepresentationItemRest(PrcEntityReader reader, PrcRepresentationItem item)
@@ -261,7 +256,7 @@ internal static class PrcTreeReader
                 break;
         }
 
-        reader.EndOf(item.Type);
+        reader.SkipNewData(item.Type);
         reader.SkipUserData();
     }
 
@@ -292,7 +287,7 @@ internal static class PrcTreeReader
                 bits.ReadBoolean();
             }
 
-            reader.EndOf(PrcTypes.MarkupLinkedItem);
+            reader.SkipNewData(PrcTypes.MarkupLinkedItem);
             reader.SkipUserData();
         }
 
@@ -361,7 +356,7 @@ internal static class PrcTreeReader
             SubType = subType,
             TessellationIndex = (int)bits.ReadUnsignedInteger() - 1
         };
-        reader.EndOf(type);
+        reader.SkipNewData(type);
         reader.SkipUserData();
         return markup;
     }
@@ -379,7 +374,7 @@ internal static class PrcTreeReader
                 pending.Pop();
                 if (level.InSet)
                 {
-                    reader.EndOf(PrcTypes.AnnotationSet);
+                    reader.SkipNewData(PrcTypes.AnnotationSet);
                     reader.SkipUserData();
                 }
 
@@ -393,7 +388,7 @@ internal static class PrcTreeReader
                 case PrcTypes.AnnotationItem:
                     reader.SkipPrcBaseWithGraphics();
                     reader.ReadReferenceUniqueIdentifier();
-                    reader.EndOf(type);
+                    reader.SkipNewData(type);
                     reader.SkipUserData();
                     break;
                 case PrcTypes.AnnotationSet:
@@ -408,7 +403,7 @@ internal static class PrcTreeReader
                         reader.ReadReferenceUniqueIdentifier();
                     }
 
-                    reader.EndOf(type);
+                    reader.SkipNewData(type);
                     reader.SkipUserData();
                     break;
                 default:
@@ -417,36 +412,4 @@ internal static class PrcTreeReader
             }
         }
     }
-}
-
-/// <summary>The representation items still to be read at one level of nesting: the set they belong to (null at the
-/// top), the list they go into, and how many are left.</summary>
-internal sealed class PrcPendingItems
-{
-    internal PrcPendingItems(PrcRepresentationItem set, List<PrcRepresentationItem> into, int remaining)
-    {
-        Set = set;
-        Into = into;
-        Remaining = remaining;
-    }
-
-    internal PrcRepresentationItem Set { get; }
-
-    internal List<PrcRepresentationItem> Into { get; }
-
-    internal int Remaining { get; set; }
-}
-
-/// <summary>The annotation entities still to be read at one level of nesting, and whether they are a set's.</summary>
-internal sealed class PrcPendingAnnotations
-{
-    internal PrcPendingAnnotations(int remaining, bool inSet)
-    {
-        Remaining = remaining;
-        InSet = inSet;
-    }
-
-    internal int Remaining { get; set; }
-
-    internal bool InSet { get; }
 }

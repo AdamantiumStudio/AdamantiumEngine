@@ -4,15 +4,13 @@ using System.IO;
 
 namespace Adamantium.Engine.Compiler.Models.U3d;
 
-/// <summary>Splits U3D bytes into blocks (ECMA-363 9.2): a U32 type, a U32 data size, a U32 meta data size, the data,
-/// zero to three bytes to the next multiple of four, the meta data, padded the same way. Every size is checked against
-/// the bytes there are, so a cut or broken file fails here with where it broke.</summary>
-public static class U3dBlockReader
+/// <summary>Splits U3D bytes into blocks (ECMA-363 9.2), checking every size against the bytes there are.</summary>
+internal static class U3dBlockReader
 {
     private const int HeaderSize = 12;
 
     /// <summary>The block at <paramref name="offset"/>, which must end by <paramref name="end"/>.</summary>
-    public static U3dBlock ReadBlock(byte[] bytes, int offset, int end)
+    internal static U3dBlock ReadBlock(byte[] bytes, int offset, int end)
     {
         ArgumentNullException.ThrowIfNull(bytes);
         if (end > bytes.Length || offset < 0 || offset > end)
@@ -29,8 +27,8 @@ public static class U3dBlockReader
         var dataSize = (long)BitConverter.ToUInt32(bytes, offset + 4);
         var metaDataSize = (long)BitConverter.ToUInt32(bytes, offset + 8);
         var dataOffset = (long)offset + HeaderSize;
-        var metaDataOffset = dataOffset + Padded(dataSize);
-        var blockEnd = metaDataOffset + Padded(metaDataSize);
+        var metaDataOffset = dataOffset + GetPaddedSize(dataSize);
+        var blockEnd = metaDataOffset + GetPaddedSize(metaDataSize);
         if (dataOffset + dataSize > end || metaDataOffset + metaDataSize > end)
         {
             throw new InvalidDataException(
@@ -38,16 +36,16 @@ public static class U3dBlockReader
                 $"and {metaDataSize} of meta data, and only {end - dataOffset} follow");
         }
 
-        var metaData = metaDataSize == 0
-            ? Array.Empty<U3dMetaDataEntry>()
+        U3dMetaDataEntry[] metaData = metaDataSize == 0
+            ? []
             : ReadMetaData(bytes, (int)metaDataOffset, (int)metaDataSize, type, offset);
         return new U3dBlock(bytes, type, offset, (int)dataOffset, (int)dataSize, (int)Math.Min(blockEnd, end), metaData);
     }
 
     /// <summary>Every block from <paramref name="offset"/> to <paramref name="end"/>, one after another.</summary>
-    public static List<U3dBlock> ReadBlocks(byte[] bytes, int offset, int end)
+    internal static List<U3dBlock> ReadBlocks(byte[] bytes, int offset, int end)
     {
-        var blocks = new List<U3dBlock>();
+        List<U3dBlock> blocks = [];
         while (offset < end)
         {
             var block = ReadBlock(bytes, offset, end);
@@ -58,7 +56,7 @@ public static class U3dBlockReader
         return blocks;
     }
 
-    private static long Padded(long size) => (size + 3) & ~3L;
+    private static long GetPaddedSize(long size) => (size + 3) & ~3L;
 
     private static U3dMetaDataEntry[] ReadMetaData(byte[] bytes, int offset, int size, uint type, int blockOffset)
     {

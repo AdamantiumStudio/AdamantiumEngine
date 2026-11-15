@@ -23,16 +23,16 @@ internal sealed class U3dTestIdtf
     public static U3dTestIdtf Read(string path)
     {
         var lines = File.ReadAllLines(path).Select(line => line.Trim()).ToList();
-        var positions = Section(lines, "MODEL_POSITION_LIST")
-            .Select(values => new Vector3F(Number(values[0]), Number(values[1]), Number(values[2]))).ToList();
-        var faces = Section(lines, "MESH_FACE_POSITION_LIST")
+        var positions = ReadSection(lines, "MODEL_POSITION_LIST")
+            .Select(values => new Vector3F(ParseNumber(values[0]), ParseNumber(values[1]), ParseNumber(values[2]))).ToList();
+        var faces = ReadSection(lines, "MESH_FACE_POSITION_LIST")
             .Select(values => values.Select(value => int.Parse(value, CultureInfo.InvariantCulture)).ToArray()).ToList();
         return new U3dTestIdtf(positions, faces);
     }
 
-    private static float Number(string text) => float.Parse(text, CultureInfo.InvariantCulture);
+    private static float ParseNumber(string text) => float.Parse(text, CultureInfo.InvariantCulture);
 
-    private static List<string[]> Section(List<string> lines, string name)
+    private static List<string[]> ReadSection(List<string> lines, string name)
     {
         var start = lines.IndexOf(name + " {");
         if (start < 0)
@@ -40,7 +40,7 @@ internal sealed class U3dTestIdtf
             throw new InvalidDataException($"The IDTF file has no {name}");
         }
 
-        var rows = new List<string[]>();
+        List<string[]> rows = [];
         for (var index = start + 1; index < lines.Count && lines[index] != "}"; index++)
         {
             rows.Add(lines[index].Split(' ', StringSplitOptions.RemoveEmptyEntries));

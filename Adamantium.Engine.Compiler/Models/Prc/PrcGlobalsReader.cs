@@ -4,15 +4,12 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>Reads a file structure's globals section (PRC_TYPE_ASM_FileStructureGlobals): the schema at its start,
-/// then the markup fonts, colours, pictures, texture definitions, materials, line patterns, styles, fill patterns and
-/// reference coordinate systems its tree draws with. A texture definition is read as the errata lay it out: a mapping
-/// operator's transformation only for mapping type 3, a destination blend after each non-zero source blend, no wrapping
-/// mode before the s, t and r ones; its 2D transformation's rotation is its x axis alone - the y axis that turned a
-/// quarter, or back when mirrored - as the errata measure it, while two non-orthogonal axes are both stored.</summary>
+/// <summary>Reads a file structure's globals section (PRC_TYPE_ASM_FileStructureGlobals): colors, pictures, textures,
+/// materials, styles and the rest its tree draws with.</summary>
 internal static class PrcGlobalsReader
 {
-    internal static void Read(PrcBitReader bits, PrcFileStructure structure, PrcNotes notes)
+    /// <summary>Reads the globals in <paramref name="bits"/> into <paramref name="structure"/>.</summary>
+    internal static void Read(PrcBitReader bits, PrcFileStructure structure, ImportNotes notes)
     {
         structure.Schema = PrcSchema.Read(bits);
         var reader = new PrcEntityReader(bits, structure.Schema, notes) { AuthoringVersion = structure.AuthoringVersion };
@@ -27,8 +24,8 @@ internal static class PrcGlobalsReader
         bits.ReadDouble();
         bits.ReadDouble();
         ReadFonts(reader, structure);
-        var colours = bits.ReadCount(3 * PrcBitReader.ShortestDouble, "colours");
-        for (var index = 0; index < colours; index++)
+        var colors = bits.ReadCount(3 * PrcBitReader.ShortestDouble, "colors");
+        for (var index = 0; index < colors; index++)
         {
             structure.Colors.Add(new Vector3<double>(bits.ReadDouble(), bits.ReadDouble(), bits.ReadDouble()));
         }
@@ -76,7 +73,7 @@ internal static class PrcGlobalsReader
             structure.CoordinateSystems.Add(PrcTreeReader.ReadCoordinateSystem(reader));
         }
 
-        reader.EndOf(PrcTypes.FileStructureGlobals);
+        reader.SkipNewData(PrcTypes.FileStructureGlobals);
         reader.SkipUserData();
         reader.CheckEnd();
     }
@@ -110,7 +107,7 @@ internal static class PrcGlobalsReader
             Width = reader.Bits.ReadUnsignedInteger(),
             Height = reader.Bits.ReadUnsignedInteger()
         };
-        reader.EndOf(PrcTypes.Picture);
+        reader.SkipNewData(PrcTypes.Picture);
         return picture;
     }
 
@@ -180,10 +177,10 @@ internal static class PrcGlobalsReader
             var flipT = bits.ReadBoolean();
             bits.ReadBoolean();
             transformation = new PrcTextureTransformation { FlipS = flipS, FlipT = flipT, Matrix = ReadTransformation2d(reader) };
-            reader.EndOf(PrcTypes.TextureTransformation);
+            reader.SkipNewData(PrcTypes.TextureTransformation);
         }
 
-        reader.EndOf(PrcTypes.TextureDefinition);
+        reader.SkipNewData(PrcTypes.TextureDefinition);
         return new PrcTextureDefinition
         {
             Name = name,
@@ -290,7 +287,7 @@ internal static class PrcGlobalsReader
                     EmissiveAlpha = bits.ReadDouble(),
                     SpecularAlpha = bits.ReadDouble()
                 };
-                reader.EndOf(type);
+                reader.SkipNewData(type);
                 return material;
             case PrcTypes.TextureApplication:
                 var application = new PrcMaterial
@@ -302,7 +299,7 @@ internal static class PrcGlobalsReader
                     NextTextureIndex = (int)bits.ReadUnsignedInteger() - 1,
                     TextureCoordinateSet = Math.Max(0, (int)bits.ReadUnsignedInteger() - 1)
                 };
-                reader.EndOf(type);
+                reader.SkipNewData(type);
                 return application;
             default:
                 reader.SkipUnknown(type, "a material");
@@ -318,7 +315,7 @@ internal static class PrcGlobalsReader
         reader.SkipDoubles(bits.ReadCount(PrcBitReader.ShortestDouble, "dashes"));
         bits.ReadDouble();
         bits.ReadBoolean();
-        reader.EndOf(PrcTypes.LinePattern);
+        reader.SkipNewData(PrcTypes.LinePattern);
     }
 
     private static PrcStyle ReadStyle(PrcEntityReader reader)
@@ -339,7 +336,7 @@ internal static class PrcGlobalsReader
 
         bits.ReadBoolean();
         bits.ReadBoolean();
-        reader.EndOf(PrcTypes.Style);
+        reader.SkipNewData(PrcTypes.Style);
         return new PrcStyle
         {
             Name = name, LineWidth = width, IsMaterial = isMaterial, ColorOrMaterialIndex = index, Transparency = transparency
@@ -385,6 +382,6 @@ internal static class PrcGlobalsReader
                 break;
         }
 
-        reader.EndOf(type);
+        reader.SkipNewData(type);
     }
 }

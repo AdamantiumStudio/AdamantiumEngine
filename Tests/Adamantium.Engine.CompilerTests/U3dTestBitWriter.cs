@@ -5,32 +5,28 @@ using Adamantium.Engine.Compiler.Models.U3d;
 
 namespace Adamantium.Engine.CompilerTests;
 
-/// <summary>The bit encoding of ECMA-363 clause 10 as its text gives it, for writing U3D test files: a value is coded
-/// as a symbol in the probability range of its context, a plain value as bytes with their bits turned round in a
-/// static context of 256, a value a dynamic context has not seen as its escape and the plain value after it, and a
-/// block with any compressed value in it ends with a plain 0. The reader's decoder is a different piece of code; the
-/// two meet only in the bytes. A dynamic histogram is halved when it holds 0x1FFF occurrences, before the next is
-/// counted, and never counts a symbol from 0xFFFF up - as the clause's own implementation (Annex A) does.</summary>
+/// <summary>Writes the arithmetic coding of ECMA-363 clause 10, for U3D test files; it shares no code with the reader's
+/// decoder.</summary>
 internal sealed class U3dTestBitWriter
 {
     private const uint Top = 0x0000FFFF;
     private const uint HalfBit = 0x00008000;
     private const uint QuarterBit = 0x00004000;
 
-    private readonly bool noCompression;
-    private readonly List<byte> bytes = [];
-    private readonly Dictionary<string, U3dTestHistogram> histograms = new(StringComparer.Ordinal);
-    private long bitCount;
-    private uint low;
-    private uint high = Top;
-    private uint underflow;
-    private bool compressed;
+    private readonly bool _noCompression;
+    private readonly List<byte> _bytes = [];
+    private readonly Dictionary<string, U3dTestHistogram> _histograms = new(StringComparer.Ordinal);
+    private long _bitCount;
+    private uint _low;
+    private uint _high = Top;
+    private uint _underflow;
+    private bool _compressed;
 
     /// <summary>A writer of one block's data; with <paramref name="noCompression"/> every compressed value is written
     /// plain, as in a file of the no compression profile.</summary>
     public U3dTestBitWriter(bool noCompression = false)
     {
-        this.noCompression = noCompression;
+        _noCompression = noCompression;
     }
 
     public void WriteU8(byte value)
@@ -107,23 +103,23 @@ internal sealed class U3dTestBitWriter
     /// <summary>The data written, the coder flushed when anything was compressed.</summary>
     public byte[] ToArray()
     {
-        if (compressed)
+        if (_compressed)
         {
-            compressed = false;
+            _compressed = false;
             WriteU32(0);
         }
 
-        return bytes.ToArray();
+        return _bytes.ToArray();
     }
 
     private bool WriteCompressed(U3dContext context, uint value, int size)
     {
-        if (noCompression)
+        if (_noCompression)
         {
             return false;
         }
 
-        compressed = true;
+        _compressed = true;
         if (!context.IsDynamic)
         {
             if (context.Range > U3dContext.MaximumStaticRange)
@@ -135,23 +131,23 @@ internal sealed class U3dTestBitWriter
             return true;
         }
 
-        if (!histograms.TryGetValue(context.Name, out var histogram))
+        if (!_histograms.TryGetValue(context.Name, out var histogram))
         {
             histogram = new U3dTestHistogram();
-            histograms.Add(context.Name, histogram);
+            _histograms.Add(context.Name, histogram);
         }
 
         var symbol = value + 1;
         var total = histogram.Total;
-        var frequency = histogram.Frequency(symbol);
+        var frequency = histogram.GetFrequency(symbol);
         var escape = frequency == 0;
         if (escape)
         {
             symbol = 0;
-            frequency = histogram.Frequency(0);
+            frequency = histogram.GetFrequency(0);
         }
 
-        Encode(histogram.Cumulative(symbol), frequency, total);
+        Encode(histogram.GetCumulative(symbol), frequency, total);
         histogram.Add(symbol);
         if (!escape)
         {
@@ -181,96 +177,40 @@ internal sealed class U3dTestBitWriter
 
     private void Encode(uint cumulative, uint frequency, uint total)
     {
-        var range = high - low + 1;
-        high = low + range * (cumulative + frequency) / total - 1;
-        low = low + range * cumulative / total;
-        while ((high & HalfBit) == (low & HalfBit))
+        var range = _high - _low + 1;
+        _high = _low + range * (cumulative + frequency) / total - 1;
+        _low = _low + range * cumulative / total;
+        while ((_high & HalfBit) == (_low & HalfBit))
         {
-            var bit = (high & HalfBit) >> 15;
+            var bit = (_high & HalfBit) >> 15;
             WriteBit(bit);
-            while (underflow > 0)
+            while (_underflow > 0)
             {
                 WriteBit(bit ^ 1);
-                underflow--;
+                _underflow--;
             }
 
-            high = ((high & ~HalfBit) << 1) | 1;
-            low = (low & ~HalfBit) << 1;
+            _high = ((_high & ~HalfBit) << 1) | 1;
+            _low = (_low & ~HalfBit) << 1;
         }
 
-        while ((low & QuarterBit) != 0 && (high & QuarterBit) == 0)
+        while ((_low & QuarterBit) != 0 && (_high & QuarterBit) == 0)
         {
-            high = (((high & ~HalfBit) << 1) | 1 | HalfBit) & Top;
-            low = ((low & ~HalfBit) << 1) & ~HalfBit & Top;
-            underflow++;
+            _high = (((_high & ~HalfBit) << 1) | 1 | HalfBit) & Top;
+            _low = ((_low & ~HalfBit) << 1) & ~HalfBit & Top;
+            _underflow++;
         }
     }
 
     private void WriteBit(uint bit)
     {
-        var offset = (int)(bitCount & 7);
+        var offset = (int)(_bitCount & 7);
         if (offset == 0)
         {
-            bytes.Add(0);
+            _bytes.Add(0);
         }
 
-        bytes[^1] |= (byte)(bit << offset);
-        bitCount++;
-    }
-}
-
-/// <summary>A dynamic context's frequencies as clause 10 defines them: the escape counted once from the start, a value
-/// the symbol above it.</summary>
-internal sealed class U3dTestHistogram
-{
-    private const uint RescaleTotal = 0x1FFF;
-    private const uint FirstUncountedSymbol = 0xFFFF;
-
-    private readonly List<uint> counts = [1];
-
-    public uint Total { get; private set; } = 1;
-
-    public uint Frequency(uint symbol) => symbol < counts.Count ? counts[(int)symbol] : 0;
-
-    public uint Cumulative(uint symbol)
-    {
-        var sum = 0u;
-        for (var index = 0; index < symbol && index < counts.Count; index++)
-        {
-            sum += counts[index];
-        }
-
-        return sum;
-    }
-
-    public void Add(uint symbol)
-    {
-        if (symbol >= FirstUncountedSymbol)
-        {
-            return;
-        }
-
-        while (counts.Count <= symbol)
-        {
-            counts.Add(0);
-        }
-
-        if (Total >= RescaleTotal)
-        {
-            Total = 0;
-            for (var index = 0; index < counts.Count; index++)
-            {
-                counts[index] /= 2;
-            }
-
-            counts[0]++;
-            foreach (var count in counts)
-            {
-                Total += count;
-            }
-        }
-
-        counts[(int)symbol]++;
-        Total++;
+        _bytes[^1] |= (byte)(bit << offset);
+        _bitCount++;
     }
 }

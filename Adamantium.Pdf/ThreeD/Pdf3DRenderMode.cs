@@ -3,7 +3,7 @@ using Adamantium.Pdf.Objects;
 namespace Adamantium.Pdf.ThreeD;
 
 /// <summary>How a 3D view draws the artwork (ISO 32000-1, 13.6.4, table 306, <c>RM</c>): solid, wireframe,
-/// transparent, illustration and the rest, with the colours and opacity some of them use.</summary>
+/// transparent, illustration and the rest, with the colors and opacity some of them use.</summary>
 public sealed class Pdf3DRenderMode
 {
     private const string SubtypeKey = "Subtype";
@@ -16,10 +16,10 @@ public sealed class Pdf3DRenderMode
     /// <c>Wireframe</c>, <c>Illustration</c>, <c>ShadedVertices</c> and the others the format names.</summary>
     public string Name { get; init; }
 
-    /// <summary>The colour of the lines and points the mode adds (<c>AC</c>); black by default.</summary>
+    /// <summary>The color of the lines and points the mode adds (<c>AC</c>); black by default.</summary>
     public Pdf3DColor AuxiliaryColor { get; init; } = new(0, 0, 0);
 
-    /// <summary>The faces' colour for the modes that paint them flat (<c>FC</c>); null for the view's background.
+    /// <summary>The faces' color for the modes that paint them flat (<c>FC</c>); null for the view's background.
     /// </summary>
     public Pdf3DColor FaceColor { get; init; }
 

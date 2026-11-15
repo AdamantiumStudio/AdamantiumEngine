@@ -4,15 +4,11 @@ using System.Linq;
 
 namespace Adamantium.Engine.CompilerTests;
 
-/// <summary>Writes the arrays of a PRC highly compressed tessellation as the specification's writing procedures give
-/// them (WriteCharacterArray, WriteShortArray, WriteCompressedIntegerArray, WriteCompressedIndiceArray, Huffman): plain,
-/// or Huffman coded - a tree built by merging the two rarest nodes, every code then put under the 1 branch of a root
-/// whose 0 branch is left empty; the stream holding the number of leaves, the width of the code lengths, each leaf's
-/// value, code length and code with the code's root bit last, the number of values and each value's code from the root,
-/// packed lowest bit first into 32-bit words written as four Characters, with the bits used in the last word.</summary>
+/// <summary>Writes the arrays of a PRC highly compressed tessellation, plain or Huffman coded, as real files store
+/// them.</summary>
 internal static class PrcTestArrayWriter
 {
-    public static void CharacterArray(PrcTestBitWriter writer, IReadOnlyList<int> values, int bitNumber, bool huffman, bool writeFlag = true)
+    public static void WriteCharacterArray(PrcTestBitWriter writer, IReadOnlyList<int> values, int bitNumber, bool huffman, bool writeFlag = true)
     {
         if (writeFlag)
         {
@@ -21,7 +17,7 @@ internal static class PrcTestArrayWriter
 
         if (huffman)
         {
-            HuffmanArray(writer, values, bitNumber);
+            WriteHuffmanArray(writer, values, bitNumber);
             return;
         }
 
@@ -32,12 +28,12 @@ internal static class PrcTestArrayWriter
         }
     }
 
-    public static void ShortArray(PrcTestBitWriter writer, IReadOnlyList<int> values, int bitNumber, bool huffman)
+    public static void WriteShortArray(PrcTestBitWriter writer, IReadOnlyList<int> values, int bitNumber, bool huffman)
     {
         writer.WriteBoolean(huffman);
         if (huffman)
         {
-            HuffmanArray(writer, values, bitNumber);
+            WriteHuffmanArray(writer, values, bitNumber);
             return;
         }
 
@@ -51,47 +47,47 @@ internal static class PrcTestArrayWriter
 
     /// <summary>Each integer's width - one bit for the sign and as many as its magnitude needs - as a six-bit
     /// CharacterArray, then the integers in those widths.</summary>
-    public static void CompressedIntegerArray(PrcTestBitWriter writer, IReadOnlyList<int> values, bool huffman)
+    public static void WriteCompressedIntegerArray(PrcTestBitWriter writer, IReadOnlyList<int> values, bool huffman)
     {
-        var widths = values.Select(value => 1 + MagnitudeBits(Math.Abs(value))).ToList();
-        CharacterArray(writer, widths, 6, huffman);
+        var widths = values.Select(value => 1 + CountMagnitudeBits(Math.Abs(value))).ToList();
+        WriteCharacterArray(writer, widths, 6, huffman);
         for (var index = 0; index < values.Count; index++)
         {
-            IntegerWithVariableBitNumber(writer, values[index], widths[index]);
+            WriteIntegerWithVariableBitNumber(writer, values[index], widths[index]);
         }
     }
 
     /// <summary>The first index's width and then how much each width differs from the one before, as a signed
     /// six-bit CharacterArray, then the first index and each difference to the next in those widths.</summary>
-    public static void CompressedIndiceArray(PrcTestBitWriter writer, IReadOnlyList<int> values, bool huffman, bool writeFlag = true)
+    public static void WriteCompressedIndiceArray(PrcTestBitWriter writer, IReadOnlyList<int> values, bool huffman, bool writeFlag = true)
     {
-        var differences = new List<int>();
+        List<int> differences = [];
         for (var index = 0; index < values.Count; index++)
         {
             differences.Add(index == 0 ? values[0] : values[index] - values[index - 1]);
         }
 
-        var widths = differences.Select(difference => 1 + MagnitudeBits(Math.Abs(difference))).ToList();
-        var steps = new List<int>();
+        var widths = differences.Select(difference => 1 + CountMagnitudeBits(Math.Abs(difference))).ToList();
+        List<int> steps = [];
         for (var index = 0; index < widths.Count; index++)
         {
             steps.Add(index == 0 ? widths[0] : widths[index] - widths[index - 1]);
         }
 
-        CharacterArray(writer, steps, 6, huffman, writeFlag);
+        WriteCharacterArray(writer, steps, 6, huffman, writeFlag);
         for (var index = 0; index < differences.Count; index++)
         {
-            IntegerWithVariableBitNumber(writer, differences[index], widths[index]);
+            WriteIntegerWithVariableBitNumber(writer, differences[index], widths[index]);
         }
     }
 
-    public static void IntegerWithVariableBitNumber(PrcTestBitWriter writer, int value, int bitNumber)
+    public static void WriteIntegerWithVariableBitNumber(PrcTestBitWriter writer, int value, int bitNumber)
     {
         writer.WriteBoolean(value < 0);
         writer.WriteBits((uint)Math.Abs(value), bitNumber - 1);
     }
 
-    public static int MagnitudeBits(int magnitude)
+    public static int CountMagnitudeBits(int magnitude)
     {
         var bits = 0;
         while (magnitude >> bits != 0)
@@ -104,7 +100,7 @@ internal static class PrcTestArrayWriter
 
     /// <summary>The Huffman words of <paramref name="values"/>, each of <paramref name="bitNumber"/> bits, with their
     /// count and the bits used in the last.</summary>
-    public static void HuffmanArray(PrcTestBitWriter writer, IReadOnlyList<int> values, int bitNumber)
+    public static void WriteHuffmanArray(PrcTestBitWriter writer, IReadOnlyList<int> values, int bitNumber)
     {
         if (values.Count == 0)
         {
@@ -112,7 +108,7 @@ internal static class PrcTestArrayWriter
             return;
         }
 
-        var stream = new List<bool>();
+        List<bool> stream = [];
         void Put(long value, int count)
         {
             for (var bit = 0; bit < count; bit++)
@@ -123,7 +119,7 @@ internal static class PrcTestArrayWriter
 
         var mask = (1 << bitNumber) - 1;
         var codes = BuildCodes(values.Select(value => value & mask).ToList());
-        var lengthWidth = MagnitudeBits(codes.Values.Max(code => code.Length));
+        var lengthWidth = CountMagnitudeBits(codes.Values.Max(code => code.Length));
         Put(codes.Count, bitNumber + 1);
         Put(lengthWidth, 8);
         foreach (var leaf in codes.OrderBy(entry => entry.Key))
@@ -143,7 +139,14 @@ internal static class PrcTestArrayWriter
             }
         }
 
-        var words = (stream.Count + 31) / 32;
+        WriteWords(writer, stream);
+    }
+
+    /// <summary><paramref name="bits"/> packed lowest first into 32-bit words written as four Characters: the count of
+    /// words, the words, then how many bits of the last one are used.</summary>
+    public static void WriteWords(PrcTestBitWriter writer, IReadOnlyList<bool> bits)
+    {
+        var words = (bits.Count + 31) / 32;
         writer.WriteUnsignedInteger((uint)words);
         for (var part = 0; part < words * 4; part++)
         {
@@ -151,7 +154,7 @@ internal static class PrcTestArrayWriter
             for (var bit = 0; bit < 8; bit++)
             {
                 var at = part * 8 + bit;
-                if (at < stream.Count && stream[at])
+                if (at < bits.Count && bits[at])
                 {
                     character |= 1 << bit;
                 }
@@ -160,7 +163,7 @@ internal static class PrcTestArrayWriter
             writer.WriteCharacter((byte)character);
         }
 
-        writer.WriteUnsignedInteger((uint)(stream.Count - (words - 1) * 32));
+        writer.WriteUnsignedInteger((uint)(words == 0 ? 0 : bits.Count - (words - 1) * 32));
     }
 
     private static Dictionary<int, PrcTestCode> BuildCodes(IReadOnlyList<int> values)
@@ -194,47 +197,4 @@ internal static class PrcTestArrayWriter
 
         return codes;
     }
-}
-
-/// <summary>A node of a test Huffman tree: its weight, and its value or its two branches.</summary>
-internal sealed class PrcTestNode
-{
-    public int Weight { get; init; }
-
-    public int Value { get; init; }
-
-    public PrcTestNode Zero { get; init; }
-
-    public PrcTestNode One { get; init; }
-}
-
-/// <summary>A node waiting to be given its code: the code so far, the root bit highest, and its length.</summary>
-internal sealed class PrcTestPending
-{
-    public PrcTestPending(PrcTestNode node, long code, int length)
-    {
-        Node = node;
-        Code = code;
-        Length = length;
-    }
-
-    public PrcTestNode Node { get; }
-
-    public long Code { get; }
-
-    public int Length { get; }
-}
-
-/// <summary>A Huffman code: its bits, the root bit highest, and its length.</summary>
-internal sealed class PrcTestCode
-{
-    public PrcTestCode(long value, int length)
-    {
-        Value = value;
-        Length = length;
-    }
-
-    public long Value { get; }
-
-    public int Length { get; }
 }

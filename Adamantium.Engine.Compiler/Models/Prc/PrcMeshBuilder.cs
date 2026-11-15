@@ -6,157 +6,20 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>Points, normals, colours and indices of one mesh being built from PRC tessellation.</summary>
-internal sealed class PrcMeshData
-{
-    private readonly Dictionary<PrcVertexKey, int> vertexOf = new();
-
-    internal PrcMeshData(PrimitiveType topology)
-    {
-        Topology = topology;
-    }
-
-    internal PrimitiveType Topology { get; }
-
-    internal List<Vector3<double>> Points { get; } = [];
-
-    internal List<Vector3F> Normals { get; } = [];
-
-    internal List<Color> Colors { get; } = [];
-
-    internal List<Vector2F> TextureCoordinates { get; } = [];
-
-    internal List<int> Indices { get; } = [];
-
-    internal bool HasNormals { get; set; } = true;
-
-    internal bool HasColors { get; set; }
-
-    internal bool HasTextureCoordinates { get; set; }
-
-    /// <summary>Adds the vertex <paramref name="key"/> names, once however many corners share it, and its index.</summary>
-    internal void AddCorner(PrcVertexKey key, Vector3<double> point, Vector3F normal, Color color, Vector2F texture)
-    {
-        if (!vertexOf.TryGetValue(key, out var vertex))
-        {
-            vertex = Points.Count;
-            vertexOf.Add(key, vertex);
-            Points.Add(point);
-            Normals.Add(normal);
-            Colors.Add(color);
-            TextureCoordinates.Add(texture);
-        }
-
-        Indices.Add(vertex);
-    }
-
-    /// <summary>Gives each corner of <see cref="Indices"/> its normal from <paramref name="cornerNormals"/>: a vertex
-    /// whose corners take different normals is split into one vertex for each.</summary>
-    internal void SetCornerNormals(IReadOnlyList<Vector3F> cornerNormals)
-    {
-        var points = new List<Vector3<double>>(Points);
-        var colors = new List<Color>(Colors);
-        var textures = new List<Vector2F>(TextureCoordinates);
-        var indices = new List<int>(Indices);
-        var split = new Dictionary<PrcCornerNormalKey, int>();
-        Points.Clear();
-        Normals.Clear();
-        Colors.Clear();
-        TextureCoordinates.Clear();
-        Indices.Clear();
-        vertexOf.Clear();
-        for (var corner = 0; corner < indices.Count; corner++)
-        {
-            var old = indices[corner];
-            var key = new PrcCornerNormalKey(old, cornerNormals[corner]);
-            if (!split.TryGetValue(key, out var vertex))
-            {
-                vertex = Points.Count;
-                split.Add(key, vertex);
-                Points.Add(points[old]);
-                Normals.Add(cornerNormals[corner]);
-                Colors.Add(colors[old]);
-                TextureCoordinates.Add(textures[old]);
-            }
-
-            Indices.Add(vertex);
-        }
-
-        HasNormals = true;
-    }
-
-    /// <summary>Lays <paramref name="transformation"/> on every texture coordinate: s and t inverted as it says, then
-    /// its matrix.</summary>
-    internal void TransformTextureCoordinates(PrcTextureTransformation transformation)
-    {
-        for (var index = 0; index < TextureCoordinates.Count; index++)
-        {
-            var coordinate = TextureCoordinates[index];
-            var textureS = transformation.FlipS ? 1 - coordinate.X : coordinate.X;
-            var textureT = transformation.FlipT ? 1 - coordinate.Y : coordinate.Y;
-            var moved = Vector3<double>.TransformCoordinate(new Vector3<double>(textureS, textureT, 0), transformation.Matrix);
-            TextureCoordinates[index] = new Vector2F((float)moved.X, (float)moved.Y);
-        }
-    }
-}
-
-/// <summary>A vertex of a mesh with one of the normals its corners take: what tells the vertices it splits into.</summary>
-internal readonly struct PrcCornerNormalKey : IEquatable<PrcCornerNormalKey>
-{
-    internal PrcCornerNormalKey(int vertex, Vector3F normal)
-    {
-        Vertex = vertex;
-        Normal = normal;
-    }
-
-    internal int Vertex { get; }
-
-    internal Vector3F Normal { get; }
-
-    public bool Equals(PrcCornerNormalKey other) =>
-        Vertex == other.Vertex && Normal.X.Equals(other.Normal.X) && Normal.Y.Equals(other.Normal.Y) && Normal.Z.Equals(other.Normal.Z);
-
-    public override bool Equals(object other) => other is PrcCornerNormalKey key && Equals(key);
-
-    public override int GetHashCode() => HashCode.Combine(Vertex, Normal.X, Normal.Y, Normal.Z);
-}
-
-/// <summary>What makes a vertex of a PRC mesh: the indices of its point, normal and texture coordinates, and for a
-/// vertex coloured on its own, which corner it is.</summary>
-internal readonly struct PrcVertexKey : IEquatable<PrcVertexKey>
-{
-    internal PrcVertexKey(long point, long normal, long texture, long corner)
-    {
-        Point = point;
-        Normal = normal;
-        Texture = texture;
-        Corner = corner;
-    }
-
-    internal long Point { get; }
-
-    internal long Normal { get; }
-
-    internal long Texture { get; }
-
-    internal long Corner { get; }
-
-    public bool Equals(PrcVertexKey other) =>
-        Point == other.Point && Normal == other.Normal && Texture == other.Texture && Corner == other.Corner;
-
-    public override bool Equals(object other) => other is PrcVertexKey key && Equals(key);
-
-    public override int GetHashCode() => HashCode.Combine(Point, Normal, Texture, Corner);
-}
-
 /// <summary>Turns PRC tessellations into meshes: the triangles, fans and stripes of a 3D tessellation's faces (PRC
 /// Tessellation Types), the polylines of a wire tessellation, and the polylines, triangles, quads, polygons and points
 /// of a markup tessellation. Every index is checked against its array; one past it throws as corrupt data.</summary>
 internal static class PrcMeshBuilder
 {
-    private const uint IsClosing = 0x10000000;
-    private const uint IsContinuous = 0x20000000;
-    private const uint WireCountMask = 0x0FFFFFFF;
+    /// <summary>The flag of a wire index header whose wire closes on its first point.</summary>
+    internal const uint IsClosing = 0x10000000;
+
+    /// <summary>The flag of a wire index header whose wire goes on from the previous one.</summary>
+    internal const uint IsContinuous = 0x20000000;
+
+    /// <summary>The bits of a wire index header that count its indices.</summary>
+    internal const uint WireCountMask = 0x0FFFFFFF;
+
     private const uint MarkupIsMatrix = 0x08000000;
     private const uint MarkupIsExtraData = 0x04000000;
     private const uint MarkupInnerCodes = 0xFFFFF;
@@ -176,7 +39,7 @@ internal static class PrcMeshBuilder
 
     /// <summary>The meshes of a 3D tessellation, one per material: <paramref name="materialOf"/> gives each face's.</summary>
     internal static Dictionary<string, PrcMeshData> Build3D(Prc3DTessellation tessellation, Func<PrcFaceTessellation, string> materialOf,
-        PrcNotes notes)
+        ImportNotes notes)
     {
         var meshes = new Dictionary<string, PrcMeshData>(StringComparer.Ordinal);
         long corner = 0;
@@ -271,11 +134,9 @@ internal static class PrcMeshBuilder
         return mesh;
     }
 
-    /// <summary>The meshes of a markup tessellation - its lines and its filled triangles - drawn in the colours its
-    /// colour entities give; <paramref name="colorOf"/> turns a colour index of the globals into a colour. Its texts are
-    /// kept as they are written - the string, the font entity before it, the size and where it stands - not drawn;
-    /// what is drawn in screen space is told and left out.</summary>
-    internal static PrcMarkupMeshes BuildMarkup(PrcMarkupTessellation markup, Func<uint, Color> colorOf, Color startColor, PrcNotes notes)
+    /// <summary>The line, triangle and point meshes of a markup tessellation and its texts; <paramref name="colorOf"/>
+    /// turns a color index of the globals into a color.</summary>
+    internal static PrcMarkupMeshes BuildMarkup(PrcMarkupTessellation markup, Func<uint, Color> colorOf, Color startColor, ImportNotes notes)
     {
         var meshes = new PrcMarkupMeshes();
         var coordinates = markup.Coordinates;
@@ -405,7 +266,7 @@ internal static class PrcMeshBuilder
                     for (var point = 0L; point < doubles / 3; point++)
                     {
                         meshes.Points.AddCorner(new PrcVertexKey(next + point * 3, -1, -1, meshes.Points.Points.Count),
-                            Transform(coordinates, next + point * 3, transform), Vector3F.Zero, color, Vector2F.Zero);
+                            TransformPoint(coordinates, next + point * 3, transform), Vector3F.Zero, color, Vector2F.Zero);
                     }
 
                     break;
@@ -445,14 +306,23 @@ internal static class PrcMeshBuilder
         return meshes;
     }
 
+    /// <summary>Throws unless <paramref name="index"/> starts a whole triple of <paramref name="values"/>.</summary>
+    internal static void CheckPoint(double[] values, long index, string what)
+    {
+        if (index < 0 || index + 2 >= values.Length)
+        {
+            throw new InvalidDataException($"An index of {what} points at coordinate {index} of {values.Length}");
+        }
+    }
+
     private static void AddPolyline(PrcMeshData mesh, double[] coordinates, long first, long count, Matrix4x4<double> transform, Color color)
     {
         for (var point = 1L; point < count; point++)
         {
             var from = first + (point - 1) * 3;
             var to = first + point * 3;
-            mesh.AddCorner(new PrcVertexKey(from, -1, -1, color.ToRgba()), Transform(coordinates, from, transform), Vector3F.Zero, color, Vector2F.Zero);
-            mesh.AddCorner(new PrcVertexKey(to, -1, -1, color.ToRgba()), Transform(coordinates, to, transform), Vector3F.Zero, color, Vector2F.Zero);
+            mesh.AddCorner(new PrcVertexKey(from, -1, -1, color.ToRgba()), TransformPoint(coordinates, from, transform), Vector3F.Zero, color, Vector2F.Zero);
+            mesh.AddCorner(new PrcVertexKey(to, -1, -1, color.ToRgba()), TransformPoint(coordinates, to, transform), Vector3F.Zero, color, Vector2F.Zero);
         }
     }
 
@@ -464,16 +334,17 @@ internal static class PrcMeshBuilder
             var start = first + polygon * corners * 3;
             for (var fan = 1; fan + 1 < corners; fan++)
             {
-                foreach (var corner in new[] { 0, fan, fan + 1 })
+                int[] triangleCorners = [0, fan, fan + 1];
+                foreach (var corner in triangleCorners)
                 {
                     var at = start + corner * 3L;
-                    mesh.AddCorner(new PrcVertexKey(at, -1, -1, color.ToRgba()), Transform(coordinates, at, transform), Vector3F.Zero, color, Vector2F.Zero);
+                    mesh.AddCorner(new PrcVertexKey(at, -1, -1, color.ToRgba()), TransformPoint(coordinates, at, transform), Vector3F.Zero, color, Vector2F.Zero);
                 }
             }
         }
     }
 
-    private static Vector3<double> Transform(double[] coordinates, long at, Matrix4x4<double> transform)
+    private static Vector3<double> TransformPoint(double[] coordinates, long at, Matrix4x4<double> transform)
     {
         var point = new Vector3<double>(coordinates[at], coordinates[at + 1], coordinates[at + 2]);
         return Vector3<double>.TransformCoordinate(point, transform);
@@ -485,272 +356,4 @@ internal static class PrcMeshBuilder
         mesh.AddCorner(new PrcVertexKey(point, -1, -1, 0), new Vector3<double>(coordinates[point], coordinates[point + 1], coordinates[point + 2]),
             Vector3F.Zero, default, Vector2F.Zero);
     }
-
-    /// <summary>Throws unless <paramref name="index"/> starts a whole triple of <paramref name="values"/>.</summary>
-    internal static void CheckPoint(double[] values, long index, string what)
-    {
-        if (index < 0 || index + 2 >= values.Length)
-        {
-            throw new InvalidDataException($"An index of {what} points at coordinate {index} of {values.Length}");
-        }
-    }
-}
-
-/// <summary>The meshes a markup tessellation gives: its lines, its filled triangles and its points.</summary>
-internal sealed class PrcMarkupMeshes
-{
-    internal PrcMeshData Lines { get; } = new(PrimitiveType.LineList) { HasNormals = false, HasColors = true };
-
-    internal PrcMeshData Triangles { get; } = new(PrimitiveType.TriangleList) { HasNormals = false, HasColors = true };
-
-    internal PrcMeshData Points { get; } = new(PrimitiveType.PointList) { HasNormals = false, HasColors = true };
-
-    internal List<PrcMarkupText> Texts { get; } = [];
-}
-
-/// <summary>A text of a markup tessellation: the string, the font key of the globals it is written in (-1 for none
-/// given), its width and height in the model's units, and the point it starts at.</summary>
-internal sealed class PrcMarkupText
-{
-    internal string Text { get; init; }
-
-    internal int FontIndex { get; init; }
-
-    internal double Width { get; init; }
-
-    internal double Height { get; init; }
-
-    internal Vector3<double> Position { get; init; }
-}
-
-/// <summary>Walks the triangulated data of one face of a 3D tessellation: for each kind of triangulation its flags
-/// name, lowest bit first, the counts of its sizes and the normal, texture and point indices they cover.</summary>
-internal sealed class PrcFaceCursor
-{
-    private readonly Prc3DTessellation tessellation;
-    private readonly PrcFaceTessellation face;
-    private readonly PrcMeshData mesh;
-    private readonly PrcNotes notes;
-    private readonly int textureIndexes;
-    private long position;
-    private int sizeAt;
-    private int colorAt;
-
-    /// <summary>A cursor at <paramref name="start"/> of the triangulated indices: the face's own start, or - when the
-    /// tessellation stores no normals, and its faces' starts still count them - where the previous face ended.</summary>
-    internal PrcFaceCursor(Prc3DTessellation tessellation, PrcFaceTessellation face, PrcMeshData mesh, PrcNotes notes, long start)
-    {
-        this.tessellation = tessellation;
-        this.face = face;
-        this.mesh = mesh;
-        this.notes = notes;
-        textureIndexes = (int)Math.Min(face.TextureCoordinateIndexes, 64);
-        position = start;
-        if (face.VertexColors != null)
-        {
-            mesh.HasColors = true;
-        }
-    }
-
-    /// <summary>The triangulated index after the last one read.</summary>
-    internal long Position => position;
-
-    internal void Read(ref long corner)
-    {
-        for (var bit = 0; bit < 32; bit++)
-        {
-            var kind = 1u << bit;
-            if ((face.UsedEntities & kind) == 0)
-            {
-                continue;
-            }
-
-            var textured = kind is PrcTessellationReader.TriangleTextured or PrcTessellationReader.TriangleFanTextured
-                or PrcTessellationReader.TriangleStripeTextured or PrcTessellationReader.TriangleOneNormalTextured
-                or PrcTessellationReader.TriangleFanOneNormalTextured or PrcTessellationReader.TriangleStripeOneNormalTextured;
-            var textures = textured ? textureIndexes : 0;
-            switch (kind)
-            {
-                case PrcTessellationReader.Triangle or PrcTessellationReader.TriangleTextured:
-                    var triangles = NextSize();
-                    for (var triangle = 0u; triangle < triangles; triangle++)
-                    {
-                        AddRun(3, false, false, textures, ref corner);
-                    }
-
-                    break;
-                case PrcTessellationReader.TriangleOneNormal or PrcTessellationReader.TriangleOneNormalTextured:
-                    var flat = NextSize();
-                    for (var triangle = 0u; triangle < flat; triangle++)
-                    {
-                        AddRun(3, true, false, textures, ref corner);
-                    }
-
-                    break;
-                case PrcTessellationReader.TriangleFan or PrcTessellationReader.TriangleFanTextured
-                    or PrcTessellationReader.TriangleStripe or PrcTessellationReader.TriangleStripeTextured:
-                    var runs = NextSize();
-                    for (var run = 0u; run < runs; run++)
-                    {
-                        AddRun(NextSize(), false, kind is PrcTessellationReader.TriangleStripe or PrcTessellationReader.TriangleStripeTextured,
-                            textures, ref corner);
-                    }
-
-                    break;
-                case PrcTessellationReader.TriangleFanOneNormal or PrcTessellationReader.TriangleFanOneNormalTextured
-                    or PrcTessellationReader.TriangleStripeOneNormal or PrcTessellationReader.TriangleStripeOneNormalTextured:
-                    var oneNormalRuns = NextSize();
-                    for (var run = 0u; run < oneNormalRuns; run++)
-                    {
-                        var size = NextSize();
-                        AddRun(size & ~PrcTessellationReader.SingleNormal, (size & PrcTessellationReader.SingleNormal) != 0,
-                            kind is PrcTessellationReader.TriangleStripeOneNormal or PrcTessellationReader.TriangleStripeOneNormalTextured,
-                            textures, ref corner);
-                    }
-
-                    break;
-                default:
-                    notes.Tell($"face tessellations of kind 0x{kind:X}, which the specification marks unused, are left out");
-                    return;
-            }
-        }
-    }
-
-    private uint NextSize()
-    {
-        if (sizeAt >= face.SizesTriangulated.Length)
-        {
-            throw new InvalidDataException("A PRC face tessellation has fewer counts than its kinds of triangulation need");
-        }
-
-        return face.SizesTriangulated[sizeAt++];
-    }
-
-    private void AddRun(uint count, bool singleNormal, bool stripe, int textures, ref long corner)
-    {
-        var indices = tessellation.TriangulatedIndices;
-        var perVertex = (singleNormal || tessellation.MustRecalculateNormals ? 0 : 1) + textures + 1;
-        var needed = (decimal)count * perVertex + (singleNormal && !tessellation.MustRecalculateNormals ? 1 : 0);
-        if (needed > indices.Length - position)
-        {
-            throw new InvalidDataException($"A PRC face tessellation needs {needed} triangulated indices where {indices.Length - position} are left");
-        }
-
-        long sharedNormal = -1;
-        if (singleNormal && !tessellation.MustRecalculateNormals)
-        {
-            sharedNormal = indices[position++];
-        }
-
-        var vertices = new PrcRunVertex[count];
-        for (var vertex = 0; vertex < count; vertex++)
-        {
-            var normal = sharedNormal;
-            if (!singleNormal && !tessellation.MustRecalculateNormals)
-            {
-                normal = indices[position++];
-            }
-
-            long texture = -1;
-            for (var layer = 0; layer < textures; layer++)
-            {
-                var index = indices[position++];
-                if (layer == 0)
-                {
-                    texture = index;
-                }
-            }
-
-            vertices[vertex] = new PrcRunVertex(indices[position++], normal, texture, NextColor());
-        }
-
-        if (count < 3)
-        {
-            return;
-        }
-
-        if (!stripe && count == 3)
-        {
-            AddTriangle(vertices[0], vertices[1], vertices[2], ref corner);
-            return;
-        }
-
-        for (var triangle = 0; triangle + 2 < count; triangle++)
-        {
-            if (!stripe)
-            {
-                AddTriangle(vertices[0], vertices[triangle + 1], vertices[triangle + 2], ref corner);
-            }
-            else if (triangle % 2 == 0)
-            {
-                AddTriangle(vertices[triangle], vertices[triangle + 1], vertices[triangle + 2], ref corner);
-            }
-            else
-            {
-                AddTriangle(vertices[triangle + 1], vertices[triangle], vertices[triangle + 2], ref corner);
-            }
-        }
-    }
-
-    private Color NextColor()
-    {
-        if (face.VertexColors == null)
-        {
-            return default;
-        }
-
-        return colorAt < face.VertexColors.Count ? face.VertexColors[colorAt++] : face.VertexColors[^1];
-    }
-
-    private void AddTriangle(PrcRunVertex first, PrcRunVertex second, PrcRunVertex third, ref long corner)
-    {
-        foreach (var vertex in new[] { first, second, third })
-        {
-            PrcMeshBuilder.CheckPoint(tessellation.Coordinates, vertex.Point, "a 3D tessellation");
-            var point = new Vector3<double>(tessellation.Coordinates[vertex.Point], tessellation.Coordinates[vertex.Point + 1],
-                tessellation.Coordinates[vertex.Point + 2]);
-            var normal = Vector3F.Zero;
-            if (mesh.HasNormals)
-            {
-                PrcMeshBuilder.CheckPoint(tessellation.Normals, vertex.Normal, "a 3D tessellation's normals");
-                normal = new Vector3F((float)tessellation.Normals[vertex.Normal], (float)tessellation.Normals[vertex.Normal + 1],
-                    (float)tessellation.Normals[vertex.Normal + 2]);
-            }
-
-            var texture = Vector2F.Zero;
-            if (vertex.Texture >= 0)
-            {
-                if (vertex.Texture + 1 >= tessellation.TextureCoordinates.Length)
-                {
-                    throw new InvalidDataException($"A PRC texture index points at coordinate {vertex.Texture} of {tessellation.TextureCoordinates.Length}");
-                }
-
-                texture = new Vector2F((float)tessellation.TextureCoordinates[vertex.Texture], (float)tessellation.TextureCoordinates[vertex.Texture + 1]);
-            }
-
-            var key = new PrcVertexKey(vertex.Point, vertex.Normal, vertex.Texture, face.VertexColors != null ? corner : -1);
-            corner++;
-            mesh.AddCorner(key, point, normal, vertex.Color, texture);
-        }
-    }
-}
-
-/// <summary>A vertex of a run of triangulated data: its point, normal and texture indices and its colour.</summary>
-internal readonly struct PrcRunVertex
-{
-    internal PrcRunVertex(long point, long normal, long texture, Color color)
-    {
-        Point = point;
-        Normal = normal;
-        Texture = texture;
-        Color = color;
-    }
-
-    internal long Point { get; }
-
-    internal long Normal { get; }
-
-    internal long Texture { get; }
-
-    internal Color Color { get; }
 }

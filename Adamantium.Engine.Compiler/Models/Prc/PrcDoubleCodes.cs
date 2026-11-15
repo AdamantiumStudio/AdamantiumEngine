@@ -85,9 +85,9 @@ internal static class PrcDoubleCodes
     /// <summary>The entry whose code is <paramref name="code"/>, <paramref name="length"/> bits long; false for a
     /// prefix of a longer code, or no code at all.</summary>
     internal static bool TryFind(int length, uint code, out PrcDoubleCode entry) =>
-        ByCode.TryGetValue(Key(length, code), out entry);
+        ByCode.TryGetValue(GetKey(length, code), out entry);
 
-    private static long Key(int length, uint code) => ((long)length << 32) | code;
+    private static long GetKey(int length, uint code) => ((long)length << 32) | code;
 
     private static Dictionary<long, PrcDoubleCode> Build()
     {
@@ -99,7 +99,7 @@ internal static class PrcDoubleCodes
             for (var step = 0u; step < ExponentRuns[run + 2]; step++)
             {
                 var code = ExponentRuns[run + 1] + step;
-                codes.Add(Key(length, code), new PrcDoubleCode(length, code, true, exponent, 0));
+                codes.Add(GetKey(length, code), new PrcDoubleCode(length, code, true, exponent, 0));
                 exponent++;
             }
         }
@@ -114,37 +114,9 @@ internal static class PrcDoubleCodes
             var length = (int)FrequentDoubles[index];
             var code = (uint)FrequentDoubles[index + 1];
             var value = BitConverter.UInt64BitsToDouble(FrequentDoubles[index + 2]);
-            codes.Add(Key(length, code), new PrcDoubleCode(length, code, false, 0, value));
+            codes.Add(GetKey(length, code), new PrcDoubleCode(length, code, false, 0, value));
         }
 
         return codes;
     }
-}
-
-/// <summary>One code of the double table: an exponent, whose mantissa follows the code, or a whole frequent value.</summary>
-internal readonly struct PrcDoubleCode
-{
-    internal PrcDoubleCode(int length, uint code, bool isExponent, int exponent, double value)
-    {
-        Length = length;
-        Code = code;
-        IsExponent = isExponent;
-        Exponent = exponent;
-        Value = value;
-    }
-
-    /// <summary>How many bits the code has.</summary>
-    internal int Length { get; }
-
-    /// <summary>The code's bits, the first one read the highest.</summary>
-    internal uint Code { get; }
-
-    /// <summary>True for an exponent's code, false for a frequent value's.</summary>
-    internal bool IsExponent { get; }
-
-    /// <summary>The 11 exponent bits of the IEEE 754 double, for an exponent's code.</summary>
-    internal int Exponent { get; }
-
-    /// <summary>The value, for a frequent value's code; its sign follows the code unless it is zero.</summary>
-    internal double Value { get; }
 }

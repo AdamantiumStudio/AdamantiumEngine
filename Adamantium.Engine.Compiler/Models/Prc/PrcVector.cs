@@ -2,10 +2,8 @@ using System;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>A point or direction of the compressed tessellation's arithmetic, as the specification's basis pseudo
-/// code computes it (PRC Basis pseudocode, PrcPt): double precision, a cross product in its order of terms, a length
-/// whose sum of squares is first rounded to single precision, and unit vectors refused below the single-precision
-/// epsilon. Encoder and decoder must compute alike, as every new point is placed in axes built from points before it.</summary>
+/// <summary>A vector computed exactly as the PRC basis pseudocode (PrcPt) does, so decoded points match the
+/// encoder's.</summary>
 internal readonly struct PrcVector
 {
     /// <summary>FLT_EPSILON: below this length a vector has no direction.</summary>
@@ -46,10 +44,9 @@ internal readonly struct PrcVector
     internal PrcVector Cross(PrcVector other) =>
         new(Y * other.Z - Z * other.Y, Z * other.X - X * other.Z, X * other.Y - Y * other.X);
 
-    /// <summary>The length (Length): the square root of the sum of squares rounded to single precision, by Newton's
-    /// iteration from that single with its exponent halved, until a step changes nothing; -1 when a hundred steps do
-    /// not get there.</summary>
-    internal double Length()
+    /// <summary>The length by the spec's Newton iteration on the single-precision sum of squares; -1 when it does not
+    /// settle.</summary>
+    internal double GetLength()
     {
         var rounded = (float)(X * X + Y * Y + Z * Z);
         var squared = (double)rounded;
@@ -77,9 +74,9 @@ internal readonly struct PrcVector
     }
 
     /// <summary>This vector divided by its length; false when the length is below the single-precision epsilon.</summary>
-    internal bool TryUnitize(out PrcVector unit)
+    internal bool TryNormalize(out PrcVector unit)
     {
-        var length = Length();
+        var length = GetLength();
         if (length < SmallestLength)
         {
             unit = this;
@@ -92,11 +89,11 @@ internal readonly struct PrcVector
 
     /// <summary>The angle to <paramref name="other"/> in radians, the cosine clamped near ±1 (AngleBetween); false
     /// when either vector has no direction.</summary>
-    internal bool TryAngleTo(PrcVector other, out double angle)
+    internal bool TryGetAngleTo(PrcVector other, out double angle)
     {
         angle = 0;
-        var length = Length();
-        var otherLength = other.Length();
+        var length = GetLength();
+        var otherLength = other.GetLength();
         if (length < SmallestLength || otherLength < SmallestLength)
         {
             return false;
@@ -110,19 +107,19 @@ internal readonly struct PrcVector
 
     /// <summary>A unit vector at right angles to this one (MakeOrthoRep): its cross product with the y axis, or the x
     /// axis when that has no direction; false when none can be made.</summary>
-    internal bool TryOrthogonal(out PrcVector orthogonal)
+    internal bool TryGetOrthogonal(out PrcVector orthogonal)
     {
         orthogonal = Zero;
-        if (!TryUnitize(out var axis))
+        if (!TryNormalize(out var axis))
         {
             return false;
         }
 
-        if (axis.Cross(new PrcVector(0, 1, 0)).TryUnitize(out orthogonal))
+        if (axis.Cross(new PrcVector(0, 1, 0)).TryNormalize(out orthogonal))
         {
             return true;
         }
 
-        return axis.Cross(new PrcVector(1, 0, 0)).TryUnitize(out orthogonal);
+        return axis.Cross(new PrcVector(1, 0, 0)).TryNormalize(out orthogonal);
     }
 }

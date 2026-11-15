@@ -6,89 +6,43 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.CompilerTests;
 
-/// <summary>A parent of a test node and where the node stands relative to it.</summary>
-internal sealed class U3dTestParent
-{
-    public string Name { get; init; } = string.Empty;
-
-    public Matrix4x4F Transform { get; init; } = Matrix4x4F.Identity;
-}
-
-/// <summary>A face of a test mesh: indices into each pool at its three corners.</summary>
-internal sealed class U3dTestFace
-{
-    public int ShadingId { get; init; }
-
-    public int[] Positions { get; init; }
-
-    public int[] Normals { get; init; }
-
-    public int[] DiffuseColors { get; init; }
-
-    public int[] TextureCoordinates { get; init; }
-}
-
-/// <summary>A CLOD mesh for the tests, written whole as its base mesh.</summary>
-internal sealed class U3dTestMesh
-{
-    public string Name { get; init; }
-
-    public List<Vector3F> Positions { get; init; } = [];
-
-    public List<Vector3F> Normals { get; init; } = [];
-
-    public List<Vector4F> DiffuseColors { get; init; } = [];
-
-    public List<Vector4F> TextureCoordinates { get; init; } = [];
-
-    public List<U3dTestFace> Faces { get; init; } = [];
-
-    /// <summary>One entry a shading ID: its attributes, 0x1 diffuse colours.</summary>
-    public List<uint> ShadingAttributes { get; init; } = [0];
-
-    /// <summary>One entry a shading ID: how many texture layers it has.</summary>
-    public List<int> ShadingLayers { get; init; } = [0];
-
-    public bool ExcludeNormals { get; init; }
-}
-
 /// <summary>The blocks of ECMA-363 clause 9 the tests write, compressed as the file they go in is.</summary>
 internal static class U3dTestBlocks
 {
-    private static readonly U3dContext Shading = U3dContext.Dynamic("cShading");
+    private static readonly U3dContext Shading = U3dContext.CreateDynamic("cShading");
 
-    public static void GroupNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, byte[] metaData = null)
+    public static void WriteGroupNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, byte[] metaData = null)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         WriteParents(data, parents);
         file.Declare(U3dBlockTypes.GroupNode, data, metaData);
     }
 
-    public static byte[] ModelNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, string resource,
+    public static byte[] CreateModelNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, string resource,
         uint visibility = 1)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         WriteParents(data, parents);
         data.WriteString(resource);
         data.WriteU32(visibility);
-        return U3dTestFile.Block(U3dBlockTypes.ModelNode, data.ToArray());
+        return U3dTestFile.CreateBlock(U3dBlockTypes.ModelNode, data.ToArray());
     }
 
-    public static void LightNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, string resource)
+    public static void WriteLightNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, string resource)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         WriteParents(data, parents);
         data.WriteString(resource);
         file.Declare(U3dBlockTypes.LightNode, data);
     }
 
-    public static void ViewNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, string resource,
+    public static void WriteViewNode(U3dTestFile file, string name, IEnumerable<U3dTestParent> parents, string resource,
         float fieldOfView, float nearClip, float farClip, float width, float height)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         WriteParents(data, parents);
         data.WriteString(resource);
@@ -105,9 +59,9 @@ internal static class U3dTestBlocks
         file.Declare(U3dBlockTypes.ViewNode, data);
     }
 
-    public static byte[] ShadingModifier(U3dTestFile file, string name, params string[] shaderPerShadingId)
+    public static byte[] CreateShadingModifier(U3dTestFile file, string name, params string[] shaderPerShadingId)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(1);
         data.WriteU32(0x7);
@@ -118,12 +72,12 @@ internal static class U3dTestBlocks
             data.WriteString(shader);
         }
 
-        return U3dTestFile.Block(U3dBlockTypes.ShadingModifier, data.ToArray());
+        return U3dTestFile.CreateBlock(U3dBlockTypes.ShadingModifier, data.ToArray());
     }
 
-    public static void Mesh(U3dTestFile file, U3dTestMesh mesh)
+    public static void WriteMesh(U3dTestFile file, U3dTestMesh mesh)
     {
-        var declaration = file.Data();
+        var declaration = file.CreateData();
         declaration.WriteString(mesh.Name);
         declaration.WriteU32(0);
         declaration.WriteU32(mesh.ExcludeNormals ? 1u : 0u);
@@ -143,7 +97,7 @@ internal static class U3dTestBlocks
         declaration.WriteU32(0);
         file.Declare(U3dBlockTypes.MeshDeclaration, declaration);
 
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(mesh.Name);
         data.WriteU32(0);
         data.WriteU32((uint)mesh.Faces.Count);
@@ -177,101 +131,101 @@ internal static class U3dTestBlocks
             data.WriteCompressedU32(Shading, (uint)face.ShadingId);
             for (var corner = 0; corner < 3; corner++)
             {
-                data.WriteCompressedU32(U3dContext.Static((uint)mesh.Positions.Count), (uint)face.Positions[corner]);
+                data.WriteCompressedU32(U3dContext.CreateStatic((uint)mesh.Positions.Count), (uint)face.Positions[corner]);
                 if (!mesh.ExcludeNormals)
                 {
-                    data.WriteCompressedU32(U3dContext.Static((uint)mesh.Normals.Count), (uint)face.Normals[corner]);
+                    data.WriteCompressedU32(U3dContext.CreateStatic((uint)mesh.Normals.Count), (uint)face.Normals[corner]);
                 }
 
                 if ((mesh.ShadingAttributes[face.ShadingId] & 0x1) != 0)
                 {
-                    data.WriteCompressedU32(U3dContext.Static((uint)mesh.DiffuseColors.Count), (uint)face.DiffuseColors[corner]);
+                    data.WriteCompressedU32(U3dContext.CreateStatic((uint)mesh.DiffuseColors.Count), (uint)face.DiffuseColors[corner]);
                 }
 
                 for (var layer = 0; layer < mesh.ShadingLayers[face.ShadingId]; layer++)
                 {
-                    data.WriteCompressedU32(U3dContext.Static((uint)mesh.TextureCoordinates.Count),
+                    data.WriteCompressedU32(U3dContext.CreateStatic((uint)mesh.TextureCoordinates.Count),
                         (uint)face.TextureCoordinates[corner]);
                 }
             }
         }
 
-        file.Continue(U3dBlockTypes.MeshBaseContinuation, data);
+        file.AddContinuation(U3dBlockTypes.MeshBaseContinuation, data);
     }
 
-    /// <summary>A point set of one point at each position, each with a normal and a diffuse colour, each position
+    /// <summary>A point set of one point at each position, each with a normal and a diffuse color, each position
     /// split off the one before it. Returns the positions as the quantization leaves them.</summary>
-    public static List<Vector3F> PointSet(U3dTestFile file, string name, IReadOnlyList<Vector3F> positions,
+    public static List<Vector3F> WritePointSet(U3dTestFile file, string name, IReadOnlyList<Vector3F> positions,
         IReadOnlyList<Vector3F> normals, IReadOnlyList<Vector4F> colors, float inverseQuant)
     {
         WriteSetDeclaration(file, U3dBlockTypes.PointSetDeclaration, name, positions.Count, 0x1, inverseQuant);
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(0);
         data.WriteU32(0);
         data.WriteU32((uint)positions.Count);
-        var reconstructed = new List<Vector3F>();
-        var reconstructedNormals = new List<Vector3F>();
-        var reconstructedColors = new List<Vector4F>();
+        List<Vector3F> reconstructed = [];
+        List<Vector3F> reconstructedNormals = [];
+        List<Vector4F> reconstructedColors = [];
         for (var position = 0; position < positions.Count; position++)
         {
             var split = Math.Max(0, position - 1);
             WriteNewPosition(data, positions[position], position, reconstructed, inverseQuant);
             var predictedNormal = position == 0 ? Vector3F.Zero : Vector3F.Normalize(reconstructedNormals[split]);
-            data.WriteCompressedU32(U3dContext.Dynamic("cNormlCnt"), 1);
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cNormlCnt"), 1);
             reconstructedNormals.Add(WriteDifference3(data, predictedNormal, normals[position], inverseQuant, "cDiffNormalSign",
                 "cDiffNormalX", "cDiffNormalY", "cDiffNormalZ"));
-            data.WriteCompressedU32(U3dContext.Dynamic("cPointCnt"), 1);
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cPointCnt"), 1);
             data.WriteCompressedU32(Shading, 0);
-            data.WriteCompressedU32(U3dContext.Dynamic("cNormlIdx"), 0);
-            data.WriteCompressedU8(U3dContext.Dynamic("cDiffDup"), 0);
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cNormlIdx"), 0);
+            data.WriteCompressedU8(U3dContext.CreateDynamic("cDiffDup"), 0);
             var predictedColor = position == 0 ? Vector4F.Zero : reconstructedColors[split];
             reconstructedColors.Add(WriteColor(data, predictedColor, colors[position], inverseQuant));
         }
 
-        file.Continue(U3dBlockTypes.PointSetContinuation, data);
+        file.AddContinuation(U3dBlockTypes.PointSetContinuation, data);
         return reconstructed;
     }
 
     /// <summary>A polyline: a line from each position to the next, a normal at each position. Returns the positions
     /// as the quantization leaves them.</summary>
-    public static List<Vector3F> LineSet(U3dTestFile file, string name, IReadOnlyList<Vector3F> positions,
+    public static List<Vector3F> WriteLineSet(U3dTestFile file, string name, IReadOnlyList<Vector3F> positions,
         IReadOnlyList<Vector3F> normals, float inverseQuant)
     {
         WriteSetDeclaration(file, U3dBlockTypes.LineSetDeclaration, name, positions.Count - 1, 0, inverseQuant);
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(0);
         data.WriteU32(0);
         data.WriteU32((uint)positions.Count);
-        var reconstructed = new List<Vector3F>();
-        var reconstructedNormals = new List<Vector3F>();
+        List<Vector3F> reconstructed = [];
+        List<Vector3F> reconstructedNormals = [];
         for (var position = 0; position < positions.Count; position++)
         {
             WriteNewPosition(data, positions[position], position, reconstructed, inverseQuant);
             var predictedNormal = position >= 2 ? reconstructedNormals[position - 1] : Vector3F.Zero;
-            data.WriteCompressedU32(U3dContext.Dynamic("cNormlCnt"), 1);
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cNormlCnt"), 1);
             reconstructedNormals.Add(WriteDifference3(data, predictedNormal, normals[position], inverseQuant, "cDiffNormalSign",
                 "cDiffNormalX", "cDiffNormalY", "cDiffNormalZ"));
-            data.WriteCompressedU32(U3dContext.Dynamic("cLineCnt"), position == 0 ? 0u : 1u);
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cLineCnt"), position == 0 ? 0u : 1u);
             if (position == 0)
             {
                 continue;
             }
 
             data.WriteCompressedU32(Shading, 0);
-            data.WriteCompressedU32(U3dContext.Static((uint)position), (uint)(position - 1));
-            data.WriteCompressedU32(U3dContext.Dynamic("cNormlIdx"), 0);
-            data.WriteCompressedU32(U3dContext.Dynamic("cNormlIdx"), 0);
+            data.WriteCompressedU32(U3dContext.CreateStatic((uint)position), (uint)(position - 1));
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cNormlIdx"), 0);
+            data.WriteCompressedU32(U3dContext.CreateDynamic("cNormlIdx"), 0);
         }
 
-        file.Continue(U3dBlockTypes.LineSetContinuation, data);
+        file.AddContinuation(U3dBlockTypes.LineSetContinuation, data);
         return reconstructed;
     }
 
-    public static void Material(U3dTestFile file, string name, Vector3F diffuse, float opacity, float reflectivity)
+    public static void WriteMaterial(U3dTestFile file, string name, Vector3F diffuse, float opacity, float reflectivity)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(0x3F);
         WriteVector(data, new Vector3F(0.1f, 0.1f, 0.1f));
@@ -283,9 +237,9 @@ internal static class U3dTestBlocks
         file.Declare(U3dBlockTypes.MaterialResource, data);
     }
 
-    public static void Shader(U3dTestFile file, string name, string material, string texture = null)
+    public static void WriteShader(U3dTestFile file, string name, string material, string texture = null)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(0x1);
         data.WriteF32(0);
@@ -311,9 +265,9 @@ internal static class U3dTestBlocks
         file.Declare(U3dBlockTypes.LitTextureShader, data);
     }
 
-    public static void Texture(U3dTestFile file, string name, byte[] png)
+    public static void WriteTexture(U3dTestFile file, string name, byte[] png)
     {
-        var declaration = file.Data();
+        var declaration = file.CreateData();
         declaration.WriteString(name);
         declaration.WriteU32(2);
         declaration.WriteU32(2);
@@ -326,9 +280,10 @@ internal static class U3dTestBlocks
         file.Declare(U3dBlockTypes.TextureDeclaration, declaration);
 
         var half = png.Length / 2;
-        foreach (var part in new[] { png[..half], png[half..] })
+        byte[][] parts = [png[..half], png[half..]];
+        foreach (var part in parts)
         {
-            var data = file.Data();
+            var data = file.CreateData();
             data.WriteString(name);
             data.WriteU32(0);
             foreach (var value in part)
@@ -336,13 +291,13 @@ internal static class U3dTestBlocks
                 data.WriteU8(value);
             }
 
-            file.Continue(U3dBlockTypes.TextureContinuation, data);
+            file.AddContinuation(U3dBlockTypes.TextureContinuation, data);
         }
     }
 
-    public static void Light(U3dTestFile file, string name, byte type, Vector3F color, float spotAngle, float intensity)
+    public static void WriteLight(U3dTestFile file, string name, byte type, Vector3F color, float spotAngle, float intensity)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(0x1);
         data.WriteU8(type);
@@ -356,9 +311,9 @@ internal static class U3dTestBlocks
         file.Declare(U3dBlockTypes.LightResource, data);
     }
 
-    public static void View(U3dTestFile file, string name)
+    public static void WriteView(U3dTestFile file, string name)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(1);
         data.WriteString(string.Empty);
@@ -384,7 +339,7 @@ internal static class U3dTestBlocks
     private static void WriteSetDeclaration(U3dTestFile file, uint type, string name, int primitives, uint shadingAttributes,
         float inverseQuant)
     {
-        var data = file.Data();
+        var data = file.CreateData();
         data.WriteString(name);
         data.WriteU32(0);
         data.WriteU32(0);
@@ -440,7 +395,7 @@ internal static class U3dTestBlocks
     private static void WriteNewPosition(U3dTestBitWriter data, Vector3F actual, int current, List<Vector3F> reconstructed,
         float inverseQuant)
     {
-        data.WriteCompressedU32(U3dContext.Static(current == 0 ? 1u : (uint)current), (uint)Math.Max(0, current - 1));
+        data.WriteCompressedU32(U3dContext.CreateStatic(current == 0 ? 1u : (uint)current), (uint)Math.Max(0, current - 1));
         var predicted = current == 0 ? Vector3F.Zero : reconstructed[current - 1];
         reconstructed.Add(WriteDifference3(data, predicted, actual, inverseQuant, "cPosDiffSign", "cPosDiffX", "cPosDiffY",
             "cPosDiffZ"));
@@ -452,10 +407,10 @@ internal static class U3dTestBlocks
         var first = Quantize(predicted.X, actual.X, inverseQuant);
         var second = Quantize(predicted.Y, actual.Y, inverseQuant);
         var third = Quantize(predicted.Z, actual.Z, inverseQuant);
-        data.WriteCompressedU8(U3dContext.Dynamic(signs), (byte)(first.SignBit | (second.SignBit << 1) | (third.SignBit << 2)));
-        data.WriteCompressedU32(U3dContext.Dynamic(xContext), first.Difference);
-        data.WriteCompressedU32(U3dContext.Dynamic(yContext), second.Difference);
-        data.WriteCompressedU32(U3dContext.Dynamic(zContext), third.Difference);
+        data.WriteCompressedU8(U3dContext.CreateDynamic(signs), (byte)(first.SignBit | (second.SignBit << 1) | (third.SignBit << 2)));
+        data.WriteCompressedU32(U3dContext.CreateDynamic(xContext), first.Difference);
+        data.WriteCompressedU32(U3dContext.CreateDynamic(yContext), second.Difference);
+        data.WriteCompressedU32(U3dContext.CreateDynamic(zContext), third.Difference);
         return new Vector3F(first.Reconstructed, second.Reconstructed, third.Reconstructed);
     }
 
@@ -465,12 +420,12 @@ internal static class U3dTestBlocks
         var green = Quantize(predicted.Y, actual.Y, inverseQuant);
         var blue = Quantize(predicted.Z, actual.Z, inverseQuant);
         var alpha = Quantize(predicted.W, actual.W, inverseQuant);
-        data.WriteCompressedU8(U3dContext.Dynamic("cDiffuseColorSign"),
+        data.WriteCompressedU8(U3dContext.CreateDynamic("cDiffuseColorSign"),
             (byte)(red.SignBit | (green.SignBit << 1) | (blue.SignBit << 2) | (alpha.SignBit << 3)));
-        data.WriteCompressedU32(U3dContext.Dynamic("cColorDiffR"), red.Difference);
-        data.WriteCompressedU32(U3dContext.Dynamic("cColorDiffG"), green.Difference);
-        data.WriteCompressedU32(U3dContext.Dynamic("cColorDiffB"), blue.Difference);
-        data.WriteCompressedU32(U3dContext.Dynamic("cColorDiffA"), alpha.Difference);
+        data.WriteCompressedU32(U3dContext.CreateDynamic("cColorDiffR"), red.Difference);
+        data.WriteCompressedU32(U3dContext.CreateDynamic("cColorDiffG"), green.Difference);
+        data.WriteCompressedU32(U3dContext.CreateDynamic("cColorDiffB"), blue.Difference);
+        data.WriteCompressedU32(U3dContext.CreateDynamic("cColorDiffA"), alpha.Difference);
         return new Vector4F(red.Reconstructed, green.Reconstructed, blue.Reconstructed, alpha.Reconstructed);
     }
 
@@ -508,14 +463,4 @@ internal static class U3dTestBlocks
             data.WriteF32(element);
         }
     }
-}
-
-/// <summary>A value quantized against its prediction: the sign, the difference and what a reader rebuilds.</summary>
-internal sealed class U3dTestQuantized
-{
-    public int SignBit { get; init; }
-
-    public uint Difference { get; init; }
-
-    public float Reconstructed { get; init; }
 }

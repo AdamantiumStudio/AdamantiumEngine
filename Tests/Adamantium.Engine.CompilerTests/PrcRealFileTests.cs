@@ -11,12 +11,8 @@ using NUnit.Framework;
 
 namespace Adamantium.Engine.CompilerTests;
 
-/// <summary>The PRC artwork of real CAD PDFs - files that are not ours and never enter the repository - read from a
-/// folder beside it, TestFiles/3d-pdf-samples, when the machine has one. Explicit: it runs only when asked for, so no
-/// build depends on files it cannot have. Each artwork must convert without error; what it gives and what it leaves out
-/// is written to the test output. Every section must be read to its end in step - no bits left after it, no compressed
-/// tessellation storing more than its triangles use - and every mesh sane: finite points within a building's reach,
-/// unit normals.</summary>
+/// <summary>The PRC artwork of real CAD PDFs kept outside the repository (TestFiles/3d-pdf-samples), run only when
+/// asked for: every artwork converts, every section is read to its end, every mesh is sane.</summary>
 [TestFixture, Explicit("Runs over CAD PDFs outside the repository"), Category("RealPdf3D")]
 public class PrcRealFileTests
 {
@@ -105,10 +101,9 @@ public class PrcRealFileTests
         foreach (var texture in scene.Textures.Values)
         {
             Assert.That(scene.Images.TryGetValue(texture.Image, out var image), Is.True, $"{name}: texture {texture.ID} shows no image");
-            var size = PrcTestImages.SizeOf(image.Data, image.MimeType);
-            Assert.That(size, Is.Not.Null, $"{name}: image {image.ID} is not the {image.MimeType} it says it is");
-            Assert.That(size.Width is > 0 and <= 16384 && size.Height is > 0 and <= 16384, Is.True,
-                $"{name}: image {image.ID} is {size.Width} by {size.Height}");
+            var decoded = PrcTestImages.Decode(image.Data);
+            Assert.That(decoded.Width is > 0 and <= 16384 && decoded.Height is > 0 and <= 16384, Is.True,
+                $"{name}: image {image.ID} is {decoded.Width} by {decoded.Height}");
         }
     }
 

@@ -6,27 +6,23 @@ using Adamantium.Engine.Compiler.Models.Prc;
 
 namespace Adamantium.Engine.CompilerTests;
 
-/// <summary>The compressed types of the PRC Format Specification as its writing procedures give them, for writing PRC
-/// test files: bits from the highest of each byte, an UnsignedInteger as 1-led bytes ended by a 0, an Integer the same
-/// with its sign kept in the last byte, a Double by WriteDouble - the code of its exponent or of a frequent value from
-/// the specification's table, the sign, the mantissa's top four bits and its lower bytes from the highest, each a byte
-/// or a reference to an equal one above it, ended by a mark when the rest repeats. Only the table of codes is shared
-/// with the reader; the procedures are this class's own.</summary>
+/// <summary>Writes the compressed types of PRC by the specification's writing procedures, for test files; only the
+/// table of double codes is shared with the reader.</summary>
 internal sealed class PrcTestBitWriter
 {
-    private readonly List<bool> bits = [];
+    private readonly List<bool> _bits = [];
 
-    public int BitCount => bits.Count;
+    public int BitCount => _bits.Count;
 
-    public void WriteBit(bool value) => bits.Add(value);
+    public void WriteBit(bool value) => _bits.Add(value);
 
-    public void WriteBoolean(bool value) => bits.Add(value);
+    public void WriteBoolean(bool value) => _bits.Add(value);
 
     public void WriteBits(uint value, int count)
     {
         for (var bit = count - 1; bit >= 0; bit--)
         {
-            bits.Add(((value >> bit) & 1) != 0);
+            _bits.Add(((value >> bit) & 1) != 0);
         }
     }
 
@@ -160,10 +156,10 @@ internal sealed class PrcTestBitWriter
     /// <summary>The bits written, the last byte filled out with zero bits.</summary>
     public byte[] ToArray()
     {
-        var bytes = new byte[(bits.Count + 7) / 8];
-        for (var bit = 0; bit < bits.Count; bit++)
+        var bytes = new byte[(_bits.Count + 7) / 8];
+        for (var bit = 0; bit < _bits.Count; bit++)
         {
-            if (bits[bit])
+            if (_bits[bit])
             {
                 bytes[bit >> 3] |= (byte)(0x80 >> (bit & 7));
             }

@@ -32,8 +32,8 @@ public class PrcBitReaderTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(unsigned.Select(index =>reader.ReadUnsignedInteger()), Is.EqualTo(unsigned));
-            Assert.That(signed.Select(index =>reader.ReadInteger()), Is.EqualTo(signed));
+            Assert.That(unsigned.Select(index => reader.ReadUnsignedInteger()), Is.EqualTo(unsigned));
+            Assert.That(signed.Select(index => reader.ReadInteger()), Is.EqualTo(signed));
             Assert.That(reader.IsAtPadding, Is.True);
         });
     }
@@ -96,18 +96,19 @@ public class PrcBitReaderTests
     public void Doubles_ReadBackBitForBit()
     {
         var random = new Random(8137);
-        var values = new[]
-            {
-                0, -0.0, 1, -1, 0.5, 0.001, -0.002, 1000, 360, 180, 12345, 999999999, Math.PI, 2 * Math.PI, 1165, 1195,
-                1e-300, -1e300, double.Epsilon, -double.Epsilon, double.MaxValue, double.MinValue, double.PositiveInfinity,
-                double.NegativeInfinity, 0.1, 1.0 / 3, 2.0 / 3, 0.2, 1.25, 4096.5, -7.75, BitConverter.UInt64BitsToDouble(0x3FF1111111111111),
-                BitConverter.UInt64BitsToDouble(0x3FF1111111111112), BitConverter.UInt64BitsToDouble(0x3FF0000000000001),
-                BitConverter.UInt64BitsToDouble(0x3FF0010203040506), BitConverter.UInt64BitsToDouble(0x3FF0050505050505),
-                BitConverter.UInt64BitsToDouble(0x3FF0FFFFFFFFFFFF)
-            }
-            .Concat(Enumerable.Range(0, 5000).Select(index =>(random.NextDouble() - 0.5) * Math.Pow(10, random.Next(-30, 30))))
-            .Concat(Enumerable.Range(0, 2000).Select(index =>BitConverter.Int64BitsToDouble(random.NextInt64())))
-            .Concat(Enumerable.Range(0, 2000).Select(index =>Math.Round((random.NextDouble() - 0.5) * 1000, random.Next(0, 4))))
+        double[] chosen =
+        [
+            0, -0.0, 1, -1, 0.5, 0.001, -0.002, 1000, 360, 180, 12345, 999999999, Math.PI, 2 * Math.PI, 1165, 1195,
+            1e-300, -1e300, double.Epsilon, -double.Epsilon, double.MaxValue, double.MinValue, double.PositiveInfinity,
+            double.NegativeInfinity, 0.1, 1.0 / 3, 2.0 / 3, 0.2, 1.25, 4096.5, -7.75, BitConverter.UInt64BitsToDouble(0x3FF1111111111111),
+            BitConverter.UInt64BitsToDouble(0x3FF1111111111112), BitConverter.UInt64BitsToDouble(0x3FF0000000000001),
+            BitConverter.UInt64BitsToDouble(0x3FF0010203040506), BitConverter.UInt64BitsToDouble(0x3FF0050505050505),
+            BitConverter.UInt64BitsToDouble(0x3FF0FFFFFFFFFFFF)
+        ];
+        var values = chosen
+            .Concat(Enumerable.Range(0, 5000).Select(index => (random.NextDouble() - 0.5) * Math.Pow(10, random.Next(-30, 30))))
+            .Concat(Enumerable.Range(0, 2000).Select(index => BitConverter.Int64BitsToDouble(random.NextInt64())))
+            .Concat(Enumerable.Range(0, 2000).Select(index => Math.Round((random.NextDouble() - 0.5) * 1000, random.Next(0, 4))))
             .Where(value => !double.IsNaN(value))
             .ToList();
         var writer = new PrcTestBitWriter();

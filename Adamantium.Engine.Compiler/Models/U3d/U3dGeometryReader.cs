@@ -1,44 +1,20 @@
 using System.Collections.Generic;
 using System.IO;
 using Adamantium.Mathematics;
+using static Adamantium.Engine.Compiler.Models.U3d.U3dContexts;
 
 namespace Adamantium.Engine.Compiler.Models.U3d;
 
-/// <summary>Reads the geometry generator blocks of ECMA-363 9.6: the declarations of CLOD meshes, point sets and line
-/// sets, a mesh's base mesh, and the continuations of point and line sets - each new position predicted from the one it
-/// splits off and corrected by quantized differences, its normals, colours and texture coordinates predicted from
-/// those used at that position.</summary>
+/// <summary>Reads the geometry blocks of ECMA-363 9.6: declarations, the base mesh, and point and line set
+/// continuations.</summary>
 internal static class U3dGeometryReader
 {
-    private static readonly U3dContext Shading = U3dContext.Dynamic("cShading");
-    private static readonly U3dContext PositionSigns = U3dContext.Dynamic("cPosDiffSign");
-    private static readonly U3dContext PositionX = U3dContext.Dynamic("cPosDiffX");
-    private static readonly U3dContext PositionY = U3dContext.Dynamic("cPosDiffY");
-    private static readonly U3dContext PositionZ = U3dContext.Dynamic("cPosDiffZ");
-    private static readonly U3dContext NormalCount = U3dContext.Dynamic("cNormlCnt");
-    private static readonly U3dContext NormalSigns = U3dContext.Dynamic("cDiffNormalSign");
-    private static readonly U3dContext NormalX = U3dContext.Dynamic("cDiffNormalX");
-    private static readonly U3dContext NormalY = U3dContext.Dynamic("cDiffNormalY");
-    private static readonly U3dContext NormalZ = U3dContext.Dynamic("cDiffNormalZ");
-    private static readonly U3dContext NormalIndex = U3dContext.Dynamic("cNormlIdx");
-    private static readonly U3dContext PointCount = U3dContext.Dynamic("cPointCnt");
-    private static readonly U3dContext LineCount = U3dContext.Dynamic("cLineCnt");
-    private static readonly U3dContext DiffuseDuplicate = U3dContext.Dynamic("cDiffDup");
-    private static readonly U3dContext SpecularDuplicate = U3dContext.Dynamic("cSpecDup");
-    private static readonly U3dContext DiffuseSigns = U3dContext.Dynamic("cDiffuseColorSign");
-    private static readonly U3dContext SpecularSigns = U3dContext.Dynamic("cSpecularColorSign");
-    private static readonly U3dContext ColorRed = U3dContext.Dynamic("cColorDiffR");
-    private static readonly U3dContext ColorGreen = U3dContext.Dynamic("cColorDiffG");
-    private static readonly U3dContext ColorBlue = U3dContext.Dynamic("cColorDiffB");
-    private static readonly U3dContext ColorAlpha = U3dContext.Dynamic("cColorDiffA");
-    private static readonly U3dContext TextureDuplicate = U3dContext.Dynamic("cTexCDup");
-    private static readonly U3dContext TextureSigns = U3dContext.Dynamic("cTexCoordSign");
-    private static readonly U3dContext TextureU = U3dContext.Dynamic("cTexCDiffU");
-    private static readonly U3dContext TextureV = U3dContext.Dynamic("cTexCDiffV");
-    private static readonly U3dContext TextureS = U3dContext.Dynamic("cTexCDiffS");
-    private static readonly U3dContext TextureT = U3dContext.Dynamic("cTexCDiffT");
-
     private const uint DuplicateFlag = 0x2;
+
+    private static readonly U3dContext PointCount = U3dContext.CreateDynamic("cPointCnt");
+    private static readonly U3dContext LineCount = U3dContext.CreateDynamic("cLineCnt");
+    private static readonly U3dContext DiffuseDuplicate = U3dContext.CreateDynamic("cDiffDup");
+    private static readonly U3dContext SpecularDuplicate = U3dContext.CreateDynamic("cSpecDup");
 
     /// <summary>A CLOD Mesh, Point Set or Line Set Declaration (9.6.1.1, 9.6.2.1, 9.6.3.1).</summary>
     internal static U3dGeometry ReadDeclaration(U3dBitReader reader, U3dGeometryKind kind)
@@ -127,13 +103,13 @@ internal static class U3dGeometryReader
             geometry.Normals.Add(ReadVector3(reader));
         }
 
-        reader.CheckCount(diffuseCount, 128, "diffuse colours");
+        reader.CheckCount(diffuseCount, 128, "diffuse colors");
         for (var index = 0u; index < diffuseCount; index++)
         {
             geometry.DiffuseColors.Add(ReadVector4(reader));
         }
 
-        reader.CheckCount(specularCount, 128, "specular colours");
+        reader.CheckCount(specularCount, 128, "specular colors");
         for (var index = 0u; index < specularCount; index++)
         {
             geometry.SpecularColors.Add(ReadVector4(reader));
@@ -146,11 +122,11 @@ internal static class U3dGeometryReader
         }
 
         reader.CheckCount(faceCount, 1, "faces");
-        var positions = U3dContext.Static(positionCount);
-        var normals = U3dContext.Static(normalCount);
-        var diffuse = U3dContext.Static(diffuseCount);
-        var specular = U3dContext.Static(specularCount);
-        var textures = U3dContext.Static(textureCount);
+        var positions = U3dContext.CreateStatic(positionCount);
+        var normals = U3dContext.CreateStatic(normalCount);
+        var diffuse = U3dContext.CreateStatic(diffuseCount);
+        var specular = U3dContext.CreateStatic(specularCount);
+        var textures = U3dContext.CreateStatic(textureCount);
         for (var face = 0u; face < faceCount; face++)
         {
             var shadingId = ReadShadingId(reader, geometry);
@@ -158,27 +134,27 @@ internal static class U3dGeometryReader
             var corners = new U3dCorner[3];
             for (var cornerIndex = 0; cornerIndex < corners.Length; cornerIndex++)
             {
-                var corner = new U3dCorner { Position = Index(reader.ReadCompressedU32(positions), positionCount, "position") };
+                var corner = new U3dCorner { Position = CheckIndex(reader.ReadCompressedU32(positions), positionCount, "position") };
                 if (!geometry.ExcludesNormals)
                 {
-                    corner.Normal = Index(reader.ReadCompressedU32(normals), normalCount, "normal");
+                    corner.Normal = CheckIndex(reader.ReadCompressedU32(normals), normalCount, "normal");
                 }
 
                 if (description.HasDiffuseColors)
                 {
-                    corner.Diffuse = Index(reader.ReadCompressedU32(diffuse), diffuseCount, "diffuse colour");
+                    corner.Diffuse = CheckIndex(reader.ReadCompressedU32(diffuse), diffuseCount, "diffuse color");
                 }
 
                 if (description.HasSpecularColors)
                 {
-                    corner.Specular = Index(reader.ReadCompressedU32(specular), specularCount, "specular colour");
+                    corner.Specular = CheckIndex(reader.ReadCompressedU32(specular), specularCount, "specular color");
                 }
 
                 corner.TextureCoordinates = new int[description.TextureLayerCount];
                 for (var layer = 0; layer < corner.TextureCoordinates.Length; layer++)
                 {
                     corner.TextureCoordinates[layer] =
-                        Index(reader.ReadCompressedU32(textures), textureCount, "texture coordinate");
+                        CheckIndex(reader.ReadCompressedU32(textures), textureCount, "texture coordinate");
                 }
 
                 corners[cornerIndex] = corner;
@@ -229,7 +205,7 @@ internal static class U3dGeometryReader
             {
                 var shadingId = ReadShadingId(reader, geometry);
                 var description = geometry.Shadings[shadingId];
-                var first = reader.ReadCompressedU32(U3dContext.Static(position == 0 ? 1u : (uint)position));
+                var first = reader.ReadCompressedU32(U3dContext.CreateStatic(position == 0 ? 1u : (uint)position));
                 if (first >= position)
                 {
                     throw new InvalidDataException(
@@ -299,7 +275,7 @@ internal static class U3dGeometryReader
     private static List<U3dCorner> ReadNewPosition(U3dBitReader reader, U3dGeometry geometry)
     {
         var current = geometry.Positions.Count;
-        var split = reader.ReadCompressedU32(U3dContext.Static(current == 0 ? 1u : (uint)current));
+        var split = reader.ReadCompressedU32(U3dContext.CreateStatic(current == 0 ? 1u : (uint)current));
         if (current > 0 && split >= current)
         {
             throw new InvalidDataException(
@@ -308,10 +284,10 @@ internal static class U3dGeometryReader
 
         var predicted = current == 0 ? Vector3F.Zero : geometry.Positions[(int)split];
         var signs = reader.ReadCompressedU8(PositionSigns);
-        var iq = geometry.PositionInverseQuant;
-        var positionX = InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(PositionX), iq);
-        var positionY = InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(PositionY), iq);
-        var positionZ = InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(PositionZ), iq);
+        var inverseQuant = geometry.PositionInverseQuant;
+        var positionX = Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(PositionX), inverseQuant);
+        var positionY = Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(PositionY), inverseQuant);
+        var positionZ = Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(PositionZ), inverseQuant);
         geometry.Positions.Add(new Vector3F(positionX, positionY, positionZ));
         geometry.CornersAtPosition.Add([]);
         return current == 0 ? [] : geometry.CornersAtPosition[(int)split];
@@ -322,13 +298,13 @@ internal static class U3dGeometryReader
         var count = reader.ReadCompressedU32(NormalCount);
         reader.CheckCount(count, 1, "normals");
         var predicted = PredictNormal(geometry, splitCorners, spherical);
-        var iq = geometry.NormalInverseQuant;
+        var inverseQuant = geometry.NormalInverseQuant;
         for (var normal = 0u; normal < count; normal++)
         {
             var signs = reader.ReadCompressedU8(NormalSigns);
-            var normalX = InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(NormalX), iq);
-            var normalY = InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(NormalY), iq);
-            var normalZ = InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(NormalZ), iq);
+            var normalX = Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(NormalX), inverseQuant);
+            var normalY = Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(NormalY), inverseQuant);
+            var normalZ = Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(NormalZ), inverseQuant);
             geometry.Normals.Add(new Vector3F(normalX, normalY, normalZ));
         }
 
@@ -380,11 +356,11 @@ internal static class U3dGeometryReader
 
         var predicted = used == 0 ? Vector4F.Zero : sum / used;
         var signs = reader.ReadCompressedU8(diffuse ? DiffuseSigns : SpecularSigns);
-        var iq = diffuse ? geometry.DiffuseColorInverseQuant : geometry.SpecularColorInverseQuant;
-        var red = InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(ColorRed), iq);
-        var green = InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(ColorGreen), iq);
-        var blue = InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(ColorBlue), iq);
-        var alpha = InverseQuant(predicted.W, signs, 0x8, reader.ReadCompressedU32(ColorAlpha), iq);
+        var inverseQuant = diffuse ? geometry.DiffuseColorInverseQuant : geometry.SpecularColorInverseQuant;
+        var red = Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(ColorRed), inverseQuant);
+        var green = Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(ColorGreen), inverseQuant);
+        var blue = Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(ColorBlue), inverseQuant);
+        var alpha = Dequantize(predicted.W, signs, 0x8, reader.ReadCompressedU32(ColorAlpha), inverseQuant);
         pool.Add(new Vector4F(red, green, blue, alpha));
         var added = pool.Count - 1;
         if (diffuse)
@@ -420,11 +396,11 @@ internal static class U3dGeometryReader
 
         var predicted = used == 0 ? Vector4F.Zero : sum / used;
         var signs = reader.ReadCompressedU8(TextureSigns);
-        var iq = geometry.TextureCoordinateInverseQuant;
-        var first = InverseQuant(predicted.X, signs, 0x1, reader.ReadCompressedU32(TextureU), iq);
-        var second = InverseQuant(predicted.Y, signs, 0x2, reader.ReadCompressedU32(TextureV), iq);
-        var third = InverseQuant(predicted.Z, signs, 0x4, reader.ReadCompressedU32(TextureS), iq);
-        var fourth = InverseQuant(predicted.W, signs, 0x8, reader.ReadCompressedU32(TextureT), iq);
+        var inverseQuant = geometry.TextureCoordinateInverseQuant;
+        var first = Dequantize(predicted.X, signs, 0x1, reader.ReadCompressedU32(TextureU), inverseQuant);
+        var second = Dequantize(predicted.Y, signs, 0x2, reader.ReadCompressedU32(TextureV), inverseQuant);
+        var third = Dequantize(predicted.Z, signs, 0x4, reader.ReadCompressedU32(TextureS), inverseQuant);
+        var fourth = Dequantize(predicted.W, signs, 0x8, reader.ReadCompressedU32(TextureT), inverseQuant);
         geometry.TextureCoordinates.Add(new Vector4F(first, second, third, fourth));
         geometry.LastTextureCoordinate = geometry.TextureCoordinates.Count - 1;
         return geometry.LastTextureCoordinate;
@@ -457,7 +433,8 @@ internal static class U3dGeometryReader
         return length > 0 ? sum / length : Vector3F.Zero;
     }
 
-    private static int ReadShadingId(U3dBitReader reader, U3dGeometry geometry)
+    /// <summary>A shading ID, checked against those <paramref name="geometry"/> declares.</summary>
+    internal static int ReadShadingId(U3dBitReader reader, U3dGeometry geometry)
     {
         var shadingId = reader.ReadCompressedU32(Shading);
         if (shadingId >= geometry.Shadings.Count)
@@ -469,7 +446,7 @@ internal static class U3dGeometryReader
         return (int)shadingId;
     }
 
-    private static int Index(uint value, uint count, string what)
+    private static int CheckIndex(uint value, uint count, string what)
     {
         if (value >= count)
         {
@@ -479,13 +456,15 @@ internal static class U3dGeometryReader
         return (int)value;
     }
 
-    private static float InverseQuant(float predicted, byte signs, int signBit, uint difference, float inverseQuant)
+    /// <summary>The value <paramref name="predicted"/> corrected by a quantized difference and its sign bit.</summary>
+    internal static float Dequantize(float predicted, byte signs, int signBit, uint difference, float inverseQuant)
     {
         var sign = (signs & signBit) != 0 ? -1f : 1f;
         return predicted + sign * difference * inverseQuant;
     }
 
-    private static Vector3F ReadVector3(U3dBitReader reader) => new(reader.ReadF32(), reader.ReadF32(), reader.ReadF32());
+    /// <summary>Three F32 values.</summary>
+    internal static Vector3F ReadVector3(U3dBitReader reader) => new(reader.ReadF32(), reader.ReadF32(), reader.ReadF32());
 
     private static Vector4F ReadVector4(U3dBitReader reader) =>
         new(reader.ReadF32(), reader.ReadF32(), reader.ReadF32(), reader.ReadF32());

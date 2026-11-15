@@ -11,6 +11,7 @@ public sealed class Pdf3DProjection
     private const string OrthographicScaleKey = "OS";
     private const string OrthographicBindingKey = "OB";
     private const string Orthographic = "O";
+    private const string WidthBinding = "W";
 
     /// <summary>Perspective, or orthographic (<c>Subtype</c> <c>P</c> or <c>O</c>).</summary>
     public Pdf3DProjectionKind Kind { get; init; }
@@ -41,8 +42,8 @@ public sealed class Pdf3DProjection
             FieldOfView = PdfValues.Number(dictionary[FieldOfViewKey], resolver, 90),
             Scale = PdfValues.Number(dictionary[OrthographicScaleKey], resolver, 1),
             Binding = orthographic
-                ? PdfValues.Name(dictionary[OrthographicBindingKey], resolver) ?? "W"
-                : PdfValues.Name(dictionary[PerspectiveScalingKey], resolver) ?? "W",
+                ? PdfValues.Name(dictionary[OrthographicBindingKey], resolver) ?? WidthBinding
+                : PdfValues.Name(dictionary[PerspectiveScalingKey], resolver) ?? WidthBinding,
         };
     }
 }

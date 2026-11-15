@@ -67,11 +67,11 @@ public sealed class Pdf3DView
         var source = PdfValues.Name(dictionary[MatrixSourceKey], resolver);
         return new Pdf3DView
         {
-            Name = Text(dictionary[ExternalNameKey], resolver),
-            InternalName = Text(dictionary[InternalNameKey], resolver),
+            Name = ReadText(dictionary[ExternalNameKey], resolver),
+            InternalName = ReadText(dictionary[InternalNameKey], resolver),
             UsesCamera = source == MatrixFromCamera || (source == null && camera != null),
             Camera = camera,
-            ViewNode = Text(dictionary[ViewNodeKey], resolver),
+            ViewNode = ReadText(dictionary[ViewNodeKey], resolver),
             CenterOfOrbit = PdfValues.Number(dictionary[CenterOfOrbitKey], resolver),
             Projection = Pdf3DProjection.From(dictionary[ProjectionKey], resolver),
             Background = Pdf3DColors.From(background?[BackgroundColorKey], resolver) ?? new Pdf3DColor(1, 1, 1),
@@ -80,7 +80,7 @@ public sealed class Pdf3DView
         };
     }
 
-    private static string Text(PdfObject value, IPdfObjectResolver resolver) => resolver.Resolve(value) switch
+    private static string ReadText(PdfObject value, IPdfObjectResolver resolver) => resolver.Resolve(value) switch
     {
         PdfString text => text.ToText(),
         PdfArray { Count: > 0 } path => (resolver.Resolve(path[0]) as PdfString)?.ToText(),

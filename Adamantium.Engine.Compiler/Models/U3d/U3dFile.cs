@@ -6,9 +6,8 @@ using System.Threading;
 
 namespace Adamantium.Engine.Compiler.Models.U3d;
 
-/// <summary>A U3D file (ECMA-363) read into its palettes: the nodes, the model resources' geometry and shading, the
-/// shaders, materials, textures, lights and views, each by its name - a later object of a name replacing the earlier,
-/// as a palette has it. What the file holds and the reader leaves out is listed in <see cref="Notes"/>.</summary>
+/// <summary>A U3D file (ECMA-363) read into its palettes by name, a later object of a name replacing the earlier; what is
+/// left out is listed in <see cref="Notes"/>.</summary>
 internal sealed class U3dFile
 {
     /// <summary>The profile bit of a file whose compressed fields are written plain.</summary>
@@ -19,11 +18,10 @@ internal sealed class U3dFile
 
     private const uint KnownProfileBits = 0x2 | NoCompressionProfile | DefinedUnitsProfile;
     private const uint Utf8 = 106;
-    private const string LocatedKey = "U3dBlock";
 
-    private readonly HashSet<string> told = new(StringComparer.Ordinal);
-    private readonly Dictionary<uint, U3dExtension> extensionBlocks = [];
-    private readonly Dictionary<string, int> nodeIndex = new(StringComparer.Ordinal);
+    private readonly ImportNotes _notes = new();
+    private readonly Dictionary<uint, U3dExtension> _extensionBlocks = [];
+    private readonly Dictionary<string, int> _nodeIndex = new(StringComparer.Ordinal);
 
     internal short MajorVersion { get; private set; }
 
@@ -31,10 +29,10 @@ internal sealed class U3dFile
 
     internal uint Profile { get; private set; }
 
-    /// <summary>Metres a unit, when the file defines its units.</summary>
+    /// <summary>Meters a unit, when the file defines its units.</summary>
     internal double? UnitsScalingFactor { get; private set; }
 
-    internal bool NoCompression => (Profile & NoCompressionProfile) != 0;
+    internal bool IsUncompressed => (Profile & NoCompressionProfile) != 0;
 
     /// <summary>The nodes in the order the file declares them.</summary>
     internal List<U3dNode> Nodes { get; } = [];
@@ -58,7 +56,7 @@ internal sealed class U3dFile
     internal Dictionary<string, U3dViewResource> Views { get; } = new(StringComparer.Ordinal);
 
     /// <summary>What the file has that the reader leaves out, each said once.</summary>
-    internal List<string> Notes { get; } = [];
+    internal IReadOnlyList<string> Notes => _notes.All;
 
     /// <summary>Reads <paramref name="bytes"/>. Throws <see cref="InvalidDataException"/> for bytes that are not U3D,
     /// are cut short or are broken, naming the block and where it starts.</summary>
@@ -93,13 +91,7 @@ internal sealed class U3dFile
         }
     }
 
-    private void Tell(string note)
-    {
-        if (told.Add(note))
-        {
-            Notes.Add(note);
-        }
-    }
+    private void Tell(string note) => _notes.Tell(note);
 
     private int ReadHeader(U3dBlock header, int length)
     {
@@ -176,18 +168,15 @@ internal sealed class U3dFile
                 return;
             }
 
-            var reader = block.OpenData(NoCompression);
+            var reader = block.OpenData(IsUncompressed);
             if (Parse(block, chain, reader))
             {
                 reader.EnsureWithinData();
             }
         }
-        catch (InvalidDataException exception) when (!exception.Data.Contains(LocatedKey))
+        catch (InvalidDataException exception)
         {
-            var located = new InvalidDataException(
-                $"U3D block 0x{block.Type:X8} at byte {block.Offset}: {exception.Message}", exception);
-            located.Data[LocatedKey] = block.Offset;
-            throw located;
+            throw new InvalidDataException($"U3D block 0x{block.Type:X8} at byte {block.Offset}: {exception.Message}", exception);
         }
     }
 
@@ -226,13 +215,13 @@ internal sealed class U3dFile
                 AddGeometry(U3dGeometryReader.ReadDeclaration(reader, U3dGeometryKind.LineSet));
                 return true;
             case U3dBlockTypes.MeshBaseContinuation:
-                return Continue(reader, U3dGeometryKind.Mesh, "base mesh", U3dGeometryReader.ReadBaseMesh);
+                return ReadContinuation(reader, U3dGeometryKind.Mesh, "base mesh", U3dGeometryReader.ReadBaseMesh);
             case U3dBlockTypes.MeshProgressiveContinuation:
-                return Continue(reader, U3dGeometryKind.Mesh, "resolution updates", U3dProgressiveMeshReader.Read);
+                return ReadContinuation(reader, U3dGeometryKind.Mesh, "resolution updates", U3dProgressiveMeshReader.Read);
             case U3dBlockTypes.PointSetContinuation:
-                return Continue(reader, U3dGeometryKind.PointSet, "points", U3dGeometryReader.ReadPointContinuation);
+                return ReadContinuation(reader, U3dGeometryKind.PointSet, "points", U3dGeometryReader.ReadPointContinuation);
             case U3dBlockTypes.LineSetContinuation:
-                return Continue(reader, U3dGeometryKind.LineSet, "lines", U3dGeometryReader.ReadLineContinuation);
+                return ReadContinuation(reader, U3dGeometryKind.LineSet, "lines", U3dGeometryReader.ReadLineContinuation);
             case U3dBlockTypes.ShadingModifier:
                 ReadShadingModifier(reader, chain);
                 return true;
@@ -273,7 +262,7 @@ internal sealed class U3dFile
                 ReadTextureContinuation(reader, block);
                 return false;
             default:
-                if (extensionBlocks.TryGetValue(block.Type, out var extension))
+                if (_extensionBlocks.TryGetValue(block.Type, out var extension))
                 {
                     Tell($"the objects of extension {extension.Name} ({extension.Vendor}, {extension.Id}) are read past");
                 }
@@ -286,7 +275,7 @@ internal sealed class U3dFile
         }
     }
 
-    private bool Continue(U3dBitReader reader, U3dGeometryKind kind, string what, Action<U3dBitReader, U3dGeometry> read)
+    private bool ReadContinuation(U3dBitReader reader, U3dGeometryKind kind, string what, Action<U3dBitReader, U3dGeometry> read)
     {
         var name = reader.ReadString();
         if (!Geometries.TryGetValue(name, out var geometry) || geometry.Kind != kind)
@@ -345,7 +334,7 @@ internal sealed class U3dFile
         var declarationType = reader.ReadU32();
         var continuationCount = reader.ReadU32();
         reader.CheckCount(continuationCount, 32, "continuation block types");
-        var types = new List<uint> { declarationType };
+        List<uint> types = [declarationType];
         for (var index = 0u; index < continuationCount; index++)
         {
             types.Add(reader.ReadU32());
@@ -367,7 +356,7 @@ internal sealed class U3dFile
         };
         foreach (var type in types)
         {
-            extensionBlocks[type] = extension;
+            _extensionBlocks[type] = extension;
         }
     }
 
@@ -379,19 +368,7 @@ internal sealed class U3dFile
         for (var index = 0u; index < parentCount; index++)
         {
             var parent = reader.ReadString();
-            var elements = new float[16];
-            for (var element = 0; element < elements.Length; element++)
-            {
-                elements[element] = reader.ReadF32();
-            }
-
-            node.Parents.Add(new U3dParent
-            {
-                Name = parent,
-                Transform = new Matrix4x4F(elements[0], elements[1], elements[2], elements[3], elements[4], elements[5],
-                    elements[6], elements[7], elements[8], elements[9], elements[10], elements[11], elements[12],
-                    elements[13], elements[14], elements[15])
-            });
+            node.Parents.Add(new U3dParent { Name = parent, Transform = ReadMatrix(reader) });
         }
 
         switch (kind)
@@ -465,13 +442,13 @@ internal sealed class U3dFile
             return;
         }
 
-        if (nodeIndex.TryGetValue(node.Name, out var index))
+        if (_nodeIndex.TryGetValue(node.Name, out var index))
         {
             Nodes[index] = node;
             return;
         }
 
-        nodeIndex.Add(node.Name, Nodes.Count);
+        _nodeIndex.Add(node.Name, Nodes.Count);
         Nodes.Add(node);
     }
 
@@ -524,7 +501,7 @@ internal sealed class U3dFile
         var name = reader.ReadString();
         var attributes = reader.ReadU32();
         var type = reader.ReadU8();
-        var color = new Vector3F(reader.ReadF32(), reader.ReadF32(), reader.ReadF32());
+        var color = U3dGeometryReader.ReadVector3(reader);
         reader.ReadF32();
         Lights[name] = new U3dLightResource
         {
@@ -621,10 +598,10 @@ internal sealed class U3dFile
         {
             Name = name,
             Attributes = reader.ReadU32(),
-            AmbientColor = ReadColor(reader),
-            DiffuseColor = ReadColor(reader),
-            SpecularColor = ReadColor(reader),
-            EmissiveColor = ReadColor(reader),
+            AmbientColor = U3dGeometryReader.ReadVector3(reader),
+            DiffuseColor = U3dGeometryReader.ReadVector3(reader),
+            SpecularColor = U3dGeometryReader.ReadVector3(reader),
+            EmissiveColor = U3dGeometryReader.ReadVector3(reader),
             Reflectivity = reader.ReadF32(),
             Opacity = reader.ReadF32()
         };
@@ -689,8 +666,6 @@ internal sealed class U3dFile
         texture.Images[(int)index].Chunks.Add(block.Data.Slice(start).ToArray());
     }
 
-    private static Vector3F ReadColor(U3dBitReader reader) => new(reader.ReadF32(), reader.ReadF32(), reader.ReadF32());
-
     private static Matrix4x4F ReadMatrix(U3dBitReader reader)
     {
         var elements = new float[16];
@@ -703,18 +678,4 @@ internal sealed class U3dFile
             elements[7], elements[8], elements[9], elements[10], elements[11], elements[12], elements[13], elements[14],
             elements[15]);
     }
-}
-
-/// <summary>A block waiting its turn, with the modifier chain it came in; null for one at the top of the file.</summary>
-internal sealed class U3dPendingBlock
-{
-    internal U3dPendingBlock(U3dBlock block, U3dChain chain)
-    {
-        Block = block;
-        Chain = chain;
-    }
-
-    internal U3dBlock Block { get; }
-
-    internal U3dChain Chain { get; }
 }

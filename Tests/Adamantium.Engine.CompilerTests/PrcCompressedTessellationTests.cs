@@ -2,15 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Adamantium.Engine.Compiler.Models;
 using Adamantium.Engine.Compiler.Models.Prc;
 using NUnit.Framework;
 
 namespace Adamantium.Engine.CompilerTests;
 
-/// <summary>PRC highly compressed tessellation (PRC_TYPE_TESS_3D_Compressed) read back from files the test encoder
-/// writes: Huffman coded and plain arrays, traversals over closed and open meshes and over disjoint parts, normals
-/// stored and recalculated, planar faces, colours, line attributes and texture coordinates. Points must come back within
-/// the tolerance they were stored to, triangles with their winding, and normals within their angles' step.</summary>
+/// <summary>PRC highly compressed tessellation read back from what the test encoder writes: points within the tolerance,
+/// triangles with their winding, normals, colors, line attributes and textures.</summary>
 [TestFixture]
 public class PrcCompressedTessellationTests
 {
@@ -22,7 +21,7 @@ public class PrcCompressedTessellationTests
         var limit = 1 << bitNumber;
         var values = Enumerable.Range(0, 300).Select(index => index * 7 % 5 == 0 ? 1 : index % 3 == 0 ? 0 : (index * 13) % limit).ToList();
         var writer = new PrcTestBitWriter();
-        PrcTestArrayWriter.CharacterArray(writer, values, bitNumber, true);
+        PrcTestArrayWriter.WriteCharacterArray(writer, values, bitNumber, true);
         writer.WriteUnsignedInteger(77);
         var bits = new PrcBitReader(writer.ToArray(), "test");
 
@@ -39,7 +38,7 @@ public class PrcCompressedTessellationTests
     public void HuffmanArrayOfOneValue_ReadsBack()
     {
         var writer = new PrcTestBitWriter();
-        PrcTestArrayWriter.CharacterArray(writer, Enumerable.Repeat(5, 40).ToList(), 6, true);
+        PrcTestArrayWriter.WriteCharacterArray(writer, Enumerable.Repeat(5, 40).ToList(), 6, true);
 
         var read = new PrcBitReader(writer.ToArray(), "test").ReadCharacterArray(6, false, "values");
 
@@ -49,9 +48,9 @@ public class PrcCompressedTessellationTests
     [Test]
     public void ShortArray_ReadsBackPlainAndCoded([Values] bool huffman)
     {
-        var values = new[] { 0, 1, 1023, 512, 512, 7, 1023, 0, 0, 0 };
+        int[] values = [0, 1, 1023, 512, 512, 7, 1023, 0, 0, 0];
         var writer = new PrcTestBitWriter();
-        PrcTestArrayWriter.ShortArray(writer, values, 10, huffman);
+        PrcTestArrayWriter.WriteShortArray(writer, values, 10, huffman);
 
         var read = new PrcBitReader(writer.ToArray(), "test").ReadShortArray(10, "values");
 
@@ -61,11 +60,11 @@ public class PrcCompressedTessellationTests
     [Test]
     public void CompressedArrays_ReadBackIntegersAndIndicesWithNegativeSteps([Values] bool huffman)
     {
-        var integers = new[] { 0, -1, 1, 1000, -70000, 3, 0, 123456 };
-        var indices = new[] { 300, 2, 5, 4, 1000, 999, 0, 0, 65536 };
+        int[] integers = [0, -1, 1, 1000, -70000, 3, 0, 123456];
+        int[] indices = [300, 2, 5, 4, 1000, 999, 0, 0, 65536];
         var writer = new PrcTestBitWriter();
-        PrcTestArrayWriter.CompressedIntegerArray(writer, integers, huffman);
-        PrcTestArrayWriter.CompressedIndiceArray(writer, indices, huffman);
+        PrcTestArrayWriter.WriteCompressedIntegerArray(writer, integers, huffman);
+        PrcTestArrayWriter.WriteCompressedIndiceArray(writer, indices, huffman);
         var bits = new PrcBitReader(writer.ToArray(), "test");
 
         Assert.Multiple(() =>
@@ -79,7 +78,7 @@ public class PrcCompressedTessellationTests
     public void CorruptHuffmanCodes_Throw()
     {
         var writer = new PrcTestBitWriter();
-        PrcTestArrayWriter.CharacterArray(writer, [1, 2, 3, 1, 2, 3], 6, true);
+        PrcTestArrayWriter.WriteCharacterArray(writer, [1, 2, 3, 1, 2, 3], 6, true);
         var bytes = writer.ToArray();
         bytes[3] ^= 0xFF;
 
@@ -89,7 +88,7 @@ public class PrcCompressedTessellationTests
     [Test]
     public void Tetrahedron_ComesBackWithItsPointsTrianglesAndNormals([Values] bool huffman, [Values] bool planar)
     {
-        var mesh = Tetrahedron(new[] { 0.0, 0.0, 0.0 }, planar ? 4 : 1);
+        var mesh = CreateTetrahedron([0.0, 0.0, 0.0], planar ? 4 : 1);
         if (planar)
         {
             mesh.PlanarFaces = [true, true, true, true];
@@ -101,10 +100,10 @@ public class PrcCompressedTessellationTests
     [Test]
     public void QuadStrip_ComesBackWithColorsLineAttributesAndTextures([Values] bool huffman)
     {
-        var mesh = Strip(6, 1, 2.5);
+        var mesh = CreateStrip(6, 1, 2.5);
         mesh.FaceLineAttributes = [3];
-        mesh.CornerColors = mesh.Triangles.Select(triangle => triangle.Select(point => new[] { (byte)(point * 20), (byte)(255 - point), (byte)7, (byte)200 }).ToArray()).ToList();
-        mesh.CornerTextures = mesh.Triangles.Select(triangle => triangle.Select(point => new[] { point * 0.25f, point % 2 * 0.5f }).ToArray()).ToList();
+        mesh.CornerColors = mesh.Triangles.Select(triangle => triangle.Select(byte[] (point) => [(byte)(point * 20), (byte)(255 - point), (byte)7, (byte)200]).ToArray()).ToList();
+        mesh.CornerTextures = mesh.Triangles.Select(triangle => triangle.Select(float[] (point) => [point * 0.25f, point % 2 * 0.5f]).ToArray()).ToList();
 
         CheckRoundTrip(mesh, huffman);
     }
@@ -112,8 +111,8 @@ public class PrcCompressedTessellationTests
     [Test]
     public void TwoDisjointParts_AreBothTraversed([Values] bool huffman, [Values] bool recalculated, [Values] bool tripleEdgeStatus)
     {
-        var mesh = Tetrahedron(new[] { -3.0, 0.0, 0.0 }, 1);
-        var other = Tetrahedron(new[] { 4.0, 1.0, -2.0 }, 1);
+        var mesh = CreateTetrahedron([-3.0, 0.0, 0.0], 1);
+        var other = CreateTetrahedron([4.0, 1.0, -2.0], 1);
         var offset = mesh.Points.Count;
         mesh.Points.AddRange(other.Points);
         for (var triangle = 0; triangle < other.Triangles.Count; triangle++)
@@ -122,7 +121,7 @@ public class PrcCompressedTessellationTests
             mesh.AddTriangle(corners[0] + offset, corners[1] + offset, corners[2] + offset, 1);
         }
 
-        mesh.CornerNormals = recalculated ? null : mesh.Triangles.Select(triangle => FlatNormals(mesh, triangle)).ToList();
+        mesh.CornerNormals = recalculated ? null : mesh.Triangles.Select(triangle => GetFlatNormals(mesh, triangle)).ToList();
 
         CheckRoundTrip(mesh, huffman, tripleEdgeStatus);
     }
@@ -130,36 +129,36 @@ public class PrcCompressedTessellationTests
     [Test]
     public void LargeCurvedGrid_StaysWithinTolerance([Values] bool huffman)
     {
-        var mesh = Strip(30, 12, 1.0);
+        var mesh = CreateStrip(30, 12, 1.0);
         for (var point = 0; point < mesh.Points.Count; point++)
         {
             var coordinates = mesh.Points[point];
             mesh.Points[point] = [coordinates[0], coordinates[1], Math.Sin(coordinates[0] * 0.4) * 2 + Math.Cos(coordinates[1] * 0.7)];
         }
 
-        mesh.CornerNormals = mesh.Triangles.Select(triangle => triangle.Select(point => SurfaceNormal(mesh.Points[point])).ToArray()).ToList();
+        mesh.CornerNormals = mesh.Triangles.Select(triangle => triangle.Select(point => GetSurfaceNormal(mesh.Points[point])).ToArray()).ToList();
 
         CheckRoundTrip(mesh, huffman);
     }
 
     private static void CheckRoundTrip(PrcTestMesh mesh, bool huffman, bool tripleEdgeStatus = false)
     {
-        var section = PrcTestEntities.Tessellations([PrcTestCompressedTessellation.Entity(mesh, Tolerance, huffman, tripleEdgeStatus)]);
+        var section = PrcTestEntities.CreateTessellations([PrcTestCompressedTessellation.CreateEntityWriter(mesh, Tolerance, huffman, tripleEdgeStatus)]);
         var structure = new PrcFileStructure { Index = 0 };
-        var notes = new PrcNotes();
+        var notes = new ImportNotes();
         PrcTessellationReader.Read(new PrcBitReader(section, "test"), structure, notes);
         var tessellation = (Prc3DTessellation)structure.Tessellations.Single();
         var coordinates = tessellation.Coordinates;
         var originalOf = new int[coordinates.Length / 3];
         for (var point = 0; point < originalOf.Length; point++)
         {
-            var nearest = Enumerable.Range(0, mesh.Points.Count).OrderBy(original => Distance(mesh.Points[original], coordinates, point)).First();
-            Assert.That(Distance(mesh.Points[nearest], coordinates, point), Is.LessThanOrEqualTo(Tolerance), $"point {point}");
+            var nearest = Enumerable.Range(0, mesh.Points.Count).OrderBy(original => GetDistance(mesh.Points[original], coordinates, point)).First();
+            Assert.That(GetDistance(mesh.Points[nearest], coordinates, point), Is.LessThanOrEqualTo(Tolerance), $"point {point}");
             originalOf[point] = nearest;
         }
 
-        var expected = mesh.Triangles.Select((triangle, index) => Canonical(triangle) + $" face {mesh.Faces[index]}").OrderBy(text => text).ToList();
-        var decoded = new List<string>();
+        var expected = mesh.Triangles.Select((triangle, index) => FormatCanonical(triangle) + $" face {mesh.Faces[index]}").OrderBy(text => text).ToList();
+        List<string> decoded = [];
         var normalStride = tessellation.MustRecalculateNormals ? 0 : 1;
         foreach (var face in tessellation.Faces)
         {
@@ -174,9 +173,9 @@ public class PrcCompressedTessellationTests
                     points[vertex] = originalOf[tessellation.TriangulatedIndices[start + vertex * corner + corner - 1] / 3];
                 }
 
-                var original = mesh.Triangles.FindIndex(candidate => Canonical(candidate) == Canonical(points));
+                var original = mesh.Triangles.FindIndex(candidate => FormatCanonical(candidate) == FormatCanonical(points));
                 Assert.That(original, Is.GreaterThanOrEqualTo(0), $"triangle {string.Join(",", points)} is one of the mesh's, wound as it is");
-                decoded.Add(Canonical(points) + $" face {mesh.Faces[original]}");
+                decoded.Add(FormatCanonical(points) + $" face {mesh.Faces[original]}");
                 for (var vertex = 0; vertex < 3; vertex++)
                 {
                     var at = start + vertex * corner;
@@ -192,20 +191,22 @@ public class PrcCompressedTessellationTests
                     if (textures > 0)
                     {
                         var texture = (int)tessellation.TriangulatedIndices[at + normalStride];
-                        Assert.That(new[] { tessellation.TextureCoordinates[texture], tessellation.TextureCoordinates[texture + 1] },
-                            Is.EqualTo(mesh.CornerTextures[original][cornerOfOriginal].Select(value => (double)value)));
+                        double[] coordinate = [tessellation.TextureCoordinates[texture], tessellation.TextureCoordinates[texture + 1]];
+                        Assert.That(coordinate, Is.EqualTo(mesh.CornerTextures[original][cornerOfOriginal].Select(value => (double)value)));
                     }
 
                     if (mesh.CornerColors != null)
                     {
                         var color = face.VertexColors[triangle * 3 + vertex];
-                        Assert.That(new[] { color.R, color.G, color.B, color.A }, Is.EqualTo(mesh.CornerColors[original][cornerOfOriginal]));
+                        byte[] channels = [color.R, color.G, color.B, color.A];
+                        Assert.That(channels, Is.EqualTo(mesh.CornerColors[original][cornerOfOriginal]));
                     }
                 }
 
                 if (mesh.FaceLineAttributes != null)
                 {
-                    Assert.That(face.LineAttributes, Is.EqualTo(new[] { (uint)mesh.FaceLineAttributes[mesh.Faces[original]] }));
+                    uint[] attributes = [(uint)mesh.FaceLineAttributes[mesh.Faces[original]]];
+                    Assert.That(face.LineAttributes, Is.EqualTo(attributes));
                 }
             }
         }
@@ -217,17 +218,17 @@ public class PrcCompressedTessellationTests
         });
     }
 
-    private static string Canonical(int[] triangle)
+    private static string FormatCanonical(int[] triangle)
     {
         var lowest = Array.IndexOf(triangle, triangle.Min());
         return $"{triangle[lowest]},{triangle[(lowest + 1) % 3]},{triangle[(lowest + 2) % 3]}";
     }
 
-    private static double Distance(double[] point, double[] coordinates, int index) =>
+    private static double GetDistance(double[] point, double[] coordinates, int index) =>
         Math.Sqrt(Math.Pow(point[0] - coordinates[index * 3], 2) + Math.Pow(point[1] - coordinates[index * 3 + 1], 2) +
                   Math.Pow(point[2] - coordinates[index * 3 + 2], 2));
 
-    private static PrcTestMesh Tetrahedron(double[] at, int faces)
+    private static PrcTestMesh CreateTetrahedron(double[] at, int faces)
     {
         var mesh = new PrcTestMesh();
         mesh.Points.Add([at[0], at[1], at[2]]);
@@ -238,11 +239,11 @@ public class PrcCompressedTessellationTests
         mesh.AddTriangle(0, 1, 3, faces > 1 ? 1 : 0);
         mesh.AddTriangle(0, 3, 2, faces > 2 ? 2 : 0);
         mesh.AddTriangle(1, 2, 3, faces > 3 ? 3 : 0);
-        mesh.CornerNormals = mesh.Triangles.Select(triangle => FlatNormals(mesh, triangle)).ToList();
+        mesh.CornerNormals = mesh.Triangles.Select(triangle => GetFlatNormals(mesh, triangle)).ToList();
         return mesh;
     }
 
-    private static PrcTestMesh Strip(int columns, int rows, double step)
+    private static PrcTestMesh CreateStrip(int columns, int rows, double step)
     {
         var mesh = new PrcTestMesh();
         for (var row = 0; row <= rows; row++)
@@ -263,25 +264,25 @@ public class PrcCompressedTessellationTests
             }
         }
 
-        mesh.CornerNormals = mesh.Triangles.Select(triangle => FlatNormals(mesh, triangle)).ToList();
+        mesh.CornerNormals = mesh.Triangles.Select(triangle => GetFlatNormals(mesh, triangle)).ToList();
         return mesh;
     }
 
-    private static double[][] FlatNormals(PrcTestMesh mesh, int[] triangle)
+    private static double[][] GetFlatNormals(PrcTestMesh mesh, int[] triangle)
     {
         var first = mesh.Points[triangle[0]];
         var second = mesh.Points[triangle[1]];
         var third = mesh.Points[triangle[2]];
         var normal = new PrcVector(second[0] - first[0], second[1] - first[1], second[2] - first[2])
             .Cross(new PrcVector(third[0] - first[0], third[1] - first[1], third[2] - first[2]));
-        normal.TryUnitize(out normal);
+        normal.TryNormalize(out normal);
         return [[normal.X, normal.Y, normal.Z], [normal.X, normal.Y, normal.Z], [normal.X, normal.Y, normal.Z]];
     }
 
-    private static double[] SurfaceNormal(double[] point)
+    private static double[] GetSurfaceNormal(double[] point)
     {
         var normal = new PrcVector(-Math.Cos(point[0] * 0.4) * 0.8, Math.Sin(point[1] * 0.7) * 0.7, 1);
-        normal.TryUnitize(out normal);
+        normal.TryNormalize(out normal);
         return [normal.X, normal.Y, normal.Z];
     }
 }
