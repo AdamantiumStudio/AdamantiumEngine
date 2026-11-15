@@ -111,6 +111,10 @@ public class InputService : EntityService
     /// wheel, which has no release, ends its gesture once it has been still for a moment.</summary>
     public event EventHandler<EntityEditEventArgs> CameraSteered;
 
+    /// <summary>Raised on the world's thread when the follow keys have hung a camera on an entity, or the free-camera key
+    /// has set it free, with how it was before.</summary>
+    public event EventHandler<CameraHungEventArgs> CameraHung;
+
     public Boolean InstrumentsEnabled { get; set; }
 
     public override void UnloadContent()
@@ -453,6 +457,9 @@ public class InputService : EntityService
             currentCamera.TranslateUp(rise.Value * cameraMovementSpeed);
         }
 
+        var typeBefore = currentCamera.Type;
+        var hostBefore = currentCamera.Owner?.Owner;
+        var stateBefore = currentCamera.Owner is { } cameraEntity ? EditedState.Of(cameraEntity) : default;
         if (freeCamera.IsPressed)
         {
             if (currentCamera.Type != CameraType.Free)
@@ -482,6 +489,13 @@ public class InputService : EntityService
         if (followLocked.IsPressed)
         {
             Follow(currentCamera, userControlledEntity, new Vector3F(-10, 0, 0), CameraType.ThirdPersonLocked);
+        }
+
+        var hostAfter = currentCamera.Owner?.Owner;
+        if (currentCamera.Owner is { } hung && (currentCamera.Type != typeBefore || hostAfter != hostBefore))
+        {
+            CameraHung?.Invoke(this,
+                new CameraHungEventArgs(hung, typeBefore, hostBefore, stateBefore, currentCamera.Type, hostAfter));
         }
 
         if (lookBack.IsPressed)
