@@ -9,8 +9,6 @@ namespace Adamantium.ECS;
 /// when it stops; none runs while a scene is edited. A kind needs a public constructor taking nothing.</summary>
 public abstract class GameService
 {
-    private readonly Stack<Entity> _walk = new();
-
     /// <summary>The scene played.</summary>
     public Scene Scene { get; internal set; }
 
@@ -37,21 +35,21 @@ public abstract class GameService
     }
 
     /// <summary>Every component of kind <typeparamref name="T"/> in the scene played, over the whole tree of each of its
-    /// roots.</summary>
+    /// roots. Each walk is its own: walks may go on inside one another.</summary>
     protected IEnumerable<T> Each<T>() where T : class, IComponent
     {
         if (Scene == null)
             yield break;
 
-        _walk.Clear();
+        var walk = new Stack<Entity>();
         for (var i = Scene.RootEntities.Count - 1; i >= 0; i--)
         {
-            _walk.Push(Scene.RootEntities[i]);
+            walk.Push(Scene.RootEntities[i]);
         }
 
-        while (_walk.Count > 0)
+        while (walk.Count > 0)
         {
-            var entity = _walk.Pop();
+            var entity = walk.Pop();
             if (entity.GetComponent<T>() is { } component)
                 yield return component;
 
@@ -59,7 +57,7 @@ public abstract class GameService
             for (var i = children.Count - 1; i >= 0; i--)
             {
                 if (children[i] != null)
-                    _walk.Push(children[i]);
+                    walk.Push(children[i]);
             }
         }
     }

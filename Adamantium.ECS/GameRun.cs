@@ -63,9 +63,10 @@ public sealed class GameRun : EntityService
             }
         }
 
-        foreach (var service in run._services.ToArray())
+        for (var i = 0; i < run._services.Count; i++)
         {
-            run.Call(service, "start", static started => started.Start());
+            if (!run.Call(run._services[i], "start", static started => started.Start()))
+                i--;
         }
 
         scene.World.AddService(run);
@@ -75,11 +76,13 @@ public sealed class GameRun : EntityService
     public override void Update(AppTime appTime)
     {
         _playTime += TimeSpan.FromSeconds(appTime.FrameTime);
-        foreach (var service in _services.ToArray())
+        for (var i = 0; i < _services.Count; i++)
         {
+            var service = _services[i];
             service.PlayTime = _playTime;
             service.FrameTime = appTime.FrameTime;
-            Call(service, "update", static updated => updated.Update());
+            if (!Call(service, "update", static updated => updated.Update()))
+                i--;
         }
     }
 
@@ -87,26 +90,36 @@ public sealed class GameRun : EntityService
     /// world's thread.</summary>
     public void Stop()
     {
-        foreach (var service in _services.ToArray())
+        foreach (var service in _services)
         {
-            Call(service, "stop", static stopped => stopped.Stop());
+            try
+            {
+                service.Stop();
+            }
+            catch (Exception exception)
+            {
+                Log.Logger.Error(exception, "The game service {Service} failed to stop", service.GetType().FullName);
+            }
         }
 
         _services.Clear();
         EntityWorld.RemoveService(this);
     }
 
-    private void Call(GameService service, string what, Action<GameService> call)
+    // False when the service threw, and was taken out.
+    private bool Call(GameService service, string what, Action<GameService> call)
     {
         try
         {
             call(service);
+            return true;
         }
         catch (Exception exception)
         {
             Log.Logger.Error(exception, "The game service {Service} failed to {What} and is taken out of the game",
                 service.GetType().FullName, what);
             _services.Remove(service);
+            return false;
         }
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.ECS;
+using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 using NUnit.Framework;
 
@@ -34,6 +35,28 @@ public class EntityCopyTreeTests
             Assert.That(copiedEarth.GetComponent<Pushed>(), Is.Not.SameAs(earth.GetComponent<Pushed>()));
             Assert.That(copiedEarth.GetComponent<Pushed>().Speed, Is.EqualTo(3));
             Assert.That(copiedEarth.Transform.Position, Is.EqualTo(new Vector3<double>(5, 0, 0)));
+        });
+    }
+
+    // A skin on one root bends with a joint standing on another: the copy bends with the joint's copy, not the original.
+    [Test]
+    public void TreesCopiedTogether_NameEachOthersCopies()
+    {
+        var body = new Entity(null, "Body");
+        var rig = new Entity(null, "Rig");
+        var joint = new Entity(rig, "Hip");
+        var skin = new Skin();
+        skin.Joints.Add(joint);
+        skin.InverseBindMatrices.Add(Matrix4x4F.Identity);
+        body.AddComponent(skin);
+        var copies = new Dictionary<Entity, Entity>();
+
+        var copied = Entity.CopyTrees([body, rig], copies);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(copied.Select(root => root.Name), Is.EqualTo(new[] { "Body", "Rig" }));
+            Assert.That(copies[body].GetComponent<Skin>().Joints, Is.EqualTo(new[] { copies[joint] }));
         });
     }
 }
