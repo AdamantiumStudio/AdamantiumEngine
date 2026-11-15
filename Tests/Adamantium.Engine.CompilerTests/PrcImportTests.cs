@@ -15,7 +15,7 @@ using NUnit.Framework;
 namespace Adamantium.Engine.CompilerTests;
 
 /// <summary>PRC import from files Asymptote wrote from the .asy scenes beside them and from files the tests write. PRC is
-/// Z up: the engine's axes take (x, y, z) to (-x, -z, y).</summary>
+/// Z up: the engine's axes take (x, y, z) to (x, -z, y).</summary>
 [TestFixture]
 public class PrcImportTests
 {
@@ -57,8 +57,8 @@ public class PrcImportTests
         var scene = Import(File.ReadAllBytes(GetGeneratedPath("groups.prc")), out var notes);
 
         var meshes = GetAllMeshes(scene).ToList();
-        var outer = meshes.Single(mesh => mesh.Points.All(point => point.X > -2));
-        var inner = meshes.Single(mesh => mesh.Points.All(point => point.X < -9));
+        var outer = meshes.Single(mesh => mesh.Points.All(point => point.X < 2));
+        var inner = meshes.Single(mesh => mesh.Points.All(point => point.X > 9));
         Vector3F[] outerPoints = [ToEngine(new Vector3F(0, 0, 0)), ToEngine(new Vector3F(1, 0, 0)), ToEngine(new Vector3F(0, 1, 0))];
         Vector3F[] innerPoints = [ToEngine(new Vector3F(10, 0, 0)), ToEngine(new Vector3F(11, 0, 0)), ToEngine(new Vector3F(10, 1, 0))];
         Assert.Multiple(() =>
@@ -287,7 +287,7 @@ public class PrcImportTests
             Assert.That(lines.Points.Select(point => point.As<float>()), Has.Some.Matches<Vector3F>(point => IsNear(point, ToEngine(new Vector3F(10, 0, 0)))),
                 "the second polyline moved by its matrix block");
             Assert.That(triangles.Indices, Has.Length.EqualTo(3));
-            Assert.That(triangles.Points.Select(point => point.As<float>()).Max(point => -point.X), Is.EqualTo(11).Within(Tolerance),
+            Assert.That(triangles.Points.Select(point => point.As<float>()).Max(point => point.X), Is.EqualTo(11).Within(Tolerance),
                 "the triangle moved by the block too");
             Assert.That(IsNear(points.Points.Single().As<float>(), ToEngine(new Vector3F(1, 2, 3))));
             Assert.That(notes, Has.Some.Contains("texts of markups are kept"));
@@ -535,7 +535,7 @@ public class PrcImportTests
                 "scaled by 2, turned a quarter by its x axis alone and moved half along s - then v turned for the engine");
             var packed = meshes.Single(mesh => mesh.Indices.Length == 6);
             Assert.That(Enumerable.Range(0, packed.Points.Length).All(vertex =>
-                    IsNear(packed.UV0[vertex], GetMoved(MathF.Round((float)-packed.Points[vertex].X), MathF.Round((float)packed.Points[vertex].Z)))),
+                    IsNear(packed.UV0[vertex], GetMoved(MathF.Round((float)packed.Points[vertex].X), MathF.Round((float)packed.Points[vertex].Z)))),
                 Is.True, "the compressed tessellation's coordinates, each its corner's x and y, transformed alike");
         });
     }
@@ -851,7 +851,7 @@ public class PrcImportTests
 
     private static string GetKey(Vector3<double> point)
     {
-        var source = new Vector3F((float)-point.X, (float)point.Z, (float)-point.Y);
+        var source = FromEngine(point.As<float>());
         return $"{Math.Round(source.X)},{Math.Round(source.Y)},{Math.Round(source.Z)}";
     }
 
@@ -861,7 +861,9 @@ public class PrcImportTests
     private static Vector3F GetRgb(SceneData.Material material) =>
         new(material.DiffuseColor.X, material.DiffuseColor.Y, material.DiffuseColor.Z);
 
-    private static Vector3F ToEngine(Vector3F prc) => new(-prc.X, -prc.Z, prc.Y);
+    private static Vector3F ToEngine(Vector3F prc) => new(prc.X, -prc.Z, prc.Y);
+
+    private static Vector3F FromEngine(Vector3F engine) => new(engine.X, engine.Z, -engine.Y);
 
     private static bool IsNear(Vector3F expected, Vector3F actual) =>
         MathF.Abs(expected.X - actual.X) <= Tolerance && MathF.Abs(expected.Y - actual.Y) <= Tolerance &&

@@ -45,15 +45,15 @@ namespace Adamantium.Engine.CompilerTests
             var frames = Frames(scene, "Bone");
             Assert.That(frames.Count, Is.EqualTo(2));
 
-            // The file is Y_UP and the engine Y_DOWN, so Y arrives with its sign flipped, exactly as the mesh
-            // vertices do (AxisConversionTests owns the basis change itself). Coordinates no channel touches must
-            // come from the rest pose rather than fall to zero.
-            Assert.That(frames[0].Position, Is.EqualTo(new Vector3F(1, -2, 3)).Using(Vector3Comparer));
-            Assert.That(frames[1].Position, Is.EqualTo(new Vector3F(5, -2, 3)).Using(Vector3Comparer));
+            // The file is Y_UP and the engine Y_DOWN, turned half round Z, so X and Y arrive with their signs flipped,
+            // exactly as the mesh vertices do (AxisConversionTests owns the basis change itself). Coordinates no
+            // channel touches must come from the rest pose rather than fall to zero.
+            Assert.That(frames[0].Position, Is.EqualTo(new Vector3F(-1, -2, 3)).Using(Vector3Comparer));
+            Assert.That(frames[1].Position, Is.EqualTo(new Vector3F(-5, -2, 3)).Using(Vector3Comparer));
 
-            // A 90-degree turn about Z, reflected along with the Y axis, sends X to -Y
+            // A 90-degree turn about Z stays one under a half turn about Z: it still sends X to Y
             var turned = Vector3F.Transform(Vector3F.UnitX, frames[1].Rotation);
-            Assert.That(turned, Is.EqualTo(-Vector3F.UnitY).Using(Vector3Comparer), "a 90-degree turn about Z was expected");
+            Assert.That(turned, Is.EqualTo(Vector3F.UnitY).Using(Vector3Comparer), "a 90-degree turn about Z was expected");
         }
 
         [Test]
@@ -78,8 +78,8 @@ namespace Adamantium.Engine.CompilerTests
 
             var frames = Frames(scene, "Bone");
             Assert.That(frames.Count, Is.EqualTo(2));
-            //Y with its sign flipped: the file is Y_UP, the engine Y_DOWN
-            Assert.That(frames[1].Position, Is.EqualTo(new Vector3F(4, -8, 0)).Using(Vector3Comparer),
+            //X and Y with their signs flipped: the file is Y_UP, the engine Y_DOWN, turned half round Z
+            Assert.That(frames[1].Position, Is.EqualTo(new Vector3F(-4, -8, 0)).Using(Vector3Comparer),
                 "both channels must land on one and the same joint");
         }
 
@@ -95,8 +95,8 @@ namespace Adamantium.Engine.CompilerTests
 
             var frames = Frames(scene, "Bone");
             Assert.That(frames.Select(f => f.TimeStamp).ToArray(), Is.EqualTo(new double[] { 0, 1, 2 }));
-            Assert.That(frames[1].Position.X, Is.EqualTo(2f).Within(0.001f), "X is linear between its own keys");
-            //Y with its sign flipped: the file is Y_UP, the engine Y_DOWN
+            Assert.That(frames[1].Position.X, Is.EqualTo(-2f).Within(0.001f), "X is linear between its own keys");
+            //X and Y with their signs flipped: the file is Y_UP, the engine Y_DOWN, turned half round Z
             Assert.That(frames[1].Position.Y, Is.EqualTo(-1f).Within(0.001f));
         }
 
@@ -111,7 +111,7 @@ namespace Adamantium.Engine.CompilerTests
 
             var frames = Frames(scene, "Bone");
             Assert.That(frames.Count, Is.EqualTo(2));
-            Assert.That(frames[1].Position.X, Is.EqualTo(7f).Within(0.001f));
+            Assert.That(frames[1].Position.X, Is.EqualTo(-7f).Within(0.001f));
         }
 
         [Test]
@@ -125,8 +125,8 @@ namespace Adamantium.Engine.CompilerTests
                     Channel("Bone1/location.X", "0 1", "0 3", stride: 1) +
                     Channel("Bone2/location.X", "0 1", "0 6", stride: 1))));
 
-            Assert.That(Frames(scene, "Bone1")[1].Position.X, Is.EqualTo(3f).Within(0.001f));
-            Assert.That(Frames(scene, "Bone2")[1].Position.X, Is.EqualTo(6f).Within(0.001f));
+            Assert.That(Frames(scene, "Bone1")[1].Position.X, Is.EqualTo(-3f).Within(0.001f));
+            Assert.That(Frames(scene, "Bone2")[1].Position.X, Is.EqualTo(-6f).Within(0.001f));
         }
 
         [Test]
@@ -141,7 +141,7 @@ namespace Adamantium.Engine.CompilerTests
 
             var frames = Frames(scene, "Bone");
             Assert.That(frames.Count, Is.EqualTo(2));
-            Assert.That(frames[1].Position, Is.EqualTo(new Vector3F(9, 0, 0)).Using(Vector3Comparer));
+            Assert.That(frames[1].Position, Is.EqualTo(new Vector3F(-9, 0, 0)).Using(Vector3Comparer));
         }
 
         [Test]

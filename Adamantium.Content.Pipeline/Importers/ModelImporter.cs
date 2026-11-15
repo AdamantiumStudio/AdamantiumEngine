@@ -46,6 +46,9 @@ public sealed class ModelImporter : IContentImporter
 
     public IReadOnlyList<ImportSetting> Settings => ModelSettings;
 
+    /// <summary>2: a right-handed file comes into the engine's axes turned, no longer as its mirror image.</summary>
+    public int Revision => 2;
+
     public object Import(string sourcePath, ContentBuildContext context)
     {
         var scale = ReadScale(sourcePath, context);

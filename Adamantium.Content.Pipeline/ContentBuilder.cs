@@ -426,7 +426,8 @@ public sealed class ContentBuilder
         var length = file.Length;
         string hash = null;
         string Hash() => hash ??= AssetSource.ComputeHash(sourceFull);
-        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, asset.Parameters,
+        var reason = GetImportReason(assetFull, sourceFull, written, length, Hash, importerName, importer.Revision,
+            asset.Parameters,
             defaultsByImporter.GetValueOrDefault(importerName), asked == null ? log : _ => { }, out var hadThumbnail,
             out var parameters, out var keptAsItIs);
         if (asked != null)
@@ -467,6 +468,7 @@ public sealed class ContentBuilder
             Written = written,
             Length = length,
             Importer = importerName,
+            ImporterRevision = importer.Revision,
             Parameters = new(parameters),
             EngineVersion = EngineVersion,
             Companions = companions.Select(companion => Normalize(companion.To)).Distinct().ToList()
@@ -480,6 +482,7 @@ public sealed class ContentBuilder
         ImportReason.SourceChanged => "source changed",
         ImportReason.SettingsChanged => "settings changed",
         ImportReason.Unreadable => "unreadable",
+        ImportReason.ImporterRevised => "importer revised",
         _ => "asked"
     };
 
@@ -500,7 +503,7 @@ public sealed class ContentBuilder
     }
 
     private static ImportReason? GetImportReason(string assetFull, string sourceFull, DateTime sourceWritten,
-        long sourceLength, Func<string> sourceHash, string importerName,
+        long sourceLength, Func<string> sourceHash, string importerName, int importerRevision,
         IReadOnlyDictionary<string, string> manifestParameters, IReadOnlyDictionary<string, string> defaults,
         Action<string> log, out bool hadThumbnail, out IReadOnlyDictionary<string, string> parameters,
         out string keptAsItIs)
@@ -548,6 +551,11 @@ public sealed class ContentBuilder
         if (source == null || (source.Written != sourceWritten || source.Length != sourceLength) && source.Hash != sourceHash())
         {
             return ImportReason.SourceChanged;
+        }
+
+        if (sameImporter && source.ImporterRevision < importerRevision)
+        {
+            return ImportReason.ImporterRevised;
         }
 
         return sameImporter && (!givenByManifest || HaveSameParameters(source.Parameters, manifestParameters))
