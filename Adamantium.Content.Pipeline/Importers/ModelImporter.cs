@@ -8,11 +8,11 @@ using Adamantium.Graphics.Core.Models;
 namespace Adamantium.Content.Pipeline.Importers;
 
 /// <summary>
-/// Imports a 3D model file (Collada/OBJ/3DS/glTF) into engine-native <c>SceneData</c> via the existing
+/// Imports a 3D model file (Collada/OBJ/3DS/glTF/U3D/PRC) into engine-native <c>SceneData</c> via the existing
 /// <see cref="ModelConverter"/>. Mesh optimization/normal+tangent generation happen inside the converter,
 /// so no separate processor is needed yet.
 /// </summary>
-[ContentImporter("Model", ".dae", ".obj", ".3ds", ".gltf", ".glb")]
+[ContentImporter("Model", ".dae", ".obj", ".3ds", ".gltf", ".glb", ".u3d", ".prc")]
 public sealed class ModelImporter : IContentImporter
 {
     /// <summary>How many times larger the model is made, the whole of it from its root.</summary>

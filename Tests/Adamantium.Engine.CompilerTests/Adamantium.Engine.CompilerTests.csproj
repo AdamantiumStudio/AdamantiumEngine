@@ -32,6 +32,8 @@
     <ItemGroup>
       <ProjectReference Include="..\..\Adamantium.Engine.Compiler\Adamantium.Engine.Compiler.csproj" />
       <ProjectReference Include="..\..\Adamantium.EffectsCompiler\Adamantium.EffectsCompiler.csproj" />
+      <ProjectReference Include="..\..\Adamantium.Pdf\Adamantium.Pdf.csproj" />
+      <ProjectReference Include="..\..\Adamantium.Imaging\Adamantium.Imaging.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -51,6 +53,22 @@
     <ItemGroup>
       <Content Include="GltfData\**">
         <Link>CompilerGltf\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
+    <!-- U3D files written by MeshLab's exporter (Intel's U3D library), compressed as real files are. -->
+    <ItemGroup>
+      <Content Include="U3dData\**">
+        <Link>CompilerU3d\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
+    <!-- PRC files Asymptote wrote from the .asy scenes beside them, which are the truth the tests check against. -->
+    <ItemGroup>
+      <Content Include="PrcData\**">
+        <Link>CompilerPrc\%(RecursiveDir)%(Filename)%(Extension)</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
     </ItemGroup>

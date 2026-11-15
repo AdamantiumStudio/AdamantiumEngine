@@ -7,6 +7,43 @@ All packages share one version.
 
 ### Added
 
+- U3D import (`U3dConverter`, `.u3d`, ECMA-363 4th edition): the bit encoding of clause 10 - static and dynamic
+  contexts, compressed U8/U16/U32, the no compression profile (`U3dBitReader`, `U3dContext`); blocks with their
+  padding and meta data (`U3dBlockReader`, `U3dBlock`); modifier chains; the node graph as the model tree, a node of
+  several parents under each, one of none under the other nodes; CLOD meshes - their base mesh and their resolution
+  updates, which is all MeshLab's files have - point sets and line sets, a mesh a shading ID; lit texture
+  shaders as materials with their material's colors, opacity and reflectivity and their first texture's PNG or JPEG;
+  lights and views as lights and cameras; the units of the file header. What it reads past - animation, bones, CLOD
+  and subdivision modifiers, glyphs, extensions, references to other files - is listed in `UnsupportedFeatures`.
+  `ModelConverterFactory.GetConverter(fileName, bytes, config)`: a model read from memory, a PDF's 3D artwork. The
+  content pipeline's `ModelImporter` takes `.u3d` and `.prc` files.
+- PRC import (`PrcConverter`, `.prc`, PRC Format Specification 8137, the format CAD systems put in PDF 3D artwork): the
+  bit-level types - UnsignedInteger, Integer, String, and Double through the specification's table of frequent doubles
+  and exponents (`PrcBitReader`); the header with every section's offset, each section inflated on its own; the schema
+  at the start of the globals and the model file, run to step over what newer versions added and entities of types
+  this reader does not know; the globals' colors, materials and styles; the tree - product occurrences with their
+  locations, prototypes and external data, part definitions, representation items, sets nested, placed by their
+  coordinate systems - as the model tree; regular 3D tessellation (triangles, fans, stripes, one normal a face or a
+  vertex, vertex colors), wire tessellation and markup tessellation (polylines, triangles, quads, polygons, points,
+  matrix blocks) as meshes; point sets. Highly compressed tessellation (PRC_TYPE_TESS_3D_Compressed): the plain and
+  Huffman coded character, short, integer and indice arrays (`PrcBitReader`); the mesh rebuilt
+  by its traversal - edges on a stack, the right neighbor pushed before the left, new points along axes built from
+  the points before them in the specification's arithmetic, several traversals in one tessellation - with its stored
+  normals (planar faces, references to a vertex's earlier normals) or the winding of recalculated ones, line
+  attributes, vertex colors and texture coordinates. Normals a tessellation asks to be recalculated are smoothed where
+  triangles meet within its crease angle and part past it. The file is read in the first unit a CAD system gave - the
+  model file's, else the first product occurrence's down the tree (PRC 5.6) - the locations already scaling between
+  the occurrences' own units. A product occurrence's entity references redefine the entities under it - their style,
+  their visibility, their place by a coordinate system of the globals - and its active display filter takes away
+  entities by their layers or by name. Texture applications lay their diffuse texture - the PNG or JPEG picture each
+  file structure's header embeds, with its wrapping and its texture transformation (a rotation by its x axis alone,
+  as the errata measure it) laid on the coordinates - as the material's base color texture, replacing or modulating
+  its color. The cameras of views and of scene display parameters become cameras named after them, placed in their
+  occurrence; their lights - ambient, point, directional and spot, of three colors as the errata have them - lights;
+  markup texts are kept on their nodes' mesh data with their font, size and place. What it leaves out - the exact
+  geometry of B-rep bodies, hidden and removed entities, what a view shows beyond its camera, clipping planes and
+  backgrounds, texture levels other than the diffuse one, pictures of raw pixels, the drawing of markup text - is
+  listed in `UnsupportedFeatures`, B-rep-only items by name.
 - What an editor's undo needs. `EntityManager.ReturnEntity` puts an entity taken out back where it stood - the same
   object, under its owner or among its scene's roots at its old index - and `GetSiblingIndex` tells where an entity
   stands; `PlaceAt` moves one among its siblings; `LightManager.ReturnLight` puts a light back. `Transform.State`
@@ -15,11 +52,15 @@ All packages share one version.
   (`EntityEdit`, `EditedState` with `LightReach` and `CameraPose`); `InputService.CameraSteered` does the same for a
   camera of a scene that an output looks through, steered by the mouse or the keys - the wheel ends its gesture after
   0.3 s still. `SceneCode.Restore` puts back the entry of a component whose code is not loaded.
-
 - `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
   of its own - for another thread, a document being read by one thread at a time. The bytes are shared.
+- 3D annotations: `PdfAnnotation.Artwork3D` (`PdfAnnotationTypes.ThreeD`) reads the artwork (`Pdf3DArtwork`, ISO
+  32000-1 13.6) - the model's stream, the annotation's own or another's through a `3DRef`, its format (U3D or PRC) and
+  its bytes; its views (`Pdf3DView`: camera, center of orbit, perspective or orthographic projection, background,
+  render mode, lighting, or a view node of the model) and the one it opens on; when it comes to life and goes back to
+  its poster (`Pdf3DActivation`), the part of the annotation it is shown in, and whether it may be turned.
 - `PdfIncrementalUpdate.RotatePage(page, rotation)`: a page turned by quarters, written as its own `/Rotate` over one
   it inherits; a page already turned so is left as it is. A page turned and annotated in one update is written once,
   with both. `PdfDocument.Continues(earlier)`: whether a document is an earlier one's file again, as it was or saved
