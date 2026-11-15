@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- What an editor's undo needs. `EntityManager.ReturnEntity` puts an entity taken out back where it stood - the same
+  object, under its owner or among its scene's roots at its old index - and `GetSiblingIndex` tells where an entity
+  stands; `PlaceAt` moves one among its siblings; `LightManager.ReturnLight` puts a light back. `Transform.State`
+  (`TransformState`) takes and gives back everything a transform places by, its pivot with it. `ToolsService.Edited`
+  tells once per drag of a handle which entities it changed, with how they stood before the press and after the release
+  (`EntityEdit`, `EditedState` with `LightReach` and `CameraPose`); `InputService.CameraSteered` does the same for a
+  camera of a scene that an output looks through, steered by the mouse or the keys - the wheel ends its gesture after
+  0.3 s still. `SceneCode.Restore` puts back the entry of a component whose code is not loaded.
+
 - `EntityManager.IsBeingRemoved(entity)`: whether an entity, or what it stands in, was taken out and leaves with the
   next frame.
 - `PdfDocument.Reopen()`: the same file opened again, by the options and the password that opened it, as a document
