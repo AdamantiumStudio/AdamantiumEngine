@@ -227,7 +227,7 @@ public class PrcImportTests
     public void WireTessellation_GivesItsPolylinesClosedAndContinued()
     {
         double[] points = [0, 0, 0, 1, 0, 0, 1, 1, 0, 5, 5, 5, 6, 5, 5];
-        uint[] wires = [2, 0, 3, 0x10000000 | 2, 6, 3, 0x20000000 | 2, 9, 12];
+        uint[] wires = [2, 0, 3, PrcMeshBuilder.IsClosing | 2, 6, 3, PrcMeshBuilder.IsContinuous | 2, 9, 12];
         var bytes = CreatePartFile([PrcTestEntities.CreateWire(points, wires)], writer => PrcTestEntities.WritePolyWire(writer, "Wire", 2, 0), 1);
 
         var scene = Import(bytes, out var notes);
@@ -837,24 +837,7 @@ public class PrcImportTests
         return scene;
     }
 
-    private static IEnumerable<Mesh> GetAllMeshes(SceneData scene)
-    {
-        var pending = new Stack<SceneData.Model>();
-        pending.Push(scene.Models);
-        while (pending.Count > 0)
-        {
-            var model = pending.Pop();
-            foreach (var mesh in model.Meshes)
-            {
-                yield return mesh;
-            }
-
-            foreach (var child in model.Dependencies)
-            {
-                pending.Push(child);
-            }
-        }
-    }
+    private static IEnumerable<Mesh> GetAllMeshes(SceneData scene) => TestScenes.GetAllMeshes(scene);
 
     private static int FindNearest(List<Vector3F> positions, Vector3F point)
     {

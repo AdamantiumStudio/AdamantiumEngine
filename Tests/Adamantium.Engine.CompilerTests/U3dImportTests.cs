@@ -563,24 +563,7 @@ public class U3dImportTests
         return scene;
     }
 
-    private static IEnumerable<Mesh> GetAllMeshes(SceneData scene)
-    {
-        var pending = new Stack<SceneData.Model>();
-        pending.Push(scene.Models);
-        while (pending.Count > 0)
-        {
-            var model = pending.Pop();
-            foreach (var mesh in model.Meshes)
-            {
-                yield return mesh;
-            }
-
-            foreach (var child in model.Dependencies)
-            {
-                pending.Push(child);
-            }
-        }
-    }
+    private static IEnumerable<Mesh> GetAllMeshes(SceneData scene) => TestScenes.GetAllMeshes(scene);
 
     private static byte[] CreateCubeFile(bool compressed)
     {

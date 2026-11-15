@@ -62,19 +62,7 @@ public class U3dBitReaderTests
             var size = range <= 256 && random.Next(3) == 0 ? 1 : range <= 0xFFFF && random.Next(2) == 0 ? 2 : 4;
             var value = (uint)random.NextInt64(range);
             var context = U3dContext.CreateStatic(range);
-            if (size == 1)
-            {
-                writer.WriteCompressedU8(context, (byte)value);
-            }
-            else if (size == 2)
-            {
-                writer.WriteCompressedU16(context, (ushort)value);
-            }
-            else
-            {
-                writer.WriteCompressedU32(context, value);
-            }
-
+            WriteCompressed(writer, context, value, size);
             contexts.Add(context);
             values.Add(value);
             sizes.Add(size);
@@ -112,19 +100,7 @@ public class U3dBitReaderTests
                 _ => (uint)random.Next(size == 1 ? 256 : 5000)
             };
             value = size == 1 ? value & 0xFF : size == 2 ? value & 0xFFFF : value;
-            if (size == 1)
-            {
-                writer.WriteCompressedU8(context, (byte)value);
-            }
-            else if (size == 2)
-            {
-                writer.WriteCompressedU16(context, (ushort)value);
-            }
-            else
-            {
-                writer.WriteCompressedU32(context, value);
-            }
-
+            WriteCompressed(writer, context, value, size);
             contexts.Add(context);
             values.Add(value);
             sizes.Add(size);
@@ -213,6 +189,22 @@ public class U3dBitReaderTests
     {
         var reader = new U3dBitReader(new byte[16]);
         Assert.That(() => reader.ReadCompressedU32(U3dContext.CreateStatic(0)), Throws.TypeOf<InvalidDataException>());
+    }
+
+    private static void WriteCompressed(U3dTestBitWriter writer, U3dContext context, uint value, int size)
+    {
+        switch (size)
+        {
+            case 1:
+                writer.WriteCompressedU8(context, (byte)value);
+                break;
+            case 2:
+                writer.WriteCompressedU16(context, (ushort)value);
+                break;
+            default:
+                writer.WriteCompressedU32(context, value);
+                break;
+        }
     }
 
     private static void AssertReadsBack(byte[] bytes, List<U3dContext> contexts, List<uint> values, List<int> sizes)

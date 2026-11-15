@@ -66,27 +66,16 @@ public class PrcRealFileTests
     private static void CheckMeshes(SceneData scene, string name)
     {
         const double reach = 1e7;
-        var pending = new Stack<SceneData.Model>();
-        pending.Push(scene.Models);
-        while (pending.Count > 0)
+        foreach (var mesh in TestScenes.GetAllMeshes(scene))
         {
-            var model = pending.Pop();
-            foreach (var mesh in model.Meshes)
-            {
-                var points = mesh.Points ?? [];
-                Assert.That(points.All(point => double.IsFinite(point.X) && double.IsFinite(point.Y) && double.IsFinite(point.Z)), Is.True,
-                    $"{name}: mesh {mesh.Name} has a point that is not finite");
-                Assert.That(points.All(point => Math.Abs(point.X) < reach && Math.Abs(point.Y) < reach && Math.Abs(point.Z) < reach), Is.True,
-                    $"{name}: mesh {mesh.Name} has a point past {reach}");
-                var lengths = (mesh.Normals ?? []).Select(normal => Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y + normal.Z * normal.Z));
-                Assert.That(lengths.All(length => Math.Abs(length - 1) < 1e-3 || length < 1e-6), Is.True,
-                    $"{name}: mesh {mesh.Name} has a normal neither of unit length nor - of a triangle of no area - zero");
-            }
-
-            foreach (var child in model.Dependencies)
-            {
-                pending.Push(child);
-            }
+            var points = mesh.Points ?? [];
+            Assert.That(points.All(point => double.IsFinite(point.X) && double.IsFinite(point.Y) && double.IsFinite(point.Z)), Is.True,
+                $"{name}: mesh {mesh.Name} has a point that is not finite");
+            Assert.That(points.All(point => Math.Abs(point.X) < reach && Math.Abs(point.Y) < reach && Math.Abs(point.Z) < reach), Is.True,
+                $"{name}: mesh {mesh.Name} has a point past {reach}");
+            var lengths = (mesh.Normals ?? []).Select(normal => Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y + normal.Z * normal.Z));
+            Assert.That(lengths.All(length => Math.Abs(length - 1) < 1e-3 || length < 1e-6), Is.True,
+                $"{name}: mesh {mesh.Name} has a normal neither of unit length nor - of a triangle of no area - zero");
         }
     }
 
@@ -136,32 +125,20 @@ public class PrcRealFileTests
 
     private static string Describe(SceneData scene)
     {
-        var nodes = 0;
+        var nodes = TestScenes.GetAllModels(scene).Count();
         var meshes = 0;
         long triangles = 0;
         long lines = 0;
-        var pending = new Stack<SceneData.Model>();
-        pending.Push(scene.Models);
-        while (pending.Count > 0)
+        foreach (var mesh in TestScenes.GetAllMeshes(scene))
         {
-            var model = pending.Pop();
-            nodes++;
-            foreach (var mesh in model.Meshes)
+            meshes++;
+            if (mesh.MeshTopology == PrimitiveType.TriangleList)
             {
-                meshes++;
-                if (mesh.MeshTopology == PrimitiveType.TriangleList)
-                {
-                    triangles += mesh.Indices.Length / 3;
-                }
-                else if (mesh.MeshTopology == PrimitiveType.LineList)
-                {
-                    lines += mesh.Indices.Length / 2;
-                }
+                triangles += mesh.Indices.Length / 3;
             }
-
-            foreach (var child in model.Dependencies)
+            else if (mesh.MeshTopology == PrimitiveType.LineList)
             {
-                pending.Push(child);
+                lines += mesh.Indices.Length / 2;
             }
         }
 

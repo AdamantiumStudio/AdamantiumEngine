@@ -33,7 +33,7 @@ internal sealed class PrcTestFile
 
     public static byte[] Compress(byte[] data)
     {
-        var output = new MemoryStream();
+        using var output = new MemoryStream();
         using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, true))
         {
             zlib.Write(data);
@@ -57,8 +57,8 @@ internal sealed class PrcTestFile
 
         var model = Compress(ModelFile);
         var headerLength = 3 + 4 * 2 + 16 * 2 + 4 + Structures.Count * (16 + 4 + 4 + 4 * 6) + 4 * 3;
-        var output = new MemoryStream();
-        var header = new BinaryWriter(output);
+        using var output = new MemoryStream();
+        using var header = new BinaryWriter(output);
         header.Write("PRC"u8.ToArray());
         header.Write(MinimalVersion);
         header.Write(AuthoringVersion);
@@ -93,8 +93,8 @@ internal sealed class PrcTestFile
 
     private byte[] CreateStructureHeader(PrcTestStructure structure)
     {
-        var output = new MemoryStream();
-        var header = new BinaryWriter(output);
+        using var output = new MemoryStream();
+        using var header = new BinaryWriter(output);
         header.Write("PRC"u8.ToArray());
         header.Write(MinimalVersion);
         header.Write(AuthoringVersion);
