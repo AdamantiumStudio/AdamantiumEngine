@@ -3,7 +3,9 @@ using Adamantium.Pdf.Objects;
 namespace Adamantium.Pdf.ThreeD;
 
 /// <summary>Where a 3D view's camera stands and how it is turned (ISO 32000-1, 13.6.5, <c>C2W</c>): the camera's axes
-/// and its place in the artwork's world. The camera looks along its own Z axis, with its Y axis up.</summary>
+/// and its place in the artwork's world. The camera looks along its own Z axis, with its Y axis up and its X axis to the
+/// left: the axes turn as the world's do, right-handed, so what is to the right on the screen lies along Z across Y.
+/// </summary>
 public sealed class Pdf3DCamera
 {
     public Pdf3DCamera(Pdf3DVector xAxis, Pdf3DVector yAxis, Pdf3DVector zAxis, Pdf3DVector position)
@@ -14,7 +16,7 @@ public sealed class Pdf3DCamera
         Position = position;
     }
 
-    /// <summary>The camera's X axis in the world: to the right of what it sees.</summary>
+    /// <summary>The camera's X axis in the world: to the left of what it sees.</summary>
     public Pdf3DVector XAxis { get; }
 
     /// <summary>The camera's Y axis in the world: up.</summary>

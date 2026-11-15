@@ -51,8 +51,8 @@ public sealed class Pdf3DArtwork
     /// <summary>When it comes to life and goes back to its poster (<c>3DA</c>).</summary>
     public Pdf3DActivation Activation { get; private init; }
 
-    /// <summary>The part of the annotation it is shown in (<c>3DB</c>), in the appearance's space; null for the whole
-    /// annotation.</summary>
+    /// <summary>The part of the annotation it is shown in (<c>3DB</c>), in the annotation's target space: points from the
+    /// middle of its rectangle, so the whole rectangle is [-w/2 -h/2 w/2 h/2]; null for the whole annotation.</summary>
     public PdfRectangle? ViewBox { get; private init; }
 
     /// <summary>Whether the reader may turn and move it (<c>3DI</c>); true by default.</summary>
