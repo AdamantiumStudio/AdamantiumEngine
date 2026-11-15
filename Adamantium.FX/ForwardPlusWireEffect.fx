@@ -49,4 +49,16 @@ technique ForwardPlusWire
         VertexShader = Lit_VS;
         PixelShader = LitTexturedWire_PS;
     }
+
+    pass SkinnedColored
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitColoredWire_PS;
+    }
+
+    pass SkinnedTextured
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitTexturedWire_PS;
+    }
 }

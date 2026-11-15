@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Adamantium.Core;
 using Adamantium.Core.Shared;
@@ -50,7 +51,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private MeshInstance[] instances = new MeshInstance[256];
     private Matrix4x4F[] palettes = [];
     private int paletteMatrices;
-    private readonly List<(MeshData Data, Matrix4x4F World, bool OverShaded)> wires = [];
+    private readonly List<MeshWire> wires = [];
     private readonly List<(Entity Entity, Collider Collider)> colliders = [];
     private long trianglesCounted;
     private long trianglesInScene;
@@ -209,8 +210,9 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             TrianglesDrawn = trianglesCounted;
             TrianglesInScene = trianglesInScene;
             DrawCalls = groupsDrawn.Count + wires.Count + colliders.Count;
-            DrawGroups();
-            DrawLines();
+            var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
+            DrawGroups(paletteAddress);
+            DrawLines(paletteAddress);
         }
         catch (Exception exception)
         {
@@ -353,12 +355,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var (shaded, wired) = Drawn(Display, shown);
-        if (meshData.RenderMode == MeshRenderMode.Skinned)
-        {
-            shaded = true;
-            wired = false;
-        }
-
         var wireInShading = shaded && wired && wireEffect != null && IsTriangles(meshData);
         trianglesCounted += triangles;
         if (shaded)
@@ -368,7 +364,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         if (wired && !wireInShading)
         {
-            wires.Add((meshData, transformation.WorldMatrixF, shaded));
+            var world = transformation.WorldMatrixF;
+            var (first, count) = meshData.RenderMode == MeshRenderMode.Skinned
+                ? PaletteOf(entity.GetComponent<Skin>(), world)
+                : default;
+            wires.Add(new MeshWire(meshData, world, shaded, first, count));
         }
 
         return true;
@@ -408,11 +408,29 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         };
     }
 
-    private void DrawWire(MeshData meshData, in Matrix4x4F world, bool overShaded)
+    // A skinned mesh bends with its joints first, so its lines are drawn by the skinned pass, one copy with its palette.
+    private void DrawWire(in MeshWire wire, ulong paletteAddress)
     {
-        basicEffect.Wvp.SetValue(world * ActiveCamera.ViewProjectionMatrix);
-        basicEffect.MeshColor.SetValue(WireColor);
-        basicEffect.BasicColoredPass.Apply();
+        var meshData = wire.Data;
+        var overShaded = wire.OverShaded;
+        var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
+        if (skinned)
+        {
+            basicEffect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
+            basicEffect.View.SetValue(ActiveCamera.ViewMatrix);
+            basicEffect.Joints.SetValue(paletteAddress + wire.PaletteFirst * (ulong)Unsafe.SizeOf<Matrix4x4F>());
+            basicEffect.JointCount.SetValue(wire.PaletteCount);
+            GizmoInstance[] copy = [new GizmoInstance(wire.World, new Vector4F(WireColor, 1f))];
+            basicEffect.Instances.SetValue(GraphicsDevice.UploadFrameData<GizmoInstance>(copy));
+            basicEffect.BasicSkinnedFlatInstancedPass.Apply();
+        }
+        else
+        {
+            basicEffect.Wvp.SetValue(wire.World * ActiveCamera.ViewProjectionMatrix);
+            basicEffect.MeshColor.SetValue(WireColor);
+            basicEffect.BasicColoredPass.Apply();
+        }
+
         if (overShaded)
         {
             GraphicsDevice.DepthBiasEnabled = true;
@@ -424,7 +442,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         {
             var state = new RenderState(true, CullModeFlagBits.None, meshData.DepthTestEnabled,
                 !overShaded && meshData.DepthWriteEnabled, meshData.TopologyOverride);
-            geometryCache.GetOrCreate(meshData.Mesh, typeof(MeshVertex)).Draw(GraphicsDevice, state);
+            var vertexType = skinned ? meshData.ResolveVertexType() : typeof(MeshVertex);
+            geometryCache.GetOrCreate(meshData.Mesh, vertexType).Draw(GraphicsDevice, state);
         }
         finally
         {
@@ -439,20 +458,17 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var material = entity.GetComponent<Material>();
         var texture = material?.Texture is { IsDisposed: false } live ? live : null;
         var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
-        Effect owner = skinned || !withWire ? effect : wireEffect;
+        var textured = texture != null;
+        Effect owner = withWire ? wireEffect : effect;
         IEffectPass pass;
-        if (skinned)
-        {
-            pass = texture != null ? effect.ForwardPlusSkinnedTexturedPass : effect.ForwardPlusSkinnedColoredPass;
-        }
+        if (withWire && skinned)
+            pass = textured ? wireEffect.ForwardPlusWireSkinnedTexturedPass : wireEffect.ForwardPlusWireSkinnedColoredPass;
         else if (withWire)
-        {
-            pass = texture != null ? wireEffect.ForwardPlusWireTexturedPass : wireEffect.ForwardPlusWireColoredPass;
-        }
+            pass = textured ? wireEffect.ForwardPlusWireTexturedPass : wireEffect.ForwardPlusWireColoredPass;
+        else if (skinned)
+            pass = textured ? effect.ForwardPlusSkinnedTexturedPass : effect.ForwardPlusSkinnedColoredPass;
         else
-        {
-            pass = texture != null ? effect.ForwardPlusTexturedPass : effect.ForwardPlusColoredPass;
-        }
+            pass = textured ? effect.ForwardPlusTexturedPass : effect.ForwardPlusColoredPass;
 
         var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
         var key = new MeshDrawKey(geometry, pass, meshData.CullMode, meshData.DepthTestEnabled,
@@ -496,7 +512,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         return palette;
     }
 
-    private void DrawGroups()
+    private void DrawGroups(ulong paletteAddress)
     {
         if (groupsDrawn.Count == 0)
         {
@@ -521,7 +537,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var instanceAddress = GraphicsDevice.UploadFrameData<MeshInstance>(instances.AsSpan(0, count));
-        var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
             target?.Parameters["Instances"].SetValue(instanceAddress);
@@ -538,11 +553,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    private void DrawLines()
+    private void DrawLines(ulong paletteAddress)
     {
-        foreach (var (data, world, overShaded) in wires)
+        foreach (var wire in wires)
         {
-            DrawWire(data, world, overShaded);
+            DrawWire(wire, paletteAddress);
         }
 
         foreach (var (entity, collider) in colliders)
