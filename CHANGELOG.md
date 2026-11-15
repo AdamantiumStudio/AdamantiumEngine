@@ -298,6 +298,10 @@ All packages share one version.
 
 ### Changed
 
+- `LightManager` follows the world: every light that comes into its scene - on its own, inside a model, put back with
+  `EntityManager.ReturnEntity` - is listed, and every one that leaves is not, from the entity manager's `EntityAdded`
+  and `EntityRemoved`; the lights already in the scene are listed when it is made. `AddLight` and `RemoveLight` only add
+  and remove the entity; `ReturnLight` is gone, and the scene builder adds lights as any entity.
 - `PdfIncrementalUpdate.Write` with nothing added, replaced or freed writes the file as it was, byte for byte, rather
   than the file and an empty section after it.
 - `LightManager.AddLight`: a light standing in another entity joins the world with that entity's root, not as a root

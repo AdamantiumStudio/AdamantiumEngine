@@ -75,6 +75,64 @@ public class LightManagerTests
         Assert.That(universe.EntityWorld.MainScene.RootEntities, Is.Empty);
     }
 
+    // The lights follow the world: a light inside a model comes with the model and goes with it, with no call of its own.
+    [Test]
+    public void ALightInsideAModel_IsListedWithIt_AndLeavesWithIt()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var lights = new LightManager(universe, manager.MainScene);
+        var model = new Entity(null, "Model");
+        var lamp = new LightTemplate().BuildEntity(model, "Lamp", LightType.Point);
+
+        manager.AddEntity(model);
+        NextFrame(universe);
+        var listed = lights.PointLights.Count;
+        manager.RemoveEntity(model);
+        NextFrame(universe);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(listed, Is.EqualTo(1));
+            Assert.That(lights.Lights, Is.Empty);
+            Assert.That(lights.Contains(lamp), Is.False);
+        });
+    }
+
+    // An undo puts a light back through the world, not through the lights: it is listed again all the same.
+    [Test]
+    public void ALightTakenOutAndReturned_IsListedAgain()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var lights = new LightManager(universe, manager.MainScene);
+        var spot = new LightTemplate().BuildEntity(null, "Spot", LightType.Spot);
+        manager.AddEntity(spot);
+        NextFrame(universe);
+        manager.RemoveEntity(spot);
+        NextFrame(universe);
+
+        manager.ReturnEntity(spot, null, manager.MainScene, 0);
+        NextFrame(universe);
+
+        Assert.That(lights.SpotLights, Is.EqualTo(new[] { spot.GetComponent<Light>() }));
+    }
+
+    [Test]
+    public void TheLightsAlreadyInTheScene_AreListed()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
+        manager.AddEntity(sun);
+        NextFrame(universe);
+
+        var lights = new LightManager(universe, manager.MainScene);
+        NextFrame(universe);
+
+        Assert.That(lights.DirectionalLights, Is.EqualTo(new[] { sun.GetComponent<Light>() }));
+    }
+
     private static void NextFrame(TestUniverse universe)
     {
         universe.EntityWorld.ForceUpdate();
