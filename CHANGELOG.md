@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `EntityIcons.Shows` (`EntityIconKinds`): the kinds of icon shown - empty entities, groups, lights, cameras - each on
+  or off, so an editor hides those in the way. An entity of a kind left out has no icon and cannot be picked by one; a
+  light or a camera with a marker goes as a light or a camera, not as an empty entity.
 - `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
   services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
   `CountOf<T>()` how many. `Select(query)` gives those of a `ComponentQuery<T>` - made once and kept by a service -
@@ -569,6 +572,7 @@ All packages share one version.
 
 ### Removed
 
+- `EntityIcons.ShowsLights` and `EntityIcons.ShowsCameras`: use `EntityIcons.Shows`.
 - `ContourProcessingHelper`, and the cut of crossing contours `Polygon.FillIndirect` fell back to: every fill goes
   through `RingFill`, which fills crossing contours by the overlay.
 - `Polygon.ProcessedContours`: copies of the contours, made on every `FillIndirect` call. Stroke the contours you
