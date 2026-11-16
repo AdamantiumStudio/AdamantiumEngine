@@ -21,7 +21,6 @@ public sealed class Pdf3DView
     private const string TypeKey = "Type";
     private const string ViewType = "3DView";
     private const string BackgroundType = "3DBG";
-    private const string RenderModeType = "3DRenderMode";
     private const string LightingType = "3DLightingScheme";
     private const string MatrixFromCamera = "M";
     private const string MatrixFromArtwork = "U3D";
@@ -102,10 +101,7 @@ public sealed class Pdf3DView
     {
         var dictionary = new PdfDictionary();
         dictionary.Set(TypeKey, new PdfName(ViewType));
-        if (Name != null)
-        {
-            dictionary.Set(ExternalNameKey, PdfString.FromText(Name));
-        }
+        dictionary.Set(ExternalNameKey, PdfString.FromText(Name ?? InternalName ?? string.Empty));
 
         if (InternalName != null)
         {
@@ -144,10 +140,7 @@ public sealed class Pdf3DView
 
         if (RenderMode?.Name != null)
         {
-            var mode = new PdfDictionary();
-            mode.Set(TypeKey, new PdfName(RenderModeType));
-            mode.Set(SubtypeKey, new PdfName(RenderMode.Name));
-            dictionary.Set(RenderModeKey, mode);
+            dictionary.Set(RenderModeKey, RenderMode.ToDictionary());
         }
 
         if (Lighting != null)

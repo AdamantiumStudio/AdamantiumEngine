@@ -11,6 +11,9 @@ public sealed class Pdf3DRenderMode
     private const string FaceColorKey = "FC";
     private const string OpacityKey = "O";
     private const string CreaseKey = "CV";
+    private const string TypeKey = "Type";
+    private const string RenderModeType = "3DRenderMode";
+    private const string RgbSpace = "DeviceRGB";
 
     /// <summary>The mode's name (<c>Subtype</c>): <c>Solid</c>, <c>SolidWireframe</c>, <c>Transparent</c>,
     /// <c>Wireframe</c>, <c>Illustration</c>, <c>ShadedVertices</c> and the others the format names.</summary>
@@ -29,6 +32,28 @@ public sealed class Pdf3DRenderMode
     /// <summary>The angle between faces, in degrees, from which their edge counts as a crease (<c>CV</c>); 45 by
     /// default.</summary>
     public double CreaseAngle { get; init; } = 45;
+
+    /// <summary>The <c>RM</c> dictionary of the mode: its name, colors, opacity and crease angle.</summary>
+    public PdfDictionary ToDictionary()
+    {
+        var dictionary = new PdfDictionary();
+        dictionary.Set(TypeKey, new PdfName(RenderModeType));
+        dictionary.Set(SubtypeKey, new PdfName(Name));
+        dictionary.Set(AuxiliaryColorKey, Color(AuxiliaryColor));
+        if (FaceColor != null)
+        {
+            dictionary.Set(FaceColorKey, Color(FaceColor));
+        }
+
+        dictionary.Set(OpacityKey, new PdfReal(Opacity));
+        dictionary.Set(CreaseKey, new PdfReal(CreaseAngle));
+        return dictionary;
+    }
+
+    private static PdfArray Color(Pdf3DColor color) => new(
+    [
+        new PdfName(RgbSpace), new PdfReal(color.Red), new PdfReal(color.Green), new PdfReal(color.Blue),
+    ]);
 
     /// <summary>The mode of an <c>RM</c> dictionary, or null for none - the artwork's own.</summary>
     public static Pdf3DRenderMode From(PdfObject value, IPdfObjectResolver resolver)

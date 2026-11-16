@@ -12,6 +12,8 @@ public sealed class Pdf3DProjection
     private const string OrthographicBindingKey = "OB";
     private const string Orthographic = "O";
     private const string Perspective = "P";
+    private const string NearKey = "N";
+    private const double NearDistance = 1;
     private const string WidthBinding = "W";
     private const string AbsoluteBinding = "Absolute";
 
@@ -31,7 +33,8 @@ public sealed class Pdf3DProjection
     /// its field of view spans (<c>PS</c>), <c>W</c> by default.</summary>
     public string Binding { get; init; }
 
-    /// <summary>The <c>P</c> dictionary of the projection.</summary>
+    /// <summary>The <c>P</c> dictionary of the projection; a perspective one with the near distance the format requires
+    /// (<c>N</c>), which clips nothing while the clipping is automatic, as it is by default.</summary>
     public PdfDictionary ToDictionary()
     {
         var dictionary = new PdfDictionary();
@@ -44,6 +47,7 @@ public sealed class Pdf3DProjection
         }
         else
         {
+            dictionary.Set(NearKey, new PdfReal(NearDistance));
             dictionary.Set(FieldOfViewKey, new PdfReal(FieldOfView));
             dictionary.Set(PerspectiveScalingKey, new PdfName(Binding ?? WidthBinding));
         }

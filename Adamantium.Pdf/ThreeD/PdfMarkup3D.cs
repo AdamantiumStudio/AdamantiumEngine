@@ -30,13 +30,13 @@ public sealed class PdfMarkup3D
     /// </summary>
     public byte[] Checksum { get; init; }
 
-    /// <summary>The markup of an <c>ExData</c> dictionary, or null for none, another kind of external data, or one that
-    /// names no view.</summary>
+    /// <summary>The markup of an <c>ExData</c> dictionary - of subtype <c>Markup3D</c>, or, as the format's own example
+    /// writes it, of that type with no subtype - or null for none, another kind of external data, or one that names no
+    /// view. <see cref="Annotation"/> is a reference to a dictionary only.</summary>
     public static PdfMarkup3D From(PdfObject value, IPdfObjectResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
-        if (resolver.Resolve(value) is not PdfDictionary dictionary ||
-            PdfValues.Name(dictionary[SubtypeKey], resolver) != Markup3DSubtype ||
+        if (resolver.Resolve(value) is not PdfDictionary dictionary || !IsMarkup3D(dictionary, resolver) ||
             Pdf3DView.From(dictionary[ViewKey], resolver) is not { } view)
         {
             return null;
@@ -45,12 +45,19 @@ public sealed class PdfMarkup3D
         var annotation = dictionary[AnnotationKey];
         return new PdfMarkup3D
         {
-            Annotation = (annotation as PdfReference)?.Id,
+            Annotation = annotation is PdfReference reference && resolver.Resolve(reference) is PdfDictionary
+                ? reference.Id
+                : null,
             AnnotationName = (resolver.Resolve(annotation) as PdfString)?.ToText(),
             View = view,
             Checksum = (resolver.Resolve(dictionary[ChecksumKey]) as PdfString)?.Bytes,
         };
     }
+
+    private static bool IsMarkup3D(PdfDictionary dictionary, IPdfObjectResolver resolver) =>
+        PdfValues.Name(dictionary[SubtypeKey], resolver) is { } subtype
+            ? subtype == Markup3DSubtype
+            : PdfValues.Name(dictionary[TypeKey], resolver) == Markup3DSubtype;
 
     /// <summary>The <c>ExData</c> dictionary of a markup on <paramref name="view"/> - a reference to a view object, or a
     /// view dictionary - of the 3D annotation <paramref name="annotation"/>, made on the stream of

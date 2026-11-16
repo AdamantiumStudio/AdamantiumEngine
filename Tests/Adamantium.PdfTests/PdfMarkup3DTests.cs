@@ -59,6 +59,49 @@ public class PdfMarkup3DTests
         });
     }
 
+    // The format's own example writes the kind as Type alone; a 3DA reference to a text string is a name, not an object.
+    [Test]
+    public void AMarkupNamedByTypeAlone_IsRead_AndANameBehindAReference_IsNoObject()
+    {
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Annots [4 0 R] >>");
+        builder.Add("<< /Type /Annot /Subtype /Square /Rect [0 0 10 10] " +
+                    "/ExData << /Type /Markup3D /3DA 5 0 R /3DV << /XN (Front) >> >> >>");
+        builder.Add("(plate)");
+        var markup = PdfDocument.Open(builder.Build("/Root 1 0 R")).Pages[0].Annotations[0].Markup3D;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markup, Is.Not.Null, "a markup named by its type alone was not read");
+            Assert.That(markup?.Annotation, Is.Null, "a reference to a text string was taken for an annotation");
+            Assert.That(markup?.AnnotationName, Is.EqualTo("plate"));
+            Assert.That(markup?.View.Name, Is.EqualTo("Front"));
+        });
+    }
+
+    [Test]
+    public void AChecksumOfTheDecodedStream_MatchesAsWellAsOneOfItsBytesInTheFile()
+    {
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Annots [4 0 R] >>");
+        builder.Add("<< /Type /Annot /Subtype /3D /Rect [0 0 100 100] /3DD 5 0 R >>");
+        var model = Encoding.ASCII.GetBytes("U3D model");
+        builder.Add(PdfFileBuilder.Stream("/Type /3D /Subtype /U3D /Filter /FlateDecode", PdfFileBuilder.Flate(model)));
+        var artwork = PdfDocument.Open(builder.Build("/Root 1 0 R")).Pages[0].Annotations[0].Artwork3D;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(artwork.MatchesChecksum(artwork.ComputeChecksum()), Is.True);
+            Assert.That(artwork.MatchesChecksum(System.Security.Cryptography.MD5.HashData(model)), Is.True,
+                "the decoded stream's checksum did not match");
+            Assert.That(artwork.MatchesChecksum(new byte[16]), Is.False);
+        });
+    }
+
     [Test]
     public void AMarkupWritten_ComesBackOnTheViewItWasMadeOn()
     {
@@ -75,7 +118,10 @@ public class PdfMarkup3DTests
             CenterOfOrbit = 250,
             Projection = new Pdf3DProjection { Kind = Pdf3DProjectionKind.Orthographic, Scale = 2, Binding = "W" },
             Background = new Pdf3DColor(0.25, 0.5, 0.75),
-            RenderMode = new Pdf3DRenderMode { Name = "Wireframe" },
+            RenderMode = new Pdf3DRenderMode
+            {
+                Name = "Wireframe", AuxiliaryColor = new Pdf3DColor(1, 0, 0), Opacity = 0.25, CreaseAngle = 30,
+            },
             Lighting = "CAD",
         };
         var update = new PdfIncrementalUpdate(document);
@@ -108,7 +154,31 @@ public class PdfMarkup3DTests
             Assert.That(first.Projection.Binding, Is.EqualTo("W"));
             Assert.That(first.Background, Is.EqualTo(new Pdf3DColor(0.25, 0.5, 0.75)));
             Assert.That(first.RenderMode.Name, Is.EqualTo("Wireframe"));
+            Assert.That(first.RenderMode.AuxiliaryColor, Is.EqualTo(new Pdf3DColor(1, 0, 0)));
+            Assert.That(first.RenderMode.Opacity, Is.EqualTo(0.25));
+            Assert.That(first.RenderMode.CreaseAngle, Is.EqualTo(30));
             Assert.That(first.Lighting, Is.EqualTo("CAD"));
+        });
+    }
+
+    // Table 305: N is required for a perspective; table 304: XN is required.
+    [Test]
+    public void AViewWritten_CarriesWhatTheFormatRequires()
+    {
+        var view = new Pdf3DView
+        {
+            InternalName = "inner",
+            Projection = new Pdf3DProjection { Kind = Pdf3DProjectionKind.Perspective, FieldOfView = 30 },
+        };
+
+        var dictionary = view.ToDictionary();
+        var projection = (PdfDictionary)dictionary["P"];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(((PdfString)dictionary["XN"]).ToText(), Is.EqualTo("inner"), "a view without a name has no XN");
+            Assert.That(projection["N"], Is.Not.Null, "a perspective has no near distance");
+            Assert.That(((PdfReal)projection["N"]).Value, Is.GreaterThan(0));
         });
     }
 }

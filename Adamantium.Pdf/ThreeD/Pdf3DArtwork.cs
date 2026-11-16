@@ -66,6 +66,12 @@ public sealed class Pdf3DArtwork
     /// 13.6.6) to tell whether the model changed since it was made.</summary>
     public byte[] ComputeChecksum() => MD5.HashData(Stream.Data.Span);
 
+    /// <summary>Whether <paramref name="checksum"/> - a 3D comment's <c>MD5</c> - is of this stream: of its data as the
+    /// file holds it, or, as a writer reading "the bytes of the stream data" otherwise may have hashed them, decoded.
+    /// </summary>
+    public bool MatchesChecksum(ReadOnlySpan<byte> checksum) =>
+        checksum.SequenceEqual(ComputeChecksum()) || checksum.SequenceEqual(MD5.HashData(ReadData().Span));
+
     /// <summary>The artwork of a 3D annotation's dictionary, or null when it names no 3D stream.</summary>
     public static Pdf3DArtwork From(PdfDictionary annotation, PdfDocument document)
     {
