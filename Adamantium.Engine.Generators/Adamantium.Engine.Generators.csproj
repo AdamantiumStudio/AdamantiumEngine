@@ -22,7 +22,7 @@
     <PropertyGroup>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <DevelopmentDependency>true</DevelopmentDependency>
-        <AdamantiumSlangVersion>1.1.0</AdamantiumSlangVersion>
+        <AdamantiumSlangVersion>1.1.1</AdamantiumSlangVersion>
         <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackAnalyzerAssemblies</TargetsForTfmSpecificContentInPackage>
         <!-- dotnet pack no-build: the references are resolved from what is already built instead of being built again. -->
         <BuildProjectReferences Condition="'$(NoBuild)' == 'true'">false</BuildProjectReferences>
@@ -53,9 +53,9 @@
 	<ItemGroup>
          <!--Generator dependencies-->
 		
-		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="2.0.0" GeneratePathProperty="true" PrivateAssets="all" />
+		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="2.0.1" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="Adamantium.Vulkan.Slang" Version="$(AdamantiumSlangVersion)" GeneratePathProperty="true" PrivateAssets="compile;runtime;native;analyzers;build;buildtransitive" />
-        <PackageReference Include="QuantumBinding.Utils" Version="3.0.1" GeneratePathProperty="true" PrivateAssets="all" />
+        <PackageReference Include="QuantumBinding.Utils" Version="3.1.0" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack.Annotations" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" GeneratePathProperty="true" PrivateAssets="all" />
