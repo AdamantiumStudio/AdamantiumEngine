@@ -155,6 +155,74 @@ public class InputActionsTests
         Assert.That(save.IsPressed, Is.True);
     }
 
+    // A shortcut is not also the key it is made with: within a map, the chord held takes the controls of a binding it
+    // holds more modifiers over. Let go of Control, and S is S again.
+    [Test]
+    public void AChordHeld_TakesTheKeyItIsMadeWith_FromTheSameMap()
+    {
+        var map = Map();
+        var save = map.Add("Save", InputActionType.Button,
+            InputBinding.Control(InputControl.Key(Keys.S), modifiers: InputControl.Key(Keys.Control)));
+        var back = map.Add("Back", InputActionType.Button, InputBinding.Control(InputControl.Key(Keys.S)));
+
+        keyboard.Key(Keys.LeftControl, InputType.Down);
+        keyboard.Key(Keys.S, InputType.Down);
+        Frame();
+        Assert.Multiple(() =>
+        {
+            Assert.That(save.IsDown, Is.True);
+            Assert.That(back.IsDown, Is.False, "Ctrl+S is not also S");
+        });
+
+        keyboard.Key(Keys.LeftControl, InputType.Up);
+        Frame();
+        Assert.Multiple(() =>
+        {
+            Assert.That(save.IsDown, Is.False);
+            Assert.That(back.IsDown, Is.True, "S alone again");
+        });
+    }
+
+    // A drag lasts while its button and keys are held, the frames the pointer stands still among them; and the plain
+    // drag, its modifiers a part of the chord's, gets nothing meanwhile.
+    [Test]
+    public void ADragChord_IsHeldWhileItsButtonAndKeysAre_AndThePlainDragGetsNothing()
+    {
+        var map = Map();
+        var look = map.Add("Look", InputActionType.Vector,
+            InputBinding.Stick(InputControl.Mouse(MouseAxis.DeltaX), InputControl.Mouse(MouseAxis.DeltaY),
+                modifiers: InputControl.Mouse(MouseButton.Right)));
+        var orbit = map.Add("Orbit", InputActionType.Vector,
+            InputBinding.Stick(InputControl.Mouse(MouseAxis.DeltaX), InputControl.Mouse(MouseAxis.DeltaY),
+                modifiers: [InputControl.Mouse(MouseButton.Right), InputControl.Key(Keys.Alt)]));
+
+        keyboard.Key(Keys.LeftAlt, InputType.Down);
+        pointer.Button(MouseButton.Right, InputType.Down);
+        Frame();
+        Assert.Multiple(() =>
+        {
+            Assert.That(orbit.IsHeld, Is.True, "held before it moves");
+            Assert.That(orbit.IsDown, Is.False);
+        });
+
+        pointer.Move(30, 5);
+        Frame();
+        Assert.Multiple(() =>
+        {
+            Assert.That(orbit.Vector.X, Is.EqualTo(30f));
+            Assert.That(look.IsDown, Is.False, "the look gets nothing while Alt is held");
+        });
+
+        keyboard.Key(Keys.LeftAlt, InputType.Up);
+        pointer.Move(30, 5);
+        Frame();
+        Assert.Multiple(() =>
+        {
+            Assert.That(orbit.IsHeld, Is.False);
+            Assert.That(look.Vector.X, Is.EqualTo(30f), "without Alt, the look again");
+        });
+    }
+
     [Test]
     public void AHigherMap_TakesTheControl_AndSwitchedOffGivesItBack()
     {

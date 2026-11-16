@@ -427,6 +427,9 @@ namespace Adamantium.Multiverse
         /// leaves the scene with the output. Null until then.</summary>
         public Camera OwnCamera { get; internal set; }
 
+        /// <summary>How the mouse orbits the camera of this output about a point: each output its own way.</summary>
+        public CameraOrbitStyle OrbitStyle { get; set; }
+
         /// <summary>The scene the output shows: the universe gives it the main scene of its world as it comes. Another
         /// one set takes <see cref="OwnCamera"/> along from the next frame; the other cameras of
         /// <see cref="Cameras"/> are the caller's to change. Null - an output outside the universe - shows no scene.

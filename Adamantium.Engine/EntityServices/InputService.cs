@@ -32,6 +32,7 @@ public class InputService : EntityService
     private readonly InputAction turn;
     private readonly InputAction roll;
     private readonly InputAction look;
+    private readonly InputAction orbit;
     private readonly InputAction zoom;
     private readonly InputAction twist;
     private readonly InputAction slowerTurn;
@@ -53,6 +54,9 @@ public class InputService : EntityService
     private Vector2F panFrom;
     private Camera panCamera;
     private double panDepth;
+    private bool orbiting;
+    private Camera orbitCamera;
+    private Vector3<double> orbitPivot;
     private const double SteeringQuietSeconds = 0.3;
     private Camera _steered;
     private EditedState _steeredBefore;
@@ -80,6 +84,10 @@ public class InputService : EntityService
             InputBinding.Stick(InputControl.Mouse(MouseAxis.DeltaX), InputControl.Mouse(MouseAxis.DeltaY),
                 modifiers: InputControl.Mouse(MouseButton.Right)),
             InputBinding.Stick(InputControl.Gesture(GestureAxis.PanX), InputControl.Gesture(GestureAxis.PanY)));
+        // The same drag with Alt held: about the point under the pointer instead of about the camera itself.
+        orbit = CameraActions.Add("Orbit", InputActionType.Vector,
+            InputBinding.Stick(InputControl.Mouse(MouseAxis.DeltaX), InputControl.Mouse(MouseAxis.DeltaY),
+                modifiers: [InputControl.Mouse(MouseButton.Right), Key(Keys.Alt)]));
         zoom = CameraActions.Add("Zoom", InputActionType.Axis,
             InputBinding.Control(InputControl.Mouse(MouseAxis.Wheel)),
             InputBinding.Control(InputControl.Gesture(GestureAxis.Pinch), PinchNotchesPerDoubling));
@@ -151,6 +159,7 @@ public class InputService : EntityService
         else
         {
             panning = false;
+            orbiting = false;
         }
 
         if (observatory.KeyboardOutput is { Camera: { } keyboardCamera } keyboardOutput)
@@ -223,7 +232,7 @@ public class InputService : EntityService
     {
         if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera)
             && IsSceneCamera(pointerCamera)
-            && (look.IsDown || zoom.Value != 0 || twist.Value != 0
+            && (look.IsDown || orbit.IsDown || zoom.Value != 0 || twist.Value != 0
                 || observatory.PointerInput is { CanLocatePointer: true } input && input.IsMouseButtonDown(MouseButton.Middle)))
         {
             return pointerCamera;
@@ -302,6 +311,8 @@ public class InputService : EntityService
 
     private void HandlePointer(Camera currentCamera)
     {
+        // The orbit's chord holds Alt over the look's drag, so while it is held the look gets nothing.
+        Orbit(currentCamera);
         if (look.IsDown)
         {
             currentCamera.RotateRelativeXY(
@@ -359,20 +370,61 @@ public class InputService : EntityService
         panning = true;
     }
 
-    private double DepthUnder(Camera camera, Vector2F pixel)
+    // Alt with the right button turns a free camera about a point: what was under the pointer when the chord went down,
+    // before the drag moved, or the middle of the view where nothing was - out in space, say. The point stays until the
+    // chord is let go. A camera that cannot orbit - on a host, following - turns about itself, as the look would.
+    private void Orbit(Camera camera)
+    {
+        if (!orbit.IsHeld || observatory.PointerInput is not { CanLocatePointer: true } input)
+        {
+            orbiting = false;
+            return;
+        }
+
+        var pitch = orbit.Vector.Y * camera.MouseSensitivity * LookPerPixel;
+        var yaw = -orbit.Vector.X * camera.MouseSensitivity * LookPerPixel;
+        if (!camera.CanOrbit)
+        {
+            orbiting = false;
+            if (orbit.IsDown)
+            {
+                camera.RotateRelativeXY(pitch, yaw);
+            }
+
+            return;
+        }
+
+        if (!orbiting || camera != orbitCamera)
+        {
+            orbitPivot = PointUnder(camera, input.RelativePosition);
+            orbitCamera = camera;
+            orbiting = true;
+        }
+
+        if (orbit.IsDown)
+        {
+            camera.Orbit(orbitPivot, pitch, yaw, observatory.PointerOutput?.OrbitStyle ?? CameraOrbitStyle.Turntable);
+        }
+    }
+
+    private double DepthUnder(Camera camera, Vector2F pixel) =>
+        HitUnder(camera, pixel, out var fromCamera)
+            ? Vector3F.Dot(fromCamera, camera.Forward.As<float>())
+            : camera.FocusDistance;
+
+    // The point of the scene under the pixel, in the world; the middle of the view where nothing is.
+    private Vector3<double> PointUnder(Camera camera, Vector2F pixel) =>
+        HitUnder(camera, pixel, out var fromCamera)
+            ? camera.WorldPosition + fromCamera.As<double>()
+            : camera.WorldPosition + camera.Forward * camera.FocusDistance;
+
+    // Whether a mesh of the scene shown is under the pixel, ahead of the camera's near plane; where, from the camera.
+    private bool HitUnder(Camera camera, Vector2F pixel, out Vector3F fromCamera)
     {
         var roots = (observatory.PointerScene ?? EntityWorld.MainScene).RootEntities;
         var hit = Picking.Pick(roots, PickRay.FromCamera(camera, pixel), PickMode.Triangles);
-        if (hit.IsHit)
-        {
-            var depth = Vector3F.Dot(hit.Point, camera.Forward.As<float>());
-            if (depth > camera.ZNear)
-            {
-                return depth;
-            }
-        }
-
-        return camera.FocusDistance;
+        fromCamera = hit.Point;
+        return hit.IsHit && Vector3F.Dot(hit.Point, camera.Forward.As<float>()) > camera.ZNear;
     }
 
     private void HandleKeyboard(UniverseOutput output, Camera currentCamera, AppTime appTime)

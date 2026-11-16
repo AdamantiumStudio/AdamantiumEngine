@@ -6,6 +6,7 @@ namespace Adamantium.Multiverse.Input;
 /// <summary>
 /// The actions of a universe: its maps, read once per frame right after the input, before any service runs - from the
 /// higher <see cref="InputActionMap.Priority"/> down, a control that drove an action not reaching the maps below.
+/// Within a map, a chord held takes the controls of a binding it holds more modifiers over: Ctrl+S is not also S.
 /// The user's rebindings travel as JSON: <c>{ "Camera.Move": [ { "up": "Key:W", "down": "Key:S", ... } ] }</c>.
 /// </summary>
 public sealed class InputActions
@@ -20,6 +21,7 @@ public sealed class InputActions
     private readonly List<InputActionMap> maps = [];
     private readonly HashSet<InputControl> consumed = [];
     private readonly List<InputControl> used = [];
+    private readonly List<InputBinding> heldChords = [];
     private readonly Dictionary<string, InputBinding[]> overrides = new(StringComparer.Ordinal);
 
     /// <summary>The maps, the highest priority first.</summary>
@@ -75,9 +77,25 @@ public sealed class InputActions
 
             var reader = new InputReader(keyboard, pointer, map.GamepadSlot);
             used.Clear();
+            // The chords whose modifiers are held: within the map, each takes the controls of the bindings it names and
+            // goes beyond - Ctrl+S over S.
+            heldChords.Clear();
             foreach (var action in map.Actions)
             {
-                action.Evaluate(reader, consumed, used);
+                var bindings = action.Bindings;
+                for (int i = 0; i < bindings.Count; i++)
+                {
+                    var binding = bindings[i];
+                    if (binding.Modifiers.Count > 0 && !binding.IsBlocked(consumed) && binding.ModifiersHeld(reader))
+                    {
+                        heldChords.Add(binding);
+                    }
+                }
+            }
+
+            foreach (var action in map.Actions)
+            {
+                action.Evaluate(reader, consumed, used, heldChords);
             }
 
             consumed.UnionWith(used);

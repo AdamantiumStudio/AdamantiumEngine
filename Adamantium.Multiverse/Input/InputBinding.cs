@@ -108,6 +108,35 @@ public sealed class InputBinding
         return Kind == InputBindingKind.Control && reader.Released(controls[0]);
     }
 
+    /// <summary>Whether this binding, its modifiers held, takes the controls of <paramref name="other"/> in the same map:
+    /// it names every control of the other and more modifiers - Ctrl+S over S, the right button's drag with Alt over
+    /// the drag alone - so a shortcut is not also the key it is made with.</summary>
+    internal bool Supersedes(InputBinding other)
+    {
+        if (ReferenceEquals(this, other) || modifiers.Length <= other.modifiers.Length)
+        {
+            return false;
+        }
+
+        foreach (var control in other.controls)
+        {
+            if (!Uses(control))
+            {
+                return false;
+            }
+        }
+
+        foreach (var modifier in other.modifiers)
+        {
+            if (!Uses(modifier))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     internal bool IsBlocked(HashSet<InputControl> consumed)
     {
         if (consumed.Count == 0)
