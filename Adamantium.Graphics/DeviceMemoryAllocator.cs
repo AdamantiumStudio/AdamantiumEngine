@@ -53,6 +53,11 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
     /// from a host-visible type in system memory that <paramref name="memoryTypeBits"/> allows.</summary>
     public MemoryAllocation Allocate(ulong size, ulong alignment, uint memoryTypeIndex, uint memoryTypeBits, bool deviceAddress)
     {
+        if (_device.MainDevice.TakeRefusal())
+        {
+            throw new OutOfDeviceMemoryException($"Out of GPU memory: {size} bytes refused on purpose (RefuseMemory)");
+        }
+
         if (size == 0) size = 1;
         if (alignment == 0) alignment = 1;
         size = AlignUp(size, alignment);

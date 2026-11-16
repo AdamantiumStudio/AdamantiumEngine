@@ -238,26 +238,57 @@ public class MainGraphicsDevice : DisposableBase
     /// <see cref="Result.ErrorOutOfDeviceMemory"/> while <see cref="RefuseMemory"/> says so.</summary>
     public Result AllocateMemory(MemoryAllocateInfo info, out DeviceMemory memory)
     {
+        if (TakeRefusal())
+        {
+            memory = default;
+            return Result.ErrorOutOfDeviceMemory;
+        }
+
+        return LogicalDevice.AllocateMemory(info, null, out memory);
+    }
+
+    /// <summary>For tests: after <paramref name="after"/> allocations of GPU memory are given, the next
+    /// <paramref name="allocations"/> - a buffer's place in a block as much as a block of its own, an image's memory -
+    /// are refused as a GPU whose memory another application holds refuses them; 0 gives memory again. How a recovery
+    /// from a full GPU - halfway through what a frame makes - is tested without filling the GPU.</summary>
+    public void RefuseMemory(int allocations, int after = 0)
+    {
+        Volatile.Write(ref _allocationsToAllow, Math.Max(0, after));
+        Volatile.Write(ref _allocationsToRefuse, Math.Max(0, allocations));
+    }
+
+    // How many allocations are still to be given before RefuseMemory's refusals begin.
+    private int _allocationsToAllow;
+
+    /// <summary>Whether this allocation is one <see cref="RefuseMemory"/> said to refuse - counted as refused. Asked by
+    /// whatever hands out GPU memory, before it does.</summary>
+    public bool TakeRefusal()
+    {
+        if (Volatile.Read(ref _allocationsToRefuse) == 0)
+        {
+            return false;
+        }
+
+        if (Interlocked.Decrement(ref _allocationsToAllow) >= 0)
+        {
+            return false;
+        }
+
+        Volatile.Write(ref _allocationsToAllow, 0);
         var left = Volatile.Read(ref _allocationsToRefuse);
         while (left > 0)
         {
             var seen = Interlocked.CompareExchange(ref _allocationsToRefuse, left - 1, left);
             if (seen == left)
             {
-                memory = default;
-                return Result.ErrorOutOfDeviceMemory;
+                return true;
             }
 
             left = seen;
         }
 
-        return LogicalDevice.AllocateMemory(info, null, out memory);
+        return false;
     }
-
-    /// <summary>For tests: the next <paramref name="allocations"/> allocations of GPU memory are refused as a GPU whose
-    /// memory another application holds refuses them; 0 gives memory again. How a recovery from a full GPU is tested
-    /// without filling the GPU.</summary>
-    public void RefuseMemory(int allocations) => Volatile.Write(ref _allocationsToRefuse, Math.Max(0, allocations));
 
     public uint AvailableQueuesCount { get; private set; }
 
