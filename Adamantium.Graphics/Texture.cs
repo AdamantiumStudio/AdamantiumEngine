@@ -303,10 +303,14 @@ public unsafe class Texture : GraphicsResource, ITexture
             MemoryTypeIndex = memoryIndex
         };
 
-        if (device.AllocateMemory(allocInfo, null, out bufferMemory) != Result.Success)
+        var allocated = device.AllocateMemory(allocInfo, null, out bufferMemory);
+        if (allocated != Result.Success)
         {
             GraphicsDevice.Destroy(buffer);
-            throw new Exception("failed to allocate buffer memory!");
+            var message = $"failed to allocate the texture's staging buffer memory: {allocated}";
+            throw allocated == Result.ErrorOutOfDeviceMemory
+                ? new OutOfDeviceMemoryException(message)
+                : new GraphicsEngineException(message);
         }
 
         if (GraphicsDevice.LogicalDevice.BindBufferMemory(buffer, bufferMemory, 0) != Result.Success)
@@ -472,7 +476,10 @@ public unsafe class Texture : GraphicsResource, ITexture
         var result = device.CreateImage(imageInfo, null, out image);
         if (result != Result.Success)
         {
-            throw new Exception("failed to create image!");
+            var message = $"failed to create image: {result}";
+            throw result == Result.ErrorOutOfDeviceMemory
+                ? new OutOfDeviceMemoryException(message)
+                : new GraphicsEngineException(message);
         }
 
         device.GetImageMemoryRequirements(image, out var memRequirements);

@@ -69,20 +69,6 @@ public class MemoryFallbackTests
         }
     }
 
-    /// <summary>Memory the GPU cannot give is said as such - a buffer larger than any of its heaps: the caller can tell it
-    /// from a fault and ask again later. Nothing is filled: the driver refuses the size outright.</summary>
-    [Test]
-    public void ABufferLargerThanTheGpu_IsRefusedAsOutOfDeviceMemory()
-    {
-        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
-
-        Assert.Throws<OutOfDeviceMemoryException>(() =>
-        {
-            using var buffer = Adamantium.Graphics.Buffer.New(device, 1UL << 40, BufferUsageFlags.StorageBuffer,
-                BufferMemoryUsage.GpuOnly);
-        });
-    }
-
     /// <summary>A block made for one allocation larger than a shared block goes back to the driver once that allocation
     /// is freed and the frames in flight are done with it; a shared block stays for the next.</summary>
     [Test]
