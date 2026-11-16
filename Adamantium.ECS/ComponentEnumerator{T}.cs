@@ -16,7 +16,7 @@ public struct ComponentEnumerator<T> : IDisposable where T : class, IComponent
         _index = index;
         _walk = new PoolWalk(pools);
         _ended = false;
-        index.BeginWalk();
+        index?.BeginWalk();
     }
 
     public T Current => (T)_walk.Component;
@@ -29,6 +29,6 @@ public struct ComponentEnumerator<T> : IDisposable where T : class, IComponent
             return;
 
         _ended = true;
-        _index.EndWalk();
+        _index?.EndWalk();
     }
 }

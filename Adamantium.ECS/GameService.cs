@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Adamantium.ECS.Components;
 
 namespace Adamantium.ECS;
@@ -54,31 +53,8 @@ public abstract class GameService : EntityService, IGameService
     {
     }
 
-    /// <summary>Every component of kind <typeparamref name="T"/> in the scene played, over the whole tree of each of its
-    /// roots. Each walk is its own: walks may go on inside one another.</summary>
-    protected IEnumerable<T> Each<T>() where T : class, IComponent
-    {
-        if (Scene == null)
-            yield break;
-
-        var walk = new Stack<Entity>();
-        for (var i = Scene.RootEntities.Count - 1; i >= 0; i--)
-        {
-            walk.Push(Scene.RootEntities[i]);
-        }
-
-        while (walk.Count > 0)
-        {
-            var entity = walk.Pop();
-            if (entity.GetComponent<T>() is { } component)
-                yield return component;
-
-            var children = entity.Dependencies;
-            for (var i = children.Count - 1; i >= 0; i--)
-            {
-                if (children[i] != null)
-                    walk.Push(children[i]);
-            }
-        }
-    }
+    /// <summary>Every component of type <typeparamref name="T"/> in the scene played, on entities enabled in their tree:
+    /// a selection from the scene's index (<see cref="Scene.Components"/>), nothing allocated. Empty while no game plays.
+    /// </summary>
+    protected ComponentSelection<T> Each<T>() where T : class, IComponent => Scene?.Components.Of<T>() ?? default;
 }
