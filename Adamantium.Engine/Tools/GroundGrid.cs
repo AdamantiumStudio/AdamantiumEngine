@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
@@ -301,13 +302,13 @@ public class GroundGrid : EditorProcessor
     /// Writes the eye's place in the ground plane modulo the cells of each level into <paramref name="phases"/>, two
     /// levels to an entry: x and z of the smallest cells, then of those ten times bigger, and so on. What a level's lines
     /// are drawn from stays as small as its cells, so they hold still however far the eye has gone. The cell is taken by
-    /// its decimal form: a float tenth is a little more than a tenth, and that little, times the cells the eye has gone,
-    /// would move the lines off the world's.
+    /// its decimal form, the shortest that reads back as the float: a float tenth is a little more than a tenth, and that
+    /// little, times the cells the eye has gone, would move the lines off the world's.
     /// </summary>
     public void PhasesFor(CameraBase camera, Vector4F[] phases)
     {
         var eye = camera.WorldPosition;
-        var cell = (double)(decimal)Cell;
+        var cell = ReadAsDecimal(Cell);
         for (int level = 0; level < Levels; level += 2)
         {
             var next = cell * 10;
@@ -315,6 +316,13 @@ public class GroundGrid : EditorProcessor
                 (float)Modulo(eye.X, next), (float)Modulo(eye.Z, next));
             cell = next * 10;
         }
+    }
+
+    private static double ReadAsDecimal(float value)
+    {
+        Span<char> text = stackalloc char[32];
+        value.TryFormat(text, out var length, provider: CultureInfo.InvariantCulture);
+        return double.Parse(text[..length], CultureInfo.InvariantCulture);
     }
 
     private static double Modulo(double value, double period)

@@ -20,6 +20,8 @@ public static class VectorsGolden
                                                                      || key.Contains(".Barycentric(")),
             "old bug: Math.Sign of a NaN dot product - a NaN input, or an overflowed one (4e30 squared, inf + -inf) - " +
             "threw; it gives NaN out now");
+        map.AnswersWhereOldThrew(key => key.StartsWith("Vector") && key.Contains(".Round(") && key.Contains(",Int32)"),
+            "Math.Round(value, digits) refused more than 15 digits before .NET 11; it rounds to them now");
         map.ChangedWhere(key => key.StartsWith("Quaternion") && key.Contains(".Barycentric("),
             inputs => inputs[12] + inputs[13] == 0,
             "old bug: weights adding to zero divided 0 by 0 into NaN; now the first rotation comes back");
