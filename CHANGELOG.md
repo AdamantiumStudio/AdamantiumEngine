@@ -7,12 +7,13 @@ All packages share one version.
 
 ### Added
 
-- `GameService : EntityService`: the logic of a game's or a mod's code, acting on its components while a scene is
-  played - `Start`, `Update(AppTime)` as any service, `Stop`; the scene played; `Each<T>()` walks the scene's
-  components of a kind. A kind needs a public constructor taking the world. `SceneCode.Replace` makes one of each kind
-  the arriving code brings, asleep (`IsActive` false), and takes out those of the leaving code.
-  `GameRun.Start(scene)` plays a scene: gives the world's game services the scene, starts and wakes them; `IsPaused`
-  puts them to sleep, `Stop` tells them and puts them to sleep. One game at a time in a world.
+- `IGameService : IEntityService`: the logic of a game's or a mod's code, acting on its components while a scene is
+  played - the scene played, `Start(scene)`, `Stop()`; the engine works with game services only through it.
+  `GameService` is a ready base: `OnStart` / `OnStop` to override, `Update(AppTime)` as any service, `Each<T>()` walks
+  the scene's components of a kind. A kind needs a public constructor taking the world. `SceneCode.Replace` makes one
+  of each kind the arriving code brings, asleep (`IsActive` false), and takes out those of the leaving code.
+  `GameRun.Start(scene)` plays a scene: starts the world's game services on it and wakes them; `IsPaused` puts them to
+  sleep, `Stop` puts them to sleep and stops them. One game at a time in a world.
 - `WorldCode.GetGivenTypes<T>(constructorParameters)`: the given types made from a constructor taking those.
 - `Entity.CopyTree(copies)`: a copy of an entity's tree under its own names, each entity put in `copies` against its
   copy - what a scene played on a copy of itself needs to keep what was played.
@@ -354,6 +355,10 @@ All packages share one version.
   before. `EntityServiceManager.SyncServices` is public: the services added and removed come in and go at once, on the
   world's thread between frames - `SceneCode.Replace` does it, so a second Replace or a game started before the frame
   ends sees the new game services.
+- `EntityServiceManager` and `EntityWorld` work with services through `IEntityService`: `AddService`, `RemoveService`,
+  `Services` and the `ServiceAdded` / `ServiceRemoved` events take and give the interface, and `GetService<T>()` /
+  `GetServices<T>()` find services by an interface too. `IEntityService` gains `SleepsWhenUpdateFails` and
+  `FrameEnded()`, which the manager calls.
 - `LightManager` follows the world: every light that comes into its scene - on its own, inside a model, put back with
   `EntityManager.ReturnEntity` - is listed, and every one that leaves is not, from the entity manager's `EntityAdded`
   and `EntityRemoved`; the lights already in the scene are listed when it is made. `AddLight` and `RemoveLight` only add

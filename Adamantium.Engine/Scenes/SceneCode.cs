@@ -160,12 +160,10 @@ public static class SceneCode
         }
     }
 
-    // The game services go and come with their code: one of each kind the arriving code brings, asleep until a game
-    // plays. In the world at once, not at the frame's end: a Replace or a game started before it sees them.
     private static void ReplaceServices(EntityWorld world, IReadOnlyList<Assembly> leaving,
         IReadOnlyList<Assembly> arriving)
     {
-        foreach (var service in world.GetServices<GameService>())
+        foreach (var service in world.GetServices<IGameService>())
         {
             if (!IsAmong(leaving, service.GetType().Assembly))
                 continue;
@@ -174,14 +172,18 @@ public static class SceneCode
             world.RemoveService(service);
         }
 
-        foreach (var type in world.Code.GetGivenTypes<GameService>([typeof(EntityWorld)]))
+        foreach (var type in world.Code.GetGivenTypes<IGameService>([typeof(EntityWorld)]))
         {
             if (!IsAmong(arriving, type.Assembly))
                 continue;
 
             try
             {
-                world.AddService((GameService)Activator.CreateInstance(type, world));
+                if (Activator.CreateInstance(type, world) is IGameService service)
+                {
+                    service.IsActive = false;
+                    world.AddService(service);
+                }
             }
             catch (Exception exception)
             {

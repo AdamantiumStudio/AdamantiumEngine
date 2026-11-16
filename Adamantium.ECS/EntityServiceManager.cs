@@ -12,18 +12,18 @@ namespace Adamantium.ECS
     {
         private readonly object syncObject = new object();
 
-        private readonly Dictionary<UInt128, EntityService> activeServices;
+        private readonly Dictionary<UInt128, IEntityService> activeServices;
 
-        private readonly List<EntityService> servicesToAdd;
-        private readonly List<EntityService> servicesToRemove;
-        private readonly List<EntityService> pendingServices;
+        private readonly List<IEntityService> servicesToAdd;
+        private readonly List<IEntityService> servicesToRemove;
+        private readonly List<IEntityService> pendingServices;
 
-        private readonly AdamantiumCollection<EntityService> services;
-        
+        private readonly AdamantiumCollection<IEntityService> services;
+
         private IAdamantiumApplication appService;
 
         public EntityWorld EntityWorld { get; }
-        
+
         /// <summary>
         /// A service registry that provides methods to register and unregister services.
         /// </summary>
@@ -33,49 +33,51 @@ namespace Adamantium.ECS
         {
             EntityWorld = world;
             Container = EntityWorld.DependencyResolver;
-            services = new AdamantiumCollection<EntityService>();
-            activeServices = new Dictionary<UInt128, EntityService>();
-            servicesToAdd = new List<EntityService>();
-            servicesToRemove = new List<EntityService>();
-            pendingServices = new List<EntityService>();
+            services = new AdamantiumCollection<IEntityService>();
+            activeServices = new Dictionary<UInt128, IEntityService>();
+            servicesToAdd = new List<IEntityService>();
+            servicesToRemove = new List<IEntityService>();
+            pendingServices = new List<IEntityService>();
         }
-        
-        public IReadOnlyCollection<EntityService> Services => services.AsReadOnly();
+
+        public IReadOnlyCollection<IEntityService> Services => services.AsReadOnly();
 
         // The per-frame phases iterate this snapshot without a lock: a lock held through Draw made the loop wait out the
         // whole GPU frame. Republished in SyncServices, ordered by Priority (stable, so equal priorities keep their order).
-        private volatile EntityService[] _snapshot = [];
+        private volatile IEntityService[] _snapshot = [];
 
         private void RepublishSnapshot() => _snapshot = services.OrderBy(s => s.Priority).ToArray();
 
         internal void OnServicePriorityChanged() => RepublishSnapshot();
 
         public Action FrameEnded;
-        
+
         internal void InitializeResources()
         {
             appService = EntityWorld.Satellites.Get<IAdamantiumApplication>();
             appService.Started += OnServiceStarted;
             appService.ShuttingDown += OnServiceShuttingDown;
         }
-        
+
         private void OnServiceShuttingDown(object sender, EventArgs e)
         {
             UnloadContent();
         }
 
-        private void OnServiceAdded(EntityService service)
+        private void OnServiceAdded(IEntityService service)
         {
             ServiceAdded?.Invoke(this, new EntityServiceEventArgs(service));
         }
 
-        private void OnServiceRemoved(EntityService service)
+        private void OnServiceRemoved(IEntityService service)
         {
             service?.UnloadContent();
             ServiceRemoved?.Invoke(this, new EntityServiceEventArgs(service));
         }
 
-        public T GetService<T>() where T : EntityService
+        /// <summary>The first service that is a <typeparamref name="T"/> - a service type or an interface - or null.
+        /// </summary>
+        public T GetService<T>() where T : class
         {
             foreach (var service in Services)
             {
@@ -87,7 +89,8 @@ namespace Adamantium.ECS
             return null;
         }
 
-        public T[] GetServices<T>() where T : EntityService
+        /// <summary>Every service that is a <typeparamref name="T"/> - a service type or an interface.</summary>
+        public T[] GetServices<T>() where T : class
         {
             var list = new List<T>();
             foreach (var service in Services)
@@ -143,7 +146,7 @@ namespace Adamantium.ECS
             }
         }
 
-        /// <summary>Updates each active service. One that throws and <see cref="EntityService.SleepsWhenUpdateFails"/> is
+        /// <summary>Updates each active service. One that throws and <see cref="IEntityService.SleepsWhenUpdateFails"/> is
         /// put to sleep, so as not to throw again every frame, and the others go on.</summary>
         public void Update(AppTime appTime)
         {
@@ -216,7 +219,7 @@ namespace Adamantium.ECS
             }
             OnFrameEnded();
         }
-        
+
         public void OnFrameEnded()
         {
             // The snapshot, not the locked collection: the lock here deadlocked against a service's init in SyncServices.
@@ -234,7 +237,7 @@ namespace Adamantium.ECS
         // service leaves the snapshot before its unload and enters it after its init, so it is never drawn half-made.
         public void SyncServices()
         {
-            EntityService[] toRemove, toAdd;
+            IEntityService[] toRemove, toAdd;
             lock (syncObject)
             {
                 if (servicesToRemove.Count == 0 && servicesToAdd.Count == 0) return;
@@ -288,7 +291,7 @@ namespace Adamantium.ECS
             }
         }
 
-        public void AddService(EntityService service)
+        public void AddService(IEntityService service)
         {
             lock (syncObject)
             {
@@ -296,7 +299,7 @@ namespace Adamantium.ECS
             }
         }
 
-        public void AddServices(IEnumerable<EntityService> services)
+        public void AddServices(IEnumerable<IEntityService> services)
         {
             foreach (var service in services)
             {
@@ -312,7 +315,7 @@ namespace Adamantium.ECS
             }
         }
 
-        public void RemoveService(EntityService service)
+        public void RemoveService(IEntityService service)
         {
             lock (syncObject)
             {
@@ -328,7 +331,7 @@ namespace Adamantium.ECS
             }
         }
 
-        public void RemoveServices(IEnumerable<EntityService> services)
+        public void RemoveServices(IEnumerable<IEntityService> services)
         {
             foreach (var service in services)
             {
@@ -358,12 +361,12 @@ namespace Adamantium.ECS
                 servicesToRemove.Clear();
             }
         }
-        
+
         public event EventHandler<EntityServiceEventArgs> ServiceAdded;
         public event EventHandler<EntityServiceEventArgs> ServiceRemoved;
 
         public event Action<IEntityService, AppTime> OnDrawStarted;
 
-        public event Action<IEntityService, AppTime> OnDrawFinished; 
+        public event Action<IEntityService, AppTime> OnDrawFinished;
     }
 }

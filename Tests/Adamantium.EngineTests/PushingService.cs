@@ -16,7 +16,7 @@ public sealed class PushingService : GameService
 
     public bool Stopped { get; private set; }
 
-    public override void Start() => Started = true;
+    protected override void OnStart() => Started = true;
 
     public override void Update(AppTime appTime)
     {
@@ -26,5 +26,5 @@ public sealed class PushingService : GameService
         }
     }
 
-    public override void Stop() => Stopped = true;
+    protected override void OnStop() => Stopped = true;
 }

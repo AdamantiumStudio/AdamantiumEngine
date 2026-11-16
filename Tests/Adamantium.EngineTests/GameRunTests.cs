@@ -33,9 +33,9 @@ public class GameRunTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(_world.GetServices<GameService>().Select(service => service.GetType()),
-                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService) }));
-            Assert.That(_world.GetServices<GameService>().Any(service => service.IsActive), Is.False);
+            Assert.That(_world.GetServices<IGameService>().Select(service => service.GetType()),
+                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService), typeof(OwnGameService) }));
+            Assert.That(_world.GetServices<IGameService>().Any(service => service.IsActive), Is.False);
             Assert.That(entity.Transform.Position.X, Is.Zero);
         });
     }
@@ -50,7 +50,7 @@ public class GameRunTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(_world.GetServices<GameService>(), Is.Empty);
+            Assert.That(_world.GetServices<IGameService>(), Is.Empty);
             Assert.That(pushing.IsActive, Is.False);
         });
     }
@@ -65,7 +65,7 @@ public class GameRunTests
         var pushing = _world.GetService<PushingService>();
         Assert.Multiple(() =>
         {
-            Assert.That(run.Services, Is.EquivalentTo(_world.GetServices<GameService>()));
+            Assert.That(run.Services, Is.EquivalentTo(_world.GetServices<IGameService>()));
             Assert.That(pushing.Scene, Is.SameAs(scene));
             Assert.That(pushing.Started, Is.True);
             Assert.That(pushing.IsActive, Is.True);
@@ -165,7 +165,7 @@ public class GameRunTests
             Assert.That(pushing.Scene, Is.Null);
             Assert.That(run.Services, Is.Empty);
             Assert.That(entity.Transform.Position.X, Is.Zero);
-            Assert.That(_world.GetServices<GameService>(), Has.Length.EqualTo(2));
+            Assert.That(_world.GetServices<IGameService>(), Has.Length.EqualTo(3));
         });
     }
 
@@ -181,11 +181,11 @@ public class GameRunTests
         SceneCode.Replace(_world, [], [typeof(GameRunTests).Assembly]);
         NextFrame();
 
-        var services = _world.GetServices<GameService>();
+        var services = _world.GetServices<IGameService>();
         Assert.Multiple(() =>
         {
             Assert.That(services.Select(service => service.GetType()),
-                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService) }));
+                Is.EquivalentTo(new[] { typeof(PushingService), typeof(ThrowingService), typeof(OwnGameService) }));
             Assert.That(services, Does.Not.Contain(first));
             Assert.That(services, Does.Not.Contain(second));
         });
@@ -243,6 +243,35 @@ public class GameRunTests
         Frame(1);
 
         Assert.That(entity.Transform.Position.X, Is.EqualTo(1).Within(1e-9));
+    }
+
+    // The engine works with game services through IGameService: one written without GameService is made, started,
+    // woken, paused and stopped as the others.
+    [Test]
+    public void AGameServiceOnTheInterfaceAlone_IsPlayedAsAnyOther()
+    {
+        var own = _world.GetService<OwnGameService>();
+        var asleepBefore = !own.IsActive;
+
+        var run = GameRun.Start(_world.MainScene);
+        var started = own.Scene;
+        var awake = own.IsActive;
+        run.IsPaused = true;
+        var asleepOnPause = !own.IsActive;
+        run.IsPaused = false;
+        run.Stop();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(asleepBefore, Is.True);
+            Assert.That(started, Is.SameAs(_world.MainScene));
+            Assert.That(awake, Is.True);
+            Assert.That(asleepOnPause, Is.True);
+            Assert.That(own.IsActive, Is.False);
+            Assert.That(own.Scene, Is.Null);
+            Assert.That(own.Starts, Is.EqualTo(1));
+            Assert.That(own.Stops, Is.EqualTo(1));
+        });
     }
 
     [Test]

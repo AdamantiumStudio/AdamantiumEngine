@@ -18,13 +18,13 @@ public sealed class ThrowingService : GameService
 
     public bool Stopped { get; private set; }
 
-    public override void Start()
+    protected override void OnStart()
     {
         if (FailsToStart)
             throw new InvalidOperationException("A game service's own mistake at the start");
     }
 
-    public override void Stop() => Stopped = true;
+    protected override void OnStop() => Stopped = true;
 
     public override void Update(AppTime appTime)
     {
