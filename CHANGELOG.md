@@ -51,10 +51,15 @@ All packages share one version.
   as the errata measure it) laid on the coordinates - as the material's base color texture, replacing or modulating
   its color. The cameras of views and of scene display parameters become cameras named after them, placed in their
   occurrence; their lights - ambient, point, directional and spot, of three colors as the errata have them - lights;
-  markup texts are kept on their nodes' mesh data with their font, size and place. What it leaves out - the exact
-  geometry of B-rep bodies, hidden and removed entities, what a view shows beyond its camera, clipping planes and
-  backgrounds, texture levels other than the diffuse one, pictures of raw pixels, the drawing of markup text - is
-  listed in `UnsupportedFeatures`, B-rep-only items by name.
+  markup texts are kept on their nodes' mesh data with their font, size and place. What it leaves out of the model's
+  drawing - items of exact geometry alone, by name, texture levels other than the diffuse one, pictures of raw pixels,
+  the drawing of markup text - is listed in `UnsupportedFeatures`; what it reads as the file says or has no place for -
+  the exact geometry beside the tessellation drawn, hidden and removed entities, what a view or a scene sets beyond its
+  camera and lights - in `Remarks`.
+- `ConverterBase.Remarks` and `ModelConverter.Remarks`: what an import read as the file says, kept out of sight as the
+  file asks, or had no place for in the scene data - nothing of what the model shows is missing for them, so they are
+  not `UnsupportedFeatures`. The U3D import's hidden nodes and what its views set beyond their cameras are remarks too.
+  The content pipeline's `ModelImporter` logs them as messages, not warnings.
 - What an editor's undo needs. `EntityManager.ReturnEntity` puts an entity taken out back where it stood - the same
   object, under its owner or among its scene's roots at its old index - and `GetSiblingIndex` tells where an entity
   stands; `PlaceAt` moves one among its siblings; `LightManager.ReturnLight` puts a light back. `Transform.State`

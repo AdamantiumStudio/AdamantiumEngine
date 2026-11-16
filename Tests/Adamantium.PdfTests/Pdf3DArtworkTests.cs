@@ -120,6 +120,17 @@ public class Pdf3DArtworkTests
         Assert.That(GetArtwork(OpenDocument(entry)).DefaultView.Name, Is.EqualTo(expected));
     }
 
+    /// <summary>A projection that names no binding: an orthographic one is not fitted at all - one unit of the artwork a
+    /// unit of the annotation (table 305, Absolute) - a perspective's field of view spans the width.</summary>
+    [TestCase("/Subtype /O /OS 4", "Absolute")]
+    [TestCase("/Subtype /P /FOV 30", "W")]
+    public void AProjectionNamingNoBinding_TakesTheFormatsDefault(string projection, string expected)
+    {
+        var document = OpenDocument($"/3DV << /XN (V) /MS /M /C2W [1 0 0 0 1 0 0 0 1 0 0 0] /P << {projection} >> >>");
+
+        Assert.That(GetArtwork(document).DefaultView.Projection.Binding, Is.EqualTo(expected));
+    }
+
     [Test]
     public void WhenItComesToLife_AndWhereItIsShown_AreItsOwn()
     {

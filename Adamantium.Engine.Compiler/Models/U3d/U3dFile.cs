@@ -94,6 +94,8 @@ internal sealed class U3dFile
 
     private void Tell(string note) => _notes.Tell(note);
 
+    private void Remark(string note) => _notes.Remark(note);
+
     private int ReadHeader(U3dBlock header, int length)
     {
         var reader = header.OpenData(true);
@@ -126,7 +128,7 @@ internal sealed class U3dFile
 
         if (encoding != Utf8)
         {
-            Tell($"strings are said to be in character set {encoding}; they are read as UTF-8, the only one U3D has");
+            Remark($"strings are said to be in character set {encoding}; they are read as UTF-8, the only one U3D has");
         }
 
         if (fileSize > (ulong)length)
@@ -147,7 +149,7 @@ internal sealed class U3dFile
 
         if (fileSize < (ulong)length)
         {
-            Tell($"{(ulong)length - fileSize} bytes past the file size the header gives are left out");
+            Remark($"{(ulong)length - fileSize} bytes past the file size the header gives are left out");
         }
 
         return (int)fileSize;

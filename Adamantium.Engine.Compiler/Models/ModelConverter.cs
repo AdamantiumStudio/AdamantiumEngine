@@ -25,6 +25,10 @@ namespace Adamantium.Engine.Compiler.Models
         /// <summary>What the imported file had that we could not understand. Empty until an import has run.</summary>
         public IReadOnlyList<String> UnsupportedFeatures { get; private set; } = Array.Empty<String>();
 
+        /// <summary>What the import read as the file says or had no place for, leaving nothing of the model out. Empty
+        /// until an import has run.</summary>
+        public IReadOnlyList<String> Remarks { get; private set; } = [];
+
         //The parse is synchronous; the former name ImportFileAsync promised otherwise
         public SceneData ImportFile(string path, CancellationToken cancellationToken = default) =>
             ImportFile(path, new ConversionConfig(true), cancellationToken);
@@ -51,6 +55,7 @@ namespace Adamantium.Engine.Compiler.Models
             {
                 // In a finally on purpose: when the import threw is exactly when this list matters most
                 UnsupportedFeatures = converter.UnsupportedFeatures;
+                Remarks = converter.Remarks;
                 ConvertationInProgress = false;
                 ConvertationFinished = true;
             }

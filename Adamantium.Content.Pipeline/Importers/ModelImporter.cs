@@ -76,6 +76,11 @@ public sealed class ModelImporter : IContentImporter
             context.Log($"{sourcePath} : warning ACB005: {unsupported}");
         }
 
+        foreach (var remark in converter.Remarks)
+        {
+            context.Log($"{sourcePath} : {remark}");
+        }
+
         if (!animations)
         {
             scene.Clips?.Clear();

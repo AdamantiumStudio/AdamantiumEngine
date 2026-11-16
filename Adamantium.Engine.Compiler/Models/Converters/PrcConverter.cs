@@ -61,16 +61,16 @@ public class PrcConverter : ConverterBase
                 SceneDataContainer.Units = new SceneData.Unit(UnitType.Meter, (float)(_file.Unit / 1000));
             }
 
-            Tell("the file's unit does not come from a CAD system; it is not to be measured by");
+            Remark("the file's unit does not come from a CAD system; it is not to be measured by");
         }
 
         SceneDataContainer.Models = SceneDataContainer.CreateMesh(null, "", Path.GetFileNameWithoutExtension(FileName));
         BuildTree();
-        TellUnapplied();
-        TellGrouped();
+        RemarkUnapplied();
+        RemarkGrouped();
     }
 
-    private void TellWithName(string feature, string name)
+    private void RemarkWithName(string feature, string name)
     {
         if (!_grouped.TryGetValue(feature, out var names))
         {
@@ -81,22 +81,22 @@ public class PrcConverter : ConverterBase
         names.Add(name);
     }
 
-    private void TellGrouped()
+    private void RemarkGrouped()
     {
         foreach (var group in _grouped)
         {
             var shown = string.Join(", ", group.Value.Take(NamesShown));
             var more = group.Value.Count > NamesShown ? $" and {group.Value.Count - NamesShown} more" : string.Empty;
-            Tell($"{group.Value.Count} {group.Key}: {shown}{more}");
+            Remark($"{group.Value.Count} {group.Key}: {shown}{more}");
         }
     }
 
-    private void TellUnapplied()
+    private void RemarkUnapplied()
     {
         foreach (var kind in _redefinitions.Where(reference => !_applied.Contains(reference) && reference.Target.Type != PrcTypes.View)
                      .GroupBy(reference => reference.Target.Type).OrderBy(group => group.Key))
         {
-            Tell($"{kind.Count()} redefinitions by reference of entities of type {kind.Key} meet no entity the tree shows; they are left out");
+            Remark($"{kind.Count()} redefinitions by reference of entities of type {kind.Key} meet no entity the tree shows; they are left out");
         }
     }
 
@@ -217,7 +217,7 @@ public class PrcConverter : ConverterBase
         {
             if ((occurrence.Behavior & PrcProductOccurrence.Suppressed) != 0)
             {
-                Tell($"product occurrence {name} is suppressed; it is left out");
+                Remark($"product occurrence {name} is suppressed; it is left out");
             }
 
             return;
@@ -313,7 +313,7 @@ public class PrcConverter : ConverterBase
     {
         if (occurrence.Views.Count > 0)
         {
-            Tell(ViewsKeptAsCameras);
+            Remark(ViewsKeptAsCameras);
         }
 
         if (occurrence.DisplayFilters.Count(filter => filter.IsActive) > 1)
@@ -408,7 +408,7 @@ public class PrcConverter : ConverterBase
             {
                 if (isLayered && active.Layers.Count > 0 && active.Filter.LayersInclusive != active.Layers.Contains(layer))
                 {
-                    TellWithName("entities the display filter of a product occurrence takes away by their layer are left out", name);
+                    RemarkWithName("entities the display filter of a product occurrence takes away by their layer are left out", name);
                     return true;
                 }
 
@@ -422,7 +422,7 @@ public class PrcConverter : ConverterBase
                 {
                     if (named)
                     {
-                        TellWithName("entities the display filter of a product occurrence takes away are left out", name);
+                        RemarkWithName("entities the display filter of a product occurrence takes away are left out", name);
                         return true;
                     }
 
@@ -435,7 +435,7 @@ public class PrcConverter : ConverterBase
                 }
                 else if (!PrcFilterPass.HasFilter(admitted, active.Filter) && !isContainer)
                 {
-                    TellWithName("entities the display filter of a product occurrence does not keep are left out", name);
+                    RemarkWithName("entities the display filter of a product occurrence does not keep are left out", name);
                     return true;
                 }
             }
@@ -496,7 +496,7 @@ public class PrcConverter : ConverterBase
 
         if (part.Views.Count > 0)
         {
-            Tell(ViewsKeptAsCameras);
+            Remark(ViewsKeptAsCameras);
         }
 
         AddViews(part.Views, structure, owner, model, world);
@@ -559,7 +559,7 @@ public class PrcConverter : ConverterBase
 
         if (item.Type is PrcTypes.Direction or PrcTypes.Plane && item.TessellationIndex < 0)
         {
-            Tell("construction directions and planes are kept as nodes; they are not drawn");
+            Remark("construction directions and planes are kept as nodes; they are not drawn");
         }
 
         if (item.TessellationIndex < 0)
@@ -662,7 +662,7 @@ public class PrcConverter : ConverterBase
     {
         if ((markup.Behavior & 0x01) != 0)
         {
-            Tell($"the tessellation of markup {name} is set to be hidden; it is left out");
+            Remark($"the tessellation of markup {name} is set to be hidden; it is left out");
             return;
         }
 
@@ -763,7 +763,7 @@ public class PrcConverter : ConverterBase
 
         if (scene.ClippingPlaneCount > 0 || scene.BackgroundStyleIndex >= 0 || scene.RotationCenter != null)
         {
-            Tell("what scenes set beyond their lights and cameras - clipping planes, backgrounds, centers of rotation - is left out: " +
+            Remark("what scenes set beyond their lights and cameras - clipping planes, backgrounds, centers of rotation - is left out: " +
                  "the scene data has no place for it");
         }
     }
@@ -904,7 +904,7 @@ public class PrcConverter : ConverterBase
             var graphics = redefinition.Reference.Graphics;
             if (graphics.IsRemoved || !graphics.IsShown)
             {
-                TellWithName("entities a product occurrence takes away or hides by reference are left out", name);
+                RemarkWithName("entities a product occurrence takes away or hides by reference are left out", name);
                 return false;
             }
 
@@ -913,13 +913,13 @@ public class PrcConverter : ConverterBase
 
         if (entity.Graphics.IsRemoved)
         {
-            TellWithName("entities removed from the tree in the file are left out", name);
+            RemarkWithName("entities removed from the tree in the file are left out", name);
             return false;
         }
 
         if (entity.Graphics.HasBehavior && !entity.Graphics.IsShown)
         {
-            TellWithName("entities set not to be shown in the file are left out", name);
+            RemarkWithName("entities set not to be shown in the file are left out", name);
             return false;
         }
 
