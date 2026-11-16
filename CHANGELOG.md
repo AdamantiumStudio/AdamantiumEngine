@@ -14,7 +14,11 @@ All packages share one version.
   projection, background, render mode, lights - `Pdf3DCamera.ToArray`, `Pdf3DProjection.ToDictionary`), and a view read
   from an object keeps its `Id`: `IsSameAs` tells one view from an equivalent one, as the format asks.
   `Pdf3DArtwork.ComputeChecksum` gives the stream's MD5.
-
+- `EntityIcons.Shows` (`EntityIconKinds`): the kinds of icon shown - empty entities, groups, lights, cameras - each on
+  or off, so an editor hides those in the way. An entity of a kind left out has no icon and cannot be picked by one; a
+  light or a camera with a marker goes as a light or a camera, not as an empty entity. An entity with a marker shows
+  the empty entity's icon only while it is empty: a component of its own - a game's, say - or an entity under it, and
+  it shows none, so the icon no longer stands over the body hung under a pivot. A group keeps its icon.
 - `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
   services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
   `CountOf<T>()` how many. `Select(query)` gives those of a `ComponentQuery<T>` - made once and kept by a service -
@@ -376,6 +380,10 @@ All packages share one version.
 
 ### Changed
 
+- Renamed after the service that runs them: `EditorProcessor` is `ToolsProcessor` - a part of what `ToolsService` runs
+  each frame, drawing over the scene and letting a click select what it drew - and `EditorOverlayProcessor` is
+  `ToolsOverlayProcessor`. `ToolProcessor`, the one pointer tool in use, is `PointerTool`, so the two no longer differ
+  by a letter.
 - `Entity.GetComponent<T>()` looks for each type once and keeps the answer until the entity's components change: 13
   times faster on entities of six components, still without a lock and without allocating. `GetInChildren` and
   `GetAllInChildren` walk with pooled stacks instead of a new one each call.
@@ -577,6 +585,7 @@ All packages share one version.
 
 ### Removed
 
+- `EntityIcons.ShowsLights` and `EntityIcons.ShowsCameras`: use `EntityIcons.Shows`.
 - `ContourProcessingHelper`, and the cut of crossing contours `Polygon.FillIndirect` fell back to: every fill goes
   through `RingFill`, which fills crossing contours by the overlay.
 - `Polygon.ProcessedContours`: copies of the contours, made on every `FillIndirect` call. Stroke the contours you

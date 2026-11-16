@@ -20,7 +20,7 @@ namespace Adamantium.Engine.Tools;
 /// hides what is below the ground. The grid is shown or not (<see cref="ShowsGrid"/>), and with it the floor
 /// (<see cref="ShowsFloor"/>): the floor is only ever the grid's, never without its lines.
 /// </summary>
-public class GroundGrid : EditorProcessor
+public class GroundGrid : ToolsProcessor
 {
     private const float ReachPerHeight = 60;
     private const float LeastReachInCells = 200;
@@ -91,7 +91,7 @@ public class GroundGrid : EditorProcessor
 
     // The lines take their place as they are drawn, from the camera drawing them: placed in Update, they kept the eye of
     // before a camera moved later in the frame, and showed beside the cells the shader drew from the eye of now.
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         if (!ShowsGrid)
         {

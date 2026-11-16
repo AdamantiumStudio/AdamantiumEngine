@@ -14,13 +14,14 @@ using Adamantium.Multiverse;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Icons for what a scene has but does not draw - lights, cameras, entities with a <see cref="Marker"/> - facing every
+/// Icons for what a scene has but does not draw - lights, cameras, groups, and empty entities: a <see cref="Marker"/>
+/// with no other component and nothing under it - facing every
 /// camera at a steady size on screen. A directional light's icon also has rays running where it shines, a camera's the
 /// shape of its view - a pyramid or, flat, a box - running where it looks, with a mark on top. A click on an icon selects
 /// its entity. A camera has no icon in its own view, and an output's own camera (<see cref="UniverseOutput.OwnCamera"/>)
 /// none at all: it is the output's, not the scene's.
 /// </summary>
-public class EntityIcons : EditorProcessor
+public class EntityIcons : ToolsProcessor
 {
     /// <summary>The size icons have unless set otherwise, in points.</summary>
     public const float DefaultPixels = 36;
@@ -46,9 +47,9 @@ public class EntityIcons : EditorProcessor
     /// <summary>How big an icon looks, in points: pixels at 100% scale.</summary>
     public float Pixels { get; set; } = DefaultPixels;
 
-    public bool ShowsLights { get; set; } = true;
-
-    public bool ShowsCameras { get; set; } = true;
+    /// <summary>The kinds of icon shown; an entity of a kind left out has none, and a click cannot pick it by one.
+    /// </summary>
+    public EntityIconKinds Shows { get; set; } = EntityIconKinds.All;
 
     public override void Update(AppTime appTime)
     {
@@ -89,7 +90,7 @@ public class EntityIcons : EditorProcessor
         metadata.Enabled = true;
     }
 
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         if (overlay.Scene is { } scene && roots.TryGetValue(scene, out var icons))
         {
@@ -193,8 +194,14 @@ public class EntityIcons : EditorProcessor
 
     private Entity LookOf(Entity entity)
     {
-        if (ShowsLights && entity.GetComponent<Light>() is { } light)
+        // An entity is of one kind: a light of a hidden kind does not fall through to the icon of its marker.
+        if (entity.GetComponent<Light>() is { } light)
         {
+            if (!Shows.HasFlag(EntityIconKinds.Lights))
+            {
+                return null;
+            }
+
             return light.Type switch
             {
                 LightType.Point => pointIcon,
@@ -203,17 +210,44 @@ public class EntityIcons : EditorProcessor
             };
         }
 
-        if (ShowsCameras && entity.GetComponent<Camera>() is { } camera && !IsOwnCamera(camera))
+        if (entity.GetComponent<Camera>() is { } camera && !IsOwnCamera(camera))
         {
-            return cameraIcon;
+            return Shows.HasFlag(EntityIconKinds.Cameras) ? cameraIcon : null;
         }
 
         if (entity.GetComponent<Marker>() is { IsEnabled: true })
         {
-            return entity.IconKey == EntityIconKeys.Group ? groupIcon : emptyIcon;
+            var group = entity.IconKey == EntityIconKeys.Group;
+            var kind = group ? EntityIconKinds.Groups : EntityIconKinds.Entities;
+            if (!Shows.HasFlag(kind) || (!group && !IsEmpty(entity)))
+            {
+                return null;
+            }
+
+            return group ? groupIcon : emptyIcon;
         }
 
         return null;
+    }
+
+    // An empty entity holds nothing - no component but its place and its marker, nothing under it. One that holds
+    // anything, a game's component or a body hung under it, is not empty and shows no empty entity's icon on top of it.
+    private static bool IsEmpty(Entity entity)
+    {
+        if (entity.Dependencies.Count > 0)
+        {
+            return false;
+        }
+
+        foreach (var component in entity.Components.AsSpan())
+        {
+            if (component is not (Transform or Marker))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private bool IsOwnCamera(Camera camera)

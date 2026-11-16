@@ -42,7 +42,7 @@ public abstract class Handles
     public abstract void Drag(Entity target, in PickRay ray);
 
     /// <summary>Draws the handles into one output's frame.</summary>
-    public virtual void Draw(EditorOverlayProcessor overlay)
+    public virtual void Draw(ToolsOverlayProcessor overlay)
     {
         overlay.DrawInScene(Shape);
     }
@@ -176,7 +176,7 @@ public abstract class Handles
         HideIf(forward, Math.Abs(Vector3F.Dot(Axis(axes, Vector3F.UnitZ), sight)) >= FacingEye, camera);
     }
 
-    protected static void DrawOrbit(EditorOverlayProcessor overlay, Entity orbit, Vector3F axis)
+    protected static void DrawOrbit(ToolsOverlayProcessor overlay, Entity orbit, Vector3F axis)
     {
         overlay.DrawRing(orbit, !FacesEye(orbit.Transform.GetMetadata(overlay.Camera).WorldMatrixF, axis));
     }
