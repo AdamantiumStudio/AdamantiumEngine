@@ -290,7 +290,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
         if (deviceAddress)
             allocInfo.PNext = new MemoryAllocateFlagsInfo { Flags = MemoryAllocateFlagBits.DeviceAddressBit };
 
-        var result = _device.LogicalDevice.AllocateMemory(allocInfo, null, out var memory);
+        var result = _device.MainDevice.AllocateMemory(allocInfo, out var memory);
         if (result == Result.ErrorOutOfDeviceMemory)
         {
             return null;

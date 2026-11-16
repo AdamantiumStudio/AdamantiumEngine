@@ -231,6 +231,34 @@ public class MainGraphicsDevice : DisposableBase
 
     public Device LogicalDevice { get; private set; }
 
+    // How many allocations are still to be refused; see RefuseMemory.
+    private int _allocationsToRefuse;
+
+    /// <summary>Allocates GPU memory, the one way every buffer and image of the device takes it - refused with
+    /// <see cref="Result.ErrorOutOfDeviceMemory"/> while <see cref="RefuseMemory"/> says so.</summary>
+    public Result AllocateMemory(MemoryAllocateInfo info, out DeviceMemory memory)
+    {
+        var left = Volatile.Read(ref _allocationsToRefuse);
+        while (left > 0)
+        {
+            var seen = Interlocked.CompareExchange(ref _allocationsToRefuse, left - 1, left);
+            if (seen == left)
+            {
+                memory = default;
+                return Result.ErrorOutOfDeviceMemory;
+            }
+
+            left = seen;
+        }
+
+        return LogicalDevice.AllocateMemory(info, null, out memory);
+    }
+
+    /// <summary>For tests: the next <paramref name="allocations"/> allocations of GPU memory are refused as a GPU whose
+    /// memory another application holds refuses them; 0 gives memory again. How a recovery from a full GPU is tested
+    /// without filling the GPU.</summary>
+    public void RefuseMemory(int allocations) => Volatile.Write(ref _allocationsToRefuse, Math.Max(0, allocations));
+
     public uint AvailableQueuesCount { get; private set; }
 
     public QueueFamilyContainer QueueFamilyContainer { get; private set; }
