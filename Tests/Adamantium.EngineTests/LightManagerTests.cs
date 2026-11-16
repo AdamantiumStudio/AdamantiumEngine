@@ -1,3 +1,4 @@
+using System.Linq;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Managers;
@@ -131,6 +132,70 @@ public class LightManagerTests
         NextFrame(universe);
 
         Assert.That(lights.DirectionalLights, Is.EqualTo(new[] { sun.GetComponent<Light>() }));
+    }
+
+    [Test]
+    public void ALightWhoseKindChanges_MovesToItsNewList()
+    {
+        var universe = new TestUniverse();
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
+        var lamp = new LightTemplate().BuildEntity(null, "Lamp", LightType.Point);
+        lights.AddLight(lamp);
+        NextFrame(universe);
+
+        lamp.GetComponent<Light>().Type = LightType.Spot;
+        NextFrame(universe);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lights.PointLights, Is.Empty);
+            Assert.That(lights.SpotLights, Is.EqualTo(new[] { lamp.GetComponent<Light>() }));
+        });
+    }
+
+    [Test]
+    public void ALightUnderADisabledEntity_LightsNothing_TillItIsEnabled()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var lights = new LightManager(universe, manager.MainScene);
+        var model = new Entity(null, "Model");
+        var lamp = new LightTemplate().BuildEntity(model, "Lamp", LightType.Point);
+        manager.AddEntity(model);
+        NextFrame(universe);
+
+        model.IsEnabled = false;
+        NextFrame(universe);
+        var whileDisabled = lights.Lights.Count;
+        model.IsEnabled = true;
+        NextFrame(universe);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(whileDisabled, Is.Zero);
+            Assert.That(lights.PointLights, Is.EqualTo(new[] { lamp.GetComponent<Light>() }));
+        });
+    }
+
+    // Renderers take the first lights up to their cap: one taken out leaves the others in their order.
+    [Test]
+    public void ALightTakenOut_LeavesTheOthersInTheirOrder()
+    {
+        var universe = new TestUniverse();
+        var lights = new LightManager(universe, universe.EntityWorld.MainScene);
+        var lamps = new Entity[4];
+        for (int i = 0; i < lamps.Length; i++)
+        {
+            lamps[i] = new LightTemplate().BuildEntity(null, $"Lamp {i}", LightType.Point);
+            lights.AddLight(lamps[i]);
+        }
+
+        NextFrame(universe);
+        var before = lights.PointLights.ToArray();
+        lights.RemoveLight(lamps[0]);
+        NextFrame(universe);
+
+        Assert.That(lights.PointLights, Is.EqualTo(before.Skip(1)));
     }
 
     private static void NextFrame(TestUniverse universe)

@@ -41,6 +41,7 @@ public class EntityIcons : ToolsProcessor
     private readonly Dictionary<Entity, Entity> iconOf = new();
     private readonly Dictionary<Entity, Entity> targetOf = new();
     private readonly Dictionary<Entity, Entity> raysOf = new();
+    private readonly Dictionary<Entity, Entity> _lookOf = new();
     private readonly HashSet<Entity> seen = [];
     private readonly List<Entity> gone = [];
 
@@ -58,10 +59,14 @@ public class EntityIcons : ToolsProcessor
         foreach (var scene in Tools.Observatory.ShownScenes)
         {
             collectingInto = RootOf(scene);
-            foreach (var entity in scene.RootEntities.AsSpan())
-            {
-                entity?.TraverseInDepth(Collect);
-            }
+            if (Shows.HasFlag(EntityIconKinds.Lights))
+                CollectOwnersOf<Light>(scene);
+
+            if (Shows.HasFlag(EntityIconKinds.Cameras))
+                CollectOwnersOf<Camera>(scene);
+
+            if ((Shows & (EntityIconKinds.Entities | EntityIconKinds.Groups)) != 0)
+                CollectOwnersOf<Marker>(scene);
         }
 
         collectingInto = null;
@@ -142,8 +147,17 @@ public class EntityIcons : ToolsProcessor
         }
     }
 
+    private void CollectOwnersOf<T>(Scene scene) where T : class, IComponent, IEntityOwner
+    {
+        foreach (var component in scene.Components.Of<T>())
+            Collect(component.Owner);
+    }
+
     private void Collect(Entity entity)
     {
+        if (seen.Contains(entity))
+            return;
+
         var look = LookOf(entity);
         if (look == null)
         {
@@ -151,6 +165,9 @@ public class EntityIcons : ToolsProcessor
         }
 
         seen.Add(entity);
+        if (_lookOf.TryGetValue(entity, out var shownLook) && shownLook != look)
+            DropIcon(entity);
+
         if (iconOf.TryGetValue(entity, out var icon))
         {
             // Gone over to another scene: its icon goes with it.
@@ -165,6 +182,7 @@ public class EntityIcons : ToolsProcessor
             icon.AddComponent(new BoxCollider());
             iconOf[entity] = icon;
             targetOf[icon] = entity;
+            _lookOf[entity] = look;
             if (look == directionalIcon)
             {
                 raysOf[entity] = Instance(icon, directionalRays);
@@ -290,13 +308,18 @@ public class EntityIcons : ToolsProcessor
         }
 
         for (int i = 0; i < gone.Count; i++)
-        {
-            var icon = iconOf[gone[i]];
-            iconOf.Remove(gone[i]);
-            targetOf.Remove(icon);
-            raysOf.Remove(gone[i]);
-            Tools.EntityWorld.EntityManager.RemoveOwner(icon);
-        }
+            DropIcon(gone[i]);
+    }
+
+    private void DropIcon(Entity target)
+    {
+        if (!iconOf.Remove(target, out var icon))
+            return;
+
+        targetOf.Remove(icon);
+        raysOf.Remove(target);
+        _lookOf.Remove(target);
+        Tools.EntityWorld.EntityManager.RemoveOwner(icon);
     }
 
     private Entity RootOf(Scene scene)

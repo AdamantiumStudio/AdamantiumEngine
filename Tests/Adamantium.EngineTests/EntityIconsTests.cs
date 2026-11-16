@@ -137,6 +137,73 @@ public class EntityIconsTests
         });
     }
 
+    [Test]
+    public void AnEntityUnderADisabledOne_HasNoIcon_TillItIsEnabled()
+    {
+        var universe = new TestUniverse();
+        var output = new TestOutput();
+        universe.Add(output);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        var own = CameraEntity("Own");
+        var group = Marked(new Entity(null, "Group") { IconKey = EntityIconKeys.Group });
+        var lamp = new LightTemplate().BuildEntity(group, "Lamp", LightType.Point);
+        universe.EntityWorld.EntityManager.AddEntity(own);
+        universe.EntityWorld.EntityManager.AddEntity(group);
+        output.OwnCamera = own.GetComponent<Camera>();
+        output.Camera = output.OwnCamera;
+        universe.EntityWorld.ForceUpdate();
+        universe.Settle();
+        var tools = new ToolsService(universe.EntityWorld);
+        tools.Initialize();
+        var icons = new EntityIcons();
+        tools.AttachProcessor(icons);
+
+        group.IsEnabled = false;
+        tools.Update(new AppTime());
+        var whileDisabled = icons.IconOf(lamp);
+        group.IsEnabled = true;
+        tools.Update(new AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(whileDisabled, Is.Null);
+            Assert.That(icons.IconOf(lamp), Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void ALightWhoseKindChanges_ShowsTheIconOfItsNewKind()
+    {
+        var universe = new TestUniverse();
+        var output = new TestOutput();
+        universe.Add(output);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        var own = CameraEntity("Own");
+        var lamp = new LightTemplate().BuildEntity(null, "Lamp", LightType.Point);
+        universe.EntityWorld.EntityManager.AddEntity(own);
+        universe.EntityWorld.EntityManager.AddEntity(lamp);
+        output.OwnCamera = own.GetComponent<Camera>();
+        output.Camera = output.OwnCamera;
+        universe.EntityWorld.ForceUpdate();
+        universe.Settle();
+        var tools = new ToolsService(universe.EntityWorld);
+        tools.Initialize();
+        var icons = new EntityIcons();
+        tools.AttachProcessor(icons);
+        tools.Update(new AppTime());
+        var asPoint = icons.IconOf(lamp).Name;
+
+        lamp.GetComponent<Light>().Type = LightType.Directional;
+        tools.Update(new AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(asPoint, Is.EqualTo("Point light"));
+            Assert.That(icons.IconOf(lamp).Name, Is.EqualTo("Directional light"));
+            Assert.That(icons.IconOf(lamp).Dependencies, Has.Count.EqualTo(1), "with its rays");
+        });
+    }
+
     private static Entity Marked(Entity entity)
     {
         entity.AddComponent(new Marker());
