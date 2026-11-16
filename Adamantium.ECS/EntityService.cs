@@ -44,6 +44,10 @@ namespace Adamantium.ECS
             set => isActive = value;
         }
 
+        /// <summary>Whether the service is put to sleep when its <see cref="Update"/> throws, the others updated on. One
+        /// that is not fails the frame, which the universe runs again.</summary>
+        public virtual bool SleepsWhenUpdateFails => false;
+
         public abstract EntityServiceType ServiceType { get; }
         
         protected AppTime AppTime { get; set; }

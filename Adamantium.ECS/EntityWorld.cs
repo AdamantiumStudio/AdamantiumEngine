@@ -70,29 +70,32 @@ namespace Adamantium.ECS
             return await EntityManager.CreateEntityFromTemplate(template, owner, name, createDisabled);
         }
 
-        public T GetService<T>() where T : EntityService
+        /// <summary>The first service that is a <typeparamref name="T"/> - a service type or an interface - or null.
+        /// </summary>
+        public T GetService<T>() where T : class
         {
             return ServiceManager.GetService<T>();
         }
 
-        public T[] GetServices<T>() where T : EntityService
+        /// <summary>Every service that is a <typeparamref name="T"/> - a service type or an interface.</summary>
+        public T[] GetServices<T>() where T : class
         {
             return ServiceManager.GetServices<T>();
         }
 
-        public T CreateService<T>(params object[] args) where T : EntityService
+        public T CreateService<T>(params object[] args) where T : class, IEntityService
         {
             var service = (T)Activator.CreateInstance(typeof(T), args);
             AddService(service);
             return service;
         }
 
-        public void AddService(EntityService service)
+        public void AddService(IEntityService service)
         {
             ServiceManager.AddService(service);
         }
 
-        public void RemoveService(EntityService service)
+        public void RemoveService(IEntityService service)
         {
             ServiceManager.RemoveService(service);
         }
@@ -102,7 +105,7 @@ namespace Adamantium.ECS
             ServiceManager.RemoveService(processorId);
         }
         
-        public void AddServices(params EntityService[] services)
+        public void AddServices(params IEntityService[] services)
         {
             ServiceManager.AddServices(services);
         }
@@ -112,7 +115,7 @@ namespace Adamantium.ECS
             ServiceManager.RemoveAllServices();
         }
 
-        public void RemoveServices(params EntityService[] services)
+        public void RemoveServices(params IEntityService[] services)
         {
             ServiceManager.RemoveServices(services);
         }
