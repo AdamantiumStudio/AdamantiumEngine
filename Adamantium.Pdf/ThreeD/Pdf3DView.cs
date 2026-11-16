@@ -18,7 +18,16 @@ public sealed class Pdf3DView
     private const string RenderModeKey = "RM";
     private const string LightingKey = "LS";
     private const string SubtypeKey = "Subtype";
+    private const string TypeKey = "Type";
+    private const string ViewType = "3DView";
+    private const string BackgroundType = "3DBG";
+    private const string LightingType = "3DLightingScheme";
     private const string MatrixFromCamera = "M";
+    private const string MatrixFromArtwork = "U3D";
+
+    /// <summary>The object the view was read from, or null for a view written in place or not read from a file. Two
+    /// views are the same view when they are one object (ISO 32000-1, 13.6.6: an equivalent view is not enough).</summary>
+    public PdfObjectId? Id { get; init; }
 
     /// <summary>The name a person reads (<c>XN</c>), as a viewer's list of views shows it.</summary>
     public string Name { get; init; }
@@ -67,6 +76,7 @@ public sealed class Pdf3DView
         var source = PdfValues.Name(dictionary[MatrixSourceKey], resolver);
         return new Pdf3DView
         {
+            Id = (value as PdfReference)?.Id,
             Name = ReadText(dictionary[ExternalNameKey], resolver),
             InternalName = ReadText(dictionary[InternalNameKey], resolver),
             UsesCamera = source == MatrixFromCamera || (source == null && camera != null),
@@ -78,6 +88,70 @@ public sealed class Pdf3DView
             RenderMode = Pdf3DRenderMode.From(dictionary[RenderModeKey], resolver),
             Lighting = lighting != null ? PdfValues.Name(lighting[SubtypeKey], resolver) : null,
         };
+    }
+
+    /// <summary>Whether this and <paramref name="other"/> are one view: the same instance, or read from the same object.
+    /// </summary>
+    public bool IsSameAs(Pdf3DView other) =>
+        other != null && (ReferenceEquals(this, other) || (Id != null && Id == other.Id));
+
+    /// <summary>The view dictionary of this view (table 298): its names, its camera when it has one, the point it orbits
+    /// round, its projection, background, render mode and lights.</summary>
+    public PdfDictionary ToDictionary()
+    {
+        var dictionary = new PdfDictionary();
+        dictionary.Set(TypeKey, new PdfName(ViewType));
+        dictionary.Set(ExternalNameKey, PdfString.FromText(Name ?? InternalName ?? string.Empty));
+
+        if (InternalName != null)
+        {
+            dictionary.Set(InternalNameKey, PdfString.FromText(InternalName));
+        }
+
+        if (UsesCamera && Camera != null)
+        {
+            dictionary.Set(MatrixSourceKey, new PdfName(MatrixFromCamera));
+            dictionary.Set(CameraKey, Camera.ToArray());
+        }
+        else if (ViewNode != null)
+        {
+            dictionary.Set(MatrixSourceKey, new PdfName(MatrixFromArtwork));
+            dictionary.Set(ViewNodeKey, PdfString.FromText(ViewNode));
+        }
+
+        if (CenterOfOrbit > 0)
+        {
+            dictionary.Set(CenterOfOrbitKey, new PdfReal(CenterOfOrbit));
+        }
+
+        if (Projection != null)
+        {
+            dictionary.Set(ProjectionKey, Projection.ToDictionary());
+        }
+
+        if (Background is { } background)
+        {
+            var backdrop = new PdfDictionary();
+            backdrop.Set(TypeKey, new PdfName(BackgroundType));
+            backdrop.Set(BackgroundColorKey,
+                new PdfArray([new PdfReal(background.Red), new PdfReal(background.Green), new PdfReal(background.Blue)]));
+            dictionary.Set(BackgroundKey, backdrop);
+        }
+
+        if (RenderMode?.Name != null)
+        {
+            dictionary.Set(RenderModeKey, RenderMode.ToDictionary());
+        }
+
+        if (Lighting != null)
+        {
+            var lights = new PdfDictionary();
+            lights.Set(TypeKey, new PdfName(LightingType));
+            lights.Set(SubtypeKey, new PdfName(Lighting));
+            dictionary.Set(LightingKey, lights);
+        }
+
+        return dictionary;
     }
 
     private static string ReadText(PdfObject value, IPdfObjectResolver resolver) => resolver.Resolve(value) switch

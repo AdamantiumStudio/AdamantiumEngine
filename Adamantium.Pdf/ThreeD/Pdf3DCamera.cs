@@ -28,6 +28,15 @@ public sealed class Pdf3DCamera
     /// <summary>The camera's place in the world.</summary>
     public Pdf3DVector Position { get; }
 
+    /// <summary>The <c>C2W</c> array of the camera: its three axes, then its place.</summary>
+    public PdfArray ToArray() => new(
+    [
+        new PdfReal(XAxis.X), new PdfReal(XAxis.Y), new PdfReal(XAxis.Z),
+        new PdfReal(YAxis.X), new PdfReal(YAxis.Y), new PdfReal(YAxis.Z),
+        new PdfReal(ZAxis.X), new PdfReal(ZAxis.Y), new PdfReal(ZAxis.Z),
+        new PdfReal(Position.X), new PdfReal(Position.Y), new PdfReal(Position.Z),
+    ]);
+
     /// <summary>The camera of a <c>C2W</c> array - twelve numbers, the matrix's three axes and its translation - or null
     /// for anything else.</summary>
     public static Pdf3DCamera From(PdfObject value, IPdfObjectResolver resolver)
