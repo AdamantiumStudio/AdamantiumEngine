@@ -48,6 +48,10 @@ namespace Adamantium.ECS.Components
         private bool projectionShown;
         private bool blending;
         private bool turning;
+        private bool _leveling;
+        private double _levelElapsed;
+        private float _leveledLean;
+        private bool _waitedForTurn;
         private Matrix4x4F blendFrom;
         private Matrix4x4F blendedProjection;
         private double changeElapsed;
@@ -549,6 +553,7 @@ namespace Adamantium.ECS.Components
 
             FollowEntityTurn();
             FollowProjection(appTime);
+            FollowLeveling(appTime);
 
             // Mouse-look multiplies into the rotation, and a non-unit quaternion scales the rotation matrix, shrinking the
             // third-person offset until the camera sat inside its subject. Only a drifted one is normalized: normalizing
@@ -955,26 +960,86 @@ namespace Adamantium.ECS.Components
             }
         }
 
-        /// <summary>Turns a free camera upright about the way it looks: the horizon level again after a trackball rolled
-        /// it. Nothing for one looking straight up or down, where no way is level, for an isometric view, which stays
-        /// as it is, or for a camera that cannot orbit.</summary>
+        /// <summary>Turns a free camera upright about the way it looks, flowing into it over
+        /// <see cref="CameraBase.ProjectionTransitionTime"/>: the horizon level and the camera right side up again after
+        /// a trackball rolled it or took it over the top. Each frame takes off a share of the roll left - a roll alone,
+        /// about the way it looks then - so the look or a turntable orbit meanwhile, which keep the roll as they find
+        /// it, go on with it, and it ends level all the same. A roll by hand or a trackball drag ends it where it got
+        /// to, as does a rotation set from elsewhere that changes how far the camera leans. A turn of the view under
+        /// way - into or out of isometric, by the orientation gizmo - it waits out; a view turned isometric keeps the
+        /// way it will turn back to upright instead. Nothing for a camera looking straight up or down, where no way is
+        /// level, or for one that cannot orbit.</summary>
         public void Level()
         {
-            if (!CanOrbit || HoldsIsometric())
+            if (!CanOrbit)
             {
                 return;
             }
 
-            var forward = ForwardOf(Rotation).As<float>();
-            if (MathF.Abs(forward.Y) >= MaxLevelPitchSine)
-            {
-                return;
-            }
+            if (isometricTurned)
+                rotationBeforeIsometric = StraightenUp(rotationBeforeIsometric);
 
-            CancelTravel();
-            Matrix4x4.CreateLookAtLH<float>(Vector3F.Zero, forward, Vector3F.UnitY).Decompose(out _, out var level, out _);
-            Rotation = level;
+            if (HoldsIsometric() || (!IsTurningOnItsOwn() && FindUpright(Rotation) is null))
+                return;
+
+            _leveling = true;
+            _levelElapsed = 0;
+            _leveledLean = MeasureLean(Rotation);
+            _waitedForTurn = false;
+            Owner.NotifyUpdated(TimeSpan.FromMilliseconds(ProjectionTransitionTime));
         }
+
+        private static QuaternionF? FindUpright(QuaternionF rotation)
+        {
+            var view = Matrix4x4.CreateFromQuaternion<float>(rotation);
+            var forward = new Vector3F(view.M13, view.M23, view.M33);
+            if (MathF.Abs(forward.Y) >= MaxLevelPitchSine)
+                return null;
+
+            var upright = Quaternion.CreateLookToLH<float>(forward, Vector3F.UnitY);
+            return Math.Abs(QuaternionF.Dot(rotation, upright)) > 1 - 1e-6f ? null : upright;
+        }
+
+        private static float MeasureLean(QuaternionF rotation) => Matrix4x4.CreateFromQuaternion<float>(rotation).M21;
+
+        private static QuaternionF StraightenUp(QuaternionF rotation) => FindUpright(rotation) ?? rotation;
+
+        private bool IsTurningOnItsOwn() => turning || !rotationDone;
+
+        private void FollowLeveling(AppTime appTime)
+        {
+            if (!_leveling)
+                return;
+
+            var turningOnItsOwn = IsTurningOnItsOwn();
+            if (turningOnItsOwn || _waitedForTurn)
+                _leveledLean = MeasureLean(Rotation);
+
+            _waitedForTurn = turningOnItsOwn;
+            if (turningOnItsOwn)
+                return;
+
+            var isometric = HoldsIsometric();
+            if (!CanOrbit || isometric || FindUpright(Rotation) is not { } upright
+                || MathF.Abs(MeasureLean(Rotation) - _leveledLean) > 1e-4f)
+            {
+                if (isometric)
+                    rotationBeforeIsometric = StraightenUp(rotationBeforeIsometric);
+
+                _leveling = false;
+                return;
+            }
+
+            var before = Eased(Done(_levelElapsed, ProjectionTransitionTime));
+            _levelElapsed += appTime.FrameTime * 1000;
+            var after = Eased(Done(_levelElapsed, ProjectionTransitionTime));
+            var share = before >= 1 ? 1 : (after - before) / (1 - before);
+            Rotation = QuaternionF.Slerp(Rotation, upright, share);
+            _leveledLean = MeasureLean(Rotation);
+            _leveling = after < 1;
+        }
+
+        private void StopLeveling() => _leveling = false;
 
         /// <summary>Whether <see cref="Orbit"/> turns this camera: a free one standing on its own - a flight or a turn
         /// under way is dropped for it - not one riding on a host or following one.</summary>
@@ -1001,6 +1066,7 @@ namespace Adamantium.ECS.Components
             var inView = Vector3<double>.TransformNormal(fromPivot, Matrix4x4.CreateFromQuaternion<float>(Rotation).As<double>());
             if (style == CameraOrbitStyle.Trackball && !HoldsIsometric())
             {
+                StopLeveling();
                 Rotation = QuaternionF.Multiply(
                     Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(yawDegrees)),
                     Pitched(Rotation, pitchDegrees));
@@ -1094,6 +1160,7 @@ namespace Adamantium.ECS.Components
         {
             if (Type != CameraType.ThirdPersonLocked && !HoldsIsometric())
             {
+                StopLeveling();
                 Rotation =
                    QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians(angle)),
                       Rotation);

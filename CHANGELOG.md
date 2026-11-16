@@ -10,7 +10,12 @@ All packages share one version.
 - Orbiting a camera about a point: `Camera.Orbit(pivot, pitch, yaw, style)` turns a free camera so the pivot stays where
   it is on the screen - `CameraOrbitStyle.Turntable` keeps the horizon level and stops short of the poles, as the free
   look does; `Trackball` turns about the camera's own axes and goes over the top; an isometric view stays isometric,
-  turning only about the vertical. `Camera.CanOrbit`: not a camera riding on a host or following one. `InputService`
+  turning only about the vertical. `Camera.CanOrbit`: not a camera riding on a host or following one. `Camera.Level()`
+  stands a camera a trackball rolled - or took over the top - upright again, flowing into it over the projection's
+  transition time: each frame takes off a share of the roll left, so the look or a turntable orbit meanwhile go on with
+  it and it still ends level. A roll by hand or a trackball drag ends it where it got to, as does a rotation set from
+  elsewhere that changes how far the camera leans; a turn of the view under way (isometric, the orientation gizmo) it
+  waits out. `InputService`
   orbits with the right button's drag while Alt is held (`Camera.Orbit` in the camera's actions, rebindable): about
   what was under the pointer when the chord went down, before the drag moved, or the middle of the view where nothing
   was; a camera that cannot orbit turns about itself, as the look would. Each output says how
