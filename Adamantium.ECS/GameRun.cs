@@ -30,27 +30,7 @@ public sealed class GameRun
     public bool IsPaused
     {
         get => _paused;
-        set
-        {
-            if (_paused == value)
-                return;
-
-            _paused = value;
-            foreach (var service in _services)
-            {
-                if (value)
-                {
-                    if (!service.IsActive)
-                        _failed.Add(service);
-
-                    service.IsActive = false;
-                }
-                else if (!_failed.Contains(service))
-                {
-                    service.IsActive = true;
-                }
-            }
-        }
+        set => SetPaused(value);
     }
 
     /// <summary>Starts the game on <paramref name="scene"/>: starts each game service of its world on the scene and wakes
@@ -106,5 +86,37 @@ public sealed class GameRun
 
         _services.Clear();
         _failed.Clear();
+    }
+
+    private void SetPaused(bool paused)
+    {
+        if (_paused == paused)
+            return;
+
+        _paused = paused;
+        if (paused)
+            PutServicesToSleep();
+        else
+            WakeServices();
+    }
+
+    private void PutServicesToSleep()
+    {
+        foreach (var service in _services)
+        {
+            if (!service.IsActive)
+                _failed.Add(service);
+
+            service.IsActive = false;
+        }
+    }
+
+    private void WakeServices()
+    {
+        foreach (var service in _services)
+        {
+            if (!_failed.Contains(service))
+                service.IsActive = true;
+        }
     }
 }
