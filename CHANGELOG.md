@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- Comments on a view of 3D artwork in `Adamantium.Pdf` (ISO 32000-1, 13.6.6): `PdfAnnotation.Markup3D` reads a markup's
+  `ExData` of subtype `Markup3D` as a `PdfMarkup3D` - the 3D annotation it comments on, by its object or its `NM`, the
+  view it is shown in and the MD5 checksum of the 3D stream it was made on; `PdfMarkup3D.ToDictionary` makes one, and
+  `PdfNewAnnotation.ExternalData` writes it. `Pdf3DView.ToDictionary` writes a view (names, camera, center of orbit,
+  projection, background, render mode, lights - `Pdf3DCamera.ToArray`, `Pdf3DProjection.ToDictionary`), and a view read
+  from an object keeps its `Id`: `IsSameAs` tells one view from an equivalent one, as the format asks.
+  `Pdf3DArtwork.ComputeChecksum` gives the stream's MD5.
+
 - `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
   services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
   `CountOf<T>()` how many. `Select(query)` gives those of a `ComponentQuery<T>` - made once and kept by a service -

@@ -11,6 +11,7 @@ public sealed class Pdf3DProjection
     private const string OrthographicScaleKey = "OS";
     private const string OrthographicBindingKey = "OB";
     private const string Orthographic = "O";
+    private const string Perspective = "P";
     private const string WidthBinding = "W";
     private const string AbsoluteBinding = "Absolute";
 
@@ -29,6 +30,26 @@ public sealed class Pdf3DProjection
     /// <c>Absolute</c> - one unit of the artwork a unit of the annotation - the default; for a perspective, the side
     /// its field of view spans (<c>PS</c>), <c>W</c> by default.</summary>
     public string Binding { get; init; }
+
+    /// <summary>The <c>P</c> dictionary of the projection.</summary>
+    public PdfDictionary ToDictionary()
+    {
+        var dictionary = new PdfDictionary();
+        var orthographic = Kind == Pdf3DProjectionKind.Orthographic;
+        dictionary.Set(Subtype, new PdfName(orthographic ? Orthographic : Perspective));
+        if (orthographic)
+        {
+            dictionary.Set(OrthographicScaleKey, new PdfReal(Scale));
+            dictionary.Set(OrthographicBindingKey, new PdfName(Binding ?? AbsoluteBinding));
+        }
+        else
+        {
+            dictionary.Set(FieldOfViewKey, new PdfReal(FieldOfView));
+            dictionary.Set(PerspectiveScalingKey, new PdfName(Binding ?? WidthBinding));
+        }
+
+        return dictionary;
+    }
 
     /// <summary>The projection of a <c>P</c> dictionary; perspective with a 90 degree field of view, as the format
     /// takes for none.</summary>

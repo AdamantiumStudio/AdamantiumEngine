@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Objects;
 
@@ -60,6 +61,10 @@ public sealed class Pdf3DArtwork
 
     /// <summary>The model's file, decoded from the stream's filters.</summary>
     public ReadOnlyMemory<byte> ReadData() => _document.Decode(Stream).Data;
+
+    /// <summary>The MD5 checksum of the stream's data as the file holds it - what a 3D comment keeps (<c>MD5</c>,
+    /// 13.6.6) to tell whether the model changed since it was made.</summary>
+    public byte[] ComputeChecksum() => MD5.HashData(Stream.Data.Span);
 
     /// <summary>The artwork of a 3D annotation's dictionary, or null when it names no 3D stream.</summary>
     public static Pdf3DArtwork From(PdfDictionary annotation, PdfDocument document)
