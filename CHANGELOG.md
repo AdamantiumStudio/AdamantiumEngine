@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `GameComponent.CloneReferences`: a game component's `Entity` property naming an entity of the trees copied names its
+  copy - a scene played on a copy of itself, or a tree duplicated, refers to itself.
+
 - Orbiting a camera about a point: `Camera.Orbit(pivot, pitch, yaw, style)` turns a free camera so the pivot stays where
   it is on the screen - `CameraOrbitStyle.Turntable` keeps the horizon level and stops short of the poles, as the free
   look does; `Trackball` turns about the camera's own axes and goes over the top; an isometric view stays isometric,
