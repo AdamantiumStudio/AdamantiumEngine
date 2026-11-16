@@ -149,7 +149,7 @@ public class PivotHandles : Handles
         }
     }
 
-    public override void Draw(EditorOverlayProcessor overlay)
+    public override void Draw(ToolsOverlayProcessor overlay)
     {
         DrawOrbit(overlay, rightOrbit, Vector3F.UnitX);
         DrawOrbit(overlay, upOrbit, Vector3F.UnitY);

@@ -4,7 +4,7 @@ namespace Adamantium.Engine.Tools;
 /// Turns the selected entity about its pivot - or several together about their common center: about an axis, about
 /// the view, or freely.
 /// </summary>
-public class RotationTool : ToolProcessor
+public class RotationTool : PointerTool
 {
     public RotationTool()
         : base(new RotationHandles())

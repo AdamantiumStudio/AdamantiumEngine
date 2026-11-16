@@ -16,7 +16,7 @@ namespace Adamantium.Engine.Tools;
 /// quarter, a drag orbits it, a double click on the center turns it back to where it started. It takes the pointer
 /// before any tool does.
 /// </summary>
-public class OrientationCube : EditorProcessor
+public class OrientationCube : ToolsProcessor
 {
     private const float ClickSlack = 3;
     private const float DragDegreesPerPixel = 0.4f;
@@ -112,7 +112,7 @@ public class OrientationCube : EditorProcessor
         input.HoldPointer(true);
     }
 
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         overlay.DrawOnScreen(cube);
     }
