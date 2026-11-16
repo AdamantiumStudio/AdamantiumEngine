@@ -953,6 +953,27 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        /// <summary>Turns a free camera upright about the way it looks: the horizon level again after a trackball rolled
+        /// it. Nothing for one looking straight up or down, where no way is level, for an isometric view, which stays
+        /// as it is, or for a camera that cannot orbit.</summary>
+        public void Level()
+        {
+            if (!CanOrbit || HoldsIsometric())
+            {
+                return;
+            }
+
+            var forward = ForwardOf(Rotation).As<float>();
+            if (MathF.Abs(forward.Y) >= MaxLevelPitchSine)
+            {
+                return;
+            }
+
+            CancelTravel();
+            Matrix4x4.CreateLookAtLH<float>(Vector3F.Zero, forward, Vector3F.UnitY).Decompose(out _, out var level, out _);
+            Rotation = level;
+        }
+
         /// <summary>Whether <see cref="Orbit"/> turns this camera: a free one standing on its own - a flight or a turn
         /// under way is dropped for it - not one riding on a host or following one.</summary>
         public bool CanOrbit => Owner is { Owner: null } && !Type.IsThirdPerson() && Type != CameraType.FirstPerson;

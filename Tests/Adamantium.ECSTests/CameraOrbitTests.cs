@@ -62,6 +62,29 @@ public class CameraOrbitTests
         Assert.That(view.M22, Is.LessThan(0), "past the top, the camera's up turned over");
     }
 
+    // A trackball rolls the horizon; Level stands the camera upright again, looking the same way.
+    [Test]
+    public void Level_StandsARolledCameraUpright_LookingTheSameWay()
+    {
+        var camera = NewCamera();
+        camera.Orbit(Pivot, 40, 0, CameraOrbitStyle.Trackball);
+        camera.Orbit(Pivot, 0, 50, CameraOrbitStyle.Trackball);
+        var rolled = Matrix4x4.CreateFromQuaternion<float>(camera.Rotation);
+        Assume.That(System.Math.Abs(rolled.M21), Is.GreaterThan(0.05f), "the trackball rolled it");
+
+        camera.Level();
+
+        var level = Matrix4x4.CreateFromQuaternion<float>(camera.Rotation);
+        var forwardBefore = new Vector3F(rolled.M13, rolled.M23, rolled.M33);
+        var forwardAfter = new Vector3F(level.M13, level.M23, level.M33);
+        Assert.Multiple(() =>
+        {
+            Assert.That(level.M21, Is.EqualTo(0).Within(1e-4), "the sideways axis level");
+            Assert.That(level.M22, Is.GreaterThan(0), "upright");
+            Assert.That(Vector3F.Dot(forwardBefore, forwardAfter), Is.GreaterThan(0.9999f), "looking the same way");
+        });
+    }
+
     // An isometric view stays isometric under a trackball: it turns only about the vertical, the pivot kept.
     [Test]
     public void AnIsometricView_StaysIsometric_UnderATrackball()
