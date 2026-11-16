@@ -62,6 +62,30 @@ public class CameraOrbitTests
         Assert.That(view.M22, Is.LessThan(0), "past the top, the camera's up turned over");
     }
 
+    // An isometric view stays isometric under a trackball: it turns only about the vertical, the pivot kept.
+    [Test]
+    public void AnIsometricView_StaysIsometric_UnderATrackball()
+    {
+        var camera = NewCamera();
+        camera.IsIsometric = true;
+        for (var i = 0; i < 60; i++)
+        {
+            camera.Update(new AppTime { FrameTime = 0.05 });
+        }
+
+        var before = InView(camera, Pivot);
+        camera.Orbit(Pivot, 30, 20, CameraOrbitStyle.Trackball);
+        camera.Update(new AppTime { FrameTime = 0.05 });
+
+        var after = InView(camera, Pivot);
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.IsIsometric, Is.True);
+            Assert.That(after.X, Is.EqualTo(before.X).Within(1e-3));
+            Assert.That(after.Y, Is.EqualTo(before.Y).Within(1e-3));
+        });
+    }
+
     [Test]
     public void ACameraRidingOnAHost_DoesNotOrbit()
     {

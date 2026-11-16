@@ -88,6 +88,45 @@ public class CameraOrbitInputTests
         });
     }
 
+    // The pivot is taken as the chord goes down, before the drag moves: a flick that leaves the cube at once still
+    // orbits about the point of it the pointer was on.
+    [Test]
+    public void ThePivot_IsTakenAsTheChordGoesDown_BeforeTheDragMoves()
+    {
+        var cube = new Entity(null, "Cube");
+        cube.Transform.Position = new Vector3<double>(0, 0, 20);
+        cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
+        universe.EntityWorld.EntityManager.AddEntity(cube);
+        output.Pointer = new Vector2F(400, 300);
+        Frame();
+        output.Key(Keys.LeftAlt, InputType.Down);
+        output.Button(MouseButton.Right, InputType.Down);
+        Frame();
+        var face = new Vector3<double>(0, 0, 19);
+        output.Pointer = new Vector2F(700, 300);
+        output.Move(300, 0);
+        Frame();
+
+        Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1),
+            "about the cube, where the pointer went down");
+    }
+
+    // A camera following a subject cannot orbit: Alt and the right button turn it about itself, as the look did.
+    [Test]
+    public void ACameraThatCannotOrbit_TurnsAboutItself()
+    {
+        var subject = new Entity(null, "Subject");
+        universe.EntityWorld.EntityManager.AddEntity(subject);
+        Frame();
+        camera.SetThirdPersonCamera(subject, Vector3F.Zero, Adamantium.Graphics.Core.CameraType.ThirdPersonFree, distanceToObject: 10);
+        Frame();
+        var rotation = camera.Rotation;
+
+        Drag(alt: true);
+
+        Assert.That(camera.Rotation, Is.Not.EqualTo(rotation), "it turns, it does not freeze");
+    }
+
     [Test]
     public void TheRightButtonAlone_StillTurnsTheCameraAboutItself()
     {

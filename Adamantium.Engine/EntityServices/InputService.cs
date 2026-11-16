@@ -159,6 +159,7 @@ public class InputService : EntityService
         else
         {
             panning = false;
+            orbiting = false;
         }
 
         if (observatory.KeyboardOutput is { Camera: { } keyboardCamera } keyboardOutput)
@@ -310,9 +311,9 @@ public class InputService : EntityService
 
     private void HandlePointer(Camera currentCamera)
     {
-        // Both are the right button's drag, and actions of one map do not take a control from each other: while the
-        // orbit holds the drag, the look leaves the camera alone.
-        if (!Orbit(currentCamera) && look.IsDown)
+        // The orbit's chord holds Alt over the look's drag, so while it is held the look gets nothing.
+        Orbit(currentCamera);
+        if (look.IsDown)
         {
             currentCamera.RotateRelativeXY(
                 look.Vector.Y * currentCamera.MouseSensitivity * LookPerPixel,
@@ -369,16 +370,28 @@ public class InputService : EntityService
         panning = true;
     }
 
-    // Alt with the right button turns a free camera about a point: what was under the pointer when the button went
-    // down, or the middle of the view where nothing was - out in space, say. The point stays until the button is let go.
-    // True while the orbit holds the drag.
-    private bool Orbit(Camera camera)
+    // Alt with the right button turns a free camera about a point: what was under the pointer when the chord went down,
+    // before the drag moved, or the middle of the view where nothing was - out in space, say. The point stays until the
+    // chord is let go. A camera that cannot orbit - on a host, following - turns about itself, as the look would.
+    private void Orbit(Camera camera)
     {
-        if (observatory.PointerInput is not { CanLocatePointer: true } input || !input.IsMouseButtonDown(MouseButton.Right)
-            || (!orbit.IsDown && !(orbiting && camera == orbitCamera)))
+        if (!orbit.IsHeld || observatory.PointerInput is not { CanLocatePointer: true } input)
         {
             orbiting = false;
-            return false;
+            return;
+        }
+
+        var pitch = orbit.Vector.Y * camera.MouseSensitivity * LookPerPixel;
+        var yaw = -orbit.Vector.X * camera.MouseSensitivity * LookPerPixel;
+        if (!camera.CanOrbit)
+        {
+            orbiting = false;
+            if (orbit.IsDown)
+            {
+                camera.RotateRelativeXY(pitch, yaw);
+            }
+
+            return;
         }
 
         if (!orbiting || camera != orbitCamera)
@@ -390,13 +403,8 @@ public class InputService : EntityService
 
         if (orbit.IsDown)
         {
-            camera.Orbit(orbitPivot,
-                orbit.Vector.Y * camera.MouseSensitivity * LookPerPixel,
-                -orbit.Vector.X * camera.MouseSensitivity * LookPerPixel,
-                observatory.PointerOutput?.OrbitStyle ?? CameraOrbitStyle.Turntable);
+            camera.Orbit(orbitPivot, pitch, yaw, observatory.PointerOutput?.OrbitStyle ?? CameraOrbitStyle.Turntable);
         }
-
-        return true;
     }
 
     private double DepthUnder(Camera camera, Vector2F pixel) =>

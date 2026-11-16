@@ -9,10 +9,15 @@ All packages share one version.
 
 - Orbiting a camera about a point: `Camera.Orbit(pivot, pitch, yaw, style)` turns a free camera so the pivot stays where
   it is on the screen - `CameraOrbitStyle.Turntable` keeps the horizon level and stops short of the poles, as the free
-  look does; `Trackball` turns about the camera's own axes and goes over the top. A camera riding on a host does not
-  orbit. `InputService` orbits with the right button's drag while Alt is held (`Camera.Orbit` in the camera's actions):
-  about what was under the pointer when the button went down, or the middle of the view where nothing was. The look,
-  bound to the same drag, leaves the camera alone meanwhile. Each output says how (`UniverseOutput.OrbitStyle`).
+  look does; `Trackball` turns about the camera's own axes and goes over the top; an isometric view stays isometric,
+  turning only about the vertical. `Camera.CanOrbit`: not a camera riding on a host or following one. `InputService`
+  orbits with the right button's drag while Alt is held (`Camera.Orbit` in the camera's actions, rebindable): about
+  what was under the pointer when the chord went down, before the drag moved, or the middle of the view where nothing
+  was; a camera that cannot orbit turns about itself, as the look would. Each output says how
+  (`UniverseOutput.OrbitStyle`).
+- Within an input map, a chord held takes the controls of a binding it holds more modifiers over: Ctrl+S is not also S,
+  and the right button's drag with Alt is not also the look. `InputAction.IsHeld`: whether a binding's modifiers are
+  all held - what a drag lasts by on the frames the pointer stands still.
 - `EntityIcons.Shows` (`EntityIconKinds`): the kinds of icon shown - empty entities, groups, lights, cameras - each on
   or off, so an editor hides those in the way. An entity of a kind left out has no icon and cannot be picked by one; a
   light or a camera with a marker goes as a light or a camera, not as an empty entity. An entity with a marker shows
