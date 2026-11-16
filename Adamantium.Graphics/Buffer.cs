@@ -414,7 +414,8 @@ namespace Adamantium.Graphics
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
         public static Buffer New(IGraphicsDevice device, ulong bufferSize, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
-            return New(device, bufferSize, (int)bufferSize, bufferFlags, memoryFlags, SharingMode.Exclusive);
+            // One element, the whole buffer: its size taken as an int would wrap for a buffer of 2 GB or more.
+            return new Buffer(device, bufferFlags, bufferSize, 1, memoryFlags, SharingMode.Exclusive);
         }
 
         /// <summary>

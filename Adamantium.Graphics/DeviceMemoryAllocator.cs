@@ -77,7 +77,7 @@ public sealed class DeviceMemoryAllocator : IDeviceMemoryAllocator
             }
 
             var heap = _heapIndexByType[memoryTypeIndex];
-            throw new GraphicsEngineException(
+            throw new OutOfDeviceMemoryException(
                 $"Out of GPU memory: {size} bytes in memory type {memoryTypeIndex} (heap {heap}, " +
                 $"{_blockBytesByHeap[heap] / 1048576.0:F1} of {_heapSizeByType[memoryTypeIndex] / 1048576} MB in this process's blocks), " +
                 "and no other memory type the buffer allows can take it");
