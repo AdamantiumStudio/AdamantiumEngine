@@ -13,7 +13,7 @@ internal static class SceneGameComponents
     /// <summary>Puts the component <paramref name="entry"/> describes on <paramref name="entity"/>, its type found in
     /// <paramref name="code"/>. The entry is kept on the entity instead when the type is not loaded, the entity has one
     /// of that type already, or its code throws - then the throw is added to <paramref name="problems"/>.</summary>
-    public static void Attach(Entity entity, SceneGameComponent entry, WorldCode code, List<GameComponentProblem> problems)
+    public static void Attach(Entity entity, SceneGameComponent entry, IWorldCode code, List<GameComponentProblem> problems)
     {
         var type = code.FindType<GameComponent>(entry.Type);
         if (type == null)

@@ -19,6 +19,7 @@ public sealed class Scene
         Roots = new TrackingCollection<Entity>();
         RootEntities = new ReadOnlyTrackingCollection<Entity>(Roots);
         Cameras = new EntityGroup(nameof(Cameras));
+        Components = new SceneComponents(this);
         Index = new SceneIndex();
         Selection = new Selection();
         Satellites = new Satellites();
@@ -36,9 +37,13 @@ public sealed class Scene
     /// and comes back once it has none. The changes come on the world's thread.</summary>
     public ReadOnlyTrackingCollection<Entity> RootEntities { get; }
 
-    /// <summary>The scene's cameras, wherever they hang in its trees: an entity with a camera joins as its tree joins
-    /// the scene, and leaves with it; on the world's thread.</summary>
+    /// <summary>The scene's cameras, wherever they hang in its trees: an entity joins as its tree joins the scene or as a
+    /// camera is added to it, and leaves with its tree or its last camera; kept by <see cref="Components"/>, on the
+    /// world's thread.</summary>
     public EntityGroup Cameras { get; }
+
+    /// <summary>The scene's components by type: selections of one type or two without walking the trees.</summary>
+    public SceneComponents Components { get; }
 
     /// <summary>Where the meshes of the scene stand, kept by whoever walks its transforms while it is shown.</summary>
     public SceneIndex Index { get; }

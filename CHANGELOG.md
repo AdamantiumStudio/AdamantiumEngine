@@ -7,14 +7,24 @@ All packages share one version.
 
 ### Added
 
+- `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
+  services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
+  `CountOf<T>()` how many. `Select(query)` gives those of a `ComponentQuery<T>` - made once and kept by a service -
+  whose entities also have a component of each type given with `With<U>()`, any number of them; it walks the type of
+  the fewest components. Walked with `foreach` through struct enumerators, nothing allocated. An entity disabled, or
+  under a disabled one, is skipped, as a tree walk skips what is under a disabled entity; `IsEnabled` is not passed
+  down. Kept as trees come into a scene and leave it, as components are added and taken off, and -
+  at the world's next sync, from whatever thread the owner changed - as branches are hung under its entities or taken
+  off; a component taken out during a walk leaves a gap closed when the walk ends. On the world's thread. Measured on
+  10 000 entities, one in a hundred with the component: 3.7 us against 507 us for a tree walk, 0 bytes against 56 KB.
 - `IGameService : IEntityService`: the logic of a game's or a mod's code, acting on its components while a scene is
   played - the scene played, `Start(scene)`, `Stop()`; the engine works with game services only through it.
-  `GameService` is a ready base: `OnStart` / `OnStop` to override, `Update(AppTime)` as any service, `Each<T>()` walks
-  the scene's components of a kind. A kind needs a public constructor taking the world. `SceneCode.Replace` makes one
+  `GameService` is a ready base: `OnStart` / `OnStop` to override, `Update(AppTime)` as any service, `Each<T>()` and
+  `Each(query)` select the played scene's components from its index. A kind needs a public constructor taking the world. `SceneCode.Replace` makes one
   of each kind the arriving code brings, asleep (`IsActive` false), and takes out those of the leaving code.
   `GameRun.Start(scene)` plays a scene: starts the world's game services on it and wakes them; `IsPaused` puts them to
   sleep, `Stop` puts them to sleep and stops them. One game at a time in a world.
-- `WorldCode.GetGivenTypes<T>(constructorParameters)`: the given types made from a constructor taking those.
+- `IWorldCode.GetGivenTypes<T>(constructorParameters)`: the given types made from a constructor taking those.
 - `Entity.CopyTree(copies)`: a copy of an entity's tree under its own names, each entity put in `copies` against its
   copy - what a scene played on a copy of itself needs to keep what was played.
 
@@ -104,16 +114,19 @@ All packages share one version.
 - `GameComponent`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
   are what a scene keeps of it - not named `Behavior`, the name of the UI's behaviors. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedGameComponents`
   and `UnloadedShape` stand for components and shapes whose code is not loaded.
-- `EntityWorld.Code` (`WorldCode`): the code a world finds the types of its scenes' entries in - the game's and its
-  mods' assemblies given to it, then the application's own; an assembly of a collectible load context counts only while
-  given, so code replaced or unloaded is not found again. `SceneCode.Replace(world, leaving, arriving)`: moves the
+- `IWorldCode` / `WorldCode` (`Adamantium.Engine.Scenes`): the code a world finds the types of its scenes' entries in -
+  the game's and its mods' assemblies given to it, then the application's own; an assembly of a collectible load
+  context counts only while given, so code replaced or unloaded is not found again. One a world, put among its
+  satellites by whoever hosts it - the editor's universe, a game's player - and reached through
+  `world.Satellites.Get<IWorldCode>()`. `WorldCode.GetMadeTypes<T>(assemblies, constructorParameters)`: what a build
+  brings, asked before it is given to a world. `SceneCode.Replace(world, leaving, arriving)`: moves the
   game's components of every scene of a world from one build of its code to the next, through their scene entries -
   their fields' values kept, an entry whose type the new code lacks kept as it was. `SceneBuilder.Problems` and the
   result of `Replace` (`GameComponentProblem`): the components whose code threw; their entries are kept. `Entity(owner, name, uid)`: an entity
   with a given id.
 - `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
   `CameraType.Parse`: the type its `ToString` names.
-- `[MovedFrom("Game.Turret")]`: a full name a component's class had before. A world's code finds the class by it when
+- `[MovedFrom("Game.Turret")]` (`Adamantium.Engine.Scenes`): a full name a component's class had before. A world's code finds the class by it when
   no class has that name now, so a component renamed or moved keeps the values its scenes gave it, and a scene saved
   again writes the new name; two classes claiming one former name take nothing. `SceneCode.Load(entity, entry, type)`:
   makes an entry kept for a component whose code is not loaded a component of another type, with the fields that type
@@ -355,6 +368,12 @@ All packages share one version.
 
 ### Changed
 
+- `Entity.GetComponent<T>()` looks for each type once and keeps the answer until the entity's components change: 13
+  times faster on entities of six components, still without a lock and without allocating. `GetInChildren` and
+  `GetAllInChildren` walk with pooled stacks instead of a new one each call.
+- `Scene.Cameras` is kept by the scene's components index: a camera given to an entity already in the scene joins it,
+  and an entity whose last camera is taken off leaves it.
+- `Entity` takes its owner last in its constructor, once its components are made.
 - `EntityServiceManager.Update`: a service whose `SleepsWhenUpdateFails` is true - every `GameService` - is logged
   and put to sleep (`IsActive` false) when it throws, the others updated on; any other service fails the frame, as
   before. `EntityServiceManager.SyncServices` is public: the services added and removed come in and go at once, on the
@@ -429,6 +448,8 @@ All packages share one version.
 
 ### Fixed
 
+- `EntityComponentCollection.Clear` takes off and tells of every component; it stepped over every second one, which
+  left without the event and still owned.
 - Imported models are no longer shown as their mirror images. The way from a file's axes into the engine's
   (`AxisConversion.Between`, `Mesh.ChangeCoordinateSystem`) was a reflection for every source - Z up `(x, -z, y)`,
   Y up `(-x, -y, z)`, glTF `(x, -y, -z)` now - while the engine's axes are right-handed as its cameras show them: a

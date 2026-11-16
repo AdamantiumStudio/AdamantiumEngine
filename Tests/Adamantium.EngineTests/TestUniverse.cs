@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS;
+using Adamantium.Engine.Scenes;
 using Adamantium.Multiverse;
 
 namespace Adamantium.EngineTests;
@@ -19,6 +20,7 @@ public class TestUniverse : IUniverse
         EntityWorld = new EntityWorld(Container, Satellites);
         Watcher = new UniverseWatcher(Invalidate, Invalidate);
         Satellites.Add<IUniverseWatcher>(Watcher);
+        Satellites.Add<IWorldCode>(new WorldCode());
     }
 
     /// <summary>The universe's watcher; not watching until the test says so.</summary>

@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Engine.Scenes;
 
 namespace Adamantium.EngineTests;
 

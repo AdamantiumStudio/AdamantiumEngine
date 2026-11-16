@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.Loader;
 
-namespace Adamantium.ECS;
+namespace Adamantium.Engine.Scenes;
 
-/// <summary>The code a world finds types in: the assemblies of the game and its mods given to it, in that order, then
-/// those of the application itself - the default load context. An assembly of a collectible context counts only while
-/// it is given, so code replaced or unloaded is not found again.</summary>
-public sealed class WorldCode
+/// <summary>The <see cref="IWorldCode"/> of a world: the assemblies of the game and its mods given to it, in that order,
+/// then those of the application itself - the default load context. An assembly of a collectible context counts only
+/// while it is given, so code replaced or unloaded is not found again.</summary>
+public sealed class WorldCode : IWorldCode
 {
     private readonly object _lock = new();
 
@@ -138,11 +138,18 @@ public sealed class WorldCode
     /// <summary>The types deriving from <typeparamref name="T"/> that can be made from arguments of
     /// <paramref name="constructorParameters"/> - a public constructor taking just those - of the given assemblies
     /// alone.</summary>
-    public IReadOnlyList<Type> GetGivenTypes<T>(Type[] constructorParameters)
+    public IReadOnlyList<Type> GetGivenTypes<T>(Type[] constructorParameters) =>
+        GetMadeTypes<T>(_assemblies, constructorParameters);
+
+    /// <summary>The types of <paramref name="assemblies"/> deriving from <typeparamref name="T"/> that can be made from
+    /// arguments of <paramref name="constructorParameters"/> - what a build of game code brings, asked of the build before
+    /// it is given to a world.</summary>
+    public static IReadOnlyList<Type> GetMadeTypes<T>(IReadOnlyList<Assembly> assemblies, Type[] constructorParameters)
     {
+        ArgumentNullException.ThrowIfNull(assemblies);
         ArgumentNullException.ThrowIfNull(constructorParameters);
         var found = new List<Type>();
-        foreach (var assembly in _assemblies)
+        foreach (var assembly in assemblies)
         {
             foreach (var type in GetLoadableTypes(assembly))
             {

@@ -123,7 +123,7 @@ public sealed class SceneBuilder
         {
             if (byId.TryGetValue(entry.On, out var entity))
             {
-                SceneGameComponents.Attach(entity, entry, world.Code, problems);
+                SceneGameComponents.Attach(entity, entry, world.Satellites.Get<IWorldCode>(), problems);
             }
             else
             {
@@ -301,7 +301,7 @@ public sealed class SceneBuilder
 
     private ProceduralShape MakeShapeComponent(SceneShape entry)
     {
-        var type = world.Code.FindType<ProceduralShape>(entry.Type);
+        var type = world.Satellites.Get<IWorldCode>().FindType<ProceduralShape>(entry.Type);
         if (type == null)
         {
             Log.Logger.Warning("Scene: the shape {Type} of {Name} is not loaded; it is kept as it was read",

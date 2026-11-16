@@ -20,6 +20,7 @@ public class SceneCodeTests
 
     private TestUniverse _universe;
     private EntityWorld _world;
+    private IWorldCode _code;
 
     [SetUp]
     public void SetUp()
@@ -27,6 +28,7 @@ public class SceneCodeTests
         _universe = new TestUniverse();
         _universe.Satellites.Add<IUniverse>(_universe);
         _world = _universe.EntityWorld;
+        _code = _universe.Satellites.Get<IWorldCode>();
     }
 
     private static SceneFile PatrolAtStart(params SceneValue[] values)
@@ -56,7 +58,7 @@ public class SceneCodeTests
     public async Task ANewBuild_TakesTheComponents_WithTheirValues()
     {
         var first = Code("Game.First", new TestGameField("Speed", typeof(double))).Assembly;
-        _world.Code.Replace([], [first]);
+        _code.Replace([], [first]);
         await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
         var second = Code("Game.Second", new TestGameField("Speed", typeof(double)), new TestGameField("Route", typeof(string)))
             .Assembly;
@@ -77,7 +79,7 @@ public class SceneCodeTests
     public async Task ATypeTheNewBuildLacks_StaysAnEntry_AndIsWrittenBack()
     {
         var first = Code("Game.First", new TestGameField("Speed", typeof(double))).Assembly;
-        _world.Code.Replace([], [first]);
+        _code.Replace([], [first]);
         await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
         var second = new TestGameCode("Game.Second").AddComponent("Game.Other").Assembly;
 
@@ -87,7 +89,7 @@ public class SceneCodeTests
         Assert.Multiple(() =>
         {
             Assert.That(StartPoint().Components.OfType<GameComponent>(), Is.Empty);
-            Assert.That(_world.Code.FindType<GameComponent>(PatrolType), Is.Null, "the old build is not found again");
+            Assert.That(_code.FindType<GameComponent>(PatrolType), Is.Null, "the old build is not found again");
             Assert.That(back.Type, Is.EqualTo(PatrolType));
             Assert.That(back.Values, Is.EqualTo(new[] { new SceneValue("Speed", "2.5") }));
         });
@@ -110,7 +112,7 @@ public class SceneCodeTests
     public async Task AFieldTheNewBuildLacks_IsLeftOut_AndTheComponentIsMade()
     {
         var first = Code("Game.First", new TestGameField("Speed", typeof(double))).Assembly;
-        _world.Code.Replace([], [first]);
+        _code.Replace([], [first]);
         await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
         var second = Code("Game.Second", new TestGameField("Route", typeof(string))).Assembly;
 
@@ -128,7 +130,7 @@ public class SceneCodeTests
     public async Task AComponentWhoseConstructorThrows_KeepsItsEntry_AndTheSceneLoads()
     {
         var code = new TestGameCode("Game.Throwing").AddThrowingComponent(PatrolType).Assembly;
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
         var scene = PatrolAtStart(new SceneValue("Speed", "2.5"));
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 2, Name = "Exit" });
 
@@ -169,7 +171,7 @@ public class SceneCodeTests
     public async Task AComponentRenamedWithItsFormerName_TakesTheEntry_AndIsWrittenUnderItsNewName()
     {
         var first = Code("Game.First", new TestGameField("Speed", typeof(double))).Assembly;
-        _world.Code.Replace([], [first]);
+        _code.Replace([], [first]);
         await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
         var second = new TestGameCode("Game.Second")
             .AddMovedComponent("Game.AI.Guard", PatrolType, new TestGameField("Speed", typeof(double))).Assembly;
@@ -194,9 +196,9 @@ public class SceneCodeTests
             .AddMovedComponent("Game.Guard", PatrolType)
             .AddMovedComponent("Game.Sentry", PatrolType).Assembly;
 
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
 
-        Assert.That(_world.Code.FindType<GameComponent>(PatrolType), Is.Null);
+        Assert.That(_code.FindType<GameComponent>(PatrolType), Is.Null);
     }
 
     // ...and a class of that name now wins over one that only had it.
@@ -205,9 +207,9 @@ public class SceneCodeTests
     {
         var code = new TestGameCode("Game.Both").AddComponent(PatrolType).AddMovedComponent("Game.Guard", PatrolType).Assembly;
 
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
 
-        Assert.That(_world.Code.FindType<GameComponent>(PatrolType).FullName, Is.EqualTo(PatrolType));
+        Assert.That(_code.FindType<GameComponent>(PatrolType).FullName, Is.EqualTo(PatrolType));
     }
 
     // An entry loaded as another component - the class renamed without saying so: the fields that class has, by name;
@@ -217,10 +219,10 @@ public class SceneCodeTests
     {
         await Build(PatrolAtStart(new SceneValue("Speed", "3"), new SceneValue("Route", "A")));
         var code = new TestGameCode("Game.Renamed").AddComponent("Game.Guard", new TestGameField("Speed", typeof(double))).Assembly;
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
         var entry = StartPoint().GetComponent<UnloadedGameComponents>().Entries.Single();
 
-        var problem = SceneCode.Load(StartPoint(), entry, _world.Code.FindType<GameComponent>("Game.Guard"));
+        var problem = SceneCode.Load(StartPoint(), entry, _code.FindType<GameComponent>("Game.Guard"));
 
         var guard = StartPoint().Components.OfType<GameComponent>().Single();
         Assert.Multiple(() =>
@@ -237,10 +239,10 @@ public class SceneCodeTests
     {
         await Build(PatrolAtStart(new SceneValue("Speed", "3")));
         var code = new TestGameCode("Game.Failing").AddThrowingComponent("Game.Guard").Assembly;
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
         var entry = StartPoint().GetComponent<UnloadedGameComponents>().Entries.Single();
 
-        var problem = SceneCode.Load(StartPoint(), entry, _world.Code.FindType<GameComponent>("Game.Guard"));
+        var problem = SceneCode.Load(StartPoint(), entry, _code.FindType<GameComponent>("Game.Guard"));
 
         Assert.Multiple(() =>
         {
@@ -286,9 +288,9 @@ public class SceneCodeTests
     {
         await Build(PatrolAtStart());
         var code = new TestGameCode("Game.Adding").AddComponentThrowingOnInitialize("Game.Guard").Assembly;
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
 
-        var problem = SceneCode.Add(StartPoint(), _world.Code.FindType<GameComponent>("Game.Guard"));
+        var problem = SceneCode.Add(StartPoint(), _code.FindType<GameComponent>("Game.Guard"));
 
         Assert.Multiple(() =>
         {
@@ -313,12 +315,12 @@ public class SceneCodeTests
     {
         var code = Code("Game.First").Assembly;
 
-        _world.Code.Replace([], [code]);
+        _code.Replace([], [code]);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_world.Code.GetGivenTypes<GameComponent>().Select(type => type.FullName), Is.EqualTo(new[] { PatrolType }));
-            Assert.That(_world.Code.FindType<GameComponent>(typeof(Patrol).FullName), Is.EqualTo(typeof(Patrol)),
+            Assert.That(_code.GetGivenTypes<GameComponent>().Select(type => type.FullName), Is.EqualTo(new[] { PatrolType }));
+            Assert.That(_code.FindType<GameComponent>(typeof(Patrol).FullName), Is.EqualTo(typeof(Patrol)),
                 "the application's own types are found");
         });
     }
