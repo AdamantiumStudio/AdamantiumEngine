@@ -16,10 +16,10 @@ using Adamantium.Vulkan.Core;
 namespace Adamantium.Engine.EntityServices;
 
 /// <summary>
-/// Draws the editor's processors into one output's frame, after its scene: in the scene, in front of what it drew, and
-/// on the screen.
+/// Draws the <see cref="ToolsProcessor"/>s of a <see cref="ToolsService"/> into one output's frame, after its scene: in
+/// the scene, in front of what it drew, and on the screen.
 /// </summary>
-public class EditorOverlayProcessor : RenderingProcessor
+public class ToolsOverlayProcessor : RenderingProcessor
 {
     private const int OutlineDirections = 8;
 
@@ -41,7 +41,7 @@ public class EditorOverlayProcessor : RenderingProcessor
     private GridEffect gridEffect;
     private MeshGeometryCache geometry;
 
-    public EditorOverlayProcessor(ToolsService tools)
+    public ToolsOverlayProcessor(ToolsService tools)
     {
         this.tools = tools;
     }
@@ -87,9 +87,9 @@ public class EditorOverlayProcessor : RenderingProcessor
         var processors = tools.Processors;
         for (int i = 0; i < processors.Count; i++)
         {
-            if (processors[i].IsEnabled && processors[i] is EditorProcessor editor)
+            if (processors[i].IsEnabled && processors[i] is ToolsProcessor processor)
             {
-                editor.DrawOverlay(this);
+                processor.DrawOverlay(this);
             }
         }
     }

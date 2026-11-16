@@ -20,7 +20,7 @@ namespace Adamantium.Engine.Tools;
 /// onto a surface. A click there places it; with Shift held the tool stays to place another, else it is done. Esc gives
 /// up; the right button turns the camera.
 /// </summary>
-public sealed class PlacementTool : ToolProcessor
+public sealed class PlacementTool : PointerTool
 {
     private static readonly Vector4F GhostTint = new(0.35f, 0.75f, 1f, 0.45f);
     private static readonly Vector4F HangingTint = new(0.7f, 0.75f, 0.8f, 0.3f);
@@ -239,7 +239,7 @@ public sealed class PlacementTool : ToolProcessor
         _placeRequested = true;
     }
 
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         if (Position != null)
         {

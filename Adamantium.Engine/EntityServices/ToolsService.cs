@@ -12,13 +12,14 @@ using Adamantium.Engine.Tools;
 namespace Adamantium.Engine.EntityServices;
 
 /// <summary>
-/// Runs the editor's processors once per frame: what sits over the scene first, then the one tool in use. Only an editor
-/// creates it; a universe without the editor has no tools. Its universe watches it: changing the tool draws a frame.
+/// Runs its <see cref="ToolsProcessor"/>s once per frame: what sits over the scene first, then the one pointer tool in
+/// use. Only an editor or a viewer creates it; a universe without one has no tools. Its universe watches it: changing the
+/// tool draws a frame.
 /// </summary>
 public class ToolsService : EntityService, INotifyUniverse
 {
-    private ToolProcessor tool;
-    private volatile ToolProcessor requested;
+    private PointerTool tool;
+    private volatile PointerTool requested;
     private IUniverseWatcher watcher;
 
     public ToolsService(EntityWorld world)
@@ -41,7 +42,7 @@ public class ToolsService : EntityService, INotifyUniverse
     public Selection Selection => Scene.Selection;
 
     /// <summary>The tool in use: one at a time, or none. Set from any thread; the change takes effect with the next frame.</summary>
-    public ToolProcessor Tool
+    public PointerTool Tool
     {
         get => requested;
         set
@@ -102,9 +103,9 @@ public class ToolsService : EntityService, INotifyUniverse
         var processors = Processors;
         for (int i = 0; i < processors.Count; i++)
         {
-            if (processors[i] is EditorProcessor editor)
+            if (processors[i] is ToolsProcessor processor)
             {
-                nearest = PickHit.Nearest(nearest, editor.PickEntity(ray));
+                nearest = PickHit.Nearest(nearest, processor.PickEntity(ray));
             }
         }
 
@@ -167,9 +168,9 @@ public class ToolsService : EntityService, INotifyUniverse
         var processors = Processors;
         for (int i = 0; i < processors.Count; i++)
         {
-            if (processors[i] is EditorProcessor editor)
+            if (processors[i] is ToolsProcessor processor)
             {
-                editor.PickEntities(camera, in frame, into);
+                processor.PickEntities(camera, in frame, into);
             }
         }
     }

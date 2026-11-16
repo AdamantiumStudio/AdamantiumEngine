@@ -4,7 +4,7 @@ namespace Adamantium.Engine.Tools;
 /// Moves the selected entity - or several together, from their common center - along an axis, across a plane, or
 /// across the view.
 /// </summary>
-public class MoveTool : ToolProcessor
+public class MoveTool : PointerTool
 {
     public MoveTool()
         : base(new MoveHandles())

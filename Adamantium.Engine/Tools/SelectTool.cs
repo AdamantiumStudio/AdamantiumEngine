@@ -19,7 +19,7 @@ namespace Adamantium.Engine.Tools;
 /// inside it when drawn to the right and whatever it touches when drawn to the left (<see cref="ScreenFrame"/>), each as
 /// a click on it would choose it (<see cref="ToolsService.ChooseIn"/>); a click on nothing selects nothing.
 /// </summary>
-public class SelectTool : ToolProcessor
+public class SelectTool : PointerTool
 {
     private const float FrameSlop = 4;
     private const float Depth = 1;
@@ -141,7 +141,7 @@ public class SelectTool : ToolProcessor
         }
     }
 
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         base.DrawOverlay(overlay);
         if (!framing || overlay.Camera != frameCamera)

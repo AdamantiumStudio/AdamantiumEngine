@@ -127,7 +127,7 @@ public class RotationHandles : Handles
         target.Transform.Rotation = QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(inParent, angle), startRotation);
     }
 
-    public override void Draw(EditorOverlayProcessor overlay)
+    public override void Draw(ToolsOverlayProcessor overlay)
     {
         overlay.DrawRing(viewCircle, false);
         overlay.DrawRing(viewOrbit, false);

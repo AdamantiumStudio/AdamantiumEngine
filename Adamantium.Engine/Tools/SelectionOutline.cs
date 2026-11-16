@@ -8,7 +8,7 @@ namespace Adamantium.Engine.Tools;
 /// the rest; and, in another color, what a click would select under the pointer, the icon it shows by, if any, in a
 /// color of its own. Works with whatever tool is in use.
 /// </summary>
-public class SelectionOutline : EditorProcessor
+public class SelectionOutline : ToolsProcessor
 {
     public Vector4F Color { get; set; } = Colors.Orange.ToVector4();
 
@@ -21,7 +21,7 @@ public class SelectionOutline : EditorProcessor
     public float Pixels { get; set; } = 2;
 
     // What is selected in the scene the output shows; what the pointer is over only in that scene.
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         if (overlay.Scene is not { } scene)
         {

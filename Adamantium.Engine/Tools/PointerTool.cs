@@ -16,7 +16,7 @@ namespace Adamantium.Engine.Tools;
 /// so a camera riding on what is dragged does not carry the pointer, and the target after it, further every frame; it
 /// stops when the selection or the output's camera changes under it.
 /// </summary>
-public abstract class ToolProcessor : EditorProcessor
+public abstract class PointerTool : ToolsProcessor
 {
     private readonly Handles[] own;
     private readonly Handles[] lightHandles = [new PointLightHandles(), new SpotLightHandles()];
@@ -37,7 +37,7 @@ public abstract class ToolProcessor : EditorProcessor
     private readonly List<Entity> _edited = [];
     private readonly List<EditedState> _editedBefore = [];
 
-    protected ToolProcessor(params Handles[] own)
+    protected PointerTool(params Handles[] own)
     {
         this.own = own;
     }
@@ -311,7 +311,7 @@ public abstract class ToolProcessor : EditorProcessor
         Tools.Observatory.PointerInput?.IsKeyDown(key) == true || Tools.Observatory.KeyboardInput?.IsKeyDown(key) == true;
 
     // The handles stand on what is selected in the scene worked in: only its outputs show them.
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         if (overlay.Scene != targetScene)
         {

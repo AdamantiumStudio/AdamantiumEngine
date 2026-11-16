@@ -20,7 +20,7 @@ namespace Adamantium.Engine.Tools;
 /// its entity. A camera has no icon in its own view, and an output's own camera (<see cref="UniverseOutput.OwnCamera"/>)
 /// none at all: it is the output's, not the scene's.
 /// </summary>
-public class EntityIcons : EditorProcessor
+public class EntityIcons : ToolsProcessor
 {
     /// <summary>The size icons have unless set otherwise, in points.</summary>
     public const float DefaultPixels = 36;
@@ -89,7 +89,7 @@ public class EntityIcons : EditorProcessor
         metadata.Enabled = true;
     }
 
-    public override void DrawOverlay(EditorOverlayProcessor overlay)
+    public override void DrawOverlay(ToolsOverlayProcessor overlay)
     {
         if (overlay.Scene is { } scene && roots.TryGetValue(scene, out var icons))
         {

@@ -368,6 +368,10 @@ All packages share one version.
 
 ### Changed
 
+- Renamed after the service that runs them: `EditorProcessor` is `ToolsProcessor` - a part of what `ToolsService` runs
+  each frame, drawing over the scene and letting a click select what it drew - and `EditorOverlayProcessor` is
+  `ToolsOverlayProcessor`. `ToolProcessor`, the one pointer tool in use, is `PointerTool`, so the two no longer differ
+  by a letter.
 - `Entity.GetComponent<T>()` looks for each type once and keeps the answer until the entity's components change: 13
   times faster on entities of six components, still without a lock and without allocating. `GetInChildren` and
   `GetAllInChildren` walk with pooled stacks instead of a new one each call.

@@ -7,14 +7,16 @@ using Adamantium.Engine.EntityServices;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Editor work that <see cref="ToolsService"/> runs every frame, and that may draw over the scene of every output.
+/// A part of what <see cref="ToolsService"/> runs every frame - the grid, the icons, the selection's outline, the
+/// orientation cube, the pointer tool in use - which may draw over the scene of every output and let a click select
+/// what it drew.
 /// </summary>
-public abstract class EditorProcessor : EntityProcessor<ToolsService>
+public abstract class ToolsProcessor : EntityProcessor<ToolsService>
 {
     protected ToolsService Tools => AssociatedService;
 
     /// <summary>Draws into one output's frame, after its scene.</summary>
-    public virtual void DrawOverlay(EditorOverlayProcessor overlay)
+    public virtual void DrawOverlay(ToolsOverlayProcessor overlay)
     {
     }
 
@@ -30,8 +32,8 @@ public abstract class EditorProcessor : EntityProcessor<ToolsService>
     {
     }
 
-    /// <summary>The first editor processor of the kind the service runs, or null.</summary>
-    protected T Find<T>() where T : EditorProcessor
+    /// <summary>The first processor of the kind the service runs, or null.</summary>
+    protected T Find<T>() where T : ToolsProcessor
     {
         var processors = Tools.Processors;
         for (int i = 0; i < processors.Count; i++)
