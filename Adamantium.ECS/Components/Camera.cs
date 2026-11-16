@@ -953,6 +953,41 @@ namespace Adamantium.ECS.Components
             }
         }
 
+        /// <summary>Turns a free camera about <paramref name="pivot"/>, a point in the world, by
+        /// <paramref name="pitchDegrees"/> up and down and <paramref name="yawDegrees"/> sideways, as
+        /// <see cref="RotateRelativeXY"/> turns it about itself: the pivot stays where it is on the screen. A turn or a
+        /// flight under way is dropped. A camera riding on a host does not orbit.</summary>
+        public void Orbit(Vector3<double> pivot, float pitchDegrees, float yawDegrees, CameraOrbitStyle style)
+        {
+            if (Owner is not { } entity || entity.Owner != null)
+            {
+                return;
+            }
+
+            CancelTravel();
+            if (Type != CameraType.Free)
+            {
+                return;
+            }
+
+            // Where the camera stands from the pivot, in the axes of its view: the same after the turn.
+            var fromPivot = (entity.Transform.Position - pivot).As<float>();
+            var inView = Vector3F.TransformNormal(fromPivot, Matrix4x4.CreateFromQuaternion<float>(Rotation));
+            if (style == CameraOrbitStyle.Trackball)
+            {
+                Rotation = QuaternionF.Multiply(
+                    Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(yawDegrees)),
+                    Pitched(Rotation, pitchDegrees));
+            }
+            else
+            {
+                TurnLevel(pitchDegrees, yawDegrees);
+            }
+
+            var turned = Matrix4x4F.Transpose(Matrix4x4.CreateFromQuaternion<float>(Rotation));
+            entity.Transform.Position = pivot + Vector3F.TransformNormal(inView, turned).As<double>();
+        }
+
         private static QuaternionF Pitched(QuaternionF rotation, float degrees) =>
             QuaternionF.Multiply(Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(degrees)), rotation);
 

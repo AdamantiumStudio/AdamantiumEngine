@@ -1,0 +1,146 @@
+using Adamantium.Core;
+using Adamantium.ECS;
+using Adamantium.ECS.Components;
+using Adamantium.Engine;
+using Adamantium.Engine.EntityServices;
+using Adamantium.Graphics.Core.Models;
+using Adamantium.Mathematics;
+using Adamantium.Multiverse;
+using Adamantium.Multiverse.Input;
+using Adamantium.ProceduralGeometry;
+using Adamantium.ProceduralGeometry.Shapes;
+using NUnit.Framework;
+
+namespace Adamantium.EngineTests;
+
+/// <summary>The right button's drag with Alt orbits the camera of the output under the pointer about a point - here,
+/// with nothing under the pointer, the middle of its view - and without Alt still turns it about itself.</summary>
+[TestFixture]
+public class CameraOrbitInputTests
+{
+    private TestUniverse universe;
+    private TestOutput output;
+    private Camera camera;
+    private InputService input;
+    private TransformService transforms;
+
+    [SetUp]
+    public void BuildScene()
+    {
+        universe = new TestUniverse();
+        universe.Satellites.Add<IUniverse>(universe);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        universe.Satellites.Add(new InputActions());
+        output = new TestOutput();
+        universe.Add(output);
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Scene camera", new Vector3<double>(0, 0, -10),
+            Vector3<double>.ForwardLH, -Vector3<double>.Up, 800, 600, 0.1f, 1000f);
+        camera = cameraEntity.GetComponent<Camera>();
+        output.Camera = camera;
+        universe.EntityWorld.EntityManager.AddEntity(cameraEntity);
+        transforms = new TransformService(universe.EntityWorld);
+        transforms.Initialize();
+        input = new InputService(universe.EntityWorld);
+        Frame();
+    }
+
+    [Test]
+    public void AltAndTheRightButton_OrbitTheMiddleOfTheView()
+    {
+        var center = camera.WorldPosition + camera.Forward * camera.FocusDistance;
+        var before = InView(center);
+
+        Drag(alt: true);
+
+        var after = InView(center);
+        Assert.Multiple(() =>
+        {
+            Assert.That((camera.Owner.Transform.Position - new Vector3<double>(0, 0, -10)).Length(), Is.GreaterThan(0.1),
+                "the camera went round");
+            Assert.That(after.X, Is.EqualTo(before.X).Within(1e-3));
+            Assert.That(after.Y, Is.EqualTo(before.Y).Within(1e-3));
+            Assert.That(after.Z, Is.EqualTo(before.Z).Within(1e-3));
+        });
+    }
+
+    // A cube under the pointer, far beyond the focus distance: the orbit goes about the point of it the pointer was on.
+    [Test]
+    public void WhatIsUnderThePointer_IsThePivot()
+    {
+        var cube = new Entity(null, "Cube");
+        cube.Transform.Position = new Vector3<double>(0, 0, 20);
+        cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
+        universe.EntityWorld.EntityManager.AddEntity(cube);
+        Frame();
+        var face = new Vector3<double>(0, 0, 19);
+        var before = InView(face);
+
+        Drag(alt: true);
+
+        var after = InView(face);
+        Assert.Multiple(() =>
+        {
+            // About the point the ray hit, a hair off the face's middle; about the middle of the view 10 units ahead, the
+            // camera would have swung far nearer or farther.
+            Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1), "as far from the cube");
+            Assert.That(after.X, Is.EqualTo(before.X).Within(0.01));
+            Assert.That(after.Y, Is.EqualTo(before.Y).Within(0.01));
+        });
+    }
+
+    [Test]
+    public void TheRightButtonAlone_StillTurnsTheCameraAboutItself()
+    {
+        var rotation = camera.Rotation;
+
+        Drag(alt: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.Owner.Transform.Position, Is.EqualTo(new Vector3<double>(0, 0, -10)), "it stays where it is");
+            Assert.That(camera.Rotation, Is.Not.EqualTo(rotation), "and turns");
+        });
+    }
+
+    private void Drag(bool alt)
+    {
+        output.Pointer = new Vector2F(400, 300);
+        Frame();
+        if (alt)
+        {
+            output.Key(Keys.LeftAlt, InputType.Down);
+        }
+
+        output.Button(MouseButton.Right, InputType.Down);
+        Frame();
+        for (int i = 1; i <= 5; i++)
+        {
+            output.Pointer = new Vector2F(400 + 20 * i, 300 + 8 * i);
+            output.Move(20, 8);
+            Frame();
+        }
+
+        output.Button(MouseButton.Right, InputType.Up);
+        if (alt)
+        {
+            output.Key(Keys.LeftAlt, InputType.Up);
+        }
+
+        Frame();
+    }
+
+    private Vector3F InView(Vector3<double> point) =>
+        Vector3F.TransformNormal((point - camera.Owner.Transform.Position).As<float>(),
+            Matrix4x4.CreateFromQuaternion<float>(camera.Rotation));
+
+    private void Frame()
+    {
+        universe.EntityWorld.ForceUpdate();
+        universe.Settle();
+        output.Frame();
+        universe.Satellites.Get<InputActions>().Update(output.Input, output.Input);
+        input.Update(new AppTime { FrameTime = 1.0 / 60 });
+        camera.Update(new AppTime { FrameTime = 1.0 / 60 });
+        transforms.Update(new AppTime());
+    }
+}
