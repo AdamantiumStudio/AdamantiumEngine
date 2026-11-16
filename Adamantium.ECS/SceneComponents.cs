@@ -26,18 +26,30 @@ public sealed class SceneComponents
 
     /// <summary>The components of type <typeparamref name="T"/>, or derived from it, on the scene's entities that are
     /// enabled in their tree.</summary>
-    public ComponentSelection<T> Of<T>() where T : class, IComponent => new(this, GetPoolsOf(typeof(T)));
+    public ComponentSelection<T> Of<T>() where T : class, IComponent => new(this, GetPoolsOf(typeof(T)), [], -1);
 
-    /// <summary>The scene's entities enabled in their tree that have a component of <typeparamref name="T1"/> and one of
-    /// <typeparamref name="T2"/>; walks the fewer of the two.</summary>
-    public ComponentPairSelection<T1, T2> With<T1, T2>()
-        where T1 : class, IComponent
-        where T2 : class, IComponent
+    /// <summary>The components of <paramref name="query"/>'s type on the scene's entities enabled in their tree that meet
+    /// its conditions; walks the type of the fewest components and asks each entity for the others.</summary>
+    public ComponentSelection<T> Select<T>(ComponentQuery<T> query) where T : class, IComponent
     {
-        var first = GetPoolsOf(typeof(T1));
-        var second = GetPoolsOf(typeof(T2));
-        var walksSecond = Count(second) < Count(first);
-        return new ComponentPairSelection<T1, T2>(this, walksSecond ? second : first, walksSecond);
+        ArgumentNullException.ThrowIfNull(query);
+        var requirements = query.Requirements;
+        var pools = GetPoolsOf(typeof(T));
+        var fewest = Count(pools);
+        var walked = -1;
+        for (var i = 0; i < requirements.Length; i++)
+        {
+            var required = GetPoolsOf(requirements[i].Type);
+            var count = Count(required);
+            if (count < fewest)
+            {
+                pools = required;
+                fewest = count;
+                walked = i;
+            }
+        }
+
+        return new ComponentSelection<T>(this, pools, requirements, walked);
     }
 
     /// <summary>How many components of type <typeparamref name="T"/>, or derived from it, the scene holds - its disabled

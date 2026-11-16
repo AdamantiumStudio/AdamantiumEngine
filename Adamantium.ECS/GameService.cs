@@ -57,4 +57,9 @@ public abstract class GameService : EntityService, IGameService
     /// a selection from the scene's index (<see cref="Scene.Components"/>), nothing allocated. Empty while no game plays.
     /// </summary>
     protected ComponentSelection<T> Each<T>() where T : class, IComponent => Scene?.Components.Of<T>() ?? default;
+
+    /// <summary>The components of <paramref name="query"/> in the scene played: of its type, on entities enabled in their
+    /// tree that meet its conditions. Make the query once and keep it; empty while no game plays.</summary>
+    protected ComponentSelection<T> Each<T>(ComponentQuery<T> query) where T : class, IComponent =>
+        Scene?.Components.Select(query) ?? default;
 }

@@ -58,7 +58,6 @@ namespace Adamantium.ECS
         private EntityComponentCollection componentCollection;
         private ReadOnlyTrackingCollection<IComponent> readOnlyComponents;
         private List<IInitializable> pendingComponents = new List<IInitializable>();
-        private bool _enabledInTree;
 
         public Transform Transform { get; internal set; }
 
@@ -86,10 +85,6 @@ namespace Adamantium.ECS
         [Bindable]
         public partial bool IsEnabled { get; set; }
 
-        /// <summary>Whether the entity and every entity it hangs under are enabled - what the scene's
-        /// <see cref="Scene.Components"/> selections go by. Kept as <see cref="IsEnabled"/> and the owner change.</summary>
-        public bool IsEnabledInTree => _enabledInTree;
-
         [Bindable]
         public partial bool IsSelected { get; set; }
 
@@ -114,7 +109,6 @@ namespace Adamantium.ECS
                 OnOwnerChanged(owner, value);
                 owner = value;
                 rootUid = GetRoot().rootUid;
-                RefreshEnabledInTree();
                 (World ?? before)?.EntityManager.NoteOwnerChanged(this);
                 before?.Changed(UniverseChangedEventArgs.OneFrame);
                 if (World != before)
@@ -138,49 +132,6 @@ namespace Adamantium.ECS
 
         // The index of components the entity is in: its scene's, once it has joined.
         internal SceneComponents ComponentIndex { get; set; }
-
-        partial void OnIsEnabledChanged(bool value) => RefreshEnabledInTree();
-
-        private void RefreshEnabledInTree()
-        {
-            if (!SetEnabledInTree(this))
-                return;
-
-            var stack = StackPool.Get();
-            try
-            {
-                PushChildren(stack, this);
-                while (stack.Count > 0)
-                {
-                    var current = stack.Pop();
-                    if (SetEnabledInTree(current))
-                        PushChildren(stack, current);
-                }
-            }
-            finally
-            {
-                StackPool.Return(stack);
-            }
-        }
-
-        private static bool SetEnabledInTree(Entity entity)
-        {
-            var enabled = entity.IsEnabled && (entity.owner == null || entity.owner._enabledInTree);
-            if (enabled == entity._enabledInTree)
-                return false;
-
-            entity._enabledInTree = enabled;
-            return true;
-        }
-
-        private static void PushChildren(Stack<Entity> stack, Entity entity)
-        {
-            foreach (var child in entity.dependencies.AsSpan())
-            {
-                if (child != null)
-                    stack.Push(child);
-            }
-        }
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>
         public void NotifyUpdated() => World?.Changed(UniverseChangedEventArgs.OneFrame);

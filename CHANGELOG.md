@@ -9,17 +9,18 @@ All packages share one version.
 
 - `Scene.Components` (`SceneComponents`): the scene's components by type, each type packed in an array of its own, so
   services select what they need without walking every tree. `Of<T>()` gives the components of `T` or a derived type,
-  `With<T1, T2>()` the entities with both, `CountOf<T>()` how many; walked with `foreach` through struct enumerators,
-  nothing allocated; a pair selection gives each entity once, with its first component of each type. Entities disabled
-  in their tree are skipped. Kept as trees come into a scene and leave it, as components are added and taken off, and -
+  `CountOf<T>()` how many. `Select(query)` gives those of a `ComponentQuery<T>` - made once and kept by a service -
+  whose entities also have a component of each type given with `With<U>()`, any number of them; it walks the type of
+  the fewest components. Walked with `foreach` through struct enumerators, nothing allocated. An entity disabled, or
+  under a disabled one, is skipped, as a tree walk skips what is under a disabled entity; `IsEnabled` is not passed
+  down. Kept as trees come into a scene and leave it, as components are added and taken off, and -
   at the world's next sync, from whatever thread the owner changed - as branches are hung under its entities or taken
   off; a component taken out during a walk leaves a gap closed when the walk ends. On the world's thread. Measured on
   10 000 entities, one in a hundred with the component: 3.7 us against 507 us for a tree walk, 0 bytes against 56 KB.
-- `Entity.IsEnabledInTree`: whether the entity and every entity it hangs under are enabled, kept as they change.
 - `IGameService : IEntityService`: the logic of a game's or a mod's code, acting on its components while a scene is
   played - the scene played, `Start(scene)`, `Stop()`; the engine works with game services only through it.
-  `GameService` is a ready base: `OnStart` / `OnStop` to override, `Update(AppTime)` as any service, `Each<T>()` walks
-  the scene's components of a kind. A kind needs a public constructor taking the world. `SceneCode.Replace` makes one
+  `GameService` is a ready base: `OnStart` / `OnStop` to override, `Update(AppTime)` as any service, `Each<T>()` and
+  `Each(query)` select the played scene's components from its index. A kind needs a public constructor taking the world. `SceneCode.Replace` makes one
   of each kind the arriving code brings, asleep (`IsActive` false), and takes out those of the leaving code.
   `GameRun.Start(scene)` plays a scene: starts the world's game services on it and wakes them; `IsPaused` puts them to
   sleep, `Stop` puts them to sleep and stops them. One game at a time in a world.

@@ -138,39 +138,43 @@ public class SceneComponentsTests
         Assert.That(Collect(_world.MainScene.Components.Of<Marker>()), Is.EqualTo(new[] { root }));
     }
 
-    // An entity with two components of a base type came out twice, whichever of the two types was walked.
+    // Whichever type is walked - the query's own or a rarer condition's - the same components come out, each once.
     [Test]
-    public void APairSelection_GivesEachEntityOnce_WithItsFirstComponentOfEachType()
+    public void AQuery_GivesTheSameComponents_WhicheverTypeItWalks()
     {
-        var entity = Marked("Entity");
-        entity.AddComponent(new Light());
-        var other = Marked("Other");
-        other.AddComponent(new Light());
-        _manager.AddEntity(entity);
-        _manager.AddEntity(other);
+        var seeing = Marked("Seeing");
+        var light = new Light();
+        seeing.AddComponent(light);
+        seeing.AddComponent(new Camera());
+        _manager.AddEntity(seeing);
+        for (var i = 0; i < 5; i++)
+        {
+            _manager.AddEntity(Marked($"Marked {i}"));
+        }
+
         NextFrame();
         var index = _world.MainScene.Components;
+        var expected = seeing.GetComponents<ActivatableComponent>();
 
-        var walkingTransforms = CollectPairs(index.With<ActivatableComponent, Transform>());
-        var walkingLights = CollectPairs(index.With<ActivatableComponent, Light>());
+        var walkingCameras = Gather(index.Select(new ComponentQuery<ActivatableComponent>().With<Camera>()));
+        var walkingOwnType = Gather(index.Select(new ComponentQuery<ActivatableComponent>().With<Light>()));
 
         Assert.Multiple(() =>
         {
-            Assert.That(walkingTransforms, Is.EquivalentTo(new[] { entity.GetComponent<ActivatableComponent>(), other.GetComponent<ActivatableComponent>() }));
-            Assert.That(walkingLights, Is.EquivalentTo(walkingTransforms));
+            Assert.That(walkingCameras, Is.EquivalentTo(expected));
+            Assert.That(walkingOwnType, Is.EquivalentTo(expected));
         });
     }
 
-    private static List<ActivatableComponent> CollectPairs<T2>(ComponentPairSelection<ActivatableComponent, T2> selection)
-        where T2 : class, IComponent
+    private static List<T> Gather<T>(ComponentSelection<T> selection) where T : class, IComponent
     {
-        var firsts = new List<ActivatableComponent>();
-        foreach (var pair in selection)
+        var components = new List<T>();
+        foreach (var component in selection)
         {
-            firsts.Add(pair.First);
+            components.Add(component);
         }
 
-        return firsts;
+        return components;
     }
 
     // A walk left without Dispose would keep every later removal a gap: the next sync ends it.
@@ -237,6 +241,7 @@ public class SceneComponentsTests
         });
     }
 
+    // As a walk does not go under a disabled entity: what hangs under it is left out too, its own IsEnabled untouched.
     [Test]
     public void ADisabledEntity_AndAllUnderIt_AreLeftOutOfSelections_TillEnabledAgain()
     {
@@ -249,25 +254,16 @@ public class SceneComponentsTests
 
         child.IsEnabled = false;
         var whileDisabled = Collect(index.Of<Marker>());
+        var grandchildOwnFlag = grandchild.IsEnabled;
         child.IsEnabled = true;
 
         Assert.Multiple(() =>
         {
             Assert.That(whileDisabled, Is.EqualTo(new[] { root }));
-            Assert.That(grandchild.IsEnabledInTree, Is.True);
+            Assert.That(grandchildOwnFlag, Is.True, "IsEnabled is not passed down");
             Assert.That(Collect(index.Of<Marker>()), Is.EquivalentTo(new[] { root, child, grandchild }));
             Assert.That(index.CountOf<Marker>(), Is.EqualTo(3), "the disabled are kept, only not selected");
         });
-    }
-
-    [Test]
-    public void AnEntityHungUnderADisabledOne_IsDisabledInItsTree()
-    {
-        var owner = new Entity(null, "Owner") { IsEnabled = false };
-
-        var child = new Entity(owner, "Child");
-
-        Assert.That(child.IsEnabledInTree, Is.False);
     }
 
     [Test]
@@ -332,28 +328,25 @@ public class SceneComponentsTests
         });
     }
 
+    // Any number of conditions, not a fixed two.
     [Test]
-    public void APairSelection_GivesTheEntitiesWithBoth()
+    public void AQuery_GivesTheComponentsWhoseEntitiesMeetEveryCondition()
     {
-        var both = Marked("Both");
-        both.AddComponent(new Light());
+        var all = Marked("All");
+        all.AddComponent(new Light());
+        all.AddComponent(new Camera());
+        all.AddComponent(new BoxCollider());
+        var lacksCollider = Marked("Lacks a collider");
+        lacksCollider.AddComponent(new Light());
+        lacksCollider.AddComponent(new Camera());
         var markedOnly = Marked("Marked");
-        var litOnly = new Entity(null, "Lit");
-        litOnly.AddComponent(new Light());
-        _manager.AddEntity(both);
+        _manager.AddEntity(all);
+        _manager.AddEntity(lacksCollider);
         _manager.AddEntity(markedOnly);
-        _manager.AddEntity(litOnly);
         NextFrame();
+        var query = new ComponentQuery<Marker>().With<Light>().With<Camera>().With<BoxCollider>();
 
-        var pairs = new List<Entity>();
-        foreach (var pair in _world.MainScene.Components.With<Marker, Light>())
-        {
-            Assert.That(pair.First, Is.SameAs(pair.Entity.GetComponent<Marker>()));
-            Assert.That(pair.Second, Is.SameAs(pair.Entity.GetComponent<Light>()));
-            pairs.Add(pair.Entity);
-        }
-
-        Assert.That(pairs, Is.EqualTo(new[] { both }));
+        Assert.That(Collect(_world.MainScene.Components.Select(query)), Is.EqualTo(new[] { all }));
     }
 
     // The scene's cameras group missed a camera given to an entity already in the scene.
@@ -388,10 +381,11 @@ public class SceneComponentsTests
 
         NextFrame();
         var index = _world.MainScene.Components;
-        var count = Walk(index);
+        var lit = new ComponentQuery<Marker>().With<Light>();
+        var count = Walk(index, lit);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
-        count += Walk(index);
+        count += Walk(index, lit);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Multiple(() =>
@@ -460,7 +454,7 @@ public class SceneComponentsTests
         });
     }
 
-    private static int Walk(SceneComponents index)
+    private static int Walk(SceneComponents index, ComponentQuery<Marker> lit)
     {
         var count = 0;
         foreach (var marker in index.Of<Marker>())
@@ -469,9 +463,9 @@ public class SceneComponentsTests
                 count++;
         }
 
-        foreach (var pair in index.With<Marker, Light>())
+        foreach (var marker in index.Select(lit))
         {
-            if (pair.Second != null)
+            if (marker != null)
                 count++;
         }
 
