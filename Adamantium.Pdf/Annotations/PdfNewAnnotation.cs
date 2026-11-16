@@ -89,6 +89,10 @@ public sealed class PdfNewAnnotation
     /// </summary>
     public PdfStream Appearance { get; init; }
 
+    /// <summary>The external data it is associated with (<c>ExData</c>), as <see cref="ThreeD.PdfMarkup3D.ToDictionary"/>
+    /// makes for a comment on a view of 3D artwork; null for none.</summary>
+    public PdfDictionary ExternalData { get; init; }
+
     /// <summary>The key of a developer extension's data (<see cref="ExtensionData"/>): a name with the extension's
     /// prefix and an underscore (ISO 32000-2, annex E).</summary>
     public string ExtensionKey { get; init; }
@@ -195,6 +199,11 @@ public sealed class PdfNewAnnotation
             var appearances = new PdfDictionary();
             appearances.Set(PdfAnnotationKeys.Normal, appearance);
             dictionary.Set(PdfAnnotationKeys.Appearance, appearances);
+        }
+
+        if (ExternalData != null)
+        {
+            dictionary.Set(PdfAnnotationKeys.ExternalData, ExternalData);
         }
 
         if (ExtensionKey != null && ExtensionData != null)

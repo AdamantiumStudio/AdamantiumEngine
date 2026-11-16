@@ -71,6 +71,10 @@ public sealed class PdfAnnotation
     public Pdf3DArtwork Artwork3D =>
         Subtype == PdfAnnotationTypes.ThreeD ? Pdf3DArtwork.From(Dictionary, _document) : null;
 
+    /// <summary>The view of 3D artwork a markup annotation comments on (<c>ExData</c> of subtype <c>Markup3D</c>,
+    /// ISO 32000-1, 13.6.6), or null for one that comments on none.</summary>
+    public PdfMarkup3D Markup3D => PdfMarkup3D.From(Dictionary[PdfAnnotationKeys.ExternalData], _document);
+
     /// <summary>Its normal appearance (<c>AP</c> <c>N</c>) - the one of its state (<c>AS</c>) when it has several;
     /// null when it has none.</summary>
     public PdfStream Appearance

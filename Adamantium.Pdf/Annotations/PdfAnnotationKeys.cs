@@ -8,6 +8,7 @@ internal static class PdfAnnotationKeys
     public const string Contents = "Contents";
     public const string Page = "P";
     public const string Name = "NM";
+    public const string ExternalData = "ExData";
     public const string Modified = "M";
     public const string Flags = "F";
     public const string Appearance = "AP";

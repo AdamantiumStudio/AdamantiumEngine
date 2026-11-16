@@ -15,14 +15,20 @@ All packages share one version.
   transition time: each frame takes off a share of the roll left, so the look or a turntable orbit meanwhile go on with
   it and it still ends level. A roll by hand or a trackball drag ends it where it got to, as does a rotation set from
   elsewhere that changes how far the camera leans; a turn of the view under way (isometric, the orientation gizmo) it
-  waits out. `InputService`
-  orbits with the right button's drag while Alt is held (`Camera.Orbit` in the camera's actions, rebindable): about
-  what was under the pointer when the chord went down, before the drag moved, or the middle of the view where nothing
-  was; a camera that cannot orbit turns about itself, as the look would. Each output says how
+  waits out. `InputService` orbits with the right button's drag while Alt is held (`Camera.Orbit` in the camera's
+  actions, rebindable): about what was under the pointer when the chord went down, before the drag moved, or the middle
+  of the view where nothing was; a camera that cannot orbit turns about itself, as the look would. Each output says how
   (`UniverseOutput.OrbitStyle`).
 - Within an input map, a chord held takes the controls of a binding it holds more modifiers over: Ctrl+S is not also S,
   and the right button's drag with Alt is not also the look. `InputAction.IsHeld`: whether a binding's modifiers are
   all held - what a drag lasts by on the frames the pointer stands still.
+- Comments on a view of 3D artwork in `Adamantium.Pdf` (ISO 32000-1, 13.6.6): `PdfAnnotation.Markup3D` reads a markup's
+  `ExData` of subtype `Markup3D` as a `PdfMarkup3D` - the 3D annotation it comments on, by its object or its `NM`, the
+  view it is shown in and the MD5 checksum of the 3D stream it was made on; `PdfMarkup3D.ToDictionary` makes one, and
+  `PdfNewAnnotation.ExternalData` writes it. `Pdf3DView.ToDictionary` writes a view (names, camera, center of orbit,
+  projection, background, render mode, lights - `Pdf3DCamera.ToArray`, `Pdf3DProjection.ToDictionary`), and a view read
+  from an object keeps its `Id`: `IsSameAs` tells one view from an equivalent one, as the format asks.
+  `Pdf3DArtwork.ComputeChecksum` gives the stream's MD5.
 - `EntityIcons.Shows` (`EntityIconKinds`): the kinds of icon shown - empty entities, groups, lights, cameras - each on
   or off, so an editor hides those in the way. An entity of a kind left out has no icon and cannot be picked by one; a
   light or a camera with a marker goes as a light or a camera, not as an empty entity. An entity with a marker shows
