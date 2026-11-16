@@ -11,7 +11,8 @@ namespace Adamantium.Engine.Scenes;
 /// them, and its game services with them.</summary>
 public static class SceneCode
 {
-    /// <summary>Takes <paramref name="leaving"/> out of the world's code and puts <paramref name="arriving"/> in: each
+    /// <summary>Takes <paramref name="leaving"/> out of the world's code (its <see cref="IWorldCode"/> satellite) and puts
+    /// <paramref name="arriving"/> in: each
     /// component of the leaving code, on an entity of any scene of the world, becomes its scene entry; then each entry an
     /// entity keeps whose type the code now has becomes a component again, its fields from the entry. The game services
     /// of the leaving code leave the world; one of each kind the arriving code brings joins it, asleep until a game plays
@@ -20,19 +21,20 @@ public static class SceneCode
     public static IReadOnlyList<GameComponentProblem> Replace(EntityWorld world, IReadOnlyList<Assembly> leaving,
         IReadOnlyList<Assembly> arriving)
     {
+        var code = world.Satellites.Get<IWorldCode>();
         var entities = CollectEntities(world);
         foreach (var entity in entities)
         {
             Detach(entity, leaving);
         }
 
-        world.Code.Replace(leaving, arriving);
-        ReplaceServices(world, leaving, arriving);
+        code.Replace(leaving, arriving);
+        ReplaceServices(world, code, leaving, arriving);
 
         var problems = new List<GameComponentProblem>();
         foreach (var entity in entities)
         {
-            Reattach(entity, world.Code, problems);
+            Reattach(entity, code, problems);
         }
 
         return problems;
@@ -160,7 +162,7 @@ public static class SceneCode
         }
     }
 
-    private static void ReplaceServices(EntityWorld world, IReadOnlyList<Assembly> leaving,
+    private static void ReplaceServices(EntityWorld world, IWorldCode code, IReadOnlyList<Assembly> leaving,
         IReadOnlyList<Assembly> arriving)
     {
         foreach (var service in world.GetServices<IGameService>())
@@ -172,7 +174,7 @@ public static class SceneCode
             world.RemoveService(service);
         }
 
-        foreach (var type in world.Code.GetGivenTypes<IGameService>([typeof(EntityWorld)]))
+        foreach (var type in code.GetGivenTypes<IGameService>([typeof(EntityWorld)]))
         {
             if (!IsAmong(arriving, type.Assembly))
                 continue;
@@ -194,7 +196,7 @@ public static class SceneCode
         world.ServiceManager.SyncServices();
     }
 
-    private static void Reattach(Entity entity, WorldCode code, List<GameComponentProblem> problems)
+    private static void Reattach(Entity entity, IWorldCode code, List<GameComponentProblem> problems)
     {
         var unloaded = entity.GetComponent<UnloadedGameComponents>();
         if (unloaded == null)

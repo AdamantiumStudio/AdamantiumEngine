@@ -24,7 +24,7 @@ All packages share one version.
   of each kind the arriving code brings, asleep (`IsActive` false), and takes out those of the leaving code.
   `GameRun.Start(scene)` plays a scene: starts the world's game services on it and wakes them; `IsPaused` puts them to
   sleep, `Stop` puts them to sleep and stops them. One game at a time in a world.
-- `WorldCode.GetGivenTypes<T>(constructorParameters)`: the given types made from a constructor taking those.
+- `IWorldCode.GetGivenTypes<T>(constructorParameters)`: the given types made from a constructor taking those.
 - `Entity.CopyTree(copies)`: a copy of an entity's tree under its own names, each entity put in `copies` against its
   copy - what a scene played on a copy of itself needs to keep what was played.
 
@@ -109,16 +109,19 @@ All packages share one version.
 - `GameComponent`: the base of a component of the game's or a mod's code; its public properties with a getter and a setter
   are what a scene keeps of it - not named `Behavior`, the name of the UI's behaviors. `SpawnPoint`: marks an entity as a place where something appears. `UnloadedGameComponents`
   and `UnloadedShape` stand for components and shapes whose code is not loaded.
-- `EntityWorld.Code` (`WorldCode`): the code a world finds the types of its scenes' entries in - the game's and its
-  mods' assemblies given to it, then the application's own; an assembly of a collectible load context counts only while
-  given, so code replaced or unloaded is not found again. `SceneCode.Replace(world, leaving, arriving)`: moves the
+- `IWorldCode` / `WorldCode` (`Adamantium.Engine.Scenes`): the code a world finds the types of its scenes' entries in -
+  the game's and its mods' assemblies given to it, then the application's own; an assembly of a collectible load
+  context counts only while given, so code replaced or unloaded is not found again. One a world, put among its
+  satellites by whoever hosts it - the editor's universe, a game's player - and reached through
+  `world.Satellites.Get<IWorldCode>()`. `WorldCode.GetMadeTypes<T>(assemblies, constructorParameters)`: what a build
+  brings, asked before it is given to a world. `SceneCode.Replace(world, leaving, arriving)`: moves the
   game's components of every scene of a world from one build of its code to the next, through their scene entries -
   their fields' values kept, an entry whose type the new code lacks kept as it was. `SceneBuilder.Problems` and the
   result of `Replace` (`GameComponentProblem`): the components whose code threw; their entries are kept. `Entity(owner, name, uid)`: an entity
   with a given id.
 - `LightTemplate.Build` and `CameraTemplate.Build`: make an entity the caller made into a light or a camera.
   `CameraType.Parse`: the type its `ToString` names.
-- `[MovedFrom("Game.Turret")]`: a full name a component's class had before. A world's code finds the class by it when
+- `[MovedFrom("Game.Turret")]` (`Adamantium.Engine.Scenes`): a full name a component's class had before. A world's code finds the class by it when
   no class has that name now, so a component renamed or moved keeps the values its scenes gave it, and a scene saved
   again writes the new name; two classes claiming one former name take nothing. `SceneCode.Load(entity, entry, type)`:
   makes an entry kept for a component whose code is not loaded a component of another type, with the fields that type

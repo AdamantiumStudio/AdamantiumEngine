@@ -1,6 +1,6 @@
 using System;
 
-namespace Adamantium.ECS;
+namespace Adamantium.Engine.Scenes;
 
 /// <summary>A full name a type had before: what a scene written then calls it. A world's code finds the type by it when
 /// no type has that name now, so a component renamed or moved to another namespace keeps the values its scenes gave it.
