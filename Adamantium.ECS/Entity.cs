@@ -502,9 +502,39 @@ namespace Adamantium.ECS
 
         public Entity Duplicate()
         {
-            var root = Copy(null, this, $"{Name} (1)");
             var entities = new Dictionary<Entity, Entity>();
             var clones = new List<(ICloneableComponent Original, IComponent Clone)>();
+            var root = CopyStructure($"{Name} (1)", entities, clones);
+            ResolveReferences(clones, entities);
+            return root;
+        }
+
+        /// <summary>A copy of this entity and its whole tree, named as they are, each child in its place, every entity
+        /// of the tree put in <paramref name="copies"/> against its copy.</summary>
+        public Entity CopyTree(Dictionary<Entity, Entity> copies) => CopyTrees([this], copies)[0];
+
+        /// <summary>Copies of <paramref name="roots"/> and their whole trees, named as they are, each child in its place,
+        /// every entity put in <paramref name="copies"/> against its copy. A component naming an entity of any of the
+        /// trees names its copy - a scene played on a copy of itself refers to itself only.</summary>
+        public static IReadOnlyList<Entity> CopyTrees(IReadOnlyList<Entity> roots, Dictionary<Entity, Entity> copies)
+        {
+            ArgumentNullException.ThrowIfNull(roots);
+            ArgumentNullException.ThrowIfNull(copies);
+            var clones = new List<(ICloneableComponent Original, IComponent Clone)>();
+            var copied = new List<Entity>(roots.Count);
+            foreach (var root in roots)
+            {
+                copied.Add(root.CopyStructure(root.Name, copies, clones));
+            }
+
+            ResolveReferences(clones, copies);
+            return copied;
+        }
+
+        private Entity CopyStructure(string rootName, Dictionary<Entity, Entity> entities,
+            List<(ICloneableComponent Original, IComponent Clone)> clones)
+        {
+            var root = Copy(null, this, rootName);
             entities.Add(this, root);
             CloneComponents(root, this, clones);
             TraverseByLayer(current =>
@@ -522,12 +552,16 @@ namespace Adamantium.ECS
                 }
             });
 
+            return root;
+        }
+
+        private static void ResolveReferences(List<(ICloneableComponent Original, IComponent Clone)> clones,
+            Dictionary<Entity, Entity> entities)
+        {
             foreach (var (original, clone) in clones)
             {
                 original.CloneReferences(clone, entities);
             }
-
-            return root;
         }
 
         private static Entity Copy(Entity owner, Entity original, string name)

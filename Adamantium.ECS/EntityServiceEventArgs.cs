@@ -4,9 +4,9 @@ namespace Adamantium.ECS
 {
     public class EntityServiceEventArgs : EventArgs
     {
-        public EntityService Service { get; }
+        public IEntityService Service { get; }
 
-        public EntityServiceEventArgs(EntityService system)
+        public EntityServiceEventArgs(IEntityService system)
         {
             Service = system;
         }

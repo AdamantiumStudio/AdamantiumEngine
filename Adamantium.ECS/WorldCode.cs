@@ -133,14 +133,20 @@ public sealed class WorldCode
 
     /// <summary>The types deriving from <typeparamref name="T"/> that can be made, of the given assemblies alone - what
     /// the game and its mods bring.</summary>
-    public IReadOnlyList<Type> GetGivenTypes<T>()
+    public IReadOnlyList<Type> GetGivenTypes<T>() => GetGivenTypes<T>(Type.EmptyTypes);
+
+    /// <summary>The types deriving from <typeparamref name="T"/> that can be made from arguments of
+    /// <paramref name="constructorParameters"/> - a public constructor taking just those - of the given assemblies
+    /// alone.</summary>
+    public IReadOnlyList<Type> GetGivenTypes<T>(Type[] constructorParameters)
     {
+        ArgumentNullException.ThrowIfNull(constructorParameters);
         var found = new List<Type>();
         foreach (var assembly in _assemblies)
         {
             foreach (var type in GetLoadableTypes(assembly))
             {
-                if (IsMadeType<T>(type))
+                if (IsMadeType<T>(type, constructorParameters))
                     found.Add(type);
             }
         }
@@ -151,12 +157,12 @@ public sealed class WorldCode
     private static Type FindMadeType<T>(Assembly assembly, string fullName)
     {
         var type = assembly.GetType(fullName, false);
-        return type != null && IsMadeType<T>(type) ? type : null;
+        return type != null && IsMadeType<T>(type, Type.EmptyTypes) ? type : null;
     }
 
-    private static bool IsMadeType<T>(Type type) =>
+    private static bool IsMadeType<T>(Type type, Type[] constructorParameters) =>
         typeof(T).IsAssignableFrom(type) && !type.IsAbstract && !type.ContainsGenericParameters &&
-        type.GetConstructor(Type.EmptyTypes) != null;
+        type.GetConstructor(constructorParameters) != null;
 
     private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
     {

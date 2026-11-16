@@ -3,18 +3,20 @@ using System.Collections.Generic;
 using System.Reflection;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Serilog;
 
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>Moves the game's components of a world from one build of its code to the next, the way a scene file holds
-/// them.</summary>
+/// them, and its game services with them.</summary>
 public static class SceneCode
 {
     /// <summary>Takes <paramref name="leaving"/> out of the world's code and puts <paramref name="arriving"/> in: each
     /// component of the leaving code, on an entity of any scene of the world, becomes its scene entry; then each entry an
-    /// entity keeps whose type the code now has becomes a component again, its fields from the entry. Either list may be
-    /// empty. On the world's thread, between its frames. Returns the components whose code threw; their entries are
-    /// kept.</summary>
+    /// entity keeps whose type the code now has becomes a component again, its fields from the entry. The game services
+    /// of the leaving code leave the world; one of each kind the arriving code brings joins it, asleep until a game plays
+    /// (<see cref="GameRun"/>). Either list may be empty. On the world's thread, between its frames. Returns the
+    /// components whose code threw; their entries are kept.</summary>
     public static IReadOnlyList<GameComponentProblem> Replace(EntityWorld world, IReadOnlyList<Assembly> leaving,
         IReadOnlyList<Assembly> arriving)
     {
@@ -25,6 +27,7 @@ public static class SceneCode
         }
 
         world.Code.Replace(leaving, arriving);
+        ReplaceServices(world, leaving, arriving);
 
         var problems = new List<GameComponentProblem>();
         foreach (var entity in entities)
@@ -155,6 +158,40 @@ public static class SceneCode
             SceneGameComponents.Keep(entity, SceneGameComponents.Write(gameComponent, entity.Uid));
             entity.RemoveComponent(gameComponent);
         }
+    }
+
+    private static void ReplaceServices(EntityWorld world, IReadOnlyList<Assembly> leaving,
+        IReadOnlyList<Assembly> arriving)
+    {
+        foreach (var service in world.GetServices<IGameService>())
+        {
+            if (!IsAmong(leaving, service.GetType().Assembly))
+                continue;
+
+            service.IsActive = false;
+            world.RemoveService(service);
+        }
+
+        foreach (var type in world.Code.GetGivenTypes<IGameService>([typeof(EntityWorld)]))
+        {
+            if (!IsAmong(arriving, type.Assembly))
+                continue;
+
+            try
+            {
+                if (Activator.CreateInstance(type, world) is IGameService service)
+                {
+                    service.IsActive = false;
+                    world.AddService(service);
+                }
+            }
+            catch (Exception exception)
+            {
+                Log.Logger.Error(exception, "The game service {Service} could not be made", type.FullName);
+            }
+        }
+
+        world.ServiceManager.SyncServices();
     }
 
     private static void Reattach(Entity entity, WorldCode code, List<GameComponentProblem> problems)

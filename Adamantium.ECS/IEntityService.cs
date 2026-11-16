@@ -23,9 +23,16 @@ public interface IEntityService : IUpdateService, IRenderService
     /// sleeping one costs nothing - and is only told the frame ended.</summary>
     bool IsActive { get; set; }
 
+    /// <summary>Whether the service is put to sleep when its <see cref="IUpdateService.Update"/> throws, the others
+    /// updated on. One that is not fails the frame, which the universe runs again.</summary>
+    bool SleepsWhenUpdateFails { get; }
+
     EntityServiceType ServiceType { get; }
 
     void Initialize();
+
+    /// <summary>Called on every service, active or not, once the frame is presented.</summary>
+    void FrameEnded();
     
     IReadOnlyList<IEntityProcessor> Processors { get; }
 
