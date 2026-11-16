@@ -395,6 +395,10 @@ All packages share one version.
 
 ### Changed
 
+- `LightManager` and `EntityIcons` read the scene's component index instead of walking its trees: the lights from
+  `Components.Of<Light>()` as the outputs settle, new lists only when the lights or their kinds changed; the icons from
+  the lights, cameras and markers. A light or an icon under a disabled entity is skipped, as the index skips it. The
+  lights kept stay in their order when one goes, so a renderer's cap does not swap which ones are drawn.
 - Renamed after the service that runs them: `EditorProcessor` is `ToolsProcessor` - a part of what `ToolsService` runs
   each frame, drawing over the scene and letting a click select what it drew - and `EditorOverlayProcessor` is
   `ToolsOverlayProcessor`. `ToolProcessor`, the one pointer tool in use, is `PointerTool`, so the two no longer differ
@@ -479,6 +483,8 @@ All packages share one version.
 
 ### Fixed
 
+- A light whose kind changed moves to its new list in `LightManager` (it stayed in the old one till another light came
+  or went) and gets its new kind's icon in `EntityIcons` (it kept the old one, rays and all).
 - `PickRay.FromCamera` aims through the middle of the depth range, not the far plane: with a far plane all but at
   infinity, the point unprojected there went to infinity at some turns of the view, and the ray's direction came out
   NaN or pointing back - a click picked nothing, and the wheel moved a camera to NaN, the view going black.
