@@ -96,6 +96,47 @@ public class EntityIconsTests
         Assert.That(icons.IconOf(kinds[hidden]), Is.Not.Null);
     }
 
+    [Test]
+    public void AMarkerHoldingAnything_IsNotEmpty_AndHasNoIcon_AGroupKeepsItsOwn()
+    {
+        var universe = new TestUniverse();
+        var output = new TestOutput();
+        universe.Add(output);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        var own = CameraEntity("Own");
+        var empty = Marked(new Entity(null, "Empty"));
+        var withComponent = Marked(new Entity(null, "Orbit"));
+        withComponent.AddComponent(new Material());
+        var withChild = Marked(new Entity(null, "Pivot"));
+        _ = new Entity(withChild, "Body");
+        var group = Marked(new Entity(null, "Group") { IconKey = EntityIconKeys.Group });
+        _ = new Entity(group, "Member");
+        universe.EntityWorld.EntityManager.AddEntity(own);
+        foreach (var entity in new[] { empty, withComponent, withChild, group })
+        {
+            universe.EntityWorld.EntityManager.AddEntity(entity);
+        }
+
+        output.OwnCamera = own.GetComponent<Camera>();
+        output.Camera = output.OwnCamera;
+        universe.EntityWorld.ForceUpdate();
+        universe.Settle();
+        var tools = new ToolsService(universe.EntityWorld);
+        tools.Initialize();
+        var icons = new EntityIcons();
+        tools.AttachProcessor(icons);
+
+        tools.Update(new AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(icons.IconOf(empty), Is.Not.Null, "nothing but its place and its marker");
+            Assert.That(icons.IconOf(withComponent), Is.Null, "a component of its own");
+            Assert.That(icons.IconOf(withChild), Is.Null, "an entity under it");
+            Assert.That(icons.IconOf(group), Is.Not.Null, "a group is shown as a group, whatever it holds");
+        });
+    }
+
     private static Entity Marked(Entity entity)
     {
         entity.AddComponent(new Marker());

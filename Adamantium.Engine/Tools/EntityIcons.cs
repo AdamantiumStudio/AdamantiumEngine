@@ -14,7 +14,8 @@ using Adamantium.Multiverse;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Icons for what a scene has but does not draw - lights, cameras, entities with a <see cref="Marker"/> - facing every
+/// Icons for what a scene has but does not draw - lights, cameras, groups, and empty entities: a <see cref="Marker"/>
+/// with no other component and nothing under it - facing every
 /// camera at a steady size on screen. A directional light's icon also has rays running where it shines, a camera's the
 /// shape of its view - a pyramid or, flat, a box - running where it looks, with a mark on top. A click on an icon selects
 /// its entity. A camera has no icon in its own view, and an output's own camera (<see cref="UniverseOutput.OwnCamera"/>)
@@ -218,7 +219,7 @@ public class EntityIcons : EditorProcessor
         {
             var group = entity.IconKey == EntityIconKeys.Group;
             var kind = group ? EntityIconKinds.Groups : EntityIconKinds.Entities;
-            if (!Shows.HasFlag(kind))
+            if (!Shows.HasFlag(kind) || (!group && !IsEmpty(entity)))
             {
                 return null;
             }
@@ -227,6 +228,26 @@ public class EntityIcons : EditorProcessor
         }
 
         return null;
+    }
+
+    // An empty entity holds nothing - no component but its place and its marker, nothing under it. One that holds
+    // anything, a game's component or a body hung under it, is not empty and shows no empty entity's icon on top of it.
+    private static bool IsEmpty(Entity entity)
+    {
+        if (entity.Dependencies.Count > 0)
+        {
+            return false;
+        }
+
+        foreach (var component in entity.Components.AsSpan())
+        {
+            if (component is not (Transform or Marker))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private bool IsOwnCamera(Camera camera)
