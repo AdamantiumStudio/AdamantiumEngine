@@ -851,7 +851,9 @@ namespace Adamantium.ECS.Components
 
             var direction = Vector3.Normalize(PickRay.FromCamera(this, pixel).Ray.Direction.As<double>());
             var ahead = Vector3<double>.Dot(direction, Forward);
-            if (ahead <= 1e-6)
+            // Written so a NaN fails it too: a ray or a depth that is no number zooms to the middle rather than moving
+            // the camera to NaN.
+            if (!(ahead > 1e-6) || !double.IsFinite(depth))
             {
                 Zoom(notches);
                 return;

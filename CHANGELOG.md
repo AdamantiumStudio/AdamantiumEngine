@@ -468,6 +468,10 @@ All packages share one version.
 
 ### Fixed
 
+- `PickRay.FromCamera` aims through the middle of the depth range, not the far plane: with a far plane all but at
+  infinity, the point unprojected there went to infinity at some turns of the view, and the ray's direction came out
+  NaN or pointing back - a click picked nothing, and the wheel moved a camera to NaN, the view going black.
+  `Camera.ZoomAt` zooms to the middle on a ray that is no number rather than moving the camera to one.
 - `EntityComponentCollection.Clear` takes off and tells of every component; it stepped over every second one, which
   left without the event and still owned.
 - Imported models are no longer shown as their mirror images. The way from a file's axes into the engine's

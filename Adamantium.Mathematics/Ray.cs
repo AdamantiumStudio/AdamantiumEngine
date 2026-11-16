@@ -11,7 +11,9 @@ public static class Ray
 
     /// <summary>The ray through the point <paramref name="x"/>, <paramref name="y"/> of <paramref name="viewport"/>,
     /// from the near plane towards the far one, in the space <paramref name="worldViewProjection"/> starts from; its
-    /// direction is of length one. The ray picking what lies under a cursor.</summary>
+    /// direction is of length one. The ray picking what lies under a cursor. It answers as the old types did, through
+    /// the far plane: with one all but at infinity, the direction can come out NaN or pointing back at some turns of the
+    /// view - the engine's picking aims through the middle of the depth range instead (PickRay).</summary>
     public static Ray<T> CreateFromViewport<T>(T x, T y, Viewport<T> viewport, Matrix4x4<T> worldViewProjection)
         where T : unmanaged, IFloatingPointIeee754<T>
     {

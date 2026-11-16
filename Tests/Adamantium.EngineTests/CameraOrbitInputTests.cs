@@ -127,6 +127,41 @@ public class CameraOrbitInputTests
         Assert.That(camera.Rotation, Is.Not.EqualTo(rotation), "it turns, it does not freeze");
     }
 
+    // An orbit, then the wheel out: the camera stays a number. (The far plane that made the owner's NaN is
+    // PickRayFarPlaneTests'; this fixture's is near.)
+    [TestCase(CameraOrbitStyle.Turntable, false)]
+    [TestCase(CameraOrbitStyle.Trackball, false)]
+    [TestCase(CameraOrbitStyle.Turntable, true)]
+    [TestCase(CameraOrbitStyle.Trackball, true)]
+    public void AnOrbitThenTheWheel_LeavesTheCameraWhereNumbersAre(CameraOrbitStyle style, bool overACube)
+    {
+        output.OrbitStyle = style;
+        if (overACube)
+        {
+            var cube = new Entity(null, "Cube");
+            cube.Transform.Position = new Vector3<double>(0, 0, 20);
+            cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
+            universe.EntityWorld.EntityManager.AddEntity(cube);
+            Frame();
+        }
+
+        Drag(alt: true);
+        Drag(alt: true);
+        for (int i = 0; i < 10; i++)
+        {
+            output.Wheel(-120, new Vector2F(400, 300));
+            Frame();
+        }
+
+        var position = camera.Owner.Transform.Position;
+        Assert.Multiple(() =>
+        {
+            Assert.That(double.IsFinite(position.X) && double.IsFinite(position.Y) && double.IsFinite(position.Z), Is.True,
+                $"position {position}, focus {camera.FocusDistance}, rotation {camera.Rotation}");
+            Assert.That(double.IsFinite(camera.FocusDistance), Is.True);
+        });
+    }
+
     [Test]
     public void TheRightButtonAlone_StillTurnsTheCameraAboutItself()
     {

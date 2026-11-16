@@ -44,17 +44,25 @@ public readonly struct PickRay
     /// <summary>Through another projection, such as the camera's screen-space one for what it draws over the scene.</summary>
     public static PickRay FromViewProjection(CameraBase camera, Vector2F pixel, Matrix4x4F viewProjection)
     {
-        var ray = Through(camera, pixel, viewProjection);
-        var next = Through(camera, new Vector2F(pixel.X + 1, pixel.Y), viewProjection);
+        // Inverted once for the ray and its neighbour a pixel over, as Vector3F.Unproject would for every point.
+        var inverse = Matrix4x4F.Invert(viewProjection);
+        var ray = Through(camera, pixel, in inverse);
+        var next = Through(camera, new Vector2F(pixel.X + 1, pixel.Y), in inverse);
         var atOrigin = (next.Position - ray.Position).Length();
         var perDepth = (next.Direction - ray.Direction).Length();
         return new PickRay(ray, camera, atOrigin, perDepth);
     }
 
-    private static Ray<float> Through(CameraBase camera, Vector2F pixel, Matrix4x4F viewProjection)
+    // From the near plane through the middle of the depth range, not the far plane: with a far plane all but at
+    // infinity, a point unprojected there goes to infinity at some turns of the view, and the direction with it - NaN,
+    // or pointing back. Halfway, a perspective point stands about twice the near distance off: always a number. The
+    // pixel goes to clip space as Vector3F.Unproject takes it there.
+    private static Ray<float> Through(CameraBase camera, Vector2F pixel, in Matrix4x4F inverse)
     {
-        var near = Vector3F.Unproject(new Vector3F(pixel.X, pixel.Y, 0), 0, 0, camera.Width, camera.Height, 0, 1, viewProjection);
-        var far = Vector3F.Unproject(new Vector3F(pixel.X, pixel.Y, 1), 0, 0, camera.Width, camera.Height, 0, 1, viewProjection);
-        return new Ray<float>(near, Vector3F.Normalize(far - near));
+        var clipX = pixel.X / camera.Width * 2 - 1;
+        var clipY = pixel.Y / camera.Height * 2 - 1;
+        var near = Vector3F.TransformCoordinate(new Vector3F(clipX, clipY, 0), inverse);
+        var beyond = Vector3F.TransformCoordinate(new Vector3F(clipX, clipY, 0.5f), inverse);
+        return new Ray<float>(near, Vector3F.Normalize(beyond - near));
     }
 }
