@@ -40,7 +40,7 @@ All packages share one version and are released together.
 
 ## Requirements
 
-- **.NET 10.**
+- **.NET 11.**
 - **Windows 10 or 11, x64.** macOS and Linux are planned; the macOS code exists but has not been built and run
   recently, so it is not claimed.
 - **A GPU and driver with Vulkan 1.4** and the `shaderInt64`, `shaderDrawParameters` and `samplerAnisotropy` features,
@@ -99,7 +99,7 @@ references it, directly or through another, gets them in its output.
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Adamantium.Content.Build" Version="0.1.0-alpha.5" />

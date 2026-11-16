@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using Adamantium.Mathematics;
 using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.Measurement;
@@ -156,7 +157,7 @@ public sealed class PdfNumberFormat
         PdfNumberStyle.Round => Math.Round(value, MidpointRounding.AwayFromZero),
         PdfNumberStyle.Truncate => Math.Truncate(value),
         PdfNumberStyle.Fraction => Math.Round(value * Precision, MidpointRounding.AwayFromZero) / Precision,
-        _ => Math.Round(value, Places, MidpointRounding.AwayFromZero),
+        _ => MathHelper.RoundAsWritten(value, Places, MidpointRounding.AwayFromZero),
     };
 
     /// <summary>The smallest step a value of this unit is written in.</summary>
@@ -168,7 +169,6 @@ public sealed class PdfNumberFormat
     };
 
     private int Places => Math.Clamp((int)Math.Round(Math.Log10(Precision)), 0, 15);
-
     private string Last(double value)
     {
         switch (Style)

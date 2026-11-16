@@ -4,7 +4,7 @@
     <Platforms>AnyCPU</Platforms>
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latest</LangVersion>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <Description>Foundation of the Adamantium engine: disposable and named objects, observable collections, commands, events, data buffers and pointers, dependency injection and type parsing.</Description>
     <PackageTags>adamantium;engine;core;collections</PackageTags>

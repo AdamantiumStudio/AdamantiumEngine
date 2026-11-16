@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <Platforms>AnyCPU</Platforms>
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latest</LangVersion>
@@ -32,7 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="QuantumBinding.Utils" Version="3.0.1" />
+    <PackageReference Include="QuantumBinding.Utils" Version="3.1.0" />
   </ItemGroup>
 
 </Project>
