@@ -19,7 +19,7 @@ public interface IGameService : IEntityService
 
     /// <summary>A component of the scene played was changed from outside the game - by the editor - awake or paused: the
     /// service brings up to date what it makes of it, so the change shows at once.</summary>
-    void Edited(GameComponent component)
+    void ComponentEdited(GameComponent component)
     {
     }
 }

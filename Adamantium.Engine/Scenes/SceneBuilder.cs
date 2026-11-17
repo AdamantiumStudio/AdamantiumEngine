@@ -261,29 +261,29 @@ public sealed class SceneBuilder
     internal static void ApplyGameComponents(Entity entity, IReadOnlyList<SceneGameComponent> entries, IWorldCode code,
         List<GameComponentProblem> problems)
     {
-        var own = entity.Components.GetAll<GameComponent>();
-        foreach (var component in own)
+        var existing = entity.Components.GetAll<GameComponent>();
+        foreach (var component in existing)
         {
-            if (!Has(entries, component.GetType().FullName))
+            if (!HasEntryOfType(entries, component.GetType().FullName))
                 entity.RemoveComponent(component);
         }
 
         if (entries == null)
             return;
 
-        HashSet<GameComponent> given = null;
+        HashSet<GameComponent> applied = null;
         var unloaded = entity.GetComponent<UnloadedGameComponents>();
         foreach (var entry in entries)
         {
-            // Kept as it was read - its code not loaded: no game touched it, it is there still.
+            // Kept as it was read - its code not loaded: no game changed it, it is there still.
             if (code.FindType<GameComponent>(entry.Type) == null)
                 continue;
 
-            if (Find(own, entry.Type) is { } component && (given ??= []).Add(component))
+            if (FindOfType(existing, entry.Type) is { } component && (applied ??= []).Add(component))
             {
                 ComponentFields.Read(entry.Values, component, typeof(GameComponent));
             }
-            else if (!KeepsOfType(unloaded, entry.Type))
+            else if (!HasUnloadedOfType(unloaded, entry.Type))
             {
                 // A second of a kind, or one whose code threw, is kept as it was read already: not again.
                 SceneGameComponents.Attach(entity, entry, code, problems);
@@ -291,7 +291,7 @@ public sealed class SceneBuilder
         }
     }
 
-    private static bool KeepsOfType(UnloadedGameComponents unloaded, string type)
+    private static bool HasUnloadedOfType(UnloadedGameComponents unloaded, string type)
     {
         if (unloaded == null)
             return false;
@@ -305,7 +305,7 @@ public sealed class SceneBuilder
         return false;
     }
 
-    private static GameComponent Find(GameComponent[] components, string type)
+    private static GameComponent FindOfType(GameComponent[] components, string type)
     {
         foreach (var component in components)
         {
@@ -316,7 +316,7 @@ public sealed class SceneBuilder
         return null;
     }
 
-    private static bool Has(IReadOnlyList<SceneGameComponent> entries, string type)
+    private static bool HasEntryOfType(IReadOnlyList<SceneGameComponent> entries, string type)
     {
         if (entries == null)
             return false;

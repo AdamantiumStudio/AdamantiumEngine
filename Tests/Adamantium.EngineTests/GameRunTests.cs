@@ -295,7 +295,7 @@ public class GameRunTests
         var pushed = entity.GetComponent<Pushed>();
         pushed.Speed = 4;
 
-        run.Edited(pushed);
+        run.TellComponentEdited(pushed);
 
         var pushing = _world.GetService<PushingService>();
         Assert.Multiple(() =>
@@ -314,9 +314,9 @@ public class GameRunTests
         var played = Placed(_world.MainScene, 1);
         var run = GameRun.Start(_world.MainScene);
 
-        run.Edited(edited.GetComponent<Pushed>());
+        run.TellComponentEdited(edited.GetComponent<Pushed>());
         run.Stop();
-        run.Edited(played.GetComponent<Pushed>());
+        run.TellComponentEdited(played.GetComponent<Pushed>());
 
         Assert.That(_world.GetService<PushingService>().EditsHeard, Is.Empty);
     }
@@ -330,10 +330,10 @@ public class GameRunTests
         throwing.FailsOnEdit = true;
         var pushed = entity.GetComponent<Pushed>();
 
-        run.Edited(pushed);
+        run.TellComponentEdited(pushed);
         run.IsPaused = true;
         run.IsPaused = false;
-        run.Edited(pushed);
+        run.TellComponentEdited(pushed);
 
         Assert.Multiple(() =>
         {
@@ -353,9 +353,9 @@ public class GameRunTests
         var pushed = entity.GetComponent<Pushed>();
         Frame(1);
 
-        run.Edited(pushed);
+        run.TellComponentEdited(pushed);
         run.IsPaused = true;
-        run.Edited(pushed);
+        run.TellComponentEdited(pushed);
 
         Assert.Multiple(() =>
         {

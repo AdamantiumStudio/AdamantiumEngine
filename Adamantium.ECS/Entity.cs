@@ -105,27 +105,16 @@ namespace Adamantium.ECS
             internal set
             {
                 if (owner == value) return;
-                var beforeScene = Scene;
-                var before = beforeScene?.World;
+                var previousScene = Scene;
+                var before = previousScene?.World;
                 OnOwnerChanged(owner, value);
                 owner = value;
                 rootUid = GetRoot().rootUid;
-                (World ?? before)?.EntityManager.NoteOwnerChanged(this);
+                (World ?? before)?.EntityManager.NoteOwnerChanged(this, previousScene);
                 before?.Changed(UniverseChangedEventArgs.OneFrame);
                 if (World != before)
                 {
-                    // Put under an entity of a scene from outside any it joined the scene; under one outside any, it left.
-                    if (before == null)
-                        Scene?.Changes.Add(this);
-                    else if (Scene == null)
-                        beforeScene.Changes.Remove(this);
-
                     NotifyUpdated();
-                }
-                else
-                {
-                    // Hung under another entity of the world: where it hangs changed.
-                    beforeScene?.Changes.Touch(this);
                 }
             }
         }
@@ -145,26 +134,26 @@ namespace Adamantium.ECS
         // The index of components the entity is in: its scene's, once it has joined.
         internal SceneComponents ComponentIndex { get; set; }
 
-        // Which recording of its scene's changes noted it touched last.
-        internal int TouchedInRecording { get; set; }
+        // Which recording of its scene's changes noted it changed last.
+        internal int ChangedDuringRecording { get; set; }
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame; the scene's
-        /// <see cref="Scene.Changes"/> note the entity touched.</summary>
-        public void NotifyUpdated() => Changed(UniverseChangedEventArgs.OneFrame);
+        /// <see cref="Scene.Changes"/> note the entity changed.</summary>
+        public void NotifyUpdated() => NotifyChanged(UniverseChangedEventArgs.OneFrame);
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for the next <paramref name="frames"/>
         /// frames.</summary>
-        public void NotifyUpdated(int frames) => Changed(new UniverseChangedEventArgs(frames));
+        public void NotifyUpdated(int frames) => NotifyChanged(new UniverseChangedEventArgs(frames));
 
         /// <summary>Tells <see cref="World"/> that what it shows keeps changing for <paramref name="duration"/>.</summary>
-        public void NotifyUpdated(TimeSpan duration) => Changed(new UniverseChangedEventArgs(duration));
+        public void NotifyUpdated(TimeSpan duration) => NotifyChanged(new UniverseChangedEventArgs(duration));
 
-        private void Changed(UniverseChangedEventArgs args)
+        private void NotifyChanged(UniverseChangedEventArgs args)
         {
             if (Scene is not { } own)
                 return;
 
-            own.Changes.Touch(this);
+            own.Changes.NoteChanged(this);
             own.World?.Changed(args);
         }
 

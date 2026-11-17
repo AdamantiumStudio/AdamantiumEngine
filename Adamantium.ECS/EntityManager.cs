@@ -223,9 +223,18 @@ public sealed class EntityManager
     }
 
     /// <summary>Notes that <paramref name="entity"/> was given another owner, from any thread: at the next sync, on the
-    /// world's thread, it joins the index of components its owner is in, or leaves the one it was in.</summary>
-    internal void NoteOwnerChanged(Entity entity)
+    /// world's thread, it joins the index of components its owner is in, or leaves the one it was in. The scenes'
+    /// <see cref="Scene.Changes"/> note it joined, left, or hung elsewhere.</summary>
+    internal void NoteOwnerChanged(Entity entity, Scene previousScene)
     {
+        var scene = entity.Scene;
+        if (previousScene == null)
+            scene?.Changes.NoteAdded(entity);
+        else if (scene == null)
+            previousScene.Changes.NoteRemoved(entity);
+        else
+            previousScene.Changes.NoteChanged(entity);
+
         lock (syncObject)
         {
             _ownersChanged.Add(entity);
@@ -453,7 +462,7 @@ public sealed class EntityManager
             SetCameraProjectionType(root, projectionType);
             entitiesToAdd.Add(root);
             root.SetScene(scene);
-            scene.Changes.Add(root);
+            scene.Changes.NoteAdded(root);
         }
 
         root.NotifyUpdated();
@@ -531,7 +540,7 @@ public sealed class EntityManager
             }
         }
 
-        entity.Scene?.Changes.Remove(entity);
+        entity.Scene?.Changes.NoteRemoved(entity);
         entity.NotifyUpdated();
     }
 

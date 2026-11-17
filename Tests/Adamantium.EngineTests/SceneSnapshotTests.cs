@@ -12,7 +12,7 @@ using NUnit.Framework;
 namespace Adamantium.EngineTests;
 
 /// <summary>A scene's state taken and put back - what Play in the editor does: what changed since goes back, the same
-/// objects; what joined goes, unless kept; only what changed is touched.</summary>
+/// objects; what joined goes, unless kept; only what changed is put back.</summary>
 [TestFixture]
 public class SceneSnapshotTests
 {
@@ -168,9 +168,9 @@ public class SceneSnapshotTests
         });
     }
 
-    // The cost of putting back follows the changes: only what was touched is.
+    // The cost of putting back follows the changes: only what changed is recorded.
     [Test]
-    public void OnlyWhatWasTouched_IsRecorded()
+    public void OnlyWhatChanged_IsRecorded()
     {
         SceneSnapshot.Take(_scene);
 
@@ -178,7 +178,7 @@ public class SceneSnapshotTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(_scene.Changes.Touched, Is.EquivalentTo(new[] { _group }));
+            Assert.That(_scene.Changes.Changed, Is.EquivalentTo(new[] { _group }));
             Assert.That(_scene.Changes.Added, Is.Empty);
             Assert.That(_scene.Changes.Removed, Is.Empty);
         });
@@ -196,7 +196,7 @@ public class SceneSnapshotTests
         Assert.Multiple(() =>
         {
             Assert.That(_scene.Changes.IsRecording, Is.False);
-            Assert.That(_scene.Changes.Touched, Is.Empty);
+            Assert.That(_scene.Changes.Changed, Is.Empty);
         });
     }
 

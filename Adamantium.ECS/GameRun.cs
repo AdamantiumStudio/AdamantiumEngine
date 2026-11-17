@@ -91,7 +91,7 @@ public sealed class GameRun
 
     /// <summary>Tells the services that <paramref name="component"/> of the scene played was edited, playing or paused;
     /// one that throws sleeps for the rest of the game. On the world's thread.</summary>
-    public void Edited(GameComponent component)
+    public void TellComponentEdited(GameComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
         // A game stopped has no services left.
@@ -106,7 +106,7 @@ public sealed class GameRun
 
             try
             {
-                service.Edited(component);
+                service.ComponentEdited(component);
             }
             catch (Exception exception)
             {

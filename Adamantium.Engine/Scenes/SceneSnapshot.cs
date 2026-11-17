@@ -33,10 +33,10 @@ public sealed class SceneSnapshot
         var states = new Dictionary<Entity, EntityState>();
         var stack = new Stack<Entity>();
         var roots = scene.RootEntities;
-        var views = ViewCameras(scene);
+        var viewCameras = ViewCameraEntities(scene);
         for (var i = 0; i < roots.Count; i++)
         {
-            if (views.Contains(roots[i]))
+            if (viewCameras.Contains(roots[i]))
                 continue;
 
             states[roots[i]] = EntityState.Of(roots[i], null, i);
@@ -59,23 +59,23 @@ public sealed class SceneSnapshot
     }
 
     /// <summary>Whether <paramref name="entity"/> was in the scene when the state was taken.</summary>
-    public bool Holds(Entity entity) => _states.ContainsKey(entity);
+    public bool Contains(Entity entity) => _states.ContainsKey(entity);
 
     /// <summary>Puts the scene back as it was: an entity that joined it since is taken out - unless it, or one it stands
-    /// in, is in <paramref name="keep"/>; one taken out comes back where it stood, the same object; one touched gets its
+    /// in, is in <paramref name="keep"/>; one taken out comes back where it stood, the same object; one changed gets its
     /// state back, its game's components with it. Recording stops.</summary>
     public void Restore(IReadOnlySet<Entity> keep = null)
     {
         var changes = Scene.Changes;
         changes.Stop();
         var manager = Scene.World.EntityManager;
-        var touched = new HashSet<Entity>(changes.Touched);
-        var returned = ReturnRemoved(changes.Removed, manager, touched);
+        var changed = new HashSet<Entity>(changes.Changed);
+        var returned = ReturnRemoved(changes.Removed, manager, changed);
         Dictionary<UInt128, ScenePlacement> entries = null;
         Dictionary<UInt128, List<SceneGameComponent>> components = null;
         var code = Scene.World.Satellites.Get<IWorldCode>();
         var problems = new List<GameComponentProblem>();
-        foreach (var entity in touched)
+        foreach (var entity in changed)
         {
             if (!_states.TryGetValue(entity, out var state))
                 continue;
@@ -84,7 +84,7 @@ public sealed class SceneSnapshot
             if (entries.TryGetValue(entity.Uid, out var entry))
             {
                 SceneBuilder.Apply(entity, entry);
-                components ??= ComponentsById();
+                components ??= GameComponentsById();
                 SceneBuilder.ApplyGameComponents(entity, components.GetValueOrDefault(entity.Uid), code, problems);
             }
 
@@ -94,10 +94,10 @@ public sealed class SceneSnapshot
         }
 
         // After those hung under them in the game are hung back: they do not go with them.
-        var views = ViewCameras(Scene);
+        var viewCameras = ViewCameraEntities(Scene);
         foreach (var entity in changes.Added)
         {
-            if (!_states.ContainsKey(entity) && !Kept(entity, keep) && !views.Contains(entity))
+            if (!_states.ContainsKey(entity) && !IsKept(entity, keep) && !viewCameras.Contains(entity))
                 manager.RemoveEntity(entity);
         }
 
@@ -105,10 +105,10 @@ public sealed class SceneSnapshot
     }
 
     // Owners first: one taken out of an entity taken out after it comes back once that one has. One hung under an entity
-    // of no scene was not taken out: it is hung back as it stood, among those touched.
-    private HashSet<Entity> ReturnRemoved(IReadOnlyCollection<Entity> removed, EntityManager manager, HashSet<Entity> touched)
+    // of no scene was not taken out: it is hung back as it stood, among those changed.
+    private HashSet<Entity> ReturnRemoved(IReadOnlyCollection<Entity> removed, EntityManager manager, HashSet<Entity> changed)
     {
-        var back = new List<Entity>(removed.Count);
+        var toReturn = new List<Entity>(removed.Count);
         foreach (var entity in removed)
         {
             if (!_states.ContainsKey(entity))
@@ -116,27 +116,27 @@ public sealed class SceneSnapshot
 
             // Hung outside, or back in the scene somewhere else: put where it stood, not returned.
             if (entity.Owner != null && entity.Scene == null || entity.Scene == Scene && !manager.IsBeingRemoved(entity))
-                touched.Add(entity);
+                changed.Add(entity);
             else
-                back.Add(entity);
+                toReturn.Add(entity);
         }
 
         // Siblings in the order they stood, so each goes back to its own place.
-        back.Sort((first, second) =>
+        toReturn.Sort((first, second) =>
         {
-            var byDepth = Depth(first).CompareTo(Depth(second));
+            var byDepth = DepthOf(first).CompareTo(DepthOf(second));
             return byDepth != 0 ? byDepth : _states[first].Index.CompareTo(_states[second].Index);
         });
-        foreach (var entity in back)
+        foreach (var entity in toReturn)
         {
             var state = _states[entity];
             manager.ReturnEntity(entity, state.Owner, Scene, state.Index);
         }
 
-        return [.. back];
+        return [.. toReturn];
     }
 
-    private int Depth(Entity entity)
+    private int DepthOf(Entity entity)
     {
         var depth = 0;
         for (var owner = _states[entity].Owner; owner != null && _states.TryGetValue(owner, out var state); owner = state.Owner)
@@ -148,22 +148,22 @@ public sealed class SceneSnapshot
     }
 
     // The entities of the views' own cameras: they stand among the scene's roots, but are the views', not the scene's.
-    private static HashSet<Entity> ViewCameras(Scene scene)
+    private static HashSet<Entity> ViewCameraEntities(Scene scene)
     {
-        var views = new HashSet<Entity>();
+        var entities = new HashSet<Entity>();
         if (scene.World.Satellites.TryGet(out IUniverse universe))
         {
             foreach (var output in universe.Outputs)
             {
                 if (output.OwnCamera?.Owner is { } camera)
-                    views.Add(camera);
+                    entities.Add(camera);
             }
         }
 
-        return views;
+        return entities;
     }
 
-    private static bool Kept(Entity entity, IReadOnlySet<Entity> keep)
+    private static bool IsKept(Entity entity, IReadOnlySet<Entity> keep)
     {
         if (keep == null)
             return false;
@@ -180,16 +180,16 @@ public sealed class SceneSnapshot
     private Dictionary<UInt128, ScenePlacement> EntriesById()
     {
         var byId = new Dictionary<UInt128, ScenePlacement>();
-        Add(byId, _file.Models);
-        Add(byId, _file.Lights);
-        Add(byId, _file.Cameras);
-        Add(byId, _file.SpawnPoints);
-        Add(byId, _file.Markers);
-        Add(byId, _file.Shapes);
+        AddEntries(byId, _file.Models);
+        AddEntries(byId, _file.Lights);
+        AddEntries(byId, _file.Cameras);
+        AddEntries(byId, _file.SpawnPoints);
+        AddEntries(byId, _file.Markers);
+        AddEntries(byId, _file.Shapes);
         return byId;
     }
 
-    private static void Add<T>(Dictionary<UInt128, ScenePlacement> byId, List<T> section) where T : ScenePlacement
+    private static void AddEntries<T>(Dictionary<UInt128, ScenePlacement> byId, List<T> section) where T : ScenePlacement
     {
         foreach (var entry in section)
         {
@@ -197,7 +197,7 @@ public sealed class SceneSnapshot
         }
     }
 
-    private Dictionary<UInt128, List<SceneGameComponent>> ComponentsById()
+    private Dictionary<UInt128, List<SceneGameComponent>> GameComponentsById()
     {
         var byId = new Dictionary<UInt128, List<SceneGameComponent>>();
         foreach (var entry in _file.GameComponents)
@@ -221,14 +221,14 @@ public sealed class SceneSnapshot
         public static EntityState Of(Entity entity, Entity owner, int index) =>
             new(entity.Name, entity.Transform.State, entity.IsEnabled, entity.Visible, owner, index);
 
-        public void ApplyTo(Entity entity, EntityManager manager, bool place)
+        public void ApplyTo(Entity entity, EntityManager manager, bool moveToPlace)
         {
-            if (place && entity.Owner != Owner)
+            if (moveToPlace && entity.Owner != Owner)
             {
                 manager.SetOwner(entity, Owner);
                 manager.PlaceAt(entity, Index);
             }
-            else if (place && manager.GetSiblingIndex(entity) != Index)
+            else if (moveToPlace && manager.GetSiblingIndex(entity) != Index)
             {
                 manager.PlaceAt(entity, Index);
             }

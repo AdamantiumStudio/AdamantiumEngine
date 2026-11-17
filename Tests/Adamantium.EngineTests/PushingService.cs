@@ -16,7 +16,7 @@ public sealed class PushingService : GameService
 
     public List<GameComponent> EditsHeard { get; } = [];
 
-    protected override void OnEdited(GameComponent component)
+    protected override void OnComponentEdited(GameComponent component)
     {
         EditsHeard.Add(component);
         if (component is not Pushed pushed)

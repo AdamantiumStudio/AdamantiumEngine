@@ -24,7 +24,7 @@ public sealed class ThrowingService : GameService
     /// <summary>Whether it fails on an edit too.</summary>
     public bool FailsOnEdit { get; set; }
 
-    protected override void OnEdited(GameComponent component)
+    protected override void OnComponentEdited(GameComponent component)
     {
         EditsHeard++;
         if (FailsOnEdit)

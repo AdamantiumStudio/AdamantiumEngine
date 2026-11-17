@@ -42,11 +42,11 @@ public abstract class GameService : EntityService, IGameService
         }
     }
 
-    public void Edited(GameComponent component) => OnEdited(component);
+    public void ComponentEdited(GameComponent component) => OnComponentEdited(component);
 
     /// <summary>Called when a component of the scene played was changed by the editor, awake or paused: the place to
     /// bring up to date what the service makes of it.</summary>
-    protected virtual void OnEdited(GameComponent component)
+    protected virtual void OnComponentEdited(GameComponent component)
     {
     }
 
