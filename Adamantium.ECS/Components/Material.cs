@@ -114,8 +114,11 @@ namespace Adamantium.ECS.Components
       public partial String EmissiveMapPath { get; set; }
 
       /// <summary>How the alpha of the base color is taken.</summary>
-      [Bindable]
+      [Bindable, Affects(nameof(IsMasked))]
       public partial AlphaMode AlphaMode { get; set; }
+
+      /// <summary>Whether <see cref="AlphaCutoff"/> leaves the surface out where its alpha is below it.</summary>
+      public bool IsMasked => AlphaMode == AlphaMode.Mask;
 
       /// <summary>Below this alpha a masked surface is left out.</summary>
       [Bindable]

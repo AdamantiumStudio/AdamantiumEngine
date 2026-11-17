@@ -413,7 +413,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     // A masked color without a texture is the same alpha all over: below the cutoff, none of it is drawn.
     private static bool IsMaskedOut(Material material)
     {
-        return material is { AlphaMode: AlphaMode.Mask } && LiveTextureOf(material) == null
+        return material is { IsMasked: true } && LiveTextureOf(material) == null
                && material.DiffuseColor.W < material.AlphaCutoff;
     }
 
