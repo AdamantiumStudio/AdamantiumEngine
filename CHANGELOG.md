@@ -12,9 +12,10 @@ All packages share one version.
   writing it, and lit by the same clusters; a two-sided mesh draws its back faces before its front ones. `Mask`: left
   out below `AlphaCutoff`, whole above it - in masked passes of their own for a texture, so the opaque passes keep the
   early depth test. `Opaque` ignores the alpha. The alpha is `DiffuseColor.W` times a texture's. A blended surface's
-  wireframe is drawn as lines over it. `Material.IsMasked` says whether the cutoff counts, for a view to show it by. A
-  scene's shape keeps its material's mode and cutoff: `SceneShape.AlphaMode` and `AlphaCutoff`, attributes written only
-  when they are not the defaults (opaque, 0.5).
+  wireframe is drawn as lines over it. `Material.IsMasked` says whether the cutoff counts and `UsesAlpha` whether the
+  alpha does, for a view to show them by; `Material.Opacity` is the diffuse color's alpha as a number of its own, 0 to
+  1. A scene's shape keeps its material's mode and cutoff: `SceneShape.AlphaMode` and `AlphaCutoff`, attributes written
+  only when they are not the defaults (opaque, 0.5).
 
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer

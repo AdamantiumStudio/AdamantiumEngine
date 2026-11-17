@@ -40,8 +40,23 @@ namespace Adamantium.ECS.Components
       [Bindable]
       public partial Vector4F Emission { get; set; }
 
-      [Bindable]
+      [Bindable, Affects(nameof(Opacity))]
       public partial Vector4F DiffuseColor { get; set; }
+
+      /// <summary>How much of the surface shows, 0 to 1: the alpha of <see cref="DiffuseColor"/>, which counts unless the
+      /// material is opaque.</summary>
+      [DoNotClone]
+      public float Opacity
+      {
+         get => DiffuseColor.W;
+         set
+         {
+            if (float.IsNaN(value))
+               return;
+
+            DiffuseColor = new Vector4F(DiffuseColor.X, DiffuseColor.Y, DiffuseColor.Z, Math.Clamp(value, 0f, 1f));
+         }
+      }
 
       [Bindable]
       public partial Vector4F AmbientColor { get; set; }
@@ -114,11 +129,14 @@ namespace Adamantium.ECS.Components
       public partial String EmissiveMapPath { get; set; }
 
       /// <summary>How the alpha of the base color is taken.</summary>
-      [Bindable, Affects(nameof(IsMasked))]
+      [Bindable, Affects(nameof(IsMasked), nameof(UsesAlpha))]
       public partial AlphaMode AlphaMode { get; set; }
 
       /// <summary>Whether <see cref="AlphaCutoff"/> leaves the surface out where its alpha is below it.</summary>
       public bool IsMasked => AlphaMode == AlphaMode.Mask;
+
+      /// <summary>Whether the alpha - <see cref="Opacity"/> - counts: the material is not opaque.</summary>
+      public bool UsesAlpha => AlphaMode != AlphaMode.Opaque;
 
       /// <summary>Below this alpha a masked surface is left out.</summary>
       [Bindable]
