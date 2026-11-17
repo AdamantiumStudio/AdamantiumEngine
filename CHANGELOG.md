@@ -18,6 +18,13 @@ All packages share one version.
   all they touch and wake when struck. `RayCast` and `Overlap` query the world; `GetContactPoints` and `LastStep`
   (`StepStatistics`) are for instruments; `StepClock` turns the time of frames into fixed steps and a blend for
   drawing between them. The same scene steps to the same result.
+- Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
+  friction and the rest - colliding with the shape of its box, sphere or capsule collider, scaled as the entity is
+  (a convex hull collider has no physics yet and is left out, said in the log). `PhysicsService`, a game service used
+  through `IPhysicsService`, runs while a game plays: it makes a world of the scene's bodies, steps it on a thread of
+  its own, takes the game's pushes as commands done before the next step - velocities, forces, impulses, gravity -
+  and each frame stands the entities between the last two steps, children of other entities included. Down is +Y,
+  so gravity is too. What it moves is recorded as the scene's changes, so the scene kept before the game comes back.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
