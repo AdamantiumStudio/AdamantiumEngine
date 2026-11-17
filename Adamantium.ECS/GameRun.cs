@@ -89,14 +89,13 @@ public sealed class GameRun
         _failed.Clear();
     }
 
-    /// <summary>Tells the services that <paramref name="component"/> of the scene played was edited, playing or paused -
-    /// not on an entity disabled in its tree, which they do not act on; one that throws sleeps for the rest of the game.
-    /// On the world's thread.</summary>
+    /// <summary>Tells the services that <paramref name="component"/> of the scene played was edited, playing or paused;
+    /// one that throws sleeps for the rest of the game. On the world's thread.</summary>
     public void Edited(GameComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
         // A game stopped has no services left.
-        if (_services.Count == 0 || component.Owner is not { } owner || owner.Scene != Scene || !owner.IsEnabledInTree)
+        if (_services.Count == 0 || component.Owner?.Scene != Scene)
             return;
 
         foreach (var service in _services)

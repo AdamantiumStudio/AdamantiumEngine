@@ -307,23 +307,6 @@ public class GameRunTests
         });
     }
 
-    // The services act on entities enabled in their tree only, so an edit of one disabled is not theirs.
-    [Test]
-    public void AnEditOnAnEntityDisabledInItsTree_IsNotHeard()
-    {
-        var group = new Entity(null, "Group");
-        _world.EntityManager.AddEntity(group, _world.MainScene);
-        var entity = new Entity(group, "Pushed");
-        entity.AddComponent(new Pushed());
-        NextFrame();
-        var run = GameRun.Start(_world.MainScene);
-        group.IsEnabled = false;
-
-        run.Edited(entity.GetComponent<Pushed>());
-
-        Assert.That(_world.GetService<PushingService>().EditsHeard, Is.Empty);
-    }
-
     [Test]
     public void AnEditOfAnotherScene_OrAfterTheGame_IsNotHeard()
     {
