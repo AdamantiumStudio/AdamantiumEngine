@@ -11,6 +11,7 @@ internal sealed class PhysicsBodyLink
         int depth)
     {
         Entity = entity;
+        Name = entity.Name;
         Kind = kind;
         Depth = depth;
         Offset = shape.Offset;
@@ -22,6 +23,9 @@ internal sealed class PhysicsBodyLink
     }
 
     public Entity Entity { get; }
+
+    /// <summary>The entity's name when the game started, for the physics thread's log.</summary>
+    public string Name { get; }
 
     public BodyKind Kind { get; }
 

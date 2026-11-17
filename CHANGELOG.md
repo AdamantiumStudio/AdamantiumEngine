@@ -26,10 +26,9 @@ All packages share one version.
   game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
   commands - velocities and impulses at the next step; a frame's forces, added up, pushing step by step for the
   frame's length, shorter when the physics drops time falling behind; gravity - and each frame stands the entities
-  between the last two
-  steps, parents before children. Down is
-  +Y, so the service's gravity is too; that of its `Settings` is not used. What it moves is recorded as the scene's
-  changes, so the scene kept before the game comes back.
+  between the last two steps, parents before children. Down is +Y, so the service's gravity is too; that of its
+  `Settings` is not used. What it moves is recorded as the scene's changes, so the scene kept before the game comes
+  back.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
