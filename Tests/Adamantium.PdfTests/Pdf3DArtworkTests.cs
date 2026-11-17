@@ -2,7 +2,7 @@ using System.Linq;
 using System.Text;
 using Adamantium.Pdf.Annotations;
 using Adamantium.Pdf.Document;
-using Adamantium.Pdf.ThreeD;
+using Adamantium.Pdf.View3D;
 using NUnit.Framework;
 
 namespace Adamantium.PdfTests;
@@ -94,7 +94,7 @@ public class Pdf3DArtworkTests
             Assert.That(top.Projection.Kind, Is.EqualTo(Pdf3DProjectionKind.Orthographic));
             Assert.That(top.Projection.Scale, Is.EqualTo(4));
             Assert.That(top.Projection.Binding, Is.EqualTo("Max"));
-            Assert.That(top.Background, Is.EqualTo(new Pdf3DColor(1, 1, 1)), "white by default");
+            Assert.That(top.Background, Is.Null, "a view with no background keeps the one in effect");
             Assert.That(top.RenderMode, Is.Null, "the model's own");
             Assert.That(top.Lighting, Is.Null, "the model's own lights");
 

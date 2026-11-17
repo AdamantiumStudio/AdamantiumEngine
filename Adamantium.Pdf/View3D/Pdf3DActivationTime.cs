@@ -1,4 +1,4 @@
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>When 3D artwork comes to life.</summary>
 public enum Pdf3DActivationTime

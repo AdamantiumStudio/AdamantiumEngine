@@ -1,7 +1,7 @@
 using System;
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>What ties a markup annotation to a view of 3D artwork (ISO 32000-1, 13.6.6, table 313, an <c>ExData</c>
 /// dictionary of subtype <c>Markup3D</c>): the 3D annotation it comments on, the view it is shown in - only while that

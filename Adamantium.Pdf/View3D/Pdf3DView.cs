@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>A named view of 3D artwork (ISO 32000-1, 13.6.4, table 298): where the camera stands, how it projects,
 /// the background, how the artwork is drawn and lit.</summary>
@@ -51,8 +51,9 @@ public sealed class Pdf3DView
     /// <summary>How the view projects (<c>P</c>).</summary>
     public Pdf3DProjection Projection { get; init; }
 
-    /// <summary>The background (<c>BG</c>); white by default.</summary>
-    public Pdf3DColor Background { get; init; } = new(1, 1, 1);
+    /// <summary>The background (<c>BG</c>; white when it names no color); null for a view that gives none - a viewer keeps
+    /// the background in effect.</summary>
+    public Pdf3DColor Background { get; init; }
 
     /// <summary>How the artwork is drawn (<c>RM</c>); null for the artwork's own way.</summary>
     public Pdf3DRenderMode RenderMode { get; init; }
@@ -84,7 +85,9 @@ public sealed class Pdf3DView
             ViewNode = ReadText(dictionary[ViewNodeKey], resolver),
             CenterOfOrbit = PdfValues.Number(dictionary[CenterOfOrbitKey], resolver),
             Projection = Pdf3DProjection.From(dictionary[ProjectionKey], resolver),
-            Background = Pdf3DColors.From(background?[BackgroundColorKey], resolver) ?? new Pdf3DColor(1, 1, 1),
+            Background = background == null
+                ? null
+                : Pdf3DColors.From(background[BackgroundColorKey], resolver) ?? new Pdf3DColor(1, 1, 1),
             RenderMode = Pdf3DRenderMode.From(dictionary[RenderModeKey], resolver),
             Lighting = lighting != null ? PdfValues.Name(lighting[SubtypeKey], resolver) : null,
         };
