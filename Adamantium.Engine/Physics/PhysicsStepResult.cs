@@ -12,5 +12,8 @@ internal sealed class PhysicsStepResult
     /// <summary>When the last step ended, in <see cref="System.Diagnostics.Stopwatch"/> ticks.</summary>
     public long SteppedAt;
 
+    /// <summary>How many steps the result covers since the last one.</summary>
+    public int Steps;
+
     public StepStatistics Statistics;
 }

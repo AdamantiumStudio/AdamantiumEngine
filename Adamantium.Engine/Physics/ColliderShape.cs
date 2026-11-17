@@ -33,9 +33,13 @@ internal readonly struct ColliderShape
         {
             case BoxCollider box:
             {
-                var half = Vector3F.Max(box.Bounds.HalfExtent.As<float>() * size, new Vector3F(Shape.MinimumSize));
                 var orientation = box.Bounds.Orientation.As<float>();
                 var turn = orientation.LengthSquared() > 0 ? QuaternionF.Normalize(orientation) : QuaternionF.Identity;
+                var stretch = new Vector3F(
+                    (Vector3F.Transform(Vector3F.UnitX, turn) * size).Length(),
+                    (Vector3F.Transform(Vector3F.UnitY, turn) * size).Length(),
+                    (Vector3F.Transform(Vector3F.UnitZ, turn) * size).Length());
+                var half = Vector3F.Max(box.Bounds.HalfExtent.As<float>() * stretch, new Vector3F(Shape.MinimumSize));
                 shape = new ColliderShape(new BoxShape(half), box.Bounds.Center.As<float>() * scale, turn);
                 return true;
             }

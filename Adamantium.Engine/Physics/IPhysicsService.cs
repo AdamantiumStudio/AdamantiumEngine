@@ -8,8 +8,8 @@ namespace Adamantium.Engine.Physics;
 /// thread of its own, and takes the game's pushes. Down is +Y in the engine's world, so gravity is too.</summary>
 public interface IPhysicsService : IGameService
 {
-    /// <summary>How the next game's physics steps and solves; a game playing keeps the settings it started with.
-    /// </summary>
+    /// <summary>How the next game's physics steps and solves; a game playing keeps those it started with. Their gravity
+    /// is not used: <see cref="Gravity"/> is.</summary>
     PhysicsSettings Settings { get; set; }
 
     /// <summary>The pull every dynamic body feels while the game plays, in meters per second squared.</summary>
@@ -33,7 +33,8 @@ public interface IPhysicsService : IGameService
     /// <summary>Sets the spin of <paramref name="entity"/>'s dynamic or kinematic body from the next step.</summary>
     void SetAngularVelocity(Entity entity, Vector3F velocity);
 
-    /// <summary>Pushes the center of <paramref name="entity"/>'s dynamic body through the next step, in newtons.</summary>
+    /// <summary>Pushes the center of <paramref name="entity"/>'s dynamic body, in newtons, for as long as the frame
+    /// lasts; call it each frame for a steady push.</summary>
     void ApplyForce(Entity entity, Vector3F force);
 
     /// <summary>Strikes the center of <paramref name="entity"/>'s dynamic body at the next step, in newton seconds.

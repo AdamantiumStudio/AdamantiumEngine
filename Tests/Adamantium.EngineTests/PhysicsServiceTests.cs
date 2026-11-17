@@ -187,6 +187,65 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void SteadyForce_PushesAsMuchAtAnyFrameRate()
+    {
+        var slow = MeasureSpeedAfterSteadyForce(1.0 / 30);
+        var fast = MeasureSpeedAfterSteadyForce(1.0 / 144);
+
+        Assert.That(slow, Is.EqualTo(1f).Within(0.05f));
+        Assert.That(fast, Is.EqualTo(1f).Within(0.05f));
+    }
+
+    [Test]
+    public void MirroredEntity_IsLeftOut()
+    {
+        UseSteppedPhysics();
+        var mirrored = MakeBox("Mirrored", new Vector3<double>(0, -3, 0), 0.5);
+        mirrored.Transform.BaseScale = new Vector3F(1, -1, 1);
+        _world.EntityManager.AddEntity(mirrored, _world.MainScene);
+        Settle();
+
+        Play();
+        Frames(0.5);
+
+        Assert.That(_physics.Moves(mirrored), Is.False);
+        Assert.That(mirrored.Transform.Position.Y, Is.EqualTo(-3).Within(1e-9));
+    }
+
+    [Test]
+    public void NewSettings_KeepGravityPointingDown()
+    {
+        UseSteppedPhysics();
+        _physics.Settings = new PhysicsSettings { StepRate = 60 };
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+
+        Play();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    [Test]
+    public void SleepingChild_StaysWhereItRestsWhenItsParentMoves()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var parent = new Entity(null, "Parent");
+        _world.EntityManager.AddEntity(parent, _world.MainScene);
+        var box = MakeBox("Child", new Vector3<double>(0, -0.5, 0), 0.5, parent);
+        Settle();
+        Play();
+        Frames(2);
+
+        parent.Transform.Position = new Vector3<double>(3, 0, 0);
+        Frames(0.1);
+
+        Assert.That(box.Transform.WorldPosition.X, Is.EqualTo(0).Within(0.02));
+        Assert.That(box.Transform.Position.X, Is.EqualTo(-3).Within(0.02));
+    }
+
+    [Test]
     public void OwnThread_StepsTheGameInRealTime()
     {
         _physics = new PhysicsService(_world);
@@ -205,6 +264,27 @@ public class PhysicsServiceTests
 
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
         Assert.That(_physics.LastStep.TouchingPairs, Is.EqualTo(1));
+    }
+
+    private static float MeasureSpeedAfterSteadyForce(double frameSeconds)
+    {
+        var tests = new PhysicsServiceTests();
+        tests.MakeWorld();
+        tests.UseSteppedPhysics();
+        tests._physics.Gravity = Vector3F.Zero;
+        var box = tests.AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        tests.Play();
+        var frames = (int)Math.Round(1 / frameSeconds);
+        for (var frame = 0; frame < frames; frame++)
+        {
+            tests.Frame(frameSeconds);
+            tests._physics.ApplyForce(box, new Vector3F(1000, 0, 0));
+        }
+
+        tests.Frames(0.1);
+        var speed = tests._physics.GetLinearVelocity(box).X;
+        tests.StopGame();
+        return speed;
     }
 
     private void UseSteppedPhysics()

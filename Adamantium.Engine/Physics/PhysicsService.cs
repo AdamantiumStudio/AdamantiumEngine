@@ -17,6 +17,7 @@ namespace Adamantium.Engine.Physics;
 public sealed class PhysicsService : GameService, IPhysicsService
 {
     private const int MaxStepsPerAdvance = 8;
+    private const int MaxUnreadResults = 4;
 
     private static readonly UnboundedChannelOptions OneReader = new() { SingleReader = true };
 
@@ -27,19 +28,23 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private readonly Dictionary<Entity, int> _keys = new();
     private readonly List<PhysicsBodyLink> _moving = [];
     private readonly List<PhysicsBodyLink> _stopped = [];
+    private readonly List<PhysicsBodyLink> _parented = [];
     private readonly Channel<PhysicsCommand> _commands = Channel.CreateUnbounded<PhysicsCommand>(OneReader);
     private readonly Channel<PhysicsStepResult> _results = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
     private readonly Channel<PhysicsStepResult> _spareResults = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
 
-    private PhysicsSettings _settings;
-    private Vector3F _gravity;
+    private PhysicsSettings _settings = new();
+    private Vector3F _gravity = new(0, 9.81f, 0);
     private Vector3<double> _origin;
     private IPhysicsWorld _world;
     private StepClock _clock;
     private Thread _thread;
     private volatile bool _stopping;
+    private int _unreadResults;
     private long _resultNumber;
     private long _lastResultAt;
+    private int _lastResultSteps = 1;
+    private double _frameSeconds;
     private StepStatistics _lastStep;
 
     public PhysicsService(EntityWorld world) : this(world, true)
@@ -51,7 +56,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
     internal PhysicsService(EntityWorld world, bool stepsOnOwnThread) : base(world)
     {
         _stepsOnOwnThread = stepsOnOwnThread;
-        Settings = new PhysicsSettings { Gravity = new Vector3F(0, 9.81f, 0) };
     }
 
     /// <inheritdoc/>
@@ -62,7 +66,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
         {
             ArgumentNullException.ThrowIfNull(value);
             _settings = value;
-            _gravity = value.Gravity;
         }
     }
 
@@ -109,7 +112,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
     public void ApplyForce(Entity entity, Vector3F force)
     {
         RequireFinite(force, nameof(force));
-        Send(PhysicsCommandKind.ApplyForce, FindDynamicKey(entity), force, Vector3F.Zero);
+        var impulse = force * (float)_frameSeconds;
+        Send(PhysicsCommandKind.ApplyCentralImpulse, FindDynamicKey(entity), impulse, Vector3F.Zero);
     }
 
     /// <inheritdoc/>
@@ -130,6 +134,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
     public override void Update(AppTime appTime)
     {
         base.Update(appTime);
+        _frameSeconds = appTime.FrameTime;
         if (_world == null)
             return;
 
@@ -138,6 +143,13 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         ReadResults();
         MoveEntities();
+    }
+
+    /// <summary>Stops the game's physics too when the service leaves its world while a game plays.</summary>
+    public override void UnloadContent()
+    {
+        EndGame();
+        base.UnloadContent();
     }
 
     protected override void OnStart()
@@ -149,8 +161,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
             AddBody(body);
         }
 
+        _parented.Sort(CompareDepths);
         _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
         _resultNumber = 0;
+        _unreadResults = 0;
+        _lastResultSteps = 1;
         _lastResultAt = Stopwatch.GetTimestamp();
         _stopping = false;
         if (!_stepsOnOwnThread)
@@ -160,7 +175,9 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _thread.Start();
     }
 
-    protected override void OnStop()
+    protected override void OnStop() => EndGame();
+
+    private void EndGame()
     {
         _stopping = true;
         _thread?.Join();
@@ -173,6 +190,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _keys.Clear();
         _moving.Clear();
         _stopped.Clear();
+        _parented.Clear();
         _lastStep = default;
         while (_commands.Reader.TryRead(out _))
         {
@@ -182,6 +200,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
         {
             _spareResults.Writer.TryWrite(result);
         }
+
+        _unreadResults = 0;
     }
 
     private void AddBody(RigidBody body)
@@ -194,24 +214,28 @@ public sealed class PhysicsService : GameService, IPhysicsService
             return;
         }
 
-        if (!entity.Transform.GetWorldMatrixF().Decompose(out var scale, out var rotation, out var translation))
+        var world = entity.Transform.GetWorldMatrixF();
+        if (world.Determinant() <= 0 || !world.Decompose(out var scale, out var rotation, out var translation))
         {
             Log.Logger.Warning("{Entity} is flattened or mirrored; the physics leaves it", entity.Name);
             return;
         }
 
-        if (!ColliderShape.TryCreate(collider, scale, out var shape))
-        {
-            Log.Logger.Warning("The physics has no shape for the {Collider} of {Entity} yet; it leaves it",
-                collider.GetType().Name, entity.Name);
-            return;
-        }
-
-        var position = ToPhysics(translation.As<double>()) + Vector3F.Transform(shape.Offset, rotation);
-        var turn = rotation * shape.Turn;
         BodyHandle handle;
+        ColliderShape shape;
+        Vector3F position;
+        QuaternionF turn;
         try
         {
+            if (!ColliderShape.TryCreate(collider, scale, out shape))
+            {
+                Log.Logger.Warning("The physics has no shape for the {Collider} of {Entity} yet; it leaves it",
+                    collider.GetType().Name, entity.Name);
+                return;
+            }
+
+            position = ToPhysics(translation.As<double>()) + Vector3F.Transform(shape.Offset, rotation);
+            turn = rotation * shape.Turn;
             handle = _world.Add(new BodyDescription
             {
                 Kind = body.Kind,
@@ -234,10 +258,13 @@ public sealed class PhysicsService : GameService, IPhysicsService
             return;
         }
 
+        var link = new PhysicsBodyLink(entity, body.Kind, shape, position, turn, CountDepth(entity));
         _keys[entity] = _links.Count;
-        _links.Add(new PhysicsBodyLink(entity, body.Kind, shape, position, turn));
+        _links.Add(link);
         _handles.Add(handle);
         _wasAwake.Add(body.Kind != BodyKind.Static);
+        if (entity.Owner != null && body.Kind != BodyKind.Static)
+            _parented.Add(link);
     }
 
     private void RunPhysics()
@@ -248,10 +275,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
             var now = Stopwatch.GetTimestamp();
             var elapsed = Stopwatch.GetElapsedTime(previous, now).TotalSeconds;
             previous = now;
-            if (!IsActive)
+            if (!IsActive || Volatile.Read(ref _unreadResults) >= MaxUnreadResults)
             {
                 _clock.Reset();
-                Thread.Sleep(5);
+                Thread.Sleep(1);
                 continue;
             }
 
@@ -280,7 +307,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             _world.Step();
         }
 
-        Publish();
+        Publish(steps);
         return steps;
     }
 
@@ -321,9 +348,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
             case PhysicsCommandKind.SetAngularVelocity:
                 _world.SetAngularVelocity(_handles[command.Key], command.Value);
                 break;
-            case PhysicsCommandKind.ApplyForce:
-                _world.ApplyForce(_handles[command.Key], command.Value);
-                break;
             case PhysicsCommandKind.ApplyCentralImpulse:
                 var handle = _handles[command.Key];
                 _world.ApplyImpulse(handle, command.Value, _world.GetPose(handle).Position);
@@ -334,7 +358,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         }
     }
 
-    private void Publish()
+    private void Publish(int steps)
     {
         if (!_spareResults.Reader.TryRead(out var result))
             result = new PhysicsStepResult();
@@ -354,8 +378,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
             _wasAwake[key] = isAwake;
         }
 
+        result.Steps = steps;
         result.Statistics = _world.LastStep;
         result.SteppedAt = Stopwatch.GetTimestamp();
+        Interlocked.Increment(ref _unreadResults);
         _results.Writer.TryWrite(result);
     }
 
@@ -363,6 +389,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
     {
         while (_results.Reader.TryRead(out var result))
         {
+            Interlocked.Decrement(ref _unreadResults);
             _resultNumber++;
             foreach (var motion in result.Motions)
             {
@@ -392,7 +419,9 @@ public sealed class PhysicsService : GameService, IPhysicsService
                 _moving.Add(_links[motion.Key]);
             }
 
+            _moving.Sort(CompareDepths);
             _lastResultAt = result.SteppedAt;
+            _lastResultSteps = result.Steps;
             _lastStep = result.Statistics;
             _spareResults.Writer.TryWrite(result);
         }
@@ -400,9 +429,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
     private void MoveEntities()
     {
-        var blend = _stepsOnOwnThread
-            ? (float)Math.Clamp(Stopwatch.GetElapsedTime(_lastResultAt).TotalSeconds / _clock.StepSeconds, 0, 1)
-            : _clock.Blend;
+        var blend = MeasureBlend();
         foreach (var link in _moving)
         {
             PlaceEntity(link, Vector3F.Lerp(link.PreviousPosition, link.CurrentPosition, blend),
@@ -415,6 +442,19 @@ public sealed class PhysicsService : GameService, IPhysicsService
         }
 
         _stopped.Clear();
+        foreach (var link in _parented)
+        {
+            if (link.MovedInResult != _resultNumber)
+                PlaceEntity(link, link.CurrentPosition, link.CurrentRotation);
+        }
+    }
+
+    private float MeasureBlend()
+    {
+        var sinceStep = _stepsOnOwnThread
+            ? Stopwatch.GetElapsedTime(_lastResultAt).TotalSeconds / _clock.StepSeconds
+            : _clock.Blend;
+        return (float)Math.Clamp((_lastResultSteps - 1 + sinceStep) / _lastResultSteps, 0, 1);
     }
 
     private void PlaceEntity(PhysicsBodyLink link, Vector3F position, QuaternionF rotation)
@@ -470,6 +510,19 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         return key;
     }
+
+    private static int CountDepth(Entity entity)
+    {
+        var depth = 0;
+        for (var owner = entity.Owner; owner != null; owner = owner.Owner)
+        {
+            depth++;
+        }
+
+        return depth;
+    }
+
+    private static int CompareDepths(PhysicsBodyLink first, PhysicsBodyLink second) => first.Depth.CompareTo(second.Depth);
 
     private static void RequireFinite(Vector3F vector, string parameterName)
     {

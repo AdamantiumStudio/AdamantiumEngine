@@ -7,10 +7,12 @@ namespace Adamantium.Engine.Physics;
 /// poses the physics sent, to draw between.</summary>
 internal sealed class PhysicsBodyLink
 {
-    public PhysicsBodyLink(Entity entity, BodyKind kind, in ColliderShape shape, Vector3F position, QuaternionF rotation)
+    public PhysicsBodyLink(Entity entity, BodyKind kind, in ColliderShape shape, Vector3F position, QuaternionF rotation,
+        int depth)
     {
         Entity = entity;
         Kind = kind;
+        Depth = depth;
         Offset = shape.Offset;
         Turn = shape.Turn;
         PreviousPosition = position;
@@ -22,6 +24,9 @@ internal sealed class PhysicsBodyLink
     public Entity Entity { get; }
 
     public BodyKind Kind { get; }
+
+    /// <summary>How many entities the entity hangs under; parents are stood before their children.</summary>
+    public int Depth { get; }
 
     public Vector3F Offset { get; }
 
