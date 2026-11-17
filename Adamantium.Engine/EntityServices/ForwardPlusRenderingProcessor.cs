@@ -48,8 +48,18 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private readonly Dictionary<MeshDrawKey, MeshDrawGroup> groups = new();
     private readonly List<MeshDrawGroup> groupsDrawn = [];
     private readonly Stack<MeshDrawGroup> spareGroups = new();
-    private readonly List<BlendedMeshDraw> blendedDraws = [];
-    private readonly List<BlendedDrawOrder> blendedOrder = [];
+    private readonly List<MeshDrawGroup> weightedGroups = [];
+    private IRenderTarget weightedSums;
+    private IRenderTarget weightedCoverage;
+    private readonly IRenderTarget[] weightedTargets = new IRenderTarget[2];
+    private readonly IRenderTarget[] frameTargets = new IRenderTarget[1];
+
+    // The weighted sums add up; the coverage is laid over what the layers before covered.
+    private static readonly ColorBlendEquationEXT[] WeightedBlends =
+        [ColorBlendEquations.Sum, ColorBlendEquations.Premultiplied];
+
+    private const ColorComponentFlagBits AllChannels = ColorComponentFlagBits.RBit | ColorComponentFlagBits.GBit
+                                                       | ColorComponentFlagBits.BBit | ColorComponentFlagBits.ABit;
     private readonly Dictionary<(Skeleton Skeleton, Matrix4x4F Mesh), (uint First, uint Count)> framePalettes = new();
     private MeshInstance[] instances = new MeshInstance[256];
     private Matrix4x4F[] palettes = [];
@@ -215,12 +225,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             TrianglesInScene = trianglesInScene;
             var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
             DrawCalls = groupsDrawn.Count + wires.Count + wiresOverBlended.Count + colliders.Count;
-            var blendedFirst = UploadInstances(paletteAddress);
-            DrawOpaque();
-            // The lines go with the opaque surfaces: what is blended over them dims them as it does those. A blended
-            // surface's own wire goes over it.
+            UploadInstances(paletteAddress);
+            DrawGroups(groupsDrawn);
+            // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
+            // see-through surface's own wire goes over it.
             DrawLines(paletteAddress);
-            DrawCalls += DrawBlended(blendedFirst);
+            DrawCalls += DrawSeeThrough();
             DrawWires(wiresOverBlended, paletteAddress);
         }
         catch (Exception exception)
@@ -489,29 +499,26 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var alphaMode = material?.AlphaMode ?? AlphaMode.Opaque;
         var albedo = AlbedoOf(material, alphaMode);
         var alphaCutoff = alphaMode == AlphaMode.Mask ? material.AlphaCutoff : 0f;
-        // The blended pass draws with the plain effect alone.
-        withWire &= alphaMode != AlphaMode.Blend;
-        var pass = PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask);
+        // A see-through surface goes into the weighted layers, in any order, tested against the depth but not writing
+        // it; its wire is drawn as lines.
+        var seeThrough = alphaMode == AlphaMode.Blend;
+        withWire &= !seeThrough;
+        var pass = PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask, seeThrough);
         var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
         var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
         var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture) : 0;
         var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff);
-        if (alphaMode == AlphaMode.Blend)
-        {
-            EnqueueBlended(entity, meshData, geometry, pass, instance);
-            return;
-        }
 
         Effect owner = withWire ? wireEffect : effect;
         var key = new MeshDrawKey(geometry, pass, meshData.CullMode, meshData.DepthTestEnabled,
-            meshData.DepthWriteEnabled, meshData.IsWireFrame, meshData.TopologyOverride);
+            !seeThrough && meshData.DepthWriteEnabled, meshData.IsWireFrame, meshData.TopologyOverride);
         if (!groups.TryGetValue(key, out var group))
         {
             group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
             group.Key = key;
             group.Effect = owner;
             groups.Add(key, group);
-            groupsDrawn.Add(group);
+            (seeThrough ? weightedGroups : groupsDrawn).Add(group);
         }
 
         group.Instances.Add(instance);
@@ -519,8 +526,15 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     // Only a textured surface's alpha changes across it, so only a textured pass is masked: a discard costs the early
     // depth test.
-    private IEffectPass PassOf(bool withWire, bool skinned, bool textured, bool masked)
+    private IEffectPass PassOf(bool withWire, bool skinned, bool textured, bool masked, bool seeThrough)
     {
+        if (seeThrough)
+        {
+            if (skinned)
+                return textured ? effect.ForwardPlusSkinnedWeightedTexturedPass : effect.ForwardPlusSkinnedWeightedColoredPass;
+            return textured ? effect.ForwardPlusWeightedTexturedPass : effect.ForwardPlusWeightedColoredPass;
+        }
+
         if (withWire)
         {
             if (!textured)
@@ -535,46 +549,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         if (masked)
             return skinned ? effect.ForwardPlusSkinnedMaskedTexturedPass : effect.ForwardPlusMaskedTexturedPass;
         return skinned ? effect.ForwardPlusSkinnedTexturedPass : effect.ForwardPlusTexturedPass;
-    }
-
-    // Tested against the depth but not writing it, so what is blended after still shows behind. A two-sided mesh of
-    // filled triangles draws its back faces before its front ones; a mirrored copy's faces turn the other way. Lines and
-    // points have no faces: one draw.
-    private void EnqueueBlended(Entity entity, MeshData meshData, RenderGeometry geometry, IEffectPass pass,
-        in MeshInstance instance)
-    {
-        var distanceSquared = DistanceSquaredOf(entity, instance.World);
-        if (meshData.CullMode != CullModeFlagBits.None || meshData.IsWireFrame || !IsTriangles(meshData))
-        {
-            AddBlended(meshData, geometry, pass, instance, distanceSquared, meshData.CullMode);
-            return;
-        }
-
-        var mirrored = instance.World.Determinant() < 0;
-        AddBlended(meshData, geometry, pass, instance, distanceSquared,
-            mirrored ? CullModeFlagBits.BackBit : CullModeFlagBits.FrontBit);
-        AddBlended(meshData, geometry, pass, instance, distanceSquared,
-            mirrored ? CullModeFlagBits.FrontBit : CullModeFlagBits.BackBit);
-    }
-
-    private void AddBlended(MeshData meshData, RenderGeometry geometry, IEffectPass pass, in MeshInstance instance,
-        float distanceSquared, CullModeFlagBits cullMode)
-    {
-        var key = new MeshDrawKey(geometry, pass, cullMode, meshData.DepthTestEnabled, false, meshData.IsWireFrame,
-            meshData.TopologyOverride);
-        blendedOrder.Add(new BlendedDrawOrder(distanceSquared, blendedDraws.Count));
-        blendedDraws.Add(new BlendedMeshDraw(key, instance));
-    }
-
-    // From the camera to the middle of the entity's bounds, or to where it stands when it has none yet.
-    private float DistanceSquaredOf(Entity entity, in Matrix4x4F world)
-    {
-        if (sceneIndex != null && sceneIndex.TryGetBox(entity, out var box))
-        {
-            return (box.Center - cameraPosition).LengthSquared();
-        }
-
-        return world.TranslationVector.LengthSquared();
     }
 
     private (uint First, uint Count) PaletteOf(Skin skin, in Matrix4x4F mesh)
@@ -602,39 +576,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         return palette;
     }
 
-    // The opaque groups' copies, then the blended ones far to near; gives where the blended ones start.
-    private uint UploadInstances(ulong paletteAddress)
+    // The opaque groups' copies, then the see-through ones.
+    private void UploadInstances(ulong paletteAddress)
     {
-        if (groupsDrawn.Count == 0 && blendedDraws.Count == 0)
+        var count = PlaceGroups(groupsDrawn, 0);
+        count = PlaceGroups(weightedGroups, count);
+        if (count == 0)
         {
-            return 0;
+            return;
         }
 
-        var count = 0;
-        foreach (var group in groupsDrawn)
-        {
-            group.First = (uint)count;
-            count += group.Instances.Count;
-        }
-
-        var blendedFirst = count;
-        count += blendedDraws.Count;
         if (instances.Length < count)
         {
             Array.Resize(ref instances, Math.Max(instances.Length * 2, count));
         }
 
-        foreach (var group in groupsDrawn)
-        {
-            CollectionsMarshal.AsSpan(group.Instances).CopyTo(instances.AsSpan((int)group.First));
-        }
-
-        blendedOrder.Sort();
-        for (var index = 0; index < blendedOrder.Count; index++)
-        {
-            instances[blendedFirst + index] = blendedDraws[blendedOrder[index].Draw].Instance;
-        }
-
+        CopyInstances(groupsDrawn);
+        CopyInstances(weightedGroups);
         var instanceAddress = GraphicsDevice.UploadFrameData<MeshInstance>(instances.AsSpan(0, count));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
@@ -642,13 +600,31 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             target?.Parameters["Palettes"].SetValue(paletteAddress);
             target?.Parameters["sampleType"].SetResource(SamplerStates.LinearRepeat);
         }
-
-        return (uint)blendedFirst;
     }
 
-    private void DrawOpaque()
+    // Where each group's copies start in the frame's instances, from first on; gives where the next group starts.
+    private static int PlaceGroups(List<MeshDrawGroup> placed, int first)
     {
-        foreach (var group in groupsDrawn)
+        foreach (var group in placed)
+        {
+            group.First = (uint)first;
+            first += group.Instances.Count;
+        }
+
+        return first;
+    }
+
+    private void CopyInstances(List<MeshDrawGroup> copied)
+    {
+        foreach (var group in copied)
+        {
+            CollectionsMarshal.AsSpan(group.Instances).CopyTo(instances.AsSpan((int)group.First));
+        }
+    }
+
+    private void DrawGroups(List<MeshDrawGroup> drawn)
+    {
+        foreach (var group in drawn)
         {
             var key = group.Key;
             group.Effect.Parameters["InstanceBase"].SetValue(group.First);
@@ -657,45 +633,165 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    // Neighbours in the order that share a key go in one call: nothing else lies between them. Gives the calls made.
-    private int DrawBlended(uint blendedFirst)
+    // The see-through surfaces, in any order, into the weighted layers - beside the frame, tested against its depth -
+    // then their average laid over the frame as much as they cover it. Gives the calls made.
+    private int DrawSeeThrough()
     {
-        if (blendedOrder.Count == 0)
+        if (weightedGroups.Count == 0)
         {
             return 0;
         }
 
-        var calls = 0;
-        var opaqueEquation = GraphicsDevice.ColorBlendEquation;
-        GraphicsDevice.ColorBlendEquation = ColorBlendEquations.Premultiplied;
-        effect.Parameters["Blended"].SetValue(1u);
-        var instanceBase = effect.Parameters["InstanceBase"];
+        var device = GraphicsDevice;
+        var frame = device.CurrentRenderTarget;
+        var clearColor = device.ClearColor;
+        var channels = device.ColorComponentFlags;
+        EnsureWeightedLayers(frame, device.MSAALevel);
+        device.SuspendRendering();
+        var layersOpen = false;
         try
         {
-            var start = 0;
-            while (start < blendedOrder.Count)
-            {
-                var draw = blendedDraws[blendedOrder[start].Draw];
-                var end = start + 1;
-                while (end < blendedOrder.Count && blendedDraws[blendedOrder[end].Draw].Key == draw.Key)
-                {
-                    end++;
-                }
-
-                instanceBase.SetValue(blendedFirst + (uint)start);
-                draw.Key.Pass.Apply();
-                draw.Key.Geometry.Draw(GraphicsDevice, draw.Key.State, (uint)(end - start));
-                calls++;
-                start = end;
-            }
+            KeepDepthForNextPass();
+            PrepareToDraw(weightedSums);
+            PrepareToDraw(weightedCoverage);
+            weightedTargets[0] = weightedSums;
+            weightedTargets[1] = weightedCoverage;
+            device.SetRenderTargets(weightedTargets);
+            device.ClearColor = Colors.Transparent;
+            // The sums' alpha is the sum of the weights the color is divided by: written whatever the frame's mask.
+            device.ColorComponentFlags = AllChannels;
+            device.TargetBlendEquations = WeightedBlends;
+            device.BeginRendering(device.CurrentCommandBuffer, keepDepth: true);
+            layersOpen = true;
+            DrawGroups(weightedGroups);
         }
         finally
         {
-            GraphicsDevice.ColorBlendEquation = opaqueEquation;
-            effect.Parameters["Blended"].SetValue(0u);
+            // Closed before the frame opens again, even when a draw threw.
+            if (layersOpen)
+            {
+                device.SuspendRendering();
+                PrepareToRead(weightedSums);
+                PrepareToRead(weightedCoverage);
+            }
+
+            KeepDepthForNextPass();
+            device.TargetBlendEquations = null;
+            device.ColorComponentFlags = channels;
+            frameTargets[0] = frame;
+            device.SetRenderTargets(frameTargets);
+            device.ClearColor = clearColor;
+            device.ResumeRendering();
         }
 
-        return calls;
+        Composite();
+        return weightedGroups.Count;
+    }
+
+    // The depth one pass wrote, seen by the next that loads it: passes are not ordered by themselves.
+    private void KeepDepthForNextPass()
+    {
+        if (GraphicsDevice.CurrentDepthStencilBuffer is not { } depth)
+            return;
+
+        const PipelineStageFlagBits2 depthTests =
+            PipelineStageFlagBits2.EarlyFragmentTestsBit | PipelineStageFlagBits2.LateFragmentTestsBit;
+        GraphicsDevice.InsertImageMemoryBarrier(GraphicsDevice.CurrentCommandBuffer, depth,
+            AccessFlagBits2.DepthStencilAttachmentWriteBit,
+            AccessFlagBits2.DepthStencilAttachmentReadBit | AccessFlagBits2.DepthStencilAttachmentWriteBit,
+            ImageLayout.DepthStencilAttachmentOptimal, ImageLayout.DepthStencilAttachmentOptimal, depthTests, depthTests);
+    }
+
+    private void Composite()
+    {
+        var device = GraphicsDevice;
+        var descriptors = ((GraphicsDevice)device).DescriptorManager;
+        var blend = device.ColorBlendEquation;
+        var vertexType = device.VertexType;
+        var topology = device.PrimitiveTopology;
+        var polygonMode = device.PolygonMode;
+        var cullMode = device.CullMode;
+        var depthTest = device.DepthTestEnabled;
+        var depthWrite = device.DepthWriteEnable;
+        effect.Parameters["AccumulatedTexture"].SetValue(descriptors.TextureIndex(weightedSums.ResolveTexture));
+        effect.Parameters["CoverageTexture"].SetValue(descriptors.TextureIndex(weightedCoverage.ResolveTexture));
+        device.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
+        device.VertexType = null;
+        device.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        device.PolygonMode = PolygonMode.Fill;
+        device.CullMode = CullModeFlagBits.None;
+        device.DepthTestEnabled = false;
+        device.DepthWriteEnable = false;
+        try
+        {
+            effect.ForwardPlusWeightedCompositePass.Apply();
+            device.Draw(3, 1);
+        }
+        finally
+        {
+            device.ColorBlendEquation = blend;
+            device.VertexType = vertexType;
+            device.PrimitiveTopology = topology;
+            device.PolygonMode = polygonMode;
+            device.CullMode = cullMode;
+            device.DepthTestEnabled = depthTest;
+            device.DepthWriteEnable = depthWrite;
+        }
+    }
+
+    // The layers the size and samples of the frame they go over: made anew when it changes, the old ones let go once the
+    // frames in flight are done with them.
+    private void EnsureWeightedLayers(IRenderTarget frame, MSAALevel samples)
+    {
+        if (weightedSums is { IsDisposed: false } && weightedSums.Width == frame.Width
+            && weightedSums.Height == frame.Height && weightedSums.MSAALevel == samples)
+        {
+            return;
+        }
+
+        ReleaseWeightedLayers();
+        weightedSums = GraphicsDevice.CreateRenderTarget(frame.Width, frame.Height, samples,
+            Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, "See-through sums");
+        weightedCoverage = GraphicsDevice.CreateRenderTarget(frame.Width, frame.Height, samples,
+            Format.R16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, "See-through coverage");
+    }
+
+    // Each by the device that made it, which may no longer be the processor's.
+    private void ReleaseWeightedLayers()
+    {
+        foreach (var layer in (ReadOnlySpan<IRenderTarget>)[weightedSums, weightedCoverage])
+        {
+            if (layer is IDisposable disposable && !layer.IsDisposed)
+                layer.GraphicsDevice.AddToDeferDisposeQueue(disposable);
+        }
+
+        weightedSums = null;
+        weightedCoverage = null;
+    }
+
+    // What a layer held last frame - read by its composite - is cleared: whatever layout it was left in goes.
+    private void PrepareToDraw(IRenderTarget layer)
+    {
+        var commands = GraphicsDevice.CurrentCommandBuffer;
+        GraphicsDevice.InsertImageMemoryBarrier(commands, layer, AccessFlagBits2.ShaderReadBit,
+            AccessFlagBits2.ColorAttachmentWriteBit, ImageLayout.Undefined, ImageLayout.ColorAttachmentOptimal,
+            PipelineStageFlagBits2.FragmentShaderBit | PipelineStageFlagBits2.ColorAttachmentOutputBit,
+            PipelineStageFlagBits2.ColorAttachmentOutputBit);
+        if (!ReferenceEquals(layer.ResolveTexture, layer))
+        {
+            GraphicsDevice.InsertImageMemoryBarrier(commands, layer.ResolveTexture, AccessFlagBits2.ShaderReadBit,
+                AccessFlagBits2.ColorAttachmentWriteBit, ImageLayout.Undefined, ImageLayout.ColorAttachmentOptimal,
+                PipelineStageFlagBits2.FragmentShaderBit | PipelineStageFlagBits2.ColorAttachmentOutputBit,
+                PipelineStageFlagBits2.ColorAttachmentOutputBit);
+        }
+    }
+
+    private void PrepareToRead(IRenderTarget layer)
+    {
+        GraphicsDevice.InsertImageMemoryBarrier(GraphicsDevice.CurrentCommandBuffer, layer.ResolveTexture,
+            AccessFlagBits2.ColorAttachmentWriteBit, AccessFlagBits2.ShaderReadBit, ImageLayout.ColorAttachmentOptimal,
+            ImageLayout.ShaderReadOnlyOptimal, PipelineStageFlagBits2.ColorAttachmentOutputBit,
+            PipelineStageFlagBits2.FragmentShaderBit);
     }
 
     private void DrawWires(List<MeshWire> drawn, ulong paletteAddress)
@@ -718,7 +814,19 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private void ForgetFrame()
     {
-        foreach (var group in groupsDrawn)
+        Recycle(groupsDrawn);
+        Recycle(weightedGroups);
+        groups.Clear();
+        framePalettes.Clear();
+        paletteMatrices = 0;
+        wires.Clear();
+        wiresOverBlended.Clear();
+        colliders.Clear();
+    }
+
+    private void Recycle(List<MeshDrawGroup> recycled)
+    {
+        foreach (var group in recycled)
         {
             group.Instances.Clear();
             group.Key = default;
@@ -726,15 +834,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             spareGroups.Push(group);
         }
 
-        groupsDrawn.Clear();
-        groups.Clear();
-        blendedDraws.Clear();
-        blendedOrder.Clear();
-        framePalettes.Clear();
-        paletteMatrices = 0;
-        wires.Clear();
-        wiresOverBlended.Clear();
-        colliders.Clear();
+        recycled.Clear();
     }
 
     private void DrawCollider(Entity entity, Collider collider)
@@ -770,6 +870,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private void ReleaseDeviceResources()
     {
+        ReleaseWeightedLayers();
         geometryCache?.Dispose();
         effect?.Dispose();
         wireEffect?.Dispose();

@@ -22,7 +22,10 @@ public interface IDrawableDevice
     /// <summary>Why the last <see cref="BeginDraw"/> returned false (a device/surface error), else null.</summary>
     string LastFrameError { get; }
 
-    void BeginRendering(CommandBuffer commandBuffer, bool continueRendering = false, float depth = 1.0f, uint stencil = 0);
+    /// <summary>Opens a rendering pass on the targets set; <paramref name="keepDepth"/> clears the colors but loads the
+    /// depth the buffer holds, for a pass tested against a scene drawn before.</summary>
+    void BeginRendering(CommandBuffer commandBuffer, bool continueRendering = false, float depth = 1.0f, uint stencil = 0,
+        bool keepDepth = false);
     
     void EndDraw();
 
@@ -93,6 +96,10 @@ public interface IDynamicStateDevice
     TessellationDomainOrigin TessellationDomainOrigin { get; set; }
 
     ColorBlendEquationEXT ColorBlendEquation { get; set; }
+
+    /// <summary>How each color target blends, in the order they were set, when they blend apart; null, or a target past
+    /// its end, blends by <see cref="ColorBlendEquation"/>.</summary>
+    ColorBlendEquationEXT[] TargetBlendEquations { get; set; }
     
     bool DepthWriteEnable { get; set; }
 

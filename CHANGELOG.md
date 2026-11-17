@@ -7,9 +7,12 @@ All packages share one version.
 
 ### Added
 
-- Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
-  near by the middle of each mesh's bounds, premultiplied over what is behind, tested against the depth but not
-  writing it, and lit by the same clusters; a two-sided mesh draws its back faces before its front ones. `Mask`: left
+- Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: weighted blended order-independent
+  transparency (McGuire and Bavoil) - nothing sorted, so crossing see-through surfaces never jump as the view turns.
+  After the opaque meshes, the see-through ones go, in instanced groups and any order, into two layers beside the
+  frame (weighted sums, RGBA16F, and coverage, R16F, at the frame's samples), tested against its depth but not
+  writing it and lit by the same clusters; one full-screen pass then lays their weighted average over the frame as
+  much as they cover it. The weight, the paper's equation (7), favours near layers at the scale of metres. `Mask`: left
   out below `AlphaCutoff`, whole above it - in masked passes of their own for a texture, so the opaque passes keep the
   early depth test. `Opaque` ignores the alpha. The alpha is `DiffuseColor.W` times a texture's. A blended surface's
   wireframe is drawn as lines over it. `Material.IsMasked` says whether the cutoff counts and `UsesAlpha` whether the
@@ -426,6 +429,10 @@ All packages share one version.
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
   nothing while the overlay is off. With its floor, the grid writes its depth, a little behind the ground, and still
   hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+- The graphics device blends each color target apart when told to: `IGraphicsDevice.TargetBlendEquations`, one
+  equation a target - every target of a pass gets its blend. `BeginRendering(keepDepth: true)` clears the colors and
+  loads the depth, for a pass tested against a scene drawn before. `ColorBlendEquations.Sum` adds the source, color
+  and alpha.
 - `MeshInstance` takes its albedo as `Vector4F` - the alpha counts now - and an `alphaCutoff`. An opaque Forward+
   surface writes alpha 1 where it used to write its texture's.
 - PDF 3D lives in `Adamantium.Pdf.View3D` (folder `View3D`), not `Adamantium.Pdf.ThreeD`: `Pdf3DArtwork`, `Pdf3DView`,

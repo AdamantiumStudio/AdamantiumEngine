@@ -51,16 +51,14 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
 [shader("fragment")]
 float4 LitColored_PS(LIT_PIXEL input) : SV_TARGET
 {
-    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
-    return Finished(lit, input.albedo.a);
+    return float4(Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
-    return Finished(lit, surface.a * input.albedo.a);
+    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
 }
 
 [shader("fragment")]
@@ -68,6 +66,48 @@ float4 LitMaskedTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = MaskedSurfaceOf(input);
     return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
+}
+
+[shader("fragment")]
+WEIGHTED_PIXEL LitWeightedColored_PS(LIT_PIXEL input)
+{
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return Weighted(lit, input.albedo.a, input.viewPosition.z);
+}
+
+[shader("fragment")]
+WEIGHTED_PIXEL LitWeightedTextured_PS(LIT_PIXEL input)
+{
+    float4 surface = SurfaceOf(input);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return Weighted(lit, surface.a * input.albedo.a, input.viewPosition.z);
+}
+
+// The see-through layers' textures in meshTextures, resolved: the weighted sums and the coverage.
+uint AccumulatedTexture;
+uint CoverageTexture;
+
+// One triangle over the whole target.
+[shader("vertex")]
+float4 Fullscreen_VS(uint vertexId : SV_VertexID) : SV_POSITION
+{
+    float2 corner = float2((vertexId << 1) & 2, vertexId & 2);
+    return float4(corner * 2.0f - 1.0f, 0.0f, 1.0f);
+}
+
+// The see-through layers' average color, weighted, laid over the scene as much as they cover it.
+[shader("fragment")]
+float4 WeightedComposite_PS(float4 position : SV_POSITION) : SV_TARGET
+{
+    int3 pixel = int3(position.xy, 0);
+    float coverage = meshTextures[NonUniformResourceIndex(CoverageTexture)].Load(pixel).r;
+    if (coverage <= 0.0f)
+    {
+        discard;
+    }
+
+    float4 accumulated = meshTextures[NonUniformResourceIndex(AccumulatedTexture)].Load(pixel);
+    return float4(accumulated.rgb / max(accumulated.a, 1e-5f), saturate(coverage));
 }
 
 technique ForwardPlus
@@ -111,5 +151,35 @@ technique ForwardPlus
     {
         VertexShader = LitSkinned_VS;
         PixelShader = LitMaskedTextured_PS;
+    }
+
+    pass WeightedColored
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitWeightedColored_PS;
+    }
+
+    pass WeightedTextured
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitWeightedTextured_PS;
+    }
+
+    pass SkinnedWeightedColored
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitWeightedColored_PS;
+    }
+
+    pass SkinnedWeightedTextured
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitWeightedTextured_PS;
+    }
+
+    pass WeightedComposite
+    {
+        VertexShader = Fullscreen_VS;
+        PixelShader = WeightedComposite_PS;
     }
 }
