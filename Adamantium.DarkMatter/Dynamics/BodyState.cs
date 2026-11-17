@@ -34,6 +34,10 @@ internal struct BodyState
 
     public bool CanSleep;
     public bool IsAwake;
+
+    /// <summary>Whether a force or torque was applied for the next step, so the body does not count it toward sleep.
+    /// </summary>
+    public bool IsPushed;
     public float SleepTime;
     public int IslandHead;
     public int IslandNext;

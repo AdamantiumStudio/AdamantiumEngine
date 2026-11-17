@@ -30,15 +30,12 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private readonly List<PhysicsBodyLink> _stopped = [];
     private readonly List<PhysicsBodyLink> _parented = [];
     private readonly List<PhysicsBodyLink> _placing = [];
-    private readonly Dictionary<int, Vector3F> _frameForces = new();
-    private readonly List<PhysicsPush> _pushes = [];
-    private readonly HashSet<int> _toldOfOverflow = [];
+    private readonly Dictionary<int, Vector3F> _forces = new();
     private readonly HashSet<int> _toldOfRefusal = [];
     private readonly Channel<PhysicsCommand> _commands = Channel.CreateUnbounded<PhysicsCommand>(OneReader);
     private readonly Channel<PhysicsStepResult> _results = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
     private readonly Channel<PhysicsStepResult> _spareResults = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
 
-    private float[] _usedThisStep = [];
     private PhysicsSettings _settings = new();
     private Vector3F _gravity = new(0, 9.81f, 0);
     private Vector3<double> _origin;
@@ -115,21 +112,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
     }
 
     /// <inheritdoc/>
-    public void ApplyForce(Entity entity, Vector3F force)
+    public void SetForce(Entity entity, Vector3F force)
     {
         RequireFinite(force, nameof(force));
-        var key = FindDynamicKey(entity);
-        var total = _frameForces.TryGetValue(key, out var earlier) ? earlier + force : force;
-        if (!IsFinite(total))
-        {
-            if (_toldOfOverflow.Add(key))
-                Log.Logger.Warning("The pushes of {Entity} in a frame add up past any number; such pushes are dropped",
-                    entity.Name);
-
-            return;
-        }
-
-        _frameForces[key] = total;
+        Send(PhysicsCommandKind.SetForce, FindDynamicKey(entity), force, Vector3F.Zero);
     }
 
     /// <inheritdoc/>
@@ -153,7 +139,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
         if (_world == null)
             return;
 
-        SendFrameForces(appTime.FrameTime);
         if (!_stepsOnOwnThread)
             Advance(appTime.FrameTime);
 
@@ -177,7 +162,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
             AddBody(body);
         }
 
-        _usedThisStep = new float[_links.Count];
         _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
         _resultNumber = 0;
         _unreadResults = 0;
@@ -208,9 +192,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _stopped.Clear();
         _parented.Clear();
         _placing.Clear();
-        _frameForces.Clear();
-        _pushes.Clear();
-        _toldOfOverflow.Clear();
+        _forces.Clear();
         _toldOfRefusal.Clear();
         _lastStep = default;
         while (_commands.Reader.TryRead(out _))
@@ -296,19 +278,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
             _parented.Add(link);
     }
 
-    private void SendFrameForces(double frameSeconds)
-    {
-        if (frameSeconds <= 0)
-            return;
-
-        foreach (var force in _frameForces)
-        {
-            Send(PhysicsCommandKind.PushForFrame, force.Key, force.Value, Vector3F.Zero, frameSeconds);
-        }
-
-        _frameForces.Clear();
-    }
-
     private void RunPhysics()
     {
         var previous = Stopwatch.GetTimestamp();
@@ -350,11 +319,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
         if (steps == 0)
             return 0;
 
-        var simulated = steps * _clock.StepSeconds;
-        DoCommands(simulated / (simulated + _clock.DroppedSeconds));
+        DoCommands();
         for (var step = 0; step < steps; step++)
         {
-            ApplyPushes((float)_clock.StepSeconds);
+            ApplyForces();
             _world.Step();
         }
 
@@ -362,38 +330,23 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return steps;
     }
 
-    private void ApplyPushes(float stepSeconds)
+    private void ApplyForces()
     {
-        Array.Clear(_usedThisStep);
-        var kept = 0;
-        for (var index = 0; index < _pushes.Count; index++)
+        foreach (var force in _forces)
         {
-            var push = _pushes[index];
-            var taken = MathF.Min(push.Seconds, stepSeconds - _usedThisStep[push.Key]);
-            var left = push.Seconds;
-            if (taken > 0)
+            try
             {
-                _usedThisStep[push.Key] += taken;
-                left -= taken;
-                try
-                {
-                    _world.ApplyForce(_handles[push.Key], push.Force * (taken / stepSeconds));
-                }
-                catch (ArgumentException exception)
-                {
-                    if (_toldOfRefusal.Add(push.Key))
-                        Log.Logger.Warning(exception, "The physics drops a push of {Entity} it cannot apply",
-                            _links[push.Key].Name);
-
-                    left = 0;
-                }
+                _world.ApplyForce(_handles[force.Key], force.Value);
             }
+            catch (ArgumentException exception)
+            {
+                if (_toldOfRefusal.Add(force.Key))
+                    Log.Logger.Warning(exception, "The physics cannot push {Entity} so hard; it drops such forces",
+                        _links[force.Key].Name);
 
-            if (left > 0)
-                _pushes[kept++] = new PhysicsPush(push.Key, push.Force, left);
+                _forces.Remove(force.Key);
+            }
         }
-
-        _pushes.RemoveRange(kept, _pushes.Count - kept);
     }
 
     private void StrikeCenter(int key, Vector3F impulse)
@@ -411,13 +364,13 @@ public sealed class PhysicsService : GameService, IPhysicsService
             Thread.Yield();
     }
 
-    private void DoCommands(double simulatedShare)
+    private void DoCommands()
     {
         while (_commands.Reader.TryRead(out var command))
         {
             try
             {
-                DoCommand(command, simulatedShare);
+                DoCommand(command);
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
@@ -426,7 +379,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         }
     }
 
-    private void DoCommand(in PhysicsCommand command, double simulatedShare)
+    private void DoCommand(in PhysicsCommand command)
     {
         switch (command.Kind)
         {
@@ -439,10 +392,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
             case PhysicsCommandKind.SetAngularVelocity:
                 _world.SetAngularVelocity(_handles[command.Key], command.Value);
                 break;
-            case PhysicsCommandKind.PushForFrame:
-                var seconds = (float)(command.Seconds * simulatedShare);
-                if (seconds > 0)
-                    _pushes.Add(new PhysicsPush(command.Key, command.Value, seconds));
+            case PhysicsCommandKind.SetForce:
+                if (command.Value == Vector3F.Zero)
+                    _forces.Remove(command.Key);
+                else
+                    _forces[command.Key] = command.Value;
                 break;
             case PhysicsCommandKind.ApplyCentralImpulse:
                 StrikeCenter(command.Key, command.Value);
@@ -604,8 +558,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
     private Vector3<double> ToWorld(Vector3F position) => position.As<double>() + _origin;
 
-    private void Send(PhysicsCommandKind kind, int key, Vector3F value, Vector3F point, double seconds = 0) =>
-        _commands.Writer.TryWrite(new PhysicsCommand(kind, key, value, point, seconds));
+    private void Send(PhysicsCommandKind kind, int key, Vector3F value, Vector3F point) =>
+        _commands.Writer.TryWrite(new PhysicsCommand(kind, key, value, point));
 
     private int FindKey(Entity entity)
     {

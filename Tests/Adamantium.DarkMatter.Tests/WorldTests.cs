@@ -496,6 +496,49 @@ public class WorldTests
     }
 
     [Test]
+    public void BodyPushedAtEveryStep_StaysAwakeHoweverSlowItGoes()
+    {
+        var scene = new SceneBuilder(new PhysicsSettings { Gravity = Vector3F.Zero });
+        var body = scene.World.Add(new BodyDescription { Shape = new Shapes.SphereCollisionShape(0.5f) });
+        var balanced = scene.World.Add(new BodyDescription
+        {
+            Shape = new Shapes.SphereCollisionShape(0.5f),
+            Position = new Vector3F(0, 0, 10)
+        });
+        var turned = scene.World.Add(new BodyDescription
+        {
+            Shape = new Shapes.SphereCollisionShape(0.5f),
+            Position = new Vector3F(0, 0, -10)
+        });
+        var steps = 2 * scene.World.Settings.StepRate;
+        for (var step = 0; step < steps; step++)
+        {
+            scene.World.ApplyForce(body, new Vector3F(5, 0, 0));
+            scene.World.ApplyForce(balanced, new Vector3F(5, 0, 0));
+            scene.World.ApplyForce(balanced, new Vector3F(-5, 0, 0));
+            scene.World.ApplyTorque(turned, new Vector3F(0, 1, 0));
+            scene.World.Step();
+        }
+
+        var mass = 1000 * 4f / 3 * MathF.PI * 0.125f;
+        Assert.That(scene.World.IsAwake(body), Is.True);
+        Assert.That(scene.World.IsAwake(balanced), Is.True);
+        Assert.That(scene.World.IsAwake(turned), Is.True);
+        Assert.That(scene.World.GetLinearVelocity(body).X, Is.EqualTo(5 * 2 / mass).Within(1e-4f));
+
+        scene.World.SetLinearVelocity(body, Vector3F.Zero);
+        scene.World.SetAngularVelocity(turned, Vector3F.Zero);
+        scene.Run(1f);
+        Assert.That(scene.World.IsAwake(body), Is.False, "pushes stopped, the body sleeps again");
+        Assert.That(scene.World.IsAwake(turned), Is.False, "turns stopped, the body sleeps again");
+        Assert.That(scene.World.IsAwake(balanced), Is.False, "pushes stopped, the balanced body sleeps again");
+        scene.World.ApplyForce(body, Vector3F.Zero);
+        scene.World.ApplyTorque(turned, Vector3F.Zero);
+        Assert.That(scene.World.IsAwake(body), Is.False, "a zero force does not wake it");
+        Assert.That(scene.World.IsAwake(turned), Is.False, "a zero torque does not wake it");
+    }
+
+    [Test]
     public void BadMotion_IsRefused()
     {
         IPhysicsWorld world = new PhysicsWorld();
@@ -588,5 +631,7 @@ public class WorldTests
 
         Assert.Throws<InvalidOperationException>(() => scene.World.SetLinearVelocity(ground, Vector3F.UnitX));
         Assert.Throws<InvalidOperationException>(() => scene.World.ApplyForce(ground, Vector3F.UnitX));
+        Assert.Throws<InvalidOperationException>(() => scene.World.ApplyForce(ground, Vector3F.Zero));
+        Assert.Throws<InvalidOperationException>(() => scene.World.ApplyTorque(ground, Vector3F.Zero));
     }
 }

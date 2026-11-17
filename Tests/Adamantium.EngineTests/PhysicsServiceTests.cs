@@ -202,10 +202,9 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         var box = AddBox("Held", new Vector3<double>(0, -3, 0), 0.5);
         Play();
-        var weight = new Vector3F(0, -1000 * 9.81f, 0);
+        _physics.SetForce(box, new Vector3F(0, -1000 * 9.81f, 0));
         for (var frame = 0; frame < 8; frame++)
         {
-            _physics.ApplyForce(box, weight);
             Frame(0.5);
         }
 
@@ -213,19 +212,105 @@ public class PhysicsServiceTests
     }
 
     [Test]
-    public void PushOfASlowFrame_EndsWithTheTimeSimulated()
+    public void ForceSetToZero_StopsPushing()
     {
         UseSteppedPhysics();
         _physics.Gravity = Vector3F.Zero;
         var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
         Play();
 
-        _physics.ApplyForce(box, new Vector3F(1000, 0, 0));
-        Frame(0.5);
-        Frames(1);
+        _physics.SetForce(box, new Vector3F(1000, 0, 0));
+        Frames(0.5);
+        _physics.SetForce(box, Vector3F.Zero);
+        Frames(0.1);
+        var speed = _physics.GetLinearVelocity(box).X;
+        Frames(0.5);
 
-        var simulated = 8.0 / 120;
-        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(simulated).Within(0.01));
+        Assert.That(speed, Is.EqualTo(0.5f).Within(0.02f));
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(speed).Within(1e-5f));
+    }
+
+    [Test]
+    public void SmallForce_IsFeltThoughTheBodyGoesSlowerThanSleep()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3F.Zero;
+        var box = AddBox("Crawling", Vector3<double>.Zero, 0.5);
+        Play();
+
+        _physics.SetForce(box, new Vector3F(10, 0, 0));
+        Frames(3);
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(0.03f).Within(0.002f));
+    }
+
+    [Test]
+    public void ForceTooStrongForTheBody_IsDroppedAndTheGameGoesOn()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3F.Zero;
+        var box = MakeBox("Light", Vector3<double>.Zero, 0.5);
+        box.GetComponent<RigidBody>().Mass = 0.001f;
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+
+        for (var frame = 0; frame < 3; frame++)
+        {
+            _physics.SetForce(box, new Vector3F(3e38f, 0, 0));
+            Frame(FrameSeconds);
+        }
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.Zero);
+        _physics.SetForce(box, new Vector3F(0.001f, 0, 0));
+        Frames(0.5);
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(0.5f).Within(0.02f));
+    }
+
+    [Test]
+    public void ForceSetInAFrameShorterThanAStep_IsKept()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3F.Zero;
+        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        Play();
+
+        _physics.SetForce(box, new Vector3F(1000, 0, 0));
+        Frame(1.0 / 480);
+        Frame(1.0 / 480);
+        Frames(0.5);
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(0.5f).Within(0.02f));
+    }
+
+    [Test]
+    public void ForceOfAStoppedGame_IsNotFeltInTheNext()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3F.Zero;
+        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        Play();
+        _physics.SetForce(box, new Vector3F(1000, 0, 0));
+        Frames(0.2);
+        _run.Stop();
+
+        Play();
+        Frames(0.2);
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.Zero);
+    }
+
+    [Test]
+    public void ForceOnAStaticBody_IsRefused()
+    {
+        UseSteppedPhysics();
+        var ground = AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        Play();
+
+        Assert.Throws<InvalidOperationException>(() => _physics.SetForce(ground, Vector3F.UnitX));
+        Assert.Throws<ArgumentOutOfRangeException>(() => _physics.SetForce(box, new Vector3F(float.NaN, 0, 0)));
     }
 
     [Test]
@@ -311,31 +396,14 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         var box = AddBox("Hovering", new Vector3<double>(0, -3, 0), 0.5);
         Play();
-        var weight = new Vector3F(0, -1000 * 9.81f, 0);
+        _physics.SetForce(box, new Vector3F(0, -1000 * 9.81f, 0));
         var frames = (int)Math.Round(3 / frameSeconds);
         for (var frame = 0; frame < frames; frame++)
         {
-            _physics.ApplyForce(box, weight);
             Frame(frameSeconds);
         }
 
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-3).Within(0.01));
-    }
-
-    [Test]
-    public void ForceOfAFrameShorterThanAStep_IsNotLost()
-    {
-        UseSteppedPhysics();
-        _physics.Gravity = Vector3F.Zero;
-        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
-        Play();
-
-        _physics.ApplyForce(box, new Vector3F(1000, 0, 0));
-        Frame(1.0 / 240);
-        Frame(1.0 / 240);
-        Frames(0.1);
-
-        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(1f / 240).Within(1e-4f));
     }
 
     [Test]
@@ -408,6 +476,28 @@ public class PhysicsServiceTests
         Assert.That(_physics.LastStep.TouchingPairs, Is.EqualTo(1));
     }
 
+    [Test]
+    public void OwnThread_FeelsTheForceSet()
+    {
+        _physics = new PhysicsService(_world);
+        _world.AddService(_physics);
+        _physics.Gravity = Vector3F.Zero;
+        Settle();
+        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+
+        Play();
+        _physics.SetForce(box, new Vector3F(1000, 0, 0));
+        var timer = Stopwatch.StartNew();
+        while (timer.Elapsed < TimeSpan.FromSeconds(5) && _physics.GetLinearVelocity(box).X < 0.2f)
+        {
+            Thread.Sleep(10);
+            Frame(0.01);
+        }
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.GreaterThanOrEqualTo(0.2f));
+        Assert.That(box.Transform.Position.X, Is.GreaterThan(0));
+    }
+
     private static float MeasureSpeedAfterSteadyForce(double frameSeconds)
     {
         var tests = new PhysicsServiceTests();
@@ -416,13 +506,14 @@ public class PhysicsServiceTests
         tests._physics.Gravity = Vector3F.Zero;
         var box = tests.AddBox("Pushed", Vector3<double>.Zero, 0.5);
         tests.Play();
+        tests._physics.SetForce(box, new Vector3F(1000, 0, 0));
         var frames = (int)Math.Round(1 / frameSeconds);
         for (var frame = 0; frame < frames; frame++)
         {
             tests.Frame(frameSeconds);
-            tests._physics.ApplyForce(box, new Vector3F(1000, 0, 0));
         }
 
+        tests._physics.SetForce(box, Vector3F.Zero);
         tests.Frames(0.1);
         var speed = tests._physics.GetLinearVelocity(box).X;
         tests.StopGame();
@@ -436,7 +527,7 @@ public class PhysicsServiceTests
         Settle();
     }
 
-    private void AddGround()
+    private Entity AddGround()
     {
         var ground = new Entity(null, "Ground");
         ground.Transform.Position = new Vector3<double>(0, 1, 0);
@@ -447,6 +538,7 @@ public class PhysicsServiceTests
         ground.AddComponent(new RigidBody { Kind = BodyKind.Static });
         _world.EntityManager.AddEntity(ground, _world.MainScene);
         Settle();
+        return ground;
     }
 
     private Entity AddBox(string name, Vector3<double> position, double half)

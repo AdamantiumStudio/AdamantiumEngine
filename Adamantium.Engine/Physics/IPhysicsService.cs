@@ -33,9 +33,9 @@ public interface IPhysicsService : IGameService
     /// <summary>Sets the spin of <paramref name="entity"/>'s dynamic or kinematic body from the next step.</summary>
     void SetAngularVelocity(Entity entity, Vector3F velocity);
 
-    /// <summary>Pushes the center of <paramref name="entity"/>'s dynamic body, in newtons, for this frame's length; a
-    /// frame's pushes add up. Call it each frame for a steady push.</summary>
-    void ApplyForce(Entity entity, Vector3F force);
+    /// <summary>Sets the force, in newtons, pushing the center of <paramref name="entity"/>'s dynamic body at every
+    /// step until it is set again; zero ends it. One too strong for the body ends it too, logged once per body.</summary>
+    void SetForce(Entity entity, Vector3F force);
 
     /// <summary>Strikes the center of <paramref name="entity"/>'s dynamic body at the next step, in newton seconds.
     /// </summary>

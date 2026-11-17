@@ -7,8 +7,8 @@ internal enum PhysicsCommandKind
     SetLinearVelocity,
     SetAngularVelocity,
 
-    /// <summary>A frame's forces, pushing for the frame's length; less of both when the physics dropped time.</summary>
-    PushForFrame,
+    /// <summary>The force a body feels at every step from now on; zero ends it.</summary>
+    SetForce,
     ApplyCentralImpulse,
     ApplyImpulse
 }

@@ -11,24 +11,23 @@ All packages share one version.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
   Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a `SphereCollisionShape`,
-  `CapsuleCollisionShape` or `BoxCollisionShape`;
-  density or mass, friction, restitution, damping - and named by the `BodyHandle` they get. Contacts are soft
-  constraints with Coulomb friction, warm-started from the last step and found ahead of time by a distance that grows
-  with speed and spin, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4
-  by default), and no body moves faster than `MaxLinearSpeed` (500 m/s). Bodies at rest fall asleep together with
-  all they touch and wake when struck. `RayCast` and `Overlap` query the world; `GetContactPoints` and `LastStep`
-  (`StepStatistics`) are for instruments; `StepClock` turns the time of frames into fixed steps and a blend for
-  drawing between them, saying what it dropped when falling behind. The same scene steps to the same result.
+  `CapsuleCollisionShape` or `BoxCollisionShape`; density or mass, friction, restitution, damping - and named by the
+  `BodyHandle` they get. Contacts are soft constraints with Coulomb friction, warm-started from the last step and
+  found ahead of time by a distance that grows with speed and spin, so a fast body stops on a thin floor; a pair keeps
+  at most `MaxContactPointsPerPair` points (4 by default), and no body moves faster than `MaxLinearSpeed` (500 m/s).
+  Bodies at rest fall asleep together with all they touch and wake when struck; a body pushed by a force or torque
+  stays awake. `RayCast` and `Overlap` query the world; `GetContactPoints` and `LastStep` (`StepStatistics`) are for
+  instruments; `StepClock` turns the time of frames into fixed steps and a blend for drawing between them. The same
+  scene steps to the same result.
 - Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
   friction and the rest - colliding with the shape of its box, sphere or capsule collider, scaled as the entity is
   (a convex hull collider has no physics yet; a moving body that is mirrored, or under a stretched or skewed parent,
   is left out too, said in the log). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
   game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
-  commands - velocities and impulses at the next step; a frame's forces, added up, pushing step by step for the
-  frame's length, shorter when the physics drops time falling behind; gravity - and each frame stands the entities
-  between the last two steps, parents before children. Down is +Y, so the service's gravity is too; that of its
-  `Settings` is not used. What it moves is recorded as the scene's changes, so the scene kept before the game comes
-  back.
+  commands - velocities and impulses at the next step; a body's force (`SetForce`), felt at every step until set
+  again; gravity - and each frame stands the entities between the last two steps, parents before children. Down is
+  +Y, so the service's gravity is too; that of its `Settings` is not used. What it moves is recorded as the scene's
+  changes, so the scene kept before the game comes back.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
