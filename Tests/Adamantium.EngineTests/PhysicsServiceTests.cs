@@ -213,6 +213,39 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void PushOfASlowFrame_EndsWithTheTimeSimulated()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3F.Zero;
+        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        Play();
+
+        _physics.ApplyForce(box, new Vector3F(1000, 0, 0));
+        Frame(0.5);
+        Frames(1);
+
+        var simulated = 8.0 / 120;
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(simulated).Within(0.01));
+    }
+
+    [Test]
+    public void BodyTurnedUnderAStretchedParent_IsLeftOut()
+    {
+        UseSteppedPhysics();
+        var parent = new Entity(null, "Stretched");
+        parent.Transform.ScaleFactor = new Vector3F(4, 1, 1);
+        _world.EntityManager.AddEntity(parent, _world.MainScene);
+        var box = MakeBox("Skewed", Vector3<double>.Zero, 0.5, parent);
+        box.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
+        Settle();
+
+        Play();
+        Frames(0.2);
+
+        Assert.That(_physics.Moves(box), Is.False);
+    }
+
+    [Test]
     public void MirroredEntity_IsLeftOut()
     {
         UseSteppedPhysics();

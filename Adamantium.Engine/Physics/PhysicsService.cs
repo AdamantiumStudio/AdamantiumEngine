@@ -117,7 +117,9 @@ public sealed class PhysicsService : GameService, IPhysicsService
     {
         RequireFinite(force, nameof(force));
         var key = FindDynamicKey(entity);
-        _frameForces[key] = _frameForces.TryGetValue(key, out var earlier) ? earlier + force : force;
+        var total = _frameForces.TryGetValue(key, out var earlier) ? earlier + force : force;
+        RequireFinite(total, nameof(force));
+        _frameForces[key] = total;
     }
 
     /// <inheritdoc/>
@@ -222,10 +224,12 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         var parentWorld = entity.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
         var world = entity.Transform.GetWorldMatrixF();
-        if (parentWorld.Determinant() <= 0 || world.Determinant() <= 0
-                                           || !world.Decompose(out var scale, out var rotation, out var translation))
+        var parentMirrored = body.Kind != BodyKind.Static && parentWorld.Determinant() <= 0;
+        if (parentMirrored || world.Determinant() <= 0 || IsSkewed(world)
+            || !world.Decompose(out var scale, out var rotation, out var translation))
         {
-            Log.Logger.Warning("{Entity} or its parent is flattened or mirrored; the physics leaves it", entity.Name);
+            Log.Logger.Warning("{Entity} or its parent is flattened, mirrored or skewed; the physics leaves it",
+                entity.Name);
             return;
         }
 
@@ -282,10 +286,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
     {
         if (frameSeconds > 0)
         {
+            var seconds = (float)Math.Min(frameSeconds, MaxStepsPerAdvance * _clock.StepSeconds);
             foreach (var force in _frameForces)
             {
                 _commands.Writer.TryWrite(new PhysicsCommand(PhysicsCommandKind.ApplyForce, force.Key, force.Value,
-                    Vector3F.Zero, (float)frameSeconds));
+                    Vector3F.Zero, seconds));
             }
         }
 
@@ -351,8 +356,17 @@ public sealed class PhysicsService : GameService, IPhysicsService
         {
             var push = _pushes[index];
             var share = MathF.Min(push.Seconds, stepSeconds) / stepSeconds;
-            _world.ApplyForce(_handles[push.Key], push.Force * share);
             var left = push.Seconds - stepSeconds;
+            try
+            {
+                _world.ApplyForce(_handles[push.Key], push.Force * share);
+            }
+            catch (ArgumentException exception)
+            {
+                Log.Logger.Warning(exception, "The physics drops a push it cannot apply");
+                left = 0;
+            }
+
             if (left > 0)
             {
                 _pushes[index] = new PhysicsPush(push.Key, push.Force, left, push.Batch);
@@ -600,6 +614,17 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         return key;
     }
+
+    private static bool IsSkewed(in Matrix4x4F world)
+    {
+        var axisX = Vector3F.TransformNormal(Vector3F.UnitX, world);
+        var axisY = Vector3F.TransformNormal(Vector3F.UnitY, world);
+        var axisZ = Vector3F.TransformNormal(Vector3F.UnitZ, world);
+        return !IsSquare(axisX, axisY) || !IsSquare(axisY, axisZ) || !IsSquare(axisZ, axisX);
+    }
+
+    private static bool IsSquare(Vector3F first, Vector3F second) =>
+        MathF.Abs(Vector3F.Dot(first, second)) <= 1e-4f * first.Length() * second.Length();
 
     private static int CountDepth(Entity entity)
     {
