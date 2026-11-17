@@ -2,7 +2,7 @@ using System.Linq;
 using System.Text;
 using Adamantium.Pdf.Annotations;
 using Adamantium.Pdf.Document;
-using Adamantium.Pdf.ThreeD;
+using Adamantium.Pdf.View3D;
 using NUnit.Framework;
 
 namespace Adamantium.PdfTests;

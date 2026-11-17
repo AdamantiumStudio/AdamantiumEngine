@@ -411,6 +411,8 @@ All packages share one version.
 
 ### Changed
 
+- PDF 3D lives in `Adamantium.Pdf.View3D` (folder `View3D`), not `Adamantium.Pdf.ThreeD`: `Pdf3DArtwork`, `Pdf3DView`,
+  `PdfMarkup3D` and the rest.
 - `LightManager` and `EntityIcons` read the scene's component index instead of walking its trees: the lights from
   `Components.Of<Light>()` as the outputs settle, new lists only when the lights or their kinds changed; the icons from
   the lights, cameras and markers. A light or an icon under a disabled entity is skipped, as the index skips it. The

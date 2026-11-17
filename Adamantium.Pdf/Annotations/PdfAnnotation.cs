@@ -4,7 +4,7 @@ using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Measurement;
 using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
-using Adamantium.Pdf.ThreeD;
+using Adamantium.Pdf.View3D;
 
 namespace Adamantium.Pdf.Annotations;
 

@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>How a 3D view projects the artwork onto the annotation (ISO 32000-1, 13.6.4, table 304, <c>P</c>).</summary>
 public sealed class Pdf3DProjection

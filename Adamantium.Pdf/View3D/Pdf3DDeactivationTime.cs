@@ -1,4 +1,4 @@
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>When 3D artwork goes back to its poster.</summary>
 public enum Pdf3DDeactivationTime

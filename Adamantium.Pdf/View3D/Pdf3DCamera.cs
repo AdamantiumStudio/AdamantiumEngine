@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>Where a 3D view's camera stands and how it is turned (ISO 32000-1, 13.6.5, <c>C2W</c>): the camera's axes
 /// and its place in the artwork's world. The camera looks along its own Z axis, with its Y axis up and its X axis to the

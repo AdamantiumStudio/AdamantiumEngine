@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>A named view of 3D artwork (ISO 32000-1, 13.6.4, table 298): where the camera stands, how it projects,
 /// the background, how the artwork is drawn and lit.</summary>
