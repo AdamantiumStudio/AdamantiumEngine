@@ -172,6 +172,32 @@ public class PdfTextTests
     }
 
     [Test]
+    public void ABigLabelAboveSmallTextIsALineOfItsOwn()
+    {
+        var text = Text("BT /F1 60 Tf 72 700 Td (ii) Tj /F1 10 Tf 0 -24 Td (Page index 2) Tj ET");
+
+        Assert.That(text.Text, Is.EqualTo("ii\nPage index 2"));
+        Assert.That(text.Lines, Has.Count.EqualTo(2));
+        Assert.That(Text("BT /F1 10 Tf 72 700 Td (Page index 2) Tj /F1 60 Tf 0 -24 Td (ii) Tj ET").Text,
+            Is.EqualTo("Page index 2\nii"), "drawn after the line, the label still stands apart");
+        Assert.That(Text("BT /F1 12 Tf 72 700 Td (word) Tj /F1 8 Tf 5 Ts (1) Tj /F1 12 Tf 0 Ts ( more) Tj ET").Text,
+            Is.EqualTo("word1 more"), "a footnote mark raised as LaTeX raises it stays on its line");
+    }
+
+    [Test]
+    public void ALinesBoxRunsFromItsLowestGlyphToItsHighest()
+    {
+        var text = Text("BT /F1 10 Tf 72 700 Td (base) Tj 5 Ts (up) Tj ET");
+
+        var quad = text.Lines.Single().Quad;
+        AssertPoint(quad.BottomLeft, 72, 698);
+        AssertPoint(quad.BottomRight, 102, 698);
+        AssertPoint(quad.TopRight, 102, 713);
+        AssertPoint(quad.TopLeft, 72, 713);
+        Assert.That(text.QuadsOf(0, 6).Single(), Is.EqualTo(quad));
+    }
+
+    [Test]
     public void AGlyphOfNoAdvanceInTurnedTextStaysOnTheLine()
     {
         var text = Text("BT /F1 10 Tf 0 1 -1 0 300 300 Tm (ab\\037cd) Tj ET");
