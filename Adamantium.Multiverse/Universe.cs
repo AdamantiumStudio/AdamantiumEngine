@@ -1167,8 +1167,11 @@ public class Universe : IUniverse
         }
     }
         
-    /// <summary>
-    /// Finish the loop and shut the universe down
+    /// <summary>How long <see cref="ShutDown"/> waits for the own loop to end; a loop still stuck in a frame after it
+    /// finishes by itself, freeing what it holds then.</summary>
+    internal TimeSpan LoopExitWait { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>Finishes the loop and shuts the universe down, waiting for its own loop at most <see cref="LoopExitWait"/>.
     /// </summary>
     public virtual void ShutDown()
     {
@@ -1176,9 +1179,10 @@ public class Universe : IUniverse
 
         if (hostedLoop != null)
         {
-            if (Thread.CurrentThread != hostedLoop)
+            if (Thread.CurrentThread != hostedLoop && !hostedLoop.Join(LoopExitWait))
             {
-                hostedLoop.Join();
+                Log.Logger.Warning("Universe {Title} did not stop within {Wait}; its loop finishes by itself", Title,
+                    LoopExitWait);
             }
 
             return;
