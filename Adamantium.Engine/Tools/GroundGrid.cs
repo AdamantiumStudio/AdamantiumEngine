@@ -12,11 +12,12 @@ using Adamantium.Mathematics;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// The ground of the editor's scene: the plane y = <see cref="PlaneY"/> ruled into cells, as editors show it. Cells of 1, 10, 100... times
-/// <see cref="CellSize"/> are shown by how big they are on screen, the smaller ones fading as the eye moves away; the X
-/// axis runs red along it and the Z axis blue. The grid fades out towards its edge, and what stands or lies on it hides
-/// it. The axes are drawn as lines too, seen from any side, and so are the grid's lines while a perspective's eye is in
-/// the plane, where its pixels have nothing to rule. Under the lines lies a floor of <see cref="FloorColor"/>, which
+/// The ground of the editor's scene: the plane y = <see cref="PlaneY"/> ruled into cells, as editors show it. Cells of
+/// 1, 10, 100... times <see cref="CellSize"/> are shown by how big they are on screen, the smaller ones fading as the eye
+/// moves away; the X axis runs red along it and the Z axis blue. The grid fades out towards its edge. It is drawn first
+/// in the frame, so what stands or lies on it - see-through things too - covers it. The axes are drawn as lines too,
+/// seen from any side, and so are the grid's lines while a perspective's eye is in the plane, where its pixels have
+/// nothing to rule. Under the lines lies a floor of <see cref="FloorColor"/>, which
 /// hides what is below the ground. The grid is shown or not (<see cref="ShowsGrid"/>), and with it the floor
 /// (<see cref="ShowsFloor"/>): the floor is only ever the grid's, never without its lines.
 /// </summary>
@@ -89,9 +90,10 @@ public class GroundGrid : ToolsProcessor
         axisZ = LineEntity("Z axis", Segment(Vector3<double>.UnitZ));
     }
 
-    // The lines take their place as they are drawn, from the camera drawing them: placed in Update, they kept the eye of
+    // First in the frame, under the whole scene: what stands on the ground covers it, see-through things included. The
+    // lines take their place as they are drawn, from the camera drawing them: placed in Update, they kept the eye of
     // before a camera moved later in the frame, and showed beside the cells the shader drew from the eye of now.
-    public override void DrawOverlay(ToolsOverlayProcessor overlay)
+    public override void DrawUnderlay(ToolsOverlayProcessor overlay)
     {
         if (!ShowsGrid)
         {
@@ -100,7 +102,7 @@ public class GroundGrid : ToolsProcessor
 
         overlay.DrawGrid(this);
         PlaceLines(overlay.Camera);
-        overlay.DrawFlatBehindScene(edges);
+        overlay.DrawFlatUnderScene(edges);
     }
 
     private void PlaceLines(CameraBase camera)

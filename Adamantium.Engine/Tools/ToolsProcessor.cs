@@ -20,6 +20,11 @@ public abstract class ToolsProcessor : EntityProcessor<ToolsService>
     {
     }
 
+    /// <summary>Draws into one output's frame first, before its scene: everything the scene draws covers it.</summary>
+    public virtual void DrawUnderlay(ToolsOverlayProcessor overlay)
+    {
+    }
+
     /// <summary>The scene entity a click along <paramref name="ray"/> would select through what this draws, if any.</summary>
     public virtual PickHit PickEntity(in PickRay ray)
     {

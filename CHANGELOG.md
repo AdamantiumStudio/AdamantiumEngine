@@ -419,6 +419,11 @@ All packages share one version.
 
 ### Changed
 
+- The ground grid is drawn first in the frame, under the whole scene, so see-through surfaces show it behind them
+  instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
+  `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
+  nothing while the overlay is off. With its floor, the grid writes its depth, a little behind the ground, and still
+  hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
 - `MeshInstance` takes its albedo as `Vector4F` - the alpha counts now - and an `alphaCutoff`. An opaque Forward+
   surface writes alpha 1 where it used to write its texture's.
 - PDF 3D lives in `Adamantium.Pdf.View3D` (folder `View3D`), not `Adamantium.Pdf.ThreeD`: `Pdf3DArtwork`, `Pdf3DView`,
@@ -510,6 +515,8 @@ All packages share one version.
   texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
 
 ### Fixed
+
+- `ToolsOverlayProcessor` released its `BasicEffect` neither on a device change nor when detached.
 
 - PDF 3D: a view with no background (`BG`) says so - `Pdf3DView.Background` is null - instead of claiming white, so a
   viewer keeps the background in effect, as Acrobat does; one whose `BG` names no color is white.
