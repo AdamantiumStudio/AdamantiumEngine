@@ -50,7 +50,7 @@ namespace Adamantium.ECS.Components
         protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
         {
             base.RaisePropertyChanged(propertyName);
-            owner?.NotifyUpdated();
+            owner?.NoteChanged();
         }
 
 

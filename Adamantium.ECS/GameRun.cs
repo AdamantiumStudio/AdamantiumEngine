@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.ECS.Components;
 using Serilog;
 
 namespace Adamantium.ECS;
@@ -86,6 +87,35 @@ public sealed class GameRun
 
         _services.Clear();
         _failed.Clear();
+    }
+
+    /// <summary>Tells the services that <paramref name="component"/> of the scene played was edited, playing or paused;
+    /// one that throws sleeps for the rest of the game. On the world's thread.</summary>
+    public void TellComponentEdited(GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        // A game stopped has no services left.
+        if (_services.Count == 0 || component.Owner?.Scene != Scene)
+            return;
+
+        foreach (var service in _services)
+        {
+            // Asleep for throwing: put among the failed on pause, or before it found asleep while playing.
+            if (_failed.Contains(service) || !_paused && !service.IsActive)
+                continue;
+
+            try
+            {
+                service.ComponentEdited(component);
+            }
+            catch (Exception exception)
+            {
+                Log.Logger.Error(exception, "The game service {Service} failed on an edit and sleeps for the game",
+                    service.GetType().FullName);
+                _failed.Add(service);
+                service.IsActive = false;
+            }
+        }
     }
 
     private void SetPaused(bool paused)

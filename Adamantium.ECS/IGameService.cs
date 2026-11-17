@@ -1,3 +1,5 @@
+using Adamantium.ECS.Components;
+
 namespace Adamantium.ECS;
 
 /// <summary>A service of the game's or a mod's logic: what the engine works with when a game plays. One of each kind is
@@ -14,4 +16,10 @@ public interface IGameService : IEntityService
 
     /// <summary>The game stops: the service, already asleep, lets the scene go.</summary>
     void Stop();
+
+    /// <summary>A component of the scene played was changed from outside the game - by the editor - awake or paused: the
+    /// service brings up to date what it makes of it, so the change shows at once.</summary>
+    void ComponentEdited(GameComponent component)
+    {
+    }
 }

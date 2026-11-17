@@ -1,15 +1,29 @@
+using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.ECS;
+using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 
 namespace Adamantium.EngineTests;
 
 /// <summary>A game service of the tests' code: moves every <see cref="Pushed"/> of the scene played along X by its speed,
-/// and says when it was started and stopped.</summary>
+/// says when it was started and stopped; an edit of a <see cref="Pushed"/> lifts its owner to its speed along Y.</summary>
 public sealed class PushingService : GameService
 {
     public PushingService(EntityWorld world) : base(world)
     {
+    }
+
+    public List<GameComponent> EditsHeard { get; } = [];
+
+    protected override void OnComponentEdited(GameComponent component)
+    {
+        EditsHeard.Add(component);
+        if (component is not Pushed pushed)
+            return;
+
+        var position = pushed.Owner.Transform.Position;
+        pushed.Owner.Transform.Position = new Vector3<double>(position.X, pushed.Speed, position.Z);
     }
 
     public bool Started { get; private set; }

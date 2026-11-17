@@ -42,6 +42,14 @@ public abstract class GameService : EntityService, IGameService
         }
     }
 
+    public void ComponentEdited(GameComponent component) => OnComponentEdited(component);
+
+    /// <summary>Called when a component of the scene played was changed by the editor, awake or paused: the place to
+    /// bring up to date what the service makes of it.</summary>
+    protected virtual void OnComponentEdited(GameComponent component)
+    {
+    }
+
     /// <summary>Called once when a game starts, its <see cref="Scene"/> given, before its first frame: the place to begin
     /// the service's state anew.</summary>
     protected virtual void OnStart()

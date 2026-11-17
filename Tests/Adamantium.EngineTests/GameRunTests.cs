@@ -285,6 +285,86 @@ public class GameRunTests
         Assert.That(() => GameRun.Start(_world.MainScene).Stop(), Throws.Nothing);
     }
 
+    // Paused, the services sleep, yet what an edit changes shows at once - without a frame or time going on.
+    [Test]
+    public void AnEditWhilePaused_IsHeardByTheServices_WithNoFrame()
+    {
+        var entity = Placed(_world.MainScene, 1);
+        var run = GameRun.Start(_world.MainScene);
+        run.IsPaused = true;
+        var pushed = entity.GetComponent<Pushed>();
+        pushed.Speed = 4;
+
+        run.TellComponentEdited(pushed);
+
+        var pushing = _world.GetService<PushingService>();
+        Assert.Multiple(() =>
+        {
+            Assert.That(pushing.EditsHeard, Is.EqualTo(new[] { pushed }));
+            Assert.That(entity.Transform.Position.Y, Is.EqualTo(4));
+            Assert.That(entity.Transform.Position.X, Is.Zero);
+            Assert.That(pushing.IsActive, Is.False);
+        });
+    }
+
+    [Test]
+    public void AnEditOfAnotherScene_OrAfterTheGame_IsNotHeard()
+    {
+        var edited = Placed(_world.CreateScene("Edited"), 1);
+        var played = Placed(_world.MainScene, 1);
+        var run = GameRun.Start(_world.MainScene);
+
+        run.TellComponentEdited(edited.GetComponent<Pushed>());
+        run.Stop();
+        run.TellComponentEdited(played.GetComponent<Pushed>());
+
+        Assert.That(_world.GetService<PushingService>().EditsHeard, Is.Empty);
+    }
+
+    [Test]
+    public void AServiceThatThrowsOnAnEdit_SleepsForTheGame_AndTheOthersHearIt()
+    {
+        var entity = Placed(_world.MainScene, 1);
+        var run = GameRun.Start(_world.MainScene);
+        var throwing = _world.GetService<ThrowingService>();
+        throwing.FailsOnEdit = true;
+        var pushed = entity.GetComponent<Pushed>();
+
+        run.TellComponentEdited(pushed);
+        run.IsPaused = true;
+        run.IsPaused = false;
+        run.TellComponentEdited(pushed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(throwing.EditsHeard, Is.EqualTo(1));
+            Assert.That(throwing.IsActive, Is.False);
+            Assert.That(_world.GetService<PushingService>().EditsHeard, Has.Count.EqualTo(2));
+        });
+    }
+
+    // Asleep for throwing on a frame, a service is not woken by an edit, nor told of it, paused or not.
+    [Test]
+    public void AServiceAsleepForThrowing_DoesNotHearEdits()
+    {
+        var entity = Placed(_world.MainScene, 1);
+        var run = GameRun.Start(_world.MainScene);
+        var throwing = _world.GetService<ThrowingService>();
+        var pushed = entity.GetComponent<Pushed>();
+        Frame(1);
+
+        run.TellComponentEdited(pushed);
+        run.IsPaused = true;
+        run.TellComponentEdited(pushed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(throwing.EditsHeard, Is.Zero);
+            Assert.That(throwing.IsActive, Is.False);
+            Assert.That(_world.GetService<PushingService>().EditsHeard, Has.Count.EqualTo(2));
+        });
+    }
+
     private void Frame(double seconds)
     {
         _world.ServiceManager.Update(new AppTime { FrameTime = seconds });

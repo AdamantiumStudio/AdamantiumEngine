@@ -591,6 +591,11 @@ namespace Adamantium.Win32
         public static extern int CoCreateInstance(ref Guid clsid, IntPtr outer, uint context, ref Guid iid,
             [MarshalAs(UnmanagedType.Interface)] out object instance);
 
+        /// <summary>The shell item of a path, as a file dialog's folder; 0 when made.</summary>
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        public static extern int SHCreateItemFromParsingName(string path, IntPtr bindContext, ref Guid iid,
+            [MarshalAs(UnmanagedType.Interface)] out Shell.IShellItem item);
+
         /// <summary>CLSCTX_INPROC_SERVER - the shell's drag-image helper lives in-process.</summary>
         public const uint ClsCtxInprocServer = 1;
 

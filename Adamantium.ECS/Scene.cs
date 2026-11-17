@@ -57,6 +57,9 @@ public sealed class Scene
     /// <summary>Whether the scene is gone from its world: removed, with its trees.</summary>
     public bool IsRemoved { get; internal set; }
 
+    /// <summary>What changes in the scene while it is recorded - for putting it back as it was.</summary>
+    public SceneChanges Changes { get; } = new();
+
     /// <summary>Raised once, as the scene is removed from its world - for what serves it alone to let go.</summary>
     public event EventHandler Removed;
 

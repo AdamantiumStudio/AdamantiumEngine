@@ -225,9 +225,115 @@ public sealed class SceneBuilder
 
         entity.Name = entry.Name;
         entity.Source = entry.Asset;
+        ApplyModel(entity, entry);
+        return entity;
+    }
+
+    /// <summary>Puts on <paramref name="entity"/>, made for <paramref name="entry"/>, what the entry says of it - its
+    /// place and the settings of its kind - as building it does; the game's components are put back by
+    /// <see cref="ApplyGameComponents"/>. For a scene put back as it was. On the world's thread.</summary>
+    internal static void Apply(Entity entity, ScenePlacement entry)
+    {
+        switch (entry)
+        {
+            case SceneModel model:
+                ApplyModel(entity, model);
+                break;
+            case SceneLight light when entity.GetComponent<Light>() is { } component:
+                Place(entity, light);
+                ApplyLight(component, light);
+                break;
+            case SceneCamera camera when entity.GetComponent<Camera>() is { } component:
+                ApplyCamera(entity, component, camera);
+                break;
+            case SceneShape shape:
+                ApplyShape(entity, shape);
+                break;
+            default:
+                Place(entity, entry);
+                break;
+        }
+    }
+
+    /// <summary>Makes the game's components of <paramref name="entity"/> those of <paramref name="entries"/> - none for
+    /// null: one of a kind not there is taken off, one there gets the entry's values, one missing is put on. On the world's
+    /// thread.</summary>
+    internal static void ApplyGameComponents(Entity entity, IReadOnlyList<SceneGameComponent> entries, IWorldCode code,
+        List<GameComponentProblem> problems)
+    {
+        var existing = entity.Components.GetAll<GameComponent>();
+        foreach (var component in existing)
+        {
+            if (!HasEntryOfType(entries, component.GetType().FullName))
+                entity.RemoveComponent(component);
+        }
+
+        if (entries == null)
+            return;
+
+        HashSet<GameComponent> applied = null;
+        var unloaded = entity.GetComponent<UnloadedGameComponents>();
+        foreach (var entry in entries)
+        {
+            // Kept as it was read - its code not loaded: no game changed it, it is there still.
+            if (code.FindType<GameComponent>(entry.Type) == null)
+                continue;
+
+            if (FindOfType(existing, entry.Type) is { } component && (applied ??= []).Add(component))
+            {
+                ComponentFields.Read(entry.Values, component, typeof(GameComponent));
+            }
+            else if (!HasUnloadedOfType(unloaded, entry.Type))
+            {
+                // A second of a kind, or one whose code threw, is kept as it was read already: not again.
+                SceneGameComponents.Attach(entity, entry, code, problems);
+            }
+        }
+    }
+
+    private static bool HasUnloadedOfType(UnloadedGameComponents unloaded, string type)
+    {
+        if (unloaded == null)
+            return false;
+
+        foreach (var entry in unloaded.Entries)
+        {
+            if (entry.Type == type)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static GameComponent FindOfType(GameComponent[] components, string type)
+    {
+        foreach (var component in components)
+        {
+            if (component.GetType().FullName == type)
+                return component;
+        }
+
+        return null;
+    }
+
+    private static bool HasEntryOfType(IReadOnlyList<SceneGameComponent> entries, string type)
+    {
+        if (entries == null)
+            return false;
+
+        foreach (var entry in entries)
+        {
+            if (entry.Type == type)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void ApplyModel(Entity entity, SceneModel entry)
+    {
         Place(entity, entry);
         entity.Transform.ScaleFactor = entry.Scale;
-        return entity;
     }
 
     private static Entity MakeLight(SceneLight entry)
@@ -235,7 +341,15 @@ public sealed class SceneBuilder
         var entity = new Entity(null, entry.Name, entry.Uid);
         Place(entity, entry);
         var type = entry.Type is LightType.Directional or LightType.Point or LightType.Spot ? entry.Type : LightType.Point;
-        var light = new LightTemplate().Build(entity, type);
+        ApplyLight(new LightTemplate().Build(entity, type), entry);
+        return entity;
+    }
+
+    private static void ApplyLight(Light light, SceneLight entry)
+    {
+        if (entry.Type is LightType.Directional or LightType.Point or LightType.Spot)
+            light.Type = entry.Type;
+
         light.Color = entry.Color;
         light.Intensity = entry.Intensity;
         light.Range = entry.Range;
@@ -243,21 +357,28 @@ public sealed class SceneBuilder
         light.OuterSpotAngle = float.DegreesToRadians(entry.OuterSpotAngle);
         light.IsWithShadows = entry.Shadows;
         light.ShadowMapResolution = entry.ShadowMapResolution;
-        return entity;
     }
 
     private static Entity MakeCamera(SceneCamera entry)
     {
         var entity = new Entity(null, entry.Name, entry.Uid);
-        entity.Transform.Position = entry.Position;
         var camera = new CameraTemplate().Build(entity, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             entry.FieldOfView, DefaultViewWidth, DefaultViewHeight, entry.Near, entry.Far);
+        ApplyCamera(entity, camera, entry);
+        return entity;
+    }
+
+    private static void ApplyCamera(Entity entity, Camera camera, SceneCamera entry)
+    {
+        entity.Transform.Position = entry.Position;
+        camera.Fov = entry.FieldOfView;
+        camera.ZNear = entry.Near;
+        camera.ZFar = entry.Far;
         camera.Type = entry.Type;
         camera.ProjectionType = entry.Projection;
         camera.OrthoScale = entry.OrthoScale;
         // A camera's own rotation is its view, the opposite turn of the way it faces.
         camera.Rotation = QuaternionF.Conjugate(Rotation(entry));
-        return entity;
     }
 
     private static Entity MakeSpawnPoint(SceneSpawnPoint entry)
@@ -294,9 +415,19 @@ public sealed class SceneBuilder
         }
 
         entity.Name = entry.Name;
+        ApplyShape(entity, entry);
+        return entity;
+    }
+
+    private static void ApplyShape(Entity entity, SceneShape entry)
+    {
         Place(entity, entry);
         entity.Transform.ScaleFactor = entry.Scale;
-        return entity;
+        if (entity.GetComponent<ProceduralShape>() is { } shape && shape.GetType().FullName == entry.Type)
+            ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
+
+        if (entity.GetComponent<Material>() is { } material)
+            material.DiffuseColor = entry.Color;
     }
 
     private ProceduralShape MakeShapeComponent(SceneShape entry)

@@ -105,11 +105,12 @@ namespace Adamantium.ECS
             internal set
             {
                 if (owner == value) return;
-                var before = World;
+                var previousScene = Scene;
+                var before = previousScene?.World;
                 OnOwnerChanged(owner, value);
                 owner = value;
                 rootUid = GetRoot().rootUid;
-                (World ?? before)?.EntityManager.NoteOwnerChanged(this);
+                (World ?? before)?.EntityManager.NoteOwnerChanged(this, previousScene);
                 before?.Changed(UniverseChangedEventArgs.OneFrame);
                 if (World != before)
                 {
@@ -133,6 +134,9 @@ namespace Adamantium.ECS
         // The index of components the entity is in: its scene's, once it has joined.
         internal SceneComponents ComponentIndex { get; set; }
 
+        // Which recording of its scene's changes noted it changed last.
+        internal int ChangedDuringRecording { get; set; }
+
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>
         public void NotifyUpdated() => World?.Changed(UniverseChangedEventArgs.OneFrame);
 
@@ -143,10 +147,21 @@ namespace Adamantium.ECS
         /// <summary>Tells <see cref="World"/> that what it shows keeps changing for <paramref name="duration"/>.</summary>
         public void NotifyUpdated(TimeSpan duration) => World?.Changed(new UniverseChangedEventArgs(duration));
 
+        // A value of the entity or of a component changed, a component came or went, or its place did: its scene's changes
+        // and its world are told. The scene found once: this runs on every value set.
+        internal void NoteChanged()
+        {
+            if (Scene is not { } own)
+                return;
+
+            own.Changes.NoteChanged(this);
+            own.World?.Changed(UniverseChangedEventArgs.OneFrame);
+        }
+
         protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
         {
             base.RaisePropertyChanged(propertyName);
-            NotifyUpdated();
+            NoteChanged();
         }
 
         private void OnOwnerChanged(Entity oldOwner, Entity newOwner)
@@ -225,13 +240,14 @@ namespace Adamantium.ECS
         {
             lock (componentCollection)
             {
+                // One refused - a second of its kind - is not given this entity as its owner.
+                if (ContainsComponent(component.GetType()) || componentCollection.Contains(component))
+                    return;
+
                 if (component is IEntityOwner owned)
                 {
                     owned.Owner = this;
                 }
-
-                if (ContainsComponent(component.GetType()) || componentCollection.Contains(component))
-                    return;
 
                 var customAttribute = component.GetType().GetCustomAttributes(typeof(RequiredComponentAttribute), true);
                 foreach (RequiredComponentAttribute attribute in customAttribute)
@@ -354,7 +370,7 @@ namespace Adamantium.ECS
         internal void OnComponentChanged(IComponent oldComponent, IComponent newComponent, ComponentChangedAction action)
         {
             ComponentsChanged?.Invoke(this, new EntityComponentEventArgs(this, oldComponent, newComponent, action));
-            NotifyUpdated();
+            NoteChanged();
         }
 
         public event EventHandler<EntityComponentEventArgs> ComponentsChanged;
