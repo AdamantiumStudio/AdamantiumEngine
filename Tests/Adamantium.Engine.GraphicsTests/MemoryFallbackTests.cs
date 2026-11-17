@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
+using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
 using NUnit.Framework;
 
@@ -68,6 +69,54 @@ public class MemoryFallbackTests
             }
         }
     }
+
+    /// <summary>Memory the GPU refuses - held by another application - is said as such, for a buffer and for an image,
+    /// and given again once the GPU has it: refused here on purpose, the GPU itself is not filled.</summary>
+    [Test]
+    public void MemoryTheGpuRefuses_IsOutOfDeviceMemory_AndComesBackOnceGiven()
+    {
+        var device = (GraphicsDevice)GpuFixture.CreateRenderDevice();
+        var main = device.MainDevice;
+        try
+        {
+            main.RefuseMemory(int.MaxValue);
+            // Larger than a shared block, so it needs a block of its own and asks the GPU.
+            Assert.Throws<OutOfDeviceMemoryException>(() =>
+            {
+                using var buffer = Adamantium.Graphics.Buffer.New(device, 65UL * 1024 * 1024, BufferUsageFlags.StorageBuffer,
+                    BufferMemoryUsage.GpuOnly);
+            });
+            Assert.Throws<OutOfDeviceMemoryException>(() =>
+            {
+                using var image = Texture.New(device, SmallImage(), "refused");
+            });
+        }
+        finally
+        {
+            main.RefuseMemory(0);
+        }
+
+        using var given = Texture.New(device, SmallImage(), "given");
+        Assert.That(given, Is.Not.Null);
+    }
+
+    private static TextureDescription SmallImage() => new()
+    {
+        Width = 64,
+        Height = 64,
+        Depth = 1,
+        ArrayLayers = 1,
+        MipLevels = 1,
+        Samples = MSAALevel.None,
+        Format = Format.R8G8B8A8_UNORM,
+        InitialLayout = ImageLayout.Undefined,
+        DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal,
+        ImageType = ImageType._2d,
+        ImageAspect = ImageAspectFlagBits.ColorBit,
+        ImageTiling = ImageTiling.Optimal,
+        Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit,
+        Dimension = TextureDimension.Texture2D
+    };
 
     /// <summary>A block made for one allocation larger than a shared block goes back to the driver once that allocation
     /// is freed and the frames in flight are done with it; a shared block stays for the next.</summary>
