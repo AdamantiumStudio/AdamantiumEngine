@@ -96,5 +96,5 @@ public interface IPhysicsWorld
 
     /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
     /// at <paramref name="pose"/>.</summary>
-    void Overlap(Shape shape, in Pose pose, ICollection<BodyHandle> into);
+    void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into);
 }

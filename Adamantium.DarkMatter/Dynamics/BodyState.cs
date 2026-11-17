@@ -8,7 +8,7 @@ internal struct BodyState
     public bool IsUsed;
     public int Generation;
     public BodyKind Kind;
-    public Shape Shape;
+    public CollisionShape Shape;
     public int Proxy;
     public BodyMarks Marks;
     public Contact Contacts;

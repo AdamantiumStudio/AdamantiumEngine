@@ -197,6 +197,22 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void ForceHoldingABodyUp_HoldsItThroughSlowFrames()
+    {
+        UseSteppedPhysics();
+        var box = AddBox("Held", new Vector3<double>(0, -3, 0), 0.5);
+        Play();
+        var weight = new Vector3F(0, -1000 * 9.81f, 0);
+        for (var frame = 0; frame < 8; frame++)
+        {
+            _physics.ApplyForce(box, weight);
+            Frame(0.5);
+        }
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-3).Within(0.05));
+    }
+
+    [Test]
     public void MirroredEntity_IsLeftOut()
     {
         UseSteppedPhysics();

@@ -44,7 +44,15 @@ internal sealed class PhysicsBodyLink
 
     public Vector3F AngularVelocity { get; set; }
 
-    /// <summary>The number of the last result that brought the body a pose; it is drawn moving until a result later.
-    /// </summary>
+    /// <summary>The number of the last result that brought the body a pose.</summary>
     public long MovedInResult { get; set; } = -2;
+
+    /// <summary>The number of the frame the entity was last stood in, so it is stood once a frame.</summary>
+    public long PlacedInFrame { get; set; } = -1;
+
+    /// <summary>Whether the entity is stood this frame whatever its parent does: its body moved or just stopped.</summary>
+    public bool MustPlace { get; set; }
+
+    /// <summary>The parent's world matrix the entity was last stood under; it is stood again when that changes.</summary>
+    public Matrix4x4F ParentWorld { get; set; }
 }

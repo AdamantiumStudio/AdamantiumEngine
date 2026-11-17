@@ -9,14 +9,14 @@ namespace Adamantium.Engine.Physics;
 /// </summary>
 internal readonly struct ColliderShape
 {
-    private ColliderShape(Shape shape, Vector3F offset, QuaternionF turn)
+    private ColliderShape(CollisionShape shape, Vector3F offset, QuaternionF turn)
     {
         Shape = shape;
         Offset = offset;
         Turn = turn;
     }
 
-    public Shape Shape { get; }
+    public CollisionShape Shape { get; }
 
     /// <summary>Where the shape's center is in the entity's own axes, scale applied.</summary>
     public Vector3F Offset { get; }
@@ -35,19 +35,22 @@ internal readonly struct ColliderShape
             {
                 var orientation = box.Bounds.Orientation.As<float>();
                 var turn = orientation.LengthSquared() > 0 ? QuaternionF.Normalize(orientation) : QuaternionF.Identity;
+                if (!IsEven(size) && !IsAlongAxes(turn))
+                    throw new ArgumentException("A box turned on an unevenly scaled entity is skewed; no box fits it.");
+
                 var stretch = new Vector3F(
                     (Vector3F.Transform(Vector3F.UnitX, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitY, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitZ, turn) * size).Length());
-                var half = Vector3F.Max(box.Bounds.HalfExtent.As<float>() * stretch, new Vector3F(Shape.MinimumSize));
-                shape = new ColliderShape(new BoxShape(half), box.Bounds.Center.As<float>() * scale, turn);
+                var half = Vector3F.Max(box.Bounds.HalfExtent.As<float>() * stretch, new Vector3F(CollisionShape.MinimumSize));
+                shape = new ColliderShape(new BoxCollisionShape(half), box.Bounds.Center.As<float>() * scale, turn);
                 return true;
             }
             case SphereCollider sphere:
             {
                 var radius = MathF.Max(Vector3F.Max(sphere.Bounds.Size.As<float>()) * 0.5f * Vector3F.Max(size),
-                    Shape.MinimumSize);
-                shape = new ColliderShape(new DarkMatter.Shapes.SphereShape(radius), sphere.Bounds.Center.As<float>() * scale,
+                    CollisionShape.MinimumSize);
+                shape = new ColliderShape(new SphereCollisionShape(radius), sphere.Bounds.Center.As<float>() * scale,
                     QuaternionF.Identity);
                 return true;
             }
@@ -55,13 +58,13 @@ internal readonly struct ColliderShape
             {
                 var start = capsule.Capsule.Start * scale;
                 var end = capsule.Capsule.End * scale;
-                var radius = MathF.Max(capsule.Capsule.Radius * Vector3F.Max(size), Shape.MinimumSize);
+                var radius = MathF.Max(capsule.Capsule.Radius * Vector3F.Max(size), CollisionShape.MinimumSize);
                 var axis = end - start;
                 var halfLength = axis.Length() * 0.5f;
                 var center = (start + end) * 0.5f;
-                shape = halfLength < Shape.MinimumSize
-                    ? new ColliderShape(new DarkMatter.Shapes.SphereShape(radius), center, QuaternionF.Identity)
-                    : new ColliderShape(new DarkMatter.Shapes.CapsuleShape(halfLength, radius), center,
+                shape = halfLength < CollisionShape.MinimumSize
+                    ? new ColliderShape(new SphereCollisionShape(radius), center, QuaternionF.Identity)
+                    : new ColliderShape(new CapsuleCollisionShape(halfLength, radius), center,
                         TurnUpTo(axis / (2 * halfLength)));
                 return true;
             }
@@ -70,6 +73,13 @@ internal readonly struct ColliderShape
                 return false;
         }
     }
+
+    private static bool IsEven(Vector3F size) =>
+        MathF.Abs(size.X - size.Y) <= 1e-5f * size.X && MathF.Abs(size.X - size.Z) <= 1e-5f * size.X;
+
+    private static bool IsAlongAxes(QuaternionF turn) =>
+        Vector3F.Max(Vector3F.Abs(Vector3F.Transform(Vector3F.UnitX, turn))) > 0.9999f
+        && Vector3F.Max(Vector3F.Abs(Vector3F.Transform(Vector3F.UnitY, turn))) > 0.9999f;
 
     private static QuaternionF TurnUpTo(Vector3F direction)
     {

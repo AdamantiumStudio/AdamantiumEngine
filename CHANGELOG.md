@@ -10,7 +10,8 @@ All packages share one version.
 - `Adamantium.DarkMatter`, the physics engine, on its own: no entities, window or GPU, only `Adamantium.Mathematics`.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
-  Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a sphere, capsule or box shape;
+  Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a `SphereCollisionShape`,
+  `CapsuleCollisionShape` or `BoxCollisionShape`;
   density or mass, friction, restitution, damping - and named by the `BodyHandle` they get. Contacts are soft
   constraints with Coulomb friction, warm-started from the last step and found ahead of time by a distance that grows
   with speed and spin, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4
@@ -20,11 +21,12 @@ All packages share one version.
   drawing between them. The same scene steps to the same result.
 - Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
   friction and the rest - colliding with the shape of its box, sphere or capsule collider, scaled as the entity is
-  (a convex hull collider has no physics yet and is left out, said in the log). `PhysicsService`, a game service used
-  through `IPhysicsService`, runs while a game plays: it makes a world of the scene's bodies, steps it on a thread of
-  its own, takes the game's pushes as commands done before the next step - velocities, forces, impulses, gravity -
-  and each frame stands the entities between the last two steps, children of other entities included. Down is +Y,
-  so gravity is too. What it moves is recorded as the scene's changes, so the scene kept before the game comes back.
+  (a convex hull collider has no physics yet, nor a mirrored entity: they are left out, said in the log).
+  `PhysicsService`, a game service used through `IPhysicsService`, runs while a game plays: it makes a world of the
+  scene's bodies, steps it on a thread of its own and takes the game's pushes as commands - velocities, impulses at
+  the next step, a force for as long as the frame lasts, gravity - and each frame stands the entities between the
+  last two steps, parents before children. Down is +Y, so the service's gravity is too; that of its `Settings` is not
+  used. What it moves is recorded as the scene's changes, so the scene kept before the game comes back.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
