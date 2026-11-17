@@ -13,9 +13,8 @@ internal static class PdfImpliedAppearance
 {
     private const double Kappa = 0.5523;
 
-    /// <summary>A link's border: its rectangle - or each of its quadrilaterals (<c>QuadPoints</c>) when it gives them -
-    /// stroked, or underlined, in its color, a beveled or inset one with a two-tone band inside; null when it would show
-    /// nothing.</summary>
+    /// <summary>A link's border round its rectangle or each quadrilateral, in its color - beveled and inset ones with a
+    /// two-tone band inside; null when it would show nothing.</summary>
     public static PdfStream LinkBorder(PdfRectangle rect, PdfAnnotationBorder border, IReadOnlyList<double> color,
         double[] quadPoints)
     {
@@ -56,24 +55,26 @@ internal static class PdfImpliedAppearance
                 }
             }
 
-            content.Append("S Q");
+            content.Append("S ");
         }
         else if (border.Style == PdfBorderStyle.Underline)
         {
             content.Append(Number(0)).Append(' ').Append(Number(half)).Append(" m ");
-            content.Append(Number(width)).Append(' ').Append(Number(half)).Append(" l S Q");
+            content.Append(Number(width)).Append(' ').Append(Number(half)).Append(" l S ");
         }
         else
         {
             Box(content, half, half, width - border.Width, height - border.Width, Math.Max(0, border.CornerX - half),
                 Math.Max(0, border.CornerY - half));
-            content.Append(" S Q");
+            content.Append(" S ");
         }
 
         if (border.Style is PdfBorderStyle.Beveled or PdfBorderStyle.Inset)
         {
-            content.Insert(content.Length - 1, Bevel(rect, border, quadPoints));
+            content.Append(Bevel(rect, border, quadPoints));
         }
+
+        content.Append('Q');
 
         var dictionary = new PdfDictionary();
         dictionary.Set(PdfKeys.Type, new PdfName(PdfKeys.XObject));
