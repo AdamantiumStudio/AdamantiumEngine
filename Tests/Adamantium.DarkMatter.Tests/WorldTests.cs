@@ -48,8 +48,8 @@ public class WorldTests
     {
         IPhysicsWorld host = new PhysicsWorld();
         IPhysicsWorld client = new PhysicsWorld();
-        var hostBody = host.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
-        var clientBody = client.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
+        var hostBody = host.Add(new BodyDescription { Shape = new Shapes.SphereShape(0.5f) });
+        var clientBody = client.Add(new BodyDescription { Shape = new Shapes.SphereShape(0.5f) });
 
         Assert.That(hostBody, Is.Not.EqualTo(clientBody));
         Assert.That(client.Contains(hostBody), Is.False);
@@ -76,7 +76,7 @@ public class WorldTests
     public void KinematicPlatform_CarriesABoxAndIsNotPushedBack()
     {
         var scene = new SceneBuilder();
-        var platform = scene.World.Add(new RigidBodyDescription
+        var platform = scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Kinematic,
             Shape = new Shapes.BoxShape(2, 0.25f, 2),
@@ -99,7 +99,7 @@ public class WorldTests
         scene.Run(2f);
         Assert.That(scene.World.IsAwake(box), Is.False);
 
-        scene.World.Add(new RigidBodyDescription
+        scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
@@ -115,10 +115,10 @@ public class WorldTests
     {
         var scene = new SceneBuilder();
         scene.AddGround();
-        var boxes = new List<RigidBody>();
+        var boxes = new List<BodyHandle>();
         for (var level = 0; level < 4; level++)
         {
-            boxes.Add(scene.World.Add(new RigidBodyDescription
+            boxes.Add(scene.World.Add(new BodyDescription
             {
                 Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
                 Position = new Vector3F(0, 0.5f + level, 0),
@@ -146,7 +146,7 @@ public class WorldTests
     public void RemovingEveryBody_LeavesNoPairs()
     {
         var scene = new SceneBuilder();
-        var bodies = new List<RigidBody> { scene.AddGround() };
+        var bodies = new List<BodyHandle> { scene.AddGround() };
         for (var level = 0; level < 5; level++)
         {
             bodies.Add(scene.AddBox(new Vector3F(0, 0.5f + level, 0), new Vector3F(0.5f)));
@@ -182,7 +182,7 @@ public class WorldTests
     {
         var scene = new SceneBuilder();
         scene.AddGround();
-        var box = scene.World.Add(new RigidBodyDescription
+        var box = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0, 0.5f, 0),
@@ -201,14 +201,14 @@ public class WorldTests
         IPhysicsWorld world = new PhysicsWorld();
         var cube = new Shapes.BoxShape(0.5f, 0.5f, 0.5f);
 
-        Assert.Throws<ArgumentException>(() => world.Add(new RigidBodyDescription { Shape = cube, Density = 0 }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new RigidBodyDescription { Shape = cube, Mass = -1 }));
-        Assert.Throws<ArgumentException>(() => world.Add(new RigidBodyDescription { Shape = cube, Rotation = default }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new RigidBodyDescription { Shape = cube, Friction = -1 }));
+        Assert.Throws<ArgumentException>(() => world.Add(new BodyDescription { Shape = cube, Density = 0 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new BodyDescription { Shape = cube, Mass = -1 }));
+        Assert.Throws<ArgumentException>(() => world.Add(new BodyDescription { Shape = cube, Rotation = default }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new BodyDescription { Shape = cube, Friction = -1 }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            world.Add(new RigidBodyDescription { Shape = cube, Position = new Vector3F(float.NaN, 0, 0) }));
+            world.Add(new BodyDescription { Shape = cube, Position = new Vector3F(float.NaN, 0, 0) }));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PhysicsWorld(new PhysicsSettings { ContactHertz = float.NaN }));
-        var body = world.Add(new RigidBodyDescription { Shape = cube });
+        var body = world.Add(new BodyDescription { Shape = cube });
         Assert.Throws<ArgumentException>(() => world.SetPose(body, new Pose { Position = Vector3F.One }));
         Assert.That(world.GetPose(body).Position, Is.EqualTo(Vector3F.Zero), "a refused pose leaves the body where it was");
         Assert.That(world.BodyCount, Is.EqualTo(1));
@@ -219,7 +219,7 @@ public class WorldTests
     {
         var scene = new SceneBuilder();
         scene.AddGround();
-        var box = scene.World.Add(new RigidBodyDescription
+        var box = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0, 0.5f, 0),
@@ -240,7 +240,7 @@ public class WorldTests
         scene.Run(2f);
         Assert.That(scene.World.IsAwake(bottom), Is.False);
 
-        var top = scene.World.Add(new RigidBodyDescription
+        var top = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0, 1.5f, 0),
@@ -261,7 +261,7 @@ public class WorldTests
         scene.AddGround();
         var bottom = scene.AddBox(new Vector3F(0, 0.5f, 0), new Vector3F(0.5f));
         scene.Run(2f);
-        var top = scene.World.Add(new RigidBodyDescription
+        var top = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0, 1.5f, 0),
@@ -279,7 +279,7 @@ public class WorldTests
     public void KinematicAddedAsleepWithVelocity_Moves()
     {
         IPhysicsWorld world = new PhysicsWorld();
-        var platform = world.Add(new RigidBodyDescription
+        var platform = world.Add(new BodyDescription
         {
             Kind = BodyKind.Kinematic,
             Shape = new Shapes.BoxShape(1, 0.1f, 1),
@@ -299,15 +299,15 @@ public class WorldTests
     public void StackLoadedAsleepOnAStillPlatform_StaysAsleep()
     {
         var scene = new SceneBuilder();
-        scene.World.Add(new RigidBodyDescription
+        scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Kinematic,
             Shape = new Shapes.BoxShape(2, 0.25f, 2)
         });
-        var boxes = new List<RigidBody>();
+        var boxes = new List<BodyHandle>();
         for (var level = 0; level < 3; level++)
         {
-            boxes.Add(scene.World.Add(new RigidBodyDescription
+            boxes.Add(scene.World.Add(new BodyDescription
             {
                 Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
                 Position = new Vector3F(0, 0.75f + level, 0),
@@ -327,7 +327,7 @@ public class WorldTests
     public void StillPlatformGivenZeroVelocity_LeavesTheStackAsleep()
     {
         var scene = new SceneBuilder();
-        var platform = scene.World.Add(new RigidBodyDescription
+        var platform = scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Kinematic,
             Shape = new Shapes.BoxShape(2, 0.25f, 2)
@@ -351,7 +351,7 @@ public class WorldTests
         scene.AddGround();
         var support = scene.AddBox(new Vector3F(0, 0.5f, 0), new Vector3F(0.5f));
         scene.Run(2f);
-        var top = scene.World.Add(new RigidBodyDescription
+        var top = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0, 1.5f, 0),
@@ -368,7 +368,7 @@ public class WorldTests
     public void HugeVelocity_IsCutToTheSpeedLimit()
     {
         IPhysicsWorld world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
-        var ball = world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
+        var ball = world.Add(new BodyDescription { Shape = new Shapes.SphereShape(0.5f) });
         world.SetLinearVelocity(ball, new Vector3F(3e38f, 0, 0));
         Assert.That(world.GetLinearVelocity(ball).Length(), Is.EqualTo(500f).Within(0.01f));
 
@@ -382,20 +382,20 @@ public class WorldTests
     public void ExtremeMotion_StaysFinite()
     {
         IPhysicsWorld world = new PhysicsWorld();
-        world.Add(new RigidBodyDescription
+        world.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxShape(50, 1, 50),
             Position = new Vector3F(0, -1, 0)
         });
-        var spinner = world.Add(new RigidBodyDescription { Shape = new Shapes.BoxShape(1, 0.1f, 0.1f), Position = Vector3F.UnitY });
-        var heavy = world.Add(new RigidBodyDescription
+        var spinner = world.Add(new BodyDescription { Shape = new Shapes.BoxShape(1, 0.1f, 0.1f), Position = Vector3F.UnitY });
+        var heavy = world.Add(new BodyDescription
         {
             Shape = new Shapes.SphereShape(0.5f),
             Position = new Vector3F(3, 1.5f, 0),
             GravityScale = 1e38f
         });
-        var underHeavy = world.Add(new RigidBodyDescription
+        var underHeavy = world.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(3, 0.5f, 0)
@@ -415,7 +415,7 @@ public class WorldTests
             Assert.That(float.IsFinite(point.NormalImpulse), Is.True, "no impulse turns into NaN");
         }
 
-        RigidBody[] bodies = [spinner, heavy, underHeavy];
+        BodyHandle[] bodies = [spinner, heavy, underHeavy];
         foreach (var body in bodies)
         {
             var pose = world.GetPose(body);
@@ -430,7 +430,7 @@ public class WorldTests
     public void GivenMass_WorksForHugeAndTinyShapes(float radius, float mass)
     {
         IPhysicsWorld world = new PhysicsWorld();
-        var body = world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(radius), Mass = mass });
+        var body = world.Add(new BodyDescription { Shape = new Shapes.SphereShape(radius), Mass = mass });
 
         world.ApplyImpulse(body, new Vector3F(mass, 0, 0), Vector3F.Zero);
 
@@ -445,7 +445,7 @@ public class WorldTests
     public void PlanetSizedStaticGround_IsAccepted()
     {
         IPhysicsWorld world = new PhysicsWorld();
-        world.Add(new RigidBodyDescription
+        world.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxShape(5e10f, 1, 5e10f),
@@ -466,7 +466,7 @@ public class WorldTests
         Assert.That(scene.World.IsAwake(left), Is.False);
 
         scene.World.Remove(far);
-        var replacement = scene.World.Add(new RigidBodyDescription
+        var replacement = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0.5f, 0.5f, 0),
@@ -482,7 +482,7 @@ public class WorldTests
     public void ChangingGravity_LeavesBodiesItDoesNotPullAsleep()
     {
         var scene = new SceneBuilder(new PhysicsSettings { Gravity = Vector3F.Zero });
-        var floating = scene.World.Add(new RigidBodyDescription
+        var floating = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.SphereShape(0.5f),
             GravityScale = 0
@@ -499,7 +499,7 @@ public class WorldTests
     public void BadMotion_IsRefused()
     {
         IPhysicsWorld world = new PhysicsWorld();
-        var body = world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
+        var body = world.Add(new BodyDescription { Shape = new Shapes.SphereShape(0.5f) });
         var bad = new Vector3F(float.NaN, 0, 0);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => world.SetLinearVelocity(body, bad));
@@ -510,11 +510,11 @@ public class WorldTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new Shapes.BoxShape(float.NaN, 1, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Shapes.BoxShape(3e38f, 3e38f, 3e38f));
         Assert.Throws<ArgumentException>(() =>
-            world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.01f), Density = 1e-40f }));
+            world.Add(new BodyDescription { Shape = new Shapes.SphereShape(0.01f), Density = 1e-40f }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(1), Kind = (BodyKind)7 }));
+            world.Add(new BodyDescription { Shape = new Shapes.SphereShape(1), Kind = (BodyKind)7 }));
         Assert.Throws<ArgumentException>(() =>
-            world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(1), Mass = 1e-39f }));
+            world.Add(new BodyDescription { Shape = new Shapes.SphereShape(1), Mass = 1e-39f }));
 
         world.ApplyForce(body, new Vector3F(3e38f, 0, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.ApplyForce(body, new Vector3F(3e38f, 0, 0)));
@@ -525,7 +525,7 @@ public class WorldTests
     {
         var scene = new SceneBuilder();
         var ground = scene.AddGround();
-        var box = scene.World.Add(new RigidBodyDescription
+        var box = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(0.5f, 0.5f, 0.5f),
             Position = new Vector3F(0, 0.6f, 0),
@@ -559,13 +559,13 @@ public class WorldTests
     public void SpinningBar_DoesNotSwingThroughAThinWall()
     {
         var scene = new SceneBuilder(new PhysicsSettings { Gravity = Vector3F.Zero });
-        scene.World.Add(new RigidBodyDescription
+        scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxShape(0.025f, 3, 3),
             Position = new Vector3F(1.5f, 0, 0)
         });
-        var bar = scene.World.Add(new RigidBodyDescription
+        var bar = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxShape(2, 0.05f, 0.05f),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, MathF.PI / 2),

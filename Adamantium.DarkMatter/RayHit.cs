@@ -3,7 +3,7 @@ namespace Adamantium.DarkMatter;
 /// <summary>Where a ray first met a body.</summary>
 public readonly struct RayHit
 {
-    public RayHit(RigidBody body, Vector3F position, Vector3F normal, float distance)
+    public RayHit(BodyHandle body, Vector3F position, Vector3F normal, float distance)
     {
         Body = body;
         Position = position;
@@ -12,7 +12,7 @@ public readonly struct RayHit
     }
 
     /// <summary>The body met.</summary>
-    public RigidBody Body { get; }
+    public BodyHandle Body { get; }
 
     /// <summary>The point met.</summary>
     public Vector3F Position { get; }

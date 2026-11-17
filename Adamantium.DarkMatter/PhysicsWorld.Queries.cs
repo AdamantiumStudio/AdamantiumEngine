@@ -45,7 +45,7 @@ public sealed partial class PhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void Overlap(Shape shape, in Pose pose, ICollection<RigidBody> into)
+    public void Overlap(Shape shape, in Pose pose, ICollection<BodyHandle> into)
     {
         ArgumentNullException.ThrowIfNull(shape);
         ArgumentNullException.ThrowIfNull(into);

@@ -83,7 +83,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public float MaxAngularSpeed { get; }
 
     /// <inheritdoc/>
-    public RigidBody Add(RigidBodyDescription description)
+    public BodyHandle Add(BodyDescription description)
     {
         ValidateDescription(description);
         var rotation = NormalizeRotation(description.Rotation, nameof(description));
@@ -92,59 +92,59 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             mass = ComputeMass(description);
 
         var index = TakeSlot();
-        ref var body = ref _bodies[index];
-        var generation = body.Generation + 1;
-        var listed = body.Marks & BodyMarks.Listed;
-        body = default;
-        body.IsUsed = true;
-        body.Generation = generation;
-        body.Marks = listed;
-        body.Kind = description.Kind;
-        body.Shape = description.Shape;
-        body.Position = description.Position;
-        body.Rotation = rotation;
-        body.StartPosition = body.Position;
-        body.StartRotation = body.Rotation;
-        body.Friction = description.Friction;
-        body.Restitution = description.Restitution;
-        body.LinearDamping = description.LinearDamping;
-        body.AngularDamping = description.AngularDamping;
-        body.GravityScale = description.GravityScale;
-        body.CanSleep = description.CanSleep;
-        body.IslandHead = NoBody;
-        body.IslandNext = NoBody;
+        ref var state = ref _bodies[index];
+        var generation = state.Generation + 1;
+        var listed = state.Marks & BodyMarks.Listed;
+        state = default;
+        state.IsUsed = true;
+        state.Generation = generation;
+        state.Marks = listed;
+        state.Kind = description.Kind;
+        state.Shape = description.Shape;
+        state.Position = description.Position;
+        state.Rotation = rotation;
+        state.StartPosition = state.Position;
+        state.StartRotation = state.Rotation;
+        state.Friction = description.Friction;
+        state.Restitution = description.Restitution;
+        state.LinearDamping = description.LinearDamping;
+        state.AngularDamping = description.AngularDamping;
+        state.GravityScale = description.GravityScale;
+        state.CanSleep = description.CanSleep;
+        state.IslandHead = NoBody;
+        state.IslandNext = NoBody;
 
         if (description.Kind == BodyKind.Kinematic || (description.Kind == BodyKind.Dynamic && description.IsAwake))
         {
-            body.LinearVelocity = LimitSpeed(description.LinearVelocity, Settings.MaxLinearSpeed);
-            body.AngularVelocity = LimitSpeed(description.AngularVelocity, MaxAngularSpeed);
-            body.IsAwake = description.Kind == BodyKind.Dynamic || description.LinearVelocity != Vector3F.Zero
-                                                                || description.AngularVelocity != Vector3F.Zero;
+            state.LinearVelocity = LimitSpeed(description.LinearVelocity, Settings.MaxLinearSpeed);
+            state.AngularVelocity = LimitSpeed(description.AngularVelocity, MaxAngularSpeed);
+            state.IsAwake = description.Kind == BodyKind.Dynamic || description.LinearVelocity != Vector3F.Zero
+                                                                 || description.AngularVelocity != Vector3F.Zero;
         }
 
         if (description.Kind == BodyKind.Dynamic)
         {
-            body.InverseMass = 1f / mass.Mass;
-            body.InverseInertia = new Vector3F(1f / mass.Inertia.X, 1f / mass.Inertia.Y, 1f / mass.Inertia.Z);
-            body.WorldInverseInertia = InertiaMath.ToWorld(body.Rotation, body.InverseInertia);
-            if (!body.IsAwake)
-                body.IslandHead = index;
+            state.InverseMass = 1f / mass.Mass;
+            state.InverseInertia = new Vector3F(1f / mass.Inertia.X, 1f / mass.Inertia.Y, 1f / mass.Inertia.Z);
+            state.WorldInverseInertia = InertiaMath.ToWorld(state.Rotation, state.InverseInertia);
+            if (!state.IsAwake)
+                state.IslandHead = index;
         }
 
-        body.Proxy = _tree.Add(ComputeProxyBounds(body), index);
+        state.Proxy = _tree.Add(ComputeProxyBounds(state), index);
         var marks = BodyMarks.Moved | BodyMarks.New;
-        if (body.IsDynamic && !body.IsAwake)
+        if (state.IsDynamic && !state.IsAwake)
             _newSleepers++;
         else
             marks |= BodyMarks.Placed;
 
         Mark(index, marks);
         BodyCount++;
-        return new RigidBody(this, index, generation);
+        return new BodyHandle(this, index, generation);
     }
 
     /// <inheritdoc/>
-    public void Remove(RigidBody body)
+    public void Remove(BodyHandle body)
     {
         var index = Resolve(body);
         WakeIsland(index);
@@ -165,23 +165,25 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         state = default;
         state.Generation = generation;
         state.Marks = listed;
-        _freeSlots.Push(index);
+        if (generation < int.MaxValue)
+            _freeSlots.Push(index);
+
         BodyCount--;
     }
 
     /// <inheritdoc/>
-    public bool Contains(RigidBody body) =>
+    public bool Contains(BodyHandle body) =>
         ReferenceEquals(body.World, this) && body.Index >= 0 && body.Index < _slotCount && _bodies[body.Index].IsUsed
         && _bodies[body.Index].Generation == body.Generation;
 
     /// <inheritdoc/>
-    public BodyKind GetKind(RigidBody body) => _bodies[Resolve(body)].Kind;
+    public BodyKind GetKind(BodyHandle body) => _bodies[Resolve(body)].Kind;
 
     /// <inheritdoc/>
-    public Pose GetPose(RigidBody body) => _bodies[Resolve(body)].Pose;
+    public Pose GetPose(BodyHandle body) => _bodies[Resolve(body)].Pose;
 
     /// <inheritdoc/>
-    public void SetPose(RigidBody body, in Pose pose)
+    public void SetPose(BodyHandle body, in Pose pose)
     {
         var index = Resolve(body);
         RequireFinite(pose.Position, nameof(pose));
@@ -200,10 +202,10 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public Vector3F GetLinearVelocity(RigidBody body) => _bodies[Resolve(body)].LinearVelocity;
+    public Vector3F GetLinearVelocity(BodyHandle body) => _bodies[Resolve(body)].LinearVelocity;
 
     /// <inheritdoc/>
-    public void SetLinearVelocity(RigidBody body, Vector3F velocity)
+    public void SetLinearVelocity(BodyHandle body, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
         var index = ResolveMoving(body);
@@ -212,10 +214,10 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public Vector3F GetAngularVelocity(RigidBody body) => _bodies[Resolve(body)].AngularVelocity;
+    public Vector3F GetAngularVelocity(BodyHandle body) => _bodies[Resolve(body)].AngularVelocity;
 
     /// <inheritdoc/>
-    public void SetAngularVelocity(RigidBody body, Vector3F velocity)
+    public void SetAngularVelocity(BodyHandle body, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
         var index = ResolveMoving(body);
@@ -224,7 +226,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void ApplyForce(RigidBody body, Vector3F force)
+    public void ApplyForce(BodyHandle body, Vector3F force)
     {
         var index = ResolveDynamic(body);
         var total = _bodies[index].Force + force;
@@ -234,7 +236,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void ApplyTorque(RigidBody body, Vector3F torque)
+    public void ApplyTorque(BodyHandle body, Vector3F torque)
     {
         var index = ResolveDynamic(body);
         var total = _bodies[index].Torque + torque;
@@ -244,7 +246,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void ApplyImpulse(RigidBody body, Vector3F impulse, Vector3F point)
+    public void ApplyImpulse(BodyHandle body, Vector3F impulse, Vector3F point)
     {
         RequireFinite(impulse, nameof(impulse));
         RequireFinite(point, nameof(point));
@@ -261,13 +263,13 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public bool IsAwake(RigidBody body) => _bodies[Resolve(body)].IsAwake;
+    public bool IsAwake(BodyHandle body) => _bodies[Resolve(body)].IsAwake;
 
     /// <inheritdoc/>
-    public void WakeUp(RigidBody body) => WakeIsland(Resolve(body));
+    public void WakeUp(BodyHandle body) => WakeIsland(Resolve(body));
 
     /// <inheritdoc/>
-    public BoundingBox<float> GetBounds(RigidBody body)
+    public BoundingBox<float> GetBounds(BodyHandle body)
     {
         ref var state = ref _bodies[Resolve(body)];
         return state.Shape.ComputeBounds(state.Pose);
@@ -818,9 +820,9 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         return _slotCount++;
     }
 
-    private RigidBody GetHandle(int index) => new(this, index, _bodies[index].Generation);
+    private BodyHandle GetHandle(int index) => new(this, index, _bodies[index].Generation);
 
-    private int Resolve(RigidBody body)
+    private int Resolve(BodyHandle body)
     {
         if (!Contains(body))
             throw new ArgumentException("The body is not in this world.", nameof(body));
@@ -828,7 +830,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         return body.Index;
     }
 
-    private int ResolveMoving(RigidBody body)
+    private int ResolveMoving(BodyHandle body)
     {
         var index = Resolve(body);
         if (_bodies[index].Kind == BodyKind.Static)
@@ -837,7 +839,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         return index;
     }
 
-    private int ResolveDynamic(RigidBody body)
+    private int ResolveDynamic(BodyHandle body)
     {
         var index = Resolve(body);
         if (!_bodies[index].IsDynamic)
@@ -867,7 +869,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             throw new ArgumentOutOfRangeException(nameof(settings), "The time to sleep must not be negative.");
     }
 
-    private static void ValidateDescription(RigidBodyDescription description)
+    private static void ValidateDescription(BodyDescription description)
     {
         ArgumentNullException.ThrowIfNull(description);
         if (description.Shape == null)
@@ -902,7 +904,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private static bool IsFinite(Vector3F vector) =>
         float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
-    private static MassProperties ComputeMass(RigidBodyDescription description)
+    private static MassProperties ComputeMass(BodyDescription description)
     {
         if (description.Mass < 0 || description.Density < 0 || !float.IsFinite(description.Mass)
             || !float.IsFinite(description.Density))

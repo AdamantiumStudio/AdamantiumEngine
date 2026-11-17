@@ -28,60 +28,60 @@ public interface IPhysicsWorld
     float MaxAngularSpeed { get; }
 
     /// <summary>Adds a body as <paramref name="description"/> describes it and gives its handle.</summary>
-    RigidBody Add(RigidBodyDescription description);
+    BodyHandle Add(BodyDescription description);
 
     /// <summary>Takes <paramref name="body"/> out of the world; bodies resting on it wake.</summary>
-    void Remove(RigidBody body);
+    void Remove(BodyHandle body);
 
     /// <summary>Whether <paramref name="body"/> is in this world.</summary>
-    bool Contains(RigidBody body);
+    bool Contains(BodyHandle body);
 
     /// <summary>How <paramref name="body"/> moves.</summary>
-    BodyKind GetKind(RigidBody body);
+    BodyKind GetKind(BodyHandle body);
 
     /// <summary>Where <paramref name="body"/> stands.</summary>
-    Pose GetPose(RigidBody body);
+    Pose GetPose(BodyHandle body);
 
     /// <summary>Moves <paramref name="body"/> to <paramref name="pose"/> at once, as a jump, not a motion; it and the
     /// bodies it touches, there or here, wake.</summary>
-    void SetPose(RigidBody body, in Pose pose);
+    void SetPose(BodyHandle body, in Pose pose);
 
     /// <summary>The velocity of <paramref name="body"/>'s center, in meters per second.</summary>
-    Vector3F GetLinearVelocity(RigidBody body);
+    Vector3F GetLinearVelocity(BodyHandle body);
 
     /// <summary>Sets the velocity of a dynamic or kinematic body's center, cut to
     /// <see cref="PhysicsSettings.MaxLinearSpeed"/>, and wakes it.</summary>
-    void SetLinearVelocity(RigidBody body, Vector3F velocity);
+    void SetLinearVelocity(BodyHandle body, Vector3F velocity);
 
     /// <summary>The spin of <paramref name="body"/>, in radians per second around each world axis.</summary>
-    Vector3F GetAngularVelocity(RigidBody body);
+    Vector3F GetAngularVelocity(BodyHandle body);
 
     /// <summary>Sets the spin of a dynamic or kinematic body, cut to <see cref="MaxAngularSpeed"/>, and wakes it.
     /// </summary>
-    void SetAngularVelocity(RigidBody body, Vector3F velocity);
+    void SetAngularVelocity(BodyHandle body, Vector3F velocity);
 
     /// <summary>Pushes a dynamic body's center with <paramref name="force"/>, in newtons, through the next step, and
     /// wakes it.</summary>
-    void ApplyForce(RigidBody body, Vector3F force);
+    void ApplyForce(BodyHandle body, Vector3F force);
 
     /// <summary>Turns a dynamic body with <paramref name="torque"/>, in newton meters around each world axis, through
     /// the next step, and wakes it.</summary>
-    void ApplyTorque(RigidBody body, Vector3F torque);
+    void ApplyTorque(BodyHandle body, Vector3F torque);
 
     /// <summary>Strikes a dynamic body at <paramref name="point"/> of the world with <paramref name="impulse"/>, in
     /// newton seconds, changing its velocity at once - cut to the speed limits - and wakes it.</summary>
-    void ApplyImpulse(RigidBody body, Vector3F impulse, Vector3F point);
+    void ApplyImpulse(BodyHandle body, Vector3F impulse, Vector3F point);
 
     /// <summary>Whether <paramref name="body"/> is awake; static bodies never are.</summary>
-    bool IsAwake(RigidBody body);
+    bool IsAwake(BodyHandle body);
 
     /// <summary>Wakes <paramref name="body"/> and everything asleep with it; a kinematic body standing still stays
     /// asleep.</summary>
-    void WakeUp(RigidBody body);
+    void WakeUp(BodyHandle body);
 
     /// <summary>The box, aligned with the world's axes, that holds <paramref name="body"/>'s shape where it stands.
     /// </summary>
-    BoundingBox<float> GetBounds(RigidBody body);
+    BoundingBox<float> GetBounds(BodyHandle body);
 
     /// <summary>Adds to <paramref name="into"/> every contact point the last step held: touching, or about to, as a
     /// positive separation says.</summary>
@@ -96,5 +96,5 @@ public interface IPhysicsWorld
 
     /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
     /// at <paramref name="pose"/>.</summary>
-    void Overlap(Shape shape, in Pose pose, ICollection<RigidBody> into);
+    void Overlap(Shape shape, in Pose pose, ICollection<BodyHandle> into);
 }

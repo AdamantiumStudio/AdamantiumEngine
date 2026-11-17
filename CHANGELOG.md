@@ -10,8 +10,8 @@ All packages share one version.
 - `Adamantium.DarkMatter`, the physics engine, on its own: no entities, window or GPU, only `Adamantium.Mathematics`.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
-  Bodies are added from a `RigidBodyDescription` - static, kinematic or dynamic; a sphere, capsule or box shape;
-  density or mass, friction, restitution, damping - and named by the `RigidBody` handle they get. Contacts are soft
+  Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a sphere, capsule or box shape;
+  density or mass, friction, restitution, damping - and named by the `BodyHandle` they get. Contacts are soft
   constraints with Coulomb friction, warm-started from the last step and found ahead of time by a distance that grows
   with speed and spin, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4
   by default), and no body moves faster than `MaxLinearSpeed` (500 m/s). Bodies at rest fall asleep together with
