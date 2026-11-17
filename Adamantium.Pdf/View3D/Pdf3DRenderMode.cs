@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>How a 3D view draws the artwork (ISO 32000-1, 13.6.4, table 306, <c>RM</c>): solid, wireframe,
 /// transparent, illustration and the rest, with the colors and opacity some of them use.</summary>
