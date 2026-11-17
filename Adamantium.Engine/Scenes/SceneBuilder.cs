@@ -411,7 +411,7 @@ public sealed class SceneBuilder
         else
         {
             new ShapeTemplate(shape).Build(entity);
-            entity.AddComponent(new Material { DiffuseColor = entry.Color });
+            entity.AddComponent(new Material());
         }
 
         entity.Name = entry.Name;
@@ -427,7 +427,11 @@ public sealed class SceneBuilder
             ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
 
         if (entity.GetComponent<Material>() is { } material)
+        {
             material.DiffuseColor = entry.Color;
+            material.AlphaMode = entry.AlphaMode;
+            material.AlphaCutoff = entry.AlphaCutoff;
+        }
     }
 
     private ProceduralShape MakeShapeComponent(SceneShape entry)

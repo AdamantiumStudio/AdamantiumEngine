@@ -24,5 +24,7 @@ public class ForwardPlusWireEffectTests
         Assert.That(technique.Passes["Textured"], Is.Not.Null);
         Assert.That(technique.Passes["SkinnedColored"], Is.Not.Null);
         Assert.That(technique.Passes["SkinnedTextured"], Is.Not.Null);
+        Assert.That(technique.Passes["MaskedTextured"], Is.Not.Null);
+        Assert.That(technique.Passes["SkinnedMaskedTextured"], Is.Not.Null);
     }
 }

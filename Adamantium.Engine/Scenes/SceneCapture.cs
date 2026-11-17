@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse;
 using Serilog;
@@ -132,12 +133,16 @@ public static class SceneCapture
         }
         else if (entity.GetComponent<ProceduralShape>() is { } shape)
         {
+            var material = entity.GetComponent<Material>();
             var placedShape = new SceneShape
             {
                 Type = shape.GetType().FullName,
-                Color = entity.GetComponent<Material>()?.DiffuseColor ?? Material.DefaultDiffuseColor,
+                Color = material?.DiffuseColor ?? Material.DefaultDiffuseColor,
+                AlphaMode = material?.AlphaMode ?? AlphaMode.Opaque,
                 Scale = entity.Transform.ScaleFactor
             };
+            if (material != null)
+                placedShape.AlphaCutoff = material.AlphaCutoff;
             ComponentFields.Write(shape, typeof(ActivatableComponent), placedShape.Values, SceneShape.OwnAttributes);
             entry = placedShape;
         }
@@ -145,7 +150,8 @@ public static class SceneCapture
         {
             var kept = new SceneShape
             {
-                Type = unloaded.Entry.Type, Color = unloaded.Entry.Color, Scale = entity.Transform.ScaleFactor
+                Type = unloaded.Entry.Type, Color = unloaded.Entry.Color, AlphaMode = unloaded.Entry.AlphaMode,
+                AlphaCutoff = unloaded.Entry.AlphaCutoff, Scale = entity.Transform.ScaleFactor
             };
             kept.Values.AddRange(unloaded.Entry.Values);
             entry = kept;

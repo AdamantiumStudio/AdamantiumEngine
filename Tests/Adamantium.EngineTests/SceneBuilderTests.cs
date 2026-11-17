@@ -97,6 +97,28 @@ public class SceneBuilderTests
         return entities;
     }
 
+    // A masked shape's material takes how its alpha counts and its cutoff, and is written back with them.
+    [Test]
+    public async Task AShapesAlphaMode_GoesToItsMaterial_AndBack()
+    {
+        var scene = new SceneFile();
+        scene.Shapes.Add(new SceneShape
+        {
+            Uid = 51, Name = "Masked", Type = typeof(SphereShape).FullName, Color = new Vector4F(1, 1, 1, 0.3f),
+            AlphaMode = AlphaMode.Mask, AlphaCutoff = 0.8f
+        });
+        var masked = (await Build(scene)).Single();
+
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene).Shapes.Single();
+
+        Assert.Multiple(() =>
+        {
+            var material = masked.GetComponent<Material>();
+            Assert.That((material.AlphaMode, material.AlphaCutoff), Is.EqualTo((AlphaMode.Mask, 0.8f)));
+            Assert.That((back.AlphaMode, back.AlphaCutoff), Is.EqualTo((AlphaMode.Mask, 0.8f)));
+        });
+    }
+
     // Built into a scene of its own, a file stands there alone, and is written back with that scene's id.
     [Test]
     public async Task ASceneBuiltIntoAnotherScene_StandsThereAlone_AndIsWrittenWithItsId()
