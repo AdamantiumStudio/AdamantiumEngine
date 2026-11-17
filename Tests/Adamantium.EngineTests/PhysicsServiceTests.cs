@@ -304,6 +304,24 @@ public class PhysicsServiceTests
         Assert.That(box.Transform.State, Is.EqualTo(kept));
     }
 
+    [TestCase(1.0 / 60)]
+    [TestCase(1.0 / 144)]
+    public void ForceAsHeavyAsTheBody_HoversItWithoutDrift(double frameSeconds)
+    {
+        UseSteppedPhysics();
+        var box = AddBox("Hovering", new Vector3<double>(0, -3, 0), 0.5);
+        Play();
+        var weight = new Vector3F(0, -1000 * 9.81f, 0);
+        var frames = (int)Math.Round(3 / frameSeconds);
+        for (var frame = 0; frame < frames; frame++)
+        {
+            _physics.ApplyForce(box, weight);
+            Frame(frameSeconds);
+        }
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-3).Within(0.01));
+    }
+
     [Test]
     public void ForceOfAFrameShorterThanAStep_IsNotLost()
     {

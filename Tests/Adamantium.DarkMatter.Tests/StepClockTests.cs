@@ -35,6 +35,11 @@ public class StepClockTests
 
         Assert.That(clock.Advance(1.0), Is.EqualTo(4));
         Assert.That(clock.Blend, Is.EqualTo(0f));
+        Assert.That(clock.DroppedSeconds, Is.EqualTo(1.0 - 4.0 / 120).Within(1e-9));
         Assert.That(clock.Advance(1.0 / 120), Is.EqualTo(1));
+        Assert.That(clock.DroppedSeconds, Is.Zero);
+        clock.Advance(1.0);
+        clock.Reset();
+        Assert.That(clock.DroppedSeconds, Is.Zero);
     }
 }

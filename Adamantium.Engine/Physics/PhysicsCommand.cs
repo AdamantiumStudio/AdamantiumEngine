@@ -3,7 +3,7 @@ namespace Adamantium.Engine.Physics;
 /// <summary>One request of the game, sent to the physics thread and done before its next step.</summary>
 internal readonly struct PhysicsCommand
 {
-    public PhysicsCommand(PhysicsCommandKind kind, int key, Vector3F value, Vector3F point, float seconds = 0)
+    public PhysicsCommand(PhysicsCommandKind kind, int key, Vector3F value, Vector3F point, double seconds = 0)
     {
         Kind = kind;
         Key = key;
@@ -22,6 +22,6 @@ internal readonly struct PhysicsCommand
     /// <summary>Where an impulse strikes, in the physics' own coordinates.</summary>
     public Vector3F Point { get; }
 
-    /// <summary>For a new force: how long the body's last force lasted, in seconds.</summary>
-    public float Seconds { get; }
+    /// <summary>For a frame's force: how long the frame was, in seconds.</summary>
+    public double Seconds { get; }
 }
