@@ -249,6 +249,11 @@ public class ToolsOverlayProcessor : RenderingProcessor
         var clamp = GraphicsDevice.DepthClampEnable;
         GraphicsDevice.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
         GraphicsDevice.DepthClampEnable = GraphicsDevice.MainDevice.IsDepthClampEnabled;
+        // The floor's depth is pushed back by the slope it is seen at too: a face lying on the ground - a see-through
+        // box's bottom, tested against the floor - stays in front at a grazing look, where a fixed step does not.
+        GraphicsDevice.DepthBiasEnabled = grid.ShowsFloor;
+        GraphicsDevice.DepthBiasConstantFactor = FloorDepthBias;
+        GraphicsDevice.DepthBiasSlopeFactor = FloorDepthBias;
         try
         {
             var state = new RenderState(false, CullModeFlagBits.None, true, grid.ShowsFloor, null);
@@ -258,8 +263,13 @@ public class ToolsOverlayProcessor : RenderingProcessor
         {
             GraphicsDevice.ColorBlendEquation = blend;
             GraphicsDevice.DepthClampEnable = clamp;
+            GraphicsDevice.DepthBiasEnabled = false;
+            GraphicsDevice.DepthBiasConstantFactor = 0;
+            GraphicsDevice.DepthBiasSlopeFactor = 0;
         }
     }
+
+    private const float FloorDepthBias = 4;
 
     /// <summary>Draws an entity laid out in the output's pixels.</summary>
     public void DrawOnScreen(Entity root)
