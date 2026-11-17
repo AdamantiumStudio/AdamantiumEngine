@@ -230,9 +230,6 @@ public class PrcConverter : ConverterBase
 
         var model = SceneDataContainer.CreateMesh(node.Parent, CreateUniqueId($"{structure.Index}/{node.Occurrence}"), name);
         model.Extra = CreateExtra(occurrence.Attributes);
-        var location = GetPlacement(redefinition, name) ?? occurrence.Location ?? Matrix4x4F.Identity;
-        Place(model, location);
-        var world = location * node.ParentWorld;
         var style = ChooseStyle(structure, occurrence.Graphics, node.Style, redefinition);
         ReportOccurrenceContent(occurrence);
 
@@ -246,6 +243,7 @@ public class PrcConverter : ConverterBase
         var sonsStructure = structure;
         var part = occurrence.PartIndex;
         var partStructure = structure;
+        var placed = occurrence.Location;
         for (var link = 0; link < MaximumPrototypeChain && source.PrototypeIndex >= 0; link++)
         {
             var prototypeStructure = Resolve(sourceStructure, source.PrototypeFileStructure, name, "prototype");
@@ -269,9 +267,14 @@ public class PrcConverter : ConverterBase
                 partStructure = prototypeStructure;
             }
 
+            placed ??= prototype.Location;
             source = prototype;
             sourceStructure = prototypeStructure;
         }
+
+        var location = GetPlacement(redefinition, name) ?? placed ?? Matrix4x4F.Identity;
+        Place(model, location);
+        var world = location * node.ParentWorld;
 
         node.Context = context;
         AddScenes(occurrence, structure, model, world);
