@@ -147,8 +147,8 @@ namespace Adamantium.ECS
         /// <summary>Tells <see cref="World"/> that what it shows keeps changing for <paramref name="duration"/>.</summary>
         public void NotifyUpdated(TimeSpan duration) => World?.Changed(new UniverseChangedEventArgs(duration));
 
-        // Something the scene keeps changed - a value of the entity or of a component, its components, its place: its
-        // scene's changes note it, and the world draws it again. The scene found once: this runs on every value set.
+        // A value of the entity or of a component changed, a component came or went, or its place did: its scene's changes
+        // note it, and the world draws it again. The scene found once: this runs on every value set.
         internal void NoteChangedAndRedraw()
         {
             if (Scene is not { } own)
@@ -158,14 +158,10 @@ namespace Adamantium.ECS
             own.World?.Changed(UniverseChangedEventArgs.OneFrame);
         }
 
-        // Its name, shown and enabled are the scene's; selected and expanded are the editor's.
         protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
         {
             base.RaisePropertyChanged(propertyName);
-            if (propertyName is nameof(Name) or nameof(Visible) or nameof(IsEnabled))
-                NoteChangedAndRedraw();
-            else
-                NotifyUpdated();
+            NoteChangedAndRedraw();
         }
 
         private void OnOwnerChanged(Entity oldOwner, Entity newOwner)

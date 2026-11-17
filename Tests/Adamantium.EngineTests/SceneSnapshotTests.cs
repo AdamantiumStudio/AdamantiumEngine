@@ -244,14 +244,13 @@ public class SceneSnapshotTests
         });
     }
 
-    // Selected, or drawn again, an entity has not changed; one that joined is among those joined, not changed.
+    // Drawn again, an entity has not changed; one that joined is among those joined, not changed.
     [Test]
-    public void ASelectionOrARedraw_IsNotAChange()
+    public void ARedraw_IsNotAChange()
     {
         SceneSnapshot.Take(_scene);
         var spawned = new Entity(null, "Spawned");
 
-        _group.IsSelected = true;
         _lamp.NotifyUpdated();
         _world.EntityManager.AddEntity(spawned, _scene);
 
