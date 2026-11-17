@@ -187,7 +187,7 @@ public class EntityImportTests
             NormalScale = 0.5f,
             AlphaMode = AlphaMode.Mask,
             AlphaCutoff = 0.4f,
-            DoubleSided = true
+            Faces = MaterialFaces.Front
         });
         var box = Box(1);
         box.MaterialID = "metal";
@@ -203,7 +203,7 @@ public class EntityImportTests
             Assert.That(material.NormalScale, Is.EqualTo(0.5f));
             Assert.That(material.AlphaMode, Is.EqualTo(AlphaMode.Mask));
             Assert.That(material.AlphaCutoff, Is.EqualTo(0.4f));
-            Assert.That(material.DoubleSided, Is.True);
+            Assert.That(material.Faces, Is.EqualTo(MaterialFaces.Front));
             Assert.That(material.TexturePath, Does.StartWith("Models/Robot/robot.glb#image0:"));
             Assert.That(material.NormalMapPath, Is.EqualTo(material.TexturePath));
         });

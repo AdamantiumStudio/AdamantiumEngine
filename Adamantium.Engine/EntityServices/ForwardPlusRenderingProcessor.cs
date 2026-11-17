@@ -510,7 +510,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff);
 
         Effect owner = withWire ? wireEffect : effect;
-        var key = new MeshDrawKey(geometry, pass, meshData.CullMode, meshData.DepthTestEnabled,
+        var key = new MeshDrawKey(geometry, pass, MeshRenderExtensions.CullModeOf(material, world), meshData.DepthTestEnabled,
             !seeThrough && meshData.DepthWriteEnabled, meshData.IsWireFrame, meshData.TopologyOverride);
         if (!groups.TryGetValue(key, out var group))
         {

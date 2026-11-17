@@ -203,8 +203,8 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
             ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture)
             : 0u);
         (texture != null ? _effect.ScreenshotTexturedPass : _effect.ScreenshotColoredPass).Apply();
-        var state = new RenderState(false, meshData.CullMode, meshData.DepthTestEnabled, meshData.DepthWriteEnabled,
-            meshData.TopologyOverride);
+        var state = new RenderState(false, MeshRenderExtensions.CullModeOf(material, world), meshData.DepthTestEnabled,
+            meshData.DepthWriteEnabled, meshData.TopologyOverride);
         _geometry.GetOrCreate(mesh, typeof(MeshVertex)).Draw(GraphicsDevice, state);
     }
 

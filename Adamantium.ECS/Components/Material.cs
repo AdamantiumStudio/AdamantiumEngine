@@ -7,6 +7,7 @@ using BindableAttribute = Adamantium.MVVM.BindableAttribute;
 using Component = Adamantium.ECS.Components.Component;
 using TextureDimension = Adamantium.Graphics.Core.Models.TextureDimension;
 using AlphaMode = Adamantium.Graphics.Core.Models.AlphaMode;
+using MaterialFaces = Adamantium.Graphics.Core.Models.MaterialFaces;
 
 namespace Adamantium.ECS.Components
 {
@@ -142,8 +143,8 @@ namespace Adamantium.ECS.Components
       [Bindable]
       public partial Single AlphaCutoff { get; set; }
 
-      /// <summary>Whether both sides of the surface are drawn and lit.</summary>
+      /// <summary>Which faces of the surface are drawn and lit: both by default.</summary>
       [Bindable]
-      public partial Boolean DoubleSided { get; set; }
+      public partial MaterialFaces Faces { get; set; }
    }
 }

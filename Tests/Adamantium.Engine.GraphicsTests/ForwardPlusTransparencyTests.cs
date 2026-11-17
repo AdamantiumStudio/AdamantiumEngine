@@ -152,6 +152,24 @@ public class ForwardPlusTransparencyTests
         Assert.That(center.Red, Is.EqualTo(red).Within(Within));
     }
 
+    // A cube round the eye shows its inside faces only when its material shows both; from outside, its front faces show,
+    // mirrored or not.
+    [TestCase(MaterialFaces.Front, false, false, 0)]
+    [TestCase(MaterialFaces.Both, false, false, 255)]
+    [TestCase(MaterialFaces.Front, true, false, 255)]
+    [TestCase(MaterialFaces.Front, false, true, 0)]
+    public void ACubesFaces_AreWhatItsMaterialShows(MaterialFaces faces, bool fromOutside, bool mirrored, int red)
+    {
+        var cube = AddCube("Box", fromOutside ? Vector3<double>.Zero : new Vector3<double>(0, 0, -6),
+            new Vector4F(1, 0, 0, 1), AlphaMode.Opaque);
+        cube.GetComponent<Material>().Faces = faces;
+        cube.Transform.ScaleFactor = new Vector3F(mirrored ? -1 : 1, 1, 1) * (fromOutside ? 1 : 4);
+
+        var center = CenterPixel("forward-plus-faces.png");
+
+        Assert.That(center.Red, Is.EqualTo(red).Within(Within));
+    }
+
     [Test]
     public void AnOpaqueCube_IgnoresItsAlpha()
     {

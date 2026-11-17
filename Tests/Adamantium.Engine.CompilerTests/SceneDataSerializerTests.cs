@@ -94,7 +94,7 @@ namespace Adamantium.Engine.CompilerTests
                 NormalMap = "image0",
                 AlphaMode = AlphaMode.Mask,
                 AlphaCutoff = 0.3f,
-                DoubleSided = true
+                Faces = MaterialFaces.Back
             };
 
             var loaded = SceneDataSerializer.Deserialize(SceneDataSerializer.Serialize(scene));
@@ -110,7 +110,7 @@ namespace Adamantium.Engine.CompilerTests
                 Assert.That(material.NormalMap, Is.EqualTo("image0"));
                 Assert.That(material.AlphaMode, Is.EqualTo(AlphaMode.Mask));
                 Assert.That(material.AlphaCutoff, Is.EqualTo(0.3f));
-                Assert.That(material.DoubleSided, Is.True);
+                Assert.That(material.Faces, Is.EqualTo(MaterialFaces.Back));
             });
         }
     }

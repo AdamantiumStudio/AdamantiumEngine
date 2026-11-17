@@ -87,13 +87,16 @@ public class SceneFileTests
         scene.Shapes.Add(new SceneShape
         {
             Uid = 52, Name = "Masked", Type = "Adamantium.ECS.Components.CubeShape", AlphaMode = AlphaMode.Mask,
-            AlphaCutoff = 0.8f
+            AlphaCutoff = 0.8f, Faces = MaterialFaces.Front
         });
 
         var back = WriteAndRead(scene);
 
         Assert.Multiple(() =>
         {
+            Assert.That(back.Shapes[2].Faces, Is.EqualTo(MaterialFaces.Front));
+            Assert.That(back.Shapes[1].Faces, Is.EqualTo(MaterialFaces.Both), "both, the default, not written");
+            Assert.That(Text(Sample()), Does.Not.Contain("Faces"));
             Assert.That((back.Shapes[2].AlphaMode, back.Shapes[2].AlphaCutoff), Is.EqualTo((AlphaMode.Mask, 0.8f)));
             Assert.That(back.Shapes[1].AlphaCutoff, Is.EqualTo(0.5f), "the default cutoff, not written");
             Assert.That(back.Shapes[1].AlphaMode, Is.EqualTo(AlphaMode.Blend));

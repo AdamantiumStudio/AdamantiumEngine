@@ -12,7 +12,7 @@ public sealed class SceneShape : ScenePlacement
 {
     /// <summary>The entry's own attributes, which no parameter of the shape can be named.</summary>
     public static readonly IReadOnlyCollection<string> OwnAttributes =
-        ["Uid", "Name", "Parent", "Position", "Rotation", "Scale", "Type", "Color", "AlphaMode", "AlphaCutoff"];
+        ["Uid", "Name", "Parent", "Position", "Rotation", "Scale", "Type", "Color", "AlphaMode", "AlphaCutoff", "Faces"];
 
     /// <summary>The full name of the shape's type.</summary>
     [XmlAttribute]
@@ -30,6 +30,10 @@ public sealed class SceneShape : ScenePlacement
     public float AlphaCutoff { get; set; } = DefaultAlphaCutoff;
 
     private const float DefaultAlphaCutoff = 0.5f;
+
+    /// <summary>Which faces of the shape are drawn: both, the default.</summary>
+    [XmlAttribute]
+    public MaterialFaces Faces { get; set; }
 
     [XmlIgnore]
     public Vector3F Scale { get; set; } = Vector3F.One;
@@ -67,4 +71,7 @@ public sealed class SceneShape : ScenePlacement
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeAlphaCutoff() => AlphaCutoff != DefaultAlphaCutoff;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeFaces() => Faces != MaterialFaces.Both;
 }

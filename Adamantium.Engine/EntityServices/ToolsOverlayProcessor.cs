@@ -471,7 +471,7 @@ public class ToolsOverlayProcessor : RenderingProcessor
             if (inFront)
             {
                 var data = head.Data;
-                var state = new RenderState(data.IsWireFrame, data.CullMode, false, false, data.TopologyOverride);
+                var state = new RenderState(data.IsWireFrame, CullModeFlagBits.None, false, false, data.TopologyOverride);
                 geometry.GetOrCreate(data.Mesh, data.ResolveVertexType()).Draw(GraphicsDevice, state, drawnInstances);
             }
             else

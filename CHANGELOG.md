@@ -429,6 +429,11 @@ All packages share one version.
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
   nothing while the overlay is off. With its floor, the grid writes its depth, a little behind the ground, and still
   hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+- Which faces a surface shows is its material's: `Material.Faces` (`MaterialFaces`: both, the default; front; back), as
+  `SceneData.Material.Faces` brings it from an import - glTF's `doubleSided` both, else front - and a scene's shape
+  keeps it (`SceneShape.Faces`, written only when not both). It replaces `Material.DoubleSided`, which nothing drew
+  by, and `MeshData.CullMode`: one setting for culling, read by the Forward+ pass and the screenshots alike, the sides
+  swapped for a mirrored copy, whose triangles turn the other way; the tools' and gizmos' meshes draw both faces.
 - The graphics device blends each color target apart when told to: `IGraphicsDevice.TargetBlendEquations`, one
   equation a target - every target of a pass gets its blend. `BeginRendering(keepDepth: true)` clears the colors and
   loads the depth, for a pass tested against a scene drawn before. `ColorBlendEquations.Sum` adds the source, color
