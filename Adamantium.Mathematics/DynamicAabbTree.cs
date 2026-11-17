@@ -87,14 +87,9 @@ public sealed class DynamicAabbTree<T>
     /// <summary>The box the leaf of <paramref name="handle"/> has: its item's grown by the margin.</summary>
     public BoundingBox<float>BoxOf(int handle) => nodes[handle].Box;
 
-    /// <summary>Adds to <paramref name="into"/> every item whose leaf <paramref name="ray"/> passes through, with how far
-    /// along the ray, in lengths of its direction, it enters the leaf's box; 0 when it starts inside.</summary>
-    public void RayCast(in Ray<float> ray, List<(T Item, float Entry)> into) =>
-        RayCast(ray, float.PositiveInfinity, into);
-
-    /// <summary>The same as <see cref="RayCast(in Ray{float}, List{ValueTuple{T, float}})"/>, leaving out the boxes the
-    /// ray enters farther than <paramref name="maxEntry"/>.</summary>
-    public void RayCast(in Ray<float> ray, float maxEntry, List<(T Item, float Entry)> into)
+    /// <summary>Adds to <paramref name="into"/> every item whose leaf <paramref name="ray"/> enters within
+    /// <paramref name="maxEntry"/> lengths of its direction, with where it enters; 0 when it starts inside.</summary>
+    public void RayCast(in Ray<float> ray, List<(T Item, float Entry)> into, float maxEntry = float.PositiveInfinity)
     {
         if (root == None)
         {

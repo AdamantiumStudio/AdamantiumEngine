@@ -10,7 +10,7 @@ internal struct BodyState
     public BodyKind Kind;
     public Shape Shape;
     public int Proxy;
-    public bool IsMoved;
+    public BodyMarks Marks;
     public Contact Contacts;
 
     public Vector3F Position;
@@ -39,6 +39,12 @@ internal struct BodyState
     public int IslandNext;
 
     public readonly bool IsDynamic => Kind == BodyKind.Dynamic;
+
+    public readonly bool IsMoved => (Marks & BodyMarks.Moved) != 0;
+
+    public readonly bool IsNew => (Marks & BodyMarks.New) != 0;
+
+    public readonly bool IsPlaced => (Marks & BodyMarks.Placed) != 0;
 
     /// <summary>Whether the body moves this step: awake and not static.</summary>
     public readonly bool IsMoving => IsAwake && Kind != BodyKind.Static;

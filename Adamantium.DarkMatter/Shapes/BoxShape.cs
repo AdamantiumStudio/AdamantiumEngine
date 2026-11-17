@@ -7,10 +7,9 @@ public sealed class BoxShape : Shape
 {
     public BoxShape(Vector3F halfExtents)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(halfExtents.X, nameof(halfExtents));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(halfExtents.Y, nameof(halfExtents));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(halfExtents.Z, nameof(halfExtents));
-        HalfExtents = halfExtents;
+        HalfExtents = new Vector3F(RequireSize(halfExtents.X, nameof(halfExtents)),
+            RequireSize(halfExtents.Y, nameof(halfExtents)), RequireSize(halfExtents.Z, nameof(halfExtents)));
+        RequireFiniteReach(nameof(halfExtents));
     }
 
     /// <summary>The box reaching <paramref name="halfX"/>, <paramref name="halfY"/> and <paramref name="halfZ"/> from

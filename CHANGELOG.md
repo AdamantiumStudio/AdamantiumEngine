@@ -12,11 +12,11 @@ All packages share one version.
   bodies are added from a `RigidBodyDescription` - static, kinematic or dynamic; a sphere, capsule or box shape;
   density or mass, friction, restitution, damping - and named by the `RigidBody` handle they get. Contacts are soft
   constraints with Coulomb friction, warm-started from the last step and found ahead of time by a distance that grows
-  with speed, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4 by
-  default). Bodies at rest fall asleep together with all they touch and wake when struck. `RayCast` and `Overlap`
+  with speed and spin, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4
+  by default), and no body moves faster than `MaxLinearSpeed` (500 m/s). Bodies at rest fall asleep together with all they touch and wake when struck. `RayCast` and `Overlap`
   query the world; `GetContactPoints` and `LastStep` (`StepStatistics`) are for instruments; `StepClock` turns the
   time of frames into fixed steps and a blend for drawing between them. The same scene steps to the same result.
-- `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` with a farthest
+- `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer

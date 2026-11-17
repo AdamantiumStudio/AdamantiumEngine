@@ -20,7 +20,7 @@ public sealed partial class PhysicsWorld
         var direction = ray.Direction / length;
         var worldRay = new Ray<float>(ray.Position, direction);
         _rayCandidates.Clear();
-        _tree.RayCast(worldRay, maxDistance, _rayCandidates);
+        _tree.RayCast(worldRay, _rayCandidates, maxDistance);
         _rayCandidates.Sort(CompareEntries);
 
         var nearest = maxDistance;

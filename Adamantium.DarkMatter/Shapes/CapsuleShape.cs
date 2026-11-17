@@ -8,10 +8,9 @@ public sealed class CapsuleShape : Shape
 {
     public CapsuleShape(float halfLength, float radius)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(halfLength);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
-        HalfLength = halfLength;
-        Radius = radius;
+        HalfLength = RequireSize(halfLength, nameof(halfLength));
+        Radius = RequireSize(radius, nameof(radius));
+        RequireFiniteReach(halfLength >= radius ? nameof(halfLength) : nameof(radius));
     }
 
     /// <summary>Half the length of the inner segment, without the round ends.</summary>
@@ -46,6 +45,12 @@ public sealed class CapsuleShape : Shape
 
     public override Vector3F GetSupport(Vector3F direction) =>
         new Vector3F(0, direction.Y >= 0 ? HalfLength : -HalfLength, 0) + Vector3F.Normalize(direction) * Radius;
+
+    internal override float MeasureSweepSpeed(Vector3F angularVelocity, QuaternionF rotation)
+    {
+        var axis = Vector3F.Transform(Vector3F.UnitY, rotation);
+        return (angularVelocity - axis * Vector3F.Dot(angularVelocity, axis)).Length() * BoundingRadius;
+    }
 
     internal override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
     {

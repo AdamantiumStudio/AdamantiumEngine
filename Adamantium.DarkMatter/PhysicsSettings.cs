@@ -29,6 +29,9 @@ public sealed class PhysicsSettings
     /// <summary>How quickly a contact's spring settles; above 1 it does not ring.</summary>
     public float ContactDampingRatio { get; init; } = 10f;
 
+    /// <summary>The fastest, in meters per second, any body moves; faster velocities are cut down to it.</summary>
+    public float MaxLinearSpeed { get; init; } = 500f;
+
     /// <summary>The fastest, in meters per second, a contact pushes overlapping bodies apart.</summary>
     public float MaxPushOutSpeed { get; init; } = 3f;
 

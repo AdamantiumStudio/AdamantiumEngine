@@ -7,8 +7,8 @@ public sealed class SphereShape : Shape
 {
     public SphereShape(float radius)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
-        Radius = radius;
+        Radius = RequireSize(radius, nameof(radius));
+        RequireFiniteReach(nameof(radius));
     }
 
     /// <summary>The radius.</summary>
@@ -31,6 +31,8 @@ public sealed class SphereShape : Shape
     }
 
     public override Vector3F GetSupport(Vector3F direction) => Vector3F.Normalize(direction) * Radius;
+
+    internal override float MeasureSweepSpeed(Vector3F angularVelocity, QuaternionF rotation) => 0;
 
     internal override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
     {

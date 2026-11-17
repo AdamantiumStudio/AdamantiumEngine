@@ -14,7 +14,4 @@ public readonly struct MassProperties
 
     /// <summary>The moments of inertia around the shape's X, Y and Z axes, in kilogram square meters.</summary>
     public Vector3F Inertia { get; }
-
-    /// <summary>The same shape at <paramref name="mass"/>: the moments scale with it.</summary>
-    public MassProperties ScaleTo(float mass) => Mass > 0 ? new MassProperties(mass, Inertia * (mass / Mass)) : this;
 }

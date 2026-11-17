@@ -18,10 +18,12 @@ public sealed class RigidBodyDescription
     /// <summary>How the body is turned.</summary>
     public QuaternionF Rotation { get; set; } = QuaternionF.Identity;
 
-    /// <summary>The velocity the body starts at, in meters per second.</summary>
+    /// <summary>The velocity the body starts at, in meters per second; a dynamic body added asleep starts still.
+    /// </summary>
     public Vector3F LinearVelocity { get; set; }
 
-    /// <summary>The spin the body starts at, in radians per second around each world axis.</summary>
+    /// <summary>The spin the body starts at, in radians per second around each world axis, cut to the world's
+    /// <see cref="PhysicsWorld.MaxAngularSpeed"/>; a dynamic body added asleep starts still.</summary>
     public Vector3F AngularVelocity { get; set; }
 
     /// <summary>The density the mass follows from, in kilograms per cubic meter; water by default.</summary>
@@ -49,6 +51,7 @@ public sealed class RigidBodyDescription
     /// <summary>Whether the body may fall asleep when it comes to rest.</summary>
     public bool CanSleep { get; set; } = true;
 
-    /// <summary>Whether the body starts awake.</summary>
+    /// <summary>Whether a dynamic body starts awake. A kinematic body is awake while it moves, a static one never.
+    /// </summary>
     public bool IsAwake { get; set; } = true;
 }

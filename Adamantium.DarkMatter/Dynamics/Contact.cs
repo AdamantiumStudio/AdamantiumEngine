@@ -1,16 +1,13 @@
 namespace Adamantium.DarkMatter.Dynamics;
 
-/// <summary>Two bodies whose broad-phase boxes overlap, kept from step to step to start from the last impulses; a fresh
-/// one is tested once even asleep, and wakes a sleeper the other body was moved onto.</summary>
+/// <summary>Two bodies whose boxes in the broad phase overlap, kept from step to step so the impulses of the last step
+/// start the next one. Each body links its contacts in a list of its own.</summary>
 internal sealed class Contact
 {
     public ulong Key;
     public int First;
     public int Second;
     public int ListIndex;
-    public bool IsFresh;
-    public bool FirstMoved;
-    public bool SecondMoved;
     public float Friction;
     public float Restitution;
 

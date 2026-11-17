@@ -19,9 +19,9 @@ public sealed partial class PhysicsWorld
     private readonly List<Contact> _contacts = [];
     private readonly Stack<Contact> _spareContacts = new();
     private readonly Stack<int> _freeSlots = new();
-    private readonly List<int> _moved = [];
     private readonly List<int> _found = [];
     private readonly List<int> _woken = [];
+    private readonly List<int> _marked = [];
     private readonly ManifoldBuffer _manifold = new();
     private readonly ContactSolver _solver = new();
     private readonly ContactPointState[] _previousPoints;
@@ -33,6 +33,7 @@ public sealed partial class PhysicsWorld
     private int[] _islandFirst = new int[64];
     private int[] _islandLast = new int[64];
     private int _slotCount;
+    private int _newSleepers;
     private Vector3F _gravity;
 
     /// <summary>A world stepped as <paramref name="settings"/> say, or with the defaults.</summary>
@@ -40,6 +41,7 @@ public sealed partial class PhysicsWorld
     {
         Settings = settings ?? new PhysicsSettings();
         ValidateSettings(Settings);
+        MaxAngularSpeed = 0.25f * MathF.PI * Settings.StepRate * Settings.Substeps;
         _gravity = Settings.Gravity;
         _tree = new DynamicAabbTree<int>(0.1f, Math.Max(0.05f, Settings.SpeculativeDistance));
         _previousPoints = new ContactPointState[Settings.MaxContactPointsPerPair];
@@ -49,23 +51,21 @@ public sealed partial class PhysicsWorld
     /// <summary>How the world steps and solves.</summary>
     public PhysicsSettings Settings { get; }
 
-    /// <summary>The pull every dynamic body feels, in meters per second squared; a change wakes the sleeping ones.
-    /// </summary>
+    /// <summary>The pull every dynamic body feels, in meters per second squared; a change wakes the sleeping bodies it
+    /// pulls.</summary>
     public Vector3F Gravity
     {
         get => _gravity;
         set
         {
-            if (!IsFinite(value))
-                throw new ArgumentOutOfRangeException(nameof(value), "Gravity must be finite.");
-
+            RequireFinite(value, nameof(value));
             if (value == _gravity)
                 return;
 
             _gravity = value;
             for (var index = 0; index < _slotCount; index++)
             {
-                if (_bodies[index].IsUsed && _bodies[index].IsDynamic)
+                if (_bodies[index].IsUsed && _bodies[index].IsDynamic && _bodies[index].GravityScale != 0)
                     WakeIsland(index);
             }
         }
@@ -80,6 +80,10 @@ public sealed partial class PhysicsWorld
     /// <summary>The length of one step, in seconds.</summary>
     public float StepSeconds => 1f / Settings.StepRate;
 
+    /// <summary>The fastest any body spins, in radians per second: a quarter turn per substep, as far as a step can
+    /// follow a turn.</summary>
+    public float MaxAngularSpeed { get; }
+
     /// <summary>Adds a body as <paramref name="description"/> describes it and gives its handle.</summary>
     public RigidBody Add(RigidBodyDescription description)
     {
@@ -92,9 +96,11 @@ public sealed partial class PhysicsWorld
         var index = TakeSlot();
         ref var body = ref _bodies[index];
         var generation = body.Generation + 1;
+        var listed = body.Marks & BodyMarks.Listed;
         body = default;
         body.IsUsed = true;
         body.Generation = generation;
+        body.Marks = listed;
         body.Kind = description.Kind;
         body.Shape = description.Shape;
         body.Position = description.Position;
@@ -110,24 +116,31 @@ public sealed partial class PhysicsWorld
         body.IslandHead = NoBody;
         body.IslandNext = NoBody;
 
-        if (description.Kind != BodyKind.Static)
+        if (description.Kind == BodyKind.Kinematic || (description.Kind == BodyKind.Dynamic && description.IsAwake))
         {
-            body.LinearVelocity = description.LinearVelocity;
-            body.AngularVelocity = description.AngularVelocity;
-            body.IsAwake = description.IsAwake;
+            body.LinearVelocity = LimitSpeed(description.LinearVelocity, Settings.MaxLinearSpeed);
+            body.AngularVelocity = LimitSpeed(description.AngularVelocity, MaxAngularSpeed);
+            body.IsAwake = description.Kind == BodyKind.Dynamic || description.LinearVelocity != Vector3F.Zero
+                                                                || description.AngularVelocity != Vector3F.Zero;
         }
 
         if (description.Kind == BodyKind.Dynamic)
         {
             body.InverseMass = 1f / mass.Mass;
-            body.InverseInertia = new Vector3F(Invert(mass.Inertia.X), Invert(mass.Inertia.Y), Invert(mass.Inertia.Z));
+            body.InverseInertia = new Vector3F(1f / mass.Inertia.X, 1f / mass.Inertia.Y, 1f / mass.Inertia.Z);
             body.WorldInverseInertia = InertiaMath.ToWorld(body.Rotation, body.InverseInertia);
             if (!body.IsAwake)
                 body.IslandHead = index;
         }
 
         body.Proxy = _tree.Add(ComputeProxyBounds(body), index);
-        MarkMoved(index);
+        var marks = BodyMarks.Moved | BodyMarks.New;
+        if (body.IsDynamic && !body.IsAwake)
+            _newSleepers++;
+        else
+            marks |= BodyMarks.Placed;
+
+        Mark(index, marks);
         BodyCount++;
         return new RigidBody(index, generation);
     }
@@ -147,13 +160,13 @@ public sealed partial class PhysicsWorld
             DestroyContact(contact);
         }
 
-        if (state.IsMoved)
-            _moved.Remove(index);
-
+        WakeNewSleepersNear(index);
         _tree.Remove(state.Proxy);
         var generation = state.Generation;
+        var listed = state.Marks & BodyMarks.Listed;
         state = default;
         state.Generation = generation;
+        state.Marks = listed;
         _freeSlots.Push(index);
         BodyCount--;
     }
@@ -174,48 +187,44 @@ public sealed partial class PhysicsWorld
     public void SetPose(RigidBody body, in Pose pose)
     {
         var index = Resolve(body);
-        if (!IsFinite(pose.Position))
-            throw new ArgumentOutOfRangeException(nameof(pose), "A position must be finite.");
-
+        RequireFinite(pose.Position, nameof(pose));
         var rotation = NormalizeRotation(pose.Rotation, nameof(pose));
+        WakeNewSleepersNear(index);
         ref var state = ref _bodies[index];
         state.Position = pose.Position;
         state.Rotation = rotation;
         if (state.IsDynamic)
             state.WorldInverseInertia = InertiaMath.ToWorld(state.Rotation, state.InverseInertia);
 
-        if (_tree.Move(state.Proxy, ComputeProxyBounds(state)))
-            MarkMoved(index);
-
+        var moved = _tree.Move(state.Proxy, ComputeProxyBounds(state));
+        Mark(index, moved ? BodyMarks.Placed | BodyMarks.Moved : BodyMarks.Placed);
         WakeIsland(index);
         WakeTouching(index);
-        for (var contact = state.Contacts; contact != null; contact = contact.GetNext(index))
-        {
-            contact.IsFresh = true;
-            contact.FirstMoved = contact.First == index;
-            contact.SecondMoved = contact.Second == index;
-        }
     }
 
     /// <summary>The velocity of <paramref name="body"/>'s center, in meters per second.</summary>
     public Vector3F GetLinearVelocity(RigidBody body) => _bodies[Resolve(body)].LinearVelocity;
 
-    /// <summary>Sets the velocity of a dynamic or kinematic body's center and wakes it.</summary>
+    /// <summary>Sets the velocity of a dynamic or kinematic body's center, cut to
+    /// <see cref="PhysicsSettings.MaxLinearSpeed"/>, and wakes it.</summary>
     public void SetLinearVelocity(RigidBody body, Vector3F velocity)
     {
+        RequireFinite(velocity, nameof(velocity));
         var index = ResolveMoving(body);
-        _bodies[index].LinearVelocity = velocity;
+        _bodies[index].LinearVelocity = LimitSpeed(velocity, Settings.MaxLinearSpeed);
         WakeIsland(index);
     }
 
     /// <summary>The spin of <paramref name="body"/>, in radians per second around each world axis.</summary>
     public Vector3F GetAngularVelocity(RigidBody body) => _bodies[Resolve(body)].AngularVelocity;
 
-    /// <summary>Sets the spin of a dynamic or kinematic body and wakes it.</summary>
+    /// <summary>Sets the spin of a dynamic or kinematic body, cut to <see cref="MaxAngularSpeed"/>, and wakes it.
+    /// </summary>
     public void SetAngularVelocity(RigidBody body, Vector3F velocity)
     {
+        RequireFinite(velocity, nameof(velocity));
         var index = ResolveMoving(body);
-        _bodies[index].AngularVelocity = velocity;
+        _bodies[index].AngularVelocity = LimitSpeed(velocity, MaxAngularSpeed);
         WakeIsland(index);
     }
 
@@ -224,7 +233,9 @@ public sealed partial class PhysicsWorld
     public void ApplyForce(RigidBody body, Vector3F force)
     {
         var index = ResolveDynamic(body);
-        _bodies[index].Force += force;
+        var total = _bodies[index].Force + force;
+        RequireFinite(total * _bodies[index].InverseMass, nameof(force));
+        _bodies[index].Force = total;
         WakeIsland(index);
     }
 
@@ -233,26 +244,35 @@ public sealed partial class PhysicsWorld
     public void ApplyTorque(RigidBody body, Vector3F torque)
     {
         var index = ResolveDynamic(body);
-        _bodies[index].Torque += torque;
+        var total = _bodies[index].Torque + torque;
+        RequireFinite(InertiaMath.Apply(_bodies[index].WorldInverseInertia, total), nameof(torque));
+        _bodies[index].Torque = total;
         WakeIsland(index);
     }
 
     /// <summary>Strikes a dynamic body at <paramref name="point"/> of the world with <paramref name="impulse"/>, in
-    /// newton seconds, changing its velocity at once, and wakes it.</summary>
+    /// newton seconds, changing its velocity at once - cut to the speed limits - and wakes it.</summary>
     public void ApplyImpulse(RigidBody body, Vector3F impulse, Vector3F point)
     {
+        RequireFinite(impulse, nameof(impulse));
+        RequireFinite(point, nameof(point));
         var index = ResolveDynamic(body);
         ref var state = ref _bodies[index];
-        state.LinearVelocity += impulse * state.InverseMass;
-        state.AngularVelocity += InertiaMath.Apply(state.WorldInverseInertia,
-            Vector3F.Cross(point - state.Position, impulse));
+        var linear = state.LinearVelocity + impulse * state.InverseMass;
+        var angular = state.AngularVelocity
+                      + InertiaMath.Apply(state.WorldInverseInertia, Vector3F.Cross(point - state.Position, impulse));
+        RequireFinite(linear, nameof(impulse));
+        RequireFinite(angular, nameof(impulse));
+        state.LinearVelocity = LimitSpeed(linear, Settings.MaxLinearSpeed);
+        state.AngularVelocity = LimitSpeed(angular, MaxAngularSpeed);
         WakeIsland(index);
     }
 
     /// <summary>Whether <paramref name="body"/> is awake; static bodies never are.</summary>
     public bool IsAwake(RigidBody body) => _bodies[Resolve(body)].IsAwake;
 
-    /// <summary>Wakes <paramref name="body"/> and everything asleep with it.</summary>
+    /// <summary>Wakes <paramref name="body"/> and everything asleep with it; a kinematic body standing still stays
+    /// asleep.</summary>
     public void WakeUp(RigidBody body) => WakeIsland(Resolve(body));
 
     /// <summary>The box, aligned with the world's axes, that holds <paramref name="body"/>'s shape where it stands.
@@ -292,6 +312,7 @@ public sealed partial class PhysicsWorld
         UpdateBroadPhase();
         FindNewPairs();
         UpdateContacts(stepSeconds);
+        ClearMarks();
         WakeTouchedSleepers();
 
         for (var index = 0; index < _slotCount; index++)
@@ -329,7 +350,7 @@ public sealed partial class PhysicsWorld
                 continue;
 
             if (_tree.Move(body.Proxy, ComputeProxyBounds(body)))
-                MarkMoved(index);
+                Mark(index, BodyMarks.Moved);
         }
     }
 
@@ -343,13 +364,16 @@ public sealed partial class PhysicsWorld
     }
 
     private static float MeasureSpinSpeed(in BodyState body) =>
-        body.AngularVelocity.Length() * body.Shape.BoundingRadius;
+        body.Shape.MeasureSweepSpeed(body.AngularVelocity, body.Rotation);
 
     private void FindNewPairs()
     {
-        foreach (var index in _moved)
+        foreach (var index in _marked)
         {
             ref var body = ref _bodies[index];
+            if (!body.IsUsed || !body.IsMoved)
+                continue;
+
             _found.Clear();
             _tree.Query(_tree.BoxOf(body.Proxy), _found);
             foreach (var other in _found)
@@ -369,13 +393,6 @@ public sealed partial class PhysicsWorld
                     CreateContact(key, Math.Min(index, other), Math.Max(index, other));
             }
         }
-
-        foreach (var index in _moved)
-        {
-            _bodies[index].IsMoved = false;
-        }
-
-        _moved.Clear();
     }
 
     private void UpdateContacts(float stepSeconds)
@@ -386,9 +403,7 @@ public sealed partial class PhysicsWorld
             var contact = _contacts[contactIndex];
             ref var first = ref _bodies[contact.First];
             ref var second = ref _bodies[contact.Second];
-            var isFresh = contact.IsFresh;
-            contact.IsFresh = false;
-            if (!first.IsMoving && !second.IsMoving && !isFresh)
+            if (!first.IsMoving && !second.IsMoving && first.Marks == BodyMarks.None && second.Marks == BodyMarks.None)
             {
                 contactIndex++;
                 continue;
@@ -415,10 +430,10 @@ public sealed partial class PhysicsWorld
 
             if (contact.IsTouching)
             {
-                if (first.IsDynamic && !first.IsAwake && (second.IsMoving || (isFresh && !contact.FirstMoved)))
+                if (first.IsDynamic && !first.IsAwake && (second.IsMoving || (second.IsPlaced && !first.IsNew)))
                     WakeIsland(contact.First);
 
-                if (second.IsDynamic && !second.IsAwake && (first.IsMoving || (isFresh && !contact.SecondMoved)))
+                if (second.IsDynamic && !second.IsAwake && (first.IsMoving || (first.IsPlaced && !second.IsNew)))
                     WakeIsland(contact.Second);
             }
 
@@ -431,7 +446,8 @@ public sealed partial class PhysicsWorld
         for (var woken = 0; woken < _woken.Count; woken++)
         {
             var index = _woken[woken];
-            if (!_bodies[index].IsUsed || !_bodies[index].IsDynamic)
+            ref var body = ref _bodies[index];
+            if (!body.IsUsed || !body.IsDynamic || !body.IsAwake)
                 continue;
 
             for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
@@ -492,7 +508,6 @@ public sealed partial class PhysicsWorld
 
     private void IntegrateVelocities(float substep)
     {
-        var maxSpin = 0.25f * MathF.PI / substep;
         for (var index = 0; index < _slotCount; index++)
         {
             ref var body = ref _bodies[index];
@@ -503,12 +518,9 @@ public sealed partial class PhysicsWorld
             var angular = body.AngularVelocity + InertiaMath.Apply(body.WorldInverseInertia, body.Torque) * substep;
             linear *= 1f / (1f + substep * body.LinearDamping);
             angular *= 1f / (1f + substep * body.AngularDamping);
-            var spin = angular.Length();
-            if (spin > maxSpin)
-                angular *= maxSpin / spin;
-
             body.LinearVelocity = linear;
             body.AngularVelocity = angular;
+            LimitSpeeds(ref body);
         }
     }
 
@@ -520,6 +532,7 @@ public sealed partial class PhysicsWorld
             if (!body.IsUsed || !body.IsMoving)
                 continue;
 
+            LimitSpeeds(ref body);
             body.Position += body.LinearVelocity * substep;
             var spin = new QuaternionF(body.AngularVelocity.X, body.AngularVelocity.Y, body.AngularVelocity.Z, 0);
             body.Rotation = QuaternionF.Normalize(body.Rotation + spin * body.Rotation * (0.5f * substep));
@@ -541,6 +554,7 @@ public sealed partial class PhysicsWorld
             if (!body.IsUsed || !body.IsAwake)
                 continue;
 
+            LimitSpeeds(ref body);
             if (body.Kind == BodyKind.Kinematic)
             {
                 if (body.LinearVelocity == Vector3F.Zero && body.AngularVelocity == Vector3F.Zero)
@@ -675,6 +689,10 @@ public sealed partial class PhysicsWorld
         if (body.IsAwake || body.Kind == BodyKind.Static)
             return;
 
+        if (body.Kind == BodyKind.Kinematic && body.LinearVelocity == Vector3F.Zero
+                                            && body.AngularVelocity == Vector3F.Zero)
+            return;
+
         if (body.Kind == BodyKind.Kinematic || body.IslandHead == NoBody)
         {
             body.IsAwake = true;
@@ -697,6 +715,21 @@ public sealed partial class PhysicsWorld
         }
     }
 
+    private void WakeNewSleepersNear(int index)
+    {
+        if (_newSleepers == 0)
+            return;
+
+        _found.Clear();
+        _tree.Query(_tree.BoxOf(_bodies[index].Proxy), _found);
+        foreach (var other in _found)
+        {
+            ref var body = ref _bodies[other];
+            if (other != index && body.IsDynamic && !body.IsAwake && body.IsNew)
+                WakeIsland(other);
+        }
+    }
+
     private void WakeTouching(int index)
     {
         for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
@@ -713,9 +746,6 @@ public sealed partial class PhysicsWorld
         contact.First = first;
         contact.Second = second;
         contact.PointCount = 0;
-        contact.IsFresh = true;
-        contact.FirstMoved = _bodies[first].IsMoved;
-        contact.SecondMoved = _bodies[second].IsMoved;
         contact.Friction = MathF.Sqrt(_bodies[first].Friction * _bodies[second].Friction);
         contact.Restitution = MathF.Max(_bodies[first].Restitution, _bodies[second].Restitution);
         contact.ListIndex = _contacts.Count;
@@ -761,14 +791,24 @@ public sealed partial class PhysicsWorld
         contact.SetNext(body, null);
     }
 
-    private void MarkMoved(int index)
+    private void Mark(int index, BodyMarks marks)
     {
         ref var body = ref _bodies[index];
-        if (body.IsMoved)
-            return;
+        if ((body.Marks & BodyMarks.Listed) == 0)
+            _marked.Add(index);
 
-        body.IsMoved = true;
-        _moved.Add(index);
+        body.Marks |= marks | BodyMarks.Listed;
+    }
+
+    private void ClearMarks()
+    {
+        foreach (var index in _marked)
+        {
+            _bodies[index].Marks = BodyMarks.None;
+        }
+
+        _marked.Clear();
+        _newSleepers = 0;
     }
 
     private int TakeSlot()
@@ -824,9 +864,10 @@ public sealed partial class PhysicsWorld
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(settings.MaxContactPointsPerPair, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(settings.MaxContactPointsPerPair, ManifoldBuffer.Capacity,
             nameof(settings));
-        if (!IsFinite(settings.Gravity))
-            throw new ArgumentOutOfRangeException(nameof(settings), "Gravity must be finite.");
-
+        RequireFinite(settings.Gravity, nameof(settings));
+        RequirePositiveFinite(settings.MaxLinearSpeed, nameof(settings));
+        if (!float.IsFinite(settings.MaxLinearSpeed * settings.MaxLinearSpeed))
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.MaxLinearSpeed, "The speed limit is too large.");
         RequireFiniteNotNegative(settings.SpeculativeDistance, nameof(settings));
         RequireFiniteNotNegative(settings.ContactHertz, nameof(settings));
         RequireFiniteNotNegative(settings.ContactDampingRatio, nameof(settings));
@@ -843,10 +884,12 @@ public sealed partial class PhysicsWorld
         if (description.Shape == null)
             throw new ArgumentException("A body needs a shape.", nameof(description));
 
-        if (!IsFinite(description.Position) || !IsFinite(description.LinearVelocity)
-                                            || !IsFinite(description.AngularVelocity))
-            throw new ArgumentOutOfRangeException(nameof(description), "Position and velocities must be finite.");
+        if (!Enum.IsDefined(description.Kind))
+            throw new ArgumentOutOfRangeException(nameof(description), description.Kind, "Unknown kind of body.");
 
+        RequireFinite(description.Position, nameof(description));
+        RequireFinite(description.LinearVelocity, nameof(description));
+        RequireFinite(description.AngularVelocity, nameof(description));
         RequireFiniteNotNegative(description.Friction, nameof(description));
         RequireFiniteNotNegative(description.Restitution, nameof(description));
         RequireFiniteNotNegative(description.LinearDamping, nameof(description));
@@ -861,6 +904,12 @@ public sealed partial class PhysicsWorld
             throw new ArgumentOutOfRangeException(parameterName, value, "The value must be finite and not negative.");
     }
 
+    private static void RequireFinite(Vector3F vector, string parameterName)
+    {
+        if (!IsFinite(vector))
+            throw new ArgumentOutOfRangeException(parameterName, vector, "The vector must be finite.");
+    }
+
     private static bool IsFinite(Vector3F vector) =>
         float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
@@ -870,14 +919,48 @@ public sealed partial class PhysicsWorld
             || !float.IsFinite(description.Density))
             throw new ArgumentOutOfRangeException(nameof(description), "Mass and density must be finite and not negative.");
 
-        if (description.Mass > 0)
-            return description.Shape.ComputeMass(1f).ScaleTo(description.Mass);
+        var density = description.Mass > 0
+            ? description.Mass / description.Shape.ComputeMass(1f).Mass
+            : description.Density;
+        var mass = description.Shape.ComputeMass(density);
+        var inertia = mass.Inertia;
+        if (!IsInvertible(mass.Mass) || !IsInvertible(inertia.X) || !IsInvertible(inertia.Y) || !IsInvertible(inertia.Z))
+            throw new ArgumentException("A dynamic body needs a density or a mass that gives it a finite weight.",
+                nameof(description));
 
-        if (description.Density == 0)
-            throw new ArgumentException("A dynamic body needs a density or a mass.", nameof(description));
-
-        return description.Shape.ComputeMass(description.Density);
+        return mass;
     }
+
+    private void LimitSpeeds(ref BodyState body)
+    {
+        body.LinearVelocity = LimitSpeed(body.LinearVelocity, Settings.MaxLinearSpeed);
+        body.AngularVelocity = LimitSpeed(body.AngularVelocity, MaxAngularSpeed);
+    }
+
+    private static Vector3F LimitSpeed(Vector3F velocity, float maxSpeed)
+    {
+        if (float.IsNaN(velocity.X) || float.IsNaN(velocity.Y) || float.IsNaN(velocity.Z))
+            return Vector3F.Zero;
+
+        if (IsFinite(velocity) && velocity.LengthSquared() <= maxSpeed * maxSpeed)
+            return velocity;
+
+        var largest = Vector3F.Max(Vector3F.Abs(velocity));
+        var direction = float.IsPositiveInfinity(largest)
+            ? new Vector3F(InfinityToUnit(velocity.X), InfinityToUnit(velocity.Y), InfinityToUnit(velocity.Z))
+            : velocity / largest;
+        return direction * (maxSpeed / direction.Length());
+    }
+
+    private static float InfinityToUnit(float value) => float.IsInfinity(value) ? MathF.Sign(value) : 0;
+
+    private static void RequirePositiveFinite(float value, string parameterName)
+    {
+        if (!float.IsFinite(value) || value <= 0)
+            throw new ArgumentOutOfRangeException(parameterName, value, "The value must be finite and above zero.");
+    }
+
+    private static bool IsInvertible(float value) => value > 0 && float.IsFinite(value) && float.IsFinite(1f / value);
 
     private static QuaternionF NormalizeRotation(QuaternionF rotation, string parameterName)
     {
@@ -887,6 +970,4 @@ public sealed partial class PhysicsWorld
 
         return QuaternionF.Normalize(rotation);
     }
-
-    private static float Invert(float value) => value > 0 ? 1f / value : 0;
 }
