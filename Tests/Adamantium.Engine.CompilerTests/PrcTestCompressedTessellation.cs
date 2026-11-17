@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Adamantium.Engine.Compiler.Models.Prc;
+using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.CompilerTests;
 
@@ -20,8 +21,8 @@ internal sealed class PrcTestCompressedTessellation
     private readonly int[] _newIndexOf;
     private readonly List<PrcVector> _rebuilt = [];
     private readonly bool[] _treated;
-    private readonly Dictionary<long, List<int>> _trianglesOfEdge = new();
-    private readonly Dictionary<long, int> _builtEdges = new();
+    private readonly Dictionary<long, List<int>> _trianglesOfEdge = new(PairKeyComparer.Instance);
+    private readonly Dictionary<long, int> _builtEdges = new(PairKeyComparer.Instance);
     private readonly Stack<PrcTestGate> _gates = new();
     private readonly List<int> _pointArray = [];
     private readonly List<int> _edgeStatus = [];

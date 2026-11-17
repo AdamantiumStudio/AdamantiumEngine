@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 using System.Globalization;
+using Adamantium.Mathematics;
 
 namespace Adamantium.Fonts.Shaping;
 
 internal sealed class CanonicalDecompositions
 {
     private readonly Dictionary<int, (int First, int Second)> _decompositions = new();
-    private readonly Dictionary<long, int> _compositions = new();
+    private readonly Dictionary<long, int> _compositions = new(PairKeyComparer.Instance);
 
     public static CanonicalDecompositions Load()
     {
