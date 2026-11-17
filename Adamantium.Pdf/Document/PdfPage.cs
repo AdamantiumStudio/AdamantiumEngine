@@ -158,7 +158,7 @@ public sealed class PdfPage
                     "P" => PdfLinkHighlight.Push,
                     _ => PdfLinkHighlight.Invert,
                 };
-                links.Add(new PdfLink(annotation.Rect, quads, action, highlight));
+                links.Add(new PdfLink(annotation, quads, action, highlight));
             }
 
             return links;

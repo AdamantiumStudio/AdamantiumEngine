@@ -130,6 +130,70 @@ public class PdfLinkAppearanceTests
     }
 
     [Test]
+    public void ABeveledBorder_IsLitTopAndLeft_AndShadedBottomAndRight_InsideItsStroke()
+    {
+        var link = Link("/BS << /W 1 /S /B >> /C [0]");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(link.Border.Style, Is.EqualTo(PdfBorderStyle.Beveled));
+            Assert.That(Content(link), Is.EqualTo("q 0 G 1 w 0.5 0.5 459 23 re S " +
+                                                  "1 g 459 23 m 1 23 l 2 22 l 458 22 l h " +
+                                                  "1 23 m 1 1 l 2 2 l 2 22 l h f " +
+                                                  "0.5 g 1 1 m 459 1 l 458 2 l 2 2 l h " +
+                                                  "459 1 m 459 23 l 458 22 l 458 2 l h f Q"));
+        });
+    }
+
+    [Test]
+    public void AnInsetBorder_IsDarkerOnBothSides()
+    {
+        var content = Content(Link("/BS << /W 1 /S /I >> /C [0]"));
+
+        Assert.That(content, Does.StartWith("q 0 G 1 w 0.5 0.5 459 23 re S 0.5 g ").And.Contain(" f 0.75 g ")
+            .And.EndWith(" f Q"));
+    }
+
+    [Test]
+    public void ABeveledLinkOverTwoLines_IsBeveledLineByLine()
+    {
+        var content = Content(Link("/BS << /W 1 /S /B >> " +
+                                   "/QuadPoints [60 138 300 138 60 126 300 126 60 126 200 126 60 114 200 114] /C [0]"));
+
+        Assert.That(content.Split(" h ").Length - 1, Is.EqualTo(2 + 8));
+    }
+
+    [Test]
+    public void TheDownAppearance_IsTheOneOfItsState_AndNullWithoutOne()
+    {
+        var form = PdfFileBuilder.Stream("/Type /XObject /Subtype /Form /BBox [0 0 1 1]", System.Array.Empty<byte>());
+        var plain = Link("/AP << /N 4 0 R /D 4 0 R >>", form);
+        var stated = Link("/AS /On /AP << /N 4 0 R /D << /On 4 0 R /Off 5 0 R >> >>", form, form);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plain.DownAppearance, Is.Not.Null);
+            Assert.That(stated.DownAppearance, Is.SameAs(stated.Appearance));
+            Assert.That(Link("/AP << /N 4 0 R >>", form).DownAppearance, Is.Null);
+            Assert.That(Link("").DownAppearance, Is.Null);
+        });
+    }
+
+    [Test]
+    public void ALink_KnowsItsAnnotation()
+    {
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Annots [" +
+                    "<< /Subtype /Link /Rect [0 0 10 10] /Dest [3 0 R /Fit] /NM (only) >>] >>");
+
+        var link = PdfDocument.Open(builder.Build("/Root 1 0 R")).Pages[0].Links.Single();
+
+        Assert.That(link.Annotation.Name, Is.EqualTo("only"));
+    }
+
+    [Test]
     public void APress_IsAnsweredAsTheLinkSays_InvertedByDefault()
     {
         var builder = new PdfFileBuilder();

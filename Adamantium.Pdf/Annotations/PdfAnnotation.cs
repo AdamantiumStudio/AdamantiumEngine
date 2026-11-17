@@ -92,19 +92,22 @@ public sealed class PdfAnnotation
 
     /// <summary>Its normal appearance (<c>AP</c> <c>N</c>) - the one of its state (<c>AS</c>) when it has several;
     /// null when it has none.</summary>
-    public PdfStream Appearance
+    public PdfStream Appearance => AppearanceOf(PdfAnnotationKeys.Normal);
+
+    /// <summary>How it looks while pressed (<c>AP</c> <c>D</c>) - the one of its state (<c>AS</c>) when it has several;
+    /// null when it gives none.</summary>
+    public PdfStream DownAppearance => AppearanceOf(PdfAnnotationKeys.Down);
+
+    private PdfStream AppearanceOf(string kind)
     {
-        get
+        var appearances = _document.Resolve(Dictionary[PdfAnnotationKeys.Appearance]) as PdfDictionary;
+        return _document.Resolve(appearances?[kind]) switch
         {
-            var appearances = _document.Resolve(Dictionary[PdfAnnotationKeys.Appearance]) as PdfDictionary;
-            return _document.Resolve(appearances?[PdfAnnotationKeys.Normal]) switch
-            {
-                PdfStream stream => stream,
-                PdfDictionary states => _document.Resolve(
-                    states[PdfValues.Name(Dictionary["AS"], _document) ?? ""]) as PdfStream,
-                _ => null,
-            };
-        }
+            PdfStream stream => stream,
+            PdfDictionary states => _document.Resolve(
+                states[PdfValues.Name(Dictionary["AS"], _document) ?? ""]) as PdfStream,
+            _ => null,
+        };
     }
 
     /// <summary>What sets <paramref name="appearance"/> - a form of this annotation - into <see cref="Rect"/> on the
