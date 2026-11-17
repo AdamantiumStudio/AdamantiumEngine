@@ -111,7 +111,7 @@ public partial class GraphicsDevice
              | (LogicOperationsEnabled ? 64UL : 0) | (RasterizerDiscardEnabled ? 128UL : 0)
              | (AlphaToCoverageEnable ? 256UL : 0) | (PrimitiveRestartEnable ? 512UL : 0)
              | ((bool)ColorBlendEnabled ? 1024UL : 0));
-        HashFloats(LineWidth, DepthBiasConstantFactor, DepthBiasSlopeFactor, 0);
+        HashFloats(LineWidth, DepthBiasConstantFactor, DepthBiasSlopeFactor, DepthBiasClamp);
         Hash(((ulong)PatchControlPoints << 32) | (uint)TessellationDomainOrigin);
         Hash(((ulong)(uint)StencilPassOp << 32) | (uint)StencilCompareOp);
         Hash(((ulong)StencilWriteMask << 32) | StencilReference);

@@ -62,6 +62,10 @@ public class MainGraphicsDevice : DisposableBase
     /// <c>DepthClampEnable</c>: drawn past the far plane, held at the farthest depth.</summary>
     public bool IsDepthClampEnabled { get; private set; }
 
+    /// <summary>True when the depthBiasClamp feature was enabled, so a draw's <c>DepthBiasClamp</c> caps its bias;
+    /// otherwise the cap is ignored.</summary>
+    public bool IsDepthBiasClampEnabled { get; private set; }
+
     /// <summary>True when multiDrawIndirect and drawIndirectFirstInstance were enabled: one indirect draw may issue up to
     /// <see cref="MaxDrawIndirectCount"/> draws, each naming its own first instance.</summary>
     public bool IsMultiDrawIndirectEnabled { get; private set; }
@@ -608,6 +612,8 @@ public class MainGraphicsDevice : DisposableBase
         deviceFeatures2.Features.TessellationShader = IsTessellationEnabled;
         IsDepthClampEnabled = GraphicsAdapter.SupportsDepthClamp;
         deviceFeatures2.Features.DepthClamp = IsDepthClampEnabled;
+        IsDepthBiasClampEnabled = GraphicsAdapter.SupportsDepthBiasClamp;
+        deviceFeatures2.Features.DepthBiasClamp = IsDepthBiasClampEnabled;
         IsMultiDrawIndirectEnabled = GraphicsAdapter.SupportsMultiDrawIndirect;
         deviceFeatures2.Features.MultiDrawIndirect = IsMultiDrawIndirectEnabled;
         deviceFeatures2.Features.DrawIndirectFirstInstance = IsMultiDrawIndirectEnabled;

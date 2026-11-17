@@ -112,6 +112,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private bool _cDepthBias;
     private float _cDepthBiasConstant;
     private float _cDepthBiasSlope;
+    private float _cDepthBiasClamp;
     private bool _depthBiasKnown;
     private bool _cDepthClamp;
     private const StencilFaceFlagBits BothStencilFaces = StencilFaceFlagBits.FrontAndBack;
@@ -514,6 +515,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public float DepthBiasConstantFactor { get; set; }
 
     public float DepthBiasSlopeFactor { get; set; }
+
+    public float DepthBiasClamp { get; set; }
 
     public bool DepthClampEnable { get; set; } = false;
         
@@ -1923,12 +1926,15 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         { commandBuffer.SetDepthBoundsTestEnable(DepthBoundsTestEnabled); _cDepthBounds = DepthBoundsTestEnabled; }
         if (!_stateInitialized || _cDepthBias != DepthBiasEnabled)
         { commandBuffer.SetDepthBiasEnable(DepthBiasEnabled); _cDepthBias = DepthBiasEnabled; }
+        var biasClamp = MainDevice.IsDepthBiasClampEnabled ? DepthBiasClamp : 0;
         if (DepthBiasEnabled && (!_depthBiasKnown || _cDepthBiasConstant != DepthBiasConstantFactor
-                                                  || _cDepthBiasSlope != DepthBiasSlopeFactor))
+                                                  || _cDepthBiasSlope != DepthBiasSlopeFactor
+                                                  || _cDepthBiasClamp != biasClamp))
         {
-            commandBuffer.SetDepthBias(DepthBiasConstantFactor, 0, DepthBiasSlopeFactor);
+            commandBuffer.SetDepthBias(DepthBiasConstantFactor, biasClamp, DepthBiasSlopeFactor);
             _cDepthBiasConstant = DepthBiasConstantFactor;
             _cDepthBiasSlope = DepthBiasSlopeFactor;
+            _cDepthBiasClamp = biasClamp;
             _depthBiasKnown = true;
         }
         if (!_stateInitialized || _cDepthClamp != DepthClampEnable)

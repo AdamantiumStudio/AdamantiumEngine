@@ -428,8 +428,10 @@ All packages share one version.
   instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
   nothing while the overlay is off. With its floor, the grid writes its depth, pushed behind the ground by the slope it
-  is seen at too - so a face lying on the ground stays in front at any angle - and still hides what is below it.
-  `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+  is seen at too, capped - so a face lying on the ground stays in front at a grazing look - and still hides what is
+  below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+- `IGraphicsDevice.DepthBiasClamp`: the limit of a draw's depth bias, kept when the device enabled the depthBiasClamp
+  feature (`GraphicsAdapter.SupportsDepthBiasClamp`, `MainGraphicsDevice.IsDepthBiasClampEnabled`).
 - Which faces a surface shows is its material's: `Material.Faces` (`MaterialFaces`: both, the default; front; back), as
   `SceneData.Material.Faces` brings it from an import - glTF's `doubleSided` both, else front - and a scene's shape
   keeps it (`SceneShape.Faces`, written only when not both). It replaces `Material.DoubleSided`, which nothing drew

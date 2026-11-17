@@ -116,6 +116,10 @@ public interface IDynamicStateDevice
     /// <summary>The depth added per unit of the polygon's depth slope while <see cref="DepthBiasEnabled"/>.</summary>
     float DepthBiasSlopeFactor { get; set; }
 
+    /// <summary>The bias's limit in depth, 0 for none: positive caps a positive bias, negative a negative one. Ignored
+    /// unless the device enabled depthBiasClamp.</summary>
+    float DepthBiasClamp { get; set; }
+
     /// <summary>Whether draws hold each fragment's depth to the depth range instead of clipping at the near and far
     /// planes; only where <see cref="MainGraphicsDevice.IsDepthClampEnabled"/>.</summary>
     bool DepthClampEnable { get; set; }

@@ -43,8 +43,8 @@ struct PS_INPUT
 // at y = 0 hides it instead of fighting it, and nothing nearer than that - nothing the buffer can tell from the ground -
 // shows through it. Added as a part of w, so the depth stays linear across the square. A fixed depth is a distance that
 // grows with the square of the eye's: 2e-5 was metres a hundred away, and from below what stood on the ground showed
-// through the floor. The draw holds each fragment's depth at the far plane (depth clamp), so the ground past it still
-// shows, behind everything.
+// through the floor. The draw adds a capped slope bias on top for a grazing look, and holds each fragment's depth at the
+// far plane (depth clamp), so the ground past it still shows, behind everything.
 static const float BehindTheGround = 4.0f / 16777216.0f;
 
 [shader("vertex")]
