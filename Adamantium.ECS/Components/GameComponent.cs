@@ -23,6 +23,10 @@ public abstract class GameComponent : Component
         }
     }
 
+    /// <summary>Says all its values changed, for a writer outside the game's code - the editor's undo: its own properties
+    /// say nothing. On the world's thread.</summary>
+    public void TellChanged() => RaisePropertyChanged(string.Empty);
+
     private static PropertyInfo[] FindEntityProperties(Type type) =>
         type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
             .Where(property => property.PropertyType == typeof(Entity) && property.CanRead && property.CanWrite &&

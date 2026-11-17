@@ -1,6 +1,7 @@
 using System;
 using Adamantium.Core;
 using Adamantium.ECS;
+using Adamantium.ECS.Components;
 
 namespace Adamantium.EngineTests;
 
@@ -17,6 +18,18 @@ public sealed class ThrowingService : GameService
     public bool FailsToStart { get; set; }
 
     public bool Stopped { get; private set; }
+
+    public int EditsHeard { get; private set; }
+
+    /// <summary>Whether it fails on an edit too.</summary>
+    public bool FailsOnEdit { get; set; }
+
+    protected override void OnEdited(GameComponent component)
+    {
+        EditsHeard++;
+        if (FailsOnEdit)
+            throw new InvalidOperationException("A game service's own mistake on an edit");
+    }
 
     protected override void OnStart()
     {

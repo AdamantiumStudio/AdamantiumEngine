@@ -34,7 +34,7 @@ internal struct PoolWalk
             while (++_item < _end)
             {
                 var owner = pool.Owners[_item];
-                if (owner != null && IsEnabledWithOwners(owner))
+                if (owner != null && owner.IsEnabledInTree)
                 {
                     Component = pool.Items[_item];
                     Owner = owner;
@@ -50,16 +50,5 @@ internal struct PoolWalk
         Component = null;
         Owner = null;
         return false;
-    }
-
-    private static bool IsEnabledWithOwners(Entity entity)
-    {
-        for (var current = entity; current != null; current = current.Owner)
-        {
-            if (!current.IsEnabled)
-                return false;
-        }
-
-        return true;
     }
 }

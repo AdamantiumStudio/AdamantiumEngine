@@ -85,6 +85,21 @@ namespace Adamantium.ECS
         [Bindable]
         public partial bool IsEnabled { get; set; }
 
+        /// <summary>Whether it and every entity over it are enabled - what game services act on.</summary>
+        internal bool IsEnabledInTree
+        {
+            get
+            {
+                for (var current = this; current != null; current = current.Owner)
+                {
+                    if (!current.IsEnabled)
+                        return false;
+                }
+
+                return true;
+            }
+        }
+
         [Bindable]
         public partial bool IsSelected { get; set; }
 
