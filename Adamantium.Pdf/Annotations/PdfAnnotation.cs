@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Measurement;
 using Adamantium.Pdf.Navigation;
@@ -74,6 +75,20 @@ public sealed class PdfAnnotation
     /// <summary>The view of 3D artwork a markup annotation comments on (<c>ExData</c> of subtype <c>Markup3D</c>,
     /// ISO 32000-1, 13.6.6), or null for one that comments on none.</summary>
     public PdfMarkup3D Markup3D => PdfMarkup3D.From(Dictionary[PdfAnnotationKeys.ExternalData], _document);
+
+    /// <summary>Its border (<c>BS</c>, else <c>Border</c>; 1 point solid when it gives neither).</summary>
+    public PdfAnnotationBorder Border => PdfAnnotationBorder.From(Dictionary, _document);
+
+    /// <summary>Its color (<c>C</c>): 1 number gray, 3 RGB, 4 CMYK, none transparent; null when it gives none.</summary>
+    public IReadOnlyList<double> Color => PdfValues.Numbers(Dictionary[PdfAnnotationKeys.Color], _document);
+
+    /// <summary>What a viewer draws for it when the file gives it no appearance (no <c>AP</c>) and its entries say how
+    /// it looks: a link's border round its rectangle, or round each of its quadrilaterals, in its color (black when it
+    /// names none). Null otherwise - for a link with a border of no width or no color, and for any other kind.</summary>
+    public PdfStream ImpliedAppearance => Subtype == PdfAnnotationTypes.Link && Dictionary[PdfAnnotationKeys.Appearance] == null
+        ? PdfImpliedAppearance.LinkBorder(Rect, Border, Color,
+            PdfValues.Numbers(Dictionary[PdfAnnotationKeys.QuadPoints], _document))
+        : null;
 
     /// <summary>Its normal appearance (<c>AP</c> <c>N</c>) - the one of its state (<c>AS</c>) when it has several;
     /// null when it has none.</summary>

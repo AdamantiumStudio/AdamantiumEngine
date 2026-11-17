@@ -525,11 +525,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         return objectStream;
     }
 
-    /// <summary>The bytes of <paramref name="stream"/>, a stream of this file, decrypted when the file is encrypted.
-    /// </summary>
+    /// <summary>The bytes of <paramref name="stream"/>, a stream of this file, decrypted when the file is encrypted; a
+    /// stream of no object (number 0, which no object has) is one built in memory, plain.</summary>
     internal ReadOnlyMemory<byte> Decrypt(PdfStream stream)
     {
-        if (_security == null || stream.Id.Number == _encryptNumber)
+        if (_security == null || stream.Id.Number == 0 || stream.Id.Number == _encryptNumber)
         {
             return stream.Data;
         }

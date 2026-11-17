@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
+  `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer
+  draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
+  underlined, in its color, black when it names none; nothing for a border of no width or no color. How a link answers
+  a press: `PdfLink.Highlight` (`PdfLinkHighlight`: invert, the default; none; outline; push).
 - `IGameService.ComponentEdited` (`GameService.OnComponentEdited`), told by `GameRun.TellComponentEdited`: a component
   of the scene played was changed by the editor, playing or paused - the service brings up to date what it makes of
   it, so a change shows while the game stands. For the editor to follow a game component's property, it must set through `SetProperty`.
