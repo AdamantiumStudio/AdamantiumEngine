@@ -59,46 +59,4 @@ public class EntityCopyTreeTests
             Assert.That(copies[body].GetComponent<Skin>().Joints, Is.EqualTo(new[] { copies[joint] }));
         });
     }
-
-    // A game component following another entity follows its copy in the game; one outside the trees stays named.
-    [Test]
-    public void AGameComponentNamingAnEntity_NamesItsCopy()
-    {
-        var moon = new Entity(null, "Moon");
-        var earth = new Entity(null, "Earth");
-        var outside = new Entity(null, "Outside");
-        moon.AddComponent(new Following { Target = earth, Watched = outside });
-        var copies = new Dictionary<Entity, Entity>();
-
-        Entity.CopyTrees([moon, earth], copies);
-
-        var following = copies[moon].GetComponent<Following>();
-        Assert.Multiple(() =>
-        {
-            Assert.That(following.Target, Is.SameAs(copies[earth]));
-            Assert.That(following.Watched, Is.SameAs(outside));
-            Assert.That(following.Owner, Is.SameAs(copies[moon]));
-            Assert.That(moon.GetComponent<Following>().Target, Is.SameAs(earth));
-        });
-    }
-
-    // Kept back from a game, an entity that went with the game names none.
-    [Test]
-    public void AnEntityMappedToNone_IsNamedByNone()
-    {
-        var gone = new Entity(null, "Gone");
-        var following = new Following { Target = gone };
-        var kept = new Following();
-
-        following.CloneReferences(kept, new Dictionary<Entity, Entity> { [gone] = null });
-
-        Assert.That(kept.Target, Is.Null);
-    }
-
-    private sealed class Following : GameComponent
-    {
-        public Entity Target { get; set; }
-
-        public Entity Watched { get; set; }
-    }
 }

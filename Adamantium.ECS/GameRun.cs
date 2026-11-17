@@ -91,7 +91,7 @@ public sealed class GameRun
 
     /// <summary>Tells the services that <paramref name="component"/> of the scene played was edited, playing or paused -
     /// not on an entity disabled in its tree, which they do not act on; one that throws sleeps for the rest of the game.
-    /// The component then says its values changed. On the world's thread.</summary>
+    /// On the world's thread.</summary>
     public void Edited(GameComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
@@ -99,13 +99,6 @@ public sealed class GameRun
         if (_services.Count == 0 || component.Owner is not { } owner || owner.Scene != Scene || !owner.IsEnabledInTree)
             return;
 
-        TellServices(component);
-        // What the services made of it shows: its own properties say nothing.
-        component.TellChanged();
-    }
-
-    private void TellServices(GameComponent component)
-    {
         foreach (var service in _services)
         {
             // Asleep for throwing: put among the failed on pause, or before it found asleep while playing.

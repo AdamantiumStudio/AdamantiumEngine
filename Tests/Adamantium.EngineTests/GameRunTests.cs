@@ -307,21 +307,6 @@ public class GameRunTests
         });
     }
 
-    // What a service made of the edit shows in the inspector: the component says its values changed, after the services.
-    [Test]
-    public void AnEdit_HeardByTheServices_ThenTheComponentSaysItChanged()
-    {
-        var entity = Placed(_world.MainScene, 1);
-        var run = GameRun.Start(_world.MainScene);
-        var pushed = entity.GetComponent<Pushed>();
-        var heardBefore = -1;
-        pushed.PropertyChanged += (_, _) => heardBefore = _world.GetService<PushingService>().EditsHeard.Count;
-
-        run.Edited(pushed);
-
-        Assert.That(heardBefore, Is.EqualTo(1));
-    }
-
     // The services act on entities enabled in their tree only, so an edit of one disabled is not theirs.
     [Test]
     public void AnEditOnAnEntityDisabledInItsTree_IsNotHeard()

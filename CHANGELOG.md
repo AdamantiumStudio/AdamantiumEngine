@@ -7,12 +7,9 @@ All packages share one version.
 
 ### Added
 
-- `GameComponent.CloneReferences`: a game component's `Entity` property naming an entity of the trees copied names its
-  copy - a scene played on a copy of itself, or a tree duplicated, refers to itself.
 - `IGameService.Edited` (`GameService.OnEdited`), told by `GameRun.Edited`: a component of the scene played was changed
   by the editor, playing or paused - the service brings up to date what it makes of it, so a change shows while the
-  game stands.
-  `GameComponent.TellChanged()`: a game component says its values changed, for a writer outside the game's code.
+  game stands. For the editor to follow a game component's property, it must set through `SetProperty`.
 
 - Orbiting a camera about a point: `Camera.Orbit(pivot, pitch, yaw, style)` turns a free camera so the pivot stays where
   it is on the screen - `CameraOrbitStyle.Turntable` keeps the horizon level and stops short of the poles, as the free
