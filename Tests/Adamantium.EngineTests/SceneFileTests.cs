@@ -73,6 +73,39 @@ public class SceneFileTests
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    // A see-through shape keeps how its alpha counts; an opaque one, the default, writes nothing of it.
+    [Test]
+    public void AShapesAlphaMode_IsReadBack_AndAnOpaqueOneWritesNone()
+    {
+        var scene = Sample();
+        var glass = new SceneShape
+        {
+            Uid = 51, Name = "Glass", Type = "Adamantium.ECS.Components.SphereShape",
+            Color = new Vector4F(0.6f, 0.8f, 1, 0.3f), AlphaMode = AlphaMode.Blend
+        };
+        scene.Shapes.Add(glass);
+        scene.Shapes.Add(new SceneShape
+        {
+            Uid = 52, Name = "Masked", Type = "Adamantium.ECS.Components.CubeShape", AlphaMode = AlphaMode.Mask,
+            AlphaCutoff = 0.8f
+        });
+
+        var back = WriteAndRead(scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((back.Shapes[2].AlphaMode, back.Shapes[2].AlphaCutoff), Is.EqualTo((AlphaMode.Mask, 0.8f)));
+            Assert.That(back.Shapes[1].AlphaCutoff, Is.EqualTo(0.5f), "the default cutoff, not written");
+            Assert.That(back.Shapes[1].AlphaMode, Is.EqualTo(AlphaMode.Blend));
+            Assert.That(back.Shapes[1].Color, Is.EqualTo(new Vector4F(0.6f, 0.8f, 1, 0.3f)));
+            Assert.That(back.Shapes[1].Values, Is.Empty, "AlphaMode is the entry's own, not a parameter of the shape");
+            Assert.That(back.Shapes[0].AlphaMode, Is.EqualTo(AlphaMode.Opaque));
+            Assert.That(Text(scene), Does.Contain("AlphaMode=\"Blend\""));
+            Assert.That(Text(Sample()), Does.Not.Contain("AlphaMode"));
+            Assert.That(Text(Sample()), Does.Not.Contain("AlphaCutoff"));
+        });
+    }
+
     // The scene keeps its own id across saving; a new scene's file has none until its scene is saved.
     [Test]
     public void TheScenesId_IsReadBack_AndAFileWithoutOneHasNone()
