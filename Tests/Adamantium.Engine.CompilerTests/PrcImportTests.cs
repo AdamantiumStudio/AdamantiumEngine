@@ -356,6 +356,37 @@ public class PrcImportTests
         Assert.That(IsNear(turned, ToEngine(Vector3F.UnitY)), $"Left's x axis turns to {turned}, the location's x axis");
     }
 
+    // A Creo assembly in inches holds a part in millimetres through an occurrence with no location of its own: the scale
+    // that turns the part into inches is the location of the prototype it links to.
+    [Test]
+    public void ProductTree_AnOccurrenceWithNoLocation_TakesItsPrototypes()
+    {
+        double[] points = [0, 0, 0, 1, 0, 0, 0, 1, 0];
+        uint[] triangulated = [0, 0, 0, 3, 0, 6];
+        var tessellation = PrcTestEntities.CreateTessellation3D(points, [0, 0, 1], triangulated,
+            [new PrcTestFace { UsedEntities = PrcTessellationReader.Triangle, Sizes = [1] }]);
+        var globals = PrcTestEntities.CreateGlobals(Colors);
+        var part = PrcTestEntities.CreatePart("Bracket", 1, writer => PrcTestEntities.WritePolyBrep(writer, "Body", 0, 0));
+        var halved = PrcTestEntities.CreateGeneral([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 4, 1]);
+        var tree = PrcTestEntities.CreateTree([part],
+        [
+            PrcTestEntities.CreateOccurrence("Base", 0, [], halved),
+            PrcTestEntities.CreateOccurrence("Linked", -1, [], prototype: 0),
+            PrcTestEntities.CreateOccurrence("Assembly", -1, [1])
+        ]);
+        var bytes = PrcTestFile.CreateSingle(globals, tree, PrcTestEntities.CreateTessellations([tessellation]), 3).ToArray();
+
+        var scene = Import(bytes, out _, out _);
+
+        var linked = scene.Models.Dependencies.Single().Dependencies.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(linked.Name, Is.EqualTo("Linked"));
+            Assert.That(linked.Scale.X, Is.EqualTo(0.5f).Within(1e-6f), "the prototype's scale");
+            Assert.That(IsNear(linked.Position, ToEngine(new Vector3F(0, 0, 4))), $"Linked stands at {linked.Position}");
+        });
+    }
+
     [TestCase(true, true, true, 0.001f, false)]
     [TestCase(false, false, true, 0.0254f, false)]
     [TestCase(false, true, true, 0.001f, false)]

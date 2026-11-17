@@ -483,6 +483,9 @@ All packages share one version.
 
 ### Fixed
 
+- PRC: a product occurrence with no location of its own takes its prototype's, as it takes its sons and its part. A
+  Creo assembly in inches holding millimetre parts through such occurrences came out with those parts 25.4 times too
+  big - the head of Tetra4D's flashlight sample filled the view.
 - A light whose kind changed moves to its new list in `LightManager` (it stayed in the old one till another light came
   or went) and gets its new kind's icon in `EntityIcons` (it kept the old one, rays and all).
 - `PickRay.FromCamera` aims through the middle of the depth range, not the far plane: with a far plane all but at
