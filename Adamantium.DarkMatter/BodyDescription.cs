@@ -4,7 +4,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>What a body is when it is added to a world: its shape, how it moves, where it stands and what it is made
 /// of. Read once by <see cref="IPhysicsWorld.Add"/>, so one description can add many bodies.</summary>
-public sealed class RigidBodyDescription
+public sealed class BodyDescription
 {
     /// <summary>How the body moves.</summary>
     public BodyKind Kind { get; set; } = BodyKind.Dynamic;

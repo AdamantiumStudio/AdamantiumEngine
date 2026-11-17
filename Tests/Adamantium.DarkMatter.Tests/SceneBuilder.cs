@@ -14,11 +14,11 @@ internal sealed class SceneBuilder
 
     /// <summary>A static slab whose top face lies at Y = 0, or turned by <paramref name="rotation"/> around its top
     /// face's center.</summary>
-    public RigidBody AddGround(float friction = 0.6f, QuaternionF? rotation = null)
+    public BodyHandle AddGround(float friction = 0.6f, QuaternionF? rotation = null)
     {
         var turn = rotation ?? QuaternionF.Identity;
         var center = Vector3F.Transform(new Vector3F(0, -1, 0), turn);
-        return World.Add(new RigidBodyDescription
+        return World.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
             Shape = new BoxShape(50, 1, 50),
@@ -28,10 +28,10 @@ internal sealed class SceneBuilder
         });
     }
 
-    public RigidBody AddBox(Vector3F position, Vector3F halfExtents, float friction = 0.6f, float restitution = 0,
+    public BodyHandle AddBox(Vector3F position, Vector3F halfExtents, float friction = 0.6f, float restitution = 0,
         QuaternionF? rotation = null, Vector3F velocity = default)
     {
-        return World.Add(new RigidBodyDescription
+        return World.Add(new BodyDescription
         {
             Shape = new BoxShape(halfExtents),
             Position = position,
@@ -42,9 +42,9 @@ internal sealed class SceneBuilder
         });
     }
 
-    public RigidBody AddSphere(Vector3F position, float radius, float restitution = 0)
+    public BodyHandle AddSphere(Vector3F position, float radius, float restitution = 0)
     {
-        return World.Add(new RigidBodyDescription
+        return World.Add(new BodyDescription
         {
             Shape = new SphereShape(radius),
             Position = position,
@@ -52,9 +52,9 @@ internal sealed class SceneBuilder
         });
     }
 
-    public RigidBody AddCapsule(Vector3F position, float halfLength, float radius, QuaternionF? rotation = null)
+    public BodyHandle AddCapsule(Vector3F position, float halfLength, float radius, QuaternionF? rotation = null)
     {
-        return World.Add(new RigidBodyDescription
+        return World.Add(new BodyDescription
         {
             Shape = new CapsuleShape(halfLength, radius),
             Position = position,

@@ -44,7 +44,7 @@ public class ReferenceSceneTests
     {
         var scene = new SceneBuilder();
         scene.AddGround();
-        var boxes = new List<RigidBody>();
+        var boxes = new List<BodyHandle>();
         for (var level = 0; level < 10; level++)
         {
             boxes.Add(scene.AddBox(new Vector3F(0, 0.5f + level, 0), new Vector3F(0.5f)));
@@ -136,7 +136,7 @@ public class ReferenceSceneTests
     {
         var scene = new SceneBuilder();
         scene.AddGround();
-        var dominoes = new List<RigidBody>();
+        var dominoes = new List<BodyHandle>();
         for (var index = 0; index < 10; index++)
         {
             dominoes.Add(scene.AddBox(new Vector3F(index * 0.6f, 0.5f, 0), new Vector3F(0.05f, 0.5f, 0.25f)));
@@ -191,7 +191,7 @@ public class ReferenceSceneTests
     public void FastBox_StopsOnAThinFloor()
     {
         var scene = new SceneBuilder();
-        scene.World.Add(new RigidBodyDescription
+        scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxShape(5, 0.025f, 5),
@@ -256,9 +256,9 @@ public class ReferenceSceneTests
         return positions;
     }
 
-    private static List<RigidBody> BuildPyramid(SceneBuilder scene, int baseCount)
+    private static List<BodyHandle> BuildPyramid(SceneBuilder scene, int baseCount)
     {
-        var boxes = new List<RigidBody>();
+        var boxes = new List<BodyHandle>();
         for (var row = 0; row < baseCount; row++)
         {
             var count = baseCount - row;
