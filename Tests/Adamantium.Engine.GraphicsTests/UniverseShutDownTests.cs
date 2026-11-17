@@ -33,24 +33,38 @@ public class UniverseShutDownTests
         using var stopped = new ManualResetEventSlim();
         universe.Stopped += (_, _) => stopped.Set();
         universe.StartHostedLoop();
-        universe.Post(() =>
+        try
         {
-            entered.Set();
-            stuck.Wait();
-        });
-        Assert.That(entered.Wait(TimeSpan.FromSeconds(10)), Is.True, "the loop never ran the posted work");
+            universe.Post(() =>
+            {
+                entered.Set();
+                stuck.Wait();
+            });
+            Assert.That(entered.Wait(TimeSpan.FromSeconds(10)), Is.True, "the loop never ran the posted work");
 
-        var clock = Stopwatch.StartNew();
-        universe.ShutDown();
-        var waited = clock.Elapsed;
-        var stoppedWhileStuck = stopped.IsSet;
-        stuck.Set();
+            var clock = Stopwatch.StartNew();
+            universe.ShutDown();
+            var waited = clock.Elapsed;
+            var stoppedWhileStuck = (stopped.IsSet, universe.IsStopped);
+            stuck.Set();
+            var stoppedOnceFree = stopped.Wait(TimeSpan.FromSeconds(10));
+            for (var attempt = 0; attempt < 100 && !universe.IsStopped; attempt++)
+            {
+                Thread.Sleep(10);
+            }
 
-        Assert.Multiple(() =>
+            Assert.Multiple(() =>
+            {
+                Assert.That(waited, Is.LessThan(TimeSpan.FromSeconds(3)), "the shut-down waited on the stuck loop");
+                Assert.That(stoppedWhileStuck, Is.EqualTo((false, false)), "said stopped while stuck");
+                Assert.That(stoppedOnceFree, Is.True, "the loop did not stop by itself once free");
+                Assert.That(universe.IsStopped, Is.True);
+            });
+        }
+        finally
         {
-            Assert.That(waited, Is.LessThan(TimeSpan.FromSeconds(3)), "the shut-down waited on the stuck loop");
-            Assert.That(stoppedWhileStuck, Is.False);
-            Assert.That(stopped.Wait(TimeSpan.FromSeconds(10)), Is.True, "the loop did not stop by itself once free");
-        });
+            stuck.Set();
+            universe.ShutDown();
+        }
     }
 }

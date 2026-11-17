@@ -30,6 +30,10 @@ namespace Adamantium.Multiverse
         /// <summary>Whether this universe runs its own loop (see <see cref="StartHostedLoop"/>).</summary>
         public bool RunsOwnLoop { get; }
 
+        /// <summary>Whether it has stopped and freed what it held; false after a shut-down that gave up waiting for a
+        /// loop stuck in a frame, which still holds the devices it draws with.</summary>
+        public bool IsStopped { get; }
+
         /// <summary>Holds the own loop between two frames, once the frame in progress is done, until
         /// <see cref="ResumeHostedLoop"/>.</summary>
         public void SuspendHostedLoop();

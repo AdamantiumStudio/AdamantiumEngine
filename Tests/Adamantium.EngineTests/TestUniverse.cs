@@ -91,6 +91,8 @@ public class TestUniverse : IUniverse
 
     public bool RunsOwnLoop => false;
 
+    public bool IsStopped => true;
+
     public void SuspendHostedLoop()
     {
     }

@@ -390,6 +390,10 @@ public class Universe : IUniverse
     /// <summary>Whether this universe runs its own loop (see <see cref="StartHostedLoop"/>).</summary>
     public bool RunsOwnLoop => hostedLoop != null;
 
+    /// <summary>Whether it has stopped and freed what it held; false after a <see cref="ShutDown"/> that gave up waiting for
+    /// a loop stuck in a frame, which still holds the devices it draws with.</summary>
+    public bool IsStopped => hostedLoop?.IsAlive == false || (hostedLoop == null && Volatile.Read(ref isStopped));
+
     /// <summary>
     /// Holds the loop of <see cref="StartHostedLoop"/> between two frames until <see cref="ResumeHostedLoop"/>, waiting
     /// for the frame in progress to finish: for whoever remakes the devices it draws with.
@@ -1167,12 +1171,10 @@ public class Universe : IUniverse
         }
     }
         
-    /// <summary>How long <see cref="ShutDown"/> waits for the own loop to end; a loop still stuck in a frame after it
-    /// finishes by itself, freeing what it holds then.</summary>
     internal TimeSpan LoopExitWait { get; set; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>Finishes the loop and shuts the universe down, waiting for its own loop at most <see cref="LoopExitWait"/>.
-    /// </summary>
+    /// <summary>Finishes the loop and shuts the universe down, waiting for its own loop at most 5 seconds - see
+    /// <see cref="IsStopped"/>.</summary>
     public virtual void ShutDown()
     {
         cancellationTokenSource?.Cancel();
