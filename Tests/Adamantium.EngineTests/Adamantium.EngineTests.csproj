@@ -21,6 +21,9 @@
         <ProjectReference Include="..\..\Adamantium.GameInput\Adamantium.GameInput.csproj" />
         <ProjectReference Include="..\..\Adamantium.Wayland\Adamantium.Wayland.csproj" />
         <ProjectReference Include="..\..\Adamantium.DBus\Adamantium.DBus.csproj" />
+        <!-- The tests' own game components are view models written with [Bindable], as a game's are. -->
+        <ProjectReference Include="..\..\Adamantium.MVVM.Generators\Adamantium.MVVM.Generators.csproj"
+                          OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <ItemGroup>
