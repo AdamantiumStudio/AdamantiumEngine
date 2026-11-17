@@ -11,7 +11,7 @@ public readonly struct MeshInstance
     /// <summary>Where the copy stands, as the camera sees the world.</summary>
     public readonly Matrix4x4F World;
 
-    /// <summary>Its color where it has no texture; alpha unused.</summary>
+    /// <summary>Its color where it has no texture, and its alpha, which a texture's alpha multiplies.</summary>
     public readonly Vector4F Albedo;
 
     /// <summary>The first matrix of its joints' palette in the palette buffer.</summary>
@@ -23,15 +23,17 @@ public readonly struct MeshInstance
     /// <summary>Its texture's index in the resource heap seen as an array of textures; a textured pass only.</summary>
     public readonly uint Texture;
 
-    private readonly uint unused;
+    /// <summary>Below this alpha an opaque pass leaves a pixel out; 0 keeps every pixel.</summary>
+    public readonly float AlphaCutoff;
 
-    public MeshInstance(Matrix4x4F world, Vector3F albedo, uint paletteFirst, uint paletteCount, uint texture)
+    public MeshInstance(Matrix4x4F world, Vector4F albedo, uint paletteFirst, uint paletteCount, uint texture,
+        float alphaCutoff)
     {
         World = world;
-        Albedo = new Vector4F(albedo.X, albedo.Y, albedo.Z, 1f);
+        Albedo = albedo;
         PaletteFirst = paletteFirst;
         PaletteCount = paletteCount;
         Texture = texture;
-        unused = 0;
+        AlphaCutoff = alphaCutoff;
     }
 }

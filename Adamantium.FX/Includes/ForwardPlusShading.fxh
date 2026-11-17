@@ -74,11 +74,13 @@ float3 Ambient;
 struct MeshInstance
 {
     float4x4 world;
-    // rgb: the surface color when it has no texture.
+    // rgb: the surface color when it has no texture; a: its alpha, which a texture's alpha multiplies.
     float4 albedo;
     // x: the first matrix of its joints' palette in Palettes, y: how many joints it has (a skinned copy only);
     // z: its texture in meshTextures (a textured pass only).
-    uint4 slots;
+    uint3 slots;
+    // Below this alpha an opaque pass leaves the pixel out.
+    float alphaCutoff;
 
     float4 Placed(float4 position)
     {
@@ -94,6 +96,8 @@ struct MeshInstance
 MeshInstance* Instances;
 float4x4* Palettes;
 uint InstanceBase;
+// 1 while the draw blends over what is behind it, premultiplied; 0 for an opaque one.
+uint Blended;
 
 float4x4 view;
 float4x4 viewProjection;
@@ -122,13 +126,29 @@ struct LIT_PIXEL
     float3 viewPosition : TEXCOORD0;
     float3 viewNormal : NORMAL;
     float2 uv : TEXCOORD1;
-    nointerpolation float3 albedo : COLOR0;
+    nointerpolation float4 albedo : COLOR0;
     nointerpolation uint texture : TEXCOORD2;
+    nointerpolation float alphaCutoff : TEXCOORD3;
 };
 
 float4 SurfaceOf(LIT_PIXEL input)
 {
     return meshTextures[NonUniformResourceIndex(input.texture)].Sample(sampleType, input.uv);
+}
+
+// The pixel's output: premultiplied by its alpha for a blended draw, whole for an opaque one.
+float4 Finished(float3 lit, float alpha)
+{
+    return Blended != 0 ? float4(lit * alpha, alpha) : float4(lit, 1.0f);
+}
+
+// A masked surface's texel, the pixel left out below the cutoff. Only masked passes call it: a discard anywhere in a
+// shader turns off the early depth test.
+float4 MaskedSurfaceOf(LIT_PIXEL input)
+{
+    float4 surface = SurfaceOf(input);
+    clip(surface.a * input.albedo.a - input.alphaCutoff);
+    return surface;
 }
 
 uint ClusterAt(float2 pixel, float depth)
@@ -180,8 +200,9 @@ LIT_PIXEL LitOf(MeshInstance instance, float4 position, float3 normal, float2 uv
     output.viewPosition = mul(placed, view).xyz;
     output.viewNormal = mul(instance.Turned(normal), (float3x3)view);
     output.uv = uv;
-    output.albedo = instance.albedo.rgb;
+    output.albedo = instance.albedo;
     output.texture = instance.slots.z;
+    output.alphaCutoff = instance.alphaCutoff;
     return output;
 }
 

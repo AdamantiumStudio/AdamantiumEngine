@@ -18,6 +18,7 @@ using Adamantium.Vulkan.Core;
 using Serilog;
 using Buffer = Adamantium.Graphics.Buffer;
 using GraphicsDevice = Adamantium.Graphics.GraphicsDevice;
+using Texture = Adamantium.Graphics.Texture;
 
 namespace Adamantium.Engine.EntityServices;
 
@@ -47,11 +48,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private readonly Dictionary<MeshDrawKey, MeshDrawGroup> groups = new();
     private readonly List<MeshDrawGroup> groupsDrawn = [];
     private readonly Stack<MeshDrawGroup> spareGroups = new();
+    private readonly List<BlendedMeshDraw> blendedDraws = [];
+    private readonly List<BlendedDrawOrder> blendedOrder = [];
     private readonly Dictionary<(Skeleton Skeleton, Matrix4x4F Mesh), (uint First, uint Count)> framePalettes = new();
     private MeshInstance[] instances = new MeshInstance[256];
     private Matrix4x4F[] palettes = [];
     private int paletteMatrices;
     private readonly List<MeshWire> wires = [];
+    private readonly List<MeshWire> wiresOverBlended = [];
     private readonly List<(Entity Entity, Collider Collider)> colliders = [];
     private long trianglesCounted;
     private long trianglesInScene;
@@ -209,10 +213,15 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
             TrianglesDrawn = trianglesCounted;
             TrianglesInScene = trianglesInScene;
-            DrawCalls = groupsDrawn.Count + wires.Count + colliders.Count;
             var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
-            DrawGroups(paletteAddress);
+            DrawCalls = groupsDrawn.Count + wires.Count + wiresOverBlended.Count + colliders.Count;
+            var blendedFirst = UploadInstances(paletteAddress);
+            DrawOpaque();
+            // The lines go with the opaque surfaces: what is blended over them dims them as it does those. A blended
+            // surface's own wire goes over it.
             DrawLines(paletteAddress);
+            DrawCalls += DrawBlended(blendedFirst);
+            DrawWires(wiresOverBlended, paletteAddress);
         }
         catch (Exception exception)
         {
@@ -355,11 +364,20 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var (shaded, wired) = Drawn(Display, shown);
-        var wireInShading = shaded && wired && wireEffect != null && IsTriangles(meshData);
+        var material = entity.GetComponent<Material>();
+        shaded &= !IsMaskedOut(material);
+        if (!shaded && !wired)
+        {
+            return true;
+        }
+
+        // A blended surface's wire is drawn as lines after it, as on a GPU without barycentrics, not faded with it.
+        var blended = shaded && material?.AlphaMode == AlphaMode.Blend;
+        var wireInShading = shaded && wired && wireEffect != null && IsTriangles(meshData) && !blended;
         trianglesCounted += triangles;
         if (shaded)
         {
-            Enqueue(entity, meshData, transformation.WorldMatrixF, wireInShading);
+            Enqueue(entity, meshData, material, transformation.WorldMatrixF, wireInShading);
         }
 
         if (wired && !wireInShading)
@@ -368,7 +386,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             var (first, count) = meshData.RenderMode == MeshRenderMode.Skinned
                 ? PaletteOf(entity.GetComponent<Skin>(), world)
                 : default;
-            wires.Add(new MeshWire(meshData, world, shaded, first, count));
+            (blended ? wiresOverBlended : wires).Add(new MeshWire(meshData, world, shaded, first, count));
         }
 
         return true;
@@ -390,6 +408,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         return !collider.ContainsDataFor(ActiveCamera) || entity.ContainsComponent<Skin>()
                || collider.IsInsideCameraFrustum(ActiveCamera) != ContainmentType.Disjoint;
+    }
+
+    // A masked color without a texture is the same alpha all over: below the cutoff, none of it is drawn.
+    private static bool IsMaskedOut(Material material)
+    {
+        return material is { AlphaMode: AlphaMode.Mask } && LiveTextureOf(material) == null
+               && material.DiffuseColor.W < material.AlphaCutoff;
     }
 
     private static bool IsTriangles(MeshData meshData) =>
@@ -453,24 +478,31 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    private void Enqueue(Entity entity, MeshData meshData, in Matrix4x4F world, bool withWire)
+    private static Texture LiveTextureOf(Material material) =>
+        material?.Texture is { IsDisposed: false } live ? live : null;
+
+    private void Enqueue(Entity entity, MeshData meshData, Material material, in Matrix4x4F world, bool withWire)
     {
-        var material = entity.GetComponent<Material>();
-        var texture = material?.Texture is { IsDisposed: false } live ? live : null;
+        var texture = LiveTextureOf(material);
         var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
         var textured = texture != null;
-        Effect owner = withWire ? wireEffect : effect;
-        IEffectPass pass;
-        if (withWire && skinned)
-            pass = textured ? wireEffect.ForwardPlusWireSkinnedTexturedPass : wireEffect.ForwardPlusWireSkinnedColoredPass;
-        else if (withWire)
-            pass = textured ? wireEffect.ForwardPlusWireTexturedPass : wireEffect.ForwardPlusWireColoredPass;
-        else if (skinned)
-            pass = textured ? effect.ForwardPlusSkinnedTexturedPass : effect.ForwardPlusSkinnedColoredPass;
-        else
-            pass = textured ? effect.ForwardPlusTexturedPass : effect.ForwardPlusColoredPass;
-
+        var alphaMode = material?.AlphaMode ?? AlphaMode.Opaque;
+        var albedo = AlbedoOf(material, alphaMode);
+        var alphaCutoff = alphaMode == AlphaMode.Mask ? material.AlphaCutoff : 0f;
+        // The blended pass draws with the plain effect alone.
+        withWire &= alphaMode != AlphaMode.Blend;
+        var pass = PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask);
         var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
+        var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
+        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture) : 0;
+        var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff);
+        if (alphaMode == AlphaMode.Blend)
+        {
+            EnqueueBlended(entity, meshData, geometry, pass, instance);
+            return;
+        }
+
+        Effect owner = withWire ? wireEffect : effect;
         var key = new MeshDrawKey(geometry, pass, meshData.CullMode, meshData.DepthTestEnabled,
             meshData.DepthWriteEnabled, meshData.IsWireFrame, meshData.TopologyOverride);
         if (!groups.TryGetValue(key, out var group))
@@ -482,9 +514,67 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             groupsDrawn.Add(group);
         }
 
-        var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
-        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture) : 0;
-        group.Instances.Add(new MeshInstance(world, AlbedoOf(material), first, count, textureIndex));
+        group.Instances.Add(instance);
+    }
+
+    // Only a textured surface's alpha changes across it, so only a textured pass is masked: a discard costs the early
+    // depth test.
+    private IEffectPass PassOf(bool withWire, bool skinned, bool textured, bool masked)
+    {
+        if (withWire)
+        {
+            if (!textured)
+                return skinned ? wireEffect.ForwardPlusWireSkinnedColoredPass : wireEffect.ForwardPlusWireColoredPass;
+            if (masked)
+                return skinned ? wireEffect.ForwardPlusWireSkinnedMaskedTexturedPass : wireEffect.ForwardPlusWireMaskedTexturedPass;
+            return skinned ? wireEffect.ForwardPlusWireSkinnedTexturedPass : wireEffect.ForwardPlusWireTexturedPass;
+        }
+
+        if (!textured)
+            return skinned ? effect.ForwardPlusSkinnedColoredPass : effect.ForwardPlusColoredPass;
+        if (masked)
+            return skinned ? effect.ForwardPlusSkinnedMaskedTexturedPass : effect.ForwardPlusMaskedTexturedPass;
+        return skinned ? effect.ForwardPlusSkinnedTexturedPass : effect.ForwardPlusTexturedPass;
+    }
+
+    // Tested against the depth but not writing it, so what is blended after still shows behind. A two-sided mesh of
+    // filled triangles draws its back faces before its front ones; a mirrored copy's faces turn the other way. Lines and
+    // points have no faces: one draw.
+    private void EnqueueBlended(Entity entity, MeshData meshData, RenderGeometry geometry, IEffectPass pass,
+        in MeshInstance instance)
+    {
+        var distanceSquared = DistanceSquaredOf(entity, instance.World);
+        if (meshData.CullMode != CullModeFlagBits.None || meshData.IsWireFrame || !IsTriangles(meshData))
+        {
+            AddBlended(meshData, geometry, pass, instance, distanceSquared, meshData.CullMode);
+            return;
+        }
+
+        var mirrored = instance.World.Determinant() < 0;
+        AddBlended(meshData, geometry, pass, instance, distanceSquared,
+            mirrored ? CullModeFlagBits.BackBit : CullModeFlagBits.FrontBit);
+        AddBlended(meshData, geometry, pass, instance, distanceSquared,
+            mirrored ? CullModeFlagBits.FrontBit : CullModeFlagBits.BackBit);
+    }
+
+    private void AddBlended(MeshData meshData, RenderGeometry geometry, IEffectPass pass, in MeshInstance instance,
+        float distanceSquared, CullModeFlagBits cullMode)
+    {
+        var key = new MeshDrawKey(geometry, pass, cullMode, meshData.DepthTestEnabled, false, meshData.IsWireFrame,
+            meshData.TopologyOverride);
+        blendedOrder.Add(new BlendedDrawOrder(distanceSquared, blendedDraws.Count));
+        blendedDraws.Add(new BlendedMeshDraw(key, instance));
+    }
+
+    // From the camera to the middle of the entity's bounds, or to where it stands when it has none yet.
+    private float DistanceSquaredOf(Entity entity, in Matrix4x4F world)
+    {
+        if (sceneIndex != null && sceneIndex.TryGetBox(entity, out var box))
+        {
+            return (box.Center - cameraPosition).LengthSquared();
+        }
+
+        return world.TranslationVector.LengthSquared();
     }
 
     private (uint First, uint Count) PaletteOf(Skin skin, in Matrix4x4F mesh)
@@ -512,11 +602,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         return palette;
     }
 
-    private void DrawGroups(ulong paletteAddress)
+    // The opaque groups' copies, then the blended ones far to near; gives where the blended ones start.
+    private uint UploadInstances(ulong paletteAddress)
     {
-        if (groupsDrawn.Count == 0)
+        if (groupsDrawn.Count == 0 && blendedDraws.Count == 0)
         {
-            return;
+            return 0;
         }
 
         var count = 0;
@@ -526,6 +617,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             count += group.Instances.Count;
         }
 
+        var blendedFirst = count;
+        count += blendedDraws.Count;
         if (instances.Length < count)
         {
             Array.Resize(ref instances, Math.Max(instances.Length * 2, count));
@@ -536,6 +629,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             CollectionsMarshal.AsSpan(group.Instances).CopyTo(instances.AsSpan((int)group.First));
         }
 
+        blendedOrder.Sort();
+        for (var index = 0; index < blendedOrder.Count; index++)
+        {
+            instances[blendedFirst + index] = blendedDraws[blendedOrder[index].Draw].Instance;
+        }
+
         var instanceAddress = GraphicsDevice.UploadFrameData<MeshInstance>(instances.AsSpan(0, count));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
@@ -544,6 +643,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             target?.Parameters["sampleType"].SetResource(SamplerStates.LinearRepeat);
         }
 
+        return (uint)blendedFirst;
+    }
+
+    private void DrawOpaque()
+    {
         foreach (var group in groupsDrawn)
         {
             var key = group.Key;
@@ -553,12 +657,58 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    private void DrawLines(ulong paletteAddress)
+    // Neighbours in the order that share a key go in one call: nothing else lies between them. Gives the calls made.
+    private int DrawBlended(uint blendedFirst)
     {
-        foreach (var wire in wires)
+        if (blendedOrder.Count == 0)
+        {
+            return 0;
+        }
+
+        var calls = 0;
+        var opaqueEquation = GraphicsDevice.ColorBlendEquation;
+        GraphicsDevice.ColorBlendEquation = ColorBlendEquations.Premultiplied;
+        effect.Parameters["Blended"].SetValue(1u);
+        var instanceBase = effect.Parameters["InstanceBase"];
+        try
+        {
+            var start = 0;
+            while (start < blendedOrder.Count)
+            {
+                var draw = blendedDraws[blendedOrder[start].Draw];
+                var end = start + 1;
+                while (end < blendedOrder.Count && blendedDraws[blendedOrder[end].Draw].Key == draw.Key)
+                {
+                    end++;
+                }
+
+                instanceBase.SetValue(blendedFirst + (uint)start);
+                draw.Key.Pass.Apply();
+                draw.Key.Geometry.Draw(GraphicsDevice, draw.Key.State, (uint)(end - start));
+                calls++;
+                start = end;
+            }
+        }
+        finally
+        {
+            GraphicsDevice.ColorBlendEquation = opaqueEquation;
+            effect.Parameters["Blended"].SetValue(0u);
+        }
+
+        return calls;
+    }
+
+    private void DrawWires(List<MeshWire> drawn, ulong paletteAddress)
+    {
+        foreach (var wire in drawn)
         {
             DrawWire(wire, paletteAddress);
         }
+    }
+
+    private void DrawLines(ulong paletteAddress)
+    {
+        DrawWires(wires, paletteAddress);
 
         foreach (var (entity, collider) in colliders)
         {
@@ -578,9 +728,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         groupsDrawn.Clear();
         groups.Clear();
+        blendedDraws.Clear();
+        blendedOrder.Clear();
         framePalettes.Clear();
         paletteMatrices = 0;
         wires.Clear();
+        wiresOverBlended.Clear();
         colliders.Clear();
     }
 
@@ -601,15 +754,18 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
     }
 
-    private Vector3F AlbedoOf(Material material)
+    // The diffuse color's alpha counts unless the material is opaque.
+    private Vector4F AlbedoOf(Material material, AlphaMode alphaMode)
     {
         if (material == null)
         {
-            return UntexturedColor;
+            return new Vector4F(UntexturedColor, 1f);
         }
 
         var diffuse = material.DiffuseColor;
-        return diffuse.X + diffuse.Y + diffuse.Z > 0 ? new Vector3F(diffuse.X, diffuse.Y, diffuse.Z) : UntexturedColor;
+        var alpha = alphaMode == AlphaMode.Opaque ? 1f : diffuse.W;
+        var color = diffuse.X + diffuse.Y + diffuse.Z > 0 ? new Vector3F(diffuse.X, diffuse.Y, diffuse.Z) : UntexturedColor;
+        return new Vector4F(color, alpha);
     }
 
     private void ReleaseDeviceResources()

@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
+  near by the middle of each mesh's bounds, premultiplied over what is behind, tested against the depth but not
+  writing it, and lit by the same clusters; a two-sided mesh draws its back faces before its front ones. `Mask`: left
+  out below `AlphaCutoff`, whole above it - in masked passes of their own for a texture, so the opaque passes keep the
+  early depth test. `Opaque` ignores the alpha. The alpha is `DiffuseColor.W` times a texture's. A blended surface's
+  wireframe is drawn as lines over it.
+
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer
   draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
@@ -411,6 +418,8 @@ All packages share one version.
 
 ### Changed
 
+- `MeshInstance` takes its albedo as `Vector4F` - the alpha counts now - and an `alphaCutoff`. An opaque Forward+
+  surface writes alpha 1 where it used to write its texture's.
 - `LightManager` and `EntityIcons` read the scene's component index instead of walking its trees: the lights from
   `Components.Of<Light>()` as the outputs settle, new lists only when the lights or their kinds changed; the icons from
   the lights, cameras and markers. A light or an icon under a disabled entity is skipped, as the index skips it. The
