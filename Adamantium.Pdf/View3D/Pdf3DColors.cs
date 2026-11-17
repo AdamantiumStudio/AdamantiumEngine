@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>Colors as 3D views write them: <c>[/DeviceRGB r g b]</c> in a render mode, <c>[r g b]</c> beside a color
 /// space named apart in a background.</summary>

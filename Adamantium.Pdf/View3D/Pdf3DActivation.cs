@@ -1,6 +1,6 @@
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>When 3D artwork comes to life and goes back to its poster, and what a viewer shows round it (ISO 32000-1,
 /// 13.6.3, table 301, <c>3DA</c>).</summary>

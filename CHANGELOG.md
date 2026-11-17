@@ -421,6 +421,8 @@ All packages share one version.
 
 - `MeshInstance` takes its albedo as `Vector4F` - the alpha counts now - and an `alphaCutoff`. An opaque Forward+
   surface writes alpha 1 where it used to write its texture's.
+- PDF 3D lives in `Adamantium.Pdf.View3D` (folder `View3D`), not `Adamantium.Pdf.ThreeD`: `Pdf3DArtwork`, `Pdf3DView`,
+  `PdfMarkup3D` and the rest.
 - `LightManager` and `EntityIcons` read the scene's component index instead of walking its trees: the lights from
   `Components.Of<Light>()` as the outputs settle, new lists only when the lights or their kinds changed; the icons from
   the lights, cameras and markers. A light or an icon under a disabled entity is skipped, as the index skips it. The
@@ -509,6 +511,8 @@ All packages share one version.
 
 ### Fixed
 
+- PDF 3D: a view with no background (`BG`) says so - `Pdf3DView.Background` is null - instead of claiming white, so a
+  viewer keeps the background in effect, as Acrobat does; one whose `BG` names no color is white.
 - PDF text: a big glyph no longer pulls the smaller text under it into its line (a page label set large above a line
   read as "iiPage index 2", whichever was drawn first). A glyph joins a line only if its baseline lies within the
   line's height so far, from descent to ascent, or its own height holds the line's baseline (a bigger glyph only close

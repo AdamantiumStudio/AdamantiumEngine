@@ -3,7 +3,7 @@ using System.Text;
 using Adamantium.Pdf.Annotations;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Objects;
-using Adamantium.Pdf.ThreeD;
+using Adamantium.Pdf.View3D;
 using Adamantium.Pdf.Writing;
 using NUnit.Framework;
 

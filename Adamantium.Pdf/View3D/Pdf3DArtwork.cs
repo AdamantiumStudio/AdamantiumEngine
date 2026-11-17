@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Objects;
 
-namespace Adamantium.Pdf.ThreeD;
+namespace Adamantium.Pdf.View3D;
 
 /// <summary>The 3D artwork of a 3D annotation (ISO 32000-1, 13.6): the model's stream and format, its views, activation
 /// and box; the model itself comes out as bytes (<see cref="ReadData"/>).</summary>
