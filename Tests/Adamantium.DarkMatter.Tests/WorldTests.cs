@@ -44,6 +44,20 @@ public class WorldTests
     }
 
     [Test]
+    public void HandleOfAnotherWorld_IsRefused()
+    {
+        IPhysicsWorld host = new PhysicsWorld();
+        IPhysicsWorld client = new PhysicsWorld();
+        var hostBody = host.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
+        var clientBody = client.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
+
+        Assert.That(hostBody, Is.Not.EqualTo(clientBody));
+        Assert.That(client.Contains(hostBody), Is.False);
+        Assert.Throws<ArgumentException>(() => client.Remove(hostBody));
+        Assert.That(client.BodyCount, Is.EqualTo(1));
+    }
+
+    [Test]
     public void RemovingTheGround_WakesWhatSleptOnIt()
     {
         var scene = new SceneBuilder();
@@ -184,7 +198,7 @@ public class WorldTests
     [Test]
     public void BadDescriptions_AreRefused()
     {
-        var world = new PhysicsWorld();
+        IPhysicsWorld world = new PhysicsWorld();
         var cube = new Shapes.BoxShape(0.5f, 0.5f, 0.5f);
 
         Assert.Throws<ArgumentException>(() => world.Add(new RigidBodyDescription { Shape = cube, Density = 0 }));
@@ -264,7 +278,7 @@ public class WorldTests
     [Test]
     public void KinematicAddedAsleepWithVelocity_Moves()
     {
-        var world = new PhysicsWorld();
+        IPhysicsWorld world = new PhysicsWorld();
         var platform = world.Add(new RigidBodyDescription
         {
             Kind = BodyKind.Kinematic,
@@ -353,7 +367,7 @@ public class WorldTests
     [Test]
     public void HugeVelocity_IsCutToTheSpeedLimit()
     {
-        var world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
+        IPhysicsWorld world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
         var ball = world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
         world.SetLinearVelocity(ball, new Vector3F(3e38f, 0, 0));
         Assert.That(world.GetLinearVelocity(ball).Length(), Is.EqualTo(500f).Within(0.01f));
@@ -367,7 +381,7 @@ public class WorldTests
     [Test]
     public void ExtremeMotion_StaysFinite()
     {
-        var world = new PhysicsWorld();
+        IPhysicsWorld world = new PhysicsWorld();
         world.Add(new RigidBodyDescription
         {
             Kind = BodyKind.Static,
@@ -415,7 +429,7 @@ public class WorldTests
     [TestCase(1e-6f, 1f)]
     public void GivenMass_WorksForHugeAndTinyShapes(float radius, float mass)
     {
-        var world = new PhysicsWorld();
+        IPhysicsWorld world = new PhysicsWorld();
         var body = world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(radius), Mass = mass });
 
         world.ApplyImpulse(body, new Vector3F(mass, 0, 0), Vector3F.Zero);
@@ -430,7 +444,7 @@ public class WorldTests
     [Test]
     public void PlanetSizedStaticGround_IsAccepted()
     {
-        var world = new PhysicsWorld();
+        IPhysicsWorld world = new PhysicsWorld();
         world.Add(new RigidBodyDescription
         {
             Kind = BodyKind.Static,
@@ -484,7 +498,7 @@ public class WorldTests
     [Test]
     public void BadMotion_IsRefused()
     {
-        var world = new PhysicsWorld();
+        IPhysicsWorld world = new PhysicsWorld();
         var body = world.Add(new RigidBodyDescription { Shape = new Shapes.SphereShape(0.5f) });
         var bad = new Vector3F(float.NaN, 0, 0);
 

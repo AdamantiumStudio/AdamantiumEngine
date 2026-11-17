@@ -7,9 +7,9 @@ using Adamantium.DarkMatter.Shapes;
 
 namespace Adamantium.DarkMatter;
 
-/// <summary>Rigid bodies stepped at a fixed rate; the same bodies and calls always step to the same result. One thread
-/// owns a world.</summary>
-public sealed partial class PhysicsWorld
+/// <summary>The simulation: the same bodies and calls always step to the same result. One thread owns a world.
+/// </summary>
+public sealed partial class PhysicsWorld : IPhysicsWorld
 {
     private const int NoBody = -1;
     private const float MatchDistanceSquared = 0.02f * 0.02f;
@@ -48,11 +48,10 @@ public sealed partial class PhysicsWorld
         _matched = new bool[Settings.MaxContactPointsPerPair];
     }
 
-    /// <summary>How the world steps and solves.</summary>
+    /// <inheritdoc/>
     public PhysicsSettings Settings { get; }
 
-    /// <summary>The pull every dynamic body feels, in meters per second squared; a change wakes the sleeping bodies it
-    /// pulls.</summary>
+    /// <inheritdoc/>
     public Vector3F Gravity
     {
         get => _gravity;
@@ -71,20 +70,19 @@ public sealed partial class PhysicsWorld
         }
     }
 
-    /// <summary>How many bodies the world holds.</summary>
+    /// <inheritdoc/>
     public int BodyCount { get; private set; }
 
-    /// <summary>What the last step did.</summary>
+    /// <inheritdoc/>
     public StepStatistics LastStep { get; private set; }
 
-    /// <summary>The length of one step, in seconds.</summary>
+    /// <inheritdoc/>
     public float StepSeconds => 1f / Settings.StepRate;
 
-    /// <summary>The fastest any body spins, in radians per second: a quarter turn per substep, as far as a step can
-    /// follow a turn.</summary>
+    /// <inheritdoc/>
     public float MaxAngularSpeed { get; }
 
-    /// <summary>Adds a body as <paramref name="description"/> describes it and gives its handle.</summary>
+    /// <inheritdoc/>
     public RigidBody Add(RigidBodyDescription description)
     {
         ValidateDescription(description);
@@ -142,10 +140,10 @@ public sealed partial class PhysicsWorld
 
         Mark(index, marks);
         BodyCount++;
-        return new RigidBody(index, generation);
+        return new RigidBody(this, index, generation);
     }
 
-    /// <summary>Takes <paramref name="body"/> out of the world; bodies resting on it wake.</summary>
+    /// <inheritdoc/>
     public void Remove(RigidBody body)
     {
         var index = Resolve(body);
@@ -171,19 +169,18 @@ public sealed partial class PhysicsWorld
         BodyCount--;
     }
 
-    /// <summary>Whether <paramref name="body"/> is in this world.</summary>
+    /// <inheritdoc/>
     public bool Contains(RigidBody body) =>
-        body.Index >= 0 && body.Index < _slotCount && _bodies[body.Index].IsUsed
+        ReferenceEquals(body.World, this) && body.Index >= 0 && body.Index < _slotCount && _bodies[body.Index].IsUsed
         && _bodies[body.Index].Generation == body.Generation;
 
-    /// <summary>How <paramref name="body"/> moves.</summary>
+    /// <inheritdoc/>
     public BodyKind GetKind(RigidBody body) => _bodies[Resolve(body)].Kind;
 
-    /// <summary>Where <paramref name="body"/> stands.</summary>
+    /// <inheritdoc/>
     public Pose GetPose(RigidBody body) => _bodies[Resolve(body)].Pose;
 
-    /// <summary>Moves <paramref name="body"/> to <paramref name="pose"/> at once, as a jump, not a motion; it and the
-    /// bodies it touches, there or here, wake.</summary>
+    /// <inheritdoc/>
     public void SetPose(RigidBody body, in Pose pose)
     {
         var index = Resolve(body);
@@ -202,11 +199,10 @@ public sealed partial class PhysicsWorld
         WakeTouching(index);
     }
 
-    /// <summary>The velocity of <paramref name="body"/>'s center, in meters per second.</summary>
+    /// <inheritdoc/>
     public Vector3F GetLinearVelocity(RigidBody body) => _bodies[Resolve(body)].LinearVelocity;
 
-    /// <summary>Sets the velocity of a dynamic or kinematic body's center, cut to
-    /// <see cref="PhysicsSettings.MaxLinearSpeed"/>, and wakes it.</summary>
+    /// <inheritdoc/>
     public void SetLinearVelocity(RigidBody body, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
@@ -215,11 +211,10 @@ public sealed partial class PhysicsWorld
         WakeIsland(index);
     }
 
-    /// <summary>The spin of <paramref name="body"/>, in radians per second around each world axis.</summary>
+    /// <inheritdoc/>
     public Vector3F GetAngularVelocity(RigidBody body) => _bodies[Resolve(body)].AngularVelocity;
 
-    /// <summary>Sets the spin of a dynamic or kinematic body, cut to <see cref="MaxAngularSpeed"/>, and wakes it.
-    /// </summary>
+    /// <inheritdoc/>
     public void SetAngularVelocity(RigidBody body, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
@@ -228,8 +223,7 @@ public sealed partial class PhysicsWorld
         WakeIsland(index);
     }
 
-    /// <summary>Pushes a dynamic body's center with <paramref name="force"/>, in newtons, through the next step, and
-    /// wakes it.</summary>
+    /// <inheritdoc/>
     public void ApplyForce(RigidBody body, Vector3F force)
     {
         var index = ResolveDynamic(body);
@@ -239,8 +233,7 @@ public sealed partial class PhysicsWorld
         WakeIsland(index);
     }
 
-    /// <summary>Turns a dynamic body with <paramref name="torque"/>, in newton meters around each world axis, through
-    /// the next step, and wakes it.</summary>
+    /// <inheritdoc/>
     public void ApplyTorque(RigidBody body, Vector3F torque)
     {
         var index = ResolveDynamic(body);
@@ -250,8 +243,7 @@ public sealed partial class PhysicsWorld
         WakeIsland(index);
     }
 
-    /// <summary>Strikes a dynamic body at <paramref name="point"/> of the world with <paramref name="impulse"/>, in
-    /// newton seconds, changing its velocity at once - cut to the speed limits - and wakes it.</summary>
+    /// <inheritdoc/>
     public void ApplyImpulse(RigidBody body, Vector3F impulse, Vector3F point)
     {
         RequireFinite(impulse, nameof(impulse));
@@ -268,24 +260,21 @@ public sealed partial class PhysicsWorld
         WakeIsland(index);
     }
 
-    /// <summary>Whether <paramref name="body"/> is awake; static bodies never are.</summary>
+    /// <inheritdoc/>
     public bool IsAwake(RigidBody body) => _bodies[Resolve(body)].IsAwake;
 
-    /// <summary>Wakes <paramref name="body"/> and everything asleep with it; a kinematic body standing still stays
-    /// asleep.</summary>
+    /// <inheritdoc/>
     public void WakeUp(RigidBody body) => WakeIsland(Resolve(body));
 
-    /// <summary>The box, aligned with the world's axes, that holds <paramref name="body"/>'s shape where it stands.
-    /// </summary>
+    /// <inheritdoc/>
     public BoundingBox<float> GetBounds(RigidBody body)
     {
         ref var state = ref _bodies[Resolve(body)];
         return state.Shape.ComputeBounds(state.Pose);
     }
 
-    /// <summary>Adds to <paramref name="into"/> every contact point the last step held: touching, or about to, as a
-    /// positive separation says.</summary>
-    public void GetContactPoints(List<ContactPoint> into)
+    /// <inheritdoc/>
+    public void GetContactPoints(ICollection<ContactPoint> into)
     {
         ArgumentNullException.ThrowIfNull(into);
         foreach (var contact in _contacts)
@@ -301,7 +290,7 @@ public sealed partial class PhysicsWorld
         }
     }
 
-    /// <summary>Moves the world by one step of <see cref="StepSeconds"/>.</summary>
+    /// <inheritdoc/>
     public void Step()
     {
         var startedAt = Stopwatch.GetTimestamp();
@@ -829,7 +818,7 @@ public sealed partial class PhysicsWorld
         return _slotCount++;
     }
 
-    private RigidBody GetHandle(int index) => new(index, _bodies[index].Generation);
+    private RigidBody GetHandle(int index) => new(this, index, _bodies[index].Generation);
 
     private int Resolve(RigidBody body)
     {

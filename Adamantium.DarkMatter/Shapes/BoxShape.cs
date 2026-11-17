@@ -47,7 +47,7 @@ public sealed class BoxShape : Shape
         new(direction.X >= 0 ? HalfExtents.X : -HalfExtents.X, direction.Y >= 0 ? HalfExtents.Y : -HalfExtents.Y,
             direction.Z >= 0 ? HalfExtents.Z : -HalfExtents.Z);
 
-    internal override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
+    public override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
     {
         var box = new BoundingBox<float>(-HalfExtents, HalfExtents);
         if (box.Contains(ray.Position) != ContainmentType.Disjoint)

@@ -1,13 +1,13 @@
 namespace Adamantium.DarkMatter;
 
-/// <summary>How a <see cref="PhysicsWorld"/> steps and solves; read once, when the world is made.</summary>
+/// <summary>How a <see cref="IPhysicsWorld"/> steps and solves; read once, when the world is made.</summary>
 public sealed class PhysicsSettings
 {
     /// <summary>The pull every dynamic body feels, in meters per second squared; down along negative Y by default.
-    /// The world's <see cref="PhysicsWorld.Gravity"/> starts at it and can change later.</summary>
+    /// The world's <see cref="IPhysicsWorld.Gravity"/> starts at it and can change later.</summary>
     public Vector3F Gravity { get; init; } = new(0, -9.81f, 0);
 
-    /// <summary>How many steps make a second; every <see cref="PhysicsWorld.Step"/> moves the world by one over this.
+    /// <summary>How many steps make a second; every <see cref="IPhysicsWorld.Step"/> moves the world by one over this.
     /// </summary>
     public int StepRate { get; init; } = 120;
 

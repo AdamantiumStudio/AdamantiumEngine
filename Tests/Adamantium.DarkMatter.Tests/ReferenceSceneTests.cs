@@ -272,7 +272,7 @@ public class ReferenceSceneTests
         return boxes;
     }
 
-    private static void AssertNoDeepOverlap(PhysicsWorld world)
+    private static void AssertNoDeepOverlap(IPhysicsWorld world)
     {
         var points = new List<ContactPoint>();
         world.GetContactPoints(points);

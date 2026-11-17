@@ -50,5 +50,5 @@ public abstract class Shape
 
     /// <summary>Where <paramref name="ray"/> (own axes, unit direction) first meets the shape within
     /// <paramref name="maxDistance"/>, and the outward normal; from inside it meets at once, facing back.</summary>
-    internal abstract bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal);
+    public abstract bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal);
 }

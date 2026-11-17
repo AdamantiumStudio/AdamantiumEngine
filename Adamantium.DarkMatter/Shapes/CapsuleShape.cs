@@ -52,7 +52,7 @@ public sealed class CapsuleShape : Shape
         return (angularVelocity - axis * Vector3F.Dot(angularVelocity, axis)).Length() * BoundingRadius;
     }
 
-    internal override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
+    public override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
     {
         var start = ray.Position;
         var direction = ray.Direction;

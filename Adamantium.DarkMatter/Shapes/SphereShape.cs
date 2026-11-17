@@ -34,7 +34,7 @@ public sealed class SphereShape : Shape
 
     internal override float MeasureSweepSpeed(Vector3F angularVelocity, QuaternionF rotation) => 0;
 
-    internal override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
+    public override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
     {
         normal = default;
         if (!Collision.RayIntersectsSphere(ray, new BoundingSphere<float>(Vector3F.Zero, Radius), out distance)

@@ -10,7 +10,7 @@ internal sealed class SceneBuilder
         World = new PhysicsWorld(settings);
     }
 
-    public PhysicsWorld World { get; }
+    public IPhysicsWorld World { get; }
 
     /// <summary>A static slab whose top face lies at Y = 0, or turned by <paramref name="rotation"/> around its top
     /// face's center.</summary>

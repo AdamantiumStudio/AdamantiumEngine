@@ -3,7 +3,7 @@ using Adamantium.DarkMatter.Shapes;
 namespace Adamantium.DarkMatter;
 
 /// <summary>What a body is when it is added to a world: its shape, how it moves, where it stands and what it is made
-/// of. Read once by <see cref="PhysicsWorld.Add"/>, so one description can add many bodies.</summary>
+/// of. Read once by <see cref="IPhysicsWorld.Add"/>, so one description can add many bodies.</summary>
 public sealed class RigidBodyDescription
 {
     /// <summary>How the body moves.</summary>
@@ -23,7 +23,7 @@ public sealed class RigidBodyDescription
     public Vector3F LinearVelocity { get; set; }
 
     /// <summary>The spin the body starts at, in radians per second around each world axis, cut to the world's
-    /// <see cref="PhysicsWorld.MaxAngularSpeed"/>; a dynamic body added asleep starts still.</summary>
+    /// <see cref="IPhysicsWorld.MaxAngularSpeed"/>; a dynamic body added asleep starts still.</summary>
     public Vector3F AngularVelocity { get; set; }
 
     /// <summary>The density the mass follows from, in kilograms per cubic meter; water by default.</summary>

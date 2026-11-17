@@ -8,8 +8,7 @@ public sealed partial class PhysicsWorld
 {
     private readonly List<(int Item, float Entry)> _rayCandidates = [];
 
-    /// <summary>Where <paramref name="ray"/> first meets a body within <paramref name="maxDistance"/> meters; a ray
-    /// starting inside a body meets it at once.</summary>
+    /// <inheritdoc/>
     public bool RayCast(in Ray<float> ray, float maxDistance, out RayHit hit)
     {
         hit = default;
@@ -45,9 +44,8 @@ public sealed partial class PhysicsWorld
         return found;
     }
 
-    /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
-    /// at <paramref name="pose"/>.</summary>
-    public void Overlap(Shape shape, in Pose pose, List<RigidBody> into)
+    /// <inheritdoc/>
+    public void Overlap(Shape shape, in Pose pose, ICollection<RigidBody> into)
     {
         ArgumentNullException.ThrowIfNull(shape);
         ArgumentNullException.ThrowIfNull(into);
