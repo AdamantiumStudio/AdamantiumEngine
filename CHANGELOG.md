@@ -538,6 +538,10 @@ All packages share one version.
 
 ### Fixed
 
+- PRC: a compressed mesh is decoded in linear time - Tetra4D's shoe sample (7.8 MB) in 1.4 s instead of 15. Its edges
+  were counted in a dictionary keyed by the two vertices packed into one long, whose own hash folds the halves together,
+  so close vertices shared buckets. Physics' contacts by pair of bodies had the same keys and the same fault. Both now
+  hash with `PairKeyComparer` (Adamantium.Mathematics), for any key packing two numbers into 64 bits.
 - `ToolsOverlayProcessor` released its `BasicEffect` neither on a device change nor when detached.
 
 - PDF 3D: a view with no background (`BG`) says so - `Pdf3DView.Background` is null - instead of claiming white, so a

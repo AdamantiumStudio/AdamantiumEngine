@@ -15,7 +15,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private const float MatchDistanceSquared = 0.02f * 0.02f;
 
     private readonly DynamicAabbTree<int> _tree;
-    private readonly Dictionary<ulong, Contact> _contactsByKey = new();
+    private readonly Dictionary<ulong, Contact> _contactsByKey = new(PairKeyComparer.Instance);
     private readonly List<Contact> _contacts = [];
     private readonly Stack<Contact> _spareContacts = new();
     private readonly Stack<int> _freeSlots = new();

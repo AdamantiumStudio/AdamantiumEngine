@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
@@ -19,7 +20,7 @@ internal sealed class PrcCompressedMeshDecoder
     private readonly List<PrcVector> _points = [];
     private readonly Stack<PrcGateEdge> _gates = new();
     private readonly List<PrcDecodedTriangle> _triangles = [];
-    private readonly Dictionary<long, int> _edgeTriangles = new();
+    private readonly Dictionary<long, int> _edgeTriangles = new(PairKeyComparer.Instance);
     private readonly PrcCompressedNormals _normals;
     private int _pointCursor;
     private int _flagCursor;
@@ -80,14 +81,15 @@ internal sealed class PrcCompressedMeshDecoder
 
     private void CountEdges(PrcDecodedTriangle triangle)
     {
-        long[] keys =
-        [
-            GetEdgeKey(triangle.First, triangle.Second), GetEdgeKey(triangle.Second, triangle.Third), GetEdgeKey(triangle.Third, triangle.First)
-        ];
-        foreach (var key in keys)
-        {
-            _edgeTriangles[key] = _edgeTriangles.GetValueOrDefault(key) + 1;
-        }
+        CountEdge(GetEdgeKey(triangle.First, triangle.Second));
+        CountEdge(GetEdgeKey(triangle.Second, triangle.Third));
+        CountEdge(GetEdgeKey(triangle.Third, triangle.First));
+    }
+
+    private void CountEdge(long key)
+    {
+        ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(_edgeTriangles, key, out _);
+        count++;
     }
 
     private static long GetEdgeKey(int first, int second) => ((long)Math.Min(first, second) << 32) | (uint)Math.Max(first, second);
