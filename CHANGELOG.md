@@ -494,6 +494,12 @@ All packages share one version.
 
 ### Fixed
 
+- PDF text: a big glyph no longer pulls the smaller text under it into its line (a page label set large above a line
+  read as "iiPage index 2", whichever was drawn first). A glyph joins a line only if its baseline lies within the
+  line's height so far, from descent to ascent, or its own height holds the line's baseline (a bigger glyph only close
+  to it), so raised footnote marks and lowered indices still keep their line. A line's box (`PdfTextLine.Quad`,
+  `PdfPageText.QuadsOf`) is one rectangle from its lowest glyph to its highest, not a slant from the first glyph's
+  height to the last one's.
 - PRC: a product occurrence with no location of its own takes its prototype's, as it takes its sons and its part. A
   Creo assembly in inches holding millimetre parts through such occurrences came out with those parts 25.4 times too
   big - the head of Tetra4D's flashlight sample filled the view.

@@ -34,10 +34,12 @@ public sealed class PdfPageText
         var glyphOfChar = new List<int>();
         var addedChar = new List<bool>();
         var start = 0;
+        var height = new PdfLineHeight();
         for (var i = 0; i <= glyphs.Count; i++)
         {
-            if (i < glyphs.Count && (i == start || Continues(glyphs, start, i)))
+            if (i < glyphs.Count && (i == start || Continues(glyphs, start, i, height)))
             {
+                Widen(glyphs, start, i, height);
                 continue;
             }
 
@@ -69,10 +71,16 @@ public sealed class PdfPageText
                     }
                 }
 
-                lines.Add(new PdfTextLine(start, i - start, Merge(glyphs, start, i)));
+                var (dx, dy) = LineDirection(glyphs, start, i);
+                lines.Add(new PdfTextLine(start, i - start, Merge(glyphs, start, i, dx, dy)));
             }
 
             start = i;
+            height.Clear();
+            if (i < glyphs.Count)
+            {
+                Widen(glyphs, start, i, height);
+            }
         }
 
         Lines = lines;
@@ -115,7 +123,8 @@ public sealed class PdfPageText
         {
             var line = Lines[_lineOfGlyph[start]];
             var stop = Math.Min(end, line.Start + line.Count);
-            quads.Add(Merge(Glyphs, start, stop));
+            var (dx, dy) = LineDirection(Glyphs, line.Start, line.Start + line.Count);
+            quads.Add(Merge(Glyphs, start, stop, dx, dy));
             start = stop;
         }
 
@@ -264,7 +273,7 @@ public sealed class PdfPageText
     private (int Start, int End) Clamp(int start, int end) =>
         (Math.Clamp(start, 0, Glyphs.Count), Math.Clamp(end, 0, Glyphs.Count));
 
-    private static bool Continues(IReadOnlyList<PdfTextGlyph> glyphs, int start, int index)
+    private static bool Continues(IReadOnlyList<PdfTextGlyph> glyphs, int start, int index, PdfLineHeight height)
     {
         var previous = glyphs[index - 1];
         var next = glyphs[index];
@@ -283,7 +292,14 @@ public sealed class PdfPageText
         var origin = glyphs[start].Origin;
         var across = Math.Abs((next.Origin.X - origin.X) * -dy + (next.Origin.Y - origin.Y) * dx);
         var along = (next.Origin.X - previous.End.X) * dx + (next.Origin.Y - previous.End.Y) * dy;
-        return across <= LineDrift * size && along >= -BackStep * size && along <= ColumnGap * size;
+        return across <= LineDrift * size && along >= -BackStep * size && along <= ColumnGap * size &&
+               height.Shares(next, origin, dx, dy);
+    }
+
+    private static void Widen(IReadOnlyList<PdfTextGlyph> glyphs, int start, int index, PdfLineHeight height)
+    {
+        var (dx, dy) = LineDirection(glyphs, start, index + 1);
+        height.Widen(glyphs[index], glyphs[start].Origin, dx, dy);
     }
 
     private static bool Gap(IReadOnlyList<PdfTextGlyph> glyphs, int start, int index)
@@ -320,11 +336,61 @@ public sealed class PdfPageText
         return length < 1e-9 ? null : (x / length, y / length);
     }
 
-    private static PdfQuad Merge(IReadOnlyList<PdfTextGlyph> glyphs, int start, int end)
+    private static PdfQuad Merge(IReadOnlyList<PdfTextGlyph> glyphs, int start, int end, double dx, double dy)
     {
-        var (first, last) = (glyphs[start].Quad, glyphs[end - 1].Quad);
-        return new PdfQuad(first.BottomLeft, last.BottomRight, last.TopRight, first.TopLeft);
+        var upX = -dy;
+        var upY = dx;
+        if (UpSide(glyphs, start, end, upX, upY) < 0)
+        {
+            upX = -upX;
+            upY = -upY;
+        }
+
+        var origin = glyphs[start].Quad.BottomLeft;
+        var alongMin = double.MaxValue;
+        var alongMax = double.MinValue;
+        var acrossMin = double.MaxValue;
+        var acrossMax = double.MinValue;
+        for (var index = start; index < end; index++)
+        {
+            var quad = glyphs[index].Quad;
+            foreach (var corner in (ReadOnlySpan<PdfPoint>)[quad.BottomLeft, quad.BottomRight, quad.TopRight, quad.TopLeft])
+            {
+                var along = (corner.X - origin.X) * dx + (corner.Y - origin.Y) * dy;
+                var across = (corner.X - origin.X) * upX + (corner.Y - origin.Y) * upY;
+                alongMin = Math.Min(alongMin, along);
+                alongMax = Math.Max(alongMax, along);
+                acrossMin = Math.Min(acrossMin, across);
+                acrossMax = Math.Max(acrossMax, across);
+            }
+        }
+
+        return new PdfQuad(At(origin, dx, dy, upX, upY, alongMin, acrossMin), At(origin, dx, dy, upX, upY, alongMax, acrossMin),
+            At(origin, dx, dy, upX, upY, alongMax, acrossMax), At(origin, dx, dy, upX, upY, alongMin, acrossMax));
     }
+
+    private static double UpSide(IReadOnlyList<PdfTextGlyph> glyphs, int start, int end, double upX, double upY)
+    {
+        for (var index = start; index < end; index++)
+        {
+            var quad = glyphs[index].Quad;
+            var side = (quad.TopLeft.X - quad.BottomLeft.X) * upX + (quad.TopLeft.Y - quad.BottomLeft.Y) * upY;
+            if (Math.Abs(side) < 1e-9)
+            {
+                side = (quad.BottomRight.X - quad.BottomLeft.X) * upX + (quad.BottomRight.Y - quad.BottomLeft.Y) * upY;
+            }
+
+            if (Math.Abs(side) >= 1e-9)
+            {
+                return side;
+            }
+        }
+
+        return 1;
+    }
+
+    private static PdfPoint At(PdfPoint origin, double dx, double dy, double upX, double upY, double along, double across) =>
+        new(origin.X + along * dx + across * upX, origin.Y + along * dy + across * upY);
 
     private static double Distance(PdfRectangle box, PdfPoint point)
     {
