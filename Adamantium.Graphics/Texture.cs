@@ -303,7 +303,7 @@ public unsafe class Texture : GraphicsResource, ITexture
             MemoryTypeIndex = memoryIndex
         };
 
-        var allocated = device.AllocateMemory(allocInfo, null, out bufferMemory);
+        var allocated = GraphicsDevice.MainDevice.AllocateMemory(allocInfo, out bufferMemory);
         if (allocated != Result.Success)
         {
             GraphicsDevice.Destroy(buffer);
@@ -529,7 +529,7 @@ public unsafe class Texture : GraphicsResource, ITexture
             allocInfo.PNext = allocPNextFactory(image);
         }
 
-        var allocResult = device.AllocateMemory(allocInfo, null, out imageMemory);
+        var allocResult = GraphicsDevice.MainDevice.AllocateMemory(allocInfo, out imageMemory);
         if (allocResult != Result.Success)
         {
             allocationRefused?.Invoke();
