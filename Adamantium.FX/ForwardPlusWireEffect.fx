@@ -1,5 +1,6 @@
 // Clustered forward shading with the mesh's wireframe drawn over it in the same pass: where a pixel lies in its
-// triangle tells how near an edge it is. Needs VK_KHR_fragment_shader_barycentric.
+// triangle tells how near an edge it is. Needs VK_KHR_fragment_shader_barycentric. Opaque surfaces only: a blended
+// one's wire is drawn as lines.
 
 #include "Includes/ForwardPlusShading.fxh"
 
@@ -24,7 +25,7 @@ float3 OverWire(float3 lit, float3 barycentrics)
 [shader("fragment")]
 float4 LitColoredWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
-    float3 lit = Shade(input.albedo, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
     return float4(OverWire(lit, barycentrics), 1.0f);
 }
 
@@ -33,7 +34,15 @@ float4 LitTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics
 {
     float4 surface = SurfaceOf(input);
     float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
-    return float4(OverWire(lit, barycentrics), surface.a);
+    return float4(OverWire(lit, barycentrics), 1.0f);
+}
+
+[shader("fragment")]
+float4 LitMaskedTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
+{
+    float4 surface = MaskedSurfaceOf(input);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(OverWire(lit, barycentrics), 1.0f);
 }
 
 technique ForwardPlusWire
@@ -60,5 +69,17 @@ technique ForwardPlusWire
     {
         VertexShader = LitSkinned_VS;
         PixelShader = LitTexturedWire_PS;
+    }
+
+    pass MaskedTextured
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitMaskedTexturedWire_PS;
+    }
+
+    pass SkinnedMaskedTextured
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitMaskedTexturedWire_PS;
     }
 }

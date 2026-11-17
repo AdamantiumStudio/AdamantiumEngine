@@ -17,7 +17,8 @@ namespace Adamantium.Engine.EntityServices;
 
 /// <summary>
 /// Draws the <see cref="ToolsProcessor"/>s of a <see cref="ToolsService"/> into one output's frame, after its scene: in
-/// the scene, in front of what it drew, and on the screen.
+/// the scene, in front of what it drew, and on the screen. What they draw under the scene - the ground grid - goes first
+/// in the frame, through a <see cref="ToolsUnderlayProcessor"/> it attaches beside itself.
 /// </summary>
 public class ToolsOverlayProcessor : RenderingProcessor
 {
@@ -40,6 +41,8 @@ public class ToolsOverlayProcessor : RenderingProcessor
     private BasicEffect effect;
     private GridEffect gridEffect;
     private MeshGeometryCache geometry;
+    private ToolsUnderlayProcessor underlay;
+    private RenderingService attachedTo;
 
     public ToolsOverlayProcessor(ToolsService tools)
     {
@@ -60,22 +63,53 @@ public class ToolsOverlayProcessor : RenderingProcessor
     {
         geometry?.Dispose();
         gridEffect?.Dispose();
+        effect?.Dispose();
         effect = new BasicEffect(GraphicsDevice);
         gridEffect = new GridEffect(GraphicsDevice);
         geometry = new MeshGeometryCache(GraphicsDevice);
         base.CreateDeviceResources();
     }
 
+    protected override void OnAttached()
+    {
+        base.OnAttached();
+        attachedTo = AssociatedService;
+        underlay = new ToolsUnderlayProcessor(this);
+        attachedTo.AttachProcessor(underlay);
+    }
+
     protected override void OnDetached()
     {
+        attachedTo?.DetachProcessor(underlay);
+        underlay = null;
+        attachedTo = null;
         geometry?.Dispose();
         gridEffect?.Dispose();
+        effect?.Dispose();
+        geometry = null;
+        gridEffect = null;
+        effect = null;
         base.OnDetached();
     }
 
     public override void Draw(AppTime appTime)
     {
         geometry?.ReleaseUnused();
+        DrawTools(under: false);
+    }
+
+    /// <summary>Lets the tools draw under the scene, before it: its <see cref="ToolsUnderlayProcessor"/> calls it. Nothing
+    /// while the overlay is off.</summary>
+    internal void DrawUnderlays()
+    {
+        if (IsEnabled)
+        {
+            DrawTools(under: true);
+        }
+    }
+
+    private void DrawTools(bool under)
+    {
         ActiveCamera = Window.Camera;
         if (ActiveCamera == null)
         {
@@ -87,10 +121,13 @@ public class ToolsOverlayProcessor : RenderingProcessor
         var processors = tools.Processors;
         for (int i = 0; i < processors.Count; i++)
         {
-            if (processors[i].IsEnabled && processors[i] is ToolsProcessor processor)
-            {
+            if (!processors[i].IsEnabled || processors[i] is not ToolsProcessor processor)
+                continue;
+
+            if (under)
+                processor.DrawUnderlay(this);
+            else
                 processor.DrawOverlay(this);
-            }
         }
     }
 
@@ -128,9 +165,9 @@ public class ToolsOverlayProcessor : RenderingProcessor
         DrawParts(ActiveCamera.ViewProjectionMatrix, true, Look.Flat);
     }
 
-    /// <summary>Draws an entity in its colors, unlit, where the scene does not stand in front of it: its meshes' own
-    /// depth test and write, as the ground grid's lines are hidden behind what stands on the ground.</summary>
-    public void DrawFlatBehindScene(Entity root)
+    /// <summary>Draws an entity in its colors, unlit, by its meshes' own depth test and write: from an underlay, under
+    /// everything the scene draws after, as the ground grid's lines.</summary>
+    public void DrawFlatUnderScene(Entity root)
     {
         Collect(root);
         DrawParts(ActiveCamera.ViewProjectionMatrix, false, Look.Flat);
@@ -184,8 +221,9 @@ public class ToolsOverlayProcessor : RenderingProcessor
         GraphicsDevice.ColorBlendEquation = blend;
     }
 
-    /// <summary>Draws the ground grid behind what stands on it: the scene's depth hides it, and it leaves no depth of its
-    /// own, so nothing drawn after it is hidden by it.</summary>
+    /// <summary>Draws the ground grid's cells, axes and floor: from an underlay, the scene drawn after covers it. With its
+    /// floor, it leaves its depth - a little behind the ground, so lines in the plane still show - and what the scene has
+    /// below the ground stays hidden.</summary>
     public void DrawGrid(GroundGrid grid)
     {
         var layout = grid.LayoutFor(ActiveCamera);
@@ -211,10 +249,16 @@ public class ToolsOverlayProcessor : RenderingProcessor
         var clamp = GraphicsDevice.DepthClampEnable;
         GraphicsDevice.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
         GraphicsDevice.DepthClampEnable = GraphicsDevice.MainDevice.IsDepthClampEnabled;
-        geometry.GetOrCreate(RingSquare, typeof(MeshVertex))
-            .Draw(GraphicsDevice, new RenderState(false, CullModeFlagBits.None, true, false, null), 1);
-        GraphicsDevice.ColorBlendEquation = blend;
-        GraphicsDevice.DepthClampEnable = clamp;
+        try
+        {
+            var state = new RenderState(false, CullModeFlagBits.None, true, grid.ShowsFloor, null);
+            geometry.GetOrCreate(RingSquare, typeof(MeshVertex)).Draw(GraphicsDevice, state, 1);
+        }
+        finally
+        {
+            GraphicsDevice.ColorBlendEquation = blend;
+            GraphicsDevice.DepthClampEnable = clamp;
+        }
     }
 
     /// <summary>Draws an entity laid out in the output's pixels.</summary>

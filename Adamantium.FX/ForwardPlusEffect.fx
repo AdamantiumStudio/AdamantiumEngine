@@ -51,14 +51,23 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
 [shader("fragment")]
 float4 LitColored_PS(LIT_PIXEL input) : SV_TARGET
 {
-    return float4(Shade(input.albedo, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return Finished(lit, input.albedo.a);
 }
 
 [shader("fragment")]
 float4 LitTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);
-    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), surface.a);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return Finished(lit, surface.a * input.albedo.a);
+}
+
+[shader("fragment")]
+float4 LitMaskedTextured_PS(LIT_PIXEL input) : SV_TARGET
+{
+    float4 surface = MaskedSurfaceOf(input);
+    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
 }
 
 technique ForwardPlus
@@ -90,5 +99,17 @@ technique ForwardPlus
     {
         VertexShader = LitSkinned_VS;
         PixelShader = LitTextured_PS;
+    }
+
+    pass MaskedTextured
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitMaskedTextured_PS;
+    }
+
+    pass SkinnedMaskedTextured
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitMaskedTextured_PS;
     }
 }

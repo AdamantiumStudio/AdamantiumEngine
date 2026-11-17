@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
+  near by the middle of each mesh's bounds, premultiplied over what is behind, tested against the depth but not
+  writing it, and lit by the same clusters; a two-sided mesh draws its back faces before its front ones. `Mask`: left
+  out below `AlphaCutoff`, whole above it - in masked passes of their own for a texture, so the opaque passes keep the
+  early depth test. `Opaque` ignores the alpha. The alpha is `DiffuseColor.W` times a texture's. A blended surface's
+  wireframe is drawn as lines over it. A scene's shape keeps its material's mode and cutoff: `SceneShape.AlphaMode` and
+  `AlphaCutoff`, attributes written only when they are not the defaults (opaque, 0.5).
+
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer
   draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
@@ -411,6 +419,13 @@ All packages share one version.
 
 ### Changed
 
+- The ground grid is drawn first in the frame, under the whole scene, so see-through surfaces show it behind them
+  instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
+  `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
+  nothing while the overlay is off. With its floor, the grid writes its depth, a little behind the ground, and still
+  hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+- `MeshInstance` takes its albedo as `Vector4F` - the alpha counts now - and an `alphaCutoff`. An opaque Forward+
+  surface writes alpha 1 where it used to write its texture's.
 - PDF 3D lives in `Adamantium.Pdf.View3D` (folder `View3D`), not `Adamantium.Pdf.ThreeD`: `Pdf3DArtwork`, `Pdf3DView`,
   `PdfMarkup3D` and the rest.
 - `LightManager` and `EntityIcons` read the scene's component index instead of walking its trees: the lights from
@@ -500,6 +515,8 @@ All packages share one version.
   texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
 
 ### Fixed
+
+- `ToolsOverlayProcessor` released its `BasicEffect` neither on a device change nor when detached.
 
 - PDF 3D: a view with no background (`BG`) says so - `Pdf3DView.Background` is null - instead of claiming white, so a
   viewer keeps the background in effect, as Acrobat does; one whose `BG` names no color is white.
