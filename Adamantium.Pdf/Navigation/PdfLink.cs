@@ -7,12 +7,16 @@ namespace Adamantium.Pdf.Navigation;
 /// <summary>A link on a page (ISO 32000-2, 12.5.6.5): the area that follows it, and what following it does.</summary>
 public sealed class PdfLink
 {
-    internal PdfLink(PdfRectangle rect, IReadOnlyList<PdfQuad> quads, PdfAction action)
+    internal PdfLink(PdfRectangle rect, IReadOnlyList<PdfQuad> quads, PdfAction action, PdfLinkHighlight highlight)
     {
         Rect = rect;
         Quads = quads;
         Action = action;
+        Highlight = highlight;
     }
+
+    /// <summary>How it answers being pressed (<c>H</c>).</summary>
+    public PdfLinkHighlight Highlight { get; }
 
     /// <summary>The area, in default user space.</summary>
     public PdfRectangle Rect { get; }

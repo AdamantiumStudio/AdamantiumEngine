@@ -151,7 +151,14 @@ public sealed class PdfPage
                         ? PdfAction.ForDestination(destination)
                         : null
                     : PdfAction.From(dictionary["A"], _document);
-                links.Add(new PdfLink(annotation.Rect, quads, action));
+                var highlight = PdfValues.Name(dictionary[PdfAnnotationKeys.HighlightMode], _document) switch
+                {
+                    "N" => PdfLinkHighlight.None,
+                    "O" => PdfLinkHighlight.Outline,
+                    "P" => PdfLinkHighlight.Push,
+                    _ => PdfLinkHighlight.Invert,
+                };
+                links.Add(new PdfLink(annotation.Rect, quads, action, highlight));
             }
 
             return links;

@@ -16,6 +16,8 @@ internal static class PdfAnnotationKeys
     public const string Color = "C";
     public const string InteriorColor = "IC";
     public const string Border = "BS";
+    public const string OldBorder = "Border";
+    public const string HighlightMode = "H";
     public const string BorderWidth = "W";
     public const string BorderStyle = "S";
     public const string Dash = "D";
