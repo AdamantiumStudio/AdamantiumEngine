@@ -285,6 +285,26 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void ParentStretchedInTheGame_StopsStandingTheChild()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var parent = new Entity(null, "Parent");
+        _world.EntityManager.AddEntity(parent, _world.MainScene);
+        var box = MakeBox("Child", new Vector3<double>(0, -0.5, 0), 0.5, parent);
+        Settle();
+        Play();
+        Frames(1);
+        var kept = box.Transform.State;
+
+        parent.Transform.ScaleFactor = new Vector3F(4, 1, 1);
+        Frames(0.2);
+
+        Assert.That(_physics.Moves(box), Is.True);
+        Assert.That(box.Transform.State, Is.EqualTo(kept));
+    }
+
+    [Test]
     public void MirroredEntity_IsLeftOut()
     {
         UseSteppedPhysics();

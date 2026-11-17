@@ -30,8 +30,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private readonly List<PhysicsBodyLink> _stopped = [];
     private readonly List<PhysicsBodyLink> _parented = [];
     private readonly List<PhysicsBodyLink> _placing = [];
-    private readonly List<PhysicsPush> _pushes = [];
     private readonly Dictionary<int, Vector3F> _frameForces = new();
+    private readonly List<int> _pushedLastFrame = [];
+    private readonly Dictionary<int, Vector3F> _forces = new();
+    private readonly List<int> _refusedForces = [];
     private readonly Channel<PhysicsCommand> _commands = Channel.CreateUnbounded<PhysicsCommand>(OneReader);
     private readonly Channel<PhysicsStepResult> _results = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
     private readonly Channel<PhysicsStepResult> _spareResults = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
@@ -46,7 +48,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private int _unreadResults;
     private long _resultNumber;
     private long _frameNumber;
-    private long _batch;
+    private bool _warnedOfOverflow;
     private long _lastResultAt;
     private int _lastResultSteps = 1;
     private StepStatistics _lastStep;
@@ -120,8 +122,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
         var total = _frameForces.TryGetValue(key, out var earlier) ? earlier + force : force;
         if (!IsFinite(total))
         {
-            Log.Logger.Warning("The pushes of {Entity} this frame add up past any number; the last is dropped",
-                entity.Name);
+            if (!_warnedOfOverflow)
+                Log.Logger.Warning("The pushes of {Entity} in a frame add up past any number; such pushes are dropped",
+                    entity.Name);
+
+            _warnedOfOverflow = true;
             return;
         }
 
@@ -149,7 +154,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         if (_world == null)
             return;
 
-        SendFrameForces(appTime.FrameTime);
+        SendFrameForces();
         if (!_stepsOnOwnThread)
             Advance(appTime.FrameTime);
 
@@ -203,8 +208,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _stopped.Clear();
         _parented.Clear();
         _placing.Clear();
-        _pushes.Clear();
         _frameForces.Clear();
+        _pushedLastFrame.Clear();
+        _forces.Clear();
+        _warnedOfOverflow = false;
         _lastStep = default;
         while (_commands.Reader.TryRead(out _))
         {
@@ -289,17 +296,21 @@ public sealed class PhysicsService : GameService, IPhysicsService
             _parented.Add(link);
     }
 
-    private void SendFrameForces(double frameSeconds)
+    private void SendFrameForces()
     {
-        if (frameSeconds > 0)
+        foreach (var force in _frameForces)
         {
-            foreach (var force in _frameForces)
-            {
-                _commands.Writer.TryWrite(new PhysicsCommand(PhysicsCommandKind.ApplyForce, force.Key, force.Value,
-                    Vector3F.Zero, (float)frameSeconds));
-            }
+            Send(PhysicsCommandKind.SetForce, force.Key, force.Value, Vector3F.Zero);
         }
 
+        foreach (var key in _pushedLastFrame)
+        {
+            if (!_frameForces.ContainsKey(key))
+                Send(PhysicsCommandKind.SetForce, key, Vector3F.Zero, Vector3F.Zero);
+        }
+
+        _pushedLastFrame.Clear();
+        _pushedLastFrame.AddRange(_frameForces.Keys);
         _frameForces.Clear();
     }
 
@@ -344,12 +355,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
         if (steps == 0)
             return 0;
 
-        _batch++;
         DoCommands();
-        ShortenPushes((float)_clock.DroppedSeconds);
         for (var step = 0; step < steps; step++)
         {
-            ApplyPushes((float)_clock.StepSeconds);
+            ApplyForces();
             _world.Step();
         }
 
@@ -357,51 +366,25 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return steps;
     }
 
-    private void ShortenPushes(float droppedSeconds)
+    private void ApplyForces()
     {
-        if (droppedSeconds <= 0)
-            return;
-
-        for (var index = _pushes.Count - 1; index >= 0; index--)
+        _refusedForces.Clear();
+        foreach (var force in _forces)
         {
-            var push = _pushes[index];
-            var left = push.Seconds - droppedSeconds;
-            if (left > 0)
-            {
-                _pushes[index] = new PhysicsPush(push.Key, push.Force, left, push.Batch);
-                continue;
-            }
-
-            _pushes[index] = _pushes[^1];
-            _pushes.RemoveAt(_pushes.Count - 1);
-        }
-    }
-
-    private void ApplyPushes(float stepSeconds)
-    {
-        for (var index = _pushes.Count - 1; index >= 0; index--)
-        {
-            var push = _pushes[index];
-            var share = MathF.Min(push.Seconds, stepSeconds) / stepSeconds;
-            var left = push.Seconds - stepSeconds;
             try
             {
-                _world.ApplyForce(_handles[push.Key], push.Force * share);
+                _world.ApplyForce(_handles[force.Key], force.Value);
             }
             catch (ArgumentException exception)
             {
-                Log.Logger.Warning(exception, "The physics drops a push it cannot apply");
-                left = 0;
+                Log.Logger.Warning(exception, "The physics drops a force it cannot apply");
+                _refusedForces.Add(force.Key);
             }
+        }
 
-            if (left > 0)
-            {
-                _pushes[index] = new PhysicsPush(push.Key, push.Force, left, push.Batch);
-                continue;
-            }
-
-            _pushes[index] = _pushes[^1];
-            _pushes.RemoveAt(_pushes.Count - 1);
+        foreach (var key in _refusedForces)
+        {
+            _forces.Remove(key);
         }
     }
 
@@ -442,8 +425,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
             case PhysicsCommandKind.SetAngularVelocity:
                 _world.SetAngularVelocity(_handles[command.Key], command.Value);
                 break;
-            case PhysicsCommandKind.ApplyForce:
-                AddPush(command);
+            case PhysicsCommandKind.SetForce:
+                if (command.Value == Vector3F.Zero)
+                    _forces.Remove(command.Key);
+                else
+                    _forces[command.Key] = command.Value;
                 break;
             case PhysicsCommandKind.ApplyCentralImpulse:
                 var handle = _handles[command.Key];
@@ -453,23 +439,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
                 _world.ApplyImpulse(_handles[command.Key], command.Value, command.Point);
                 break;
         }
-    }
-
-    private void AddPush(in PhysicsCommand command)
-    {
-        if (command.Seconds <= 0)
-            return;
-
-        for (var index = _pushes.Count - 1; index >= 0; index--)
-        {
-            if (_pushes[index].Key != command.Key || _pushes[index].Batch == _batch)
-                continue;
-
-            _pushes[index] = _pushes[^1];
-            _pushes.RemoveAt(_pushes.Count - 1);
-        }
-
-        _pushes.Add(new PhysicsPush(command.Key, command.Value, command.Seconds, _batch));
     }
 
     private void Publish(int steps)
@@ -559,6 +528,16 @@ public sealed class PhysicsService : GameService, IPhysicsService
                 continue;
 
             link.ParentWorld = parentWorld;
+            if (parent != null && !IsTurnAndEvenScale(parentWorld))
+            {
+                if (!link.WarnedOfParent)
+                    Log.Logger.Warning("The parent of {Entity} got stretched or mirrored; it is no longer stood",
+                        link.Entity.Name);
+
+                link.WarnedOfParent = true;
+                continue;
+            }
+
             PlaceEntity(link, parent != null, parentWorld,
                 Vector3F.Lerp(link.PreviousPosition, link.CurrentPosition, blend),
                 QuaternionF.Slerp(link.PreviousRotation, link.CurrentRotation, blend));

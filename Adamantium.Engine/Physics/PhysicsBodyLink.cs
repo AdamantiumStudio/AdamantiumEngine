@@ -53,6 +53,9 @@ internal sealed class PhysicsBodyLink
     /// <summary>Whether the entity is stood this frame whatever its parent does: its body moved or just stopped.</summary>
     public bool MustPlace { get; set; }
 
+    /// <summary>Whether the log was told the entity's parent got stretched or mirrored, so it is told once.</summary>
+    public bool WarnedOfParent { get; set; }
+
     /// <summary>The parent's world matrix the entity was last stood under; it is stood again when that changes.</summary>
     public Matrix4x4F ParentWorld { get; set; }
 }

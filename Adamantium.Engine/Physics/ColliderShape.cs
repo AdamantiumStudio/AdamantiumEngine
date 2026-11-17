@@ -35,10 +35,12 @@ internal readonly struct ColliderShape
             {
                 var orientation = box.Bounds.Orientation.As<float>();
                 var turn = orientation.LengthSquared() > 0 ? QuaternionF.Normalize(orientation) : QuaternionF.Identity;
-                var mirrored = scale.X < 0 || scale.Y < 0 || scale.Z < 0;
-                if ((!IsEven(size) || mirrored) && !IsAlongAxes(turn))
-                    throw new ArgumentException(
-                        "A box turned on an unevenly scaled or mirrored entity is skewed; no box fits it.");
+                if (!IsEven(size) && !IsAlongAxes(turn))
+                    throw new ArgumentException("A box turned on an unevenly scaled entity is skewed; no box fits it.");
+
+                if (scale.X < 0)
+                    turn = new QuaternionF(turn.X, -turn.Y, -turn.Z, turn.W);
+
 
                 var stretch = new Vector3F(
                     (Vector3F.Transform(Vector3F.UnitX, turn) * size).Length(),
