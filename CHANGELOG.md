@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.DarkMatter`, the physics engine, on its own: no entities, window or GPU, only `Adamantium.Mathematics`.
+  A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
+  is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
+  Bodies are added from a `RigidBodyDescription` - static, kinematic or dynamic; a sphere, capsule or box shape;
+  density or mass, friction, restitution, damping - and named by the `RigidBody` handle they get. Contacts are soft
+  constraints with Coulomb friction, warm-started from the last step and found ahead of time by a distance that grows
+  with speed and spin, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4
+  by default), and no body moves faster than `MaxLinearSpeed` (500 m/s). Bodies at rest fall asleep together with
+  all they touch and wake when struck. `RayCast` and `Overlap` query the world; `GetContactPoints` and `LastStep`
+  (`StepStatistics`) are for instruments; `StepClock` turns the time of frames into fixed steps and a blend for
+  drawing between them. The same scene steps to the same result.
+- `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
+  entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
   near by the middle of each mesh's bounds, premultiplied over what is behind, tested against the depth but not
   writing it, and lit by the same clusters; a two-sided mesh draws its back faces before its front ones. `Mask`: left
@@ -14,7 +27,6 @@ All packages share one version.
   early depth test. `Opaque` ignores the alpha. The alpha is `DiffuseColor.W` times a texture's. A blended surface's
   wireframe is drawn as lines over it. A scene's shape keeps its material's mode and cutoff: `SceneShape.AlphaMode` and
   `AlphaCutoff`, attributes written only when they are not the defaults (opaque, 0.5).
-
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer
   draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
@@ -419,6 +431,9 @@ All packages share one version.
 
 ### Changed
 
+- `Gjk.Intersects` allocates nothing: its simplex lives on the stack.
+- `DynamicAabbTree.Move` also moves a leaf that has grown far larger than its item needs - a fast item come to rest -
+  so it stops overlapping what it no longer reaches.
 - The ground grid is drawn first in the frame, under the whole scene, so see-through surfaces show it behind them
   instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws

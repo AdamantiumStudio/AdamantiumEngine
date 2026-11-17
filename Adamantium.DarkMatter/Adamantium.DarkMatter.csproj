@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Platforms>AnyCPU</Platforms>
+    <Configurations>Debug;Release</Configurations>
+    <LangVersion>latestmajor</LangVersion>
+    <Nullable>disable</Nullable>
+    <TargetFramework>net11.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <Description>DarkMatter, the physics engine of Adamantium: rigid bodies, collisions, contacts with friction, sleeping and queries. Stands on its own - no entities, no window, no GPU.</Description>
+    <PackageTags>adamantium;engine;physics;rigid-body;collision</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Adamantium.DarkMatter.Tests" />
+  </ItemGroup>
+
+</Project>

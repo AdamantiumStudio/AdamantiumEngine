@@ -1,0 +1,74 @@
+using Adamantium.DarkMatter.Shapes;
+
+namespace Adamantium.DarkMatter.Tests;
+
+/// <summary>Builds the reference scenes: a ground and bodies on it, stepped for a while.</summary>
+internal sealed class SceneBuilder
+{
+    public SceneBuilder(PhysicsSettings settings = null)
+    {
+        World = new PhysicsWorld(settings);
+    }
+
+    public IPhysicsWorld World { get; }
+
+    /// <summary>A static slab whose top face lies at Y = 0, or turned by <paramref name="rotation"/> around its top
+    /// face's center.</summary>
+    public RigidBody AddGround(float friction = 0.6f, QuaternionF? rotation = null)
+    {
+        var turn = rotation ?? QuaternionF.Identity;
+        var center = Vector3F.Transform(new Vector3F(0, -1, 0), turn);
+        return World.Add(new RigidBodyDescription
+        {
+            Kind = BodyKind.Static,
+            Shape = new BoxShape(50, 1, 50),
+            Position = center,
+            Rotation = turn,
+            Friction = friction
+        });
+    }
+
+    public RigidBody AddBox(Vector3F position, Vector3F halfExtents, float friction = 0.6f, float restitution = 0,
+        QuaternionF? rotation = null, Vector3F velocity = default)
+    {
+        return World.Add(new RigidBodyDescription
+        {
+            Shape = new BoxShape(halfExtents),
+            Position = position,
+            Rotation = rotation ?? QuaternionF.Identity,
+            Friction = friction,
+            Restitution = restitution,
+            LinearVelocity = velocity
+        });
+    }
+
+    public RigidBody AddSphere(Vector3F position, float radius, float restitution = 0)
+    {
+        return World.Add(new RigidBodyDescription
+        {
+            Shape = new SphereShape(radius),
+            Position = position,
+            Restitution = restitution
+        });
+    }
+
+    public RigidBody AddCapsule(Vector3F position, float halfLength, float radius, QuaternionF? rotation = null)
+    {
+        return World.Add(new RigidBodyDescription
+        {
+            Shape = new CapsuleShape(halfLength, radius),
+            Position = position,
+            Rotation = rotation ?? QuaternionF.Identity
+        });
+    }
+
+    /// <summary>Steps the world for <paramref name="seconds"/>.</summary>
+    public void Run(float seconds)
+    {
+        var steps = (int)(seconds * World.Settings.StepRate + 0.5f);
+        for (var step = 0; step < steps; step++)
+        {
+            World.Step();
+        }
+    }
+}
