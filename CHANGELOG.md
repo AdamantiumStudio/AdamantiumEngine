@@ -501,6 +501,8 @@ All packages share one version.
 
 ### Fixed
 
+- PDF 3D: a view with no background (`BG`) says so - `Pdf3DView.Background` is null - instead of claiming white, so a
+  viewer keeps the background in effect, as Acrobat does; one whose `BG` names no color is white.
 - PDF text: a big glyph no longer pulls the smaller text under it into its line (a page label set large above a line
   read as "iiPage index 2", whichever was drawn first). A glyph joins a line only if its baseline lies within the
   line's height so far, from descent to ascent, or its own height holds the line's baseline (a bigger glyph only close
