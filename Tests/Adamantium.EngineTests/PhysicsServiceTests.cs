@@ -305,6 +305,22 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void ForceOfAFrameShorterThanAStep_IsNotLost()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3F.Zero;
+        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        Play();
+
+        _physics.ApplyForce(box, new Vector3F(1000, 0, 0));
+        Frame(1.0 / 240);
+        Frame(1.0 / 240);
+        Frames(0.1);
+
+        Assert.That(_physics.GetLinearVelocity(box).X, Is.EqualTo(1f / 240).Within(1e-4f));
+    }
+
+    [Test]
     public void MirroredEntity_IsLeftOut()
     {
         UseSteppedPhysics();

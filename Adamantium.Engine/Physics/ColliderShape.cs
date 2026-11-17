@@ -41,7 +41,6 @@ internal readonly struct ColliderShape
                 if (scale.X < 0)
                     turn = new QuaternionF(turn.X, -turn.Y, -turn.Z, turn.W);
 
-
                 var stretch = new Vector3F(
                     (Vector3F.Transform(Vector3F.UnitX, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitY, turn) * size).Length(),
