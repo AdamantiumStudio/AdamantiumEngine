@@ -7,6 +7,17 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.DarkMatter`, the physics engine, on its own: no entities, window or GPU, only `Adamantium.Mathematics`.
+  A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps;
+  bodies are added from a `RigidBodyDescription` - static, kinematic or dynamic; a sphere, capsule or box shape;
+  density or mass, friction, restitution, damping - and named by the `RigidBody` handle they get. Contacts are soft
+  constraints with Coulomb friction, warm-started from the last step and found ahead of time by a distance that grows
+  with speed, so a fast body stops on a thin floor; a pair keeps at most `MaxContactPointsPerPair` points (4 by
+  default). Bodies at rest fall asleep together with all they touch and wake when struck. `RayCast` and `Overlap`
+  query the world; `GetContactPoints` and `LastStep` (`StepStatistics`) are for instruments; `StepClock` turns the
+  time of frames into fixed steps and a blend for drawing between them. The same scene steps to the same result.
+- `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` with a farthest
+  entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer
   draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
@@ -411,6 +422,9 @@ All packages share one version.
 
 ### Changed
 
+- `Gjk.Intersects` allocates nothing: its simplex lives on the stack.
+- `DynamicAabbTree.Move` also moves a leaf that has grown far larger than its item needs - a fast item come to rest -
+  so it stops overlapping what it no longer reaches.
 - `LightManager` and `EntityIcons` read the scene's component index instead of walking its trees: the lights from
   `Components.Of<Light>()` as the outputs settle, new lists only when the lights or their kinds changed; the icons from
   the lights, cameras and markers. A light or an icon under a disabled entity is skipped, as the index skips it. The

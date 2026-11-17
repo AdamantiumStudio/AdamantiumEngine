@@ -16,7 +16,7 @@ public static class Gjk
         where TFirst : IConvexShape<float>
         where TSecond : IConvexShape<float>
     {
-        var simplex = new Vector3F[4];
+        Span<Vector3F> simplex = stackalloc Vector3F[4];
         var count = 1;
         simplex[0] = Support(first, second, Vector3F.UnitX);
         var direction = -simplex[0];
@@ -59,7 +59,7 @@ public static class Gjk
         return first.Support(direction) - second.Support(-direction);
     }
 
-    private static bool Enclose(Vector3F[] simplex, ref int count, ref Vector3F direction)
+    private static bool Enclose(Span<Vector3F> simplex, ref int count, ref Vector3F direction)
     {
         switch (count)
         {
@@ -74,7 +74,7 @@ public static class Gjk
         }
     }
 
-    private static void Line(Vector3F[] simplex, ref int count, ref Vector3F direction)
+    private static void Line(Span<Vector3F> simplex, ref int count, ref Vector3F direction)
     {
         var a = simplex[1];
         var b = simplex[0];
@@ -91,7 +91,7 @@ public static class Gjk
         direction = ao;
     }
 
-    private static void Triangle(Vector3F[] simplex, ref int count, ref Vector3F direction)
+    private static void Triangle(Span<Vector3F> simplex, ref int count, ref Vector3F direction)
     {
         var a = simplex[2];
         var b = simplex[1];
@@ -133,7 +133,7 @@ public static class Gjk
         direction = -abc;
     }
 
-    private static bool Tetrahedron(Vector3F[] simplex, ref int count, ref Vector3F direction)
+    private static bool Tetrahedron(Span<Vector3F> simplex, ref int count, ref Vector3F direction)
     {
         var a = simplex[3];
         var b = simplex[2];
@@ -174,7 +174,7 @@ public static class Gjk
         return Vector3F.Dot(normal, towardOpposite) > 0 ? -normal : normal;
     }
 
-    private static void SetLine(Vector3F[] simplex, ref int count, ref Vector3F direction, Vector3F b, Vector3F a)
+    private static void SetLine(Span<Vector3F> simplex, ref int count, ref Vector3F direction, Vector3F b, Vector3F a)
     {
         simplex[0] = b;
         simplex[1] = a;
@@ -182,7 +182,7 @@ public static class Gjk
         Line(simplex, ref count, ref direction);
     }
 
-    private static void SetTriangle(Vector3F[] simplex, ref int count, ref Vector3F direction, Vector3F c, Vector3F b, Vector3F a)
+    private static void SetTriangle(Span<Vector3F> simplex, ref int count, ref Vector3F direction, Vector3F c, Vector3F b, Vector3F a)
     {
         simplex[0] = c;
         simplex[1] = b;

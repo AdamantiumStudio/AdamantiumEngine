@@ -1,0 +1,45 @@
+namespace Adamantium.DarkMatter;
+
+/// <summary>How a <see cref="PhysicsWorld"/> steps and solves; read once, when the world is made.</summary>
+public sealed class PhysicsSettings
+{
+    /// <summary>The pull every dynamic body feels, in meters per second squared; down along negative Y by default.
+    /// The world's <see cref="PhysicsWorld.Gravity"/> starts at it and can change later.</summary>
+    public Vector3F Gravity { get; init; } = new(0, -9.81f, 0);
+
+    /// <summary>How many steps make a second; every <see cref="PhysicsWorld.Step"/> moves the world by one over this.
+    /// </summary>
+    public int StepRate { get; init; } = 120;
+
+    /// <summary>How many times each step solves the contacts, each over a share of the step; more hold stacks firmer.
+    /// </summary>
+    public int Substeps { get; init; } = 4;
+
+    /// <summary>The most points a contact between two shapes keeps. Four hold any shape still on a flat face; the
+    /// limit is for one pair of shapes, not for a body.</summary>
+    public int MaxContactPointsPerPair { get; init; } = 4;
+
+    /// <summary>How close, in meters, two shapes are found touching before they touch, so a fast body stops at the
+    /// surface instead of sinking in. The distance a body covers in a step is added to it.</summary>
+    public float SpeculativeDistance { get; init; } = 0.02f;
+
+    /// <summary>How stiff contacts are, as the frequency of a spring, in hertz.</summary>
+    public float ContactHertz { get; init; } = 30f;
+
+    /// <summary>How quickly a contact's spring settles; above 1 it does not ring.</summary>
+    public float ContactDampingRatio { get; init; } = 10f;
+
+    /// <summary>The fastest, in meters per second, a contact pushes overlapping bodies apart.</summary>
+    public float MaxPushOutSpeed { get; init; } = 3f;
+
+    /// <summary>The least closing speed, in meters per second, a contact bounces at; slower ones only stop.</summary>
+    public float RestitutionThreshold { get; init; } = 1f;
+
+    /// <summary>The speed, in meters per second, a body counts as still below, its spin measured at its farthest point.
+    /// </summary>
+    public float SleepSpeed { get; init; } = 0.05f;
+
+    /// <summary>How long, in seconds, all bodies touching each other stay still before they fall asleep together.
+    /// </summary>
+    public float TimeToSleep { get; init; } = 0.5f;
+}

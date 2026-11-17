@@ -59,17 +59,24 @@ public sealed class DynamicAabbTree<T>
         Count--;
     }
 
-    /// <summary>Gives the item of <paramref name="handle"/> its new box; gives whether its leaf had to move, which it does
-    /// only once the box leaves the leaf's.</summary>
+    /// <summary>Gives the item of <paramref name="handle"/> its new box; gives whether its leaf had to move: once the box
+    /// leaves the leaf's, or the leaf's grows far larger than the box needs.</summary>
     public bool Move(int handle, in BoundingBox<float>box)
     {
-        if (nodes[handle].Box.Contains(box) == ContainmentType.Contains)
+        var grown = Grown(box);
+        var leaf = nodes[handle].Box;
+        if (leaf.Contains(box) == ContainmentType.Contains)
         {
-            return false;
+            var reach = (grown.Maximum - box.Maximum) * 4f;
+            var largest = new BoundingBox<float>(grown.Minimum - reach, grown.Maximum + reach);
+            if (largest.Contains(leaf) == ContainmentType.Contains)
+            {
+                return false;
+            }
         }
 
         RemoveLeaf(handle);
-        nodes[handle].Box = Grown(box);
+        nodes[handle].Box = grown;
         InsertLeaf(handle);
         return true;
     }
@@ -82,7 +89,12 @@ public sealed class DynamicAabbTree<T>
 
     /// <summary>Adds to <paramref name="into"/> every item whose leaf <paramref name="ray"/> passes through, with how far
     /// along the ray, in lengths of its direction, it enters the leaf's box; 0 when it starts inside.</summary>
-    public void RayCast(in Ray<float> ray, List<(T Item, float Entry)> into)
+    public void RayCast(in Ray<float> ray, List<(T Item, float Entry)> into) =>
+        RayCast(ray, float.PositiveInfinity, into);
+
+    /// <summary>The same as <see cref="RayCast(in Ray{float}, List{ValueTuple{T, float}})"/>, leaving out the boxes the
+    /// ray enters farther than <paramref name="maxEntry"/>.</summary>
+    public void RayCast(in Ray<float> ray, float maxEntry, List<(T Item, float Entry)> into)
     {
         if (root == None)
         {
@@ -94,7 +106,7 @@ public sealed class DynamicAabbTree<T>
         while (count > 0)
         {
             var index = stack[--count];
-            if (!Collision.RayIntersectsBox(ray, nodes[index].Box, out float entry))
+            if (!Collision.RayIntersectsBox(ray, nodes[index].Box, out float entry) || entry > maxEntry)
             {
                 continue;
             }
@@ -102,6 +114,41 @@ public sealed class DynamicAabbTree<T>
             if (nodes[index].IsLeaf)
             {
                 into.Add((nodes[index].Item, entry));
+                continue;
+            }
+
+            if (count + 2 > stack.Length)
+            {
+                Array.Resize(ref stack, stack.Length * 2);
+            }
+
+            stack[count++] = nodes[index].Child1;
+            stack[count++] = nodes[index].Child2;
+        }
+    }
+
+    /// <summary>Adds to <paramref name="into"/> every item whose leaf box overlaps <paramref name="box"/>, faces
+    /// touching included.</summary>
+    public void Query(in BoundingBox<float> box, List<T> into)
+    {
+        if (root == None)
+        {
+            return;
+        }
+
+        var count = 0;
+        stack[count++] = root;
+        while (count > 0)
+        {
+            var index = stack[--count];
+            if (!Collision.BoxIntersectsBox(nodes[index].Box, box))
+            {
+                continue;
+            }
+
+            if (nodes[index].IsLeaf)
+            {
+                into.Add(nodes[index].Item);
                 continue;
             }
 

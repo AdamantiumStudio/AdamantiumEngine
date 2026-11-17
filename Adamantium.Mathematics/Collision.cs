@@ -120,6 +120,16 @@ public static class Collision
         return start + along * T.Clamp(Vector3<T>.Dot(point - start, along) / along.LengthSquared(), T.Zero, largest);
     }
 
+    /// <summary>The nearest points of the segments from <paramref name="start1"/> to <paramref name="end1"/> and from
+    /// <paramref name="start2"/> to <paramref name="end2"/>, one on each.</summary>
+    public static void FindClosestPointsOnSegments<T>(Vector3<T> start1, Vector3<T> end1, Vector3<T> start2,
+        Vector3<T> end2, out Vector3<T> point1, out Vector3<T> point2) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var closest = ClosestPoints(start1, end1 - start1, T.One, start2, end2 - start2);
+        point1 = closest.First;
+        point2 = closest.Second;
+    }
+
     /// <summary>How far <paramref name="point"/> lies in front of <paramref name="plane"/>, negative behind it; the
     /// plane's normal is taken to be of length one.</summary>
     public static T DistancePlanePoint<T>(Plane<T> plane, Vector3<T> point) where T : unmanaged, IFloatingPointIeee754<T> =>

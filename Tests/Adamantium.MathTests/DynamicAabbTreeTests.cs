@@ -61,6 +61,48 @@ public class DynamicAabbTreeTests
         Assert.That(tree.Count, Is.EqualTo(handles.Count));
     }
 
+    /// <summary>Whatever was added, moved and removed, a box finds exactly the items whose leaf boxes it overlaps.
+    /// </summary>
+    [Test]
+    public void ABox_FindsWhatALookAtEveryLeafFinds()
+    {
+        var random = new Random(13);
+        var tree = new DynamicAabbTree<int>();
+        var handles = new Dictionary<int, int>();
+        for (var item = 0; item < 300; item++)
+        {
+            handles[item] = tree.Add(RandomBox(random), item);
+        }
+
+        for (var step = 0; step < 600; step++)
+        {
+            var item = random.Next(300);
+            if (handles.Remove(item, out var handle))
+                tree.Remove(handle);
+            else
+                handles[item] = tree.Add(RandomBox(random), item);
+        }
+
+        var found = new List<int>();
+        for (var query = 0; query < 200; query++)
+        {
+            var box = RandomBox(random);
+            found.Clear();
+            tree.Query(box, found);
+
+            var expected = new List<int>();
+            foreach (var pair in handles)
+            {
+                if (Collision.BoxIntersectsBox(tree.BoxOf(pair.Value), box))
+                    expected.Add(pair.Key);
+            }
+
+            found.Sort();
+            expected.Sort();
+            Assert.That(found, Is.EqualTo(expected));
+        }
+    }
+
     /// <summary>Items added in a row along a line - the order that turns a tree without rotations into a list - still
     /// make a tree of logarithmic height.</summary>
     [Test]
@@ -88,6 +130,19 @@ public class DynamicAabbTreeTests
         var far = new BoundingBox<float>(new Vector3F(5), new Vector3F(6));
         Assert.That(tree.Move(handle, far), Is.True);
         Assert.That(tree.BoxOf(handle).Contains(far), Is.EqualTo(ContainmentType.Contains));
+    }
+
+    /// <summary>An item that shrinks far below its leaf - a fast mover come to rest - gets a leaf fitting it again.
+    /// </summary>
+    [Test]
+    public void ALeaf_ShrinksOnceItsItemNeedsFarLess()
+    {
+        var tree = new DynamicAabbTree<string>();
+        var handle = tree.Add(new BoundingBox<float>(Vector3F.Zero, new Vector3F(10, 1, 1)), "a");
+
+        var small = new BoundingBox<float>(Vector3F.Zero, Vector3F.One);
+        Assert.That(tree.Move(handle, small), Is.True);
+        Assert.That(tree.BoxOf(handle).Maximum.X, Is.LessThan(2));
     }
 
     private static BoundingBox<float> RandomBox(Random random)
