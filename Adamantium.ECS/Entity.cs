@@ -148,8 +148,8 @@ namespace Adamantium.ECS
         public void NotifyUpdated(TimeSpan duration) => World?.Changed(new UniverseChangedEventArgs(duration));
 
         // A value of the entity or of a component changed, a component came or went, or its place did: its scene's changes
-        // note it, and the world draws it again. The scene found once: this runs on every value set.
-        internal void NoteChangedAndRedraw()
+        // and its world are told. The scene found once: this runs on every value set.
+        internal void NoteChanged()
         {
             if (Scene is not { } own)
                 return;
@@ -161,7 +161,7 @@ namespace Adamantium.ECS
         protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
         {
             base.RaisePropertyChanged(propertyName);
-            NoteChangedAndRedraw();
+            NoteChanged();
         }
 
         private void OnOwnerChanged(Entity oldOwner, Entity newOwner)
@@ -370,7 +370,7 @@ namespace Adamantium.ECS
         internal void OnComponentChanged(IComponent oldComponent, IComponent newComponent, ComponentChangedAction action)
         {
             ComponentsChanged?.Invoke(this, new EntityComponentEventArgs(this, oldComponent, newComponent, action));
-            NoteChangedAndRedraw();
+            NoteChanged();
         }
 
         public event EventHandler<EntityComponentEventArgs> ComponentsChanged;
