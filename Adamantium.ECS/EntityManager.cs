@@ -453,6 +453,7 @@ public sealed class EntityManager
             SetCameraProjectionType(root, projectionType);
             entitiesToAdd.Add(root);
             root.SetScene(scene);
+            scene.Changes.Add(root);
         }
 
         root.NotifyUpdated();
@@ -530,6 +531,7 @@ public sealed class EntityManager
             }
         }
 
+        entity.Scene?.Changes.Remove(entity);
         entity.NotifyUpdated();
     }
 

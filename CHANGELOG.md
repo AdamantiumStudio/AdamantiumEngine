@@ -10,6 +10,12 @@ All packages share one version.
 - `IGameService.Edited` (`GameService.OnEdited`), told by `GameRun.Edited`: a component of the scene played was changed
   by the editor, playing or paused - the service brings up to date what it makes of it, so a change shows while the
   game stands. For the editor to follow a game component's property, it must set through `SetProperty`.
+- A scene's state kept and put back: `SceneSnapshot.Take(scene)` keeps what the scene file holds (`SceneCapture`) and
+  how each entity stands - placed, named, enabled, shown, under which entity and where; `Restore` puts back only what
+  changed since, as `Scene.Changes` recorded it: entities touched (a value of theirs or of their components changed,
+  through `NotifyUpdated`), joined and taken out. Joined ones go unless kept, those taken out come back as the same
+  objects, those touched get their state and their game components back through `SceneBuilder`, which builds and puts
+  back with one code. The views' own cameras are left out. What Play in the editor keeps instead of a copy of the scene.
 
 - Orbiting a camera about a point: `Camera.Orbit(pivot, pitch, yaw, style)` turns a free camera so the pivot stays where
   it is on the screen - `CameraOrbitStyle.Turntable` keeps the horizon level and stops short of the poles, as the free
