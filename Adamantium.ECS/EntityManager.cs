@@ -596,7 +596,7 @@ public sealed class EntityManager
             _entitiesPlacedAt[entity] = index;
         }
 
-        entity.NotifyUpdated();
+        entity.NoteChangedAndRedraw();
     }
 
     private void PlaceAtInternal(Entity entity, int index)

@@ -50,7 +50,11 @@ namespace Adamantium.ECS.Components
         protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
         {
             base.RaisePropertyChanged(propertyName);
-            owner?.NotifyUpdated();
+            // Whether the inspector shows its section open is not the scene's.
+            if (propertyName == nameof(IsExpanded))
+                owner?.NotifyUpdated();
+            else
+                owner?.NoteChangedAndRedraw();
         }
 
 

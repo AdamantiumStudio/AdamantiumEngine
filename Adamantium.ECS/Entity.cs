@@ -137,30 +137,35 @@ namespace Adamantium.ECS
         // Which recording of its scene's changes noted it changed last.
         internal int ChangedDuringRecording { get; set; }
 
-        /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame; the scene's
-        /// <see cref="Scene.Changes"/> note the entity changed.</summary>
-        public void NotifyUpdated() => NotifyChanged(UniverseChangedEventArgs.OneFrame);
+        /// <summary>Tells <see cref="World"/> that what it shows has changed, for one frame.</summary>
+        public void NotifyUpdated() => World?.Changed(UniverseChangedEventArgs.OneFrame);
 
         /// <summary>Tells <see cref="World"/> that what it shows has changed, for the next <paramref name="frames"/>
         /// frames.</summary>
-        public void NotifyUpdated(int frames) => NotifyChanged(new UniverseChangedEventArgs(frames));
+        public void NotifyUpdated(int frames) => World?.Changed(new UniverseChangedEventArgs(frames));
 
         /// <summary>Tells <see cref="World"/> that what it shows keeps changing for <paramref name="duration"/>.</summary>
-        public void NotifyUpdated(TimeSpan duration) => NotifyChanged(new UniverseChangedEventArgs(duration));
+        public void NotifyUpdated(TimeSpan duration) => World?.Changed(new UniverseChangedEventArgs(duration));
 
-        private void NotifyChanged(UniverseChangedEventArgs args)
+        // Something the scene keeps changed - a value of the entity or of a component, its components, its place: its
+        // scene's changes note it, and the world draws it again. The scene found once: this runs on every value set.
+        internal void NoteChangedAndRedraw()
         {
             if (Scene is not { } own)
                 return;
 
             own.Changes.NoteChanged(this);
-            own.World?.Changed(args);
+            own.World?.Changed(UniverseChangedEventArgs.OneFrame);
         }
 
+        // Its name, shown and enabled are the scene's; selected and expanded are the editor's.
         protected override void RaisePropertyChanged([CallerMemberName] string propertyName = "")
         {
             base.RaisePropertyChanged(propertyName);
-            NotifyUpdated();
+            if (propertyName is nameof(Name) or nameof(Visible) or nameof(IsEnabled))
+                NoteChangedAndRedraw();
+            else
+                NotifyUpdated();
         }
 
         private void OnOwnerChanged(Entity oldOwner, Entity newOwner)
@@ -239,13 +244,14 @@ namespace Adamantium.ECS
         {
             lock (componentCollection)
             {
+                // One refused - a second of its kind - is not given this entity as its owner.
+                if (ContainsComponent(component.GetType()) || componentCollection.Contains(component))
+                    return;
+
                 if (component is IEntityOwner owned)
                 {
                     owned.Owner = this;
                 }
-
-                if (ContainsComponent(component.GetType()) || componentCollection.Contains(component))
-                    return;
 
                 var customAttribute = component.GetType().GetCustomAttributes(typeof(RequiredComponentAttribute), true);
                 foreach (RequiredComponentAttribute attribute in customAttribute)
@@ -368,7 +374,7 @@ namespace Adamantium.ECS
         internal void OnComponentChanged(IComponent oldComponent, IComponent newComponent, ComponentChangedAction action)
         {
             ComponentsChanged?.Invoke(this, new EntityComponentEventArgs(this, oldComponent, newComponent, action));
-            NotifyUpdated();
+            NoteChangedAndRedraw();
         }
 
         public event EventHandler<EntityComponentEventArgs> ComponentsChanged;

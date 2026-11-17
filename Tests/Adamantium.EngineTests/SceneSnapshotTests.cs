@@ -184,6 +184,84 @@ public class SceneSnapshotTests
         });
     }
 
+    // Not values but structure: a game component taken off, an entity moved among its siblings - both go back.
+    [Test]
+    public void AComponentTakenOff_AndAPlaceAmongSiblings_GoBack()
+    {
+        var snapshot = SceneSnapshot.Take(_scene);
+        var order = _scene.RootEntities.ToList();
+        _body.RemoveComponent(_body.GetComponent<Pushed>());
+        _world.EntityManager.PlaceAt(_lamp, 0);
+        _world.ForceUpdate();
+
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_body.GetComponent<Pushed>()?.Speed, Is.EqualTo(2));
+            Assert.That(_scene.RootEntities, Is.EqualTo(order));
+        });
+    }
+
+    // Two of an entity's children moved, one past the other: all its children stand as they stood.
+    [Test]
+    public void ChildrenMovedAround_StandAsTheyStood()
+    {
+        var first = new Entity(_group, "First");
+        var second = new Entity(_group, "Second");
+        _world.ForceUpdate();
+        var order = _group.Dependencies.ToList();
+        var snapshot = SceneSnapshot.Take(_scene);
+        _world.EntityManager.PlaceAt(second, 0);
+        _world.ForceUpdate();
+        _world.EntityManager.PlaceAt(_body, 2);
+        _world.ForceUpdate();
+
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.That(_group.Dependencies, Is.EqualTo(order));
+    }
+
+    // Taken out, then changed while out, an entity comes back with its state as it was.
+    [Test]
+    public void AnEntityChangedWhileOut_ComesBackAsItWas()
+    {
+        var snapshot = SceneSnapshot.Take(_scene);
+        _world.EntityManager.RemoveEntity(_lamp);
+        _world.ForceUpdate();
+        _lamp.Visible = false;
+        _lamp.Transform.Position = new Vector3<double>(7, 7, 7);
+
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_lamp.Visible, Is.True);
+            Assert.That(_lamp.Transform.Position, Is.EqualTo(new Vector3<double>(0, 0, 0)));
+        });
+    }
+
+    // Selected, or drawn again, an entity has not changed; one that joined is among those joined, not changed.
+    [Test]
+    public void ASelectionOrARedraw_IsNotAChange()
+    {
+        SceneSnapshot.Take(_scene);
+        var spawned = new Entity(null, "Spawned");
+
+        _group.IsSelected = true;
+        _lamp.NotifyUpdated();
+        _world.EntityManager.AddEntity(spawned, _scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_scene.Changes.Changed, Is.Empty);
+            Assert.That(_scene.Changes.Added, Is.EquivalentTo(new[] { spawned }));
+        });
+    }
+
     [Test]
     public void AfterRestoring_NothingIsRecorded()
     {
