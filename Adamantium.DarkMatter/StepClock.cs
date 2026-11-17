@@ -26,6 +26,10 @@ public sealed class StepClock
     /// before the next.</summary>
     public float Blend => (float)(_accumulated / StepSeconds);
 
+    /// <summary>How much time the last <see cref="Advance"/> dropped for falling behind, in seconds; zero mostly.
+    /// </summary>
+    public double DroppedSeconds { get; private set; }
+
     /// <summary>Adds <paramref name="elapsedSeconds"/> and gives how many steps are due.</summary>
     public int Advance(double elapsedSeconds)
     {
@@ -34,9 +38,11 @@ public sealed class StepClock
                 "The time passed must be a finite number of seconds, not negative.");
 
         _accumulated += elapsedSeconds;
+        DroppedSeconds = 0;
         var steps = (int)Math.Min(Math.Floor(_accumulated / StepSeconds), int.MaxValue);
         if (steps > MaxStepsPerAdvance)
         {
+            DroppedSeconds = _accumulated - MaxStepsPerAdvance * StepSeconds;
             _accumulated = 0;
             return MaxStepsPerAdvance;
         }

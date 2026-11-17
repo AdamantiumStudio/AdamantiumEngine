@@ -18,7 +18,7 @@ All packages share one version.
   by default), and no body moves faster than `MaxLinearSpeed` (500 m/s). Bodies at rest fall asleep together with
   all they touch and wake when struck. `RayCast` and `Overlap` query the world; `GetContactPoints` and `LastStep`
   (`StepStatistics`) are for instruments; `StepClock` turns the time of frames into fixed steps and a blend for
-  drawing between them. The same scene steps to the same result.
+  drawing between them, saying what it dropped when falling behind. The same scene steps to the same result.
 - Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
   friction and the rest - colliding with the shape of its box, sphere or capsule collider, scaled as the entity is
   (a convex hull collider has no physics yet, nor a mirrored entity: they are left out, said in the log).

@@ -118,7 +118,13 @@ public sealed class PhysicsService : GameService, IPhysicsService
         RequireFinite(force, nameof(force));
         var key = FindDynamicKey(entity);
         var total = _frameForces.TryGetValue(key, out var earlier) ? earlier + force : force;
-        RequireFinite(total, nameof(force));
+        if (!IsFinite(total))
+        {
+            Log.Logger.Warning("The pushes of {Entity} this frame add up past any number; the last is dropped",
+                entity.Name);
+            return;
+        }
+
         _frameForces[key] = total;
     }
 
@@ -224,12 +230,13 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         var parentWorld = entity.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
         var world = entity.Transform.GetWorldMatrixF();
-        var parentMirrored = body.Kind != BodyKind.Static && parentWorld.Determinant() <= 0;
-        if (parentMirrored || world.Determinant() <= 0 || IsSkewed(world)
+        var moves = body.Kind != BodyKind.Static;
+        var cannotStand = moves && (world.Determinant() <= 0 || !IsTurnAndEvenScale(parentWorld));
+        if (cannotStand || world.Determinant() == 0 || IsSkewed(world)
             || !world.Decompose(out var scale, out var rotation, out var translation))
         {
-            Log.Logger.Warning("{Entity} or its parent is flattened, mirrored or skewed; the physics leaves it",
-                entity.Name);
+            Log.Logger.Warning("{Entity} or its parent is flattened, mirrored, skewed or stretched unevenly; "
+                               + "the physics leaves it", entity.Name);
             return;
         }
 
@@ -286,11 +293,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
     {
         if (frameSeconds > 0)
         {
-            var seconds = (float)Math.Min(frameSeconds, MaxStepsPerAdvance * _clock.StepSeconds);
             foreach (var force in _frameForces)
             {
                 _commands.Writer.TryWrite(new PhysicsCommand(PhysicsCommandKind.ApplyForce, force.Key, force.Value,
-                    Vector3F.Zero, seconds));
+                    Vector3F.Zero, (float)frameSeconds));
             }
         }
 
@@ -340,6 +346,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         _batch++;
         DoCommands();
+        ShortenPushes((float)_clock.DroppedSeconds);
         for (var step = 0; step < steps; step++)
         {
             ApplyPushes((float)_clock.StepSeconds);
@@ -348,6 +355,26 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         Publish(steps);
         return steps;
+    }
+
+    private void ShortenPushes(float droppedSeconds)
+    {
+        if (droppedSeconds <= 0)
+            return;
+
+        for (var index = _pushes.Count - 1; index >= 0; index--)
+        {
+            var push = _pushes[index];
+            var left = push.Seconds - droppedSeconds;
+            if (left > 0)
+            {
+                _pushes[index] = new PhysicsPush(push.Key, push.Force, left, push.Batch);
+                continue;
+            }
+
+            _pushes[index] = _pushes[^1];
+            _pushes.RemoveAt(_pushes.Count - 1);
+        }
     }
 
     private void ApplyPushes(float stepSeconds)
@@ -623,6 +650,17 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return !IsSquare(axisX, axisY) || !IsSquare(axisY, axisZ) || !IsSquare(axisZ, axisX);
     }
 
+    private static bool IsTurnAndEvenScale(in Matrix4x4F world)
+    {
+        if (world.Determinant() <= 0 || IsSkewed(world))
+            return false;
+
+        var lengthX = Vector3F.TransformNormal(Vector3F.UnitX, world).Length();
+        var lengthY = Vector3F.TransformNormal(Vector3F.UnitY, world).Length();
+        var lengthZ = Vector3F.TransformNormal(Vector3F.UnitZ, world).Length();
+        return MathF.Abs(lengthX - lengthY) <= 1e-4f * lengthX && MathF.Abs(lengthX - lengthZ) <= 1e-4f * lengthX;
+    }
+
     private static bool IsSquare(Vector3F first, Vector3F second) =>
         MathF.Abs(Vector3F.Dot(first, second)) <= 1e-4f * first.Length() * second.Length();
 
@@ -641,7 +679,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
     private static void RequireFinite(Vector3F vector, string parameterName)
     {
-        if (!float.IsFinite(vector.X) || !float.IsFinite(vector.Y) || !float.IsFinite(vector.Z))
+        if (!IsFinite(vector))
             throw new ArgumentOutOfRangeException(parameterName, vector, "The vector must be finite.");
     }
+
+    private static bool IsFinite(Vector3F vector) =>
+        float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 }

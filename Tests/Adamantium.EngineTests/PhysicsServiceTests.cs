@@ -246,6 +246,45 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void GroundUnderAMirroredParent_StillHoldsWhatFalls()
+    {
+        UseSteppedPhysics();
+        var level = new Entity(null, "Mirrored level");
+        level.Transform.ScaleFactor = new Vector3F(-1, 1, 1);
+        _world.EntityManager.AddEntity(level, _world.MainScene);
+        var ground = new Entity(level, "Ground");
+        ground.Transform.Position = new Vector3<double>(0, 1, 0);
+        ground.AddComponent(new BoxCollider
+        {
+            Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(20, 1, 20), Quaternion<double>.Identity)
+        });
+        ground.AddComponent(new RigidBody { Kind = BodyKind.Static });
+        Settle();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+
+        Play();
+        Frames(3);
+
+        Assert.That(_physics.Moves(ground), Is.True);
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    [Test]
+    public void MovingBodyUnderAStretchedParent_IsLeftOut()
+    {
+        UseSteppedPhysics();
+        var parent = new Entity(null, "Stretched");
+        parent.Transform.ScaleFactor = new Vector3F(4, 1, 1);
+        _world.EntityManager.AddEntity(parent, _world.MainScene);
+        var box = MakeBox("Upright", Vector3<double>.Zero, 0.5, parent);
+        Settle();
+
+        Play();
+
+        Assert.That(_physics.Moves(box), Is.False);
+    }
+
+    [Test]
     public void MirroredEntity_IsLeftOut()
     {
         UseSteppedPhysics();
