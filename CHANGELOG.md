@@ -42,6 +42,9 @@ All packages share one version.
   draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
   underlined, in its color, black when it names none; nothing for a border of no width or no color. How a link answers
   a press: `PdfLink.Highlight` (`PdfLinkHighlight`: invert, the default; none; outline; push).
+- PDF: a beveled or inset link border is drawn with a two-tone band inside its stroke - lit top and left, shaded
+  bottom and right for a beveled one, both darker for an inset one. `PdfAnnotation.DownAppearance`: how an annotation
+  looks while pressed (`AP` `D`), the one of its state. `PdfLink.Annotation`: the annotation a link is.
 - `IGameService.ComponentEdited` (`GameService.OnComponentEdited`), told by `GameRun.TellComponentEdited`: a component
   of the scene played was changed by the editor, playing or paused - the service brings up to date what it makes of
   it, so a change shows while the game stands. For the editor to follow a game component's property, it must set through `SetProperty`.

@@ -13,6 +13,7 @@ internal static class PdfAnnotationKeys
     public const string Flags = "F";
     public const string Appearance = "AP";
     public const string Normal = "N";
+    public const string Down = "D";
     public const string Color = "C";
     public const string InteriorColor = "IC";
     public const string Border = "BS";

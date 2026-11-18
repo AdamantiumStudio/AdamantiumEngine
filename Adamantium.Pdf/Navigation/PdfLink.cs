@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Adamantium.Pdf.Annotations;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Text;
 
@@ -7,13 +8,18 @@ namespace Adamantium.Pdf.Navigation;
 /// <summary>A link on a page (ISO 32000-2, 12.5.6.5): the area that follows it, and what following it does.</summary>
 public sealed class PdfLink
 {
-    internal PdfLink(PdfRectangle rect, IReadOnlyList<PdfQuad> quads, PdfAction action, PdfLinkHighlight highlight)
+    internal PdfLink(PdfAnnotation annotation, IReadOnlyList<PdfQuad> quads, PdfAction action,
+        PdfLinkHighlight highlight)
     {
-        Rect = rect;
+        Annotation = annotation;
+        Rect = annotation.Rect;
         Quads = quads;
         Action = action;
         Highlight = highlight;
     }
+
+    /// <summary>The link annotation it is - its appearances, its border.</summary>
+    public PdfAnnotation Annotation { get; }
 
     /// <summary>How it answers being pressed (<c>H</c>).</summary>
     public PdfLinkHighlight Highlight { get; }

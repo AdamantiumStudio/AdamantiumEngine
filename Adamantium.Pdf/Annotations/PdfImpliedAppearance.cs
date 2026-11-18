@@ -13,8 +13,8 @@ internal static class PdfImpliedAppearance
 {
     private const double Kappa = 0.5523;
 
-    /// <summary>A link's border: its rectangle - or each of its quadrilaterals (<c>QuadPoints</c>) when it gives them -
-    /// stroked, or underlined, in its color; null when it would show nothing.</summary>
+    /// <summary>A link's border round its rectangle or each quadrilateral, in its color - beveled and inset ones with a
+    /// two-tone band inside; null when it would show nothing.</summary>
     public static PdfStream LinkBorder(PdfRectangle rect, PdfAnnotationBorder border, IReadOnlyList<double> color,
         double[] quadPoints)
     {
@@ -55,25 +55,91 @@ internal static class PdfImpliedAppearance
                 }
             }
 
-            content.Append("S Q");
+            content.Append("S ");
         }
         else if (border.Style == PdfBorderStyle.Underline)
         {
             content.Append(Number(0)).Append(' ').Append(Number(half)).Append(" m ");
-            content.Append(Number(width)).Append(' ').Append(Number(half)).Append(" l S Q");
+            content.Append(Number(width)).Append(' ').Append(Number(half)).Append(" l S ");
         }
         else
         {
             Box(content, half, half, width - border.Width, height - border.Width, Math.Max(0, border.CornerX - half),
                 Math.Max(0, border.CornerY - half));
-            content.Append(" S Q");
+            content.Append(" S ");
         }
+
+        if (border.Style is PdfBorderStyle.Beveled or PdfBorderStyle.Inset)
+        {
+            content.Append(Bevel(rect, border, quadPoints));
+        }
+
+        content.Append('Q');
 
         var dictionary = new PdfDictionary();
         dictionary.Set(PdfKeys.Type, new PdfName(PdfKeys.XObject));
         dictionary.Set(PdfKeys.Subtype, new PdfName(PdfKeys.Form));
         dictionary.Set(PdfKeys.BBox, new PdfArray([new PdfReal(0), new PdfReal(0), new PdfReal(width), new PdfReal(height)]));
         return new PdfStream(dictionary, Encoding.ASCII.GetBytes(content.ToString()));
+    }
+
+    private static string Bevel(PdfRectangle rect, PdfAnnotationBorder border, double[] quadPoints)
+    {
+        var areas = new List<PdfPoint[]>();
+        if (quadPoints is { Length: >= 8 })
+        {
+            for (var start = 0; start + 8 <= quadPoints.Length; start += 8)
+            {
+                areas.Add(Corners(quadPoints, start, rect));
+            }
+        }
+        else
+        {
+            areas.Add([new PdfPoint(0, 0), new PdfPoint(rect.Width, 0), new PdfPoint(rect.Width, rect.Height),
+                new PdfPoint(0, rect.Height)]);
+        }
+
+        var lit = new StringBuilder();
+        var shaded = new StringBuilder();
+        foreach (var area in areas)
+        {
+            var outer = Inset(area, border.Width);
+            var inner = Inset(area, border.Width * 2);
+            var top = 0;
+            var left = 0;
+            for (var side = 1; side < 4; side++)
+            {
+                if (Middle(area, side).Y > Middle(area, top).Y)
+                {
+                    top = side;
+                }
+
+                if (Middle(area, side).X < Middle(area, left).X)
+                {
+                    left = side;
+                }
+            }
+
+            for (var side = 0; side < 4; side++)
+            {
+                var band = side == top || side == left ? lit : shaded;
+                var next = (side + 1) % 4;
+                Move(band, outer[side].X, outer[side].Y);
+                Line(band, outer[next].X, outer[next].Y);
+                Line(band, inner[next].X, inner[next].Y);
+                Line(band, inner[side].X, inner[side].Y);
+                band.Append("h ");
+            }
+        }
+
+        var raised = border.Style == PdfBorderStyle.Beveled;
+        return (raised ? "1" : "0.5") + " g " + lit + "f " + (raised ? "0.5" : "0.75") + " g " + shaded + "f ";
+    }
+
+    private static PdfPoint Middle(PdfPoint[] area, int side)
+    {
+        var next = area[(side + 1) % 4];
+        return new PdfPoint((area[side].X + next.X) / 2, (area[side].Y + next.Y) / 2);
     }
 
     private static PdfPoint[] Corners(double[] points, int start, PdfRectangle rect)
