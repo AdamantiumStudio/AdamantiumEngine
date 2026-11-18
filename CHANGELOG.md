@@ -41,7 +41,8 @@ All packages share one version.
   hull and a cylinder touch any shape through GJK while apart, EPA once overlapping, and the faces turned toward each
   other clipped one by the other, so they rest on a face with all its corners; their edges are rounded within them by
   a `ConvexRadius` (`CollisionShape.DefaultConvexRadius`, 5 cm, less on a small or uneven shape), so they roll off an
-  edge smoothly. A
+  edge smoothly. A cylinder or a capsule lying along another, or along an edge of a box or a hull, touches along a
+  line - at both ends of where they overlap - not at one point it could turn about. A
   body's pose is that of its origin, the point its shape is given around; it spins about its center of mass
   (`GetCenterOfMass`, and `GetLocalCenterOfMass` in its own axes). Contacts are soft constraints with Coulomb friction, warm-started from the last step and
   found ahead of time by a distance that grows with speed and spin, so a fast body stops on a thin floor; a pair keeps
