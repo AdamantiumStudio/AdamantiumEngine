@@ -1,6 +1,6 @@
 namespace Adamantium.Pdf.Text;
 
-/// <summary>How <see cref="PdfPageText.Find"/> compares text.</summary>
+/// <summary>How <see cref="PdfPageText.Find"/> and <see cref="PdfTextMatching"/> compare text.</summary>
 public sealed class PdfTextSearchOptions
 {
     public static PdfTextSearchOptions Default { get; } = new();
