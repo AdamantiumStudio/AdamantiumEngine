@@ -12,6 +12,7 @@ using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
+using Adamantium.Engine.Physics;
 using Adamantium.Mathematics;
 using Serilog;
 
@@ -255,75 +256,13 @@ public class EntityImportTemplate : IEntityTemplate
 
             if (edits.Collider is { } kind)
             {
-                SetCollider(part, kind);
+                PhysicsParts.SetCollider(part, kind);
             }
 
-            if (edits.Body is { } body)
+            if (edits.Body is { } body && !PhysicsParts.SetBody(part, body))
             {
-                if (!IsSound(body))
-                {
-                    Log.Logger.Warning("The body {Model} keeps for {Part} is not one this engine reads; it is left out",
-                        model.Name, path);
-                    continue;
-                }
-
-                part.RemoveComponent<RigidBody>();
-                part.AddComponent(new RigidBody
-                {
-                    Kind = body.Kind,
-                    Mass = body.Mass,
-                    Density = body.Density,
-                    Friction = body.Friction,
-                    Restitution = body.Restitution,
-                    LinearDamping = body.LinearDamping,
-                    AngularDamping = body.AngularDamping,
-                    GravityScale = body.GravityScale,
-                    CanSleep = body.CanSleep
-                });
+                Log.Logger.Warning("The body {Model} keeps for {Part} is left out", model.Name, path);
             }
-        }
-    }
-
-    // A kind this engine knows, and amounts that are finite and not negative; gravity may pull either way.
-    private static bool IsSound(BodyEdits body) =>
-        Enum.IsDefined(body.Kind) && IsAmount(body.Mass) && IsAmount(body.Density) && IsAmount(body.Friction)
-        && IsAmount(body.Restitution) && IsAmount(body.LinearDamping) && IsAmount(body.AngularDamping)
-        && float.IsFinite(body.GravityScale);
-
-    private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
-
-    private static void SetCollider(Entity part, ColliderKind kind)
-    {
-        if (!Enum.IsDefined(kind))
-        {
-            Log.Logger.Warning("{Part} is given a collider this engine does not know, {Kind}; it keeps what it has",
-                part.Name, kind);
-            return;
-        }
-
-        if (kind != ColliderKind.None && part.GetComponent<MeshData>() is not { Mesh.HasPoints: true })
-        {
-            Log.Logger.Warning("{Part} has no mesh to fit a collider to; it keeps what it has", part.Name);
-            return;
-        }
-
-        foreach (var collider in part.GetComponents<Collider>())
-        {
-            part.RemoveComponent(collider);
-        }
-
-        Collider fitted = kind switch
-        {
-            ColliderKind.Box => new BoxCollider(),
-            ColliderKind.Sphere => new SphereCollider(),
-            ColliderKind.Capsule => new CapsuleCollider(),
-            ColliderKind.Cylinder => new CylinderCollider(),
-            ColliderKind.ConvexHull => new ConvexHullCollider(),
-            _ => null
-        };
-        if (fitted != null)
-        {
-            part.AddComponent(fitted);
         }
     }
 

@@ -1,8 +1,10 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
+using Adamantium.ECS.Components;
 using Adamantium.Engine.Scenes;
 using Adamantium.Graphics.Core.Models;
 using CameraProjectionType = Adamantium.ECS.Components.CameraProjectionType;
@@ -126,6 +128,55 @@ public class SceneFileTests
             Assert.That(back.Models[0].IsEnabled, Is.True);
             Assert.That(Text(scene), Does.Contain("Enabled=\"false\""));
             Assert.That(Text(Sample()), Does.Not.Contain("Enabled"));
+        });
+    }
+
+    // A body writes only what is not a new body's own, a collider its kind by name; an entry without them writes neither.
+    [Test]
+    public void ABodyAndACollider_AreReadBack_WritingOnlyWhatIsNotByDefault()
+    {
+        var scene = Sample();
+        scene.Shapes[0].Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Mass = 2.5f, Friction = 0.2f };
+        scene.Shapes[0].Collider = new SceneCollider { Kind = ColliderKind.Sphere };
+        scene.Markers[0].Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Static };
+        scene.Markers[0].Collider = new SceneCollider { Kind = ColliderKind.None };
+
+        var back = WriteAndRead(scene);
+        var text = Text(scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Shapes[0].Body.Mass, Is.EqualTo(2.5f));
+            Assert.That(back.Shapes[0].Body.Friction, Is.EqualTo(0.2f));
+            Assert.That(back.Shapes[0].Body.Density, Is.EqualTo(new RigidBody().Density), "not written, read as a new body's");
+            Assert.That(back.Shapes[0].Collider.Kind, Is.EqualTo(ColliderKind.Sphere));
+            Assert.That(back.Markers[0].Body.Kind, Is.EqualTo(Adamantium.DarkMatter.BodyKind.Static));
+            Assert.That(back.Markers[0].Collider.Kind, Is.EqualTo(ColliderKind.None));
+            Assert.That(back.Models[0].Body, Is.Null);
+            Assert.That(back.Models[0].Collider, Is.Null);
+            Assert.That(text, Does.Contain("<Body Mass=\"2.5\" Friction=\"0.2\" />"), "Dynamic and the rest by default");
+            Assert.That(text, Does.Contain("<Collider Kind=\"Sphere\" />"));
+            Assert.That(text, Does.Contain("<Collider Kind=\"None\" />"));
+            Assert.That(Text(Sample()), Does.Not.Contain("<Body").And.Not.Contain("<Collider"));
+        });
+    }
+
+    // A kind this engine does not know leaves that entry's body or collider out, not the whole scene.
+    [Test]
+    public void AKindNotKnown_LeavesOnlyThatOut()
+    {
+        var text = Text(Sample()).Replace("Name=\"Floor\"", "Name=\"Floor\"><Body Kind=\"Floating\" /><Collider Kind=\"Mesh\" /></Shape><Shape Uid=\"99\" Name=\"Spare\"");
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
+
+        var back = SceneFile.Read(stream);
+
+        Assert.Multiple(() =>
+        {
+            var floor = back.Shapes.First(shape => shape.Name == "Floor");
+            Assert.That(floor.Body?.Kind, Is.Null);
+            Assert.That(floor.Body?.ToEdits(), Is.Null);
+            Assert.That(floor.Collider?.Kind, Is.Null);
+            Assert.That(Text(back), Does.Contain("Kind=\"Floating\"").And.Contain("Kind=\"Mesh\""), "written back as read");
         });
     }
 
