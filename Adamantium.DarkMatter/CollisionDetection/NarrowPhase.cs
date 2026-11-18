@@ -3,7 +3,7 @@ using Adamantium.DarkMatter.Shapes;
 namespace Adamantium.DarkMatter.CollisionDetection;
 
 /// <summary>Finds where two shapes touch or come within the speculative distance of each other.</summary>
-internal static class Narrowphase
+internal static class NarrowPhase
 {
     /// <summary>Fills <paramref name="manifold"/> with the contact of the two shapes, its normal from the first to the
     /// second; false when they stand farther apart than <paramref name="speculativeDistance"/>.</summary>

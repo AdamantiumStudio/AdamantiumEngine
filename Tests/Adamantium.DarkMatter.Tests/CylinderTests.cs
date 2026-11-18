@@ -240,7 +240,7 @@ public class CylinderTests
     }
 
     private bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose) =>
-        Narrowphase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
+        NarrowPhase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
 
     private static BoxCollisionShape Ground() => new(5, 0.5f, 5);
 

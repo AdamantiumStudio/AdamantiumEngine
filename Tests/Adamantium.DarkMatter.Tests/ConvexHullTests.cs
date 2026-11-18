@@ -520,7 +520,7 @@ public class ConvexHullTests
     }
 
     private bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose) =>
-        Narrowphase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
+        NarrowPhase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
 
     private float Deepest()
     {
