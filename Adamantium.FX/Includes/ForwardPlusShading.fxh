@@ -96,8 +96,6 @@ struct MeshInstance
 MeshInstance* Instances;
 float4x4* Palettes;
 uint InstanceBase;
-// 1 while the draw blends over what is behind it, premultiplied; 0 for an opaque one.
-uint Blended;
 
 float4x4 view;
 float4x4 viewProjection;
@@ -136,10 +134,24 @@ float4 SurfaceOf(LIT_PIXEL input)
     return meshTextures[NonUniformResourceIndex(input.texture)].Sample(sampleType, input.uv);
 }
 
-// The pixel's output: premultiplied by its alpha for a blended draw, whole for an opaque one.
-float4 Finished(float3 lit, float alpha)
+// A see-through pixel, in any order with the others over it (weighted blended order-independent transparency, McGuire
+// and Bavoil 2013): its color and alpha, weighted, summed into the first target; its alpha laid over the coverage in the
+// second, 1 - the product of (1 - alpha). The weight, their equation (7), favours the near layers at the scale of metres;
+// it stops at 300 and a layer's light at 16, so a dozen bright layers at the eye still fit a half float.
+struct WEIGHTED_PIXEL
 {
-    return Blended != 0 ? float4(lit * alpha, alpha) : float4(lit, 1.0f);
+    float4 accumulated : SV_TARGET0;
+    float4 coverage : SV_TARGET1;
+};
+
+WEIGHTED_PIXEL Weighted(float3 lit, float alpha, float viewDepth)
+{
+    float depth = abs(viewDepth);
+    float weight = alpha * clamp(10.0f / (1e-5f + pow(depth / 5.0f, 2.0f) + pow(depth / 200.0f, 6.0f)), 1e-2f, 3e2f);
+    WEIGHTED_PIXEL output;
+    output.accumulated = float4(min(lit, 16.0f) * alpha, alpha) * weight;
+    output.coverage = float4(alpha, 0.0f, 0.0f, alpha);
+    return output;
 }
 
 // A masked surface's texel, the pixel left out below the cutoff. Only masked passes call it: a discard anywhere in a

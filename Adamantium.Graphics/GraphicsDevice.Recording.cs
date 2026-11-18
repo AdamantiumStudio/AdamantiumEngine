@@ -111,7 +111,7 @@ public partial class GraphicsDevice
              | (LogicOperationsEnabled ? 64UL : 0) | (RasterizerDiscardEnabled ? 128UL : 0)
              | (AlphaToCoverageEnable ? 256UL : 0) | (PrimitiveRestartEnable ? 512UL : 0)
              | ((bool)ColorBlendEnabled ? 1024UL : 0));
-        HashFloats(LineWidth, DepthBiasConstantFactor, DepthBiasSlopeFactor, 0);
+        HashFloats(LineWidth, DepthBiasConstantFactor, DepthBiasSlopeFactor, DepthBiasClamp);
         Hash(((ulong)PatchControlPoints << 32) | (uint)TessellationDomainOrigin);
         Hash(((ulong)(uint)StencilPassOp << 32) | (uint)StencilCompareOp);
         Hash(((ulong)StencilWriteMask << 32) | StencilReference);
@@ -121,6 +121,23 @@ public partial class GraphicsDevice
         Hash(((ulong)(uint)blend.SrcColorBlendFactor << 32) | (uint)blend.DstColorBlendFactor);
         Hash(((ulong)(uint)blend.ColorBlendOp << 32) | (uint)blend.SrcAlphaBlendFactor);
         Hash(((ulong)(uint)blend.DstAlphaBlendFactor << 32) | (uint)blend.AlphaBlendOp);
+        HashTargetsBlend();
+    }
+
+    // The targets of the pass and how each blends, when they blend apart.
+    private void HashTargetsBlend()
+    {
+        var equations = TargetBlendEquations;
+        Hash(((ulong)(uint)(renderTargets?.Length ?? 0) << 32) | (uint)(equations?.Length ?? 0));
+        if (equations == null)
+            return;
+
+        foreach (var each in equations)
+        {
+            Hash(((ulong)(uint)each.SrcColorBlendFactor << 32) | (uint)each.DstColorBlendFactor);
+            Hash(((ulong)(uint)each.ColorBlendOp << 32) | (uint)each.SrcAlphaBlendFactor);
+            Hash(((ulong)(uint)each.DstAlphaBlendFactor << 32) | (uint)each.AlphaBlendOp);
+        }
     }
 
     private void RefuseWhileIssuingAside(string what)

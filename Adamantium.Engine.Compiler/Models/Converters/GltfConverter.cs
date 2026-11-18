@@ -1080,7 +1080,7 @@ public class GltfConverter : ConverterBase
                 Emission = new Vector4F(emissive, 1),
                 AlphaMode = alphaMode,
                 AlphaCutoff = gltfMaterial.AlphaCutoff,
-                DoubleSided = gltfMaterial.DoubleSided,
+                Faces = gltfMaterial.DoubleSided ? MaterialFaces.Both : MaterialFaces.Front,
                 Transparency = alphaMode == AlphaMode.Blend ? baseColor.W : 1,
                 Shininess = 1,
                 Name = gltfMaterial.Name,

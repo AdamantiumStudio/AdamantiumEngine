@@ -247,8 +247,18 @@ public class ToolsOverlayProcessor : RenderingProcessor
         // depth, behind everything. Without the feature the grid ends at the far plane.
         var blend = GraphicsDevice.ColorBlendEquation;
         var clamp = GraphicsDevice.DepthClampEnable;
+        var bias = GraphicsDevice.DepthBiasEnabled;
+        var biasConstant = GraphicsDevice.DepthBiasConstantFactor;
+        var biasSlope = GraphicsDevice.DepthBiasSlopeFactor;
+        var biasClamp = GraphicsDevice.DepthBiasClamp;
         GraphicsDevice.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
         GraphicsDevice.DepthClampEnable = GraphicsDevice.MainDevice.IsDepthClampEnabled;
+        // On top of the shader's fixed step the floor goes back by the slope it is seen at, so a face lying on it stays
+        // in front at a grazing look; capped at that step, so far off it is never more than doubled. No cap, no bias.
+        GraphicsDevice.DepthBiasEnabled = grid.ShowsFloor && GraphicsDevice.MainDevice.IsDepthBiasClampEnabled;
+        GraphicsDevice.DepthBiasConstantFactor = 0;
+        GraphicsDevice.DepthBiasSlopeFactor = FloorSlopeBias;
+        GraphicsDevice.DepthBiasClamp = FloorBiasCap;
         try
         {
             var state = new RenderState(false, CullModeFlagBits.None, true, grid.ShowsFloor, null);
@@ -258,8 +268,16 @@ public class ToolsOverlayProcessor : RenderingProcessor
         {
             GraphicsDevice.ColorBlendEquation = blend;
             GraphicsDevice.DepthClampEnable = clamp;
+            GraphicsDevice.DepthBiasEnabled = bias;
+            GraphicsDevice.DepthBiasConstantFactor = biasConstant;
+            GraphicsDevice.DepthBiasSlopeFactor = biasSlope;
+            GraphicsDevice.DepthBiasClamp = biasClamp;
         }
     }
+
+    private const float FloorSlopeBias = 4;
+    // The shader's BehindTheGround: 4 steps of a 32-bit depth buffer by 1.0.
+    private const float FloorBiasCap = 4f / 16777216f;
 
     /// <summary>Draws an entity laid out in the output's pixels.</summary>
     public void DrawOnScreen(Entity root)
@@ -471,7 +489,7 @@ public class ToolsOverlayProcessor : RenderingProcessor
             if (inFront)
             {
                 var data = head.Data;
-                var state = new RenderState(data.IsWireFrame, data.CullMode, false, false, data.TopologyOverride);
+                var state = new RenderState(data.IsWireFrame, CullModeFlagBits.None, false, false, data.TopologyOverride);
                 geometry.GetOrCreate(data.Mesh, data.ResolveVertexType()).Draw(GraphicsDevice, state, drawnInstances);
             }
             else

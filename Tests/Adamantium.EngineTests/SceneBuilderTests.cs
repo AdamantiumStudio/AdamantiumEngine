@@ -105,7 +105,7 @@ public class SceneBuilderTests
         scene.Shapes.Add(new SceneShape
         {
             Uid = 51, Name = "Masked", Type = typeof(SphereShape).FullName, Color = new Vector4F(1, 1, 1, 0.3f),
-            AlphaMode = AlphaMode.Mask, AlphaCutoff = 0.8f
+            AlphaMode = AlphaMode.Mask, AlphaCutoff = 0.8f, Faces = MaterialFaces.Front
         });
         var masked = (await Build(scene)).Single();
 
@@ -116,6 +116,7 @@ public class SceneBuilderTests
             var material = masked.GetComponent<Material>();
             Assert.That((material.AlphaMode, material.AlphaCutoff), Is.EqualTo((AlphaMode.Mask, 0.8f)));
             Assert.That((back.AlphaMode, back.AlphaCutoff), Is.EqualTo((AlphaMode.Mask, 0.8f)));
+            Assert.That((material.Faces, back.Faces), Is.EqualTo((MaterialFaces.Front, MaterialFaces.Front)));
         });
     }
 

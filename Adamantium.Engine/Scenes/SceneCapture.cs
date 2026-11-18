@@ -142,7 +142,10 @@ public static class SceneCapture
                 Scale = entity.Transform.ScaleFactor
             };
             if (material != null)
+            {
                 placedShape.AlphaCutoff = material.AlphaCutoff;
+                placedShape.Faces = material.Faces;
+            }
             ComponentFields.Write(shape, typeof(ActivatableComponent), placedShape.Values, SceneShape.OwnAttributes);
             entry = placedShape;
         }
@@ -151,7 +154,7 @@ public static class SceneCapture
             var kept = new SceneShape
             {
                 Type = unloaded.Entry.Type, Color = unloaded.Entry.Color, AlphaMode = unloaded.Entry.AlphaMode,
-                AlphaCutoff = unloaded.Entry.AlphaCutoff, Scale = entity.Transform.ScaleFactor
+                AlphaCutoff = unloaded.Entry.AlphaCutoff, Faces = unloaded.Entry.Faces, Scale = entity.Transform.ScaleFactor
             };
             kept.Values.AddRange(unloaded.Entry.Values);
             entry = kept;

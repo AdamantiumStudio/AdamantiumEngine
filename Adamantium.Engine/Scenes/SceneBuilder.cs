@@ -431,6 +431,7 @@ public sealed class SceneBuilder
             material.DiffuseColor = entry.Color;
             material.AlphaMode = entry.AlphaMode;
             material.AlphaCutoff = entry.AlphaCutoff;
+            material.Faces = entry.Faces;
         }
     }
 

@@ -136,6 +136,55 @@ public class PdfTextTests
     }
 
     [Test]
+    public void ABigLinesBox_StopsAboveTheSmallLineSetUnderIt_AndThatLineKeepsItsOwn()
+    {
+        // A 200-point figure, its descent 40 points under its baseline, and a 12-point line 30 points under it.
+        var text = Text("BT /F1 200 Tf 100 500 Td (9) Tj ET BT /F1 12 Tf 100 470 Td (Page 9: A5) Tj ET");
+
+        Assert.That(text.Lines.Select(line => text.GetText(line.Start, line.Start + line.Count)),
+            Is.EqualTo(new[] { "9", "Page 9: A5" }));
+        var figure = text.QuadsOf(0, 1).Single().Bounds;
+        var small = text.QuadsOf(1, text.Glyphs.Count).Single().Bounds;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(figure.Bottom, Is.EqualTo((500 + 470 + 0.8 * 12) / 2).Within(1e-9), "halfway to the line's top");
+            Assert.That(figure.Top, Is.EqualTo(500 + 0.8 * 200).Within(1e-9));
+            Assert.That(small.Bottom, Is.EqualTo(470 - 0.2 * 12).Within(1e-9));
+            Assert.That(small.Top, Is.EqualTo(470 + 0.8 * 12).Within(1e-9), "the small line's own box");
+            Assert.That(text.Lines[0].Quad.Bounds.Bottom, Is.EqualTo(figure.Bottom).Within(1e-9));
+        });
+    }
+
+    [Test]
+    public void TightLinesOfOneSize_KeepTheirWholeBoxes()
+    {
+        // 10-point lines 9 points apart: each line's top reaches into the descent of the one above.
+        var text = Text("BT /F1 10 Tf 100 700 Td (first) Tj 0 -9 Td (second) Tj ET");
+
+        var first = text.QuadsOf(0, 5).Single().Bounds;
+
+        Assert.That(first.Bottom, Is.EqualTo(698).Within(1e-9), "a tight but even paragraph lost its descent");
+    }
+
+    [Test]
+    public void ABigLine_IsNotCutForASmallLineInAnotherColumn()
+    {
+        var text = Text("BT /F1 200 Tf 100 500 Td (9) Tj ET BT /F1 12 Tf 400 470 Td (beside) Tj ET");
+
+        Assert.That(text.QuadsOf(0, 1).Single().Bounds.Bottom, Is.EqualTo(500 - 0.2 * 200).Within(1e-9));
+    }
+
+    [Test]
+    public void AnAccentStepBackOfItsSize_AndASmallSuperscript_StayInTheirLine()
+    {
+        // The accent steps back 8 points over the "e", well within its own 20; the "2" goes on forward, raised.
+        var text = Text("BT /F1 20 Tf 100 700 Td (e) Tj 2 0 Td (^) Tj 10 0 Td (x) Tj /F1 8 Tf 10 8 Td (2) Tj ET");
+
+        Assert.That(text.Lines, Has.Count.EqualTo(1));
+    }
+
+    [Test]
     public void ASearch_StopsAtItsLimit()
     {
         var text = Text("BT /F1 10 Tf 100 700 Td (ab ab ab ab) Tj ET");
