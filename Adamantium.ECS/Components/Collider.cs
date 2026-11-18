@@ -9,22 +9,27 @@ namespace Adamantium.ECS.Components
     [ViewModel]
     public abstract partial class Collider : ActivatableComponent
     {
-        public Vector3F Size { get; set; }
+        [Bindable]
+        public partial Vector3F Size { get; set; }
 
         public Vector3F LocalCenter => Bounds.Center.As<float>();
 
-        public Vector3F Scale { get; set; }
+        [Bindable]
+        public partial Vector3F Scale { get; set; }
 
-        public QuaternionF Rotation { get; set; }
+        [Bindable]
+        public partial QuaternionF Rotation { get; set; }
 
-        public Vector3F Position { get; set; }
+        [Bindable]
+        public partial Vector3F Position { get; set; }
 
         /// <summary>The box the collider is fitted to; a change tells what follows the collider's shape - the physics.
         /// </summary>
         [Bindable]
         public partial Bounds Bounds { get; set; }
 
-        public Vector3F Center { get; set; }
+        [Bindable]
+        public partial Vector3F Center { get; set; }
 
         [Bindable]
         public partial bool DisplayCollider { get; set; }

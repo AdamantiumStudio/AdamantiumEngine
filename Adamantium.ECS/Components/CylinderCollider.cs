@@ -19,11 +19,13 @@ public partial class CylinderCollider : Collider
     public CylinderCollider()
     {
         Axis = ColliderAxis.Y;
+        ChoosesAxis = true;
     }
 
     /// <summary>Whether fitting to a mesh chooses the axis; false keeps <see cref="Axis"/> for a shape known to stand
     /// so.</summary>
-    public bool ChoosesAxis { get; set; } = true;
+    [Bindable]
+    public partial bool ChoosesAxis { get; set; }
 
     [Bindable]
     public partial ColliderAxis Axis { get; set; }

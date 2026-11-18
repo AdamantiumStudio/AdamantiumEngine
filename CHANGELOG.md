@@ -23,8 +23,9 @@ All packages share one version.
   time. A change the body cannot take throws and leaves it as it was. `BodyDescription.AreWeighedAlike` tells whether
   two masses and densities weigh a body alike; a static or kinematic body's weight is not looked at until it is made
   dynamic.
-- `Collider.Bounds` and a `ConvexHullCollider`'s hull tell of their change (`PropertyChanged`), so what follows a
-  collider's shape sees it refitted.
+- A collider's values tell of their change (`PropertyChanged`), so what follows a collider's shape sees it refitted:
+  `Collider.Bounds`, `Size`, `Center`, `Position`, `Rotation`, `Scale` and `CylinderCollider.ChoosesAxis` are made by
+  the MVVM generator (`[Bindable]`), and a `ConvexHullCollider`'s new hull is told too.
 - `PdfAnnotation.Line`, `Vertices` and `Intent`: a line annotation's two ends (`L`), a polygon's or polyline's corners
   (`Vertices`) and what it is meant as (`IT`, such as `LineDimension`) - what a measurement is read back by.
 
