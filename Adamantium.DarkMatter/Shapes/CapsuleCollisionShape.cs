@@ -6,6 +6,9 @@ namespace Adamantium.DarkMatter.Shapes;
 /// <see cref="HalfLength"/> up and down from the center.</summary>
 public sealed class CapsuleCollisionShape : CollisionShape
 {
+    // The sine of the tilt under which the segment counts as lying across a direction: about six degrees.
+    private const float LyingAcross = 0.1f;
+
     public CapsuleCollisionShape(float halfLength, float radius)
     {
         HalfLength = RequireSize(halfLength, nameof(halfLength));
@@ -45,6 +48,27 @@ public sealed class CapsuleCollisionShape : CollisionShape
 
     public override Vector3F GetSupport(Vector3F direction) =>
         new Vector3F(0, direction.Y >= 0 ? HalfLength : -HalfLength, 0) + Vector3F.Normalize(direction) * Radius;
+
+    internal override float CoreRadius => Radius;
+
+    internal override Vector3F GetCoreSupport(Vector3F direction) =>
+        new(0, direction.Y >= 0 ? HalfLength : -HalfLength, 0);
+
+    /// <summary>The whole segment when it lies across <paramref name="direction"/>, within a few degrees, else its end
+    /// that way.</summary>
+    internal override int GetSupportingFace(Vector3F direction, Span<Vector3F> into)
+    {
+        var length = direction.Length();
+        if (length > 0 && MathF.Abs(direction.Y) < LyingAcross * length)
+        {
+            into[0] = new Vector3F(0, -HalfLength, 0);
+            into[1] = new Vector3F(0, HalfLength, 0);
+            return 2;
+        }
+
+        into[0] = GetCoreSupport(direction);
+        return 1;
+    }
 
     internal override float MeasureSweepSpeed(Vector3F angularVelocity, QuaternionF rotation)
     {

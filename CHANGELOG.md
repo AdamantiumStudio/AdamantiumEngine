@@ -14,7 +14,11 @@ All packages share one version.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
   Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a `SphereCollisionShape`,
-  `CapsuleCollisionShape` or `BoxCollisionShape`, or a `CompoundCollisionShape` of them standing together (each
+  `CapsuleCollisionShape`, `BoxCollisionShape` or `ConvexHullCollisionShape` (the hull of a set of points, at most
+  `MaxCorners` - 256 - of them kept as far out as they reach, its triangles in one plane one face; its mass, center
+  and axes found from its volume; it touches any shape through GJK
+  while apart, EPA once overlapping, and the faces turned toward each other clipped one by the other, so it rests on a
+  face with all its corners), or a `CompoundCollisionShape` of them standing together (each
   `CompoundPart` colliding on its own, with a contact and normal of its own; the mass of all of them, its center and
   principal axes found); density or mass, friction, restitution, damping - and named by the `BodyHandle` they get. A
   body's pose is that of its origin, the point its shape is given around; it spins about its center of mass
@@ -26,9 +30,9 @@ All packages share one version.
   instruments; `StepClock` turns the time of frames into fixed steps and a blend for drawing between them. The same
   scene steps to the same result.
 - Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
-  friction and the rest - colliding with the box, sphere and capsule colliders on it and on the enabled entities below
-  it that have no rigid body of their own, scaled as each entity is: a model's parts make one body (a convex hull
-  collider has no physics yet; a moving body that is mirrored, or under a stretched or skewed parent, is left out too,
+  friction and the rest - colliding with the box, sphere, capsule and convex hull colliders on it and on the enabled
+  entities below it that have no rigid body of their own, scaled as each entity is: a model's parts make one body (a
+  hull collider with no mesh, or a moving body that is mirrored, or under a stretched or skewed parent, is left out,
   said in the log). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
   game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
   commands - velocities and impulses at the next step; a body's force (`SetForce`), felt at every step until set

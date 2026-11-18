@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using Adamantium.Core;
@@ -7,6 +8,8 @@ using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Physics;
 using Adamantium.Engine.Scenes;
+using Adamantium.Graphics.Core;
+using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using NUnit.Framework;
 
@@ -121,8 +124,71 @@ public class PhysicsServiceTests
         Frames(0.5);
 
         Assert.That(_physics.Moves(bare), Is.False);
-        Assert.That(_physics.Moves(hull), Is.False);
+        Assert.That(_physics.Moves(hull), Is.False, "a hull collider with no mesh holds no hull");
         Assert.That(bare.Transform.Position, Is.EqualTo(Vector3<double>.Zero));
+    }
+
+    [Test]
+    public void HullOfAMesh_FallsAndRestsOnItsFace()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        // A wedge: a square face down at its origin, a ridge up; scaled twice over.
+        var wedge = AddHull("Wedge", new Mesh(PrimitiveType.TriangleList).SetPoints(
+        [
+            new Vector3<double>(-0.5, 0, -0.5), new Vector3<double>(0.5, 0, -0.5), new Vector3<double>(0.5, 0, 0.5),
+            new Vector3<double>(-0.5, 0, 0.5), new Vector3<double>(-0.5, -0.5, 0), new Vector3<double>(0.5, -0.5, 0)
+        ]), new Vector3<double>(0, -2, 0), 2);
+        Settle();
+
+        Play();
+        Frames(3);
+
+        Assert.That(_physics.Moves(wedge), Is.True);
+        Assert.That(wedge.Transform.Position.Y, Is.EqualTo(0).Within(0.02), "its square face, at its origin, on the ground");
+        Assert.That(Vector3<float>.Transform(Vector3<float>.UnitY, wedge.Transform.Rotation.As<float>()).Y,
+            Is.GreaterThan(0.999f));
+    }
+
+    // Three cubes of one mesh, two of them twice the first: each rests by its own size, though a hull is made once for
+    // each scale.
+    [Test]
+    public void HullsOfOneMesh_RestEachByItsOwnSize()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var corners = new List<Vector3<double>>();
+        foreach (var x in new[] { -0.5, 0.5 })
+        foreach (var y in new[] { -0.5, 0.5 })
+        foreach (var z in new[] { -0.5, 0.5 })
+        {
+            corners.Add(new Vector3<double>(x, y, z));
+        }
+
+        var mesh = new Mesh(PrimitiveType.TriangleList).SetPoints(corners.ToArray());
+        var small = AddHull("Small", mesh, new Vector3<double>(-3, -2, 0), 1);
+        var large = AddHull("Large", mesh, new Vector3<double>(3, -3, 0), 2);
+        var twin = AddHull("Twin", mesh, new Vector3<double>(0, -3, 3), 2);
+        Settle();
+
+        Play();
+        Frames(3);
+
+        Assert.That(small.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+        Assert.That(large.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
+        Assert.That(twin.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
+    }
+
+    private Entity AddHull(string name, Mesh mesh, Vector3<double> position, float scale)
+    {
+        var entity = new Entity(null, name);
+        entity.Transform.Position = position;
+        entity.Transform.BaseScale = new Vector3<float>(scale);
+        entity.AddComponent(new MeshData { Mesh = mesh });
+        entity.AddComponent(new ConvexHullCollider());
+        entity.AddComponent(new RigidBody());
+        _world.EntityManager.AddEntity(entity, _world.MainScene);
+        return entity;
     }
 
     [Test]
