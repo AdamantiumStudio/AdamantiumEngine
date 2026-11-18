@@ -37,4 +37,16 @@ public class StepClockTests
         Assert.That(clock.Blend, Is.EqualTo(0f));
         Assert.That(clock.Advance(1.0 / 120), Is.EqualTo(1));
     }
+
+    [Test]
+    public void Reset_ForgetsTheTimeNotYetStepped()
+    {
+        var clock = new StepClock(120);
+        clock.Advance(1.0 / 240);
+
+        clock.Reset();
+
+        Assert.That(clock.Blend, Is.Zero);
+        Assert.That(clock.Advance(1.0 / 240), Is.EqualTo(0));
+    }
 }

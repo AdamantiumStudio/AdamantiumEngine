@@ -3,9 +3,9 @@ using System;
 namespace Adamantium.DarkMatter.Shapes;
 
 /// <summary>A ball of <see cref="Radius"/> around the body's center.</summary>
-public sealed class SphereShape : Shape
+public sealed class SphereCollisionShape : CollisionShape
 {
-    public SphereShape(float radius)
+    public SphereCollisionShape(float radius)
     {
         Radius = RequireSize(radius, nameof(radius));
         RequireFiniteReach(nameof(radius));
@@ -14,7 +14,7 @@ public sealed class SphereShape : Shape
     /// <summary>The radius.</summary>
     public float Radius { get; }
 
-    public override ShapeKind Kind => ShapeKind.Sphere;
+    public override CollisionShapeKind Kind => CollisionShapeKind.Sphere;
 
     public override float BoundingRadius => Radius;
 

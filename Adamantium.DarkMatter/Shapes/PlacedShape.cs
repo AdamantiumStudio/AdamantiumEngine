@@ -3,10 +3,10 @@ namespace Adamantium.DarkMatter.Shapes;
 /// <summary>A shape standing at a pose, as <see cref="Gjk"/> tests it.</summary>
 internal readonly struct PlacedShape : IConvexShape<float>
 {
-    private readonly Shape _shape;
+    private readonly CollisionShape _shape;
     private readonly Pose _pose;
 
-    public PlacedShape(Shape shape, in Pose pose)
+    public PlacedShape(CollisionShape shape, in Pose pose)
     {
         _shape = shape;
         _pose = pose;

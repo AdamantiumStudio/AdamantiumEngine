@@ -42,7 +42,7 @@ public sealed class PhysicsSettings
     /// </summary>
     public float SleepSpeed { get; init; } = 0.05f;
 
-    /// <summary>How long, in seconds, all bodies touching each other stay still before they fall asleep together.
-    /// </summary>
+    /// <summary>How long, in seconds, all bodies touching each other stay still and unpushed before they fall asleep
+    /// together.</summary>
     public float TimeToSleep { get; init; } = 0.5f;
 }

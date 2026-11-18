@@ -60,12 +60,12 @@ public interface IPhysicsWorld
     /// </summary>
     void SetAngularVelocity(BodyHandle body, Vector3F velocity);
 
-    /// <summary>Pushes a dynamic body's center with <paramref name="force"/>, in newtons, through the next step, and
-    /// wakes it.</summary>
+    /// <summary>Pushes a dynamic body's center with <paramref name="force"/>, in newtons, through the next step; a force
+    /// not zero wakes it and keeps it from counting that step toward sleep.</summary>
     void ApplyForce(BodyHandle body, Vector3F force);
 
     /// <summary>Turns a dynamic body with <paramref name="torque"/>, in newton meters around each world axis, through
-    /// the next step, and wakes it.</summary>
+    /// the next step; a torque not zero wakes it and keeps it from counting that step toward sleep.</summary>
     void ApplyTorque(BodyHandle body, Vector3F torque);
 
     /// <summary>Strikes a dynamic body at <paramref name="point"/> of the world with <paramref name="impulse"/>, in
@@ -96,5 +96,5 @@ public interface IPhysicsWorld
 
     /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
     /// at <paramref name="pose"/>.</summary>
-    void Overlap(Shape shape, in Pose pose, ICollection<BodyHandle> into);
+    void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into);
 }

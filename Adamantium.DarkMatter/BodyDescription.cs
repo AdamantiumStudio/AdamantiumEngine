@@ -10,7 +10,7 @@ public sealed class BodyDescription
     public BodyKind Kind { get; set; } = BodyKind.Dynamic;
 
     /// <summary>The shape the body collides with, centered on it.</summary>
-    public Shape Shape { get; set; }
+    public CollisionShape Shape { get; set; }
 
     /// <summary>Where the body's center stands.</summary>
     public Vector3F Position { get; set; }
