@@ -4,7 +4,7 @@ namespace Adamantium.Graphics.Core.Models;
 /// last.</summary>
 public enum ColliderKind
 {
-    /// <summary>No collider: the part is not met by the physics or picked by its collider.</summary>
+    /// <summary>No collider: the physics does not meet it; picking in the viewport goes by its triangles.</summary>
     None,
     Box,
     Sphere,
