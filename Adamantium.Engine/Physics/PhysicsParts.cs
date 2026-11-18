@@ -86,9 +86,9 @@ public static class PhysicsParts
         _ => ColliderKind.None
     };
 
-    /// <summary>Gives <paramref name="entity"/> a rigid body of <paramref name="body"/>'s settings, in place of the one
-    /// it has; false, the entity left as it was and logged, for settings this engine cannot read - a kind it does not
-    /// know, an amount not finite or below zero.</summary>
+    /// <summary>Gives <paramref name="entity"/>'s rigid body <paramref name="body"/>'s settings, a new body when it has
+    /// none; false, the entity left as it was and logged, for settings this engine cannot read - a kind it does not know,
+    /// an amount not finite or below zero.</summary>
     public static bool SetBody(Entity entity, BodyEdits body)
     {
         ArgumentNullException.ThrowIfNull(entity);
@@ -99,19 +99,23 @@ public static class PhysicsParts
             return false;
         }
 
-        entity.RemoveComponent<RigidBody>();
-        entity.AddComponent(new RigidBody
+        // The body it has keeps its place, so a moving one keeps its speed.
+        var own = entity.GetComponent<RigidBody>();
+        var target = own ?? new RigidBody();
+        target.Kind = body.Kind;
+        target.Mass = body.Mass;
+        target.Density = body.Density;
+        target.Friction = body.Friction;
+        target.Restitution = body.Restitution;
+        target.LinearDamping = body.LinearDamping;
+        target.AngularDamping = body.AngularDamping;
+        target.GravityScale = body.GravityScale;
+        target.CanSleep = body.CanSleep;
+        if (own == null)
         {
-            Kind = body.Kind,
-            Mass = body.Mass,
-            Density = body.Density,
-            Friction = body.Friction,
-            Restitution = body.Restitution,
-            LinearDamping = body.LinearDamping,
-            AngularDamping = body.AngularDamping,
-            GravityScale = body.GravityScale,
-            CanSleep = body.CanSleep
-        });
+            entity.AddComponent(target);
+        }
+
         return true;
     }
 
