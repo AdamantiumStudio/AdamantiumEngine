@@ -120,6 +120,78 @@ public class EntityImportTests
     }
 
     [Test]
+    public void ModelRoot_GetsNoColliderOfItsOwnYetMeasuresAllItsParts()
+    {
+        var scene = NewScene();
+        var left = scene.CreateMesh(scene.Models, "left", "Left");
+        left.Position = new Vector3F(-3, 0, 0);
+        left.Meshes.Add(Box(1));
+        var right = scene.CreateMesh(scene.Models, "right", "Right");
+        right.Position = new Vector3F(3, 0, 0);
+        right.Meshes.Add(Box(1));
+
+        var model = Import(scene, new Vector3<double>(0, 0, 5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.GetComponent<Collider>(), Is.Null, "a collider is the physics' and picking's, not a size");
+            Assert.That(Find(model, left).GetComponent<Collider>(), Is.Not.Null);
+            Assert.That(model.GetDiameter(), Is.EqualTo(8).Within(1e-4), "from the left part's far side to the right's");
+            Assert.That((model.GetCenterAbsolute().As<float>() - new Vector3F(0, 0, 5)).Length(), Is.LessThan(1e-4f));
+        });
+    }
+
+    [Test]
+    public void EditsOfTheModel_GiveItsPartsTheirCollidersAndBodies()
+    {
+        var scene = NewScene();
+        scene.CreateMesh(scene.Models, "ball", "Ball").Meshes.Add(Box(1));
+        scene.CreateMesh(scene.Models, "ghost", "Ghost").Meshes.Add(Box(1));
+        scene.CreateMesh(scene.Models, "crate", "Crate").Meshes.Add(Box(1));
+        scene.Edits = new ModelEdits();
+        scene.Edits.Parts[""] = new PartEdits { Body = new BodyEdits { Mass = 900, Friction = 0.9f } };
+        scene.Edits.Parts["Ball"] = new PartEdits { Collider = ColliderKind.Sphere };
+        scene.Edits.Parts["Ghost"] = new PartEdits { Collider = ColliderKind.None };
+        scene.Edits.Parts["Gone"] = new PartEdits { Collider = ColliderKind.Capsule };
+
+        var model = Import(scene, Vector3<double>.Zero);
+
+        Assert.Multiple(() =>
+        {
+            var body = model.GetComponent<RigidBody>();
+            Assert.That(body, Is.Not.Null);
+            Assert.That(body.Mass, Is.EqualTo(900));
+            Assert.That(body.Friction, Is.EqualTo(0.9f));
+            var ball = model.Dependencies.First(part => part.Name == "Ball");
+            Assert.That(ball.GetComponents<Collider>(), Has.Length.EqualTo(1));
+            Assert.That(ball.GetComponent<Collider>(), Is.InstanceOf<SphereCollider>());
+            Assert.That(ball.GetComponent<Collider>().Bounds.Radius, Is.GreaterThan(0), "fitted to its mesh");
+            Assert.That(model.Dependencies.First(part => part.Name == "Ghost").GetComponent<Collider>(), Is.Null);
+            Assert.That(model.Dependencies.First(part => part.Name == "Crate").GetComponent<Collider>(),
+                Is.InstanceOf<BoxCollider>(), "a part without edits keeps the import's box");
+        });
+    }
+
+    [Test]
+    public void ABodyEditThisEngineCannotRead_IsLeftOut()
+    {
+        var scene = NewScene();
+        scene.CreateMesh(scene.Models, "crate", "Crate").Meshes.Add(Box(1));
+        scene.Edits = new ModelEdits();
+        scene.Edits.Parts["Crate"] = new PartEdits { Body = new BodyEdits { Kind = (Adamantium.DarkMatter.BodyKind)7 } };
+        scene.Edits.Parts[""] = new PartEdits { Body = new BodyEdits { Mass = float.NaN } };
+
+        var model = Import(scene, Vector3<double>.Zero);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model, Is.Not.Null);
+            Assert.That(model.GetComponent<RigidBody>(), Is.Null);
+            Assert.That(model.Dependencies.First(part => part.Name == "Crate").GetComponent<RigidBody>(), Is.Null);
+        });
+    }
+
+    [Test]
     public void NodePlacement_IsKept()
     {
         var scene = NewScene();

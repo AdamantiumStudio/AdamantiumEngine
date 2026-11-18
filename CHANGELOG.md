@@ -11,8 +11,11 @@ All packages share one version.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
   Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a `SphereCollisionShape`,
-  `CapsuleCollisionShape` or `BoxCollisionShape`; density or mass, friction, restitution, damping - and named by the
-  `BodyHandle` they get. Contacts are soft constraints with Coulomb friction, warm-started from the last step and
+  `CapsuleCollisionShape` or `BoxCollisionShape`, or a `CompoundCollisionShape` of them standing together (each
+  `CompoundPart` colliding on its own, with a contact and normal of its own; the mass of all of them, its center and
+  principal axes found); density or mass, friction, restitution, damping - and named by the `BodyHandle` they get. A
+  body's pose is that of its origin, the point its shape is given around; it spins about its center of mass
+  (`GetCenterOfMass`, and `GetLocalCenterOfMass` in its own axes). Contacts are soft constraints with Coulomb friction, warm-started from the last step and
   found ahead of time by a distance that grows with speed and spin, so a fast body stops on a thin floor; a pair keeps
   at most `MaxContactPointsPerPair` points (4 by default), and no body moves faster than `MaxLinearSpeed` (500 m/s).
   Bodies at rest fall asleep together with all they touch and wake when struck; a body pushed by a force or torque
@@ -20,14 +23,24 @@ All packages share one version.
   instruments; `StepClock` turns the time of frames into fixed steps and a blend for drawing between them. The same
   scene steps to the same result.
 - Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
-  friction and the rest - colliding with the shape of its box, sphere or capsule collider, scaled as the entity is
-  (a convex hull collider has no physics yet; a moving body that is mirrored, or under a stretched or skewed parent,
-  is left out too, said in the log). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
+  friction and the rest - colliding with the box, sphere and capsule colliders on it and on the enabled entities below
+  it that have no rigid body of their own, scaled as each entity is: a model's parts make one body (a convex hull
+  collider has no physics yet; a moving body that is mirrored, or under a stretched or skewed parent, is left out too,
+  said in the log). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
   game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
   commands - velocities and impulses at the next step; a body's force (`SetForce`), felt at every step until set
   again; gravity - and each frame stands the entities between the last two steps, parents before children. Down is
   +Y, so the service's gravity is too; that of its `Settings` is not used. What it moves is recorded as the scene's
   changes, so the scene kept before the game comes back.
+- A model's edits made in the editor are kept in its asset file, in a section of their own (`AssetFileSection.Edits`,
+  `AssetFile.Edits`, written by `ModelEditsSerializer`), and a new import of the model carries them over as they are;
+  `ContentBuilder.WriteEdits` puts them in. `ModelEdits` holds them by part, by `ModelPartPath` - the names from the
+  model's root, "Frame/Wheel[1]", an unnamed part counted, "[0]": a part's collider (`ColliderKind`, fitted to its mesh,
+  or none) and its rigid body (`BodyEdits`). The model is built with them (`SceneData.Edits`); an edit whose part is
+  gone waits in the file, and edits that cannot be read are left out - both said in the log - without stopping the
+  model, its thumbnail or new edits.
+- `Entity.TryMeasureBounds`: the box, in the entity's own axes, that holds its meshes and those of everything under it -
+  a collider's bounds for an entity without a mesh.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
 - Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
@@ -444,6 +457,11 @@ All packages share one version.
 
 ### Changed
 
+- An imported model's root, and each node with parts under it, no longer gets a box collider merged from its parts':
+  a collider is the physics' and picking's, not a size. The size of an entity - `GetDiameter`, `GetCenterAbsolute`,
+  `GetLocalCenter`, `GetRadius`, a thumbnail's framing - is measured from the meshes of it and everything under it
+  (`TryMeasureBounds`), so a group of entities has one too. A camera orbiting a subject with parts measures it once it
+  is the subject, not every frame; a single entity is measured afresh.
 - `Gjk.Intersects` allocates nothing: its simplex lives on the stack.
 - `DynamicAabbTree.Move` also moves a leaf that has grown far larger than its item needs - a fast item come to rest -
   so it stops overlapping what it no longer reaches.

@@ -39,17 +39,26 @@ public interface IPhysicsWorld
     /// <summary>How <paramref name="body"/> moves.</summary>
     BodyKind GetKind(BodyHandle body);
 
-    /// <summary>Where <paramref name="body"/> stands.</summary>
+    /// <summary>Where <paramref name="body"/>'s origin stands, the point its shape is given around, and how it is turned.
+    /// </summary>
     Pose GetPose(BodyHandle body);
 
-    /// <summary>Moves <paramref name="body"/> to <paramref name="pose"/> at once, as a jump, not a motion; it and the
-    /// bodies it touches, there or here, wake.</summary>
+    /// <summary>Where <paramref name="body"/>'s center of mass stands; the origin for a body that is not dynamic.
+    /// </summary>
+    Vector3F GetCenterOfMass(BodyHandle body);
+
+    /// <summary>Where <paramref name="body"/>'s center of mass is from its origin, in the body's own axes; zero for a
+    /// body that is not dynamic.</summary>
+    Vector3F GetLocalCenterOfMass(BodyHandle body);
+
+    /// <summary>Moves <paramref name="body"/>'s origin to <paramref name="pose"/> at once, as a jump, not a motion; it
+    /// and the bodies it touches, there or here, wake.</summary>
     void SetPose(BodyHandle body, in Pose pose);
 
-    /// <summary>The velocity of <paramref name="body"/>'s center, in meters per second.</summary>
+    /// <summary>The velocity of <paramref name="body"/>'s center of mass, in meters per second.</summary>
     Vector3F GetLinearVelocity(BodyHandle body);
 
-    /// <summary>Sets the velocity of a dynamic or kinematic body's center, cut to
+    /// <summary>Sets the velocity of a dynamic or kinematic body's center of mass, cut to
     /// <see cref="PhysicsSettings.MaxLinearSpeed"/>, and wakes it.</summary>
     void SetLinearVelocity(BodyHandle body, Vector3F velocity);
 
@@ -60,7 +69,7 @@ public interface IPhysicsWorld
     /// </summary>
     void SetAngularVelocity(BodyHandle body, Vector3F velocity);
 
-    /// <summary>Pushes a dynamic body's center with <paramref name="force"/>, in newtons, through the next step; a force
+    /// <summary>Pushes a dynamic body's center of mass with <paramref name="force"/>, in newtons, through the next step; a force
     /// not zero wakes it and keeps it from counting that step toward sleep.</summary>
     void ApplyForce(BodyHandle body, Vector3F force);
 

@@ -171,8 +171,9 @@ public class EntityImportTemplate : IEntityTemplate
                 owner.AddComponent(animation);
             }
 
-            CalculateBoundBoxes(owner);
-
+            ApplyEdits(owner);
+            var bounds = new Dictionary<Entity, Bounds>();
+            owner.MeasureBoundsBelow(bounds);
             owner.TraverseInDepth(entity =>
             {
                 if (ReferenceEquals(entity, owner))
@@ -180,8 +181,9 @@ public class EntityImportTemplate : IEntityTemplate
                     return;
                 }
 
+                var center = bounds.TryGetValue(entity, out var measured) ? measured.Center.As<float>() : Vector3F.Zero;
                 var transform = entity.Transform;
-                transform.Pivot = Vector3F.TransformCoordinate(entity.GetLocalCenter(), transform.GetLocalMatrixF()).As<double>();
+                transform.Pivot = Vector3F.TransformCoordinate(center, transform.GetLocalMatrixF()).As<double>();
             });
             owner.Transform.Position += initialPosition;
             return owner;
@@ -193,45 +195,98 @@ public class EntityImportTemplate : IEntityTemplate
         return null;
     }
 
-
-    private void CalculateBoundBoxes(Entity root)
+    // The edits made in the editor, each on the part its path names; an edit whose part a new import took away waits in
+    // the file.
+    private void ApplyEdits(Entity model)
     {
-        var roots = new List<Entity>();
-        var queue = new Queue<Entity>();
-        queue.Enqueue(root);
-        if (root.Dependencies.Count > 0)
+        if (sceneData.Edits?.Parts is not { Count: > 0 } parts)
         {
-            roots.Add(root);
+            return;
         }
 
-        while (queue.Count > 0)
+        foreach (var (path, edits) in parts)
         {
-            var current = queue.Dequeue();
-
-            foreach (var entity in current.Dependencies)
+            if (edits == null)
             {
-                if (entity.Dependencies.Count > 0)
-                {
-                    queue.Enqueue(entity);
-                    roots.Add(entity);
-                }
+                continue;
             }
-        }
 
-        for (var i = roots.Count - 1; i >= 0; --i)
-        {
-            BoxCollider rootCollider = null;
-            foreach (var entity in roots[i].Dependencies)
+            var part = ModelPartPath.Find(model, path);
+            if (part == null)
             {
-                var collider = entity.GetComponent<Collider>();
-                if (collider == null)
+                Log.Logger.Warning("{Model} has no part {Part} any more; its edits wait in the file", model.Name, path);
+                continue;
+            }
+
+            if (edits.Collider is { } kind)
+            {
+                SetCollider(part, kind);
+            }
+
+            if (edits.Body is { } body)
+            {
+                if (!IsSound(body))
                 {
+                    Log.Logger.Warning("The body {Model} keeps for {Part} is not one this engine reads; it is left out",
+                        model.Name, path);
                     continue;
                 }
 
-                rootCollider ??= roots[i].GetOrCreateComponent<BoxCollider>();
-                rootCollider.Merge(collider);
+                part.RemoveComponent<RigidBody>();
+                part.AddComponent(new RigidBody
+                {
+                    Kind = body.Kind,
+                    Mass = body.Mass,
+                    Density = body.Density,
+                    Friction = body.Friction,
+                    Restitution = body.Restitution,
+                    LinearDamping = body.LinearDamping,
+                    AngularDamping = body.AngularDamping,
+                    GravityScale = body.GravityScale,
+                    CanSleep = body.CanSleep
+                });
             }
+        }
+    }
+
+    // A kind this engine knows, and amounts that are finite and not negative; gravity may pull either way.
+    private static bool IsSound(BodyEdits body) =>
+        Enum.IsDefined(body.Kind) && IsAmount(body.Mass) && IsAmount(body.Density) && IsAmount(body.Friction)
+        && IsAmount(body.Restitution) && IsAmount(body.LinearDamping) && IsAmount(body.AngularDamping)
+        && float.IsFinite(body.GravityScale);
+
+    private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
+
+    private static void SetCollider(Entity part, ColliderKind kind)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            Log.Logger.Warning("{Part} is given a collider this engine does not know, {Kind}; it keeps what it has",
+                part.Name, kind);
+            return;
+        }
+
+        if (kind != ColliderKind.None && part.GetComponent<MeshData>() is not { Mesh.HasPoints: true })
+        {
+            Log.Logger.Warning("{Part} has no mesh to fit a collider to; it keeps what it has", part.Name);
+            return;
+        }
+
+        foreach (var collider in part.GetComponents<Collider>())
+        {
+            part.RemoveComponent(collider);
+        }
+
+        Collider fitted = kind switch
+        {
+            ColliderKind.Box => new BoxCollider(),
+            ColliderKind.Sphere => new SphereCollider(),
+            ColliderKind.Capsule => new CapsuleCollider(),
+            _ => null
+        };
+        if (fitted != null)
+        {
+            part.AddComponent(fitted);
         }
     }
 
@@ -257,9 +312,7 @@ public class EntityImportTemplate : IEntityTemplate
             : MeshRenderMode.Static;
         entity.AddComponent(meshData);
 
-        Collider collider = new BoxCollider();
-        entity.AddComponent(collider);
-        collider.Initialize();
+        entity.AddComponent(new BoxCollider());
 
         SceneData.Material materialData;
         if (!String.IsNullOrEmpty(mesh.MaterialID))

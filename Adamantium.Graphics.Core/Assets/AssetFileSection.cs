@@ -17,5 +17,9 @@ public enum AssetFileSection
     /// <summary>The asset itself.</summary>
     Body = 4,
 
-    All = Thumbnail | Source | Body
+    /// <summary>The <see cref="Models.ModelEdits"/> made to a model in the editor, as
+    /// <see cref="Models.ModelEditsSerializer"/> writes them; a new import keeps them.</summary>
+    Edits = 8,
+
+    All = Thumbnail | Source | Body | Edits
 }

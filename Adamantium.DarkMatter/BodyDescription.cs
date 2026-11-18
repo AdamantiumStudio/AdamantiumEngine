@@ -9,17 +9,18 @@ public sealed class BodyDescription
     /// <summary>How the body moves.</summary>
     public BodyKind Kind { get; set; } = BodyKind.Dynamic;
 
-    /// <summary>The shape the body collides with, centered on it.</summary>
+    /// <summary>The shape the body collides with, given around the body's origin; a
+    /// <see cref="CompoundCollisionShape"/> for a body of many.</summary>
     public CollisionShape Shape { get; set; }
 
-    /// <summary>Where the body's center stands.</summary>
+    /// <summary>Where the body's origin stands.</summary>
     public Vector3F Position { get; set; }
 
     /// <summary>How the body is turned.</summary>
     public QuaternionF Rotation { get; set; } = QuaternionF.Identity;
 
-    /// <summary>The velocity the body starts at, in meters per second; a dynamic body added asleep starts still.
-    /// </summary>
+    /// <summary>The velocity the body's center of mass starts at, in meters per second; a dynamic body added asleep
+    /// starts still.</summary>
     public Vector3F LinearVelocity { get; set; }
 
     /// <summary>The spin the body starts at, in radians per second around each world axis, cut to the world's

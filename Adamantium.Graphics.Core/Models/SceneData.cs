@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using MessagePack;
 
 namespace Adamantium.Graphics.Core.Models;
 
@@ -155,6 +156,11 @@ public partial class SceneData
 
    /// <summary>Where the scene was loaded from, as it was asked for; null for one made in memory.</summary>
    public String Source { get; set; }
+
+   /// <summary>The edits made to the model in the editor, read from its asset file, not kept in the model itself; null
+   /// when it has none.</summary>
+   [IgnoreMember]
+   public ModelEdits Edits { get; set; }
 
    public Unit Units { get; set; }
 

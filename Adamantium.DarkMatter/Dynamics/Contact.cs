@@ -1,12 +1,14 @@
 namespace Adamantium.DarkMatter.Dynamics;
 
-/// <summary>Two bodies whose boxes in the broad phase overlap, kept from step to step so the impulses of the last step
-/// start the next one. Each body links its contacts in a list of its own.</summary>
+/// <summary>Two parts of two bodies whose boxes in the broad phase overlap, kept from step to step so the impulses of
+/// the last step start the next one. Each body links its contacts in a list of its own.</summary>
 internal sealed class Contact
 {
     public ulong Key;
     public int First;
     public int Second;
+    public int FirstPart;
+    public int SecondPart;
     public int ListIndex;
     public float Friction;
     public float Restitution;
@@ -29,7 +31,7 @@ internal sealed class Contact
 
     public bool IsTouching => PointCount > 0;
 
-    /// <summary>The key of the pair of body slots, the lesser first.</summary>
+    /// <summary>The key of the pair of part slots, the lesser first.</summary>
     public static ulong MakeKey(int first, int second) =>
         first < second ? ((ulong)(uint)first << 32) | (uint)second : ((ulong)(uint)second << 32) | (uint)first;
 
