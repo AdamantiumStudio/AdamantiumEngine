@@ -43,6 +43,13 @@ public partial class CylinderCollider : Collider
 
     partial void OnHeightChanged(float value) => Rebuild();
 
+    // Let choose again, it fits the mesh it stands on anew; told to keep its axis, it keeps the one it has.
+    partial void OnChoosesAxisChanged(bool value)
+    {
+        if (value && Owner?.GetComponent<MeshData>() is { Mesh: { HasPoints: true } mesh })
+            CalculateFromMesh(mesh);
+    }
+
     /// <summary>The cylinder in its entity's own space.</summary>
     public BoundingCylinder Cylinder => cylinder;
 
