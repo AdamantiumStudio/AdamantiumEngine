@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `PdfTextMatching.IndexOf` finds a query in plain text by the rules a page's text is searched by - case, accents and
+  whole words as `PdfTextSearchOptions` say - for a viewer that searches bookmarks and comments as it searches pages;
+  `PdfPageText.Find` goes through it, and stops at a `limit` of matches when given one.
 - `Adamantium.DarkMatter`, the physics engine, on its own: no entities, window or GPU, only `Adamantium.Mathematics`.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.

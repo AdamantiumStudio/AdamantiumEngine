@@ -136,6 +136,30 @@ public class PdfTextTests
     }
 
     [Test]
+    public void ASearch_StopsAtItsLimit()
+    {
+        var text = Text("BT /F1 10 Tf 100 700 Td (ab ab ab ab) Tj ET");
+
+        Assert.That(text.Find("ab", limit: 2).Select(m => m.Start), Is.EqualTo(new[] { 0, 3 }));
+    }
+
+    [TestCase("Café cafe", "CAFE", false, false, false, 0)]
+    [TestCase("Café cafe", "cafe", false, false, true, 5)]
+    [TestCase("Café cafe", "Cafe", true, false, false, 0)]
+    [TestCase("wider wide", "wide", false, true, false, 6)]
+    [TestCase("wider", "wide", false, true, false, -1)]
+    public void PlainText_IsMatchedByThePagesRules(string sought, string query, bool matchCase, bool wholeWord,
+        bool diacritics, int expected)
+    {
+        var options = new PdfTextSearchOptions { MatchCase = matchCase, WholeWord = wholeWord, MatchDiacritics = diacritics };
+
+        var at = PdfTextMatching.IndexOf(sought, query, options, 0, out var length);
+
+        Assert.That(at, Is.EqualTo(expected));
+        Assert.That(length, Is.EqualTo(expected < 0 ? 0 : query.Length));
+    }
+
+    [Test]
     public void TheCaretFallsBeforeTheGlyphWhoseFirstHalfIsHit()
     {
         var text = Text("BT /F1 10 Tf 100 700 Td (abcd) Tj 0 -20 Td (efgh) Tj ET");
