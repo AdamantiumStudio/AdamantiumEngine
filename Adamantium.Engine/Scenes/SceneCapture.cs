@@ -123,7 +123,8 @@ public static class SceneCapture
                 // A camera's own rotation is its view, the opposite turn of the way it faces.
                 Rotation = QuaternionF.Conjugate(camera.Rotation),
                 Type = camera.Type, Projection = camera.ProjectionType, FieldOfView = camera.Fov,
-                Near = camera.ZNear, Far = camera.ZFar, OrthoScale = camera.OrthoScale
+                Near = camera.ZNear, Far = camera.ZFar, OrthoScale = camera.OrthoScale,
+                IsEnabled = entity.IsEnabled
             };
             return placedCamera;
         }
@@ -175,6 +176,7 @@ public static class SceneCapture
         entry.Name = entity.Name ?? "";
         entry.Position = entity.Transform.Position;
         entry.Rotation = entity.Transform.Rotation;
+        entry.IsEnabled = entity.IsEnabled;
         return entry;
     }
 

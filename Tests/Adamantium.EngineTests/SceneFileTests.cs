@@ -109,6 +109,26 @@ public class SceneFileTests
         });
     }
 
+    // A disabled entry is written so and read back; an enabled one, the default, writes nothing of it.
+    [Test]
+    public void ADisabledEntry_IsReadBack_AndAnEnabledOneWritesNone()
+    {
+        var scene = Sample();
+        scene.Shapes[0].IsEnabled = false;
+        scene.Cameras[0].IsEnabled = false;
+
+        var back = WriteAndRead(scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Shapes[0].IsEnabled, Is.False);
+            Assert.That(back.Cameras[0].IsEnabled, Is.False);
+            Assert.That(back.Models[0].IsEnabled, Is.True);
+            Assert.That(Text(scene), Does.Contain("Enabled=\"false\""));
+            Assert.That(Text(Sample()), Does.Not.Contain("Enabled"));
+        });
+    }
+
     // The scene keeps its own id across saving; a new scene's file has none until its scene is saved.
     [Test]
     public void TheScenesId_IsReadBack_AndAFileWithoutOneHasNone()

@@ -220,6 +220,12 @@ public class EntityIcons : ToolsProcessor
 
     private Entity LookOf(Entity entity)
     {
+        // Hidden in the hierarchy - itself or an owner - it is hidden in the view: no icon pops up in its place.
+        if (IsHidden(entity))
+        {
+            return null;
+        }
+
         // An entity is of one kind: a light of a hidden kind does not fall through to the icon of its marker.
         if (entity.GetComponent<Light>() is { } light)
         {
@@ -241,21 +247,40 @@ public class EntityIcons : ToolsProcessor
             return Shows.HasFlag(EntityIconKinds.Cameras) ? cameraIcon : null;
         }
 
-        // Hidden in the hierarchy, it is hidden in the view: no icon pops up in place of what it drew.
-        if (!IsMarked(entity) || !entity.Visible)
+        if (!IsMarked(entity))
         {
             return null;
         }
 
         var group = entity.GetComponent<Marker>() != null && entity.IconKey == EntityIconKeys.Group;
         var kind = group ? EntityIconKinds.Groups : EntityIconKinds.Entities;
-        // A group too: what its meshes show is read in the scene, an icon over them only hides it.
-        if (!Shows.HasFlag(kind) || HasLook(entity))
+        if (!Shows.HasFlag(kind))
+        {
+            return null;
+        }
+
+        // A group too: what its meshes show is read in the scene, an icon over them only hides it - unless asked for
+        // (EditorDisplay.ShowsIcon), to take the entity by.
+        var asked = entity.GetComponent<EditorDisplay>() is { IsEnabled: true, ShowsIcon: true };
+        if (!asked && HasLook(entity))
         {
             return null;
         }
 
         return group ? groupIcon : emptyIcon;
+    }
+
+    private static bool IsHidden(Entity entity)
+    {
+        for (var each = entity; each != null; each = each.Owner)
+        {
+            if (!each.Visible)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Whether a mesh the view draws is on the entity or under it; each entity is looked at once a frame.

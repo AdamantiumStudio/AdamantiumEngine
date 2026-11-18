@@ -226,6 +226,65 @@ public class EntityIconsTests
         });
     }
 
+    // Asked for, an icon shows over the meshes of a group or a marked entity; left out again, the meshes hide it.
+    [Test]
+    public void AnIconAskedFor_ShowsOverTheMeshes_TillItIsLeftOut()
+    {
+        var universe = new TestUniverse();
+        var output = new TestOutput();
+        universe.Add(output);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        var own = CameraEntity("Own");
+        var fleet = Marked(new Entity(null, "Fleet") { IconKey = EntityIconKeys.Group });
+        new Entity(fleet, "Ship").AddComponent(Shape());
+        var display = new EditorDisplay { ShowsIcon = true };
+        fleet.AddComponent(display);
+        var shown = Marked(new Entity(null, "Shown"));
+        shown.AddComponent(Shape());
+        shown.AddComponent(new EditorDisplay { ShowsIcon = true });
+        var hidden = Marked(new Entity(null, "Hidden fleet") { IconKey = EntityIconKeys.Group, Visible = false });
+        hidden.AddComponent(new EditorDisplay { ShowsIcon = true });
+        var convoy = new Entity(null, "Convoy") { Visible = false };
+        var underHidden = Marked(new Entity(convoy, "Escort") { IconKey = EntityIconKeys.Group });
+        new Entity(underHidden, "Ship").AddComponent(Shape());
+        underHidden.AddComponent(new EditorDisplay { ShowsIcon = true });
+        var hiddenLamp = new LightTemplate().BuildEntity(convoy, "Lamp", LightType.Point);
+        universe.EntityWorld.EntityManager.AddEntity(own);
+        foreach (var entity in new[] { fleet, shown, hidden, convoy })
+        {
+            universe.EntityWorld.EntityManager.AddEntity(entity);
+        }
+
+        output.OwnCamera = own.GetComponent<Camera>();
+        output.Camera = output.OwnCamera;
+        universe.EntityWorld.ForceUpdate();
+        universe.Settle();
+        var tools = new ToolsService(universe.EntityWorld);
+        tools.Initialize();
+        var icons = new EntityIcons();
+        tools.AttachProcessor(icons);
+
+        tools.Update(new AppTime());
+        var asked = icons.IconOf(fleet)?.Name;
+        display.ShowsIcon = false;
+        tools.Update(new AppTime());
+        var leftOut = icons.IconOf(fleet);
+        display.ShowsIcon = true;
+        display.IsEnabled = false;
+        tools.Update(new AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(asked, Is.EqualTo("Group"));
+            Assert.That(leftOut, Is.Null, "its meshes show it");
+            Assert.That(icons.IconOf(fleet), Is.Null, "the display turned off asks for nothing");
+            Assert.That(icons.IconOf(shown), Is.Not.Null, "a marked entity with its own mesh");
+            Assert.That(icons.IconOf(hidden), Is.Null, "hidden, asked or not");
+            Assert.That(icons.IconOf(underHidden), Is.Null, "an owner hidden");
+            Assert.That(icons.IconOf(hiddenLamp), Is.Null, "a light, an owner hidden");
+        });
+    }
+
     [Test]
     public void AnEntityUnderADisabledOne_HasNoIcon_TillItIsEnabled()
     {
