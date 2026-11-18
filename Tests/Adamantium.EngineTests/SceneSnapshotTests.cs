@@ -70,6 +70,41 @@ public class SceneSnapshotTests
         });
     }
 
+    // A game's physics changes put back: a body given during the game goes, one changed is as it was, a shape's collider
+    // swapped is its template's again.
+    [Test]
+    public async Task BodiesAndCollidersChangedInAGame_GoBack()
+    {
+        var file = new SceneFile();
+        file.Shapes.Add(new SceneShape
+        {
+            Uid = 10, Name = "Crate", Type = typeof(CubeShape).FullName,
+            Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Mass = 2 }
+        });
+        file.Shapes.Add(new SceneShape { Uid = 11, Name = "Plain", Type = typeof(CubeShape).FullName });
+        await new SceneBuilder(_scene, new CountingAssets()).Build(file);
+        _world.ForceUpdate();
+        var crate = Named("Crate");
+        var plain = Named("Plain");
+        var snapshot = SceneSnapshot.Take(_scene);
+        crate.GetComponent<RigidBody>().Mass = 9;
+        plain.AddComponent(new RigidBody());
+        Adamantium.Engine.Physics.PhysicsParts.SetCollider(plain, ColliderKind.Sphere);
+        _group.AddComponent(new RigidBody());
+        _world.ForceUpdate();
+
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(crate.GetComponent<RigidBody>()?.Mass, Is.EqualTo(2));
+            Assert.That(plain.GetComponent<RigidBody>(), Is.Null);
+            Assert.That(plain.GetComponent<Collider>(), Is.TypeOf<BoxCollider>(), "the template's again");
+            Assert.That(_group.GetComponent<RigidBody>(), Is.Null);
+        });
+    }
+
     [Test]
     public void WhatJoined_Goes_AndWhatWasTakenOut_ComesBack_TheSameObject()
     {

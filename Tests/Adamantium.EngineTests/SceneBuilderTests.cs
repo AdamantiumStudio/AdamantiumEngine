@@ -120,6 +120,64 @@ public class SceneBuilderTests
         });
     }
 
+    // A body and a collider of an entry are put on its entity over what its kind makes - a shape's template box - and
+    // written back; a collider as the kind makes it, and a model's root's, are not written.
+    [Test]
+    public async Task ABodyAndACollider_AreBuiltOverWhatTheKindMakes_AndWrittenBack()
+    {
+        var scene = Sample();
+        scene.Shapes[0].Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Mass = 2 };
+        scene.Shapes[0].Collider = new SceneCollider { Kind = ColliderKind.Sphere };
+        scene.Models[0].Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Static };
+        var bare = new SceneShape
+        {
+            Uid = 52, Name = "Bare", Type = typeof(CubeShape).FullName, Collider = new SceneCollider { Kind = ColliderKind.None }
+        };
+        var plain = new SceneShape { Uid = 53, Name = "Plain", Type = typeof(CubeShape).FullName };
+        scene.Shapes.Add(bare);
+        scene.Shapes.Add(plain);
+        var entities = await Build(scene);
+
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
+        Entity Named(string name) => entities.SelectMany(Everything).First(entity => entity.Name == name);
+
+        Assert.Multiple(() =>
+        {
+            var crate = Named("Crate");
+            Assert.That(crate.GetComponent<RigidBody>() is { Kind: Adamantium.DarkMatter.BodyKind.Dynamic, Mass: 2 }, Is.True);
+            Assert.That(crate.GetComponents<Collider>().Select(collider => collider.GetType()),
+                Is.EqualTo(new[] { typeof(SphereCollider) }), "the template's box replaced");
+            Assert.That(Named("Bare").GetComponents<Collider>(), Is.Empty);
+            Assert.That(Named("Plain").GetComponent<Collider>(), Is.TypeOf<BoxCollider>(), "the template's own");
+            Assert.That(Named("Robot A").GetComponent<RigidBody>()?.Kind, Is.EqualTo(Adamantium.DarkMatter.BodyKind.Static));
+
+            var crateBack = back.Shapes.Single(shape => shape.Name == "Crate");
+            Assert.That((crateBack.Body?.Kind, crateBack.Body?.Mass), Is.EqualTo((Adamantium.DarkMatter.BodyKind.Dynamic, 2f)));
+            Assert.That(crateBack.Collider?.Kind, Is.EqualTo(ColliderKind.Sphere));
+            Assert.That(back.Shapes.Single(shape => shape.Name == "Bare").Collider?.Kind, Is.EqualTo(ColliderKind.None));
+            Assert.That(back.Shapes.Single(shape => shape.Name == "Plain").Collider, Is.Null, "as its template makes it");
+            Assert.That(back.Shapes.Single(shape => shape.Name == "Plain").Body, Is.Null);
+            var robot = back.Models.Single(model => model.Name == "Robot A");
+            Assert.That(robot.Body?.Kind, Is.EqualTo(Adamantium.DarkMatter.BodyKind.Static));
+            Assert.That(robot.Collider, Is.Null, "a model's root takes its collider from its parts");
+            Assert.That(back.Markers.Single().Collider, Is.Null);
+        });
+    }
+
+    private static IEnumerable<Entity> Everything(Entity root)
+    {
+        var walk = new Stack<Entity>();
+        walk.Push(root);
+        while (walk.TryPop(out var entity))
+        {
+            yield return entity;
+            foreach (var under in entity.Dependencies)
+            {
+                walk.Push(under);
+            }
+        }
+    }
+
     // A disabled entry - a model's root, a camera - is built disabled and written back so; the others stay enabled.
     [Test]
     public async Task ADisabledEntry_IsBuiltDisabled_AndWrittenBackSo()

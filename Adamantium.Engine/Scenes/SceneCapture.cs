@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Engine.Physics;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse;
@@ -29,7 +30,7 @@ public static class SceneCapture
     public static bool Keeps(Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return Entry(entity, []) != null;
+        return Entry(entity, [], withPhysics: false) != null;
     }
 
     public static SceneFile Capture(Scene source)
@@ -97,7 +98,7 @@ public static class SceneCapture
     // An entity still to write, and the nearest entry it stands in; null for none.
     private readonly record struct Visit(Entity Entity, Entity Placed);
 
-    private static ScenePlacement Entry(Entity entity, HashSet<Camera> ownCameras)
+    private static ScenePlacement Entry(Entity entity, HashSet<Camera> ownCameras, bool withPhysics = true)
     {
         ScenePlacement entry;
         if (!string.IsNullOrEmpty(entity.Source))
@@ -158,6 +159,9 @@ public static class SceneCapture
                 AlphaCutoff = unloaded.Entry.AlphaCutoff, Faces = unloaded.Entry.Faces, Scale = entity.Transform.ScaleFactor
             };
             kept.Values.AddRange(unloaded.Entry.Values);
+            // Nothing made of it to read them from: kept as read.
+            kept.Body = unloaded.Entry.Body;
+            kept.Collider = unloaded.Entry.Collider;
             entry = kept;
         }
         else if (entity.ContainsComponent<Marker>())
@@ -177,7 +181,34 @@ public static class SceneCapture
         entry.Position = entity.Transform.Position;
         entry.Rotation = entity.Transform.Rotation;
         entry.IsEnabled = entity.IsEnabled;
+        if (withPhysics && entry is not SceneLight && entity.GetComponent<UnloadedShape>() == null)
+        {
+            CapturePhysics(entity, entry);
+        }
+
         return entry;
+    }
+
+    // Its rigid body, and a shape's collider where it is not the one its template makes. A model's root takes its
+    // colliders from its parts, which the model's edits keep; a marker and a spawn point have no mesh to fit one to.
+    private static void CapturePhysics(Entity entity, ScenePlacement entry)
+    {
+        if (entity.GetComponent<RigidBody>() is { } body)
+        {
+            entry.Body = SceneBody.From(PhysicsParts.BodyOf(body));
+        }
+
+        if (entry is not SceneShape || entity.GetComponent<ProceduralShape>() is not { } shape
+            || PhysicsParts.TemplateColliderOf(shape) is not { } template)
+        {
+            return;
+        }
+
+        var kind = PhysicsParts.KindOf(entity.GetComponent<Collider>());
+        if (kind != PhysicsParts.KindOf(template))
+        {
+            entry.Collider = new SceneCollider { Kind = kind };
+        }
     }
 
     // Places the entry in placed - null for the scene itself - as the entity stands, through the entities between them

@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- A scene keeps its entries' physics: `ScenePlacement.Body` (`SceneBody` - a `RigidBody`'s settings, each written
+  only when it is not a new body's own) on any entry but a light or a camera, and a shape's `ScenePlacement.Collider`
+  (`SceneCollider` - a kind by name, fitted to the mesh, `None` for none) in place of its template's; with none written
+  the template's stays. `SceneBuilder` makes an entity's physics the entry's - built, and put back when a game stops:
+  a body given in the game goes, a collider swapped is the template's again, what is already so is left. A kind this
+  engine does not know leaves that body or collider out, not the scene. `SceneCapture` writes them back - a model's root
+  its body only, its colliders coming from its parts. `PhysicsParts` puts a collider of a kind and a body's settings on
+  an entity and reads them back, for a scene's entries and a model's edits alike.
+
 - A model's parts keep their ids from load to load: `EntityImportTemplate` makes each one's id from the model root's
   and the part's path in the model (`ModelPartPath.UidOf`, `ModelPartPath.Child`), so what refers to a part by its
   id - a scene's editor section, a selection - finds it again; another copy of the model has other ids. The parts are

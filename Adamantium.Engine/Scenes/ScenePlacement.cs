@@ -57,6 +57,16 @@ public abstract class ScenePlacement
         set => Rotation = QuaternionF.Parse(value);
     }
 
+    /// <summary>Its rigid body; null for none of its own. A light's and a camera's are not read.</summary>
+    [XmlElement("Body")]
+    public SceneBody Body { get; set; }
+
+    /// <summary>A shape's collider, in place of the one its template makes; null to keep that one. Read for shapes
+    /// only: a model's root takes its colliders from its parts, which the model's edits keep, and a marker or a spawn
+    /// point has no mesh to fit one to.</summary>
+    [XmlElement("Collider")]
+    public SceneCollider Collider { get; set; }
+
     /// <summary>Whether it works and is drawn, in the editor and in the game; written only when it does not.</summary>
     [XmlAttribute("Enabled")]
     public bool IsEnabled { get; set; } = true;

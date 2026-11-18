@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Managers;
+using Adamantium.Engine.Physics;
 using Adamantium.Engine.Templates;
 using Adamantium.Engine.Templates.Lights;
 using Adamantium.Graphics.Core.Assets;
@@ -422,7 +423,6 @@ public sealed class SceneBuilder
 
     private static void ApplyShape(Entity entity, SceneShape entry)
     {
-        Place(entity, entry);
         entity.Transform.ScaleFactor = entry.Scale;
         if (entity.GetComponent<ProceduralShape>() is { } shape && shape.GetType().FullName == entry.Type)
             ComponentFields.Read(entry.Values, shape, typeof(ActivatableComponent));
@@ -434,6 +434,9 @@ public sealed class SceneBuilder
             material.AlphaCutoff = entry.AlphaCutoff;
             material.Faces = entry.Faces;
         }
+
+        // After the shape's values: the collider its template makes may follow them.
+        Place(entity, entry);
     }
 
     private ProceduralShape MakeShapeComponent(SceneShape entry)
@@ -466,6 +469,65 @@ public sealed class SceneBuilder
         entity.Transform.Position = entry.Position;
         entity.Transform.Rotation = Rotation(entry);
         entity.IsEnabled = entry.IsEnabled;
+        if (entry is not SceneLight && entity.GetComponent<UnloadedShape>() == null)
+        {
+            ApplyPhysics(entity, entry);
+        }
+    }
+
+    // The entity's physics made the entry's - built, or put back as it was when a game stops: its body, none for none
+    // (a model's root keeping the one its model's edits give it); a shape's collider, the template's for none written.
+    // What already is so is left as it is.
+    private static void ApplyPhysics(Entity entity, ScenePlacement entry)
+    {
+        var body = entity.GetComponent<RigidBody>();
+        if (entry.Body is { } kept)
+        {
+            if (kept.ToEdits() is not { } edits)
+            {
+                Log.Logger.Warning("Scene: the body of {Name} is of a kind this engine does not know; it is left out",
+                    entry.Name);
+            }
+            else if (body == null || !PhysicsParts.IsAlike(body, edits))
+            {
+                PhysicsParts.SetBody(entity, edits);
+            }
+        }
+        else if (body != null && entry is not SceneModel)
+        {
+            entity.RemoveComponent(body);
+        }
+
+        if (entry is not SceneShape shape || entity.GetComponent<ProceduralShape>() is not { } made)
+        {
+            return;
+        }
+
+        // A second collider given in a game counts as other than wanted.
+        var colliders = entity.GetComponents<Collider>();
+        var current = colliders.Length > 1
+            ? (ColliderKind?)null
+            : PhysicsParts.KindOf(colliders.Length == 0 ? null : colliders[0]);
+        if (shape.Collider?.Kind is { } kind)
+        {
+            if (current != kind)
+            {
+                PhysicsParts.SetCollider(entity, kind);
+            }
+
+            return;
+        }
+
+        if (shape.Collider != null)
+        {
+            Log.Logger.Warning("Scene: the collider of {Name} is of a kind this engine does not know; it keeps the " +
+                               "template's", entry.Name);
+        }
+
+        if (PhysicsParts.TemplateColliderOf(made) is { } template && current != PhysicsParts.KindOf(template))
+        {
+            PhysicsParts.PutCollider(entity, template);
+        }
     }
 
     // The entry's rotation made unit; none for one that is no rotation - zero, or not numbers.
