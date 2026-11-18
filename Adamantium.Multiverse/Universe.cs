@@ -36,15 +36,14 @@ public class Universe : IUniverse
     private double accumulatedFrameTime;
     private AppTime appTime;
 
-    private TimeSpan totalTime;
+    private double totalSeconds;
     private volatile bool simulationPauseRequested;
-    private bool isSimulationPaused;
+    private volatile bool isSimulationPaused;
+    private bool isFramePaused;
 
     private readonly System.Diagnostics.Stopwatch renderTimer = new();
     private double renderSeconds, renderWindow, gpuMilliseconds;
     private int renderedFrames;
-
-    private readonly PreciseTimer loopTimer;
 
     private Double fpsTime;
     private Int32 fpsCounter;
@@ -89,7 +88,6 @@ public class Universe : IUniverse
         UniverseBuilder.Build(Container);
             
         appTime = new AppTime();
-        loopTimer = new PreciseTimer();
         contextsMapping = new Dictionary<Object, OutputContext>();
         IsFixedTimeStep = false;
         DesiredFPS = 60;
@@ -360,13 +358,13 @@ public class Universe : IUniverse
         if (IsPaused)
         {
             platform.RemoveWindowsInternal();
-            hostedFrameAt = 0;
+            RestartFrameClock();
             Fps = 0;
             return;
         }
 
-        UpdateAppTime(HostedFrameTime());
         StartFrame(true);
+        UpdateAppTime(MeasureFrameTime());
         MakePreparations();
         Update(SimulationTime());
         ExecuteDrawSequence2(appTime);
@@ -457,6 +455,7 @@ public class Universe : IUniverse
             {
                 if (Volatile.Read(ref hostedLoopHolds) > 0)
                 {
+                    RestartFrameClock();
                     Thread.Sleep(1);
                     continue;
                 }
@@ -529,7 +528,7 @@ public class Universe : IUniverse
     private bool RunPausedFrame()
     {
         platform.RemoveWindowsInternal();
-        hostedFrameAt = 0;
+        RestartFrameClock();
         Fps = 0;
         TakeMessages();
         return false;
@@ -539,7 +538,7 @@ public class Universe : IUniverse
     {
         StartFrame(false);
         WaitUntilShown();
-        UpdateAppTime(HostedFrameTime());
+        UpdateAppTime(MeasureFrameTime());
         MakePreparations();
         Update(SimulationTime());
         var drawn = ExecuteDrawSequence2(appTime);
@@ -625,19 +624,22 @@ public class Universe : IUniverse
         }
     }
 
-    // A hosted universe may run several frames to one of its host's, or one to several: its clock is its own frames.
-    // A gap without frames - a minimized window, a stalled render thread - moves it by one long frame at most.
-    private double HostedFrameTime()
+    // A universe's clock is its own frames, whoever drives them; a hosted one may run several frames to one of its
+    // host's. A gap without frames - startup, a minimized window, a stalled thread - moves it by one long frame at most.
+    private double MeasureFrameTime()
     {
         var now = Stopwatch.GetTimestamp();
-        var elapsed = hostedFrameAt == 0 ? 0 : Stopwatch.GetElapsedTime(hostedFrameAt, now).TotalSeconds;
-        hostedFrameAt = now;
-        return Math.Min(elapsed, LongestHostedFrame);
+        var elapsed = frameMeasuredAt == 0 ? 0 : Stopwatch.GetElapsedTime(frameMeasuredAt, now).TotalSeconds;
+        frameMeasuredAt = now;
+        return Math.Min(elapsed, LongestFrame);
     }
 
-    private const double LongestHostedFrame = 0.25;
+    // A gap the universe spent outside its frames - paused or held - counts no time.
+    private void RestartFrameClock() => frameMeasuredAt = 0;
 
-    private long hostedFrameAt;
+    private const double LongestFrame = 0.25;
+
+    private long frameMeasuredAt;
 
     /// <summary>
     /// Run the loop on the selected control
@@ -784,10 +786,12 @@ public class Universe : IUniverse
     /// <param name="elapsed">elapsed time from the last frame</param>
     protected void UpdateAppTime(double elapsed)
     {
-        TimeSpan frameTimeSpan = TimeSpan.FromSeconds(appTime.FrameTime);
-        if (!IsPaused && !isSimulationPaused)
+        // The pause is taken once here, before the total moves, so a frame paused adds nothing to it.
+        isSimulationPaused = simulationPauseRequested;
+        isFramePaused = IsPaused || isSimulationPaused;
+        if (!isFramePaused)
         {
-            totalTime += frameTimeSpan;
+            totalSeconds += elapsed;
         }
         if (appTime.FramesCount > 0 && appTime.FramesCount - 1 < UInt64.MaxValue)
         {
@@ -799,7 +803,7 @@ public class Universe : IUniverse
         }
 
         appTime.FrameTime = elapsed;
-        appTime.TotalTime = totalTime;
+        appTime.TotalTime = TimeSpan.FromSeconds(totalSeconds);
         CalculateFps(ref appTime);
 
     }
@@ -845,7 +849,7 @@ public class Universe : IUniverse
 
     private AppTime SimulationTime()
     {
-        return isSimulationPaused ? appTime with { FrameTime = 0 } : appTime;
+        return isFramePaused ? appTime with { FrameTime = 0 } : appTime;
     }
 
     /// <summary>
@@ -861,31 +865,12 @@ public class Universe : IUniverse
             {
                 if (IsFixedTimeStep)
                 {
-                    accumulatedFrameTime += loopTimer.GetElapsedTime();
-
-                    if (accumulatedFrameTime >= TimeStep)
-                    {
-                        StartFrame(true);
-                        MakePreparations();
-                        Update(SimulationTime());
-                        ExecuteDrawSequence(appTime);
-
-                        UpdateAppTime(accumulatedFrameTime);
-                        accumulatedFrameTime = 0;
-                    }
+                    accumulatedFrameTime += MeasureFrameTime();
+                    if (accumulatedFrameTime < TimeStep)
+                        continue;
                 }
-                else
-                {
-                    var frameTime = loopTimer.GetElapsedTime();
 
-                    StartFrame(true);
-                    MakePreparations();
-                    Update(SimulationTime());
-                    ExecuteDrawSequence(appTime);
-
-                    UpdateAppTime(frameTime);
-                }
-                FrameFinished?.Invoke(this, EventArgs.Empty);
+                RunOwnFrame();
             }
 
             OnStopped();
@@ -896,7 +881,25 @@ public class Universe : IUniverse
             Log.Logger.Fatal(exception, "Universe loop stopped");
         }
     }
-        
+
+    private void RunOwnFrame()
+    {
+        StartFrame(true);
+        UpdateAppTime(TakeAccumulatedFrameTime());
+        MakePreparations();
+        Update(SimulationTime());
+        ExecuteDrawSequence(appTime);
+        FrameFinished?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The time of the loop's frame: all gathered since the last fixed step, if any, and the frame's posted actions.
+    private double TakeAccumulatedFrameTime()
+    {
+        var frameTime = accumulatedFrameTime + MeasureFrameTime();
+        accumulatedFrameTime = 0;
+        return frameTime;
+    }
+
     private void ExecuteDrawSequence(AppTime time)
     {
         if (!platform.HasOutputs) return;
@@ -1089,7 +1092,6 @@ public class Universe : IUniverse
     /// </summary>
     protected virtual void MakePreparations()
     {
-        isSimulationPaused = simulationPauseRequested;
         platform.MakePreparationsForNextFrame();
         if (deviceResourcesLost)
         {
