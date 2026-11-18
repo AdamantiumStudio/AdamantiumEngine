@@ -27,6 +27,10 @@ public struct Pose
     /// <summary>A point given in the body's own axes, in the world.</summary>
     public readonly Vector3F TransformPoint(Vector3F localPoint) => Position + Vector3F.Transform(localPoint, Rotation);
 
+    /// <summary>A pose given in the body's own axes, in the world.</summary>
+    public readonly Pose Transform(in Pose localPose) =>
+        new(TransformPoint(localPose.Position), Rotation * localPose.Rotation);
+
     /// <summary>A direction given in the body's own axes, in the world.</summary>
     public readonly Vector3F TransformDirection(Vector3F localDirection) => Vector3F.Transform(localDirection, Rotation);
 

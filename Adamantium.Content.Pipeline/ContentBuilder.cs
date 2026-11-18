@@ -9,6 +9,7 @@ using System.Threading;
 using Adamantium.Content.Pipeline.Importers;
 using Adamantium.Content.Pipeline.Writers;
 using Adamantium.Graphics.Core.Assets;
+using Adamantium.Graphics.Core.Models;
 
 namespace Adamantium.Content.Pipeline;
 
@@ -460,7 +461,8 @@ public sealed class ContentBuilder
         };
 
         var content = importer.Import(sourceFull, context);
-        WriteAssetFile(assetFull, writersByImporter[importerName], content, new AssetSource
+        var edits = ReadEdits(assetFull, sourceFull, log);
+        WriteAssetFile(assetFull, writersByImporter[importerName], content, edits, new AssetSource
         {
             Path = Normalize(Path.GetRelativePath(
                 Path.GetDirectoryName(Path.Combine(projectDirectory, logicalName)), sourceFull)),
@@ -637,11 +639,83 @@ public sealed class ContentBuilder
         return true;
     }
 
-    private static void WriteAssetFile(string path, IContentWriter writer, object content, AssetSource source)
+    /// <summary>Puts <paramref name="edits"/> into the model file at <paramref name="assetFile"/>, in place of the ones it
+    /// had and the rest of it as it was - parts with nothing edited left out, no section when none is left - under the
+    /// lock of the content project in <paramref name="projectDirectory"/>, null for a file in no project. False, and
+    /// nothing written, when the file is gone or is of an older format version; <see cref="AssetFormatException"/> for one
+    /// this engine cannot read, <see cref="IOException"/> when it cannot be replaced, as while another reads it.</summary>
+    public static bool WriteEdits(string projectDirectory, string assetFile, ModelEdits edits)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(assetFile);
+        ArgumentNullException.ThrowIfNull(edits);
+
+        using var projectLock = projectDirectory == null ? null : ProjectLock.Take(projectDirectory);
+        if (!File.Exists(assetFile))
+        {
+            return false;
+        }
+
+        // The edits it had are not read: they are replaced, spoiled or not.
+        var file = AssetFile.Read(assetFile, AssetFileSection.All & ~AssetFileSection.Edits);
+        if (file.Version != AssetFile.FormatVersion)
+        {
+            return false;
+        }
+
+        var kept = new ModelEdits();
+        foreach (var (path, part) in edits.Parts ?? [])
+        {
+            if (part is { Collider: not null } or { Body: not null })
+            {
+                kept.Parts[path] = part;
+            }
+        }
+
+        file.Edits = kept.Parts.Count > 0 ? ModelEditsSerializer.Serialize(kept) : null;
+        Replace(assetFile, file);
+        return true;
+    }
+
+    // The edits of the asset file a new import writes over, kept as they are; null when it has none or they cannot be
+    // read out of it.
+    private static byte[] ReadEdits(string assetFull, string sourceFull, Action<string> log)
+    {
+        if (!File.Exists(assetFull))
+        {
+            return null;
+        }
+
+        try
+        {
+            if ((AssetFile.Read(assetFull, AssetFileSection.None).Sections & AssetFileSection.Edits) == 0)
+            {
+                return null;
+            }
+        }
+        catch (AssetFormatException exception)
+        {
+            log($"{sourceFull} : warning ACB013: its asset file cannot be read, so any edits made to it are lost: " +
+                exception.Message);
+            return null;
+        }
+
+        try
+        {
+            return AssetFile.Read(assetFull, AssetFileSection.Edits).Edits;
+        }
+        catch (AssetFormatException exception)
+        {
+            log($"{sourceFull} : warning ACB013: the edits made to it are lost: {exception.Message}");
+            return null;
+        }
+    }
+
+    private static void WriteAssetFile(string path, IContentWriter writer, object content, byte[] edits,
+        AssetSource source)
     {
         using var body = new MemoryStream();
         writer.Write(body, content);
-        Replace(path, new AssetFile { Source = source, Body = body.ToArray() });
+        Replace(path, new AssetFile { Source = source, Body = body.ToArray(), Edits = edits });
     }
 
     private static void Replace(string path, AssetFile file)

@@ -433,7 +433,7 @@ public sealed class PlacementTool : PointerTool
     private static double ViewDepth(CameraBase camera)
     {
         var depth = camera.Type.IsThirdPerson() && camera.Subject != null
-            ? (camera.Subject.GetCenterAbsolute() - camera.WorldPosition).Length()
+            ? (camera.FindSubjectCenter() - camera.WorldPosition).Length()
             : camera.FocusDistance;
         return Math.Max(depth, camera.ZNear * 2);
     }

@@ -1,6 +1,7 @@
 ﻿using Adamantium.Mathematics;
 using System;
 using Adamantium.Core;
+using Adamantium.ECS.Components.Extensions;
 using Adamantium.Graphics.Core;
 using Adamantium.MVVM;
 
@@ -133,6 +134,75 @@ namespace Adamantium.ECS.Components
         /// <summary>The object a third-person camera FOLLOWS. It IS the parent of the camera's entity: transforms are
         /// relative to the parent, so the follow link and the transform link are one thing.</summary>
         public Entity Subject => Owner?.Owner;
+
+        private Entity measuredSubject;
+        private Vector3F measuredCenter;
+
+        /// <summary>Where the middle of the <see cref="Subject"/> stands in the world, the camera's own entity left out;
+        /// where the camera stands when it has no subject. A subject with parts is measured once the camera starts
+        /// orbiting it, as an orbit's pivot is; a single entity is measured afresh.</summary>
+        public Vector3<double> FindSubjectCenter()
+        {
+            var center = FindLocalSubjectCenter();
+            return Subject == null
+                ? WorldPosition
+                : Vector3F.TransformCoordinate(center, Subject.Transform.GetWorldMatrixF()).As<double>();
+        }
+
+        /// <summary>The middle of the <see cref="Subject"/> in its own axes, as <see cref="FindSubjectCenter"/> measures
+        /// it; its origin when it has nothing to measure.</summary>
+        protected Vector3F FindLocalSubjectCenter()
+        {
+            var subject = Subject;
+            if (subject != null && subject == measuredSubject)
+            {
+                return measuredCenter;
+            }
+
+            // A subject left is let go of, so the camera keeps no model alive.
+            measuredSubject = null;
+            if (subject == null)
+            {
+                return Vector3F.Zero;
+            }
+
+            var center = subject.TryMeasureBounds(out var bounds, Owner) ? bounds.Center.As<float>() : Vector3F.Zero;
+            if (HasPartsBesidesTheCamera(subject))
+            {
+                measuredCenter = center;
+                measuredSubject = subject;
+            }
+
+            return center;
+        }
+
+        /// <summary>Forgets the subject's measured middle, so it is measured again: for a camera starting an orbit.
+        /// </summary>
+        protected void ForgetSubjectCenter()
+        {
+            measuredSubject = null;
+        }
+
+        partial void OnTypeChanged(CameraType value) => ForgetSubjectCenter();
+
+        protected override void OnOwnerChanged(Entity oldOwner, Entity newOwner)
+        {
+            ForgetSubjectCenter();
+            base.OnOwnerChanged(oldOwner, newOwner);
+        }
+
+        private bool HasPartsBesidesTheCamera(Entity subject)
+        {
+            foreach (var child in subject.Dependencies.AsSpan())
+            {
+                if (child != null && child != Owner)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>Air a third-person camera keeps around its subject, as a multiple of the edge-to-edge framing
         /// distance. Ignored when an explicit distance is passed to <c>SetThirdPersonCamera</c>.</summary>

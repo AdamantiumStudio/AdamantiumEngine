@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Adamantium.Graphics.Core.Models;
 using MessagePack;
 using MessagePack.Resolvers;
 
 namespace Adamantium.Graphics.Core.Assets;
 
 /// <summary>A cooked asset file (.aemf): a header with its format version and a table of sections, then the sections -
-/// <see cref="Thumbnail"/>, <see cref="Source"/> and <see cref="Body"/> - each read without the others.</summary>
+/// <see cref="Thumbnail"/>, <see cref="Source"/>, <see cref="Body"/> and <see cref="Edits"/> - each read without the
+/// others.</summary>
 public sealed class AssetFile
 {
     /// <summary>The extension of an asset file.</summary>
@@ -42,6 +44,10 @@ public sealed class AssetFile
 
     /// <summary>The asset itself, as its writer gave it.</summary>
     public byte[] Body { get; set; }
+
+    /// <summary>The edits made to the model in the editor, as <see cref="ModelEditsSerializer"/> wrote them; null when it
+    /// has none.</summary>
+    public byte[] Edits { get; set; }
 
     /// <summary>Reads the <paramref name="sections"/> of the file at <paramref name="path"/>; the others stay null.
     /// Throws <see cref="AssetFormatException"/> for a file this engine does not read.</summary>
@@ -138,6 +144,9 @@ public sealed class AssetFile
                 case AssetFileSection.Body:
                     file.Body = data;
                     break;
+                case AssetFileSection.Edits:
+                    file.Edits = data;
+                    break;
             }
         }
 
@@ -154,6 +163,7 @@ public sealed class AssetFile
         AddSection(sections, AssetFileSection.Source,
             Source == null ? null : MessagePackSerializer.Serialize(Source, SourceOptions));
         AddSection(sections, AssetFileSection.Body, Body);
+        AddSection(sections, AssetFileSection.Edits, Edits);
 
         using var writer = new BinaryWriter(stream, Encoding.UTF8, true);
         writer.Write(Signature);
@@ -186,7 +196,8 @@ public sealed class AssetFile
 
     private static bool IsKnown(AssetFileSection section)
     {
-        return section is AssetFileSection.Thumbnail or AssetFileSection.Source or AssetFileSection.Body;
+        return section is AssetFileSection.Thumbnail or AssetFileSection.Source or AssetFileSection.Body
+            or AssetFileSection.Edits;
     }
 
     private static long GetHeaderSize(int sectionCount)

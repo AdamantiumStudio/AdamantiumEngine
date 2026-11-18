@@ -12,6 +12,7 @@ namespace Adamantium.DarkMatter;
 public sealed partial class PhysicsWorld : IPhysicsWorld
 {
     private const int NoBody = -1;
+    private const int NoPart = -1;
     private const float MatchDistanceSquared = 0.02f * 0.02f;
 
     private readonly DynamicAabbTree<int> _tree;
@@ -19,6 +20,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private readonly List<Contact> _contacts = [];
     private readonly Stack<Contact> _spareContacts = new();
     private readonly Stack<int> _freeSlots = new();
+    private readonly Stack<int> _freeParts = new();
     private readonly List<int> _found = [];
     private readonly List<int> _woken = [];
     private readonly List<int> _marked = [];
@@ -32,7 +34,9 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private float[] _islandSleepTime = new float[64];
     private int[] _islandFirst = new int[64];
     private int[] _islandLast = new int[64];
+    private PartState[] _parts = new PartState[64];
     private int _slotCount;
+    private int _partCount;
     private int _newSleepers;
     private Vector3F _gravity;
 
@@ -100,8 +104,10 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         state.Generation = generation;
         state.Marks = listed;
         state.Kind = description.Kind;
-        state.Shape = description.Shape;
-        state.Position = description.Position;
+        state.FirstPart = NoPart;
+        state.CenterOfMass = mass.Center;
+        state.InertiaRotation = description.Kind == BodyKind.Dynamic ? mass.InertiaRotation : QuaternionF.Identity;
+        state.Position = description.Position + Vector3F.Transform(mass.Center, rotation);
         state.Rotation = rotation;
         state.StartPosition = state.Position;
         state.StartRotation = state.Rotation;
@@ -126,12 +132,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         {
             state.InverseMass = 1f / mass.Mass;
             state.InverseInertia = new Vector3F(1f / mass.Inertia.X, 1f / mass.Inertia.Y, 1f / mass.Inertia.Z);
-            state.WorldInverseInertia = InertiaMath.ToWorld(state.Rotation, state.InverseInertia);
+            state.WorldInverseInertia = state.MeasureWorldInverseInertia();
             if (!state.IsAwake)
                 state.IslandHead = index;
         }
 
-        state.Proxy = _tree.Add(ComputeProxyBounds(state), index);
+        AddParts(index, description.Shape);
         var marks = BodyMarks.Moved | BodyMarks.New;
         if (state.IsDynamic && !state.IsAwake)
             _newSleepers++;
@@ -159,7 +165,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         }
 
         WakeNewSleepersNear(index);
-        _tree.Remove(state.Proxy);
+        RemoveParts(index);
         var generation = state.Generation;
         var listed = state.Marks & BodyMarks.Listed;
         state = default;
@@ -180,7 +186,13 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public BodyKind GetKind(BodyHandle body) => _bodies[Resolve(body)].Kind;
 
     /// <inheritdoc/>
-    public Pose GetPose(BodyHandle body) => _bodies[Resolve(body)].Pose;
+    public Pose GetPose(BodyHandle body) => _bodies[Resolve(body)].OriginPose;
+
+    /// <inheritdoc/>
+    public Vector3F GetCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].Position;
+
+    /// <inheritdoc/>
+    public Vector3F GetLocalCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].CenterOfMass;
 
     /// <inheritdoc/>
     public void SetPose(BodyHandle body, in Pose pose)
@@ -190,12 +202,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var rotation = NormalizeRotation(pose.Rotation, nameof(pose));
         WakeNewSleepersNear(index);
         ref var state = ref _bodies[index];
-        state.Position = pose.Position;
+        state.Position = pose.Position + Vector3F.Transform(state.CenterOfMass, rotation);
         state.Rotation = rotation;
         if (state.IsDynamic)
-            state.WorldInverseInertia = InertiaMath.ToWorld(state.Rotation, state.InverseInertia);
+            state.WorldInverseInertia = state.MeasureWorldInverseInertia();
 
-        var moved = _tree.Move(state.Proxy, ComputeProxyBounds(state));
+        var moved = MoveParts(index);
         Mark(index, moved ? BodyMarks.Placed | BodyMarks.Moved : BodyMarks.Placed);
         WakeIsland(index);
         WakeTouching(index);
@@ -278,7 +290,16 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public BoundingBox<float> GetBounds(BodyHandle body)
     {
         ref var state = ref _bodies[Resolve(body)];
-        return state.Shape.ComputeBounds(state.Pose);
+        var part = state.FirstPart;
+        var bounds = _parts[part].Shape.ComputeBounds(PlacePart(state, _parts[part]));
+        for (part = _parts[part].Next; part != NoPart; part = _parts[part].Next)
+        {
+            var partBounds = _parts[part].Shape.ComputeBounds(PlacePart(state, _parts[part]));
+            bounds = new BoundingBox<float>(Vector3F.Min(bounds.Minimum, partBounds.Minimum),
+                Vector3F.Max(bounds.Maximum, partBounds.Maximum));
+        }
+
+        return bounds;
     }
 
     /// <inheritdoc/>
@@ -346,22 +367,41 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             if (!body.IsUsed || !body.IsMoving)
                 continue;
 
-            if (_tree.Move(body.Proxy, ComputeProxyBounds(body)))
+            if (MoveParts(index))
                 Mark(index, BodyMarks.Moved);
         }
     }
 
-    private BoundingBox<float> ComputeProxyBounds(in BodyState body)
+    private bool MoveParts(int index)
     {
-        var bounds = body.Shape.ComputeBounds(body.Pose);
+        ref var body = ref _bodies[index];
+        var moved = false;
+        for (var part = body.FirstPart; part != NoPart; part = _parts[part].Next)
+        {
+            moved |= _tree.Move(_parts[part].Proxy, ComputeProxyBounds(body, _parts[part]));
+        }
+
+        return moved;
+    }
+
+    private BoundingBox<float> ComputeProxyBounds(in BodyState body, in PartState part)
+    {
+        var bounds = part.Shape.ComputeBounds(PlacePart(body, part));
         var travel = body.LinearVelocity * StepSeconds;
-        var swing = new Vector3F(MeasureSpinSpeed(body) * StepSeconds);
+        var swing = new Vector3F(MeasureSweepSpeed(body, part) * StepSeconds);
         return new BoundingBox<float>(bounds.Minimum + Vector3F.Min(travel, Vector3F.Zero) - swing,
             bounds.Maximum + Vector3F.Max(travel, Vector3F.Zero) + swing);
     }
 
-    private static float MeasureSpinSpeed(in BodyState body) =>
-        body.Shape.MeasureSweepSpeed(body.AngularVelocity, body.Rotation);
+    private static Pose PlacePart(in BodyState body, in PartState part) =>
+        part.HasBodyPose ? body.Pose : body.Pose.Transform(part.Pose);
+
+    /// <summary>How fast the space the part fills sweeps outward as its body spins: a part off the center of mass
+    /// swings around it.</summary>
+    private static float MeasureSweepSpeed(in BodyState body, in PartState part) =>
+        part.IsCentered
+            ? part.Shape.MeasureSweepSpeed(body.AngularVelocity, body.Rotation * part.Pose.Rotation)
+            : body.AngularVelocity.Length() * (part.Pose.Position.Length() + part.Shape.BoundingRadius);
 
     private void FindNewPairs()
     {
@@ -371,23 +411,27 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             if (!body.IsUsed || !body.IsMoved)
                 continue;
 
-            _found.Clear();
-            _tree.Query(_tree.BoxOf(body.Proxy), _found);
-            foreach (var other in _found)
+            for (var part = body.FirstPart; part != NoPart; part = _parts[part].Next)
             {
-                if (other == index)
-                    continue;
+                _found.Clear();
+                _tree.Query(_tree.BoxOf(_parts[part].Proxy), _found);
+                foreach (var otherPart in _found)
+                {
+                    var other = _parts[otherPart].Body;
+                    if (other == index)
+                        continue;
 
-                ref var otherBody = ref _bodies[other];
-                if (otherBody.IsMoved && other < index)
-                    continue;
+                    ref var otherBody = ref _bodies[other];
+                    if (otherBody.IsMoved && otherPart < part)
+                        continue;
 
-                if (!body.IsDynamic && !otherBody.IsDynamic)
-                    continue;
+                    if (!body.IsDynamic && !otherBody.IsDynamic)
+                        continue;
 
-                var key = Contact.MakeKey(index, other);
-                if (!_contactsByKey.ContainsKey(key))
-                    CreateContact(key, Math.Min(index, other), Math.Max(index, other));
+                    var key = Contact.MakeKey(part, otherPart);
+                    if (!_contactsByKey.ContainsKey(key))
+                        CreateContact(key, Math.Min(part, otherPart), Math.Max(part, otherPart));
+                }
             }
         }
     }
@@ -406,16 +450,19 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 continue;
             }
 
-            if (!Collision.BoxIntersectsBox(_tree.BoxOf(first.Proxy), _tree.BoxOf(second.Proxy)))
+            ref var firstPart = ref _parts[contact.FirstPart];
+            ref var secondPart = ref _parts[contact.SecondPart];
+            if (!Collision.BoxIntersectsBox(_tree.BoxOf(firstPart.Proxy), _tree.BoxOf(secondPart.Proxy)))
             {
                 DestroyContact(contact);
                 continue;
             }
 
-            var closingSpeed = (second.LinearVelocity - first.LinearVelocity).Length() + MeasureSpinSpeed(first)
-                               + MeasureSpinSpeed(second);
+            var closingSpeed = (second.LinearVelocity - first.LinearVelocity).Length()
+                               + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
             var speculativeDistance = Settings.SpeculativeDistance + closingSpeed * stepSeconds;
-            if (Narrowphase.Collide(first.Shape, first.Pose, second.Shape, second.Pose, speculativeDistance, _manifold))
+            if (Narrowphase.Collide(firstPart.Shape, PlacePart(first, firstPart), secondPart.Shape,
+                    PlacePart(second, secondPart), speculativeDistance, _manifold))
             {
                 _manifold.ReduceTo(Settings.MaxContactPointsPerPair);
                 RefreshPoints(contact, first.Pose, second.Pose);
@@ -534,7 +581,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             var spin = new QuaternionF(body.AngularVelocity.X, body.AngularVelocity.Y, body.AngularVelocity.Z, 0);
             body.Rotation = QuaternionF.Normalize(body.Rotation + spin * body.Rotation * (0.5f * substep));
             if (body.IsDynamic)
-                body.WorldInverseInertia = InertiaMath.ToWorld(body.Rotation, body.InverseInertia);
+                body.WorldInverseInertia = body.MeasureWorldInverseInertia();
         }
     }
 
@@ -564,7 +611,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             body.Force = Vector3F.Zero;
             body.Torque = Vector3F.Zero;
             body.IsPushed = false;
-            var spinSpeed = body.AngularVelocity.Length() * body.Shape.BoundingRadius;
+            var spinSpeed = body.AngularVelocity.Length() * body.Reach;
             if (!body.CanSleep || isPushed || body.LinearVelocity.LengthSquared() > sleepSpeedSquared
                                || spinSpeed * spinSpeed > sleepSpeedSquared)
             {
@@ -725,13 +772,17 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         if (_newSleepers == 0)
             return;
 
-        _found.Clear();
-        _tree.Query(_tree.BoxOf(_bodies[index].Proxy), _found);
-        foreach (var other in _found)
+        for (var part = _bodies[index].FirstPart; part != NoPart; part = _parts[part].Next)
         {
-            ref var body = ref _bodies[other];
-            if (other != index && body.IsDynamic && !body.IsAwake && body.IsNew)
-                WakeIsland(other);
+            _found.Clear();
+            _tree.Query(_tree.BoxOf(_parts[part].Proxy), _found);
+            foreach (var otherPart in _found)
+            {
+                var other = _parts[otherPart].Body;
+                ref var body = ref _bodies[other];
+                if (other != index && body.IsDynamic && !body.IsAwake && body.IsNew)
+                    WakeIsland(other);
+            }
         }
     }
 
@@ -744,12 +795,16 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         }
     }
 
-    private void CreateContact(ulong key, int first, int second)
+    private void CreateContact(ulong key, int firstPart, int secondPart)
     {
+        var first = _parts[firstPart].Body;
+        var second = _parts[secondPart].Body;
         var contact = _spareContacts.Count > 0 ? _spareContacts.Pop() : new Contact(Settings.MaxContactPointsPerPair);
         contact.Key = key;
         contact.First = first;
         contact.Second = second;
+        contact.FirstPart = firstPart;
+        contact.SecondPart = secondPart;
         contact.PointCount = 0;
         contact.Friction = MathF.Sqrt(_bodies[first].Friction * _bodies[second].Friction);
         contact.Restitution = MathF.Max(_bodies[first].Restitution, _bodies[second].Restitution);
@@ -832,6 +887,66 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         }
 
         return _slotCount++;
+    }
+
+    private void AddParts(int body, CollisionShape shape)
+    {
+        var center = _bodies[body].CenterOfMass;
+        if (shape is not CompoundCollisionShape compound)
+        {
+            AddPart(body, shape, new Pose(-center));
+            return;
+        }
+
+        // Added last to first, so the body's list keeps the compound's order.
+        var parts = compound.Parts;
+        for (var index = parts.Count - 1; index >= 0; index--)
+        {
+            AddPart(body, parts[index].Shape, new Pose(parts[index].Pose.Position - center, parts[index].Pose.Rotation));
+        }
+    }
+
+    private void AddPart(int body, CollisionShape shape, in Pose pose)
+    {
+        var part = TakePartSlot();
+        ref var state = ref _bodies[body];
+        ref var slot = ref _parts[part];
+        slot.Body = body;
+        slot.Shape = shape;
+        slot.Pose = pose;
+        slot.IsCentered = pose.Position == Vector3F.Zero;
+        slot.HasBodyPose = slot.IsCentered && pose.Rotation == QuaternionF.Identity;
+        slot.Next = state.FirstPart;
+        slot.Proxy = _tree.Add(ComputeProxyBounds(state, slot), part);
+        state.FirstPart = part;
+        state.Reach = MathF.Max(state.Reach, pose.Position.Length() + shape.BoundingRadius);
+    }
+
+    private void RemoveParts(int body)
+    {
+        var part = _bodies[body].FirstPart;
+        while (part != NoPart)
+        {
+            var next = _parts[part].Next;
+            _tree.Remove(_parts[part].Proxy);
+            _parts[part] = default;
+            _parts[part].Body = NoBody;
+            _freeParts.Push(part);
+            part = next;
+        }
+
+        _bodies[body].FirstPart = NoPart;
+    }
+
+    private int TakePartSlot()
+    {
+        if (_freeParts.Count > 0)
+            return _freeParts.Pop();
+
+        if (_partCount == _parts.Length)
+            Array.Resize(ref _parts, _parts.Length * 2);
+
+        return _partCount++;
     }
 
     private BodyHandle GetHandle(int index) => new(this, index, _bodies[index].Generation);

@@ -794,6 +794,88 @@ public class ContentBuilderTests
         });
     }
 
+    [Test]
+    public void WriteEdits_PutsThemIn_AndKeepsTheRestOfTheFile()
+    {
+        var asset = ImportTriangle();
+        var before = AssetFile.Read(asset, AssetFileSection.All);
+
+        var written = ContentBuilder.WriteEdits(_project, asset, BodyOnTheRoot());
+
+        var after = AssetFile.Read(asset, AssetFileSection.All);
+        Assert.Multiple(() =>
+        {
+            Assert.That(written, Is.True);
+            Assert.That(ModelEditsSerializer.Deserialize(after.Edits).Parts[""].Body.Mass, Is.EqualTo(50));
+            Assert.That(after.Body, Is.EqualTo(before.Body));
+            Assert.That(after.Source.Hash, Is.EqualTo(before.Source.Hash));
+        });
+    }
+
+    [Test]
+    public void AModelImportedAgain_KeepsItsEdits()
+    {
+        var asset = ImportTriangle();
+        ContentBuilder.WriteEdits(_project, asset, BodyOnTheRoot());
+        Write("Models/triangle.obj", Triangle.Replace("v 1 0 0", "v 2 0 0"));
+        var manifest = Manifest();
+        manifest.SetSources(["Models/triangle.obj"]);
+
+        var result = new ContentBuilder().Import(manifest, _project);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Imported, Has.Count.EqualTo(1), "the model was imported again");
+            var kept = ModelEditsSerializer.Deserialize(AssetFile.Read(asset, AssetFileSection.Edits).Edits);
+            Assert.That(kept.Parts[""].Body.Mass, Is.EqualTo(50));
+        });
+    }
+
+    [Test]
+    public void EditsAllUndone_LeaveNoSection()
+    {
+        var asset = ImportTriangle();
+        ContentBuilder.WriteEdits(_project, asset, BodyOnTheRoot());
+
+        ContentBuilder.WriteEdits(_project, asset, new ModelEdits());
+
+        Assert.That(AssetFile.Read(asset, AssetFileSection.None).Sections & AssetFileSection.Edits,
+            Is.EqualTo(AssetFileSection.None));
+    }
+
+    // Spoiled edits are carried as they are: a thumbnail is still put in, and new edits replace them.
+    [Test]
+    public void SpoiledEdits_StopNeitherAThumbnailNorNewEdits()
+    {
+        var asset = ImportTriangle();
+        var file = AssetFile.Read(asset, AssetFileSection.All);
+        file.Edits = [0xC1];
+        using (var stream = File.Create(asset))
+        {
+            file.WriteTo(stream);
+        }
+
+        var pictured = ContentBuilder.WriteThumbnail(_project, asset, [1, 2, 3], File.GetLastWriteTimeUtc(asset));
+        var keptThroughThePicture = AssetFile.Read(asset, AssetFileSection.Edits).Edits;
+        var edited = ContentBuilder.WriteEdits(_project, asset, BodyOnTheRoot());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pictured, Is.True);
+            Assert.That(keptThroughThePicture, Is.EqualTo(new byte[] { 0xC1 }));
+            Assert.That(edited, Is.True);
+            var replaced = ModelEditsSerializer.Deserialize(AssetFile.Read(asset, AssetFileSection.Edits).Edits);
+            Assert.That(replaced.Parts[""].Body.Mass, Is.EqualTo(50));
+        });
+    }
+
+    private static ModelEdits BodyOnTheRoot()
+    {
+        var edits = new ModelEdits();
+        edits.Parts[""] = new PartEdits { Body = new BodyEdits { Mass = 50 } };
+        return edits;
+    }
+
     private string ImportTriangle()
     {
         Write("Models/triangle.obj", Triangle);

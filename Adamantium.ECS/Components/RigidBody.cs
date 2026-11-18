@@ -3,8 +3,8 @@ using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components;
 
-/// <summary>Makes its entity a body the physics moves while a game plays, colliding with the shape of the entity's
-/// collider: a box, a sphere or a capsule.</summary>
+/// <summary>Makes its entity a body the physics moves while a game plays, colliding with the colliders on the entity and
+/// on the entities below it that have no rigid body of their own: boxes, spheres and capsules.</summary>
 [ViewModel]
 public partial class RigidBody : Component
 {

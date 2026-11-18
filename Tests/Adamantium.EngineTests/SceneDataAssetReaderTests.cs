@@ -39,6 +39,42 @@ public class SceneDataAssetReaderTests
         }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ABakedModel_IsReadWithItsEdits_OrWithoutThemWhenTheyCannotBeRead(bool spoiled)
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".aemf");
+        var edits = new ModelEdits();
+        edits.Parts[""] = new PartEdits { Collider = ColliderKind.Capsule };
+        using (var stream = File.Create(path))
+        {
+            new AssetFile
+            {
+                Body = SceneDataSerializer.Serialize(new SceneData { Name = "baked" }),
+                Edits = ModelEditsSerializer.Serialize(edits)
+            }.WriteTo(stream);
+        }
+
+        if (spoiled)
+        {
+            var bytes = File.ReadAllBytes(path);
+            bytes[^1] = 0xC1;
+            File.WriteAllBytes(path, bytes);
+        }
+
+        try
+        {
+            var scene = SceneDataSerializer.ReadAssetFile(path);
+
+            Assert.That(scene, Is.Not.Null, "the model is read either way");
+            Assert.That(scene.Edits?.Parts[""].Collider, spoiled ? Is.Null : Is.EqualTo(ColliderKind.Capsule));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Test]
     public void ABakedModel_IsReadFromItsAssetFile()
     {

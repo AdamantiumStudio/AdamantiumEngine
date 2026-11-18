@@ -57,7 +57,7 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
     public bool Take(Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        if (entity.GetComponent<Collider>() is not { } bounds || entity.GetDiameter() <= 0)
+        if (!entity.TryMeasureBounds(out var bounds) || Vector3<double>.Max(bounds.Size) <= 0)
         {
             return false;
         }
@@ -219,16 +219,16 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
         return diffuse.X + diffuse.Y + diffuse.Z > 0 ? new Vector3F(diffuse.X, diffuse.Y, diffuse.Z) : UntexturedColor;
     }
 
-    private Camera Aim(Entity entity, Collider bounds)
+    private Camera Aim(Entity entity, in Bounds bounds)
     {
-        bounds.Bounds.GetCorners(_corners);
+        bounds.GetCorners(_corners);
         var world = entity.Transform.GetWorldMatrixF();
         for (var i = 0; i < _corners.Length; i++)
         {
             _corners[i] = Vector3F.TransformCoordinate(_corners[i].As<float>(), world).As<double>();
         }
 
-        var center = entity.GetCenterAbsolute();
+        var center = Vector3F.TransformCoordinate(bounds.Center.As<float>(), world).As<double>();
         var forward = -ViewDirection;
         var right = Vector3.Normalize(Vector3<double>.Cross(-Vector3<double>.Up, forward));
         var up = Vector3<double>.Cross(forward, right);
