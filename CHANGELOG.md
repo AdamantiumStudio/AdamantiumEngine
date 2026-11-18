@@ -7,6 +7,12 @@ All packages share one version.
 
 ### Added
 
+- A model's parts keep their ids from load to load: `EntityImportTemplate` makes each one's id from the model root's
+  and the part's path in the model (`ModelPartPath.UidOf`, `ModelPartPath.Child`), so what refers to a part by its
+  id - a scene's editor section, a selection - finds it again; another copy of the model has other ids. The parts are
+  made in the file's order, no longer the reverse: a part exported after its namesakes leaves their paths and ids. An
+  edit of the model kept for one of several parts of one name now finds the part counted from the file's start.
+
 - `EditorDisplay.ShowsIcon` asks for an entity's icon even where its meshes are drawn - a group's or a marked
   entity's - so it can be taken by in the view; an entity hidden, itself or by an owner, still shows none.
   `EntityIcons.CanAskForIcon` tells which entities it changes anything for: marked ones, not lights or cameras.

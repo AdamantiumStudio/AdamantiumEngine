@@ -1,5 +1,7 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Adamantium.ECS;
@@ -93,6 +95,28 @@ public static class ModelPartPath
         return at;
     }
 
+    /// <summary>The path of the part named <paramref name="name"/> under the part at <paramref name="ownerPath"/>, the
+    /// <paramref name="count"/>-th of its siblings so named: for its id before it is made.</summary>
+    public static string Child(string ownerPath, string name, int count)
+    {
+        var segment = Segment(name ?? string.Empty, count);
+        return string.IsNullOrEmpty(ownerPath) ? segment : ownerPath + Separator + segment;
+    }
+
+    /// <summary>The id of the part at <paramref name="path"/> of the model whose root's id is <paramref name="model"/>:
+    /// the same each time the model is made, so what refers to the part finds it again.</summary>
+    public static UInt128 UidOf(UInt128 model, string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var length = 16 + Encoding.UTF8.GetByteCount(path);
+        Span<byte> input = length <= 512 ? stackalloc byte[length] : new byte[length];
+        BinaryPrimitives.WriteUInt128LittleEndian(input, model);
+        Encoding.UTF8.GetBytes(path, input[16..]);
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(input, hash);
+        return BinaryPrimitives.ReadUInt128LittleEndian(hash);
+    }
+
     private static string SegmentOf(Entity part)
     {
         var name = part.Name ?? string.Empty;
@@ -110,6 +134,11 @@ public static class ModelPartPath
             }
         }
 
+        return Segment(name, count);
+    }
+
+    private static string Segment(string name, int count)
+    {
         var segment = new StringBuilder(name.Length + 4);
         foreach (var symbol in name)
         {
