@@ -15,6 +15,7 @@ public sealed class PdfTextLine
 
     public int Count { get; }
 
-    /// <summary>Its box, from its first glyph's start to its last glyph's end.</summary>
+    /// <summary>Its box, from its first glyph's start to its last glyph's end; a line over a much smaller one stops short
+    /// of it below.</summary>
     public PdfQuad Quad { get; }
 }

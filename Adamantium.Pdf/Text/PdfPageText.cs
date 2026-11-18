@@ -23,6 +23,11 @@ public sealed class PdfPageText
     private readonly int[] _charOfGlyph;
     private readonly int[] _lineOfGlyph;
 
+    // Each line's side up, and how low its box may reach along it - set only for a line over a much smaller one.
+    private const double BigOverSmall = 1.5;
+    private readonly double[] _lineFloors;
+    private readonly double[] _lineUpSigns;
+
     internal PdfPageText(IReadOnlyList<PdfTextGlyph> glyphs)
     {
         Glyphs = glyphs;
@@ -71,7 +76,7 @@ public sealed class PdfPageText
                 }
 
                 var (dx, dy) = LineDirection(glyphs, start, i);
-                lines.Add(new PdfTextLine(start, i - start, Merge(glyphs, start, i, dx, dy)));
+                lines.Add(new PdfTextLine(start, i - start, Merge(glyphs, start, i, dx, dy, 0, double.NegativeInfinity)));
             }
 
             start = i;
@@ -82,11 +87,112 @@ public sealed class PdfPageText
             }
         }
 
+        _lineFloors = new double[lines.Count];
+        _lineUpSigns = new double[lines.Count];
+        FitLines(lines);
         Lines = lines;
         _text = text.ToString();
         _searchable = _text.Replace('\n', ' ');
         _glyphOfChar = glyphOfChar.ToArray();
         _addedChar = addedChar.ToArray();
+    }
+
+    // A big line's box - a title, a large figure - stops halfway between its baseline and the top of a much smaller line
+    // reaching up into its descent; lines of like size overlap as they always did.
+    private void FitLines(List<PdfTextLine> lines)
+    {
+        var count = lines.Count;
+        var shapes = new PdfTextLineShape[count];
+        var byTop = new int[count];
+        for (var index = 0; index < count; index++)
+        {
+            var shape = ShapeOf(lines[index]);
+            shapes[index] = shape;
+            _lineUpSigns[index] = shape.UpX * -shape.AlongY + shape.UpY * shape.AlongX < 0 ? -1 : 1;
+            byTop[index] = index;
+            _lineFloors[index] = double.NegativeInfinity;
+        }
+
+        // The lines by their tops, so only those whose top falls in a line's descent are looked at.
+        Array.Sort(byTop, (first, second) => shapes[first].High.CompareTo(shapes[second].High));
+        var tops = new double[count];
+        for (var rank = 0; rank < count; rank++)
+        {
+            tops[rank] = shapes[byTop[rank]].High;
+        }
+
+        for (var upper = 0; upper < count; upper++)
+        {
+            var big = shapes[upper];
+            for (var rank = FirstAbove(tops, big.Low); rank < count && tops[rank] <= big.Baseline; rank++)
+            {
+                var lower = byTop[rank];
+                var small = shapes[lower];
+                if (lower == upper || !big.RunsAs(small) || big.Size < BigOverSmall * small.Size ||
+                    small.Baseline >= big.Baseline || Math.Min(big.End, small.End) <= Math.Max(big.Start, small.Start))
+                {
+                    continue;
+                }
+
+                _lineFloors[upper] = Math.Max(_lineFloors[upper], (big.Baseline + small.High) / 2);
+            }
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            if (!double.IsNegativeInfinity(_lineFloors[index]))
+            {
+                var line = lines[index];
+                lines[index] = new PdfTextLine(line.Start, line.Count, Merge(Glyphs, line.Start, line.Start + line.Count,
+                    shapes[index].AlongX, shapes[index].AlongY, _lineUpSigns[index], _lineFloors[index]));
+            }
+        }
+    }
+
+    private PdfTextLineShape ShapeOf(PdfTextLine line)
+    {
+        var end = line.Start + line.Count;
+        var (dx, dy) = LineDirection(Glyphs, line.Start, end);
+        var sign = UpSide(Glyphs, line.Start, end, -dy, dx) < 0 ? -1 : 1;
+        var upX = -dy * sign;
+        var upY = dx * sign;
+        var biggest = line.Start;
+        for (var glyph = line.Start + 1; glyph < end; glyph++)
+        {
+            biggest = Glyphs[glyph].Size > Glyphs[biggest].Size ? glyph : biggest;
+        }
+
+        var origin = Glyphs[biggest].Origin;
+        var quad = line.Quad;
+        return new PdfTextLineShape(dx, dy, upX, upY, Glyphs[biggest].Size, origin.X * upX + origin.Y * upY,
+            quad.BottomLeft.X * upX + quad.BottomLeft.Y * upY, quad.TopLeft.X * upX + quad.TopLeft.Y * upY,
+            quad.BottomLeft.X * dx + quad.BottomLeft.Y * dy, quad.BottomRight.X * dx + quad.BottomRight.Y * dy);
+    }
+
+    // The first of the tops, in order, above value; tops that are no number - sorted first - are passed over.
+    private static int FirstAbove(double[] tops, double value)
+    {
+        var low = 0;
+        while (low < tops.Length && double.IsNaN(tops[low]))
+        {
+            low++;
+        }
+
+        var high = tops.Length;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (tops[middle] <= value)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return low;
     }
 
     public IReadOnlyList<PdfTextGlyph> Glyphs { get; }
@@ -120,10 +226,11 @@ public sealed class PdfPageText
         var quads = new List<PdfQuad>();
         while (start < end)
         {
-            var line = Lines[_lineOfGlyph[start]];
+            var lineIndex = _lineOfGlyph[start];
+            var line = Lines[lineIndex];
             var stop = Math.Min(end, line.Start + line.Count);
             var (dx, dy) = LineDirection(Glyphs, line.Start, line.Start + line.Count);
-            quads.Add(Merge(Glyphs, start, stop, dx, dy));
+            quads.Add(Merge(Glyphs, start, stop, dx, dy, _lineUpSigns[lineIndex], _lineFloors[lineIndex]));
             start = stop;
         }
 
@@ -273,7 +380,11 @@ public sealed class PdfPageText
         var origin = glyphs[start].Origin;
         var across = Math.Abs((next.Origin.X - origin.X) * -dy + (next.Origin.Y - origin.Y) * dx);
         var along = (next.Origin.X - previous.End.X) * dx + (next.Origin.Y - previous.End.Y) * dy;
-        return across <= LineDrift * size && along >= -BackStep * size && along <= ColumnGap * size &&
+
+        // A step back is a glyph's own - an accent over the one before - so the smaller of the two measures it: a small
+        // caption under a big figure is not drawn back over it.
+        var back = Math.Max(Math.Min(previous.Size, next.Size), 1e-6);
+        return across <= LineDrift * size && along >= -BackStep * back && along <= ColumnGap * size &&
                height.Shares(next, origin, dx, dy);
     }
 
@@ -317,11 +428,14 @@ public sealed class PdfPageText
         return length < 1e-9 ? null : (x / length, y / length);
     }
 
-    private static PdfQuad Merge(IReadOnlyList<PdfTextGlyph> glyphs, int start, int end, double dx, double dy)
+    // A line's glyphs boxed as one, up the side upSign gives (0: found from these glyphs), reaching no lower than floor
+    // along that up - as FitLines works it out - unless the glyphs are all below it.
+    private static PdfQuad Merge(IReadOnlyList<PdfTextGlyph> glyphs, int start, int end, double dx, double dy,
+        double upSign, double floor)
     {
         var upX = -dy;
         var upY = dx;
-        if (UpSide(glyphs, start, end, upX, upY) < 0)
+        if (upSign < 0 || (upSign == 0 && UpSide(glyphs, start, end, upX, upY) < 0))
         {
             upX = -upX;
             upY = -upY;
@@ -344,6 +458,12 @@ public sealed class PdfPageText
                 acrossMin = Math.Min(acrossMin, across);
                 acrossMax = Math.Max(acrossMax, across);
             }
+        }
+
+        var lowest = floor - (origin.X * upX + origin.Y * upY);
+        if (lowest > acrossMin && lowest < acrossMax)
+        {
+            acrossMin = lowest;
         }
 
         return new PdfQuad(At(origin, dx, dy, upX, upY, alongMin, acrossMin), At(origin, dx, dy, upX, upY, alongMax, acrossMin),
