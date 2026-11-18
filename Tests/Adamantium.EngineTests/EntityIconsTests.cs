@@ -282,6 +282,9 @@ public class EntityIconsTests
             Assert.That(icons.IconOf(hidden), Is.Null, "hidden, asked or not");
             Assert.That(icons.IconOf(underHidden), Is.Null, "an owner hidden");
             Assert.That(icons.IconOf(hiddenLamp), Is.Null, "a light, an owner hidden");
+            Assert.That((EntityIcons.CanAskForIcon(fleet), EntityIcons.CanAskForIcon(shown)), Is.EqualTo((true, true)));
+            Assert.That(EntityIcons.CanAskForIcon(hiddenLamp), Is.False, "a light always shows its icon");
+            Assert.That(EntityIcons.CanAskForIcon(convoy), Is.False, "not marked");
         });
     }
 

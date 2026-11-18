@@ -376,6 +376,11 @@ public class EntityIcons : ToolsProcessor
     public static bool IsMarked(Entity entity) =>
         entity?.GetComponent<Marker>() is { } marker ? marker.IsEnabled : entity?.GetComponent<SpawnPoint>() != null;
 
+    /// <summary>Whether <see cref="EditorDisplay.ShowsIcon"/> changes anything for the entity: a marked one whose meshes
+    /// may hide its icon - not a light or a camera, which always show theirs.</summary>
+    public static bool CanAskForIcon(Entity entity) =>
+        IsMarked(entity) && !entity.ContainsComponent<Light>() && !entity.ContainsComponent<Camera>();
+
     private bool IsOwnCamera(Camera camera)
     {
         var outputs = Tools.Observatory.Outputs;

@@ -9,6 +9,7 @@ All packages share one version.
 
 - `EditorDisplay.ShowsIcon` asks for an entity's icon even where its meshes are drawn - a group's or a marked
   entity's - so it can be taken by in the view; an entity hidden, itself or by an owner, still shows none.
+  `EntityIcons.CanAskForIcon` tells which entities it changes anything for: marked ones, not lights or cameras.
   `EntityDisplay.Inherited`, the new default, draws a subtree as its owner's is, so an `EditorDisplay` added only for
   the icon changes nothing of the drawing.
 - A scene keeps its entries turned off: `ScenePlacement.IsEnabled` is written as `Enabled="false"` only when the entry
