@@ -508,6 +508,9 @@ All packages share one version.
 
 ### Changed
 
+- `PhysicsParts.SetBody` gives the entity's own `RigidBody` the settings rather than putting a new one in its place:
+  the body stays the same component, so the physics, once it follows edits made in a game, can keep its speed. An
+  entity with no body still gets a new one.
 - A click on an icon takes its entity even where a mesh is nearer: the icon is drawn in front of everything
   (`ToolsService.ChosenAt`, `ToolsService.PickEntity`).
 - An entity hidden in the hierarchy, itself or by an owner, shows no icon - a light's and a camera's too.
