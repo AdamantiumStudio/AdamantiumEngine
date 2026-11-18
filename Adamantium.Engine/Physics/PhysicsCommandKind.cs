@@ -10,5 +10,13 @@ internal enum PhysicsCommandKind
     /// <summary>The force a body feels at every step from now on; zero ends it.</summary>
     SetForce,
     ApplyCentralImpulse,
-    ApplyImpulse
+    ApplyImpulse,
+    AddBody,
+
+    /// <summary>A body made anew in place of the key's one, moving as that one did.</summary>
+    ReplaceBody,
+
+    /// <summary>The key's body put where its entity was moved by hand, its shape and settings as they were.</summary>
+    MoveBody,
+    RemoveBody
 }

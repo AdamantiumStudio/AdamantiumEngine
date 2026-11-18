@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- `PhysicsService` follows the scene while a game plays, not only at its start. A rigid body given during the game, or
+  on an entity enabled again, becomes a body - at once when the game pushes it in the same frame; one taken off,
+  disabled or taken out of the world leaves. A body moved by hand is put where it was moved, its contacts kept; a
+  static one follows its parents. One whose settings or shape change - a collider edited, a part hung under it or
+  given a body of its own - is made anew, moving on as it moved while its kind stays. A change that alters neither,
+  such as selecting the entity, leaves the body as it is. It looks once a frame through `Entity.ChangeCount`, new: how
+  many times an entity changed - its values and its components', a component added or taken off, an entity hung under
+  it or taken from it. A body the physics world refuses is not one it moves. Gravity and settings set during a game go
+  back when it stops, and the service runs before the others (`PhysicsService.UpdatePriority`), so the entities it
+  stands are placed in the same frame.
+- `Collider.Bounds` and a `ConvexHullCollider`'s hull tell of their change (`PropertyChanged`), so what follows a
+  collider's shape sees it refitted.
+
 - A scene keeps its entries' physics: `ScenePlacement.Body` (`SceneBody` - a `RigidBody`'s settings, each written
   only when it is not a new body's own) on any entry but a light or a camera, and a shape's `ScenePlacement.Collider`
   (`SceneCollider` - a kind by name, fitted to the mesh, `None` for none) in place of its template's; with none written

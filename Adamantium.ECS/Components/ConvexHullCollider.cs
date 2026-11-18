@@ -161,16 +161,17 @@ public class ConvexHullCollider : Collider
     {
         hull = taken;
         corners = [];
-        if (hull == null)
+        if (hull != null)
         {
-            return;
+            corners = new Vector3F[hull.Vertices.Count];
+            for (int i = 0; i < corners.Length; i++)
+            {
+                corners[i] = hull.Vertices[i];
+            }
         }
 
-        corners = new Vector3F[hull.Vertices.Count];
-        for (int i = 0; i < corners.Length; i++)
-        {
-            corners[i] = hull.Vertices[i];
-        }
+        // What follows the collider's shape - the physics - sees a new hull.
+        RaisePropertyChanged(nameof(Hull));
     }
 
     private sealed class Placement
