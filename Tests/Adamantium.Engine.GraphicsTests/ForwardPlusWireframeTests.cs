@@ -86,6 +86,42 @@ public class ForwardPlusWireframeTests
         });
     }
 
+    // A shape given no collider vanished: the pass skipped any entity without one. Colliders are for the physics only.
+    [Test]
+    public void AMeshWithNoCollider_IsDrawn()
+    {
+        // Shaded: a wire in the shading needs barycentrics, which not every GPU has.
+        _processor.Display = ViewDisplay.Shaded;
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new Vector3<double>(0, 0, -10);
+        eye.SetFreeLookAt(Vector3<double>.Zero);
+        var plain = new Entity(null, "Plain");
+        var mesh = new Mesh(PrimitiveType.TriangleList);
+        mesh.SetPoints([new Vector3<double>(-1, 1, 0), new Vector3<double>(1, 1, 0), new Vector3<double>(0, -1, 0)])
+            .SetIndices([0, 1, 2]);
+        plain.AddComponent(new MeshData { Mesh = mesh });
+        plain.AddComponent(new Material());
+        _universe.EntityWorld.EntityManager.AddEntity(plain, _universe.EntityWorld.MainScene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var pixels = Pixels(_output.ReadFrame(), "no-collider.png");
+        var lit = 0;
+        for (var start = 0; start + 2 < pixels.Length; start += 4)
+        {
+            if (pixels[start] + pixels[start + 1] + pixels[start + 2] > 0)
+                lit++;
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_processor.TrianglesDrawn, Is.EqualTo(1), "the triangle, counted as drawn");
+            Assert.That(lit, Is.GreaterThan(100), "its pixels on the black background");
+        });
+    }
+
     // A triangle bound whole to one joint, the joint then moved sideways.
     private void AddCarriedTriangle()
     {

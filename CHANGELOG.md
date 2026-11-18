@@ -634,6 +634,10 @@ All packages share one version.
 
 ### Fixed
 
+- A mesh with no collider is drawn: `ForwardPlusRenderingProcessor` skipped any entity without one, so a shape or a
+  model's part given no collider (`ColliderKind.None`) vanished from the view. Colliders are for the physics only. A
+  mesh without one is culled by its box in the scene's index; one the index leaves out - a mesh on the view's own
+  camera - is not drawn in that view. Picking a mesh by its triangles never needed a collider.
 - The ground grid's axes are drawn smoothed, by the grid's shader alone: the lines drawn over them stair-stepped their
   edges, and are drawn now only where the plane is seen edge on - a perspective's eye in it, a flat view along it. A
   pixel's share of the plane is its gradient's length on screen, so a line seen at a slant is as wide and as soft as one

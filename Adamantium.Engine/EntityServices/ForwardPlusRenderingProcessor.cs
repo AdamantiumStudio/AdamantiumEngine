@@ -341,22 +341,24 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return false;
         }
 
+        // Colliders are for the physics only: a mesh without one is still drawn, culled by its box in the scene's index.
         var collider = entity.GetComponent<Collider>();
-        if (collider == null)
+        var meshData = entity.GetComponent<MeshData>();
+        var shown = display?.Display ?? EntityDisplay.AsView;
+        var drawsMesh = meshData is { Mesh: not null, IsEnabled: true } && shown != EntityDisplay.Collider;
+        if (collider == null && !drawsMesh)
         {
             return true;
         }
 
-        var shown = display?.Display ?? EntityDisplay.AsView;
         var inView = InView(entity, collider);
-        if (inView && collider.ContainsDataFor(ActiveCamera)
+        if (collider != null && inView && collider.ContainsDataFor(ActiveCamera)
             && (collider.DisplayCollider || ShowColliders || shown == EntityDisplay.Collider))
         {
             colliders.Add((entity, collider));
         }
 
-        var meshData = entity.GetComponent<MeshData>();
-        if (meshData?.Mesh == null || !meshData.IsEnabled || shown == EntityDisplay.Collider)
+        if (!drawsMesh)
         {
             return true;
         }
@@ -415,6 +417,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         {
             return frustum.Contains(new BoundingBox<float>(box.Minimum - cameraPosition, box.Maximum - cameraPosition))
                    != ContainmentType.Disjoint;
+        }
+
+        // A mesh the index leaves out - one on the view's own camera - has no place for this view; with no index, every
+        // mesh is.
+        if (collider == null)
+        {
+            return sceneIndex == null;
         }
 
         return !collider.ContainsDataFor(ActiveCamera) || entity.ContainsComponent<Skin>()
