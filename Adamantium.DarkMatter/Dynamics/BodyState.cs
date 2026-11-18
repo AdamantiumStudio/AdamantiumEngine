@@ -8,7 +8,7 @@ internal struct BodyState
     public bool IsUsed;
     public int Generation;
     public BodyKind Kind;
-    public Shape Shape;
+    public CollisionShape Shape;
     public int Proxy;
     public BodyMarks Marks;
     public Contact Contacts;
@@ -34,6 +34,10 @@ internal struct BodyState
 
     public bool CanSleep;
     public bool IsAwake;
+
+    /// <summary>Whether a force or torque was applied for the next step, so the body does not count it toward sleep.
+    /// </summary>
+    public bool IsPushed;
     public float SleepTime;
     public int IslandHead;
     public int IslandNext;

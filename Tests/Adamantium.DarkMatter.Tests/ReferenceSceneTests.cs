@@ -194,7 +194,7 @@ public class ReferenceSceneTests
         scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static,
-            Shape = new Shapes.BoxShape(5, 0.025f, 5),
+            Shape = new Shapes.BoxCollisionShape(5, 0.025f, 5),
             Position = new Vector3F(0, -0.025f, 0)
         });
         var box = scene.AddBox(new Vector3F(0, 3f, 0), new Vector3F(0.25f), velocity: new Vector3F(0, -40f, 0));

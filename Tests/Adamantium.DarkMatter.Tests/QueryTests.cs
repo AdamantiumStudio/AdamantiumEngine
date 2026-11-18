@@ -77,7 +77,7 @@ public class QueryTests
         scene.AddBox(new Vector3F(3, 0, 0), new Vector3F(0.5f));
 
         var found = new List<BodyHandle>();
-        scene.World.Overlap(new SphereShape(0.6f), new Pose(Vector3F.Zero), found);
+        scene.World.Overlap(new SphereCollisionShape(0.6f), new Pose(Vector3F.Zero), found);
 
         Assert.That(found, Has.Count.EqualTo(1));
         Assert.That(found[0], Is.EqualTo(touched));

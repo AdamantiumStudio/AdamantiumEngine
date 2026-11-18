@@ -229,20 +229,26 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public void ApplyForce(BodyHandle body, Vector3F force)
     {
         var index = ResolveDynamic(body);
+        if (force == Vector3F.Zero)
+            return;
+
         var total = _bodies[index].Force + force;
         RequireFinite(total * _bodies[index].InverseMass, nameof(force));
         _bodies[index].Force = total;
-        WakeIsland(index);
+        MarkPushed(index);
     }
 
     /// <inheritdoc/>
     public void ApplyTorque(BodyHandle body, Vector3F torque)
     {
         var index = ResolveDynamic(body);
+        if (torque == Vector3F.Zero)
+            return;
+
         var total = _bodies[index].Torque + torque;
         RequireFinite(InertiaMath.Apply(_bodies[index].WorldInverseInertia, total), nameof(torque));
         _bodies[index].Torque = total;
-        WakeIsland(index);
+        MarkPushed(index);
     }
 
     /// <inheritdoc/>
@@ -554,10 +560,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 continue;
             }
 
+            var isPushed = body.IsPushed;
             body.Force = Vector3F.Zero;
             body.Torque = Vector3F.Zero;
+            body.IsPushed = false;
             var spinSpeed = body.AngularVelocity.Length() * body.Shape.BoundingRadius;
-            if (!body.CanSleep || body.LinearVelocity.LengthSquared() > sleepSpeedSquared
+            if (!body.CanSleep || isPushed || body.LinearVelocity.LengthSquared() > sleepSpeedSquared
                                || spinSpeed * spinSpeed > sleepSpeedSquared)
             {
                 body.SleepTime = 0;
@@ -672,6 +680,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             _islandParent[secondRoot] = firstRoot;
         else
             _islandParent[firstRoot] = secondRoot;
+    }
+
+    private void MarkPushed(int index)
+    {
+        _bodies[index].IsPushed = true;
+        WakeIsland(index);
     }
 
     private void WakeIsland(int index)

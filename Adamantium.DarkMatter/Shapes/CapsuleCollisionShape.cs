@@ -4,9 +4,9 @@ namespace Adamantium.DarkMatter.Shapes;
 
 /// <summary>A capsule along the body's Y axis: every point within <see cref="Radius"/> of the segment reaching
 /// <see cref="HalfLength"/> up and down from the center.</summary>
-public sealed class CapsuleShape : Shape
+public sealed class CapsuleCollisionShape : CollisionShape
 {
-    public CapsuleShape(float halfLength, float radius)
+    public CapsuleCollisionShape(float halfLength, float radius)
     {
         HalfLength = RequireSize(halfLength, nameof(halfLength));
         Radius = RequireSize(radius, nameof(radius));
@@ -19,7 +19,7 @@ public sealed class CapsuleShape : Shape
     /// <summary>The radius.</summary>
     public float Radius { get; }
 
-    public override ShapeKind Kind => ShapeKind.Capsule;
+    public override CollisionShapeKind Kind => CollisionShapeKind.Capsule;
 
     public override float BoundingRadius => HalfLength + Radius;
 

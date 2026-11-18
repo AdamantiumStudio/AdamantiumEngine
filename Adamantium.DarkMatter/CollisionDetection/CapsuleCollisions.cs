@@ -13,8 +13,8 @@ internal static class CapsuleCollisions
     private const int SearchSteps = 40;
     private const float GoldenRatio = 0.618034f;
 
-    public static bool CollideCapsules(CapsuleShape first, in Pose firstPose, CapsuleShape second, in Pose secondPose,
-        float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideCapsules(CapsuleCollisionShape first, in Pose firstPose, CapsuleCollisionShape second,
+        in Pose secondPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         var firstBottom = firstPose.TransformPoint(new Vector3F(0, -first.HalfLength, 0));
         var firstTop = firstPose.TransformPoint(new Vector3F(0, first.HalfLength, 0));
@@ -70,8 +70,8 @@ internal static class CapsuleCollisions
         return true;
     }
 
-    public static bool CollideCapsuleBox(CapsuleShape capsule, in Pose capsulePose, BoxShape box, in Pose boxPose,
-        float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideCapsuleBox(CapsuleCollisionShape capsule, in Pose capsulePose, BoxCollisionShape box,
+        in Pose boxPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         var size = box.HalfExtents;
         var radius = capsule.Radius;

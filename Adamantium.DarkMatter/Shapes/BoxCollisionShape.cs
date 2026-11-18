@@ -3,9 +3,9 @@ using System;
 namespace Adamantium.DarkMatter.Shapes;
 
 /// <summary>A box reaching <see cref="HalfExtents"/> from the body's center along its own axes.</summary>
-public sealed class BoxShape : Shape
+public sealed class BoxCollisionShape : CollisionShape
 {
-    public BoxShape(Vector3F halfExtents)
+    public BoxCollisionShape(Vector3F halfExtents)
     {
         HalfExtents = new Vector3F(RequireSize(halfExtents.X, nameof(halfExtents)),
             RequireSize(halfExtents.Y, nameof(halfExtents)), RequireSize(halfExtents.Z, nameof(halfExtents)));
@@ -14,14 +14,14 @@ public sealed class BoxShape : Shape
 
     /// <summary>The box reaching <paramref name="halfX"/>, <paramref name="halfY"/> and <paramref name="halfZ"/> from
     /// the center.</summary>
-    public BoxShape(float halfX, float halfY, float halfZ) : this(new Vector3F(halfX, halfY, halfZ))
+    public BoxCollisionShape(float halfX, float halfY, float halfZ) : this(new Vector3F(halfX, halfY, halfZ))
     {
     }
 
     /// <summary>Half the width, height and depth.</summary>
     public Vector3F HalfExtents { get; }
 
-    public override ShapeKind Kind => ShapeKind.Box;
+    public override CollisionShapeKind Kind => CollisionShapeKind.Box;
 
     public override float BoundingRadius => HalfExtents.Length();
 

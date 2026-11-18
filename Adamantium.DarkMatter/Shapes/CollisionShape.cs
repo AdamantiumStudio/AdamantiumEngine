@@ -4,13 +4,13 @@ namespace Adamantium.DarkMatter.Shapes;
 
 /// <summary>The convex form a body collides with, centered on the body; it holds no state of a world, so many bodies
 /// can share one.</summary>
-public abstract class Shape
+public abstract class CollisionShape
 {
     /// <summary>The least size a shape has, in meters: a micrometer.</summary>
     public const float MinimumSize = 1e-6f;
 
     /// <summary>Which shape this is.</summary>
-    public abstract ShapeKind Kind { get; }
+    public abstract CollisionShapeKind Kind { get; }
 
     /// <summary>The distance from the center to the farthest point of the shape.</summary>
     public abstract float BoundingRadius { get; }
