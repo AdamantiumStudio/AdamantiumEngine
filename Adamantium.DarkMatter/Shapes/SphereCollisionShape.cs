@@ -34,6 +34,10 @@ public sealed class SphereCollisionShape : CollisionShape
 
     internal override float MeasureSweepSpeed(Vector3F angularVelocity, QuaternionF rotation) => 0;
 
+    internal override float CoreRadius => Radius;
+
+    internal override Vector3F GetCoreSupport(Vector3F direction) => Vector3F.Zero;
+
     public override bool CastRay(in Ray<float> ray, float maxDistance, out float distance, out Vector3F normal)
     {
         normal = default;

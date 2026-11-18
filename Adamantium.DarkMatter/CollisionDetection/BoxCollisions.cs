@@ -168,8 +168,8 @@ internal static class BoxCollisions
             var side = referenceAxes[axis];
             var offset = Vector3F.Dot(side, referenceCenter);
             var limit = GetComponent(referenceSize, axis);
-            count = ClipPolygon(polygon, count, spare, side, offset + limit);
-            count = ClipPolygon(spare, count, polygon, -side, limit - offset);
+            count = PolygonClipping.ClipBehind(polygon, count, spare, side, offset + limit);
+            count = PolygonClipping.ClipBehind(spare, count, polygon, -side, limit - offset);
         }
 
         var faceDistance = Vector3F.Dot(referenceNormal, referenceCenter) + GetComponent(referenceSize, referenceAxis);
@@ -181,25 +181,6 @@ internal static class BoxCollisions
             if (separation <= speculativeDistance)
                 manifold.Add(point - referenceNormal * (separation * 0.5f), separation);
         }
-    }
-
-    private static int ClipPolygon(Vector3F[] input, int count, Vector3F[] output, Vector3F normal, float limit)
-    {
-        var kept = 0;
-        for (var index = 0; index < count; index++)
-        {
-            var start = input[index];
-            var end = input[(index + 1) % count];
-            var startDistance = Vector3F.Dot(normal, start) - limit;
-            var endDistance = Vector3F.Dot(normal, end) - limit;
-            if (startDistance <= 0)
-                output[kept++] = start;
-
-            if ((startDistance < 0 && endDistance > 0) || (startDistance > 0 && endDistance < 0))
-                output[kept++] = start + (end - start) * (startDistance / (startDistance - endDistance));
-        }
-
-        return kept;
     }
 
     private static void AddEdgeContact(Vector3F firstCenter, ReadOnlySpan<Vector3F> firstAxes, Vector3F firstSize,

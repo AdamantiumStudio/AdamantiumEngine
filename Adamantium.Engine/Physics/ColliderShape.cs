@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.DarkMatter.Shapes;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
@@ -25,8 +26,10 @@ internal readonly struct ColliderShape
     public QuaternionF Turn { get; }
 
     /// <summary>The shape of <paramref name="collider"/> on an entity scaled by <paramref name="scale"/>; false for a
-    /// collider the physics has no shape for yet.</summary>
-    public static bool TryCreate(Collider collider, Vector3F scale, out ColliderShape shape)
+    /// collider the physics has no shape for yet. A hull's shape is taken from <paramref name="hullShapes"/> when it
+    /// holds one for the hull at that scale, and kept there.</summary>
+    public static bool TryCreate(Collider collider, Vector3F scale,
+        Dictionary<HullShapeKey, ConvexHullCollisionShape> hullShapes, out ColliderShape shape)
     {
         var size = Vector3F.Abs(scale);
         switch (collider)
@@ -71,10 +74,43 @@ internal readonly struct ColliderShape
                         TurnUpTo(axis / (2 * halfLength)));
                 return true;
             }
+            case ConvexHullCollider hullCollider:
+            {
+                if (hullCollider.Hull is not { } hull)
+                    throw new ArgumentException("The hull collider holds no hull: its entity has no mesh.");
+
+                // A scale read back from a turned entity's matrix differs in its last digits: rounded for the key, copies
+                // share the shape the first of them made.
+                var rounded = new Vector3F(KeepSixDigits(scale.X), KeepSixDigits(scale.Y), KeepSixDigits(scale.Z));
+                var key = new HullShapeKey(hull, rounded);
+                if (!hullShapes.TryGetValue(key, out var hullShape))
+                {
+                    var points = new Vector3F[hull.Vertices.Count];
+                    for (var index = 0; index < points.Length; index++)
+                    {
+                        points[index] = hull.Vertices[index] * scale;
+                    }
+
+                    hullShape = new ConvexHullCollisionShape(points);
+                    hullShapes[key] = hullShape;
+                }
+
+                shape = new ColliderShape(hullShape, Vector3F.Zero, QuaternionF.Identity);
+                return true;
+            }
             default:
                 shape = default;
                 return false;
         }
+    }
+
+    private static float KeepSixDigits(float value)
+    {
+        if (value == 0 || !float.IsFinite(value))
+            return value;
+
+        var unit = Math.Pow(10, Math.Floor(Math.Log10(Math.Abs(value))) - 5);
+        return (float)(Math.Round(value / unit) * unit);
     }
 
     private static bool IsEven(Vector3F size) =>

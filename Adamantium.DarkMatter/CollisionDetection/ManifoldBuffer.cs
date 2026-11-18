@@ -4,23 +4,41 @@ namespace Adamantium.DarkMatter.CollisionDetection;
 /// while overlapping. A world refills one for every pair, so finding contacts allocates nothing.</summary>
 internal sealed class ManifoldBuffer
 {
-    /// <summary>The most points the narrow phase finds for a pair before any limit: a face clipped by a face.</summary>
+    /// <summary>The most points a world may keep for a pair: its <see cref="PhysicsSettings.MaxContactPointsPerPair"/>
+    /// is at most this.</summary>
     public const int Capacity = 16;
 
-    private readonly float[] _nearestChosen = new float[Capacity];
+    /// <summary>The most corners a face turned toward the other shape gives, a hull's included.</summary>
+    public const int FaceCapacity = 64;
+
+    /// <summary>The most points a face clipped by a face gives: its corners and a crossing for each edge of the other.
+    /// </summary>
+    private const int ClipCapacity = 2 * FaceCapacity + 8;
+
+    private readonly float[] _nearestChosen = new float[ClipCapacity];
 
     public Vector3F Normal;
 
     public int Count;
 
-    public readonly Vector3F[] Positions = new Vector3F[Capacity];
+    /// <summary>The points found, all of a clipped face, before <see cref="ReduceTo"/> keeps the spread of them.</summary>
+    public readonly Vector3F[] Positions = new Vector3F[ClipCapacity];
 
-    public readonly float[] Separations = new float[Capacity];
+    public readonly float[] Separations = new float[ClipCapacity];
 
     /// <summary>Scratch polygons the clipping of a face works between.</summary>
-    public readonly Vector3F[] ClipFirst = new Vector3F[Capacity];
+    public readonly Vector3F[] ClipFirst = new Vector3F[ClipCapacity];
 
-    public readonly Vector3F[] ClipSecond = new Vector3F[Capacity];
+    public readonly Vector3F[] ClipSecond = new Vector3F[ClipCapacity];
+
+    /// <summary>The faces of two shapes turned toward each other.</summary>
+    public readonly Vector3F[] FaceFirst = new Vector3F[FaceCapacity];
+
+    public readonly Vector3F[] FaceSecond = new Vector3F[FaceCapacity];
+
+    public readonly GjkSimplex Simplex = new();
+
+    public readonly ExpandingPolytope Polytope = new();
 
     public void Clear()
     {
@@ -32,7 +50,7 @@ internal sealed class ManifoldBuffer
     /// </summary>
     public void Add(Vector3F position, float separation)
     {
-        if (Count == Capacity)
+        if (Count == Positions.Length)
             return;
 
         Positions[Count] = position;

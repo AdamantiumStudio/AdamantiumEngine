@@ -25,6 +25,42 @@ public abstract class CollisionShape
     /// <summary>The point of the shape farthest along <paramref name="direction"/>, both in the shape's own axes.</summary>
     public abstract Vector3F GetSupport(Vector3F direction);
 
+    /// <summary>How far the shape reaches past its core, the part GJK and EPA meet: a ball's radius around a point, a
+    /// capsule's around a segment; nothing for a shape of corners, which is its own core.</summary>
+    internal virtual float CoreRadius => 0;
+
+    /// <summary>The point of the core farthest along <paramref name="direction"/>, both in the shape's own axes.</summary>
+    internal virtual Vector3F GetCoreSupport(Vector3F direction) => GetSupport(direction);
+
+    /// <summary>Writes into <paramref name="into"/> the corners of the core's face turned most toward
+    /// <paramref name="direction"/>, in the shape's own axes, and gives their count: one for a point, two for an
+    /// edge.</summary>
+    internal virtual int GetSupportingFace(Vector3F direction, Span<Vector3F> into)
+    {
+        into[0] = GetCoreSupport(direction);
+        return 1;
+    }
+
+    /// <summary>How many flat faces the shape has, each a separating axis worth trying; none for a round shape.
+    /// </summary>
+    internal virtual int FlatFaceCount => 0;
+
+    /// <summary>The outward normal of face <paramref name="face"/>, of length one, in the shape's own axes.</summary>
+    internal virtual Vector3F GetFlatFaceNormal(int face) => throw new ArgumentOutOfRangeException(nameof(face));
+
+    /// <summary>How far face <paramref name="face"/>'s plane stands from the shape's origin along its normal: the
+    /// farthest the shape reaches that way.</summary>
+    internal virtual float GetFlatFaceOffset(int face) => throw new ArgumentOutOfRangeException(nameof(face));
+
+    /// <summary>The face whose normal turns most toward <paramref name="direction"/>, in the shape's own axes; -1 for
+    /// a round shape.</summary>
+    internal virtual int FindFlatFace(Vector3F direction) => -1;
+
+    /// <summary>Writes into <paramref name="into"/> the corners of face <paramref name="face"/>, in the shape's own
+    /// axes, and gives their count.</summary>
+    internal virtual int GetFlatFace(int face, Span<Vector3F> into) =>
+        throw new ArgumentOutOfRangeException(nameof(face));
+
     /// <summary>How fast the space the shape fills sweeps outward when, turned by <paramref name="rotation"/>, it spins
     /// at <paramref name="angularVelocity"/>; a ball spinning in place sweeps nothing.</summary>
     internal virtual float MeasureSweepSpeed(Vector3F angularVelocity, QuaternionF rotation) =>

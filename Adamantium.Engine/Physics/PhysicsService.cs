@@ -159,9 +159,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
     {
         _origin = Vector3<double>.Zero;
         _world = new PhysicsWorld(Settings) { Gravity = _gravity };
+        // The hull shapes made for the bodies, one for each hull and scale they share.
+        var hullShapes = new Dictionary<HullShapeKey, ConvexHullCollisionShape>();
         foreach (var body in Each<RigidBody>())
         {
-            AddBody(body);
+            AddBody(body, hullShapes);
         }
 
         _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
@@ -209,7 +211,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _unreadResults = 0;
     }
 
-    private void AddBody(RigidBody body)
+    private void AddBody(RigidBody body, Dictionary<HullShapeKey, ConvexHullCollisionShape> hullShapes)
     {
         var entity = body.Owner;
         var parentWorld = entity.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
@@ -225,7 +227,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         }
 
         var position = ToPhysics(translation.As<double>());
-        var shape = CreateShape(entity, position, rotation, scale);
+        var shape = CreateShape(entity, position, rotation, scale, hullShapes);
         if (shape == null)
         {
             Log.Logger.Warning("{Entity} has a rigid body but no collider on it or below it; the physics leaves it",
@@ -274,7 +276,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
     /// <summary>The shape of the colliders on <paramref name="entity"/> and on the entities below it that have no rigid
     /// body of their own, around the body's origin at <paramref name="origin"/> turned by <paramref name="rotation"/>,
     /// the entity scaled by <paramref name="scale"/>; null when there are none.</summary>
-    private CollisionShape CreateShape(Entity entity, Vector3F origin, QuaternionF rotation, Vector3F scale)
+    private CollisionShape CreateShape(Entity entity, Vector3F origin, QuaternionF rotation, Vector3F scale,
+        Dictionary<HullShapeKey, ConvexHullCollisionShape> hullShapes)
     {
         _shapeParts.Clear();
         var unturn = QuaternionF.Conjugate(rotation);
@@ -283,7 +286,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             if (current != entity && (!current.IsEnabled || current.ContainsComponent<RigidBody>()))
                 return false;
 
-            AddColliders(entity, current, origin, unturn, scale);
+            AddColliders(entity, current, origin, unturn, scale, hullShapes);
             return true;
         });
 
@@ -297,7 +300,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return new CompoundCollisionShape(_shapeParts);
     }
 
-    private void AddColliders(Entity body, Entity entity, Vector3F origin, QuaternionF unturn, Vector3F bodyScale)
+    private void AddColliders(Entity body, Entity entity, Vector3F origin, QuaternionF unturn, Vector3F bodyScale,
+        Dictionary<HullShapeKey, ConvexHullCollisionShape> hullShapes)
     {
         // The body's own colliders stand on it exactly, as their offsets say.
         var placed = entity == body;
@@ -325,7 +329,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             ColliderShape shape;
             try
             {
-                if (!ColliderShape.TryCreate(collider, scale, out shape))
+                if (!ColliderShape.TryCreate(collider, scale, hullShapes, out shape))
                 {
                     Log.Logger.Warning("The physics has no shape for the {Collider} of {Entity} yet; the body of {Body} "
                                        + "leaves it", collider.GetType().Name, entity.Name, body.Name);

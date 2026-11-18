@@ -11,6 +11,9 @@ internal static class Narrowphase
         float speculativeDistance, ManifoldBuffer manifold)
     {
         manifold.Clear();
+        if (first.Kind == CollisionShapeKind.ConvexHull || second.Kind == CollisionShapeKind.ConvexHull)
+            return ConvexCollisions.Collide(first, firstPose, second, secondPose, speculativeDistance, manifold);
+
         if (first.Kind > second.Kind)
         {
             var found = CollideOrdered(second, secondPose, first, firstPose, speculativeDistance, manifold);
