@@ -84,8 +84,8 @@ public partial class SceneData
       /// <summary>Below this alpha a <see cref="AlphaMode.Mask"/> surface is not drawn.</summary>
       public Single AlphaCutoff { get; set; } = 0.5f;
 
-      /// <summary>Whether both sides of the surface are drawn and lit.</summary>
-      public Boolean DoubleSided { get; set; }
+      /// <summary>Which faces of the surface are drawn and lit; both unless the file says one.</summary>
+      public MaterialFaces Faces { get; set; }
 
       public String Name { get; set; }
 
