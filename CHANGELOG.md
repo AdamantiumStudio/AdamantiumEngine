@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- `EditorDisplay.ShowsIcon` asks for an entity's icon even where its meshes are drawn - a group's or a marked
+  entity's - so it can be taken by in the view; an entity hidden, itself or by an owner, still shows none.
+  `EntityIcons.CanAskForIcon` tells which entities it changes anything for: marked ones, not lights or cameras.
+  `EntityDisplay.Inherited`, the new default, draws a subtree as its owner's is, so an `EditorDisplay` added only for
+  the icon changes nothing of the drawing.
+- A scene keeps its entries turned off: `ScenePlacement.IsEnabled` is written as `Enabled="false"` only when the entry
+  is disabled, built so by `SceneBuilder` and written back by `SceneCapture`, a camera's too.
 - Text markups without an appearance of their own are drawn: `PdfAnnotation.ImpliedAppearance` gives a highlight
   (filled and multiplied into the page, yellow when it names no color), an underline, a strikeout or a squiggle over
   each of its areas, in its color and opacity. `PdfAnnotation.QuadPoints` reads the areas, `PdfAnnotation.Opacity` its
@@ -474,6 +481,9 @@ All packages share one version.
 
 ### Changed
 
+- A click on an icon takes its entity even where a mesh is nearer: the icon is drawn in front of everything
+  (`ToolsService.ChosenAt`, `ToolsService.PickEntity`).
+- An entity hidden in the hierarchy, itself or by an owner, shows no icon - a light's and a camera's too.
 - `EntityIcons` gives its icon to a marked entity or a spawn point that no drawn mesh shows - none on it or under it, or
   only ones turned off, hidden or with nothing to draw - whatever else it holds: the icon is all there is of it in the
   view to see and take it by. One a mesh shows has none, a group too - icons over what is drawn only hide the scene -

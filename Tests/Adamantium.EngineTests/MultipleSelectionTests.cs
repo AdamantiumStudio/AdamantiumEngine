@@ -141,6 +141,29 @@ public class MultipleSelectionTests
         });
     }
 
+    // An icon is drawn in front of everything: a click on it takes its entity, though a mesh round it is nearer.
+    [Test]
+    public void AClickOnAnIconInsideAMesh_TakesTheIconsEntity()
+    {
+        var pivot = new Entity(null, "Pivot");
+        pivot.AddComponent(new Marker());
+        pivot.Transform.Position = left.Transform.Position;
+        universe.EntityWorld.EntityManager.AddEntity(pivot);
+        var icons = new EntityIcons();
+        tools.AttachProcessor(icons);
+        Frame();
+        Frame();
+
+        var ray = PickRay.FromCamera(camera, PixelOf(pivot.Transform.Position));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(icons.IconOf(pivot), Is.Not.Null);
+            Assert.That(tools.ChosenAt(ray), Is.SameAs(pivot));
+            Assert.That(tools.PickEntity(ray).Entity, Is.SameAs(pivot));
+        });
+    }
+
     // Drawn as it is, unbent, it is clicked where it is drawn.
     [Test]
     public void AClick_HitsASkinDrawnUnbent_WhereItWasBound()

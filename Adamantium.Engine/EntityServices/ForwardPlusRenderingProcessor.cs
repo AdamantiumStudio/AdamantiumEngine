@@ -116,8 +116,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     public Vector3F WireColor { get; set; } = new(0.55f, 0.65f, 0.8f);
 
     /// <summary>Whether a mesh is shaded and whether its wireframe is drawn, the view drawn as <paramref name="view"/>
-    /// and the entity set to <paramref name="entity"/>: anything but <see cref="EntityDisplay.AsView"/> takes the
-    /// view's place, either way.</summary>
+    /// and the entity set to <paramref name="entity"/>: anything but <see cref="EntityDisplay.AsView"/> or
+    /// <see cref="EntityDisplay.Inherited"/> takes the view's place, either way.</summary>
     public static (bool Shaded, bool Wired) Drawn(ViewDisplay view, EntityDisplay entity)
     {
         return entity switch
@@ -316,7 +316,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         while (walk.Count > 0)
         {
             var (entity, display) = walk.Pop();
-            if (FollowsEditorDisplay && entity.GetComponent<EditorDisplay>() is { IsEnabled: true } own)
+            if (FollowsEditorDisplay
+                && entity.GetComponent<EditorDisplay>() is { IsEnabled: true, Display: not EntityDisplay.Inherited } own)
             {
                 display = own;
             }

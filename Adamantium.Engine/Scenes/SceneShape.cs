@@ -12,7 +12,8 @@ public sealed class SceneShape : ScenePlacement
 {
     /// <summary>The entry's own attributes, which no parameter of the shape can be named.</summary>
     public static readonly IReadOnlyCollection<string> OwnAttributes =
-        ["Uid", "Name", "Parent", "Position", "Rotation", "Scale", "Type", "Color", "AlphaMode", "AlphaCutoff", "Faces"];
+        ["Uid", "Name", "Parent", "Position", "Rotation", "Enabled", "Scale", "Type", "Color", "AlphaMode", "AlphaCutoff",
+            "Faces"];
 
     /// <summary>The full name of the shape's type.</summary>
     [XmlAttribute]
