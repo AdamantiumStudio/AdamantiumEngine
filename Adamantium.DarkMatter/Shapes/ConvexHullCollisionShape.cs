@@ -14,6 +14,10 @@ public sealed class ConvexHullCollisionShape : CollisionShape
     // The rounding takes at most this share of the distance from the hull's middle to its nearest face.
     private const float MaxShareOfInnerRadius = 0.25f;
 
+    // Faces contacts meet whose corners lie within this share of the hull's size of one plane are one: a body lying on
+    // two faces nearly in one plane bears on both, not on whichever is turned a hair nearer.
+    private const double ContactFlatness = 3e-4;
+
     // The hull as given, weighed and met by rays; and its core, the hull drawn in by the radius, that contacts meet.
     private readonly HullFaces _hull;
     private readonly HullFaces _core;
@@ -59,11 +63,14 @@ public sealed class ConvexHullCollisionShape : CollisionShape
         RequireFiniteReach(parameterName);
         var size = 2 * Vector3F.Max(_boundsHalf);
         _hull = HullFaces.Build(hull, size);
-        _core = _hull;
         if (convexRadius > 0 && TryDrawIn(_hull, convexRadius, size, out var core, out var radius))
         {
             _core = core;
             _convexRadius = radius;
+        }
+        else
+        {
+            _core = HullFaces.Build(hull, size, ContactFlatness);
         }
     }
 
@@ -160,7 +167,7 @@ public sealed class ConvexHullCollisionShape : CollisionShape
     internal override int FindFlatFace(Vector3F direction) => _core.FindFace(direction);
 
     internal override int GetSupportingFace(Vector3F direction, Span<Vector3F> into) =>
-        _core.GetFace(_core.FindFace(direction), into);
+        _core.GetFace(_core.FindSupportingFace(direction), into);
 
     /// <summary>Where <paramref name="ray"/> first meets the hull's faces, the rounding not met; from inside, at once.
     /// </summary>
@@ -321,7 +328,7 @@ public sealed class ConvexHullCollisionShape : CollisionShape
         if (kept == null)
             return false;
 
-        core = HullFaces.Build(kept, size);
+        core = HullFaces.Build(kept, size, ContactFlatness);
         return true;
     }
 

@@ -248,14 +248,24 @@ public class ConvexHullTests
         }
     }
 
-    // The core's faces are its own, each flat, so a rock lying on one rests on all its corners; and each stands where a
-    // face of the hull does, the radius in.
+    // The faces contacts meet are flat - faces within a hair of one plane joined, three ten-thousandths of the rock's
+    // size - so a rock lying on one rests on all its corners; and each stands where a face of the hull does, the
+    // radius in. Rounded or sharp alike.
     [Test]
-    public void RoundedRock_HasFlatFacesItsWholeCoreStandsBehind([Range(0, 4)] int seed)
+    public void Rock_HasFlatFacesWhereTheHullHasThem([Range(0, 4)] int seed, [Values(0f, 0.05f)] float convexRadius)
     {
-        var rock = Rock(new Random(seed));
+        var rock = Rock(new Random(seed), convexRadius);
+        var minimum = new Vector3F(float.MaxValue);
+        var maximum = new Vector3F(float.MinValue);
+        foreach (var vertex in rock.Vertices)
+        {
+            minimum = Vector3F.Min(minimum, vertex);
+            maximum = Vector3F.Max(maximum, vertex);
+        }
 
-        Assert.That(rock.ConvexRadius, Is.GreaterThan(0));
+        var hair = 3e-4f * Vector3F.Max(maximum - minimum) + 1e-6f;
+
+        Assert.That(rock.ConvexRadius > 0, Is.EqualTo(convexRadius > 0));
         Span<Vector3F> corners = stackalloc Vector3F[ManifoldBuffer.FaceCapacity];
         for (var face = 0; face < rock.FlatFaceCount; face++)
         {
@@ -264,10 +274,8 @@ public class ConvexHullTests
             var count = rock.GetFlatFace(face, corners);
             for (var corner = 0; corner < count; corner++)
             {
-                Assert.That(Vector3F.Dot(normal, corners[corner]), Is.EqualTo(offset).Within(1e-4f), $"face {face}");
+                Assert.That(Vector3F.Dot(normal, corners[corner]), Is.EqualTo(offset).Within(hair), $"face {face}");
             }
-
-            Assert.That(Vector3F.Dot(normal, rock.GetCoreSupport(normal)), Is.EqualTo(offset).Within(1e-5f));
 
             // The faces moved in by the radius: rounded, the rock reaches each of them as far as the hull does.
             var hullReach = float.MinValue;
@@ -276,15 +284,17 @@ public class ConvexHullTests
                 hullReach = MathF.Max(hullReach, Vector3F.Dot(normal, vertex));
             }
 
-            Assert.That(Vector3F.Dot(normal, rock.GetSupport(normal)), Is.EqualTo(hullReach).Within(1e-4f), $"face {face}");
+            Assert.That(Vector3F.Dot(normal, rock.GetSupport(normal)), Is.EqualTo(hullReach).Within(hair), $"face {face}");
         }
     }
 
+    // A rock lying on a face beside a sliver nearly in its plane bore on whichever was turned a hair nearer, and rocked
+    // between them for good: each one dropped comes to rest.
     [Test]
-    public void RoundedRocksDropped_EachComesToRest([Range(0, 19)] int seed)
+    public void RocksDropped_EachComesToRest([Range(0, 19)] int seed, [Values(0f, 0.05f)] float convexRadius)
     {
         var random = new Random(seed);
-        var rock = Rock(random);
+        var rock = Rock(random, convexRadius);
         var scene = new SceneBuilder();
         scene.AddGround();
         var body = scene.World.Add(new BodyDescription
@@ -295,8 +305,7 @@ public class ConvexHullTests
                 (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f))
         });
 
-        // A rounded rock rocks a while on the rounding of its face's edge before it settles.
-        scene.Run(20f);
+        scene.Run(10f);
 
         Assert.That(scene.World.IsAwake(body), Is.False);
     }
@@ -535,7 +544,7 @@ public class ConvexHullTests
         new(CornersOf(half), convexRadius: 0);
 
     // A flat rock of forty points, eighty centimeters across, rounded by default.
-    private static ConvexHullCollisionShape Rock(Random random)
+    private static ConvexHullCollisionShape Rock(Random random, float convexRadius = CollisionShape.DefaultConvexRadius)
     {
         var points = new List<Vector3F>();
         for (var index = 0; index < 40; index++)
@@ -544,7 +553,7 @@ public class ConvexHullTests
                 (float)random.NextDouble() - 0.5f) * 0.8f);
         }
 
-        return new ConvexHullCollisionShape(points);
+        return new ConvexHullCollisionShape(points, convexRadius);
     }
 
     private static List<Vector3F> CornersOf(Vector3F half)
