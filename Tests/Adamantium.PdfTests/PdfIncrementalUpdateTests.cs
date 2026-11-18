@@ -92,6 +92,41 @@ public class PdfIncrementalUpdateTests
         Assert.That(update.Write(), Is.EqualTo(original));
     }
 
+    // A measurement as Acrobat writes one: a dimension line by its two ends, an area by its corners, each meant as a
+    // dimension and scaled - read back by the same entries.
+    [Test]
+    public void AMeasurementsEndsCornersAndIntent_AreReadBack()
+    {
+        var document = PdfDocument.Open(Pages().Build("/Root 1 0 R"));
+        var update = new PdfIncrementalUpdate(document);
+        update.AddAnnotation(document.Pages[0], new PdfNewAnnotation(PdfAnnotationTypes.Line, new PdfRectangle(0, 0, 120, 60))
+        {
+            Line = [10, 20, 110, 50],
+            Intent = "LineDimension",
+            Measure = PdfMeasure.Scaled("1 pt = 0.5 m", "m", 0.5),
+        });
+        update.AddAnnotation(document.Pages[0], new PdfNewAnnotation(PdfAnnotationTypes.Polygon, new PdfRectangle(0, 0, 120, 60))
+        {
+            Vertices = [10, 10, 100, 10, 100, 50],
+            Intent = "PolygonDimension",
+        });
+
+        var annotations = PdfDocument.Open(update.Write()).Pages[0].Annotations;
+        var line = annotations.Single(annotation => annotation.Subtype == PdfAnnotationTypes.Line);
+        var polygon = annotations.Single(annotation => annotation.Subtype == PdfAnnotationTypes.Polygon);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(line.Line, Is.EqualTo(new[] { new PdfPoint(10, 20), new PdfPoint(110, 50) }));
+            Assert.That(line.Intent, Is.EqualTo("LineDimension"));
+            Assert.That(line.Measure.FormatDistance(100, 0), Is.EqualTo("50.00 m"));
+            Assert.That(line.Vertices, Is.Empty);
+            Assert.That(polygon.Vertices, Is.EqualTo(new[] { new PdfPoint(10, 10), new PdfPoint(100, 10), new PdfPoint(100, 50) }));
+            Assert.That(polygon.Intent, Is.EqualTo("PolygonDimension"));
+            Assert.That(polygon.Line, Is.Empty);
+        });
+    }
+
     [Test]
     public void AnAnnotationAddedAfterATableIsReadBack()
     {
