@@ -12,9 +12,9 @@ All packages share one version.
   disabled or taken out of the world leaves. A body is changed where it stands, its contacts kept: put where it was
   moved by hand - a static one follows its parents - and given its new kind, settings or shape when a collider is
   edited or a part hung under it or given a body of its own; it is made anew only once its entity hangs elsewhere in
-  the tree. A change that alters none of these, such as selecting the entity, leaves the body as it is. It looks once a frame through `Entity.ChangeCount`, new: how
-  many times an entity changed - its values and its components', a component added or taken off, an entity hung under
-  it or taken from it. A body the physics world refuses is not one it moves. Gravity and settings set during a game go
+  the tree. A change that alters none of these, such as selecting the entity, leaves the body as it is. It looks once
+  a frame through `Entity.ChangeCount`, new: how many times an entity changed - its values and its components', a
+  component added or taken off, an entity hung under it or taken from it. A body the physics world refuses is not one it moves. Gravity and settings set during a game go
   back when it stops, and the service runs before the others (`PhysicsService.UpdatePriority`), so the entities it
   stands are placed in the same frame.
 - `IPhysicsWorld` changes a body where it stands: `Change` gives it a whole description's kind, shape, weight and
@@ -25,6 +25,8 @@ All packages share one version.
   dynamic.
 - `Collider.Bounds` and a `ConvexHullCollider`'s hull tell of their change (`PropertyChanged`), so what follows a
   collider's shape sees it refitted.
+- `PdfAnnotation.Line`, `Vertices` and `Intent`: a line annotation's two ends (`L`), a polygon's or polyline's corners
+  (`Vertices`) and what it is meant as (`IT`, such as `LineDimension`) - what a measurement is read back by.
 
 - A scene keeps its entries' physics: `ScenePlacement.Body` (`SceneBody` - a `RigidBody`'s settings, each written
   only when it is not a new body's own) on any entry but a light or a camera, and a shape's `ScenePlacement.Collider`
@@ -527,6 +529,9 @@ All packages share one version.
 
 ### Changed
 
+- `PhysicsParts.SetBody` gives the entity's own `RigidBody` the settings rather than putting a new one in its place:
+  the body stays the same component, so the physics, once it follows edits made in a game, can keep its speed. An
+  entity with no body still gets a new one.
 - A click on an icon takes its entity even where a mesh is nearer: the icon is drawn in front of everything
   (`ToolsService.ChosenAt`, `ToolsService.PickEntity`).
 - An entity hidden in the hierarchy, itself or by an owner, shows no icon - a light's and a camera's too.
@@ -653,6 +658,10 @@ All packages share one version.
 
 ### Fixed
 
+- A mesh with no collider is drawn: `ForwardPlusRenderingProcessor` skipped any entity without one, so a shape or a
+  model's part given no collider (`ColliderKind.None`) vanished from the view. Colliders are for the physics only. A
+  mesh without one is culled by its box in the scene's index; one the index leaves out - a mesh on the view's own
+  camera - is not drawn in that view. Picking a mesh by its triangles never needed a collider.
 - The ground grid's axes are drawn smoothed, by the grid's shader alone: the lines drawn over them stair-stepped their
   edges, and are drawn now only where the plane is seen edge on - a perspective's eye in it, a flat view along it. A
   pixel's share of the plane is its gradient's length on screen, so a line seen at a slant is as wide and as soft as one

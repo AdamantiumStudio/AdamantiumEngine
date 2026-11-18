@@ -87,7 +87,8 @@ public class SceneSnapshotTests
         var crate = Named("Crate");
         var plain = Named("Plain");
         var snapshot = SceneSnapshot.Take(_scene);
-        crate.GetComponent<RigidBody>().Mass = 9;
+        var crateBody = crate.GetComponent<RigidBody>();
+        crateBody.Mass = 9;
         plain.AddComponent(new RigidBody());
         Adamantium.Engine.Physics.PhysicsParts.SetCollider(plain, ColliderKind.Sphere);
         _group.AddComponent(new RigidBody());
@@ -99,6 +100,7 @@ public class SceneSnapshotTests
         Assert.Multiple(() =>
         {
             Assert.That(crate.GetComponent<RigidBody>()?.Mass, Is.EqualTo(2));
+            Assert.That(crate.GetComponent<RigidBody>(), Is.SameAs(crateBody), "the body it had, so it keeps its speed");
             Assert.That(plain.GetComponent<RigidBody>(), Is.Null);
             Assert.That(plain.GetComponent<Collider>(), Is.TypeOf<BoxCollider>(), "the template's again");
             Assert.That(_group.GetComponent<RigidBody>(), Is.Null);

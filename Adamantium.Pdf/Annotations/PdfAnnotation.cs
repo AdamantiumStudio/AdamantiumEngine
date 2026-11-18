@@ -113,6 +113,39 @@ public sealed class PdfAnnotation
         }
     }
 
+    /// <summary>The two ends of a line annotation (<c>L</c>), in default user space; empty when it gives fewer.</summary>
+    public IReadOnlyList<PdfPoint> Line
+    {
+        get
+        {
+            var ends = Points(PdfAnnotationKeys.Line);
+            return ends.Count >= 2 ? ends.GetRange(0, 2) : [];
+        }
+    }
+
+    /// <summary>The corners of a polygon or polyline annotation (<c>Vertices</c>), in order; empty when it gives none.
+    /// </summary>
+    public IReadOnlyList<PdfPoint> Vertices => Points(PdfAnnotationKeys.Vertices);
+
+    /// <summary>What it is meant as (<c>IT</c>), such as <c>LineDimension</c> or <c>PolygonDimension</c> for a
+    /// measurement; null when it says nothing.</summary>
+    public string Intent => PdfValues.Name(Dictionary[PdfAnnotationKeys.Intent], _document);
+
+    // Pairs of numbers as points; a number left without its pair is dropped.
+    private List<PdfPoint> Points(string key)
+    {
+        var points = new List<PdfPoint>();
+        if (PdfValues.Numbers(Dictionary[key], _document) is { } numbers)
+        {
+            for (var start = 0; start + 2 <= numbers.Length; start += 2)
+            {
+                points.Add(new PdfPoint(numbers[start], numbers[start + 1]));
+            }
+        }
+
+        return points;
+    }
+
     /// <summary>What a viewer draws for it without an appearance of its own (<c>AP</c>): a link's border, a text markup's
     /// highlight, underline, strikeout or squiggle; null for nothing to draw and for any other kind. Built once.</summary>
     public PdfStream ImpliedAppearance
