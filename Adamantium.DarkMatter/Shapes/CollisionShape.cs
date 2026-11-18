@@ -9,6 +9,9 @@ public abstract class CollisionShape
     /// <summary>The least size a shape has, in meters: a micrometer.</summary>
     public const float MinimumSize = 1e-6f;
 
+    /// <summary>How round the edges of a hull or a cylinder are unless told otherwise, in meters.</summary>
+    public const float DefaultConvexRadius = 0.05f;
+
     /// <summary>Which shape this is.</summary>
     public abstract CollisionShapeKind Kind { get; }
 
@@ -26,7 +29,7 @@ public abstract class CollisionShape
     public abstract Vector3F GetSupport(Vector3F direction);
 
     /// <summary>How far the shape reaches past its core, the part GJK and EPA meet: a ball's radius around a point, a
-    /// capsule's around a segment; nothing for a shape of corners, which is its own core.</summary>
+    /// capsule's around a segment, a rounded hull's around its hull drawn in; nothing for a box, its own core.</summary>
     internal virtual float CoreRadius => 0;
 
     /// <summary>The point of the core farthest along <paramref name="direction"/>, both in the shape's own axes.</summary>
@@ -48,16 +51,16 @@ public abstract class CollisionShape
     /// <summary>The outward normal of face <paramref name="face"/>, of length one, in the shape's own axes.</summary>
     internal virtual Vector3F GetFlatFaceNormal(int face) => throw new ArgumentOutOfRangeException(nameof(face));
 
-    /// <summary>How far face <paramref name="face"/>'s plane stands from the shape's origin along its normal: the
-    /// farthest the shape reaches that way.</summary>
+    /// <summary>How far the plane of the core's face <paramref name="face"/> stands from the shape's origin along its
+    /// normal: the farthest the core reaches that way, the shape reaching <see cref="CoreRadius"/> farther.</summary>
     internal virtual float GetFlatFaceOffset(int face) => throw new ArgumentOutOfRangeException(nameof(face));
 
     /// <summary>The face whose normal turns most toward <paramref name="direction"/>, in the shape's own axes; -1 for
     /// a round shape.</summary>
     internal virtual int FindFlatFace(Vector3F direction) => -1;
 
-    /// <summary>Writes into <paramref name="into"/> the corners of face <paramref name="face"/>, in the shape's own
-    /// axes, and gives their count.</summary>
+    /// <summary>Writes into <paramref name="into"/> the corners of the core's face <paramref name="face"/>, in the
+    /// shape's own axes, and gives their count.</summary>
     internal virtual int GetFlatFace(int face, Span<Vector3F> into) =>
         throw new ArgumentOutOfRangeException(nameof(face));
 

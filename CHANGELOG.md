@@ -26,13 +26,16 @@ All packages share one version.
   A `PhysicsWorld` steps rigid bodies at a fixed rate (`PhysicsSettings.StepRate`, 120 by default) with substeps; it
   is used through `IPhysicsWorld`, for dependency injection and for other worlds - a client's, a replay, a test's.
   Bodies are added from a `BodyDescription` - static, kinematic or dynamic; a `SphereCollisionShape`,
-  `CapsuleCollisionShape`, `BoxCollisionShape` or `ConvexHullCollisionShape` (the hull of a set of points, at most
-  `MaxCorners` - 256 - of them kept as far out as they reach, its triangles in one plane one face; its mass, center
-  and axes found from its volume; it touches any shape through GJK
-  while apart, EPA once overlapping, and the faces turned toward each other clipped one by the other, so it rests on a
-  face with all its corners), or a `CompoundCollisionShape` of them standing together (each
+  `CapsuleCollisionShape`, `BoxCollisionShape`, `ConvexHullCollisionShape` (the hull of a set of points, or of a
+  `ConvexHull` built already, at most `MaxCorners` - 256 - of them kept as far out as they reach, its triangles in one
+  plane one face; its mass, center and axes found from its volume), `CylinderCollisionShape` (along Y, a wheel or a
+  barrel; spinning about its axis it sweeps nothing), or a `CompoundCollisionShape` of them standing together (each
   `CompoundPart` colliding on its own, with a contact and normal of its own; the mass of all of them, its center and
   principal axes found); density or mass, friction, restitution, damping - and named by the `BodyHandle` they get. A
+  hull and a cylinder touch any shape through GJK while apart, EPA once overlapping, and the faces turned toward each
+  other clipped one by the other, so they rest on a face with all its corners; their edges are rounded within them by
+  a `ConvexRadius` (`CollisionShape.DefaultConvexRadius`, 5 cm, less on a small or uneven shape), so they roll off an
+  edge smoothly. A
   body's pose is that of its origin, the point its shape is given around; it spins about its center of mass
   (`GetCenterOfMass`, and `GetLocalCenterOfMass` in its own axes). Contacts are soft constraints with Coulomb friction, warm-started from the last step and
   found ahead of time by a distance that grows with speed and spin, so a fast body stops on a thin floor; a pair keeps
@@ -42,7 +45,7 @@ All packages share one version.
   instruments; `StepClock` turns the time of frames into fixed steps and a blend for drawing between them. The same
   scene steps to the same result.
 - Physics in games: a `RigidBody` component makes its entity a body - static, kinematic or dynamic, its mass,
-  friction and the rest - colliding with the box, sphere, capsule and convex hull colliders on it and on the enabled
+  friction and the rest - colliding with the box, sphere, capsule, cylinder and convex hull colliders on it and on the enabled
   entities below it that have no rigid body of their own, scaled as each entity is: a model's parts make one body (a
   hull collider with no mesh, or a moving body that is mirrored, or under a stretched or skewed parent, is left out,
   said in the log). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
@@ -51,13 +54,21 @@ All packages share one version.
   again; gravity - and each frame stands the entities between the last two steps, parents before children. Down is
   +Y, so the service's gravity is too; that of its `Settings` is not used. What it moves is recorded as the scene's
   changes, so the scene kept before the game comes back.
+- A built model keeps each mesh's convex hull (the mesh row's version 3): found at every import, and taken as it is
+  when the model loads, so a hull collider no longer hulls every point of its mesh then - 94 ms for 100,000 points.
+  Models built before still load, their hulls found from their points. `ConvexHull.FromBuilt` takes a solid hull's
+  corners and triangles as a file keeps them.
 - A model's edits made in the editor are kept in its asset file, in a section of their own (`AssetFileSection.Edits`,
   `AssetFile.Edits`, written by `ModelEditsSerializer`), and a new import of the model carries them over as they are;
   `ContentBuilder.WriteEdits` puts them in. `ModelEdits` holds them by part, by `ModelPartPath` - the names from the
-  model's root, "Frame/Wheel[1]", an unnamed part counted, "[0]": a part's collider (`ColliderKind`, fitted to its mesh,
-  or none) and its rigid body (`BodyEdits`). The model is built with them (`SceneData.Edits`); an edit whose part is
+  model's root, "Frame/Wheel[1]", an unnamed part counted, "[0]": a part's collider (`ColliderKind` - a box, sphere,
+  capsule, cylinder or convex hull fitted to its mesh, or none) and its rigid body (`BodyEdits`). The model is built with them (`SceneData.Edits`); an edit whose part is
   gone waits in the file, and edits that cannot be read are left out - both said in the log - without stopping the
   model, its thumbnail or new edits.
+- `CylinderCollider`: a cylinder round an entity along a `ColliderAxis`, fitted to its mesh along the side whose
+  cross-section is roundest - a wheel's thin side, a barrel's height; picked, seen by a frustum and overlapped as a
+  cylinder. `BoundingCylinder`, a placeholder until now, is the cylinder between two points: its support, rays,
+  containment, frustum test and bounds.
 - `Entity.TryMeasureBounds`: the box, in the entity's own axes, that holds its meshes and those of everything under it -
   a collider's bounds for an entity without a mesh.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest

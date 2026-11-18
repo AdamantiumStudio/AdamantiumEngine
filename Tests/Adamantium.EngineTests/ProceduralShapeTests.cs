@@ -248,6 +248,26 @@ public class ProceduralShapeTests
         });
     }
 
+    // Stretched along X it is still a cylinder standing along Y, if not round: its collider stands so, as wide as its
+    // widest.
+    [Test]
+    public void ACylinder_IsHeldByACylinder_StandingAlongYHoweverStretched()
+    {
+        var entity = new ShapeTemplate(new CylinderShape { Size = new Vector3<double>(3, 1, 1) })
+            .Build(new Entity(null, "Cylinder"));
+
+        var collider = entity.GetComponent<Collider>();
+
+        Assert.That(collider, Is.TypeOf<CylinderCollider>());
+        var cylinder = (CylinderCollider)collider;
+        Assert.Multiple(() =>
+        {
+            Assert.That(cylinder.Axis, Is.EqualTo(ColliderAxis.Y));
+            Assert.That(cylinder.Radius, Is.EqualTo(1.5f).Within(1e-3));
+            Assert.That(cylinder.Height, Is.EqualTo(1).Within(1e-3));
+        });
+    }
+
     [Test]
     public void ACubeAndASphere_KeepTheirBox()
     {

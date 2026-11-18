@@ -67,98 +67,25 @@ internal sealed class GjkSimplex
         return a + along * t;
     }
 
-    // Ericson, Real-Time Collision Detection, 5.1.5: the region of the triangle the origin projects into.
+    // The triangle's point nearest the origin, the simplex cut to the corners that weigh in it.
     private Vector3<double> NearestOnTriangle(int first, int second, int third)
     {
-        var a = Vertices[first].Point;
-        var b = Vertices[second].Point;
-        var c = Vertices[third].Point;
-        var ab = b - a;
-        var ac = c - a;
-        var d1 = -Vector3<double>.Dot(ab, a);
-        var d2 = -Vector3<double>.Dot(ac, a);
-        if (d1 <= 0 && d2 <= 0)
-            return Keep(first);
-
-        var d3 = -Vector3<double>.Dot(ab, b);
-        var d4 = -Vector3<double>.Dot(ac, b);
-        if (d3 >= 0 && d4 <= d3)
-            return Keep(second);
-
-        var vc = d1 * d4 - d3 * d2;
-        if (vc <= 0 && d1 >= 0 && d3 <= 0)
-        {
-            var v = d1 / (d1 - d3);
-            Keep(first, second, 1 - v, v);
-            return a + ab * v;
-        }
-
-        var d5 = -Vector3<double>.Dot(ab, c);
-        var d6 = -Vector3<double>.Dot(ac, c);
-        if (d6 >= 0 && d5 <= d6)
-            return Keep(third);
-
-        var vb = d5 * d2 - d1 * d6;
-        if (vb <= 0 && d2 >= 0 && d6 <= 0)
-        {
-            var w = d2 / (d2 - d6);
-            Keep(first, third, 1 - w, w);
-            return a + ac * w;
-        }
-
-        var va = d3 * d6 - d5 * d4;
-        if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0)
-        {
-            var w = (d4 - d3) / (d4 - d3 + (d5 - d6));
-            Keep(second, third, 1 - w, w);
-            return b + (c - b) * w;
-        }
-
-        var sum = va + vb + vc;
-        if (!(sum > 0))
-            return NearestOnFlatTriangle(first, second, third);
-
-        var weightB = vb / sum;
-        var weightC = vc / sum;
-        Keep(first, second, third, 1 - weightB - weightC, weightB, weightC);
-        return a + ab * weightB + ac * weightC;
-    }
-
-    // A triangle of no area: the nearest point of its three edges.
-    private Vector3<double> NearestOnFlatTriangle(int first, int second, int third)
-    {
-        Span<SupportVertex> corners = [Vertices[first], Vertices[second], Vertices[third]];
-        Span<SupportVertex> kept = stackalloc SupportVertex[2];
-        Span<double> keptWeights = stackalloc double[2];
-        var keptCount = 0;
-        var nearest = Vector3<double>.Zero;
-        var best = double.MaxValue;
-        for (var edge = 0; edge < 3; edge++)
-        {
-            Vertices[0] = corners[edge];
-            Vertices[1] = corners[(edge + 1) % 3];
-            Count = 2;
-            var candidate = NearestOnSegment(0, 1);
-            var distance = candidate.LengthSquared();
-            if (distance >= best)
-                continue;
-
-            best = distance;
-            nearest = candidate;
-            keptCount = Count;
-            for (var index = 0; index < Count; index++)
-            {
-                kept[index] = Vertices[index];
-                keptWeights[index] = Weights[index];
-            }
-        }
-
-        Count = keptCount;
-        for (var index = 0; index < keptCount; index++)
-        {
-            Vertices[index] = kept[index];
-            Weights[index] = keptWeights[index];
-        }
+        var firstPoint = Vertices[first].Point;
+        var secondPoint = Vertices[second].Point;
+        var thirdPoint = Vertices[third].Point;
+        TriangleMath.FindNearestWeights(firstPoint, secondPoint, thirdPoint, Vector3<double>.Zero, out var firstWeight,
+            out var secondWeight, out var thirdWeight);
+        var nearest = firstPoint * firstWeight + secondPoint * secondWeight + thirdPoint * thirdWeight;
+        if (firstWeight > 0 && secondWeight > 0 && thirdWeight > 0)
+            Keep(first, second, third, firstWeight, secondWeight, thirdWeight);
+        else if (thirdWeight == 0 && firstWeight > 0 && secondWeight > 0)
+            Keep(first, second, firstWeight, secondWeight);
+        else if (firstWeight == 0 && secondWeight > 0 && thirdWeight > 0)
+            Keep(second, third, secondWeight, thirdWeight);
+        else if (secondWeight == 0 && firstWeight > 0 && thirdWeight > 0)
+            Keep(first, third, firstWeight, thirdWeight);
+        else
+            Keep(firstWeight > 0 ? first : secondWeight > 0 ? second : third);
 
         return nearest;
     }

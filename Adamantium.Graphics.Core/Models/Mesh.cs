@@ -172,11 +172,12 @@ public class Mesh
 
     /// <summary>
     /// The convex hull of the mesh's points, in the mesh's own space: built on first use and again after the points
-    /// change, and shared by every entity that draws this mesh.
+    /// change, and shared by every entity that draws this mesh. A mesh read from a model built with its hull takes that
+    /// one, hulling nothing.
     /// </summary>
     public ConvexHull GetConvexHull()
     {
-        if (convexHull == null || convexHullVersion != version || !ReferenceEquals(convexHullPoints, Points))
+        if (!HasCurrentConvexHull)
         {
             var points = new Vector3F[Points.Length];
             for (int i = 0; i < points.Length; i++)
@@ -184,13 +185,23 @@ public class Mesh
                 points[i] = Points[i].As<float>();
             }
 
-            convexHull = ConvexHull.FromPoints(points);
-            convexHullVersion = version;
-            convexHullPoints = Points;
+            KeepConvexHull(ConvexHull.FromPoints(points));
         }
 
         return convexHull;
     }
+
+    /// <summary>Keeps <paramref name="hull"/> as the hull of the mesh's points as they are now - one a model file holds,
+    /// or a copy's - so <see cref="GetConvexHull"/> gives it until the points change; null keeps none.</summary>
+    internal void KeepConvexHull(ConvexHull hull)
+    {
+        convexHull = hull;
+        convexHullVersion = version;
+        convexHullPoints = Points;
+    }
+
+    private bool HasCurrentConvexHull =>
+        convexHull != null && convexHullVersion == version && ReferenceEquals(convexHullPoints, Points);
 
     public bool HasIndices => Indices.Length > 0;
 
@@ -936,6 +947,11 @@ public class Mesh
         clonedMesh.ApplyTransform(transform);
         clonedMesh.CalculateBoundingVolumes();
         clonedMesh.IsModified = true;
+
+        // A copy where the mesh stands shares its hull, which never changes once made; a moved copy's points are
+        // rounded as they move, so its hull is found from them.
+        if (transform == Matrix4x4<double>.Identity && HasCurrentConvexHull)
+            clonedMesh.KeepConvexHull(convexHull);
 
         return clonedMesh;
     }

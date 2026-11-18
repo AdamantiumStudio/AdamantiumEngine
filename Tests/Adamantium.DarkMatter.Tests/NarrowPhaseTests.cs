@@ -6,7 +6,7 @@ using NUnit.Framework;
 namespace Adamantium.DarkMatter.Tests;
 
 [TestFixture]
-public class NarrowphaseTests
+public class NarrowPhaseTests
 {
     private const float Speculative = 0.02f;
     private readonly ManifoldBuffer _manifold = new();
@@ -146,7 +146,7 @@ public class NarrowphaseTests
     [Test]
     public void BoxHoveringOverSlab_TouchesAtFourCornersAhead()
     {
-        var found = Narrowphase.Collide(new BoxCollisionShape(5, 0.025f, 5), new Pose(new Vector3F(0, -0.025f, 0)),
+        var found = NarrowPhase.Collide(new BoxCollisionShape(5, 0.025f, 5), new Pose(new Vector3F(0, -0.025f, 0)),
             new BoxCollisionShape(0.25f, 0.25f, 0.25f), new Pose(new Vector3F(0, 0.311f, 0)), 0.35f, _manifold);
 
         Assert.That(found, Is.True);
@@ -185,7 +185,7 @@ public class NarrowphaseTests
     }
 
     private bool Collide(CollisionShape first, Pose firstPose, CollisionShape second, Pose secondPose) =>
-        Narrowphase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
+        NarrowPhase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
 
     private void AssertNormal(Vector3F expected)
     {

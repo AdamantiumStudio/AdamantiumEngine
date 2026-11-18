@@ -7,6 +7,7 @@ public enum CollisionShapeKind
     Capsule,
     Box,
     ConvexHull,
+    Cylinder,
 
     /// <summary>Shapes standing together; the world tests each of them on its own.</summary>
     Compound

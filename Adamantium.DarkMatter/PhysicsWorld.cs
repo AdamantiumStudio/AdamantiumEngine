@@ -461,7 +461,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             var closingSpeed = (second.LinearVelocity - first.LinearVelocity).Length()
                                + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
             var speculativeDistance = Settings.SpeculativeDistance + closingSpeed * stepSeconds;
-            if (Narrowphase.Collide(firstPart.Shape, PlacePart(first, firstPart), secondPart.Shape,
+            if (NarrowPhase.Collide(firstPart.Shape, PlacePart(first, firstPart), secondPart.Shape,
                     PlacePart(second, secondPart), speculativeDistance, _manifold))
             {
                 _manifold.ReduceTo(Settings.MaxContactPointsPerPair);

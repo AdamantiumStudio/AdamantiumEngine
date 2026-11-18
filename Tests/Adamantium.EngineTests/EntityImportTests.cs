@@ -173,6 +173,29 @@ public class EntityImportTests
     }
 
     [Test]
+    public void EditsAskingForACylinderOrAHull_GiveThePartThatCollider()
+    {
+        var scene = NewScene();
+        scene.CreateMesh(scene.Models, "wheel", "Wheel").Meshes.Add(Box(1));
+        scene.CreateMesh(scene.Models, "rock", "Rock").Meshes.Add(Box(1));
+        scene.Edits = new ModelEdits();
+        scene.Edits.Parts["Wheel"] = new PartEdits { Collider = ColliderKind.Cylinder };
+        scene.Edits.Parts["Rock"] = new PartEdits { Collider = ColliderKind.ConvexHull };
+
+        var model = Import(scene, Vector3<double>.Zero);
+
+        Assert.Multiple(() =>
+        {
+            var wheel = model.Dependencies.First(part => part.Name == "Wheel").GetComponent<Collider>();
+            Assert.That(wheel, Is.InstanceOf<CylinderCollider>());
+            Assert.That(((CylinderCollider)wheel).Radius, Is.GreaterThan(0), "fitted to its mesh");
+            var rock = model.Dependencies.First(part => part.Name == "Rock").GetComponent<Collider>();
+            Assert.That(rock, Is.InstanceOf<ConvexHullCollider>());
+            Assert.That(((ConvexHullCollider)rock).Hull, Is.Not.Null);
+        });
+    }
+
+    [Test]
     public void ABodyEditThisEngineCannotRead_IsLeftOut()
     {
         var scene = NewScene();

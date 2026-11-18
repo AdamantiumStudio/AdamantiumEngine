@@ -85,17 +85,28 @@ internal readonly struct ColliderShape
                 var key = new HullShapeKey(hull, rounded);
                 if (!hullShapes.TryGetValue(key, out var hullShape))
                 {
-                    var points = new Vector3F[hull.Vertices.Count];
-                    for (var index = 0; index < points.Length; index++)
-                    {
-                        points[index] = hull.Vertices[index] * scale;
-                    }
-
-                    hullShape = new ConvexHullCollisionShape(points);
+                    // A hull scaled is still a hull: carried as it is, not hulled anew from its corners.
+                    hullShape = new ConvexHullCollisionShape(hull.Transform(Matrix4x4.CreateScale<float>(scale)));
                     hullShapes[key] = hullShape;
                 }
 
                 shape = new ColliderShape(hullShape, Vector3F.Zero, QuaternionF.Identity);
+                return true;
+            }
+            case CylinderCollider cylinder:
+            {
+                var start = cylinder.Cylinder.Start * scale;
+                var end = cylinder.Cylinder.End * scale;
+                // A circle stays round only on an even scale: the radius takes the wider of the scales across the axis.
+                var across = cylinder.Axis == ColliderAxis.X ? MathF.Max(size.Y, size.Z)
+                    : cylinder.Axis == ColliderAxis.Y ? MathF.Max(size.X, size.Z)
+                    : MathF.Max(size.X, size.Y);
+                var radius = MathF.Max(cylinder.Cylinder.Radius * across, CollisionShape.MinimumSize);
+                var axis = end - start;
+                var length = axis.Length();
+                var halfHeight = MathF.Max(length * 0.5f, CollisionShape.MinimumSize);
+                var turn = length > 0 ? TurnUpTo(axis / length) : QuaternionF.Identity;
+                shape = new ColliderShape(new CylinderCollisionShape(halfHeight, radius), (start + end) * 0.5f, turn);
                 return true;
             }
             default:
