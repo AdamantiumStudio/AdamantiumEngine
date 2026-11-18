@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Objects;
+using Adamantium.Pdf.Text;
 
 namespace Adamantium.Pdf.Annotations;
 
@@ -12,6 +13,14 @@ namespace Adamantium.Pdf.Annotations;
 internal static class PdfImpliedAppearance
 {
     private const double Kappa = 0.5523;
+
+    // A text markup's line weight, and heights over the baseline side, as parts of the marked area's height.
+    private const double MarkupLine = 0.07;
+    private const double UnderlineAt = 0.08;
+    private const double StrikeOutAt = 0.42;
+    private const double SquiggleHeight = 0.1;
+    private const double SquiggleStep = 0.2;
+    private const int MaxSquiggleSteps = 16384;
 
     /// <summary>A link's border round its rectangle or each quadrilateral, in its color - beveled and inset ones with a
     /// two-tone band inside; null when it would show nothing.</summary>
@@ -83,6 +92,200 @@ internal static class PdfImpliedAppearance
         return new PdfStream(dictionary, Encoding.ASCII.GetBytes(content.ToString()));
     }
 
+    /// <summary>A text markup over each area, in its color (a highlight yellow, a line black, by default) and opacities:
+    /// a highlight fills the area multiplied into the page; an underline, strikeout or squiggle runs along its baseline
+    /// side. Null when it would show nothing.</summary>
+    public static PdfStream TextMarkup(string subtype, PdfRectangle rect, IReadOnlyList<double> color,
+        double strokeOpacity, double fillOpacity, IReadOnlyList<PdfQuad> quads)
+    {
+        if (quads.Count == 0 || rect.Width <= 0 || rect.Height <= 0 || color is { Count: not (1 or 3 or 4) })
+        {
+            return null;
+        }
+
+        var highlight = subtype == PdfAnnotationTypes.Highlight;
+        var content = new StringBuilder("q /Markup gs ");
+        content.Append(highlight ? FillColor(color ?? [1, 1, 0]) : StrokeColor(color ?? [0])).Append(' ');
+        if (!highlight)
+        {
+            content.Append("0 J 0 j [] 0 d ");
+        }
+
+        var drawn = 0;
+        var squiggleBudget = MaxSquiggleSteps;
+        foreach (var quad in quads)
+        {
+            if (highlight)
+            {
+                // Round the middle, whatever order the file gives the corners in.
+                var corners = Sorted([
+                    Local(quad.BottomLeft, rect), Local(quad.BottomRight, rect), Local(quad.TopRight, rect),
+                    Local(quad.TopLeft, rect),
+                ]);
+                if (Math.Abs(Area(corners)) < 1e-9)
+                {
+                    continue;
+                }
+
+                Move(content, corners[0].X, corners[0].Y);
+                for (var corner = 1; corner < 4; corner++)
+                {
+                    Line(content, corners[corner].X, corners[corner].Y);
+                }
+
+                content.Append("h ");
+                drawn++;
+                continue;
+            }
+
+            var bottomLeft = Local(quad.BottomLeft, rect);
+            var bottomRight = Local(quad.BottomRight, rect);
+            var alongX = bottomRight.X - bottomLeft.X;
+            var alongY = bottomRight.Y - bottomLeft.Y;
+            var length = Math.Sqrt(alongX * alongX + alongY * alongY);
+            if (length < 1e-9)
+            {
+                continue;
+            }
+
+            // Up is square to the baseline, as far as the top side stands over it.
+            var height = ((quad.TopLeft.Y - quad.BottomLeft.Y) * alongX - (quad.TopLeft.X - quad.BottomLeft.X) * alongY) /
+                         length;
+            if (Math.Abs(height) < 1e-9)
+            {
+                continue;
+            }
+
+            var upX = -alongY / length * height;
+            var upY = alongX / length * height;
+            var width = Number(Math.Abs(height) * MarkupLine) + " w ";
+            if (subtype == PdfAnnotationTypes.Squiggly)
+            {
+                if (Squiggle(content, width, bottomLeft, alongX / length, alongY / length, length, upX, upY, rect,
+                        ref squiggleBudget))
+                {
+                    drawn++;
+                }
+
+                continue;
+            }
+
+            var at = subtype == PdfAnnotationTypes.StrikeOut ? StrikeOutAt : UnderlineAt;
+            content.Append(width);
+            Move(content, bottomLeft.X + upX * at, bottomLeft.Y + upY * at);
+            Line(content, bottomRight.X + upX * at, bottomRight.Y + upY * at);
+            content.Append("S ");
+            drawn++;
+        }
+
+        if (drawn == 0)
+        {
+            return null;
+        }
+
+        if (highlight)
+        {
+            content.Append("f ");
+        }
+
+        content.Append('Q');
+
+        var state = new PdfDictionary();
+        state.Set(PdfKeys.Type, new PdfName(PdfKeys.ExtGState));
+        state.Set(PdfKeys.StrokeOpacity, new PdfReal(strokeOpacity));
+        state.Set(PdfKeys.FillOpacity, new PdfReal(fillOpacity));
+        if (highlight)
+        {
+            state.Set(Graphics.PdfGraphicsKeys.BlendMode, new PdfName(nameof(Graphics.PdfBlendMode.Multiply)));
+        }
+
+        var states = new PdfDictionary();
+        states.Set("Markup", state);
+        var resources = new PdfDictionary();
+        resources.Set(PdfKeys.ExtGState, states);
+
+        var dictionary = new PdfDictionary();
+        dictionary.Set(PdfKeys.Type, new PdfName(PdfKeys.XObject));
+        dictionary.Set(PdfKeys.Subtype, new PdfName(PdfKeys.Form));
+        dictionary.Set(PdfKeys.BBox, new PdfArray([new PdfReal(0), new PdfReal(0), new PdfReal(rect.Width),
+            new PdfReal(rect.Height)]));
+        dictionary.Set(PdfKeys.Resources, resources);
+        return new PdfStream(dictionary, Encoding.ASCII.GetBytes(content.ToString()));
+    }
+
+    // A zigzag along the baseline side, rising and falling a step of a fifth of the height at a time - only over the
+    // part the annotation's box shows, in no more steps than the budget left. False when nothing of it shows.
+    private static bool Squiggle(StringBuilder content, string width, PdfPoint from, double directionX,
+        double directionY, double length, double upX, double upY, PdfRectangle rect, ref int budget)
+    {
+        var lowX = from.X + upX * MarkupLine;
+        var lowY = from.Y + upY * MarkupLine;
+        var first = length;
+        var last = 0.0;
+        foreach (var corner in (ReadOnlySpan<PdfPoint>)
+                 [new(0, 0), new(rect.Width, 0), new(rect.Width, rect.Height), new(0, rect.Height)])
+        {
+            var along = (corner.X - lowX) * directionX + (corner.Y - lowY) * directionY;
+            first = Math.Min(first, along);
+            last = Math.Max(last, along);
+        }
+
+        first = Math.Max(first, 0);
+        last = Math.Min(last, length);
+        var step = Math.Max(0.5, Math.Sqrt(upX * upX + upY * upY) * SquiggleStep);
+        if (!(last > first) || budget <= 0)
+        {
+            return false;
+        }
+
+        // Counted, not added up: far from the origin a step can be smaller than a double's own step there.
+        var before = Math.Floor(first / step);
+        var start = before * step;
+        var wanted = Math.Ceiling((last - start) / step);
+        var count = (int)Math.Clamp(wanted, 1, budget);
+        if (count < wanted)
+        {
+            step = (last - start) / count;
+        }
+
+        budget -= count;
+        var raised = before % 2 == 1;
+        content.Append(width);
+        Move(content, lowX + directionX * start + upX * (raised ? SquiggleHeight : 0),
+            lowY + directionY * start + upY * (raised ? SquiggleHeight : 0));
+        for (var index = 1; index <= count; index++)
+        {
+            var at = Math.Min(start + index * step, last);
+            raised = !raised;
+            var lift = raised ? SquiggleHeight : 0;
+            Line(content, lowX + directionX * at + upX * lift, lowY + directionY * at + upY * lift);
+        }
+
+        content.Append("S ");
+        return true;
+    }
+
+    private static PdfPoint Local(PdfPoint point, PdfRectangle rect) => new(point.X - rect.Left, point.Y - rect.Bottom);
+
+    private static double Area(PdfPoint[] corners)
+    {
+        var twice = 0.0;
+        for (var corner = 0; corner < corners.Length; corner++)
+        {
+            var next = corners[(corner + 1) % corners.Length];
+            twice += corners[corner].X * next.Y - next.X * corners[corner].Y;
+        }
+
+        return twice / 2;
+    }
+
+    private static string FillColor(IReadOnlyList<double> color) => color.Count switch
+    {
+        1 => Number(color[0]) + " g",
+        3 => Number(color[0]) + " " + Number(color[1]) + " " + Number(color[2]) + " rg",
+        _ => Number(color[0]) + " " + Number(color[1]) + " " + Number(color[2]) + " " + Number(color[3]) + " k",
+    };
+
     private static string Bevel(PdfRectangle rect, PdfAnnotationBorder border, double[] quadPoints)
     {
         var areas = new List<PdfPoint[]>();
@@ -145,11 +348,21 @@ internal static class PdfImpliedAppearance
     private static PdfPoint[] Corners(double[] points, int start, PdfRectangle rect)
     {
         var corners = new PdfPoint[4];
+        for (var corner = 0; corner < 4; corner++)
+        {
+            corners[corner] = new PdfPoint(points[start + corner * 2] - rect.Left, points[start + corner * 2 + 1] - rect.Bottom);
+        }
+
+        return Sorted(corners);
+    }
+
+    // The corners in turn round their middle, counterclockwise from the left of the bottom.
+    private static PdfPoint[] Sorted(PdfPoint[] corners)
+    {
         var centerX = 0.0;
         var centerY = 0.0;
         for (var corner = 0; corner < 4; corner++)
         {
-            corners[corner] = new PdfPoint(points[start + corner * 2] - rect.Left, points[start + corner * 2 + 1] - rect.Bottom);
             centerX += corners[corner].X / 4;
             centerY += corners[corner].Y / 4;
         }

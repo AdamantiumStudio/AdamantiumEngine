@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- Text markups without an appearance of their own are drawn: `PdfAnnotation.ImpliedAppearance` gives a highlight
+  (filled and multiplied into the page, yellow when it names no color), an underline, a strikeout or a squiggle over
+  each of its areas, in its color and opacity. `PdfAnnotation.QuadPoints` reads the areas, `PdfAnnotation.Opacity` its
+  `CA` and `FillOpacity` its `ca`; `PdfContentBuilder.BlendMode` sets how what is painted next mixes with what lies
+  under it.
 - `PdfTextMatching.IndexOf` finds a query in plain text by the rules a page's text is searched by - case, accents and
   whole words as `PdfTextSearchOptions` say - for a viewer that searches bookmarks and comments as it searches pages;
   `PdfPageText.Find` goes through it, and stops at a `limit` of matches when given one.

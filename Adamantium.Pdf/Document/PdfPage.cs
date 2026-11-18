@@ -134,17 +134,7 @@ public sealed class PdfPage
                     continue;
                 }
 
-                var quads = new List<PdfQuad>();
-                if (PdfValues.Numbers(annotation.Dictionary["QuadPoints"], _document) is { } points)
-                {
-                    for (var i = 0; i + 8 <= points.Length; i += 8)
-                    {
-                        quads.Add(new PdfQuad(new PdfPoint(points[i + 4], points[i + 5]),
-                            new PdfPoint(points[i + 6], points[i + 7]), new PdfPoint(points[i + 2], points[i + 3]),
-                            new PdfPoint(points[i], points[i + 1])));
-                    }
-                }
-
+                var quads = annotation.QuadPoints;
                 var dictionary = annotation.Dictionary;
                 var action = dictionary[PdfKeys.Dest] != null
                     ? _document.ResolveDestination(dictionary[PdfKeys.Dest]) is { } destination
