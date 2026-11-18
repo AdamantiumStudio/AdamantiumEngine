@@ -9,14 +9,20 @@ All packages share one version.
 
 - `PhysicsService` follows the scene while a game plays, not only at its start. A rigid body given during the game, or
   on an entity enabled again, becomes a body - at once when the game pushes it in the same frame; one taken off,
-  disabled or taken out of the world leaves. A body moved by hand is put where it was moved, its contacts kept; a
-  static one follows its parents. One whose settings or shape change - a collider edited, a part hung under it or
-  given a body of its own - is made anew, moving on as it moved while its kind stays. A change that alters neither,
-  such as selecting the entity, leaves the body as it is. It looks once a frame through `Entity.ChangeCount`, new: how
+  disabled or taken out of the world leaves. A body is changed where it stands, its contacts kept: put where it was
+  moved by hand - a static one follows its parents - and given its new kind, settings or shape when a collider is
+  edited or a part hung under it or given a body of its own; it is made anew only once its entity hangs elsewhere in
+  the tree. A change that alters none of these, such as selecting the entity, leaves the body as it is. It looks once a frame through `Entity.ChangeCount`, new: how
   many times an entity changed - its values and its components', a component added or taken off, an entity hung under
   it or taken from it. A body the physics world refuses is not one it moves. Gravity and settings set during a game go
   back when it stops, and the service runs before the others (`PhysicsService.UpdatePriority`), so the entities it
   stands are placed in the same frame.
+- `IPhysicsWorld` changes a body where it stands: `Change` gives it a whole description's kind, shape, weight and
+  material at once, checked as a whole first; `SetKind` (from rest), `SetShape` (its origin kept, its contacts found
+  anew), `SetMass`, `SetMaterial` (its contacts at once), `SetDamping`, `SetGravityScale` and `SetCanSleep` one at a
+  time. A change the body cannot take throws and leaves it as it was. `BodyDescription.AreWeighedAlike` tells whether
+  two masses and densities weigh a body alike; a static or kinematic body's weight is not looked at until it is made
+  dynamic.
 - `Collider.Bounds` and a `ConvexHullCollider`'s hull tell of their change (`PropertyChanged`), so what follows a
   collider's shape sees it refitted.
 

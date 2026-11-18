@@ -55,6 +55,37 @@ public interface IPhysicsWorld
     /// and the bodies it touches, there or here, wake.</summary>
     void SetPose(BodyHandle body, in Pose pose);
 
+    /// <summary>Gives <paramref name="body"/>, where it stands, everything <paramref name="description"/> holds but its
+    /// pose and velocity - and its shape only when <paramref name="changesShape"/> - as the setters below would, all at
+    /// once: checked as a whole first, a change it cannot take throws and leaves it as it was.</summary>
+    void Change(BodyHandle body, BodyDescription description, bool changesShape);
+
+    /// <summary>Makes <paramref name="body"/> move as <paramref name="kind"/> says, where it stands, from rest; it and
+    /// what touches it wake.</summary>
+    void SetKind(BodyHandle body, BodyKind kind);
+
+    /// <summary>Gives <paramref name="body"/> <paramref name="shape"/> in place of its own, its origin where it stands;
+    /// its contacts are found anew, and it and what touched it wake.</summary>
+    void SetShape(BodyHandle body, CollisionShape shape);
+
+    /// <summary>Weighs <paramref name="body"/> by <paramref name="mass"/> in kilograms, or by
+    /// <paramref name="density"/> when the mass is zero, as <see cref="BodyDescription"/> does; kept, and not looked
+    /// at, for a body that is not dynamic until it is. A dynamic body and what touches it wake.</summary>
+    void SetMass(BodyHandle body, float mass, float density);
+
+    /// <summary>Sets how <paramref name="body"/> rubs and bounces, its contacts at once; a change wakes it and what
+    /// touches it.</summary>
+    void SetMaterial(BodyHandle body, float friction, float restitution);
+
+    /// <summary>Sets how quickly <paramref name="body"/>'s motion and spin die away by themselves.</summary>
+    void SetDamping(BodyHandle body, float linearDamping, float angularDamping);
+
+    /// <summary>Sets how much of <see cref="Gravity"/> <paramref name="body"/> feels; a change wakes it.</summary>
+    void SetGravityScale(BodyHandle body, float gravityScale);
+
+    /// <summary>Sets whether <paramref name="body"/> may fall asleep; forbidden, it wakes.</summary>
+    void SetCanSleep(BodyHandle body, bool canSleep);
+
     /// <summary>The velocity of <paramref name="body"/>'s center of mass, in meters per second.</summary>
     Vector3F GetLinearVelocity(BodyHandle body);
 

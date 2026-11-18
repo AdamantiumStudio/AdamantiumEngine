@@ -19,19 +19,10 @@ namespace Adamantium.ECS.Components
 
         public Vector3F Position { get; set; }
 
-        /// <summary>The box the collider is fitted to; set, it tells what follows the collider's shape - the physics.
+        /// <summary>The box the collider is fitted to; a change tells what follows the collider's shape - the physics.
         /// </summary>
-        public Bounds Bounds
-        {
-            get => bounds;
-            set
-            {
-                bounds = value;
-                RaisePropertyChanged();
-            }
-        }
-
-        private Bounds bounds;
+        [Bindable]
+        public partial Bounds Bounds { get; set; }
 
         public Vector3F Center { get; set; }
 

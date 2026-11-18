@@ -28,8 +28,8 @@ internal sealed class PhysicsBodyLink
 
     public Entity Entity { get; }
 
-    /// <summary>The rigid body the body was made from.</summary>
-    public RigidBody Body { get; }
+    /// <summary>The rigid body the body follows.</summary>
+    public RigidBody Body { get; set; }
 
     /// <summary>What the body was made from, to see when it changes.</summary>
     public BodyParts Parts { get; set; }
@@ -50,6 +50,10 @@ internal sealed class PhysicsBodyLink
     /// <summary>The generation the body was sent to the physics thread with: a refusal of it names this one.</summary>
     public int AddedAs { get; }
 
+    /// <summary>How many requests that could be refused - its add, then changes to its settings or shape - were sent
+    /// for the body.</summary>
+    public int RequestsSent { get; set; }
+
     /// <summary>Whether the body was taken out or made anew; a link left in a list is passed over.</summary>
     public bool IsGone { get; set; }
 
@@ -62,7 +66,7 @@ internal sealed class PhysicsBodyLink
     /// <summary>The entity's name when the body was made, for the log.</summary>
     public string Name { get; }
 
-    public BodyKind Kind { get; }
+    public BodyKind Kind { get; set; }
 
     /// <summary>How many entities the entity hangs under; parents are stood before their children.</summary>
     public int Depth { get; }

@@ -445,6 +445,91 @@ public class PhysicsServiceTests
         Assert.That(_physics.GetLinearVelocity(box).Y, Is.GreaterThanOrEqualTo(falling.Y));
     }
 
+    // The middle box's density dragged along by a slider, a frame at a time: changed where it stands, its contacts
+    // kept, the stack stands as it stood.
+    [Test]
+    public void StackedBoxsMassDraggedEachFrame_LeavesTheStackStanding()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var boxes = new Entity[5];
+        for (var index = 0; index < boxes.Length; index++)
+        {
+            boxes[index] = AddBox("Box" + index, new Vector3<double>(0, -0.5 - index, 0), 0.5);
+        }
+
+        Play();
+        Frames(3);
+        var settled = boxes[^1].Transform.Position.Y;
+        var middle = boxes[2].GetComponent<RigidBody>();
+        for (var frame = 0; frame < 60; frame++)
+        {
+            middle.Density = 1000 + frame * 10;
+            Frame(FrameSeconds);
+        }
+
+        Frames(1);
+
+        Assert.That(boxes[^1].Transform.Position.Y, Is.EqualTo(settled).Within(0.005));
+        Assert.That(Math.Abs(boxes[^1].Transform.Position.X) + Math.Abs(boxes[^1].Transform.Position.Z),
+            Is.LessThan(0.01));
+    }
+
+    // The middle box's density and friction cleared while typing - weighing nothing, rubbing by no number - keep what
+    // they were: the stack does not lose its support.
+    [Test]
+    public void StackedBoxsDensityClearedWhileTyping_LeavesTheStackStanding()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var boxes = new Entity[3];
+        for (var index = 0; index < boxes.Length; index++)
+        {
+            boxes[index] = AddBox("Box" + index, new Vector3<double>(0, -0.5 - index, 0), 0.5);
+        }
+
+        Play();
+        Frames(3);
+        var settled = boxes[^1].Transform.Position.Y;
+        var middle = boxes[1].GetComponent<RigidBody>();
+
+        middle.Density = 0;
+        middle.Friction = float.NaN;
+        Frames(0.5);
+        Assert.That(_physics.Moves(boxes[1]), Is.True, "while typing");
+        middle.Density = 800;
+        middle.Friction = 0.5f;
+        Frames(1);
+
+        Assert.That(_physics.Moves(boxes[1]), Is.True);
+        Assert.That(boxes[^1].Transform.Position.Y, Is.EqualTo(settled).Within(0.005));
+    }
+
+    // A static body weighing nothing made dynamic cannot be: the physics leaves it until it is given a weight, then
+    // it falls.
+    [Test]
+    public void WeightlessStaticBodyMadeDynamic_FallsOnceWeighed()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var body = box.GetComponent<RigidBody>();
+        body.Kind = BodyKind.Static;
+        body.Density = 0;
+        Play();
+        Frames(0.2);
+
+        body.Kind = BodyKind.Dynamic;
+        Frames(0.5);
+        Assert.That(_physics.Moves(box), Is.False);
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-4));
+
+        body.Density = 500;
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
     // Selected in the editor while it falls, the body falls on as it fell.
     [Test]
     public void BodySelectedDuringTheGame_FallsOn()

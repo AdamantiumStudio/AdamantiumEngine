@@ -1,3 +1,5 @@
+using Adamantium.DarkMatter.Shapes;
+
 namespace Adamantium.DarkMatter.Dynamics;
 
 /// <summary>Everything a world keeps about one body, in one slot of its array.</summary>
@@ -32,6 +34,11 @@ internal struct BodyState
     /// <summary>The center of mass in the body's own axes: where <see cref="Position"/> is from the body's origin.
     /// </summary>
     public Vector3F CenterOfMass;
+
+    /// <summary>The whole shape, and the mass and density it is weighed by, to weigh it again.</summary>
+    public CollisionShape Shape;
+    public float Mass;
+    public float Density;
 
     public float Friction;
     public float Restitution;

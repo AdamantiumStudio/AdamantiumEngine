@@ -93,7 +93,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var rotation = NormalizeRotation(description.Rotation, nameof(description));
         var mass = default(MassProperties);
         if (description.Kind == BodyKind.Dynamic)
-            mass = ComputeMass(description);
+            mass = ComputeMass(description.Shape, description.Mass, description.Density);
 
         var index = TakeSlot();
         ref var state = ref _bodies[index];
@@ -104,6 +104,9 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         state.Generation = generation;
         state.Marks = listed;
         state.Kind = description.Kind;
+        state.Shape = description.Shape;
+        state.Mass = description.Mass;
+        state.Density = description.Density;
         state.FirstPart = NoPart;
         state.CenterOfMass = mass.Center;
         state.InertiaRotation = description.Kind == BodyKind.Dynamic ? mass.InertiaRotation : QuaternionF.Identity;
@@ -153,18 +156,8 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public void Remove(BodyHandle body)
     {
         var index = Resolve(body);
-        WakeIsland(index);
+        TearOffContacts(index);
         ref var state = ref _bodies[index];
-        while (state.Contacts != null)
-        {
-            var contact = state.Contacts;
-            if (contact.IsTouching)
-                WakeIsland(contact.GetOther(index));
-
-            DestroyContact(contact);
-        }
-
-        WakeNewSleepersNear(index);
         RemoveParts(index);
         var generation = state.Generation;
         var listed = state.Marks & BodyMarks.Listed;
@@ -786,6 +779,23 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         }
     }
 
+    // Lets go of every contact the body has, waking it, what it touched and the new sleepers near it.
+    private void TearOffContacts(int index)
+    {
+        WakeIsland(index);
+        ref var state = ref _bodies[index];
+        while (state.Contacts != null)
+        {
+            var contact = state.Contacts;
+            if (contact.IsTouching)
+                WakeIsland(contact.GetOther(index));
+
+            DestroyContact(contact);
+        }
+
+        WakeNewSleepersNear(index);
+    }
+
     private void WakeTouching(int index)
     {
         for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
@@ -1033,22 +1043,25 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private static bool IsFinite(Vector3F vector) =>
         float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
-    private static MassProperties ComputeMass(BodyDescription description)
+    private static MassProperties ComputeMass(CollisionShape shape, float mass, float density)
     {
-        if (description.Mass < 0 || description.Density < 0 || !float.IsFinite(description.Mass)
-            || !float.IsFinite(description.Density))
-            throw new ArgumentOutOfRangeException(nameof(description), "Mass and density must be finite and not negative.");
-
-        var density = description.Mass > 0
-            ? description.Mass / description.Shape.ComputeMass(1f).Mass
-            : description.Density;
-        var mass = description.Shape.ComputeMass(density);
-        var inertia = mass.Inertia;
-        if (!IsInvertible(mass.Mass) || !IsInvertible(inertia.X) || !IsInvertible(inertia.Y) || !IsInvertible(inertia.Z))
+        RequireMassAndDensity(mass, density);
+        // Measured at the density itself: scaling a unit density's inertia overflows for huge and tiny shapes.
+        var weighedBy = mass > 0 ? mass / shape.ComputeMass(1f).Mass : density;
+        var properties = shape.ComputeMass(weighedBy);
+        var inertia = properties.Inertia;
+        if (!IsInvertible(properties.Mass) || !IsInvertible(inertia.X) || !IsInvertible(inertia.Y)
+            || !IsInvertible(inertia.Z))
             throw new ArgumentException("A dynamic body needs a density or a mass that gives it a finite weight.",
-                nameof(description));
+                nameof(mass));
 
-        return mass;
+        return properties;
+    }
+
+    private static void RequireMassAndDensity(float mass, float density)
+    {
+        if (mass < 0 || density < 0 || !float.IsFinite(mass) || !float.IsFinite(density))
+            throw new ArgumentOutOfRangeException(nameof(mass), "Mass and density must be finite and not negative.");
     }
 
     private void LimitSpeeds(ref BodyState body)
