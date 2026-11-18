@@ -57,6 +57,8 @@ public class EntityImportTemplate : IEntityTemplate
             }
 
             var entityOf = new Dictionary<SceneData.Model, Entity>(ReferenceEqualityComparer.Instance);
+            // Each part's path in the model: its id is made from it and the root's, the same on every load.
+            var parts = new PartPaths(owner);
             var nodeEntities = new Dictionary<string, Entity>();
             var restPoses = new Dictionary<string, SceneData.KeyFrame>();
             var drawnOf = new Dictionary<Entity, List<Entity>>();
@@ -79,7 +81,7 @@ public class EntityImportTemplate : IEntityTemplate
                 {
                     if (entityOf.TryGetValue(currentMesh.Parent, out var parentEntity))
                     {
-                        entity = new Entity(parentEntity, currentMesh.Name);
+                        entity = parts.Make(parentEntity, currentMesh.Name);
                         entityOf.Add(currentMesh, entity);
                     }
                 }
@@ -102,7 +104,7 @@ public class EntityImportTemplate : IEntityTemplate
                     var count = 1;
                     foreach (var mesh in currentMesh.Meshes)
                     {
-                        var entityPart = new Entity(entity, $"{currentMesh.Name} ({count})");
+                        var entityPart = parts.Make(entity, $"{currentMesh.Name} ({count})");
                         count++;
                         WriteMeshData(entityPart, mesh);
                         drawn.Add(entityPart);
@@ -128,9 +130,11 @@ public class EntityImportTemplate : IEntityTemplate
                     skinned.Add((entity, nodeSkin));
                 }
 
-                foreach (var newEntity in currentMesh.Dependencies)
+                // Last pushed first: the parts are made in the file's order, so one added after its namesakes by a new
+                // export takes the next count, and theirs - and their ids - stay.
+                for (var i = currentMesh.Dependencies.Count - 1; i >= 0; i--)
                 {
-                    stack.Push(newEntity);
+                    stack.Push(currentMesh.Dependencies[i]);
                 }
             }
 
@@ -193,6 +197,37 @@ public class EntityImportTemplate : IEntityTemplate
             Log.Logger.Error(exception, "Building an entity from imported model data failed");
         }
         return null;
+    }
+
+    // The parts of a model as they are made, each with its path - its id made from the root's and that path - and how many
+    // of each name each part holds already.
+    private sealed class PartPaths(Entity model)
+    {
+        private readonly Dictionary<Entity, string> pathOf = new() { [model] = string.Empty };
+        private readonly Dictionary<Entity, Dictionary<string, int>> namesUnder = new();
+
+        public Entity Make(Entity under, string name)
+        {
+            // A node whose parent was not made stands alone, as before.
+            if (under == null || !pathOf.TryGetValue(under, out var underPath))
+            {
+                return new Entity(under, name);
+            }
+
+            if (!namesUnder.TryGetValue(under, out var names))
+            {
+                names = new Dictionary<string, int>(StringComparer.Ordinal);
+                namesUnder[under] = names;
+            }
+
+            var key = name ?? string.Empty;
+            var count = names.GetValueOrDefault(key);
+            names[key] = count + 1;
+            var path = ModelPartPath.Child(underPath, key, count);
+            var part = new Entity(under, name, ModelPartPath.UidOf(model.Uid, path));
+            pathOf[part] = path;
+            return part;
+        }
     }
 
     // The edits made in the editor, each on the part its path names; an edit whose part a new import took away waits in

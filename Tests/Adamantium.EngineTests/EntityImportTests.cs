@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
@@ -55,6 +57,66 @@ public class EntityImportTests
         var parts = Find(model, node).Dependencies;
         Assert.That(parts.Count, Is.EqualTo(2));
         Assert.That(parts.All(p => p.Transform.Position == Vector3<double>.Zero), Is.True);
+    }
+
+    // A part's id comes from the model root's and the part's path: made again, the same; in another copy, another.
+    [Test]
+    public void APartsId_IsTheSameEachTimeTheModelIsMade_AndAnotherCopysDiffers()
+    {
+        var scene = NewScene();
+        var node = scene.CreateMesh(scene.Models, "node", "Wheel");
+        node.Meshes.Add(Box(1));
+        node.Meshes.Add(Box(1));
+        scene.CreateMesh(scene.Models, "node2", "Wheel").Meshes.Add(Box(1));
+        var uid = (UInt128)0x5EED;
+
+        var first = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity(null, "Car", uid));
+        var again = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity(null, "Car", uid));
+        var other = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity(null, "Car", uid + 1));
+
+        var ids = new List<UInt128>();
+        first.TraverseInDepth(part => ids.Add(part.Uid));
+        var idsAgain = new List<UInt128>();
+        again.TraverseInDepth(part => idsAgain.Add(part.Uid));
+        var idsOther = new List<UInt128>();
+        other.TraverseInDepth(part => idsOther.Add(part.Uid));
+        var wheel = first.Dependencies.Last(part => part.Name == "Wheel");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(idsAgain, Is.EqualTo(ids));
+            Assert.That(ids.Distinct().Count(), Is.EqualTo(ids.Count), "every part its own");
+            Assert.That(idsOther.Skip(1).Intersect(ids), Is.Empty);
+            Assert.That(wheel.Uid, Is.EqualTo(ModelPartPath.UidOf(uid, ModelPartPath.Of(first, wheel))));
+        });
+    }
+
+    // Exported again with one more wheel after the others, the model's parts are made in the file's order: the wheels it
+    // had keep their ids.
+    [Test]
+    public void APartAddedAfterItsNamesakes_LeavesTheirIds()
+    {
+        var uid = (UInt128)0xCA7;
+        var before = Wheels(2, uid);
+        var after = Wheels(3, uid);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(after.Take(2), Is.EqualTo(before));
+            Assert.That(after[2], Is.Not.AnyOf(before[0], before[1]));
+        });
+    }
+
+    private static List<UInt128> Wheels(int count, UInt128 uid)
+    {
+        var scene = NewScene();
+        for (var i = 0; i < count; i++)
+        {
+            scene.CreateMesh(scene.Models, "wheel" + i, "Wheel").Meshes.Add(Box(1));
+        }
+
+        var model = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity(null, "Car", uid));
+        return model.Dependencies.Where(part => part.Name == "Wheel").Select(part => part.Uid).ToList();
     }
 
     [Test]
