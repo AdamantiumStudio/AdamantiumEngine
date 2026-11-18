@@ -20,8 +20,8 @@ using engine::Adamantium.Engine.Templates;
 
 namespace Adamantium.Engine.GraphicsTests;
 
-/// <summary>Materials whose alpha counts, drawn by the Forward+ pass: blended far to near over what is behind them,
-/// masked by their cutoff, or opaque whatever their alpha. Lit by a white ambient light alone, a surface shows its own
+/// <summary>Materials whose alpha counts, drawn by the Forward+ pass: see-through in any order over what is behind them
+/// (weighted blended), masked by their cutoff, or opaque whatever their alpha. Lit by a white ambient light alone, a surface shows its own
 /// color, and each cube is seen through both its faces.</summary>
 [TestFixture]
 public class ForwardPlusTransparencyTests
@@ -102,19 +102,27 @@ public class ForwardPlusTransparencyTests
         });
     }
 
-    // The near red cube is met first, yet the far green one goes under it: red over green, not green over red.
+    // Met in either order, two see-through cubes give one picture - nothing is sorted - the near red weighing more than
+    // the far green, and the four faces covering all but a sixteenth of the black behind.
     [Test]
-    public void TwoTransparentCubes_AreBlendedFarToNear()
+    public void TwoTransparentCubes_GiveOnePicture_InEitherOrder_TheNearOneWeighingMore()
     {
-        AddCube("Near", new Vector3<double>(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
-        AddCube("Far", new Vector3<double>(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
+        var near = AddCube("Near", new Vector3<double>(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
+        var far = AddCube("Far", new Vector3<double>(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
+        var nearFirst = CenterPixel("forward-plus-near-first.png");
 
-        var center = CenterPixel("forward-plus-sorted.png");
+        _universe.EntityWorld.EntityManager.RemoveEntity(near);
+        _universe.EntityWorld.EntityManager.RemoveEntity(far);
+        AddCube("Far", new Vector3<double>(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
+        AddCube("Near", new Vector3<double>(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
+        var farFirst = CenterPixel("forward-plus-far-first.png");
 
         Assert.Multiple(() =>
         {
-            Assert.That(center.Red, Is.EqualTo(191).Within(Within), "the near red over everything");
-            Assert.That(center.Green, Is.EqualTo(48).Within(Within), "a quarter of the far green under it");
+            Assert.That(farFirst.Red, Is.EqualTo(nearFirst.Red).Within(2), "red, whichever came first");
+            Assert.That(farFirst.Green, Is.EqualTo(nearFirst.Green).Within(2), "green, whichever came first");
+            Assert.That(nearFirst.Red, Is.GreaterThan(nearFirst.Green * 2), "the near red weighs more");
+            Assert.That(nearFirst.Red + nearFirst.Green, Is.EqualTo(239).Within(Within), "15/16 covered");
         });
     }
 
@@ -140,6 +148,24 @@ public class ForwardPlusTransparencyTests
         cube.GetComponent<Material>().Texture = _texture;
 
         var center = CenterPixel("forward-plus-masked-texture.png");
+
+        Assert.That(center.Red, Is.EqualTo(red).Within(Within));
+    }
+
+    // A cube round the eye shows its inside faces only when its material shows both; from outside, its front faces show,
+    // mirrored or not.
+    [TestCase(MaterialFaces.Front, false, false, 0)]
+    [TestCase(MaterialFaces.Both, false, false, 255)]
+    [TestCase(MaterialFaces.Front, true, false, 255)]
+    [TestCase(MaterialFaces.Front, false, true, 0)]
+    public void ACubesFaces_AreWhatItsMaterialShows(MaterialFaces faces, bool fromOutside, bool mirrored, int red)
+    {
+        var cube = AddCube("Box", fromOutside ? Vector3<double>.Zero : new Vector3<double>(0, 0, -6),
+            new Vector4F(1, 0, 0, 1), AlphaMode.Opaque);
+        cube.GetComponent<Material>().Faces = faces;
+        cube.Transform.ScaleFactor = new Vector3F(mirrored ? -1 : 1, 1, 1) * (fromOutside ? 1 : 4);
+
+        var center = CenterPixel("forward-plus-faces.png");
 
         Assert.That(center.Red, Is.EqualTo(red).Within(Within));
     }

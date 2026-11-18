@@ -7,6 +7,7 @@ using BindableAttribute = Adamantium.MVVM.BindableAttribute;
 using Component = Adamantium.ECS.Components.Component;
 using TextureDimension = Adamantium.Graphics.Core.Models.TextureDimension;
 using AlphaMode = Adamantium.Graphics.Core.Models.AlphaMode;
+using MaterialFaces = Adamantium.Graphics.Core.Models.MaterialFaces;
 
 namespace Adamantium.ECS.Components
 {
@@ -40,8 +41,23 @@ namespace Adamantium.ECS.Components
       [Bindable]
       public partial Vector4F Emission { get; set; }
 
-      [Bindable]
+      [Bindable, Affects(nameof(Opacity))]
       public partial Vector4F DiffuseColor { get; set; }
+
+      /// <summary>How much of the surface shows, 0 to 1: the alpha of <see cref="DiffuseColor"/>, which counts unless the
+      /// material is opaque.</summary>
+      [DoNotClone]
+      public float Opacity
+      {
+         get => DiffuseColor.W;
+         set
+         {
+            if (float.IsNaN(value))
+               return;
+
+            DiffuseColor = new Vector4F(DiffuseColor.X, DiffuseColor.Y, DiffuseColor.Z, Math.Clamp(value, 0f, 1f));
+         }
+      }
 
       [Bindable]
       public partial Vector4F AmbientColor { get; set; }
@@ -114,15 +130,21 @@ namespace Adamantium.ECS.Components
       public partial String EmissiveMapPath { get; set; }
 
       /// <summary>How the alpha of the base color is taken.</summary>
-      [Bindable]
+      [Bindable, Affects(nameof(IsMasked), nameof(UsesAlpha))]
       public partial AlphaMode AlphaMode { get; set; }
+
+      /// <summary>Whether <see cref="AlphaCutoff"/> leaves the surface out where its alpha is below it.</summary>
+      public bool IsMasked => AlphaMode == AlphaMode.Mask;
+
+      /// <summary>Whether the alpha - <see cref="Opacity"/> - counts: the material is not opaque.</summary>
+      public bool UsesAlpha => AlphaMode != AlphaMode.Opaque;
 
       /// <summary>Below this alpha a masked surface is left out.</summary>
       [Bindable]
       public partial Single AlphaCutoff { get; set; }
 
-      /// <summary>Whether both sides of the surface are drawn and lit.</summary>
+      /// <summary>Which faces of the surface are drawn and lit: both by default.</summary>
       [Bindable]
-      public partial Boolean DoubleSided { get; set; }
+      public partial MaterialFaces Faces { get; set; }
    }
 }

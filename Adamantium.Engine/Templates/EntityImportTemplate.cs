@@ -344,7 +344,7 @@ public class EntityImportTemplate : IEntityTemplate
                 material.EmissiveMapPath = PathOf(materialData.EmissiveMap);
                 material.AlphaMode = materialData.AlphaMode;
                 material.AlphaCutoff = materialData.AlphaCutoff;
-                material.DoubleSided = materialData.DoubleSided;
+                material.Faces = materialData.Faces;
 
                 if (!String.IsNullOrEmpty(materialData.DiffuseMap)
                     && sceneData.Images.TryGetValue(materialData.DiffuseMap, out var image))

@@ -62,6 +62,7 @@ public unsafe class GraphicsAdapter
         SupportsImageCubeArray = features2.Features != null && (bool)features2.Features.ImageCubeArray;
         SupportsTessellationShaders = features2.Features != null && (bool)features2.Features.TessellationShader;
         SupportsDepthClamp = features2.Features != null && (bool)features2.Features.DepthClamp;
+        SupportsDepthBiasClamp = features2.Features != null && (bool)features2.Features.DepthBiasClamp;
         SupportsMultiDrawIndirect = features2.Features != null && (bool)features2.Features.MultiDrawIndirect &&
                                     (bool)features2.Features.DrawIndirectFirstInstance;
         SupportsMeshShaders = hasMeshShaderExtension && meshShader.MeshShader;
@@ -154,6 +155,9 @@ public unsafe class GraphicsAdapter
     /// <summary>Whether the device can clamp each fragment's depth to the depth range instead of clipping at the near
     /// and far planes: the depthClamp feature.</summary>
     public bool SupportsDepthClamp { get; private set; }
+
+    /// <summary>Whether a depth bias may be capped: the depthBiasClamp feature.</summary>
+    public bool SupportsDepthBiasClamp { get; private set; }
 
     /// <summary>Whether one indirect draw may issue many draws, each naming its own first instance: the multiDrawIndirect
     /// and drawIndirectFirstInstance features together.</summary>

@@ -14,7 +14,6 @@ namespace Adamantium.ECS.Components
         [Bindable] private Mesh mesh;
         [Bindable] private MeshRenderMode renderMode;
         [Bindable] private bool isWireFrame;
-        [Bindable] private CullModeFlagBits cullMode = CullModeFlagBits.None;
         [Bindable] private bool depthTestEnabled = true;
         [Bindable] private bool depthWriteEnabled = true;
         [Bindable] private PrimitiveTopology? topologyOverride;
@@ -31,7 +30,6 @@ namespace Adamantium.ECS.Components
                 Mesh = Mesh.Clone(),
                 RenderMode = RenderMode,
                 IsWireFrame = IsWireFrame,
-                CullMode = CullMode,
                 DepthTestEnabled = DepthTestEnabled,
                 DepthWriteEnabled = DepthWriteEnabled,
                 TopologyOverride = TopologyOverride

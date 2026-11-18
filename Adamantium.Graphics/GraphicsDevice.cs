@@ -70,6 +70,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private bool _cBlendEnable;
     private ColorComponentFlagBits _cWriteMask;
     private bool _cBlendKnown;
+    private ColorBlendEquationEXT[] _targetEquations = [];
+    private Adamantium.Vulkan.Core.Interop.VkBool32[] _targetEnables = [];
+    private ColorComponentFlagBits[] _targetMasks = [];
 
     private static bool SameViewport(Viewport a, Viewport b)
         => a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height && a.MinDepth == b.MinDepth && a.MaxDepth == b.MaxDepth;
@@ -109,6 +112,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private bool _cDepthBias;
     private float _cDepthBiasConstant;
     private float _cDepthBiasSlope;
+    private float _cDepthBiasClamp;
     private bool _depthBiasKnown;
     private bool _cDepthClamp;
     private const StencilFaceFlagBits BothStencilFaces = StencilFaceFlagBits.FrontAndBack;
@@ -473,7 +477,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public bool RasterizerDiscardEnabled { get; set; }
 
     public ColorBlendEquationEXT ColorBlendEquation { get; set; } = new ColorBlendEquationEXT();
-        
+
+    public ColorBlendEquationEXT[] TargetBlendEquations { get; set; }
+
     public bool PrimitiveRestartEnable { get; set; }
 
     public MSAALevel MSAALevel { get; set; } = MSAALevel.None;
@@ -509,6 +515,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     public float DepthBiasConstantFactor { get; set; }
 
     public float DepthBiasSlopeFactor { get; set; }
+
+    public float DepthBiasClamp { get; set; }
 
     public bool DepthClampEnable { get; set; } = false;
         
@@ -1314,7 +1322,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         BeginRendering(CurrentCommandBuffer, continueRendering: true);
     }
 
-    public void BeginRendering(CommandBuffer commandBuffer, bool continueRendering = false, float depth = 1.0f, uint stencil = 0)
+    public void BeginRendering(CommandBuffer commandBuffer, bool continueRendering = false, float depth = 1.0f, uint stencil = 0,
+        bool keepDepth = false)
     {
         RefuseWhileIssuingAside(nameof(BeginRendering));
         var clearColorValue = new ClearValue
@@ -1368,7 +1377,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             depthAttachmentInfo.ImageView = depthBuffer?.GetImageView();
             depthAttachmentInfo.ImageLayout = ImageLayout.DepthStencilAttachmentOptimal;
             depthAttachmentInfo.ResolveMode = ResolveModeFlagBits.None;
-            depthAttachmentInfo.LoadOp = loadOperation;
+            depthAttachmentInfo.LoadOp = keepDepth ? AttachmentLoadOp.Load : loadOperation;
             depthAttachmentInfo.StoreOp = AttachmentStoreOp.Store;
             depthAttachmentInfo.ClearValue = clearDepthValue;
 
@@ -1917,12 +1926,15 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         { commandBuffer.SetDepthBoundsTestEnable(DepthBoundsTestEnabled); _cDepthBounds = DepthBoundsTestEnabled; }
         if (!_stateInitialized || _cDepthBias != DepthBiasEnabled)
         { commandBuffer.SetDepthBiasEnable(DepthBiasEnabled); _cDepthBias = DepthBiasEnabled; }
+        var biasClamp = MainDevice.IsDepthBiasClampEnabled ? DepthBiasClamp : 0;
         if (DepthBiasEnabled && (!_depthBiasKnown || _cDepthBiasConstant != DepthBiasConstantFactor
-                                                  || _cDepthBiasSlope != DepthBiasSlopeFactor))
+                                                  || _cDepthBiasSlope != DepthBiasSlopeFactor
+                                                  || _cDepthBiasClamp != biasClamp))
         {
-            commandBuffer.SetDepthBias(DepthBiasConstantFactor, 0, DepthBiasSlopeFactor);
+            commandBuffer.SetDepthBias(DepthBiasConstantFactor, biasClamp, DepthBiasSlopeFactor);
             _cDepthBiasConstant = DepthBiasConstantFactor;
             _cDepthBiasSlope = DepthBiasSlopeFactor;
+            _cDepthBiasClamp = biasClamp;
             _depthBiasKnown = true;
         }
         if (!_stateInitialized || _cDepthClamp != DepthClampEnable)
@@ -1942,15 +1954,48 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         // Color-blend state DOES vary between UI draws (text uses premultiplied), which is why it used to be sent every
         // time - but comparing six enum fields is nothing against three marshaled calls, and a run of same-material draws
         // sends none of them.
-        if (!_stateInitialized || !_cBlendKnown || !SameBlend(_cBlendEq, ColorBlendEquation))
-        { commandBuffer.SetColorBlendEquationEXT(0, 1, ColorBlendEquation); _cBlendEq = ColorBlendEquation; }
-        if (!_stateInitialized || !_cBlendKnown || _cBlendEnable != (bool)ColorBlendEnabled)
-        { commandBuffer.SetColorBlendEnableEXT(0, 1, ColorBlendEnabled); _cBlendEnable = ColorBlendEnabled; }
-        if (!_stateInitialized || !_cBlendKnown || _cWriteMask != ColorComponentFlags)
-        { commandBuffer.SetColorWriteMaskEXT(0, 1, ColorComponentFlags); _cWriteMask = ColorComponentFlags; }
-        _cBlendKnown = true;
+        var targets = Math.Max(1, renderTargets?.Length ?? 0);
+        if (targets > 1 || TargetBlendEquations != null)
+        {
+            SendTargetsBlend(commandBuffer, targets);
+        }
+        else
+        {
+            if (!_stateInitialized || !_cBlendKnown || !SameBlend(_cBlendEq, ColorBlendEquation))
+            { commandBuffer.SetColorBlendEquationEXT(0, 1, ColorBlendEquation); _cBlendEq = ColorBlendEquation; }
+            if (!_stateInitialized || !_cBlendKnown || _cBlendEnable != (bool)ColorBlendEnabled)
+            { commandBuffer.SetColorBlendEnableEXT(0, 1, ColorBlendEnabled); _cBlendEnable = ColorBlendEnabled; }
+            if (!_stateInitialized || !_cBlendKnown || _cWriteMask != ColorComponentFlags)
+            { commandBuffer.SetColorWriteMaskEXT(0, 1, ColorComponentFlags); _cWriteMask = ColorComponentFlags; }
+            _cBlendKnown = true;
+        }
 
         _stateInitialized = true;
+    }
+
+    // Every target of the pass gets its blend - a target left without one blends undefined. Sent whole each draw, so the
+    // single-target state is sent afresh after.
+    private void SendTargetsBlend(CommandBuffer commandBuffer, int targets)
+    {
+        if (_targetEquations.Length < targets)
+        {
+            _targetEquations = new ColorBlendEquationEXT[targets];
+            _targetEnables = new Adamantium.Vulkan.Core.Interop.VkBool32[targets];
+            _targetMasks = new ColorComponentFlagBits[targets];
+        }
+
+        var equations = TargetBlendEquations;
+        for (var i = 0; i < targets; i++)
+        {
+            _targetEquations[i] = equations != null && i < equations.Length ? equations[i] : ColorBlendEquation;
+            _targetEnables[i] = ColorBlendEnabled;
+            _targetMasks[i] = ColorComponentFlags;
+        }
+
+        commandBuffer.SetColorBlendEquationEXT(0, (uint)targets, _targetEquations);
+        commandBuffer.SetColorBlendEnableEXT(0, (uint)targets, _targetEnables);
+        commandBuffer.SetColorWriteMaskEXT(0, (uint)targets, _targetMasks);
+        _cBlendKnown = false;
     }
 
     private void SetTessellationState(CommandBuffer commandBuffer)

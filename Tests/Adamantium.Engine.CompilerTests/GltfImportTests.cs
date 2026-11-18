@@ -214,6 +214,18 @@ public class GltfImportTests
         });
     }
 
+    // glTF's default: one-sided, its front faces drawn and the back ones culled.
+    [Test]
+    public void AMaterialNotDoubleSided_DrawsItsFrontFacesOnly()
+    {
+        var asset = Triangle(material: 0);
+        asset.Array("materials").Add(new JsonObject { ["name"] = "Plain" });
+
+        var scene = Import(asset.WriteGltf(folder));
+
+        Assert.That(scene.Materials[SingleMesh(scene).MaterialID].Faces, Is.EqualTo(MaterialFaces.Front));
+    }
+
     [Test]
     public void AMaterial_KeepsEveryPbrValue()
     {
@@ -255,7 +267,7 @@ public class GltfImportTests
             Assert.That(material.Emission, Is.EqualTo(new Vector4F(1, 0.5f, 0, 1)));
             Assert.That(material.AlphaMode, Is.EqualTo(AlphaMode.Blend));
             Assert.That(material.Transparency, Is.EqualTo(0.75f));
-            Assert.That(material.DoubleSided, Is.True);
+            Assert.That(material.Faces, Is.EqualTo(MaterialFaces.Both), "doubleSided");
         });
     }
 

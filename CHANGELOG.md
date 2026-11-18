@@ -46,13 +46,18 @@ All packages share one version.
   a collider's bounds for an entity without a mesh.
 - `DynamicAabbTree.Query`: every item whose box overlaps a given box; `DynamicAabbTree.RayCast` takes a farthest
   entry, past which boxes are left out. `Collision.FindClosestPointsOnSegments`: the nearest points of two segments.
-- Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: drawn after the opaque meshes, far to
-  near by the middle of each mesh's bounds, premultiplied over what is behind, tested against the depth but not
-  writing it, and lit by the same clusters; a two-sided mesh draws its back faces before its front ones. `Mask`: left
+- Transparency in the Forward+ pass, as a material's `AlphaMode` says. `Blend`: weighted blended order-independent
+  transparency (McGuire and Bavoil) - nothing sorted, so crossing see-through surfaces never jump as the view turns.
+  After the opaque meshes, the see-through ones go, in instanced groups and any order, into two layers beside the
+  frame (weighted sums, RGBA16F, and coverage, R16F, at the frame's samples), tested against its depth but not
+  writing it and lit by the same clusters; one full-screen pass then lays their weighted average over the frame as
+  much as they cover it. The weight, the paper's equation (7), favours near layers at the scale of metres. `Mask`: left
   out below `AlphaCutoff`, whole above it - in masked passes of their own for a texture, so the opaque passes keep the
   early depth test. `Opaque` ignores the alpha. The alpha is `DiffuseColor.W` times a texture's. A blended surface's
-  wireframe is drawn as lines over it. A scene's shape keeps its material's mode and cutoff: `SceneShape.AlphaMode` and
-  `AlphaCutoff`, attributes written only when they are not the defaults (opaque, 0.5).
+  wireframe is drawn as lines over it. `Material.IsMasked` says whether the cutoff counts and `UsesAlpha` whether the
+  alpha does, for a view to show them by; `Material.Opacity` is the diffuse color's alpha as a number of its own, 0 to
+  1. A scene's shape keeps its material's mode and cutoff: `SceneShape.AlphaMode` and `AlphaCutoff`, attributes written
+  only when they are not the defaults (opaque, 0.5).
 - PDF: an annotation's border and color (`PdfAnnotation.Border` - `PdfAnnotationBorder` with `PdfBorderStyle`, from
   `BS` or else the older `Border`, corner radii and dashes included - and `PdfAnnotation.Color`), and what a viewer
   draws for a link the file gives no appearance (`PdfAnnotation.ImpliedAppearance`): its rectangle stroked, or
@@ -471,8 +476,20 @@ All packages share one version.
 - The ground grid is drawn first in the frame, under the whole scene, so see-through surfaces show it behind them
   instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
-  nothing while the overlay is off. With its floor, the grid writes its depth, a little behind the ground, and still
-  hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+  nothing while the overlay is off. With its floor, the grid writes its depth, pushed behind the ground by the slope it
+  is seen at too, capped - so a face lying on the ground stays in front at a grazing look - and still hides what is
+  below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+- `IGraphicsDevice.DepthBiasClamp`: the limit of a draw's depth bias, kept when the device enabled the depthBiasClamp
+  feature (`GraphicsAdapter.SupportsDepthBiasClamp`, `MainGraphicsDevice.IsDepthBiasClampEnabled`).
+- Which faces a surface shows is its material's: `Material.Faces` (`MaterialFaces`: both, the default; front; back), as
+  `SceneData.Material.Faces` brings it from an import - glTF's `doubleSided` both, else front - and a scene's shape
+  keeps it (`SceneShape.Faces`, written only when not both). It replaces `Material.DoubleSided`, which nothing drew
+  by, and `MeshData.CullMode`: one setting for culling, read by the Forward+ pass and the screenshots alike, the sides
+  swapped for a mirrored copy, whose triangles turn the other way; the tools' and gizmos' meshes draw both faces.
+- The graphics device blends each color target apart when told to: `IGraphicsDevice.TargetBlendEquations`, one
+  equation a target - every target of a pass gets its blend. `BeginRendering(keepDepth: true)` clears the colors and
+  loads the depth, for a pass tested against a scene drawn before. `ColorBlendEquations.Sum` adds the source, color
+  and alpha.
 - `MeshInstance` takes its albedo as `Vector4F` - the alpha counts now - and an `alphaCutoff`. An opaque Forward+
   surface writes alpha 1 where it used to write its texture's.
 - PDF 3D lives in `Adamantium.Pdf.View3D` (folder `View3D`), not `Adamantium.Pdf.ThreeD`: `Pdf3DArtwork`, `Pdf3DView`,

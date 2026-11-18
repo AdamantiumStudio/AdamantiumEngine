@@ -27,6 +27,10 @@ public static class ColorBlendEquations
     /// a premultiplied target as a whole.</summary>
     public static ColorBlendEquationEXT TimesSourceAlpha {get; private set;}
 
+    /// <summary>The source added to what is drawn already, color and alpha alike: rgb = src + dst, a = srcA + dstA. Sums
+    /// layers whatever their order.</summary>
+    public static ColorBlendEquationEXT Sum {get; private set;}
+
     public static ColorBlendEquationEXT Default => Opaque;
 
     static ColorBlendEquations()
@@ -47,6 +51,7 @@ public static class ColorBlendEquations
             BlendFactor.One, BlendFactor.OneMinusSrcAlpha);
         TimesSourceAlpha = New(BlendFactor.Zero, BlendFactor.SrcAlpha, BlendOp.Add, BlendOp.Add,
             BlendFactor.Zero, BlendFactor.SrcAlpha);
+        Sum = New(BlendFactor.One, BlendFactor.One, BlendOp.Add, BlendOp.Add, BlendFactor.One, BlendFactor.One);
     }
 
     private static ColorBlendEquationEXT New(
