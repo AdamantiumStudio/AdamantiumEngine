@@ -481,9 +481,10 @@ All packages share one version.
 - The ground grid is drawn first in the frame, under the whole scene, so see-through surfaces show it behind them
   instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
-  nothing while the overlay is off. With its floor, the grid writes its depth, pushed behind the ground by the slope it
-  is seen at too, capped - so a face lying on the ground stays in front at a grazing look - and still hides what is
-  below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+  nothing while the overlay is off. With its floor, the grid writes its depth from its shader, per pixel - not
+  interpolated across its square, hundreds of cells wide, which drifted and fought a face lying on the ground far off -
+  pushed back by half its change across the pixel and a few steps of the buffer, so such a face stays in front in every
+  sample at any angle, and still hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
 - `IGraphicsDevice.DepthBiasClamp`: the limit of a draw's depth bias, kept when the device enabled the depthBiasClamp
   feature (`GraphicsAdapter.SupportsDepthBiasClamp`, `MainGraphicsDevice.IsDepthBiasClampEnabled`).
 - Which faces a surface shows is its material's: `Material.Faces` (`MaterialFaces`: both, the default; front; back), as
