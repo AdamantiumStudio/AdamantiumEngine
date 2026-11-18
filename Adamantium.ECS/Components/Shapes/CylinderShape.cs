@@ -20,5 +20,7 @@ public partial class CylinderShape : ProceduralShape
 
     partial void OnSizeChanged(Vector3<double> value) => Changed();
 
+    public override Collider CreateCollider() => new CylinderCollider { Axis = ColliderAxis.Y, ChoosesAxis = false };
+
     protected override Mesh Generate() => Shapes.Cylinder.GenerateGeometry(GeometryType.Solid, Positive(Size), TessellationFrom(3));
 }

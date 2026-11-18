@@ -68,7 +68,7 @@ public struct BoundingCapsule : IConvexShape<float>
             var b = axisLength * Vector3F.Dot(ray.Direction, offset) - alongOffset * alongDirection;
             var c = axisLength * Vector3F.Dot(offset, offset) - alongOffset * alongOffset - Radius * Radius * axisLength;
             var h = b * b - a * c;
-            if (a > 1e-7f * axisLength && h >= 0)
+            if (a > 1e-7f * axisLength * Vector3F.Dot(ray.Direction, ray.Direction) && h >= 0)
             {
                 var t = (-b - MathF.Sqrt(h)) / a;
                 var along = alongOffset + t * alongDirection;

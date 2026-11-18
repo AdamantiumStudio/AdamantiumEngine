@@ -179,6 +179,39 @@ public class PhysicsServiceTests
         Assert.That(twin.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
     }
 
+    // A log: a cylinder collider fitted along its long side, dropped turned - it rests on its round side, its axis
+    // level, its middle a radius above the ground.
+    [Test]
+    public void LogOfACylinderCollider_FallsAndRestsOnItsRoundSide()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var corners = new List<Vector3<double>>();
+        foreach (var x in new[] { -0.4, 0.4 })
+        foreach (var y in new[] { -0.4, 0.4 })
+        foreach (var z in new[] { -1.0, 1.0 })
+        {
+            corners.Add(new Vector3<double>(x, y, z));
+        }
+
+        var log = new Entity(null, "Log");
+        log.Transform.Position = new Vector3<double>(0, -2, 0);
+        log.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, 0.4f);
+        log.AddComponent(new MeshData { Mesh = new Mesh(PrimitiveType.TriangleList).SetPoints(corners.ToArray()) });
+        log.AddComponent(new CylinderCollider());
+        log.AddComponent(new RigidBody());
+        _world.EntityManager.AddEntity(log, _world.MainScene);
+        Settle();
+
+        Play();
+        Frames(3);
+
+        Assert.That(_physics.Moves(log), Is.True);
+        Assert.That(log.Transform.Position.Y, Is.EqualTo(-0.4).Within(0.02), "a radius above the ground");
+        var axis = Vector3<float>.Transform(Vector3<float>.UnitZ, log.Transform.Rotation);
+        Assert.That(MathF.Abs(axis.Y), Is.LessThan(0.01f), "its axis level");
+    }
+
     private Entity AddHull(string name, Mesh mesh, Vector3<double> position, float scale)
     {
         var entity = new Entity(null, name);

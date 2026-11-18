@@ -239,85 +239,18 @@ internal sealed class ExpandingPolytope
     }
 
     // The points of each core at the point of the face nearest the origin's foot on its plane - inside the triangle,
-    // so a face among ties whose plane the origin meets off its edge still gives points on the shapes (Ericson, 5.1.5).
+    // so a face among ties whose plane the origin meets off its edge still gives points on the shapes.
     private void FindWitnesses(in PolytopeFace face, out Vector3F onFirst, out Vector3F onSecond)
     {
-        var a = _vertices[face.A];
-        var b = _vertices[face.B];
-        var c = _vertices[face.C];
+        var first = _vertices[face.A];
+        var second = _vertices[face.B];
+        var third = _vertices[face.C];
         var projected = face.Normal * face.Distance;
-        FindNearestWeights(a.Point, b.Point, c.Point, projected, out var weightA, out var weightB, out var weightC);
-        onFirst = (a.OnFirst.As<double>() * weightA + b.OnFirst.As<double>() * weightB + c.OnFirst.As<double>() * weightC)
-            .As<float>();
-        onSecond = (a.OnSecond.As<double>() * weightA + b.OnSecond.As<double>() * weightB
-                    + c.OnSecond.As<double>() * weightC).As<float>();
-    }
-
-    private static void FindNearestWeights(Vector3<double> a, Vector3<double> b, Vector3<double> c, Vector3<double> p,
-        out double weightA, out double weightB, out double weightC)
-    {
-        var ab = b - a;
-        var ac = c - a;
-        var ap = p - a;
-        var d1 = Vector3<double>.Dot(ab, ap);
-        var d2 = Vector3<double>.Dot(ac, ap);
-        weightA = 1;
-        weightB = 0;
-        weightC = 0;
-        if (d1 <= 0 && d2 <= 0)
-            return;
-
-        var bp = p - b;
-        var d3 = Vector3<double>.Dot(ab, bp);
-        var d4 = Vector3<double>.Dot(ac, bp);
-        if (d3 >= 0 && d4 <= d3)
-        {
-            weightA = 0;
-            weightB = 1;
-            return;
-        }
-
-        var vc = d1 * d4 - d3 * d2;
-        if (vc <= 0 && d1 >= 0 && d3 <= 0)
-        {
-            weightB = d1 / (d1 - d3);
-            weightA = 1 - weightB;
-            return;
-        }
-
-        var cp = p - c;
-        var d5 = Vector3<double>.Dot(ab, cp);
-        var d6 = Vector3<double>.Dot(ac, cp);
-        if (d6 >= 0 && d5 <= d6)
-        {
-            weightA = 0;
-            weightC = 1;
-            return;
-        }
-
-        var vb = d5 * d2 - d1 * d6;
-        if (vb <= 0 && d2 >= 0 && d6 <= 0)
-        {
-            weightC = d2 / (d2 - d6);
-            weightA = 1 - weightC;
-            return;
-        }
-
-        var va = d3 * d6 - d5 * d4;
-        if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0)
-        {
-            weightC = (d4 - d3) / (d4 - d3 + (d5 - d6));
-            weightA = 0;
-            weightB = 1 - weightC;
-            return;
-        }
-
-        var sum = va + vb + vc;
-        if (!(sum > 0))
-            return;
-
-        weightB = vb / sum;
-        weightC = vc / sum;
-        weightA = 1 - weightB - weightC;
+        TriangleMath.FindNearestWeights(first.Point, second.Point, third.Point, projected, out var firstWeight,
+            out var secondWeight, out var thirdWeight);
+        onFirst = (first.OnFirst.As<double>() * firstWeight + second.OnFirst.As<double>() * secondWeight
+                   + third.OnFirst.As<double>() * thirdWeight).As<float>();
+        onSecond = (first.OnSecond.As<double>() * firstWeight + second.OnSecond.As<double>() * secondWeight
+                    + third.OnSecond.As<double>() * thirdWeight).As<float>();
     }
 }

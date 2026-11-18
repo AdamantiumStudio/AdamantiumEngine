@@ -20,6 +20,10 @@ internal static class ConvexCollisions
     /// 25 degrees.</summary>
     private const float NearTheNormal = 0.9f;
 
+    /// <summary>The cosine of the widest turn between two segments for them to lie along each other: about six degrees.
+    /// </summary>
+    private const float RunningTogether = 0.995f;
+
     public static bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose,
         float speculativeDistance, ManifoldBuffer manifold)
     {
@@ -72,7 +76,9 @@ internal static class ConvexCollisions
         // the true axis; with no depth measured, any face that parts them best.
         var enough = normalIsKnown ? separation - FaceTolerance - 0.02f * MathF.Abs(separation) : float.MinValue;
         if (!AddFaceContacts(first, firstPose, second, secondPose, normal, normalIsKnown, enough, speculativeDistance,
-                manifold))
+                manifold)
+            && !(normalIsKnown && CanLieAlong(first) && CanLieAlong(second)
+                 && AddLineContacts(first, firstPose, second, secondPose, normal, speculativeDistance, manifold)))
         {
             manifold.Normal = normal;
             var surfaceOfFirst = onFirst + normal * firstRadius;
@@ -193,6 +199,60 @@ internal static class ConvexCollisions
         return true;
     }
 
+    // Two sides lying along each other - logs, a log and a capsule - touch along a line: the ends of where their
+    // segments overlap, each a point; false unless both give a segment and the two run together.
+    private static bool AddLineContacts(CollisionShape first, in Pose firstPose, CollisionShape second,
+        in Pose secondPose, Vector3F normal, float speculativeDistance, ManifoldBuffer manifold)
+    {
+        if (PlaceFace(first, firstPose, normal, manifold.FaceFirst) != 2
+            || PlaceFace(second, secondPose, -normal, manifold.FaceSecond) != 2)
+            return false;
+
+        var start = manifold.FaceFirst[0];
+        var along = manifold.FaceFirst[1] - start;
+        var length = along.Length();
+        var otherStart = manifold.FaceSecond[0];
+        var otherAlong = manifold.FaceSecond[1] - otherStart;
+        var otherLength = otherAlong.Length();
+        if (!(length > 0) || !(otherLength > 0))
+            return false;
+
+        along /= length;
+        if (MathF.Abs(Vector3F.Dot(along, otherAlong / otherLength)) < RunningTogether)
+            return false;
+
+        var otherFrom = Vector3F.Dot(otherStart - start, along);
+        var otherTo = Vector3F.Dot(manifold.FaceSecond[1] - start, along);
+        var from = MathF.Max(0, MathF.Min(otherFrom, otherTo));
+        var to = MathF.Min(length, MathF.Max(otherFrom, otherTo));
+        if (from > to)
+            return false;
+
+        var firstRadius = first.CoreRadius;
+        var secondRadius = second.CoreRadius;
+        var added = manifold.Count;
+        var ends = to - from > 1e-6f * length ? 2 : 1;
+        foreach (var at in ((ReadOnlySpan<float>)[from, to])[..ends])
+        {
+            var onFirst = start + along * at;
+            var onSecond = otherStart + otherAlong * Math.Clamp(Vector3F.Dot(onFirst - otherStart, otherAlong)
+                                                                / (otherLength * otherLength), 0, 1);
+            var separation = Vector3F.Dot(onSecond - onFirst, normal) - firstRadius - secondRadius;
+            if (separation <= speculativeDistance)
+                manifold.Add((onFirst + normal * firstRadius + onSecond - normal * secondRadius) * 0.5f, separation);
+        }
+
+        if (manifold.Count == added)
+            return false;
+
+        manifold.Normal = normal;
+        return true;
+    }
+
+    // Shapes whose side is a segment: only they can lie along each other.
+    private static bool CanLieAlong(CollisionShape shape) =>
+        shape.Kind is CollisionShapeKind.Capsule or CollisionShapeKind.Cylinder;
+
     // Of the faces of shape whose normal turns toward toward by at least the cosine nearness, the one whose outward
     // normal parts it most from other, that normal in the world and how far they part along it; -1 when it has none
     // such.
@@ -222,13 +282,13 @@ internal static class ConvexCollisions
         return best;
     }
 
-    // How far the other shape stands beyond the face's plane, along its outward normal axis; less than zero while it
-    // reaches behind it.
+    // How far the other shape stands beyond the face, along its outward normal axis - the core's plane out by the
+    // shape's radius; less than zero while it reaches behind it.
     private static float MeasureParting(CollisionShape shape, in Pose pose, int face, CollisionShape other,
         in Pose otherPose, Vector3F axis)
     {
         var nearestOfOther = otherPose.TransformPoint(other.GetSupport(otherPose.InverseTransformDirection(-axis)));
-        return Vector3F.Dot(nearestOfOther - pose.Position, axis) - shape.GetFlatFaceOffset(face);
+        return Vector3F.Dot(nearestOfOther - pose.Position, axis) - shape.GetFlatFaceOffset(face) - shape.CoreRadius;
     }
 
     // The face of shape turned most toward the other along toward, its outward normal in the world and how far the

@@ -115,6 +115,73 @@ public class ColliderShapeTests
         Assert.That(rootHull.Hull.Contains(new Vector3F(7f, 0, 0)), Is.False);
     }
 
+    [Test]
+    public void ACylinder_FitsAlongTheSideWhoseCrossSectionIsRoundest()
+    {
+        var wheel = With(new CylinderCollider(), Box(null, new Vector3<double>(-0.4, -0.4, -0.15), new Vector3<double>(0.4, 0.4, 0.15)));
+        var barrel = With(new CylinderCollider(), Box(null, new Vector3<double>(-0.3, -0.5, -0.3), new Vector3<double>(0.3, 0.5, 0.3)));
+
+        Assert.That(wheel.Axis, Is.EqualTo(ColliderAxis.Z));
+        Assert.That(wheel.Radius, Is.EqualTo(0.4f).Within(1e-5f));
+        Assert.That(wheel.Height, Is.EqualTo(0.3f).Within(1e-5f));
+        Assert.That((wheel.Cylinder.End - new Vector3F(0, 0, 0.15f)).Length(), Is.LessThan(1e-5f));
+        Assert.That(barrel.Axis, Is.EqualTo(ColliderAxis.Y));
+        Assert.That(barrel.Height, Is.EqualTo(1f).Within(1e-5f));
+    }
+
+    [Test]
+    public void ACylinder_IsPickedOnItsSideAndItsEnd_NotBeyondItsRim()
+    {
+        var scene = new PickScene();
+        var entity = Box(null, new Vector3<double>(-1, -0.5, -1), new Vector3<double>(1, 0.5, 1));
+        entity.Transform.Position = new Vector3<double>(0, 0, 10);
+        var cylinder = With(new CylinderCollider(), entity);
+        scene.Place(entity);
+
+        var hit = entity.Pick(scene.RayThroughCenter(), PickMode.Colliders);
+        var corner = new Ray<float>(new Vector3F(0.9f, -5, 0.9f), Vector3F.UnitY);
+        var end = new Ray<float>(new Vector3F(0.2f, -5, 0.2f), Vector3F.UnitY);
+
+        Assert.That(hit.Entity, Is.SameAs(entity));
+        Assert.That(hit.Point.Z, Is.EqualTo(9f).Within(1e-3f), "on the round side, a meter from the axis");
+        Assert.That(cylinder.Intersects(ref corner, out _), Is.False, "the box's corner is off the rim");
+        Assert.That(cylinder.Intersects(ref end, out var point), Is.True);
+        Assert.That(point.Y, Is.EqualTo(-0.5f).Within(1e-4f));
+    }
+
+    [Test]
+    public void AFrustum_SeesACylinderInFront_AndNotOneBehind()
+    {
+        var scene = new PickScene();
+        var ahead = Box(null, new Vector3<double>(-0.5, -0.5, -0.2), new Vector3<double>(0.5, 0.5, 0.2));
+        ahead.Transform.Position = new Vector3<double>(0, 0, 10);
+        var behind = Box(null, new Vector3<double>(-0.5, -0.5, -0.2), new Vector3<double>(0.5, 0.5, 0.2));
+        behind.Transform.Position = new Vector3<double>(0, 0, -10);
+        var seen = With(new CylinderCollider(), ahead);
+        var hidden = With(new CylinderCollider(), behind);
+        scene.Place(ahead);
+        scene.Place(behind);
+        seen.UpdateForCamera(scene.Camera);
+        hidden.UpdateForCamera(scene.Camera);
+
+        Assert.That(seen.IsInsideCameraFrustum(scene.Camera), Is.Not.EqualTo(ContainmentType.Disjoint));
+        Assert.That(hidden.IsInsideCameraFrustum(scene.Camera), Is.EqualTo(ContainmentType.Disjoint));
+    }
+
+    [Test]
+    public void ACylinder_OverlapsWhereItsRoundSideReaches()
+    {
+        var cylinder = With(new CylinderCollider(), Box(null, new Vector3<double>(-1, -0.5, -1), new Vector3<double>(1, 0.5, 1)));
+        var otherEntity = Box(null, new Vector3<double>(-0.2, -0.2, -0.2), new Vector3<double>(0.2, 0.2, 0.2));
+        var other = With(new BoxCollider(), otherEntity);
+
+        otherEntity.Transform.Position = new Vector3<double>(1.1, 0, 0);
+        Assert.That(cylinder.Intersects(other), Is.True);
+
+        otherEntity.Transform.Position = new Vector3<double>(1, 0, 1);
+        Assert.That(cylinder.Intersects(other), Is.False, "beside the round side, where a box round it would reach");
+    }
+
     private static T With<T>(T collider, Entity entity) where T : Collider
     {
         entity.AddComponent(collider);

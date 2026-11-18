@@ -100,7 +100,7 @@ public class ConvexHullTests
         var asBoxes = Collide(box, firstPose, box, secondPose);
         var boxNormal = _manifold.Normal;
         var boxDeepest = Deepest();
-        var asHulls = Collide(Cube(half), firstPose, Cube(half), secondPose);
+        var asHulls = Collide(SharpCube(half), firstPose, SharpCube(half), secondPose);
 
         Assert.That(asHulls, Is.EqualTo(asBoxes));
         if (!asBoxes)
@@ -163,8 +163,8 @@ public class ConvexHullTests
         var edgeDown = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 4);
         var edgeAcross = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
         var reach = MathF.Sqrt(2) * 0.5f;
-        var found = Collide(Cube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 2 * reach - 0.01f, 0), edgeAcross),
-            Cube(new Vector3F(0.5f)), new Pose(Vector3F.Zero, edgeDown));
+        var found = Collide(SharpCube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 2 * reach - 0.01f, 0), edgeAcross),
+            SharpCube(new Vector3F(0.5f)), new Pose(Vector3F.Zero, edgeDown));
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -181,8 +181,8 @@ public class ConvexHullTests
         var edgeDown = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 4);
         var edgeAcross = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
         var reach = MathF.Sqrt(2) * 0.5f;
-        var found = Collide(Cube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 2 * reach + gap, 0), edgeAcross),
-            Cube(new Vector3F(0.5f)), new Pose(Vector3F.Zero, edgeDown));
+        var found = Collide(SharpCube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 2 * reach + gap, 0), edgeAcross),
+            SharpCube(new Vector3F(0.5f)), new Pose(Vector3F.Zero, edgeDown));
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -190,6 +190,137 @@ public class ConvexHullTests
         AssertNormal(-Vector3F.UnitY, 1e-2f);
         Assert.That((_manifold.Positions[0] - new Vector3F(0, reach, 0)).Length(), Is.LessThan(1e-2f),
             "where the edges cross");
+    }
+
+    // Rounded edges crossed: each edge is cut by the radius times (root two less one), so they meet that much lower,
+    // touching at one point with their cores apart - no EPA, no special case.
+    [Test]
+    public void RoundedHullsCrossedAtTheirEdges_TouchWhereTheRoundingMeets()
+    {
+        var edgeDown = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 4);
+        var edgeAcross = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
+        var cube = Cube(new Vector3F(0.5f));
+        var reach = MathF.Sqrt(2) * 0.5f - cube.ConvexRadius * (MathF.Sqrt(2) - 1);
+        var found = Collide(cube, new Pose(new Vector3F(0, 2 * reach + 0.005f, 0), edgeAcross), cube,
+            new Pose(Vector3F.Zero, edgeDown));
+
+        Assert.That(found, Is.True);
+        Assert.That(_manifold.Count, Is.EqualTo(1));
+        Assert.That(_manifold.Separations[0], Is.EqualTo(0.005f).Within(1e-4f));
+        AssertNormal(-Vector3F.UnitY, 1e-4f);
+        Assert.That((_manifold.Positions[0] - new Vector3F(0, reach + 0.0025f, 0)).Length(), Is.LessThan(1e-3f));
+    }
+
+    [Test]
+    public void RoundedCube_KeepsItsFacesAndRoundsItsCorners()
+    {
+        var cube = Cube(new Vector3F(0.5f));
+
+        Assert.That(cube.ConvexRadius, Is.EqualTo(ConvexHullCollisionShape.DefaultConvexRadius));
+        Assert.That(cube.GetSupport(Vector3F.UnitY).Y, Is.EqualTo(0.5f).Within(1e-6f), "a face stands where it stood");
+        var corner = Vector3F.Normalize(new Vector3F(1, 1, 1));
+        var cut = MathF.Sqrt(3) * 0.5f - Vector3F.Dot(cube.GetSupport(corner), corner);
+        Assert.That(cut, Is.EqualTo(cube.ConvexRadius * (MathF.Sqrt(3) - 1)).Within(1e-5f), "a corner is cut round");
+    }
+
+    // A sharp corner would be cut deep by the full radius: the radius shrinks so no corner loses more than it, and the
+    // rounded hull stays within the hull every way.
+    [Test]
+    public void RoundedTetrahedron_IsRoundedLessAndStaysWithinItsHull()
+    {
+        Vector3F[] corners = [new(1, 1, 1), new(1, -1, -1), new(-1, 1, -1), new(-1, -1, 1)];
+        var hull = new ConvexHullCollisionShape(corners);
+
+        Assert.That(hull.ConvexRadius, Is.GreaterThan(0).And.LessThan(ConvexHullCollisionShape.DefaultConvexRadius));
+        var random = new Random(3);
+        for (var index = 0; index < 200; index++)
+        {
+            var direction = Vector3F.Normalize(RandomPoint(random, 1));
+            var sharpest = float.MinValue;
+            foreach (var corner in corners)
+            {
+                sharpest = MathF.Max(sharpest, Vector3F.Dot(corner, direction));
+            }
+
+            var rounded = Vector3F.Dot(hull.GetSupport(direction), direction);
+            Assert.That(rounded, Is.LessThanOrEqualTo(sharpest + 1e-5f));
+            Assert.That(rounded, Is.GreaterThanOrEqualTo(sharpest - ConvexHullCollisionShape.DefaultConvexRadius - 1e-5f));
+        }
+    }
+
+    // The core's faces are its own, each flat, so a rock lying on one rests on all its corners; and each stands where a
+    // face of the hull does, the radius in.
+    [Test]
+    public void RoundedRock_HasFlatFacesItsWholeCoreStandsBehind([Range(0, 4)] int seed)
+    {
+        var rock = Rock(new Random(seed));
+
+        Assert.That(rock.ConvexRadius, Is.GreaterThan(0));
+        Span<Vector3F> corners = stackalloc Vector3F[ManifoldBuffer.FaceCapacity];
+        for (var face = 0; face < rock.FlatFaceCount; face++)
+        {
+            var normal = rock.GetFlatFaceNormal(face);
+            var offset = rock.GetFlatFaceOffset(face);
+            var count = rock.GetFlatFace(face, corners);
+            for (var corner = 0; corner < count; corner++)
+            {
+                Assert.That(Vector3F.Dot(normal, corners[corner]), Is.EqualTo(offset).Within(1e-4f), $"face {face}");
+            }
+
+            Assert.That(Vector3F.Dot(normal, rock.GetCoreSupport(normal)), Is.EqualTo(offset).Within(1e-5f));
+
+            // The faces moved in by the radius: rounded, the rock reaches each of them as far as the hull does.
+            var hullReach = float.MinValue;
+            foreach (var vertex in rock.Vertices)
+            {
+                hullReach = MathF.Max(hullReach, Vector3F.Dot(normal, vertex));
+            }
+
+            Assert.That(Vector3F.Dot(normal, rock.GetSupport(normal)), Is.EqualTo(hullReach).Within(1e-4f), $"face {face}");
+        }
+    }
+
+    [Test]
+    public void RoundedRocksDropped_EachComesToRest([Range(0, 19)] int seed)
+    {
+        var random = new Random(seed);
+        var rock = Rock(random);
+        var scene = new SceneBuilder();
+        scene.AddGround();
+        var body = scene.World.Add(new BodyDescription
+        {
+            Shape = rock,
+            Position = new Vector3F(0, 1, 0),
+            Rotation = QuaternionF.Normalize(new QuaternionF((float)random.NextDouble() - 0.5f,
+                (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f))
+        });
+
+        // A rounded rock rocks a while on the rounding of its face's edge before it settles.
+        scene.Run(20f);
+
+        Assert.That(scene.World.IsAwake(body), Is.False);
+    }
+
+    [Test]
+    public void ConvexRadius_BelowZeroOrNotFinite_IsRefused()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => _ = new ConvexHullCollisionShape(CornersOf(new Vector3F(1)), -0.1f));
+        Assert.Throws<ArgumentOutOfRangeException>(() => _ = new ConvexHullCollisionShape(CornersOf(new Vector3F(1)), float.NaN));
+    }
+
+    // A hull a model keeps already: taken as it is, the same shape as from its points.
+    [Test]
+    public void HullBuiltAlready_GivesTheShapeItsPointsGive()
+    {
+        var points = CornersOf(new Vector3F(0.5f, 0.3f, 0.2f));
+        var fromPoints = new ConvexHullCollisionShape(points);
+        var fromHull = new ConvexHullCollisionShape(ConvexHull.FromPoints(points));
+
+        Assert.That(fromHull.FaceCount, Is.EqualTo(fromPoints.FaceCount));
+        Assert.That(fromHull.ConvexRadius, Is.EqualTo(fromPoints.ConvexRadius));
+        Assert.That(fromHull.ComputeMass(1).Mass, Is.EqualTo(fromPoints.ComputeMass(1).Mass).Within(1e-5f));
+        Assert.Throws<ArgumentException>(() =>
+            _ = new ConvexHullCollisionShape(ConvexHull.FromPoints([Vector3F.Zero, Vector3F.UnitX, Vector3F.UnitY])));
     }
 
     // Round hulls of many corners, deep in each other at random: EPA takes many steps, and its nearest face still
@@ -396,7 +527,27 @@ public class ConvexHullTests
     private void AssertNormal(Vector3F expected, float tolerance = 1e-4f) =>
         Assert.That((_manifold.Normal - expected).Length(), Is.LessThan(tolerance), $"normal {_manifold.Normal}");
 
-    private static ConvexHullCollisionShape Cube(Vector3F half)
+    private static ConvexHullCollisionShape Cube(Vector3F half) =>
+        new(CornersOf(half));
+
+    // A hull of a box's corners with no rounding: the box itself.
+    private static ConvexHullCollisionShape SharpCube(Vector3F half) =>
+        new(CornersOf(half), convexRadius: 0);
+
+    // A flat rock of forty points, eighty centimeters across, rounded by default.
+    private static ConvexHullCollisionShape Rock(Random random)
+    {
+        var points = new List<Vector3F>();
+        for (var index = 0; index < 40; index++)
+        {
+            points.Add(new Vector3F((float)random.NextDouble() - 0.5f, (float)random.NextDouble() * 0.6f - 0.3f,
+                (float)random.NextDouble() - 0.5f) * 0.8f);
+        }
+
+        return new ConvexHullCollisionShape(points);
+    }
+
+    private static List<Vector3F> CornersOf(Vector3F half)
     {
         var corners = new List<Vector3F>();
         foreach (var x in new[] { -half.X, half.X })
@@ -406,7 +557,7 @@ public class ConvexHullTests
             corners.Add(new Vector3F(x, y, z));
         }
 
-        return new ConvexHullCollisionShape(corners);
+        return corners;
     }
 
     private static QuaternionF RandomTurn(Random random) =>

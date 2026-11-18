@@ -282,6 +282,8 @@ public class EntityImportTemplate : IEntityTemplate
             ColliderKind.Box => new BoxCollider(),
             ColliderKind.Sphere => new SphereCollider(),
             ColliderKind.Capsule => new CapsuleCollider(),
+            ColliderKind.Cylinder => new CylinderCollider(),
+            ColliderKind.ConvexHull => new ConvexHullCollider(),
             _ => null
         };
         if (fitted != null)
