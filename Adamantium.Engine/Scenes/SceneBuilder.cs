@@ -371,6 +371,7 @@ public sealed class SceneBuilder
     private static void ApplyCamera(Entity entity, Camera camera, SceneCamera entry)
     {
         entity.Transform.Position = entry.Position;
+        entity.IsEnabled = entry.IsEnabled;
         camera.Fov = entry.FieldOfView;
         camera.ZNear = entry.Near;
         camera.ZFar = entry.Far;
@@ -464,6 +465,7 @@ public sealed class SceneBuilder
     {
         entity.Transform.Position = entry.Position;
         entity.Transform.Rotation = Rotation(entry);
+        entity.IsEnabled = entry.IsEnabled;
     }
 
     // The entry's rotation made unit; none for one that is no rotation - zero, or not numbers.

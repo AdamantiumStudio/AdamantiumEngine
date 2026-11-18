@@ -120,6 +120,34 @@ public class SceneBuilderTests
         });
     }
 
+    // A disabled entry - a model's root, a camera - is built disabled and written back so; the others stay enabled.
+    [Test]
+    public async Task ADisabledEntry_IsBuiltDisabled_AndWrittenBackSo()
+    {
+        var scene = Sample();
+        scene.Models[1].IsEnabled = false;
+        scene.Cameras[0].IsEnabled = false;
+        scene.Markers[0].IsEnabled = false;
+        scene.Shapes[0].IsEnabled = false;
+        scene.SpawnPoints[0].IsEnabled = false;
+        var entities = await Build(scene);
+
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entities.Single(entity => entity.Name == "Robot B").IsEnabled, Is.False);
+            Assert.That(entities.Single(entity => entity.Name == "Intro").IsEnabled, Is.False);
+            Assert.That(entities.Single(entity => entity.Name == "Robot A").IsEnabled, Is.True);
+            Assert.That(back.Models.Select(model => model.IsEnabled), Is.EqualTo(new[] { true, false }));
+            Assert.That(back.Cameras.Single().IsEnabled, Is.False);
+            Assert.That(back.Lights.Single().IsEnabled, Is.True);
+            Assert.That(back.Markers.Single().IsEnabled, Is.False);
+            Assert.That(back.Shapes.Single().IsEnabled, Is.False);
+            Assert.That(back.SpawnPoints.Single().IsEnabled, Is.False);
+        });
+    }
+
     // Built into a scene of its own, a file stands there alone, and is written back with that scene's id.
     [Test]
     public async Task ASceneBuiltIntoAnotherScene_StandsThereAlone_AndIsWrittenWithItsId()

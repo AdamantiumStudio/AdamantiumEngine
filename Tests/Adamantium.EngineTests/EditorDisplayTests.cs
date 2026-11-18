@@ -8,12 +8,17 @@ namespace Adamantium.EngineTests;
 [TestFixture]
 public class EditorDisplayTests
 {
+    // Inherited, met with no owner setting it, is drawn as the view is too.
     [TestCase(ViewDisplay.Shaded, true, false)]
     [TestCase(ViewDisplay.Wireframe, false, true)]
     [TestCase(ViewDisplay.ShadedWireframe, true, true)]
     public void AsView_DrawsAsTheViewIs(ViewDisplay view, bool shaded, bool wired)
     {
-        Assert.That(ForwardPlusRenderingProcessor.Drawn(view, EntityDisplay.AsView), Is.EqualTo((shaded, wired)));
+        Assert.Multiple(() =>
+        {
+            Assert.That(ForwardPlusRenderingProcessor.Drawn(view, EntityDisplay.AsView), Is.EqualTo((shaded, wired)));
+            Assert.That(ForwardPlusRenderingProcessor.Drawn(view, EntityDisplay.Inherited), Is.EqualTo((shaded, wired)));
+        });
     }
 
     [TestCase(EntityDisplay.Shaded, true, false)]

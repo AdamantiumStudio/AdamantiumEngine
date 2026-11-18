@@ -57,6 +57,13 @@ public abstract class ScenePlacement
         set => Rotation = QuaternionF.Parse(value);
     }
 
+    /// <summary>Whether it works and is drawn, in the editor and in the game; written only when it does not.</summary>
+    [XmlAttribute("Enabled")]
+    public bool IsEnabled { get; set; } = true;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeIsEnabled() => !IsEnabled;
+
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeParentText() => Parent.HasValue;
 

@@ -71,22 +71,27 @@ public class ToolsService : EntityService, INotifyUniverse
         IsPointerTaken = true;
     }
 
-    /// <summary>What a click along <paramref name="ray"/> lands on: the nearest part of the scene, or of what the editor shows over it.</summary>
-    public PickHit PickEntity(in PickRay ray) => PickHit.Nearest(PickForm(ray), PickShown(ray));
+    /// <summary>What a click along <paramref name="ray"/> lands on: what the editor shows over the scene - drawn in front
+    /// of it, wherever it stands - or else the nearest part of the scene.</summary>
+    public PickHit PickEntity(in PickRay ray)
+    {
+        var shown = PickShown(ray);
+        return shown.IsHit ? shown : PickForm(ray);
+    }
 
     /// <summary>What a click along <paramref name="ray"/> selects - or, <paramref name="removing"/>, takes out: what the
-    /// editor shows over the scene, as an icon, as it is - it stands for that one entity; a part of the scene's form as
-    /// the selection chooses it (<see cref="Selection.ChosenByClick"/>, <see cref="Selection.ChosenToRemove"/>). Null
-    /// for nothing.</summary>
+    /// editor shows over the scene, as an icon, as it is - drawn in front, it stands for that one entity; else a part of
+    /// the scene's form as the selection chooses it (<see cref="Selection.ChosenByClick"/>,
+    /// <see cref="Selection.ChosenToRemove"/>). Null for nothing.</summary>
     public Entity ChosenAt(in PickRay ray, bool removing = false)
     {
-        var form = PickForm(ray);
         var shown = PickShown(ray);
-        if (shown.IsHit && (!form.IsHit || shown.Depth < form.Depth))
+        if (shown.IsHit)
         {
             return shown.Entity;
         }
 
+        var form = PickForm(ray);
         if (!form.IsHit)
         {
             return null;
