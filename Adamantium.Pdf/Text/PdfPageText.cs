@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using Adamantium.Pdf.Document;
@@ -215,35 +214,20 @@ public sealed class PdfPageText
         return text.ToString();
     }
 
-    /// <summary>Where <paramref name="query"/> is in the text, in order; a match may run on from one line into the
-    /// next, the break between them read as a space.</summary>
-    public IReadOnlyList<PdfTextMatch> Find(string query, PdfTextSearchOptions options = null)
+    /// <summary>Where <paramref name="query"/> is in the text, in order, the first <paramref name="limit"/> of them; a
+    /// match may run on from one line into the next, the break between them read as a space.</summary>
+    public IReadOnlyList<PdfTextMatch> Find(string query, PdfTextSearchOptions options = null, int limit = int.MaxValue)
     {
-        options ??= PdfTextSearchOptions.Default;
         var matches = new List<PdfTextMatch>();
-        if (string.IsNullOrEmpty(query) || _searchable.Length == 0)
+        for (var from = 0; matches.Count < limit;)
         {
-            return matches;
-        }
-
-        var compare = (options.MatchCase ? CompareOptions.None : CompareOptions.IgnoreCase) |
-                      (options.MatchDiacritics ? CompareOptions.None : CompareOptions.IgnoreNonSpace);
-        var info = CultureInfo.InvariantCulture.CompareInfo;
-        for (var from = 0; from < _searchable.Length;)
-        {
-            var found = info.IndexOf(_searchable.AsSpan(from), query, compare, out var length);
-            if (found < 0 || length <= 0)
+            var at = PdfTextMatching.IndexOf(_searchable, query, options, from, out var length);
+            if (at < 0)
             {
                 break;
             }
 
-            var at = from + found;
-            from = at + Math.Max(1, length);
-            if (options.WholeWord && (IsWordCharacter(at - 1) || IsWordCharacter(at + length)))
-            {
-                continue;
-            }
-
+            from = at + length;
             var last = at + length - 1;
             while (last > at && _addedChar[last])
             {
@@ -266,9 +250,6 @@ public sealed class PdfPageText
 
         return matches;
     }
-
-    private bool IsWordCharacter(int index) =>
-        index >= 0 && index < _searchable.Length && char.IsLetterOrDigit(_searchable[index]);
 
     private (int Start, int End) Clamp(int start, int end) =>
         (Math.Clamp(start, 0, Glyphs.Count), Math.Clamp(end, 0, Glyphs.Count));
