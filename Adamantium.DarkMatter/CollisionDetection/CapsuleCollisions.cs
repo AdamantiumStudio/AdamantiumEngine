@@ -8,7 +8,6 @@ namespace Adamantium.DarkMatter.CollisionDetection;
 internal static class CapsuleCollisions
 {
     private const float CoincidentDistance = 1e-5f;
-    private const float ParallelSineSquared = 1e-3f;
     private const float FaceAlignment = 0.98f;
     private const int SearchSteps = 40;
     private const float GoldenRatio = 0.618034f;
@@ -44,26 +43,11 @@ internal static class CapsuleCollisions
                 normal = -normal;
         }
 
-        manifold.Normal = normal;
-        var firstSquared = firstAlong.LengthSquared();
-        var isParallel = cross.LengthSquared() <= ParallelSineSquared * firstSquared * secondAlong.LengthSquared();
-        if (isParallel)
-        {
-            var startAmount = Vector3F.Dot(secondBottom - firstBottom, firstAlong) / firstSquared;
-            var endAmount = Vector3F.Dot(secondTop - firstBottom, firstAlong) / firstSquared;
-            var low = Math.Max(0f, Math.Min(startAmount, endAmount));
-            var high = Math.Min(1f, Math.Max(startAmount, endAmount));
-            if (high - low > 1e-3f)
-            {
-                AddCapsulePoint(firstBottom + firstAlong * low, secondBottom, secondTop, normal, first.Radius,
-                    second.Radius, speculativeDistance, manifold);
-                AddCapsulePoint(firstBottom + firstAlong * high, secondBottom, secondTop, normal, first.Radius,
-                    second.Radius, speculativeDistance, manifold);
-                if (manifold.Count > 0)
-                    return true;
-            }
-        }
+        if (LineContacts.TryAdd(firstBottom, firstTop, secondBottom, secondTop, normal, first.Radius, second.Radius,
+                speculativeDistance, manifold))
+            return true;
 
+        manifold.Normal = normal;
         var surfaceFirst = onFirst + normal * first.Radius;
         var surfaceSecond = onSecond - normal * second.Radius;
         manifold.Add((surfaceFirst + surfaceSecond) * 0.5f, Vector3F.Dot(between, normal) - radii);
@@ -75,8 +59,10 @@ internal static class CapsuleCollisions
     {
         var size = box.HalfExtents;
         var radius = capsule.Radius;
-        var start = boxPose.InverseTransformPoint(capsulePose.TransformPoint(new Vector3F(0, -capsule.HalfLength, 0)));
-        var end = boxPose.InverseTransformPoint(capsulePose.TransformPoint(new Vector3F(0, capsule.HalfLength, 0)));
+        var worldStart = capsulePose.TransformPoint(new Vector3F(0, -capsule.HalfLength, 0));
+        var worldEnd = capsulePose.TransformPoint(new Vector3F(0, capsule.HalfLength, 0));
+        var start = boxPose.InverseTransformPoint(worldStart);
+        var end = boxPose.InverseTransformPoint(worldEnd);
         var along = end - start;
 
         var amount = FindNearestAmount(start, along, size);
@@ -99,6 +85,11 @@ internal static class CapsuleCollisions
                     return true;
             }
 
+            // A capsule lying along an edge of the box touches along it, found as the general path finds it.
+            if (LineContacts.TryAddAlongEdge(worldStart, worldEnd, capsule.Radius, box, boxPose,
+                    boxPose.TransformDirection(localNormal), speculativeDistance, manifold))
+                return true;
+
             manifold.Normal = boxPose.TransformDirection(localNormal);
             var onCapsule = nearest + localNormal * radius;
             manifold.Add(boxPose.TransformPoint((onCapsule + onBox) * 0.5f), distance - radius);
@@ -106,19 +97,6 @@ internal static class CapsuleCollisions
         }
 
         return CollideCoreInsideBox(start, along, size, radius, speculativeDistance, boxPose, manifold);
-    }
-
-    private static void AddCapsulePoint(Vector3F onFirst, Vector3F secondStart, Vector3F secondEnd, Vector3F normal,
-        float firstRadius, float secondRadius, float speculativeDistance, ManifoldBuffer manifold)
-    {
-        var onSecond = Collision.ClosestPointSegmentPoint(secondStart, secondEnd, onFirst);
-        var separation = Vector3F.Dot(onSecond - onFirst, normal) - firstRadius - secondRadius;
-        if (separation > speculativeDistance)
-            return;
-
-        var surfaceFirst = onFirst + normal * firstRadius;
-        var surfaceSecond = onSecond - normal * secondRadius;
-        manifold.Add((surfaceFirst + surfaceSecond) * 0.5f, separation);
     }
 
     private static float FindNearestAmount(Vector3F start, Vector3F along, Vector3F size)

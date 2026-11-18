@@ -20,10 +20,6 @@ internal static class ConvexCollisions
     /// 25 degrees.</summary>
     private const float NearTheNormal = 0.9f;
 
-    /// <summary>The cosine of the widest turn between two segments for them to lie along each other: about six degrees.
-    /// </summary>
-    private const float RunningTogether = 0.995f;
-
     public static bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose,
         float speculativeDistance, ManifoldBuffer manifold)
     {
@@ -77,7 +73,7 @@ internal static class ConvexCollisions
         var enough = normalIsKnown ? separation - FaceTolerance - 0.02f * MathF.Abs(separation) : float.MinValue;
         if (!AddFaceContacts(first, firstPose, second, secondPose, normal, normalIsKnown, enough, speculativeDistance,
                 manifold)
-            && !(normalIsKnown && CanLieAlong(first) && CanLieAlong(second)
+            && !(normalIsKnown && (CanLieAlong(first) || CanLieAlong(second))
                  && AddLineContacts(first, firstPose, second, secondPose, normal, speculativeDistance, manifold)))
         {
             manifold.Normal = normal;
@@ -169,7 +165,7 @@ internal static class ConvexCollisions
             reference[index] = referencePose.TransformPoint(reference[index]);
         }
 
-        var incidentCount = PlaceFace(incidentShape, incidentPose, -faceNormal, incident);
+        var incidentCount = incidentShape.PlaceSupportingFace(incidentPose, -faceNormal, incident);
         var referenceRadius = referenceShape.CoreRadius;
         var incidentRadius = incidentShape.CoreRadius;
 
@@ -199,59 +195,49 @@ internal static class ConvexCollisions
         return true;
     }
 
-    // Two sides lying along each other - logs, a log and a capsule - touch along a line: the ends of where their
-    // segments overlap, each a point; false unless both give a segment and the two run together.
+    // A side lying along another - logs, a log and a capsule - or along an edge of a box or a hull touches along a
+    // line: the ends of where the two overlap, each a point; false unless one gives a segment and the other a segment
+    // or an edge running with it.
     private static bool AddLineContacts(CollisionShape first, in Pose firstPose, CollisionShape second,
         in Pose secondPose, Vector3F normal, float speculativeDistance, ManifoldBuffer manifold)
     {
-        if (PlaceFace(first, firstPose, normal, manifold.FaceFirst) != 2
-            || PlaceFace(second, secondPose, -normal, manifold.FaceSecond) != 2)
-            return false;
-
-        var start = manifold.FaceFirst[0];
-        var along = manifold.FaceFirst[1] - start;
-        var length = along.Length();
-        var otherStart = manifold.FaceSecond[0];
-        var otherAlong = manifold.FaceSecond[1] - otherStart;
-        var otherLength = otherAlong.Length();
-        if (!(length > 0) || !(otherLength > 0))
-            return false;
-
-        along /= length;
-        if (MathF.Abs(Vector3F.Dot(along, otherAlong / otherLength)) < RunningTogether)
-            return false;
-
-        var otherFrom = Vector3F.Dot(otherStart - start, along);
-        var otherTo = Vector3F.Dot(manifold.FaceSecond[1] - start, along);
-        var from = MathF.Max(0, MathF.Min(otherFrom, otherTo));
-        var to = MathF.Min(length, MathF.Max(otherFrom, otherTo));
-        if (from > to)
-            return false;
-
-        var firstRadius = first.CoreRadius;
-        var secondRadius = second.CoreRadius;
-        var added = manifold.Count;
-        var ends = to - from > 1e-6f * length ? 2 : 1;
-        foreach (var at in ((ReadOnlySpan<float>)[from, to])[..ends])
+        // The side that can be a segment is asked first, and only when the other can meet it: a segment or an edge.
+        if (CanLieAlong(first) && (CanLieAlong(second) || HasEdges(second))
+            && first.PlaceSupportingFace(firstPose, normal, manifold.FaceFirst) == 2)
         {
-            var onFirst = start + along * at;
-            var onSecond = otherStart + otherAlong * Math.Clamp(Vector3F.Dot(onFirst - otherStart, otherAlong)
-                                                                / (otherLength * otherLength), 0, 1);
-            var separation = Vector3F.Dot(onSecond - onFirst, normal) - firstRadius - secondRadius;
-            if (separation <= speculativeDistance)
-                manifold.Add((onFirst + normal * firstRadius + onSecond - normal * secondRadius) * 0.5f, separation);
+            var start = manifold.FaceFirst[0];
+            var end = manifold.FaceFirst[1];
+            if (!CanLieAlong(second))
+                return LineContacts.TryAddAlongEdge(start, end, first.CoreRadius, second, secondPose, normal,
+                    speculativeDistance, manifold);
+
+            return second.PlaceSupportingFace(secondPose, -normal, manifold.FaceSecond) == 2
+                   && LineContacts.TryAdd(start, end, manifold.FaceSecond[0], manifold.FaceSecond[1], normal,
+                       first.CoreRadius, second.CoreRadius, speculativeDistance, manifold);
         }
 
-        if (manifold.Count == added)
+        if (!HasEdges(first) || !CanLieAlong(second)
+            || second.PlaceSupportingFace(secondPose, -normal, manifold.FaceSecond) != 2)
+            return false;
+
+        // The segment is the second shape's: met from its side, the normal turned back to run from the first.
+        var segmentStart = manifold.FaceSecond[0];
+        var segmentEnd = manifold.FaceSecond[1];
+        if (!LineContacts.TryAddAlongEdge(segmentStart, segmentEnd, second.CoreRadius, first, firstPose, -normal,
+                speculativeDistance, manifold))
             return false;
 
         manifold.Normal = normal;
         return true;
     }
 
-    // Shapes whose side is a segment: only they can lie along each other.
+    // Shapes whose side is a segment: one of them is in every pair that lies along each other.
     private static bool CanLieAlong(CollisionShape shape) =>
         shape.Kind is CollisionShapeKind.Capsule or CollisionShapeKind.Cylinder;
+
+    // Shapes whose faces' edges are real: a cylinder's end is a circle, its corners only drawn round it.
+    private static bool HasEdges(CollisionShape shape) =>
+        shape.Kind is CollisionShapeKind.Box or CollisionShapeKind.ConvexHull;
 
     // Of the faces of shape whose normal turns toward toward by at least the cosine nearness, the one whose outward
     // normal parts it most from other, that normal in the world and how far they part along it; -1 when it has none
@@ -305,17 +291,6 @@ internal static class ConvexCollisions
         faceNormal = pose.TransformDirection(shape.GetFlatFaceNormal(face));
         parting = MeasureParting(shape, pose, face, other, otherPose, faceNormal);
         return face;
-    }
-
-    private static int PlaceFace(CollisionShape shape, in Pose pose, Vector3F direction, Vector3F[] into)
-    {
-        var count = shape.GetSupportingFace(pose.InverseTransformDirection(direction), into);
-        for (var index = 0; index < count; index++)
-        {
-            into[index] = pose.TransformPoint(into[index]);
-        }
-
-        return count;
     }
 
     // Clips the incident points - a polygon, an edge or a point - by the planes through the reference polygon's edges.

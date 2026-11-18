@@ -44,6 +44,19 @@ public abstract class CollisionShape
         return 1;
     }
 
+    /// <summary>As <see cref="GetSupportingFace"/>, the shape standing at <paramref name="pose"/> and
+    /// <paramref name="direction"/> and the corners in the world.</summary>
+    internal int PlaceSupportingFace(in Pose pose, Vector3F direction, Span<Vector3F> into)
+    {
+        var count = GetSupportingFace(pose.InverseTransformDirection(direction), into);
+        for (var index = 0; index < count; index++)
+        {
+            into[index] = pose.TransformPoint(into[index]);
+        }
+
+        return count;
+    }
+
     /// <summary>How many flat faces the shape has, each a separating axis worth trying; none for a round shape.
     /// </summary>
     internal virtual int FlatFaceCount => 0;
