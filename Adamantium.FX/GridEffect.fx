@@ -89,7 +89,11 @@ float Strength(float rise)
 [shader("fragment")]
 float4 Ground_PS(PS_INPUT input) : SV_TARGET
 {
-    float2 perPixel = max(fwidth(input.plane), 1e-6f);
+    // How much of the plane a pixel spans across each coordinate's lines: the length of its gradient on screen, so a line
+    // seen at a slant is as wide and as soft as one seen square (fwidth's |ddx| + |ddy| makes it wider and blurrier).
+    float2 gradientX = float2(ddx(input.plane.x), ddy(input.plane.x));
+    float2 gradientZ = float2(ddx(input.plane.y), ddy(input.plane.y));
+    float2 perPixel = max(float2(length(gradientX), length(gradientZ)), 1e-6f);
     float halfWidth = lines.z * 0.5f;
 
     float level = max(0.0f, log10(max(perPixel.x, perPixel.y) * lines.w / layout.x));

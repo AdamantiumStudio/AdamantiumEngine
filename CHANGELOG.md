@@ -469,6 +469,11 @@ All packages share one version.
 
 ### Changed
 
+- `EntityIcons` gives its icon to a marked entity or a spawn point that no drawn mesh shows - none on it or under it, or
+  only ones turned off, hidden or with nothing to draw - whatever else it holds: the icon is all there is of it in the
+  view to see and take it by. One a mesh shows has none, a group too - icons over what is drawn only hide the scene -
+  so a group of models is picked in the hierarchy, not in the view; one hidden in the hierarchy has none either. The
+  select tool drags a spawn point by its icon as it drags a marked entity (`EntityIcons.IsMarked`).
 - An imported model's root, and each node with parts under it, no longer gets a box collider merged from its parts':
   a collider is the physics' and picking's, not a size. The size of an entity - `GetDiameter`, `GetCenterAbsolute`,
   `GetLocalCenter`, `GetRadius`, a thumbnail's framing - is measured from the meshes of it and everything under it
@@ -586,6 +591,10 @@ All packages share one version.
 
 ### Fixed
 
+- The ground grid's axes are drawn smoothed, by the grid's shader alone: the lines drawn over them stair-stepped their
+  edges, and are drawn now only where the plane is seen edge on - a perspective's eye in it, a flat view along it. A
+  pixel's share of the plane is its gradient's length on screen, so a line seen at a slant is as wide and as soft as one
+  seen square.
 - PDF text: a big line's box - a title, a large figure - no longer reaches down over a much smaller line set close
   under it: it stops halfway between its baseline and that line's top, so selecting or finding one does not cover the
   other. Lines of like size overlap as before. A small glyph is no longer read into a big one's line by stepping back

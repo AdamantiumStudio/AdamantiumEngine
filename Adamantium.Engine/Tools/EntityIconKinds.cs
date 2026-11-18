@@ -8,10 +8,11 @@ public enum EntityIconKinds
 {
     None = 0,
 
-    /// <summary>Empty entities: a <see cref="ECS.Components.Marker"/> and nothing else to see.</summary>
+    /// <summary>Entities with nothing to see: a <see cref="ECS.Components.Marker"/> or a spawn point, no mesh drawn on it
+    /// or under it.</summary>
     Entities = 1,
 
-    /// <summary>Groups: a marker with the group's icon key.</summary>
+    /// <summary>Groups: a marker with the group's icon key, no mesh drawn under it.</summary>
     Groups = 2,
 
     /// <summary>Lights, with the rays of a directional one.</summary>
