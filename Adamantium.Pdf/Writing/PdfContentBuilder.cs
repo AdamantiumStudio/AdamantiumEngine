@@ -5,17 +5,19 @@ using System.IO.Compression;
 using System.Text;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Filters;
+using Adamantium.Pdf.Graphics;
 using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.Writing;
 
 /// <summary>Builds a content stream (ISO 32000-2, 8.2): paths, their paint, line style and opacity - what an
 /// annotation's appearance is drawn with (<see cref="ToFormXObject"/>). Text is drawn by its outlines, as paths.
-/// Opacity goes through graphics state parameter dictionaries the builder names itself.</summary>
+/// Opacity and blend modes go through graphics state parameter dictionaries the builder names itself.</summary>
 public sealed class PdfContentBuilder
 {
     private readonly StringBuilder _operations = new();
     private readonly Dictionary<(double Stroke, double Fill), string> _opacities = [];
+    private readonly Dictionary<PdfBlendMode, string> _blends = [];
 
     public PdfContentBuilder SaveState() => Operator("q");
 
@@ -72,6 +74,24 @@ public sealed class PdfContentBuilder
         return this;
     }
 
+    /// <summary>How what is painted from here on mixes with what lies under it (ISO 32000-2, 11.3.5).</summary>
+    public PdfContentBuilder BlendMode(PdfBlendMode mode)
+    {
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode));
+        }
+
+        if (!_blends.TryGetValue(mode, out var name))
+        {
+            name = "BM" + _blends.Count;
+            _blends[mode] = name;
+        }
+
+        _operations.Append('/').Append(name).Append(" gs\n");
+        return this;
+    }
+
     public PdfContentBuilder MoveTo(double x, double y) => Operator("m", x, y);
 
     public PdfContentBuilder LineTo(double x, double y) => Operator("l", x, y);
@@ -112,7 +132,7 @@ public sealed class PdfContentBuilder
         dictionary.Set(PdfKeys.BBox, new PdfArray([new PdfReal(bbox.Left), new PdfReal(bbox.Bottom),
             new PdfReal(bbox.Right), new PdfReal(bbox.Top)]));
         var resources = new PdfDictionary();
-        if (_opacities.Count > 0)
+        if (_opacities.Count > 0 || _blends.Count > 0)
         {
             var states = new PdfDictionary();
             foreach (var ((stroke, fill), name) in _opacities)
@@ -121,6 +141,14 @@ public sealed class PdfContentBuilder
                 state.Set(PdfKeys.Type, new PdfName(PdfKeys.ExtGState));
                 state.Set(PdfKeys.StrokeOpacity, new PdfReal(stroke));
                 state.Set(PdfKeys.FillOpacity, new PdfReal(fill));
+                states.Set(name, state);
+            }
+
+            foreach (var (mode, name) in _blends)
+            {
+                var state = new PdfDictionary();
+                state.Set(PdfKeys.Type, new PdfName(PdfKeys.ExtGState));
+                state.Set(PdfGraphicsKeys.BlendMode, new PdfName(mode.ToString()));
                 states.Set(name, state);
             }
 

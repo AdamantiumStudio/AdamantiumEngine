@@ -36,16 +36,21 @@ struct MESH_VERTEX
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float2 plane : TEXCOORD0;
+    // The point of the ground relative to the eye.
+    float3 ground : TEXCOORD0;
 };
 
-// How far behind the ground the grid is drawn, in depth: a few steps of a 32-bit depth buffer by 1.0, so a floor lying
-// at y = 0 hides it instead of fighting it, and nothing nearer than that - nothing the buffer can tell from the ground -
-// shows through it. Added as a part of w, so the depth stays linear across the square. A fixed depth is a distance that
-// grows with the square of the eye's: 2e-5 was metres a hundred away, and from below what stood on the ground showed
-// through the floor. The draw adds a capped slope bias on top for a grazing look, and holds each fragment's depth at the
-// far plane (depth clamp), so the ground past it still shows, behind everything.
-static const float BehindTheGround = 4.0f / 16777216.0f;
+struct PS_OUTPUT
+{
+    float4 color : SV_TARGET;
+    // Never nearer than the rasterized ground: the depth test keeps its early rejection for what comes after.
+    float depth : SV_DepthGreaterEqual;
+};
+
+// The floor's depth, written per pixel, goes back by half its change across the pixel (every sample behind a face lying
+// on the ground) and these steps of a 32-bit depth buffer by 1.0; the change is capped where it blows up near the eye.
+static const float BehindTheGround = 8.0f / 16777216.0f;
+static const float MostSlopePush = 1e-4f;
 
 [shader("vertex")]
 PS_INPUT Ground_VS(MESH_VERTEX input)
@@ -54,9 +59,18 @@ PS_INPUT Ground_VS(MESH_VERTEX input)
 
     float4 world = mul(float4(input.position.xyz, 1.0f), placement);
     output.position = mul(world, viewProjection);
-    output.position.z += BehindTheGround * output.position.w;
-    output.plane = world.xz;
+    output.ground = world.xyz;
     return output;
+}
+
+// The floor's depth at the ground's point; past the far plane the farthest (the draw clamps rather than clips there), so
+// the ground running on still shows, behind everything.
+float GroundDepth(float3 ground)
+{
+    float4 clip = mul(float4(ground, 1.0f), viewProjection);
+    float depth = clip.z / max(clip.w, 1e-6f);
+    float slope = min(0.5f * (abs(ddx(depth)) + abs(ddy(depth))), MostSlopePush);
+    return saturate(depth + slope + BehindTheGround);
 }
 
 static const int Levels = 8;
@@ -87,9 +101,17 @@ float Strength(float rise)
 // Lines of cells 1, 10, 100... times the smallest, the level shown by how big its cells are on screen, and the two axes
 // over them; all of it fades away towards the grid's reach.
 [shader("fragment")]
-float4 Ground_PS(PS_INPUT input) : SV_TARGET
+PS_OUTPUT Ground_PS(PS_INPUT input)
 {
-    float2 perPixel = max(fwidth(input.plane), 1e-6f);
+    // Before any pixel of the quad is discarded: the depth's change across the pixel is taken from its neighbours.
+    float depth = GroundDepth(input.ground);
+    float2 plane = input.ground.xz;
+
+    // How much of the plane a pixel spans across each coordinate's lines: the length of its gradient on screen, so a line
+    // seen at a slant is as wide and as soft as one seen square (fwidth's |ddx| + |ddy| makes it wider and blurrier).
+    float2 gradientX = float2(ddx(plane.x), ddy(plane.x));
+    float2 gradientZ = float2(ddx(plane.y), ddy(plane.y));
+    float2 perPixel = max(float2(length(gradientX), length(gradientZ)), 1e-6f);
     float halfWidth = lines.z * 0.5f;
 
     float level = max(0.0f, log10(max(perPixel.x, perPixel.y) * lines.w / layout.x));
@@ -107,7 +129,7 @@ float4 Ground_PS(PS_INPUT input) : SV_TARGET
             break;
         }
 
-        float2 at = input.plane + PhaseOf((int)step + k);
+        float2 at = plane + PhaseOf((int)step + k);
         float covered = Ruled(at, perPixel, cell, halfWidth) * Strength(k - rise);
         ruled = max(ruled, covered);
         major = max(major, covered * saturate(k - rise));
@@ -119,18 +141,21 @@ float4 Ground_PS(PS_INPUT input) : SV_TARGET
     float3 lineColor = lerp(minorColor.rgb, majorColor.rgb, ruled > 0.0f ? major / ruled : 0.0f);
     float4 shade = float4(lineColor * ruled, ruled) + float4(floorColor.rgb * floorColor.a, floorColor.a) * (1.0f - ruled);
 
-    float alongX = saturate(halfWidth + 0.5f - abs(input.plane.y - lines.y) / perPixel.y) * axisXColor.a;
-    float alongZ = saturate(halfWidth + 0.5f - abs(input.plane.x - lines.x) / perPixel.x) * axisZColor.a;
+    float alongX = saturate(halfWidth + 0.5f - abs(plane.y - lines.y) / perPixel.y) * axisXColor.a;
+    float alongZ = saturate(halfWidth + 0.5f - abs(plane.x - lines.x) / perPixel.x) * axisZColor.a;
     shade = float4(axisXColor.rgb * alongX, alongX) + shade * (1.0f - alongX);
     shade = float4(axisZColor.rgb * alongZ, alongZ) + shade * (1.0f - alongZ);
 
-    shade *= 1.0f - smoothstep(layout.y * 0.4f, layout.y, length(input.plane - layout.zw));
+    shade *= 1.0f - smoothstep(layout.y * 0.4f, layout.y, length(plane - layout.zw));
     if (shade.a <= 0.0f)
     {
         discard;
     }
 
-    return float4(shade.rgb / shade.a, shade.a);
+    PS_OUTPUT output;
+    output.color = float4(shade.rgb / shade.a, shade.a);
+    output.depth = depth;
+    return output;
 }
 
 technique Grid

@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- Text markups without an appearance of their own are drawn: `PdfAnnotation.ImpliedAppearance` gives a highlight
+  (filled and multiplied into the page, yellow when it names no color), an underline, a strikeout or a squiggle over
+  each of its areas, in its color and opacity. `PdfAnnotation.QuadPoints` reads the areas, `PdfAnnotation.Opacity` its
+  `CA` and `FillOpacity` its `ca`; `PdfContentBuilder.BlendMode` sets how what is painted next mixes with what lies
+  under it.
 - `PdfTextMatching.IndexOf` finds a query in plain text by the rules a page's text is searched by - case, accents and
   whole words as `PdfTextSearchOptions` say - for a viewer that searches bookmarks and comments as it searches pages;
   `PdfPageText.Find` goes through it, and stops at a `limit` of matches when given one.
@@ -476,6 +481,11 @@ All packages share one version.
 
 ### Changed
 
+- `EntityIcons` gives its icon to a marked entity or a spawn point that no drawn mesh shows - none on it or under it, or
+  only ones turned off, hidden or with nothing to draw - whatever else it holds: the icon is all there is of it in the
+  view to see and take it by. One a mesh shows has none, a group too - icons over what is drawn only hide the scene -
+  so a group of models is picked in the hierarchy, not in the view; one hidden in the hierarchy has none either. The
+  select tool drags a spawn point by its icon as it drags a marked entity (`EntityIcons.IsMarked`).
 - An imported model's root, and each node with parts under it, no longer gets a box collider merged from its parts':
   a collider is the physics' and picking's, not a size. The size of an entity - `GetDiameter`, `GetCenterAbsolute`,
   `GetLocalCenter`, `GetRadius`, a thumbnail's framing - is measured from the meshes of it and everything under it
@@ -487,9 +497,10 @@ All packages share one version.
 - The ground grid is drawn first in the frame, under the whole scene, so see-through surfaces show it behind them
   instead of being painted over. `ToolsProcessor.DrawUnderlay` draws before the scene, through a
   `ToolsUnderlayProcessor` the `ToolsOverlayProcessor` attaches beside itself - nothing to wire up - and that draws
-  nothing while the overlay is off. With its floor, the grid writes its depth, pushed behind the ground by the slope it
-  is seen at too, capped - so a face lying on the ground stays in front at a grazing look - and still hides what is
-  below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
+  nothing while the overlay is off. With its floor, the grid writes its depth from its shader, per pixel - not
+  interpolated across its square, hundreds of cells wide, which drifted and fought a face lying on the ground far off -
+  pushed back by half its change across the pixel and a few steps of the buffer, so such a face stays in front in every
+  sample at any angle, and still hides what is below it. `DrawFlatBehindScene` is now `DrawFlatUnderScene`.
 - `IGraphicsDevice.DepthBiasClamp`: the limit of a draw's depth bias, kept when the device enabled the depthBiasClamp
   feature (`GraphicsAdapter.SupportsDepthBiasClamp`, `MainGraphicsDevice.IsDepthBiasClampEnabled`).
 - Which faces a surface shows is its material's: `Material.Faces` (`MaterialFaces`: both, the default; front; back), as
@@ -593,6 +604,10 @@ All packages share one version.
 
 ### Fixed
 
+- The ground grid's axes are drawn smoothed, by the grid's shader alone: the lines drawn over them stair-stepped their
+  edges, and are drawn now only where the plane is seen edge on - a perspective's eye in it, a flat view along it. A
+  pixel's share of the plane is its gradient's length on screen, so a line seen at a slant is as wide and as soft as one
+  seen square.
 - PDF text: a big line's box - a title, a large figure - no longer reaches down over a much smaller line set close
   under it: it stops halfway between its baseline and that line's top, so selecting or finding one does not cover the
   other. Lines of like size overlap as before. A small glyph is no longer read into a big one's line by stepping back

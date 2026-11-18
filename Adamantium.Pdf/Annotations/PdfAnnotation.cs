@@ -4,6 +4,7 @@ using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Measurement;
 using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
+using Adamantium.Pdf.Text;
 using Adamantium.Pdf.View3D;
 
 namespace Adamantium.Pdf.Annotations;
@@ -15,6 +16,8 @@ namespace Adamantium.Pdf.Annotations;
 public sealed class PdfAnnotation
 {
     private readonly PdfDocument _document;
+    private PdfStream _implied;
+    private bool _impliedBuilt;
 
     internal PdfAnnotation(PdfDictionary dictionary, PdfObjectId? id, PdfDocument document)
     {
@@ -82,13 +85,67 @@ public sealed class PdfAnnotation
     /// <summary>Its color (<c>C</c>): 1 number gray, 3 RGB, 4 CMYK, none transparent; null when it gives none.</summary>
     public IReadOnlyList<double> Color => PdfValues.Numbers(Dictionary[PdfAnnotationKeys.Color], _document);
 
-    /// <summary>What a viewer draws for it when the file gives it no appearance (no <c>AP</c>) and its entries say how
-    /// it looks: a link's border round its rectangle, or round each of its quadrilaterals, in its color (black when it
-    /// names none). Null otherwise - for a link with a border of no width or no color, and for any other kind.</summary>
-    public PdfStream ImpliedAppearance => Subtype == PdfAnnotationTypes.Link && Dictionary[PdfAnnotationKeys.Appearance] == null
-        ? PdfImpliedAppearance.LinkBorder(Rect, Border, Color,
-            PdfValues.Numbers(Dictionary[PdfAnnotationKeys.QuadPoints], _document))
-        : null;
+    /// <summary>Its opacity (<c>CA</c>), 0..1; 1 when it gives none.</summary>
+    public double Opacity => Math.Clamp(PdfValues.Number(Dictionary[PdfAnnotationKeys.Opacity], _document, 1), 0, 1);
+
+    /// <summary>The opacity of what it fills (<c>ca</c>, PDF 2.0), 0..1; <see cref="Opacity"/> when it gives none.</summary>
+    public double FillOpacity =>
+        Math.Clamp(PdfValues.Number(Dictionary[PdfKeys.FillOpacity], _document, Opacity), 0, 1);
+
+    /// <summary>The areas it covers (<c>QuadPoints</c>), read in the order Acrobat writes them - top left, top right,
+    /// bottom left, bottom right - rather than the counterclockwise one ISO 32000 states. Empty when it gives none.</summary>
+    public IReadOnlyList<PdfQuad> QuadPoints
+    {
+        get
+        {
+            var quads = new List<PdfQuad>();
+            if (PdfValues.Numbers(Dictionary[PdfAnnotationKeys.QuadPoints], _document) is { } points)
+            {
+                for (var start = 0; start + 8 <= points.Length; start += 8)
+                {
+                    quads.Add(new PdfQuad(new PdfPoint(points[start + 4], points[start + 5]),
+                        new PdfPoint(points[start + 6], points[start + 7]), new PdfPoint(points[start + 2], points[start + 3]),
+                        new PdfPoint(points[start], points[start + 1])));
+                }
+            }
+
+            return quads;
+        }
+    }
+
+    /// <summary>What a viewer draws for it without an appearance of its own (<c>AP</c>): a link's border, a text markup's
+    /// highlight, underline, strikeout or squiggle; null for nothing to draw and for any other kind. Built once.</summary>
+    public PdfStream ImpliedAppearance
+    {
+        get
+        {
+            if (!_impliedBuilt)
+            {
+                _implied = BuildImpliedAppearance();
+                _impliedBuilt = true;
+            }
+
+            return _implied;
+        }
+    }
+
+    private PdfStream BuildImpliedAppearance()
+    {
+        if (Dictionary[PdfAnnotationKeys.Appearance] != null)
+        {
+            return null;
+        }
+
+        return Subtype switch
+        {
+            PdfAnnotationTypes.Link => PdfImpliedAppearance.LinkBorder(Rect, Border, Color,
+                PdfValues.Numbers(Dictionary[PdfAnnotationKeys.QuadPoints], _document)),
+            PdfAnnotationTypes.Highlight or PdfAnnotationTypes.Underline or PdfAnnotationTypes.StrikeOut
+                or PdfAnnotationTypes.Squiggly => PdfImpliedAppearance.TextMarkup(Subtype, Rect, Color, Opacity,
+                    FillOpacity, QuadPoints),
+            _ => null,
+        };
+    }
 
     /// <summary>Its normal appearance (<c>AP</c> <c>N</c>) - the one of its state (<c>AS</c>) when it has several;
     /// null when it has none.</summary>

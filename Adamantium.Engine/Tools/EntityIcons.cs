@@ -14,8 +14,8 @@ using Adamantium.Multiverse;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Icons for what a scene has but does not draw - lights, cameras, groups, and empty entities: a <see cref="Marker"/>
-/// with no other component and nothing under it - facing every
+/// Icons for what a scene has but does not draw - lights, cameras, and a <see cref="Marker"/> (a group among them) or
+/// <see cref="SpawnPoint"/> with no mesh on it or under it, whatever else it holds - facing every
 /// camera at a steady size on screen. A directional light's icon also has rays running where it shines, a camera's the
 /// shape of its view - a pyramid or, flat, a box - running where it looks, with a mark on top. A click on an icon selects
 /// its entity. A camera has no icon in its own view, and an output's own camera (<see cref="UniverseOutput.OwnCamera"/>)
@@ -39,6 +39,10 @@ public class EntityIcons : ToolsProcessor
     private readonly Entity emptyIcon = new EmptyIconTemplate().BuildEntity(null, "Entity");
     private readonly Entity groupIcon = new GroupIconTemplate().BuildEntity(null, "Group");
     private readonly Dictionary<Entity, Entity> iconOf = new();
+    // Whether an entity is seen by a mesh, worked out once a frame; the walk's lists are kept so it allocates nothing.
+    private readonly Dictionary<Entity, bool> lookThisFrame = new();
+    private readonly Stack<Entity> looking = new();
+    private readonly List<Entity> walked = new();
     private readonly Dictionary<Entity, Entity> targetOf = new();
     private readonly Dictionary<Entity, Entity> raysOf = new();
     private readonly Dictionary<Entity, Entity> _lookOf = new();
@@ -56,6 +60,7 @@ public class EntityIcons : ToolsProcessor
     {
         // Each scene shown has icons of its own, which only the outputs showing it draw.
         seen.Clear();
+        lookThisFrame.Clear();
         foreach (var scene in Tools.Observatory.ShownScenes)
         {
             collectingInto = RootOf(scene);
@@ -67,6 +72,9 @@ public class EntityIcons : ToolsProcessor
 
             if ((Shows & (EntityIconKinds.Entities | EntityIconKinds.Groups)) != 0)
                 CollectOwnersOf<Marker>(scene);
+
+            if (Shows.HasFlag(EntityIconKinds.Entities))
+                CollectOwnersOf<SpawnPoint>(scene);
         }
 
         collectingInto = null;
@@ -233,40 +241,115 @@ public class EntityIcons : ToolsProcessor
             return Shows.HasFlag(EntityIconKinds.Cameras) ? cameraIcon : null;
         }
 
-        if (entity.GetComponent<Marker>() is { IsEnabled: true })
+        // Hidden in the hierarchy, it is hidden in the view: no icon pops up in place of what it drew.
+        if (!IsMarked(entity) || !entity.Visible)
         {
-            var group = entity.IconKey == EntityIconKeys.Group;
-            var kind = group ? EntityIconKinds.Groups : EntityIconKinds.Entities;
-            if (!Shows.HasFlag(kind) || (!group && !IsEmpty(entity)))
-            {
-                return null;
-            }
-
-            return group ? groupIcon : emptyIcon;
+            return null;
         }
 
-        return null;
+        var group = entity.GetComponent<Marker>() != null && entity.IconKey == EntityIconKeys.Group;
+        var kind = group ? EntityIconKinds.Groups : EntityIconKinds.Entities;
+        // A group too: what its meshes show is read in the scene, an icon over them only hides it.
+        if (!Shows.HasFlag(kind) || HasLook(entity))
+        {
+            return null;
+        }
+
+        return group ? groupIcon : emptyIcon;
     }
 
-    // An empty entity holds nothing - no component but its place and its marker, nothing under it. One that holds
-    // anything, a game's component or a body hung under it, is not empty and shows no empty entity's icon on top of it.
-    private static bool IsEmpty(Entity entity)
+    // Whether a mesh the view draws is on the entity or under it; each entity is looked at once a frame.
+    private bool HasLook(Entity entity)
     {
-        if (entity.Dependencies.Count > 0)
+        if (lookThisFrame.TryGetValue(entity, out var known))
         {
-            return false;
+            return known;
         }
 
-        foreach (var component in entity.Components.AsSpan())
+        if (IsShown(entity) && DrawsOwnMesh(entity))
         {
-            if (component is not (Transform or Marker))
+            lookThisFrame[entity] = true;
+            return true;
+        }
+
+        // Down the tree, then back up it: an entity is answered after everything under it. The first mesh seen on the way
+        // down answers for the whole tree at once - a group of thousands is not walked to its end.
+        looking.Push(entity);
+        while (looking.TryPop(out var next))
+        {
+            if (lookThisFrame.TryGetValue(next, out var answered))
             {
-                return false;
+                if (answered)
+                {
+                    return SeenAtOnce(entity);
+                }
+
+                continue;
+            }
+
+            walked.Add(next);
+            if (!IsShown(next))
+            {
+                continue;
+            }
+
+            if (DrawsOwnMesh(next))
+            {
+                return SeenAtOnce(entity);
+            }
+
+            foreach (var under in next.Dependencies.AsSpan())
+            {
+                if (under != null)
+                {
+                    looking.Push(under);
+                }
             }
         }
 
+        for (var i = walked.Count - 1; i >= 0; i--)
+        {
+            var next = walked[i];
+            var seen = IsShown(next) && (DrawsOwnMesh(next) || AnySeenUnder(next));
+            lookThisFrame[next] = seen;
+        }
+
+        walked.Clear();
+        return lookThisFrame[entity];
+    }
+
+    // A mesh found under the entity: it is seen; the entities passed on the way are answered when asked.
+    private bool SeenAtOnce(Entity entity)
+    {
+        looking.Clear();
+        walked.Clear();
+        lookThisFrame[entity] = true;
         return true;
     }
+
+    // What the renderer and picking leave out - an entity turned off or hidden, and all under it - shows nothing.
+    private static bool IsShown(Entity entity) => entity.IsEnabled && entity.Visible;
+
+    private static bool DrawsOwnMesh(Entity entity) =>
+        entity.GetComponent<MeshData>() is { IsEnabled: true, Mesh.HasPoints: true };
+
+    private bool AnySeenUnder(Entity entity)
+    {
+        foreach (var under in entity.Dependencies.AsSpan())
+        {
+            if (under != null && lookThisFrame.TryGetValue(under, out var seen) && seen)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the entity is one shown by an icon of its own and taken by it: a marked entity, or a spawn point
+    /// with no marker turned off.</summary>
+    public static bool IsMarked(Entity entity) =>
+        entity?.GetComponent<Marker>() is { } marker ? marker.IsEnabled : entity?.GetComponent<SpawnPoint>() != null;
 
     private bool IsOwnCamera(Camera camera)
     {
