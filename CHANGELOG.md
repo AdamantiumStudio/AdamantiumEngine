@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `PdfAnnotation.Line`, `Vertices` and `Intent`: a line annotation's two ends (`L`), a polygon's or polyline's corners
+  (`Vertices`) and what it is meant as (`IT`, such as `LineDimension`) - what a measurement is read back by.
+
 - A scene keeps its entries' physics: `ScenePlacement.Body` (`SceneBody` - a `RigidBody`'s settings, each written
   only when it is not a new body's own) on any entry but a light or a camera, and a shape's `ScenePlacement.Collider`
   (`SceneCollider` - a kind by name, fitted to the mesh, `None` for none) in place of its template's; with none written
