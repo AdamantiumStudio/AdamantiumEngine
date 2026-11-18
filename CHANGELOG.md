@@ -465,6 +465,10 @@ All packages share one version.
 
 ### Changed
 
+- `EntityIcons` gives the empty entity's icon to a marked entity or a spawn point that no drawn mesh shows - none on it
+  or under it, or only ones turned off, hidden or with nothing to draw - whatever else it holds: the icon is all there
+  is of it in the view to see and take it by. One a mesh shows has none. Groups keep theirs. The select tool drags a
+  spawn point by its icon as it drags a marked entity (`EntityIcons.IsMarked`).
 - An imported model's root, and each node with parts under it, no longer gets a box collider merged from its parts':
   a collider is the physics' and picking's, not a size. The size of an entity - `GetDiameter`, `GetCenterAbsolute`,
   `GetLocalCenter`, `GetRadius`, a thumbnail's framing - is measured from the meshes of it and everything under it
@@ -582,6 +586,10 @@ All packages share one version.
 
 ### Fixed
 
+- The ground grid's axes are drawn smoothed, by the grid's shader alone: the lines drawn over them stair-stepped their
+  edges, and are drawn now only where the plane is seen edge on - a perspective's eye in it, a flat view along it. A
+  pixel's share of the plane is its gradient's length on screen, so a line seen at a slant is as wide and as soft as one
+  seen square.
 - A standalone `Universe` updates with the length of the frame that just passed, not the one before it, measured
   finer than a millisecond with the same clock as a hosted one: the first frame counts none, and a stall at most a
   quarter second; a fixed-step loop says a frame finished only when one ran. `TotalTime` counts the frame it is

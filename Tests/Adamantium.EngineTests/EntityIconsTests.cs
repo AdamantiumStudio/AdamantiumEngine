@@ -96,8 +96,9 @@ public class EntityIconsTests
         Assert.That(icons.IconOf(kinds[hidden]), Is.Not.Null);
     }
 
+    // An icon is all there is of an entity that shows nothing: whatever it holds, so long as no mesh is on it or under it.
     [Test]
-    public void AMarkerHoldingAnything_IsNotEmpty_AndHasNoIcon_AGroupKeepsItsOwn()
+    public void AnEntityWithNoMesh_OnItOrUnderIt_HasItsIcon_WhateverItHolds_AGroupKeepsItsOwn()
     {
         var universe = new TestUniverse();
         var output = new TestOutput();
@@ -109,10 +110,32 @@ public class EntityIconsTests
         withComponent.AddComponent(new Material());
         var withChild = Marked(new Entity(null, "Pivot"));
         _ = new Entity(withChild, "Body");
+        var withMesh = Marked(new Entity(null, "Shown"));
+        withMesh.AddComponent(Shape());
+        var withMeshUnder = Marked(new Entity(null, "Holder"));
+        new Entity(new Entity(withMeshUnder, "Frame"), "Wheel").AddComponent(Shape());
+        var withHiddenMesh = Marked(new Entity(null, "Hidden"));
+        var hidden = Shape();
+        hidden.IsEnabled = false;
+        withHiddenMesh.AddComponent(hidden);
+        var withMeshTurnedOff = Marked(new Entity(null, "Off"));
+        var off = new Entity(withMeshTurnedOff, "Wheel") { IsEnabled = false };
+        off.AddComponent(Shape());
+        var withNothingToDraw = Marked(new Entity(null, "Unloaded"));
+        withNothingToDraw.AddComponent(new MeshData { Mesh = new Mesh() });
+        var start = new Entity(null, "Start");
+        start.AddComponent(new SpawnPoint());
+        start.AddComponent(new Material());
+        var markedStart = Marked(new Entity(null, "Marked start"));
+        markedStart.AddComponent(new SpawnPoint());
         var group = Marked(new Entity(null, "Group") { IconKey = EntityIconKeys.Group });
         _ = new Entity(group, "Member");
         universe.EntityWorld.EntityManager.AddEntity(own);
-        foreach (var entity in new[] { empty, withComponent, withChild, group })
+        foreach (var entity in new[]
+                 {
+                     empty, withComponent, withChild, withMesh, withMeshUnder, withHiddenMesh, withMeshTurnedOff,
+                     withNothingToDraw, start, markedStart, group
+                 })
         {
             universe.EntityWorld.EntityManager.AddEntity(entity);
         }
@@ -131,9 +154,66 @@ public class EntityIconsTests
         Assert.Multiple(() =>
         {
             Assert.That(icons.IconOf(empty), Is.Not.Null, "nothing but its place and its marker");
-            Assert.That(icons.IconOf(withComponent), Is.Null, "a component of its own");
-            Assert.That(icons.IconOf(withChild), Is.Null, "an entity under it");
+            Assert.That(icons.IconOf(withComponent), Is.Not.Null, "a component of its own, nothing to see");
+            Assert.That(icons.IconOf(withChild), Is.Not.Null, "an entity under it with nothing to see");
+            Assert.That(icons.IconOf(withMesh), Is.Null, "seen by its own mesh");
+            Assert.That(icons.IconOf(withMeshUnder), Is.Null, "seen by a mesh deeper down");
+            Assert.That(icons.IconOf(withHiddenMesh), Is.Not.Null, "a mesh turned off shows nothing");
+            Assert.That(icons.IconOf(withMeshTurnedOff), Is.Not.Null, "a mesh on an entity turned off shows nothing");
+            Assert.That(icons.IconOf(withNothingToDraw), Is.Not.Null, "a mesh with no points draws nothing");
+            Assert.That(icons.IconOf(start), Is.Not.Null, "a spawn point, game components on it");
+            Assert.That(icons.IconOf(markedStart), Is.Not.Null, "a marked spawn point: one icon");
             Assert.That(icons.IconOf(group), Is.Not.Null, "a group is shown as a group, whatever it holds");
+        });
+    }
+
+    // Asked again each frame: a mesh hung under it takes the icon away, a hidden one gives it back; a marker turned off
+    // hides a spawn point's icon too, and the select tool drags by the icon what has one.
+    [Test]
+    public void AnIcon_FollowsTheMeshesFrameByFrame_AndAMarkerTurnedOff_HidesASpawnPoints()
+    {
+        var universe = new TestUniverse();
+        var output = new TestOutput();
+        universe.Add(output);
+        universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
+        var own = CameraEntity("Own");
+        var holder = Marked(new Entity(null, "Holder"));
+        var start = new Entity(null, "Start");
+        start.AddComponent(new SpawnPoint());
+        var offStart = new Entity(null, "Off start");
+        offStart.AddComponent(new SpawnPoint());
+        offStart.AddComponent(new Marker { IsEnabled = false });
+        universe.EntityWorld.EntityManager.AddEntity(own);
+        foreach (var entity in new[] { holder, start, offStart })
+        {
+            universe.EntityWorld.EntityManager.AddEntity(entity);
+        }
+
+        output.OwnCamera = own.GetComponent<Camera>();
+        output.Camera = output.OwnCamera;
+        universe.EntityWorld.ForceUpdate();
+        universe.Settle();
+        var tools = new ToolsService(universe.EntityWorld);
+        tools.Initialize();
+        var icons = new EntityIcons();
+        tools.AttachProcessor(icons);
+
+        tools.Update(new AppTime());
+        var bare = icons.IconOf(holder);
+        var wheel = new Entity(holder, "Wheel");
+        wheel.AddComponent(Shape());
+        tools.Update(new AppTime());
+        var shown = icons.IconOf(holder);
+        wheel.Visible = false;
+        tools.Update(new AppTime());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(bare, Is.Not.Null, "nothing under it yet");
+            Assert.That(shown, Is.Null, "a mesh hung under it is seen");
+            Assert.That(icons.IconOf(holder), Is.Not.Null, "its mesh hidden, nothing is seen of it");
+            Assert.That(icons.IconOf(offStart), Is.Null, "its marker turned off");
+            Assert.That((EntityIcons.IsMarked(start), EntityIcons.IsMarked(offStart)), Is.EqualTo((true, false)));
         });
     }
 
@@ -208,6 +288,14 @@ public class EntityIconsTests
     {
         entity.AddComponent(new Marker());
         return entity;
+    }
+
+    // A mesh with something to draw: a triangle.
+    private static MeshData Shape()
+    {
+        var mesh = new Mesh();
+        mesh.SetPoints(new List<Vector3<double>> { Vector3<double>.Zero, Vector3<double>.UnitX, Vector3<double>.UnitY });
+        return new MeshData { Mesh = mesh };
     }
 
     private static Entity CameraEntity(string name) =>

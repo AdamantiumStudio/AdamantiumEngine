@@ -15,9 +15,9 @@ namespace Adamantium.Engine.Tools;
 /// The ground of the editor's scene: the plane y = <see cref="PlaneY"/> ruled into cells, as editors show it. Cells of
 /// 1, 10, 100... times <see cref="CellSize"/> are shown by how big they are on screen, the smaller ones fading as the eye
 /// moves away; the X axis runs red along it and the Z axis blue. The grid fades out towards its edge. It is drawn first
-/// in the frame, so what stands or lies on it - see-through things too - covers it. The axes are drawn as lines too,
-/// seen from any side, and so are the grid's lines while a perspective's eye is in the plane, where its pixels have
-/// nothing to rule. Under the lines lies a floor of <see cref="FloorColor"/>, which
+/// in the frame, so what stands or lies on it - see-through things too - covers it. Where the plane is seen edge on its
+/// pixels have nothing to rule, and the axes are drawn as lines instead - a perspective's eye in it, a flat view along
+/// it - and so are the grid's lines in a perspective. Under the lines lies a floor of <see cref="FloorColor"/>, which
 /// hides what is below the ground. The grid is shown or not (<see cref="ShowsGrid"/>), and with it the floor
 /// (<see cref="ShowsFloor"/>): the floor is only ever the grid's, never without its lines.
 /// </summary>
@@ -114,18 +114,20 @@ public class GroundGrid : ToolsProcessor
         var center = new Vector3<double>(eye.X + offX, eye.Y, eye.Z + offZ);
         var below = (float)((float.IsFinite(PlaneY) ? PlaneY : 0) - eye.Y);
         var reach = layout.Reach;
-        Place(axisX, camera, Math.Abs(center.Z) < reach,
-            Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateTranslation<float>(offX, below, (float)-eye.Z), AxisXColor, 1);
-        Place(axisZ, camera, Math.Abs(center.X) < reach,
-            Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateTranslation<float>((float)-eye.X, below, offZ), AxisZColor, 1);
-
         var cell = layout.Cell;
         while (cell * EdgeLines < reach)
         {
             cell *= 10;
         }
 
-        var edgeOn = EdgeOn(camera, below, cell);
+        // Axes as lines only edge on; elsewhere the shader draws them smoothed. Cell lines as lines in a perspective only.
+        var axesOn = EdgeOn(camera, below, cell);
+        var edgeOn = camera.ProjectionMatrix.M44 > 0.5f ? 0 : axesOn;
+        Place(axisX, camera, Math.Abs(center.Z) < reach && axesOn > 0.01f,
+            Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateTranslation<float>(offX, below, (float)-eye.Z), AxisXColor, axesOn);
+        Place(axisZ, camera, Math.Abs(center.X) < reach && axesOn > 0.01f,
+            Matrix4x4.CreateScale<float>(reach) * Matrix4x4.CreateTranslation<float>((float)-eye.X, below, offZ), AxisZColor, axesOn);
+
         var phaseX = (float)Modulo(center.X, cell);
         var phaseZ = (float)Modulo(center.Z, cell);
         Place(lines, camera, edgeOn > 0.01f,
@@ -197,14 +199,10 @@ public class GroundGrid : ToolsProcessor
         return Math.Min(Math.Max(reach, Cell * LeastReachInCells), Math.Min(camera.ZFar * 0.9f, camera.OrthoFar * 0.6f));
     }
 
+    // How edge on the plane is seen: 1 while a cell ahead covers about a pixel on screen, 0 by five.
     private static float EdgeOn(CameraBase camera, float below, float cell)
     {
         var forward = camera.Forward.As<float>();
-        if (camera.ProjectionMatrix.M44 > 0.5f)
-        {
-            return 0;
-        }
-
         var across = new Vector3F(forward.X, 0, forward.Z);
         if (across.Length() < 0.1f)
         {

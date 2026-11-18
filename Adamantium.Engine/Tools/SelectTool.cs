@@ -50,10 +50,7 @@ public class SelectTool : PointerTool
         border = Part("Border", borderMesh);
     }
 
-    protected override Handles DragsClicked(Entity entity)
-    {
-        return entity?.GetComponent<Marker>() is { IsEnabled: true } ? mover : null;
-    }
+    protected override Handles DragsClicked(Entity entity) => EntityIcons.IsMarked(entity) ? mover : null;
 
     /// <summary>Whether a press on an entity waits for the release to click it, and draws a frame instead once the
     /// pointer moves away: for a tool whose click cannot be taken back.</summary>
