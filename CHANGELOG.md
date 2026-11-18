@@ -465,10 +465,11 @@ All packages share one version.
 
 ### Changed
 
-- `EntityIcons` gives the empty entity's icon to a marked entity or a spawn point that no drawn mesh shows - none on it
-  or under it, or only ones turned off, hidden or with nothing to draw - whatever else it holds: the icon is all there
-  is of it in the view to see and take it by. One a mesh shows has none. Groups keep theirs. The select tool drags a
-  spawn point by its icon as it drags a marked entity (`EntityIcons.IsMarked`).
+- `EntityIcons` gives its icon to a marked entity or a spawn point that no drawn mesh shows - none on it or under it, or
+  only ones turned off, hidden or with nothing to draw - whatever else it holds: the icon is all there is of it in the
+  view to see and take it by. One a mesh shows has none, a group too - icons over what is drawn only hide the scene -
+  so a group of models is picked in the hierarchy, not in the view; one hidden in the hierarchy has none either. The
+  select tool drags a spawn point by its icon as it drags a marked entity (`EntityIcons.IsMarked`).
 - An imported model's root, and each node with parts under it, no longer gets a box collider merged from its parts':
   a collider is the physics' and picking's, not a size. The size of an entity - `GetDiameter`, `GetCenterAbsolute`,
   `GetLocalCenter`, `GetRadius`, a thumbnail's framing - is measured from the meshes of it and everything under it

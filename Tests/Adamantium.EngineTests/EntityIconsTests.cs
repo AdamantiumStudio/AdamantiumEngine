@@ -98,7 +98,7 @@ public class EntityIconsTests
 
     // An icon is all there is of an entity that shows nothing: whatever it holds, so long as no mesh is on it or under it.
     [Test]
-    public void AnEntityWithNoMesh_OnItOrUnderIt_HasItsIcon_WhateverItHolds_AGroupKeepsItsOwn()
+    public void AnEntityWithNoMesh_OnItOrUnderIt_HasItsIcon_WhateverItHolds_AGroupToo()
     {
         var universe = new TestUniverse();
         var output = new TestOutput();
@@ -130,11 +130,17 @@ public class EntityIconsTests
         markedStart.AddComponent(new SpawnPoint());
         var group = Marked(new Entity(null, "Group") { IconKey = EntityIconKeys.Group });
         _ = new Entity(group, "Member");
+        var groupOfModels = Marked(new Entity(null, "Fleet") { IconKey = EntityIconKeys.Group });
+        new Entity(groupOfModels, "Ship").AddComponent(Shape());
+        var groupOfHidden = Marked(new Entity(null, "Docked") { IconKey = EntityIconKeys.Group });
+        new Entity(groupOfHidden, "Ship") { Visible = false }.AddComponent(Shape());
+        var hiddenGroup = Marked(new Entity(null, "Hidden fleet") { IconKey = EntityIconKeys.Group, Visible = false });
+        new Entity(hiddenGroup, "Ship").AddComponent(Shape());
         universe.EntityWorld.EntityManager.AddEntity(own);
         foreach (var entity in new[]
                  {
                      empty, withComponent, withChild, withMesh, withMeshUnder, withHiddenMesh, withMeshTurnedOff,
-                     withNothingToDraw, start, markedStart, group
+                     withNothingToDraw, start, markedStart, group, groupOfModels, groupOfHidden, hiddenGroup
                  })
         {
             universe.EntityWorld.EntityManager.AddEntity(entity);
@@ -163,7 +169,10 @@ public class EntityIconsTests
             Assert.That(icons.IconOf(withNothingToDraw), Is.Not.Null, "a mesh with no points draws nothing");
             Assert.That(icons.IconOf(start), Is.Not.Null, "a spawn point, game components on it");
             Assert.That(icons.IconOf(markedStart), Is.Not.Null, "a marked spawn point: one icon");
-            Assert.That(icons.IconOf(group), Is.Not.Null, "a group is shown as a group, whatever it holds");
+            Assert.That(icons.IconOf(group)?.Name, Is.EqualTo("Group"), "a group of nothing to see, by a group's icon");
+            Assert.That(icons.IconOf(groupOfModels), Is.Null, "a group its meshes show");
+            Assert.That(icons.IconOf(groupOfHidden)?.Name, Is.EqualTo("Group"), "a group whose meshes are hidden");
+            Assert.That(icons.IconOf(hiddenGroup), Is.Null, "a group hidden itself pops no icon up");
         });
     }
 

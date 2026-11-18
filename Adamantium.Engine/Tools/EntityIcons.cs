@@ -14,7 +14,7 @@ using Adamantium.Multiverse;
 namespace Adamantium.Engine.Tools;
 
 /// <summary>
-/// Icons for what a scene has but does not draw - lights, cameras, groups, and a <see cref="Marker"/> or
+/// Icons for what a scene has but does not draw - lights, cameras, and a <see cref="Marker"/> (a group among them) or
 /// <see cref="SpawnPoint"/> with no mesh on it or under it, whatever else it holds - facing every
 /// camera at a steady size on screen. A directional light's icon also has rays running where it shines, a camera's the
 /// shape of its view - a pyramid or, flat, a box - running where it looks, with a mark on top. A click on an icon selects
@@ -241,14 +241,16 @@ public class EntityIcons : ToolsProcessor
             return Shows.HasFlag(EntityIconKinds.Cameras) ? cameraIcon : null;
         }
 
-        if (!IsMarked(entity))
+        // Hidden in the hierarchy, it is hidden in the view: no icon pops up in place of what it drew.
+        if (!IsMarked(entity) || !entity.Visible)
         {
             return null;
         }
 
         var group = entity.GetComponent<Marker>() != null && entity.IconKey == EntityIconKeys.Group;
         var kind = group ? EntityIconKinds.Groups : EntityIconKinds.Entities;
-        if (!Shows.HasFlag(kind) || (!group && HasLook(entity)))
+        // A group too: what its meshes show is read in the scene, an icon over them only hides it.
+        if (!Shows.HasFlag(kind) || HasLook(entity))
         {
             return null;
         }
@@ -270,12 +272,18 @@ public class EntityIcons : ToolsProcessor
             return true;
         }
 
-        // Down the tree, then back up it: an entity is answered after everything under it.
+        // Down the tree, then back up it: an entity is answered after everything under it. The first mesh seen on the way
+        // down answers for the whole tree at once - a group of thousands is not walked to its end.
         looking.Push(entity);
         while (looking.TryPop(out var next))
         {
-            if (lookThisFrame.ContainsKey(next))
+            if (lookThisFrame.TryGetValue(next, out var answered))
             {
+                if (answered)
+                {
+                    return SeenAtOnce(entity);
+                }
+
                 continue;
             }
 
@@ -283,6 +291,11 @@ public class EntityIcons : ToolsProcessor
             if (!IsShown(next))
             {
                 continue;
+            }
+
+            if (DrawsOwnMesh(next))
+            {
+                return SeenAtOnce(entity);
             }
 
             foreach (var under in next.Dependencies.AsSpan())
@@ -303,6 +316,15 @@ public class EntityIcons : ToolsProcessor
 
         walked.Clear();
         return lookThisFrame[entity];
+    }
+
+    // A mesh found under the entity: it is seen; the entities passed on the way are answered when asked.
+    private bool SeenAtOnce(Entity entity)
+    {
+        looking.Clear();
+        walked.Clear();
+        lookThisFrame[entity] = true;
+        return true;
     }
 
     // What the renderer and picking leave out - an entity turned off or hidden, and all under it - shows nothing.

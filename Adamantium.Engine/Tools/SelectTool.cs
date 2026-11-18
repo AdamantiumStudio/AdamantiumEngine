@@ -14,8 +14,8 @@ namespace Adamantium.Engine.Tools;
 /// <summary>
 /// Selects what a click lands on, as <see cref="ToolsService.ChosenAt"/> chooses it - a model whole first, its parts once
 /// something of it is selected, an icon's entity as it is - with Shift held adding it to the selection, with Control
-/// taking it out; an entity with a <see cref="Marker"/> - its icon or, if it has one, its form - is also dragged in the
-/// plane facing the eye. A drag from nothing draws a frame across the screen that selects, CAD style, what lies wholly
+/// taking it out; a marked entity or a spawn point clicked (<see cref="EntityIcons.IsMarked"/>) - by its icon or its own
+/// form - is also dragged in the plane facing the eye. A drag from nothing draws a frame across the screen that selects, CAD style, what lies wholly
 /// inside it when drawn to the right and whatever it touches when drawn to the left (<see cref="ScreenFrame"/>), each as
 /// a click on it would choose it (<see cref="ToolsService.ChooseIn"/>); a click on nothing selects nothing.
 /// </summary>
