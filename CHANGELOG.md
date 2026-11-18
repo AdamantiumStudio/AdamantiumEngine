@@ -54,6 +54,10 @@ All packages share one version.
   again; gravity - and each frame stands the entities between the last two steps, parents before children. Down is
   +Y, so the service's gravity is too; that of its `Settings` is not used. What it moves is recorded as the scene's
   changes, so the scene kept before the game comes back.
+- A built model keeps each mesh's convex hull (the mesh row's version 3): found at every import, and taken as it is
+  when the model loads, so a hull collider no longer hulls every point of its mesh then - 94 ms for 100,000 points.
+  Models built before still load, their hulls found from their points. `ConvexHull.FromBuilt` takes a solid hull's
+  corners and triangles as a file keeps them.
 - A model's edits made in the editor are kept in its asset file, in a section of their own (`AssetFileSection.Edits`,
   `AssetFile.Edits`, written by `ModelEditsSerializer`), and a new import of the model carries them over as they are;
   `ContentBuilder.WriteEdits` puts them in. `ModelEdits` holds them by part, by `ModelPartPath` - the names from the

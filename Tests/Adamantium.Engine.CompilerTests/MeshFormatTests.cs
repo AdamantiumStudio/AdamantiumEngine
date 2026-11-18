@@ -142,6 +142,73 @@ namespace Adamantium.Engine.CompilerTests
             Assert.That(FullText(error), Does.Contain("99"), "and say which version it turned out to be");
         }
 
+        // A built model keeps each mesh's hull, so a load hulls nothing: the hull comes back as it was.
+        [Test]
+        public void TheHullOfTheMeshComesBackWithIt()
+        {
+            var corners = new[]
+            {
+                new Vector3<double>(-1, -1, -1), new Vector3<double>(1, -1, -1), new Vector3<double>(-1, 1, -1),
+                new Vector3<double>(1, 1, -1), new Vector3<double>(-1, -1, 1), new Vector3<double>(1, -1, 1),
+                new Vector3<double>(-1, 1, 1), new Vector3<double>(1, 1, 1)
+            };
+            var inside = Enumerable.Range(0, 200).Select(i => new Vector3<double>(Math.Sin(i) * 0.9, Math.Cos(i) * 0.9, i % 7 * 0.1));
+            var mesh = Mesh([.. corners, .. inside]);
+
+            var loaded = RoundTrip(mesh);
+            var copy = loaded.Clone();
+
+            // Its points moved behind its back, the hull it gives is still the file's: it was not found from them.
+            loaded.Points[0] = new Vector3<double>(-5, -5, -5);
+            var hull = loaded.GetConvexHull();
+            Assert.That(hull.Vertices, Has.Count.EqualTo(8));
+            foreach (var corner in corners)
+            {
+                Assert.That(hull.Vertices, Does.Contain(corner.As<float>()));
+            }
+
+            Assert.That(copy.GetConvexHull(), Is.SameAs(hull), "a copy shares it");
+
+            loaded.SetPoints([.. loaded.Points]);
+            Assert.That(loaded.GetConvexHull().Vertices, Does.Contain(new Vector3F(-5, -5, -5)),
+                "points set anew are hulled anew");
+        }
+
+        // A mesh row an engine wrote before the hull was kept - version 2, its last field missing - still reads, its hull
+        // then found from its points.
+        [Test]
+        public void AMeshOfTheVersionWithoutItsHull_StillReads()
+        {
+            var options = MessagePack.MessagePackSerializerOptions.Standard.WithResolver(
+                MessagePack.Resolvers.ContractlessStandardResolver.Instance);
+            var points = new[] { new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0), new Vector3<double>(0, 1, 0), new Vector3<double>(0, 0, 1) };
+            var current = new System.Buffers.ArrayBufferWriter<byte>();
+            var writer = new MessagePack.MessagePackWriter(current);
+            new MeshFormatter().Serialize(ref writer, Mesh(points), options);
+            writer.Flush();
+
+            // The same row, its version 2 and the hull - its corners, then its triangles' tag and blob - left off.
+            const int hullFields = 3;
+            var older = new System.Buffers.ArrayBufferWriter<byte>();
+            var olderWriter = new MessagePack.MessagePackWriter(older);
+            var reader = new MessagePack.MessagePackReader(current.WrittenMemory);
+            var fields = reader.ReadArrayHeader();
+            reader.ReadInt32();
+            olderWriter.WriteArrayHeader(fields - hullFields);
+            olderWriter.Write(2);
+            for (var field = 2; field < fields - hullFields + 1; field++)
+            {
+                olderWriter.WriteRaw(reader.ReadRaw());
+            }
+
+            olderWriter.Flush();
+            var olderReader = new MessagePack.MessagePackReader(older.WrittenMemory);
+            var loaded = new MeshFormatter().Deserialize(ref olderReader, options);
+
+            Assert.That(loaded.Points, Is.EqualTo(points));
+            Assert.That(loaded.GetConvexHull().Vertices, Has.Count.EqualTo(4));
+        }
+
         #region Plumbing
 
         private static Mesh Mesh(Vector3<double>[] points)

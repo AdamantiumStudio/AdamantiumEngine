@@ -61,6 +61,122 @@ public sealed class ConvexHull : IConvexShape<float>
         return new SolidBuilder(points, tolerance).Build(first, second, third, fourth);
     }
 
+    /// <summary>A solid hull built already, as a file keeps it: its <see cref="Vertices"/> and <see cref="Triangles"/>
+    /// taken as they are, no Quickhull run. Null when they cannot be one closed convex surface wound outward.</summary>
+    public static ConvexHull FromBuilt(IReadOnlyList<Vector3F> vertices, IReadOnlyList<int> triangles)
+    {
+        if (vertices == null || triangles == null || vertices.Count < 4 || triangles.Count < 12 || triangles.Count % 3 != 0)
+        {
+            return null;
+        }
+
+        var corners = new Vector3F[vertices.Count];
+        for (int i = 0; i < corners.Length; i++)
+        {
+            corners[i] = vertices[i];
+        }
+
+        var indices = new int[triangles.Count];
+        for (int i = 0; i < indices.Length; i++)
+        {
+            if (triangles[i] < 0 || triangles[i] >= corners.Length)
+            {
+                return null;
+            }
+
+            indices[i] = triangles[i];
+        }
+
+        // One closed surface: each edge met once each way, every corner used, and corners less edges plus triangles
+        // two, as one shell has.
+        var edgeTriangles = new Dictionary<long, int>(indices.Length);
+        var used = new bool[corners.Length];
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            if (indices[i] == indices[i + 1] || indices[i + 1] == indices[i + 2] || indices[i] == indices[i + 2])
+            {
+                return null;
+            }
+
+            for (int side = 0; side < 3; side++)
+            {
+                used[indices[i + side]] = true;
+                if (!edgeTriangles.TryAdd(EdgeKey(indices[i + side], indices[i + (side + 1) % 3]), i))
+                {
+                    return null;
+                }
+            }
+        }
+
+        if (Array.IndexOf(used, false) >= 0 || corners.Length - edgeTriangles.Count / 2 + indices.Length / 3 != 2)
+        {
+            return null;
+        }
+
+        var hull = new ConvexHull(corners, indices, null);
+        if (hull.planes.Length < 4)
+        {
+            return null;
+        }
+
+        // Wound once round: the triangles at a corner of a convex surface turn through less than a full circle, those of
+        // one wrapped round twice through nearly two.
+        var turns = new double[corners.Length];
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            for (int side = 0; side < 3; side++)
+            {
+                var at = corners[indices[i + side]];
+                var toNext = Vector3F.Normalize(corners[indices[i + (side + 1) % 3]] - at);
+                var toLast = Vector3F.Normalize(corners[indices[i + (side + 2) % 3]] - at);
+                turns[indices[i + side]] += Math.Acos(Math.Clamp(Vector3F.Dot(toNext, toLast), -1f, 1f));
+            }
+        }
+
+        foreach (var turn in turns)
+        {
+            if (!(turn < 2 * Math.PI + 1e-3))
+            {
+                return null;
+            }
+        }
+
+        // Convex and turned out: across every edge the other triangle's far corner stands behind this one's plane.
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            var origin = corners[indices[i]];
+            var normal = Vector3F.Cross(corners[indices[i + 1]] - origin, corners[indices[i + 2]] - origin);
+            var length = normal.Length();
+            if (!(length > 0))
+            {
+                return null;
+            }
+
+            normal /= length;
+            for (int side = 0; side < 3; side++)
+            {
+                var from = indices[i + side];
+                var to = indices[i + (side + 1) % 3];
+                if (!edgeTriangles.TryGetValue(EdgeKey(to, from), out var other))
+                {
+                    return null;
+                }
+
+                var far = indices[other] != from && indices[other] != to ? indices[other]
+                    : indices[other + 1] != from && indices[other + 1] != to ? indices[other + 1]
+                    : indices[other + 2];
+                if (Vector3F.Dot(normal, corners[far] - origin) > hull.tolerance)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return hull;
+    }
+
+    private static long EdgeKey(int from, int to) => ((long)from << 32) | (uint)to;
+
     /// <summary>The hull carried through an affine matrix; a mirroring matrix keeps its faces turned outward.</summary>
     public ConvexHull Transform(Matrix4x4F matrix)
     {

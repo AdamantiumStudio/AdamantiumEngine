@@ -11,11 +11,15 @@ namespace Adamantium.Graphics.Core.Models;
 public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
 {
     /// <summary>Bumped whenever the row below changes shape. A file written by an older engine is refused by
-    /// name instead of being read as nonsense.</summary>
-    private const int Version = 2;
+    /// name instead of being read as nonsense - but for version 2, the same row without the hull.</summary>
+    private const int Version = 3;
 
-    // Points, indices and bitangents take two items each: a tag of their form, then the blob.
-    private const int Fields = 25;
+    private const int VersionWithoutHull = 2;
+
+    // Points, indices, bitangents and the hull's triangles take two items each: a tag of their form, then the blob.
+    private const int Fields = 28;
+
+    private const int FieldsWithoutHull = 25;
 
     private const byte BitangentsNone = 0;
     private const byte BitangentsDerived = 1;
@@ -71,6 +75,12 @@ public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
         WriteMorphTargets(ref writer, value.MorphTargets, options);
         MeshBlobs.WriteSingles(ref writer, value.MorphWeights);
         MessagePackSerializer.Serialize(ref writer, value.VariantMaterials, options);
+
+        // The hull of its points, found as the model is built, so a load hulls nothing; a flat one is found anew.
+        var hull = value.HasPoints ? value.GetConvexHull() : null;
+        var solid = hull is { IsFlat: false, Triangles.Count: >= 12 };
+        MeshBlobs.WriteSingles(ref writer, solid ? MeshBlobs.Flatten([.. hull.Vertices]) : null);
+        MeshBlobs.WriteIndices(ref writer, solid ? [.. hull.Triangles] : null);
     }
 
     private static void WriteMorphTargets(ref MessagePackWriter writer, List<MorphTarget> targets,
@@ -119,15 +129,17 @@ public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
 
         var fields = reader.ReadArrayHeader();
         var version = reader.ReadInt32();
-        if (version != Version)
+        if (version != Version && version != VersionWithoutHull)
         {
             throw new MessagePackSerializationException(
-               $"This baked model is version {version}, and this engine reads version {Version}. Re-bake the content.");
+               $"This baked model is version {version}, and this engine reads versions {VersionWithoutHull} and {Version}. Re-bake the content.");
         }
-        if (fields != Fields)
+
+        var expected = version == Version ? Fields : FieldsWithoutHull;
+        if (fields != expected)
         {
             throw new MessagePackSerializationException(
-               $"A baked mesh of version {version} should carry {Fields} fields, this one has {fields}.");
+               $"A baked mesh of version {version} should carry {expected} fields, this one has {fields}.");
         }
 
         var geometry = new MeshGeometry
@@ -174,6 +186,12 @@ public sealed class MeshFormatter : IMessagePackFormatter<Mesh>
         mesh.SetMorphTargets(ReadMorphTargets(ref reader, options));
         mesh.MorphWeights = MeshBlobs.ReadSingles(ref reader) ?? [];
         mesh.VariantMaterials = MessagePackSerializer.Deserialize<Dictionary<int, string>>(ref reader, options) ?? new();
+        if (version == Version)
+        {
+            var corners = MeshBlobs.ToVector3(MeshBlobs.ReadSingles(ref reader));
+            mesh.KeepConvexHull(ConvexHull.FromBuilt(corners, MeshBlobs.ReadIndices(ref reader)));
+        }
+
         return mesh;
     }
 }

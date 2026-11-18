@@ -26,6 +26,73 @@ public class ConvexHullTests
         Assert.That(points.All(hull.Contains), Is.True);
     }
 
+    // A hull a file keeps comes back as it was built, its planes and containment the same; what cannot be a solid hull's
+    // comes back as none.
+    [Test]
+    public void AHullBuiltAlready_IsTakenAsItIs_AndNonsenseIsRefused()
+    {
+        var built = ConvexHull.FromPoints([.. Corners(new BoundingBox<float>(new Vector3F(-1), new Vector3F(1)))]);
+
+        var taken = ConvexHull.FromBuilt(built.Vertices, built.Triangles);
+
+        Assert.That(taken.Vertices, Is.EqualTo(built.Vertices));
+        Assert.That(taken.Triangles, Is.EqualTo(built.Triangles));
+        Assert.That(taken.Planes, Has.Count.EqualTo(built.Planes.Count));
+        Assert.That(taken.Contains(Vector3F.Zero), Is.True);
+        Assert.That(taken.Contains(new Vector3F(1.5f, 0, 0)), Is.False);
+        Assert.That(ConvexHull.FromBuilt(built.Vertices, [0, 1, 2]), Is.Null, "too few triangles");
+        Assert.That(ConvexHull.FromBuilt(built.Vertices, [.. built.Triangles.Take(35), 99]), Is.Null, "a corner out of range");
+        Assert.That(ConvexHull.FromBuilt(null, built.Triangles), Is.Null);
+        var inward = built.Triangles.ToArray();
+        for (var corner = 0; corner < inward.Length; corner += 3)
+        {
+            (inward[corner + 1], inward[corner + 2]) = (inward[corner + 2], inward[corner + 1]);
+        }
+
+        Assert.That(ConvexHull.FromBuilt(built.Vertices, inward), Is.Null, "wound inward");
+        Assert.That(ConvexHull.FromBuilt(built.Vertices, [.. built.Triangles.Skip(6)]), Is.Null, "torn open");
+        Assert.That(ConvexHull.FromBuilt([.. built.Vertices, new Vector3F(100, 0, 0)], built.Triangles), Is.Null,
+            "a corner no triangle uses");
+        var dented = built.Vertices.ToArray();
+        dented[0] *= 0.5f;
+        Assert.That(ConvexHull.FromBuilt(dented, built.Triangles), Is.Null, "not convex");
+
+        // A double pyramid on a hexagon whose rim is listed twice over: closed, convex at every edge, and wrapped round
+        // twice.
+        List<Vector3F> twice = [new Vector3F(0, -1, 0), new Vector3F(0, 1, 0)];
+        for (var corner = 0; corner < 12; corner++)
+        {
+            var angle = corner % 6 * MathF.PI / 3;
+            twice.Add(new Vector3F(MathF.Cos(angle), 0, MathF.Sin(angle)));
+        }
+
+        List<int> twiceTriangles = [];
+        for (var corner = 0; corner < 12; corner++)
+        {
+            var rim = 2 + corner;
+            var next = 2 + (corner + 1) % 12;
+            twiceTriangles.AddRange([0, rim, next, 1, next, rim]);
+        }
+
+        Assert.That(ConvexHull.FromBuilt(twice, twiceTriangles), Is.Null, "wrapped round twice");
+    }
+
+    // Every hull Quickhull builds is one FromBuilt takes back: a file's hull is never refused for being a hull.
+    [Test]
+    public void EveryHullQuickhullBuilds_IsTakenBack([Range(0, 19)] int seed)
+    {
+        var random = new Random(seed);
+        var count = 10 + seed * 50;
+        var points = Enumerable.Range(0, count)
+            .Select(_ => seed % 2 == 0
+                ? Vector3F.Normalize(new Vector3F(Next(random), Next(random), Next(random)) + new Vector3F(1e-4f)) * (1 + seed)
+                : new Vector3F(Next(random), Next(random) * 0.3f, Next(random)) + new Vector3F(500, 0, 0))
+            .ToList();
+        var built = ConvexHull.FromPoints(points);
+
+        Assert.That(ConvexHull.FromBuilt(built.Vertices, built.Triangles), Is.Not.Null);
+    }
+
     [Test]
     public void PointsOnASphere_GiveAClosedConvexHull()
     {
