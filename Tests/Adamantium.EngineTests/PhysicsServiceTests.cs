@@ -126,6 +126,102 @@ public class PhysicsServiceTests
     }
 
     [Test]
+    public void TableOfChildEntities_StandsLevelOnItsLegs()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var table = new Entity(null, "Table");
+        table.Transform.Position = new Vector3<double>(0, -0.2, 0);
+        table.AddComponent(new RigidBody());
+        AddPart(table, "Top", new Vector3<double>(0, -0.85, 0), new Vector3<double>(1, 0.05, 0.6));
+        foreach (var corner in new[] { new Vector3<double>(0.9, -0.4, 0.5), new Vector3<double>(-0.9, -0.4, 0.5),
+                     new Vector3<double>(0.9, -0.4, -0.5), new Vector3<double>(-0.9, -0.4, -0.5) })
+        {
+            AddPart(table, "Leg", corner, new Vector3<double>(0.05, 0.4, 0.05));
+        }
+
+        _world.EntityManager.AddEntity(table, _world.MainScene);
+        Settle();
+
+        Play();
+        Frames(2);
+
+        Assert.That(table.Transform.Position.Y, Is.EqualTo(0).Within(0.02), "it stands on the feet of its legs");
+        Assert.That(Vector3<float>.Transform(Vector3<float>.UnitY, table.Transform.Rotation.As<float>()).Y,
+            Is.GreaterThan(0.9999f));
+        Assert.That(table.Dependencies[0].Transform.Position.Y, Is.EqualTo(-0.85).Within(1e-9), "its parts stay put on it");
+    }
+
+    // Drawn between two steps, a body turns about its center of mass: its origin, off it, swings round, not across.
+    [Test]
+    public void SpinningBodyDrawnBetweenSteps_TurnsAboutItsCenterOfMass()
+    {
+        UseSteppedPhysics();
+        _physics.Gravity = Vector3<float>.Zero;
+        var spinner = new Entity(null, "Spinner");
+        spinner.AddComponent(new RigidBody { CanSleep = false });
+        AddPart(spinner, "Weight", new Vector3<double>(2, 0, 0), new Vector3<double>(0.5));
+        _world.EntityManager.AddEntity(spinner, _world.MainScene);
+        Settle();
+        Play();
+        _physics.SetAngularVelocity(spinner, new Vector3<float>(0, 20, 0));
+        Frame(FrameSeconds);
+
+        var farthest = 0.0;
+        for (var frame = 0; frame < 24; frame++)
+        {
+            Frame(1.0 / 240);
+            var weight = spinner.Transform.Position
+                         + Vector3<float>.Transform(new Vector3<float>(2, 0, 0), spinner.Transform.Rotation).As<double>();
+            farthest = Math.Max(farthest, (weight - new Vector3<double>(2, 0, 0)).Length());
+        }
+
+        Assert.That(spinner.Transform.Rotation, Is.Not.EqualTo(Quaternion<float>.Identity), "it spins");
+        Assert.That(farthest, Is.LessThan(1e-3), "the weight, its center of mass, stays where it is");
+    }
+
+    [Test]
+    public void ChildWithABodyOfItsOwn_IsNoPartOfItsParent()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var parent = new Entity(null, "Cart");
+        parent.AddComponent(new RigidBody());
+        var child = MakeBox("Crate", new Vector3<double>(0, -3, 0), 0.5, parent);
+        _world.EntityManager.AddEntity(parent, _world.MainScene);
+        Settle();
+
+        Play();
+        Frames(2);
+
+        Assert.That(_physics.Moves(parent), Is.False, "the crate's collider is the crate's");
+        Assert.That(_physics.Moves(child), Is.True);
+        Assert.That(child.Transform.WorldPosition.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    [Test]
+    public void DisabledChildOrCollider_IsNoPartOfTheShape()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var body = new Entity(null, "Body");
+        body.Transform.Position = new Vector3<double>(0, -3, 0);
+        body.AddComponent(new RigidBody());
+        AddPart(body, "Hull", Vector3<double>.Zero, new Vector3<double>(0.5));
+        var hiddenEntity = AddPart(body, "Hidden", new Vector3<double>(0, 3, 0), new Vector3<double>(0.5));
+        hiddenEntity.IsEnabled = false;
+        var hiddenCollider = AddPart(body, "Switched off", new Vector3<double>(0, 4, 0), new Vector3<double>(0.5));
+        hiddenCollider.GetComponent<Collider>().IsEnabled = false;
+        _world.EntityManager.AddEntity(body, _world.MainScene);
+        Settle();
+
+        Play();
+        Frames(3);
+
+        Assert.That(body.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02), "only the hull meets the ground");
+    }
+
+    [Test]
     public void StoppedGame_LetsTheBodiesGo()
     {
         UseSteppedPhysics();
@@ -559,6 +655,14 @@ public class PhysicsServiceTests
         });
         box.AddComponent(new RigidBody());
         return box;
+    }
+
+    private static Entity AddPart(Entity owner, string name, Vector3<double> position, Vector3<double> half)
+    {
+        var part = new Entity(owner, name);
+        part.Transform.Position = position;
+        part.AddComponent(new BoxCollider { Bounds = new Bounds(Vector3<double>.Zero, half, Quaternion<double>.Identity) });
+        return part;
     }
 
     private void Play()

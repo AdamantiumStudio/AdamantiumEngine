@@ -5,5 +5,8 @@ public enum CollisionShapeKind
 {
     Sphere,
     Capsule,
-    Box
+    Box,
+
+    /// <summary>Shapes standing together; the world tests each of them on its own.</summary>
+    Compound
 }

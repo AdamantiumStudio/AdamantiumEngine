@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Channels;
 using Adamantium.Core;
 using Adamantium.DarkMatter;
+using Adamantium.DarkMatter.Shapes;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
@@ -32,6 +33,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private readonly List<PhysicsBodyLink> _placing = [];
     private readonly Dictionary<int, Vector3F> _forces = new();
     private readonly HashSet<int> _toldOfRefusal = [];
+    private readonly List<CompoundPart> _shapeParts = [];
     private readonly Channel<PhysicsCommand> _commands = Channel.CreateUnbounded<PhysicsCommand>(OneReader);
     private readonly Channel<PhysicsStepResult> _results = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
     private readonly Channel<PhysicsStepResult> _spareResults = Channel.CreateUnbounded<PhysicsStepResult>(OneReader);
@@ -210,13 +212,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private void AddBody(RigidBody body)
     {
         var entity = body.Owner;
-        var collider = entity.GetComponent<Collider>();
-        if (collider == null)
-        {
-            Log.Logger.Warning("{Entity} has a rigid body but no collider; the physics leaves it", entity.Name);
-            return;
-        }
-
         var parentWorld = entity.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
         var world = entity.Transform.GetWorldMatrixF();
         var moves = body.Kind != BodyKind.Static;
@@ -229,27 +224,24 @@ public sealed class PhysicsService : GameService, IPhysicsService
             return;
         }
 
+        var position = ToPhysics(translation.As<double>());
+        var shape = CreateShape(entity, position, rotation, scale);
+        if (shape == null)
+        {
+            Log.Logger.Warning("{Entity} has a rigid body but no collider on it or below it; the physics leaves it",
+                entity.Name);
+            return;
+        }
+
         BodyHandle handle;
-        ColliderShape shape;
-        Vector3F position;
-        QuaternionF turn;
         try
         {
-            if (!ColliderShape.TryCreate(collider, scale, out shape))
-            {
-                Log.Logger.Warning("The physics has no shape for the {Collider} of {Entity} yet; it leaves it",
-                    collider.GetType().Name, entity.Name);
-                return;
-            }
-
-            position = ToPhysics(translation.As<double>()) + Vector3F.Transform(shape.Offset, rotation);
-            turn = rotation * shape.Turn;
             handle = _world.Add(new BodyDescription
             {
                 Kind = body.Kind,
-                Shape = shape.Shape,
+                Shape = shape,
                 Position = position,
-                Rotation = turn,
+                Rotation = rotation,
                 Mass = body.Mass,
                 Density = body.Density,
                 Friction = body.Friction,
@@ -266,7 +258,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
             return;
         }
 
-        var link = new PhysicsBodyLink(entity, body.Kind, shape, position, turn, CountDepth(entity))
+        var link = new PhysicsBodyLink(entity, body.Kind, _world.GetLocalCenterOfMass(handle),
+            _world.GetCenterOfMass(handle), rotation, CountDepth(entity))
         {
             ParentWorld = parentWorld
         };
@@ -276,6 +269,85 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _wasAwake.Add(body.Kind != BodyKind.Static);
         if (entity.Owner != null && body.Kind != BodyKind.Static)
             _parented.Add(link);
+    }
+
+    /// <summary>The shape of the colliders on <paramref name="entity"/> and on the entities below it that have no rigid
+    /// body of their own, around the body's origin at <paramref name="origin"/> turned by <paramref name="rotation"/>,
+    /// the entity scaled by <paramref name="scale"/>; null when there are none.</summary>
+    private CollisionShape CreateShape(Entity entity, Vector3F origin, QuaternionF rotation, Vector3F scale)
+    {
+        _shapeParts.Clear();
+        var unturn = QuaternionF.Conjugate(rotation);
+        entity.VisitInDepth(current =>
+        {
+            if (current != entity && (!current.IsEnabled || current.ContainsComponent<RigidBody>()))
+                return false;
+
+            AddColliders(entity, current, origin, unturn, scale);
+            return true;
+        });
+
+        if (_shapeParts.Count == 0)
+            return null;
+
+        var only = _shapeParts[0];
+        if (_shapeParts.Count == 1 && only.Pose.Position == Vector3F.Zero && only.Pose.Rotation == QuaternionF.Identity)
+            return only.Shape;
+
+        return new CompoundCollisionShape(_shapeParts);
+    }
+
+    private void AddColliders(Entity body, Entity entity, Vector3F origin, QuaternionF unturn, Vector3F bodyScale)
+    {
+        // The body's own colliders stand on it exactly, as their offsets say.
+        var placed = entity == body;
+        var scale = bodyScale;
+        var turn = QuaternionF.Identity;
+        var translation = Vector3F.Zero;
+        foreach (var component in entity.Components)
+        {
+            if (component is not Collider { IsEnabled: true } collider)
+                continue;
+
+            if (!placed)
+            {
+                var world = entity.Transform.GetWorldMatrixF();
+                if (world.Determinant() == 0 || IsSkewed(world) || !world.Decompose(out scale, out turn, out translation))
+                {
+                    Log.Logger.Warning("{Entity} is flattened or skewed; the body of {Body} leaves its colliders",
+                        entity.Name, body.Name);
+                    return;
+                }
+
+                placed = true;
+            }
+
+            ColliderShape shape;
+            try
+            {
+                if (!ColliderShape.TryCreate(collider, scale, out shape))
+                {
+                    Log.Logger.Warning("The physics has no shape for the {Collider} of {Entity} yet; the body of {Body} "
+                                       + "leaves it", collider.GetType().Name, entity.Name, body.Name);
+                    continue;
+                }
+            }
+            catch (ArgumentException exception)
+            {
+                Log.Logger.Warning(exception, "The body of {Body} leaves the collider of {Entity}", body.Name, entity.Name);
+                continue;
+            }
+
+            if (entity == body)
+            {
+                _shapeParts.Add(new CompoundPart(shape.Shape, new Pose(shape.Offset, shape.Turn)));
+                continue;
+            }
+
+            var center = ToPhysics(translation.As<double>()) + Vector3F.Transform(shape.Offset, turn);
+            _shapeParts.Add(new CompoundPart(shape.Shape,
+                new Pose(Vector3F.Transform(center - origin, unturn), unturn * turn * shape.Turn)));
+        }
     }
 
     private void RunPhysics()
@@ -352,7 +424,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private void StrikeCenter(int key, Vector3F impulse)
     {
         var handle = _handles[key];
-        _world.ApplyImpulse(handle, impulse, _world.GetPose(handle).Position);
+        _world.ApplyImpulse(handle, impulse, _world.GetCenterOfMass(handle));
     }
 
     private void WaitForNextStep()
@@ -419,9 +491,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
             var isAwake = _world.IsAwake(handle);
             if (isAwake || _wasAwake[key])
             {
-                var pose = _world.GetPose(handle);
-                result.Motions.Add(new BodyMotion(key, pose.Position, pose.Rotation, _world.GetLinearVelocity(handle),
-                    _world.GetAngularVelocity(handle)));
+                result.Motions.Add(new BodyMotion(key, _world.GetCenterOfMass(handle), _world.GetPose(handle).Rotation,
+                    _world.GetLinearVelocity(handle), _world.GetAngularVelocity(handle)));
             }
 
             _wasAwake[key] = isAwake;
@@ -445,7 +516,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
                 var link = _links[motion.Key];
                 link.PreviousPosition = link.CurrentPosition;
                 link.PreviousRotation = link.CurrentRotation;
-                link.CurrentPosition = motion.Position;
+                link.CurrentPosition = motion.CenterOfMass;
                 link.CurrentRotation = motion.Rotation;
                 link.LinearVelocity = motion.LinearVelocity;
                 link.AngularVelocity = motion.AngularVelocity;
@@ -535,11 +606,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return (float)Math.Clamp((_lastResultSteps - 1 + sinceStep) / _lastResultSteps, 0, 1);
     }
 
-    private void PlaceEntity(PhysicsBodyLink link, bool hasParent, in Matrix4x4F parentWorld, Vector3F position,
-        QuaternionF rotation)
+    private void PlaceEntity(PhysicsBodyLink link, bool hasParent, in Matrix4x4F parentWorld, Vector3F centerOfMass,
+        QuaternionF entityRotation)
     {
-        var entityRotation = rotation * QuaternionF.Conjugate(link.Turn);
-        var entityPosition = ToWorld(position - Vector3F.Transform(link.Offset, entityRotation));
+        var entityPosition = ToWorld(centerOfMass - Vector3F.Transform(link.CenterOfMass, entityRotation));
         var transform = link.Entity.Transform;
         if (!hasParent)
         {

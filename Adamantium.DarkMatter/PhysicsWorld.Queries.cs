@@ -7,6 +7,8 @@ namespace Adamantium.DarkMatter;
 public sealed partial class PhysicsWorld
 {
     private readonly List<(int Item, float Entry)> _rayCandidates = [];
+    private readonly List<int> _overlapped = [];
+    private readonly HashSet<int> _overlappedBodies = [];
 
     /// <inheritdoc/>
     public bool RayCast(in Ray<float> ray, float maxDistance, out RayHit hit)
@@ -29,16 +31,16 @@ public sealed partial class PhysicsWorld
             if (candidate.Entry > nearest)
                 break;
 
-            ref var body = ref _bodies[candidate.Item];
-            var pose = body.Pose;
+            ref var part = ref _parts[candidate.Item];
+            var pose = PlacePart(_bodies[part.Body], part);
             var localRay = new Ray<float>(pose.InverseTransformPoint(ray.Position), pose.InverseTransformDirection(direction));
-            if (!body.Shape.CastRay(localRay, nearest, out var distance, out var normal))
+            if (!part.Shape.CastRay(localRay, nearest, out var distance, out var normal))
                 continue;
 
             nearest = distance;
             found = true;
-            hit = new RayHit(GetHandle(candidate.Item), ray.Position + direction * distance,
-                pose.TransformDirection(normal), distance);
+            hit = new RayHit(GetHandle(part.Body), ray.Position + direction * distance, pose.TransformDirection(normal),
+                distance);
         }
 
         return found;
@@ -50,14 +52,42 @@ public sealed partial class PhysicsWorld
         ArgumentNullException.ThrowIfNull(shape);
         ArgumentNullException.ThrowIfNull(into);
         var placedPose = new Pose(pose.Position, NormalizeRotation(pose.Rotation, nameof(pose)));
+        _overlapped.Clear();
+        _overlappedBodies.Clear();
+        if (shape is CompoundCollisionShape compound)
+        {
+            foreach (var part in compound.Parts)
+            {
+                OverlapPart(part.Shape, placedPose.Transform(part.Pose));
+            }
+        }
+        else
+        {
+            OverlapPart(shape, placedPose);
+        }
+
+        foreach (var body in _overlapped)
+        {
+            into.Add(GetHandle(body));
+        }
+    }
+
+    private void OverlapPart(CollisionShape shape, in Pose pose)
+    {
         _found.Clear();
-        _tree.Query(shape.ComputeBounds(placedPose), _found);
-        var placed = new PlacedShape(shape, placedPose);
+        _tree.Query(shape.ComputeBounds(pose), _found);
+        var placed = new PlacedShape(shape, pose);
         foreach (var index in _found)
         {
-            ref var body = ref _bodies[index];
-            if (Gjk.Intersects(placed, new PlacedShape(body.Shape, body.Pose)))
-                into.Add(GetHandle(index));
+            ref var part = ref _parts[index];
+            if (_overlappedBodies.Contains(part.Body))
+                continue;
+
+            if (Gjk.Intersects(placed, new PlacedShape(part.Shape, PlacePart(_bodies[part.Body], part))))
+            {
+                _overlappedBodies.Add(part.Body);
+                _overlapped.Add(part.Body);
+            }
         }
     }
 

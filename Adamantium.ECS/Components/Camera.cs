@@ -354,7 +354,7 @@ namespace Adamantium.ECS.Components
         private double FocusDepth()
         {
             var depth = Type.IsThirdPerson() && Subject != null
-                ? (Subject.GetCenterAbsolute() - Owner.Transform.WorldPosition).Length()
+                ? (FindSubjectCenter() - Owner.Transform.WorldPosition).Length()
                 : FocusDistance;
             return Math.Max(depth, ZNear * 2);
         }
@@ -446,8 +446,13 @@ namespace Adamantium.ECS.Components
             startingOffset = Owner.Transform.Position;
             if (LookAtObject != null)
             {
-                diameter = (Vector3<double>)Forward * LookAtObject.GetDiameter() * Fov;
-                center = LookAtObject.GetCenterAbsolute() + diameter + Owner.Transform.Position - LookAtObject.GetLocalCenter().As<double>();
+                var measured = LookAtObject.TryMeasureBounds(out var bounds, Owner);
+                var localCenter = measured ? bounds.Center : Vector3<double>.Zero;
+                var size = measured ? Vector3<double>.Max(bounds.Size) : 0;
+                var absoluteCenter = Vector3F.TransformCoordinate(localCenter.As<float>(),
+                    LookAtObject.Transform.GetWorldMatrixF()).As<double>();
+                diameter = (Vector3<double>)Forward * size * Fov;
+                center = absoluteCenter + diameter + Owner.Transform.Position - localCenter;
             }
             Type = CameraType.Special;
             Owner.NotifyUpdated(TimeSpan.FromMilliseconds(time));
@@ -503,9 +508,12 @@ namespace Adamantium.ECS.Components
             moveToDuration = 0;
             startingOffset = Owner.Transform.Position;
             var world = lookAtObject.Transform.GetWorldMatrixF();
-            var size = lookAtObject.GetDiameter() * Math.Max(world.Right.Length(), Math.Max(world.Up.Length(), world.Backward.Length()));
+            var measured = lookAtObject.TryMeasureBounds(out var bounds, Owner);
+            var size = (measured ? Vector3<double>.Max(bounds.Size) : 0)
+                       * Math.Max(world.Right.Length(), Math.Max(world.Up.Length(), world.Backward.Length()));
             var away = size > 0 ? FramingDistance(size) : UnframedDistance;
-            endingPosition = lookAtObject.GetCenterAbsolute() - (Vector3<double>)Forward * away;
+            var localCenter = measured ? bounds.Center.As<float>() : Vector3F.Zero;
+            endingPosition = Vector3F.TransformCoordinate(localCenter, world).As<double>() - (Vector3<double>)Forward * away;
             Type = CameraType.Free;
             FocusDistance = away;
             if (ProjectionType == CameraProjectionType.Ortho)
@@ -667,7 +675,7 @@ namespace Adamantium.ECS.Components
         // a host turned - by the rotation tool, say - does not swing a free orbit round.
         private void PlaceInOrbit(Vector3<double> back)
         {
-            var center = Subject.GetLocalCenter().As<double>();
+            var center = FindLocalSubjectCenter().As<double>();
             Owner.Transform.Position = center - Vector3F.TransformNormal(back.As<float>(), HostTurnBack()).As<double>();
         }
 
@@ -717,6 +725,7 @@ namespace Adamantium.ECS.Components
             else if (subject != shownSubject)
             {
                 shownSubject = subject;
+                ForgetSubjectCenter();
                 travelFrom = lastStanding;
                 travelViewFrom = lastView;
                 travelElapsed = 0;
@@ -1247,6 +1256,8 @@ namespace Adamantium.ECS.Components
             {
                 return;
             }
+
+            ForgetSubjectCenter();
             if (hostObject != null)
             {
                 HostUpVector = EntityRotationMatrix.Up;
@@ -1262,7 +1273,8 @@ namespace Adamantium.ECS.Components
                     {
                         // From the CENTER: get out of the body, then stand back far enough for the diameter to
                         // subtend the field of view. Fov is in DEGREES.
-                        var diameter = hostObject.GetDiameter();
+                        var measured = hostObject.TryMeasureBounds(out var bounds, Owner);
+                        var diameter = measured ? Vector3<double>.Max(bounds.Size) : 0;
 
                         if (diameter > 0)
                         {
@@ -1272,7 +1284,9 @@ namespace Adamantium.ECS.Components
                         {
                             // Nothing measurable to frame - a subject whose bounds have not been built yet. Keep the
                             // distance we already stand at rather than collapsing the orbit onto its center.
-                            Radius = (WorldPosition - hostObject.GetCenterAbsolute()).Length();
+                            var localCenter = measured ? bounds.Center.As<float>() : Vector3F.Zero;
+                            Radius = (WorldPosition - Vector3F.TransformCoordinate(localCenter,
+                                hostObject.Transform.GetWorldMatrixF()).As<double>()).Length();
                         }
                     }
                 }

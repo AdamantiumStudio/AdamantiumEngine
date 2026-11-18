@@ -1,7 +1,9 @@
+using System;
 using System.IO;
 using Adamantium.Graphics.Core.Assets;
 using MessagePack;
 using MessagePack.Resolvers;
+using Serilog;
 
 namespace Adamantium.Graphics.Core.Models;
 
@@ -55,18 +57,35 @@ public static class SceneDataSerializer
     }
 
     /// <summary>Reads the model of the baked model file at <paramref name="path"/>. Throws
-    /// <see cref="AssetFormatException"/> when this engine does not read the file or the model in it.</summary>
+    /// <see cref="AssetFormatException"/> when this engine does not read the file or the model in it. Edits that cannot be
+    /// read are left out, logged.</summary>
     public static SceneData ReadAssetFile(string path)
     {
-        var body = AssetFile.Read(path, AssetFileSection.Body).Body
-                   ?? throw new AssetFormatException($"{path}: the file holds no model; import its source again");
+        var file = AssetFile.Read(path, AssetFileSection.Body);
+        var body = file.Body ?? throw new AssetFormatException($"{path}: the file holds no model; import its source again");
+        SceneData scene;
         try
         {
-            return Deserialize(body);
+            scene = Deserialize(body);
         }
         catch (MessagePackSerializationException exception)
         {
             throw new AssetFormatException($"{path}: its model cannot be read; import its source again", exception);
         }
+
+        if (scene != null && (file.Sections & AssetFileSection.Edits) != 0)
+        {
+            try
+            {
+                var edits = AssetFile.Read(path, AssetFileSection.Edits).Edits;
+                scene.Edits = edits == null ? null : ModelEditsSerializer.Deserialize(edits);
+            }
+            catch (Exception exception) when (exception is AssetFormatException or IOException)
+            {
+                Log.Logger.Warning(exception, "The edits made to {Model} cannot be read; it is built without them", path);
+            }
+        }
+
+        return scene;
     }
 }

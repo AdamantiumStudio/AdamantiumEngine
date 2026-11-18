@@ -1,0 +1,11 @@
+namespace Adamantium.Graphics.Core.Models;
+
+/// <summary>The edits of one part of a model.</summary>
+public sealed class PartEdits
+{
+    /// <summary>The collider the part's mesh gets in place of the box its import gives; null to keep that box.</summary>
+    public ColliderKind? Collider { get; set; }
+
+    /// <summary>How the physics moves the part in a game; null when the part is no body of its own.</summary>
+    public BodyEdits Body { get; set; }
+}

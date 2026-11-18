@@ -3,19 +3,18 @@ using Adamantium.ECS;
 
 namespace Adamantium.Engine.Physics;
 
-/// <summary>An entity the physics moves, as the game's side keeps it: where its shape stands on it, and the last two
-/// poses the physics sent, to draw between.</summary>
+/// <summary>An entity the physics moves, as the game's side keeps it: the last two poses the physics sent - where the
+/// body's center of mass stood and how it was turned - to draw between.</summary>
 internal sealed class PhysicsBodyLink
 {
-    public PhysicsBodyLink(Entity entity, BodyKind kind, in ColliderShape shape, Vector3F position, QuaternionF rotation,
+    public PhysicsBodyLink(Entity entity, BodyKind kind, Vector3F centerOfMass, Vector3F position, QuaternionF rotation,
         int depth)
     {
         Entity = entity;
         Name = entity.Name;
         Kind = kind;
         Depth = depth;
-        Offset = shape.Offset;
-        Turn = shape.Turn;
+        CenterOfMass = centerOfMass;
         PreviousPosition = position;
         PreviousRotation = rotation;
         CurrentPosition = position;
@@ -32,9 +31,8 @@ internal sealed class PhysicsBodyLink
     /// <summary>How many entities the entity hangs under; parents are stood before their children.</summary>
     public int Depth { get; }
 
-    public Vector3F Offset { get; }
-
-    public QuaternionF Turn { get; }
+    /// <summary>The body's center of mass in the entity's own axes, unscaled: what a turn is drawn about.</summary>
+    public Vector3F CenterOfMass { get; }
 
     public Vector3F PreviousPosition { get; set; }
 

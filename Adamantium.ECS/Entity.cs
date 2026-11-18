@@ -380,6 +380,8 @@ namespace Adamantium.ECS
         // it on Return, keeping no Entity references alive in the pool.
         internal static readonly ObjectPool<Stack<Entity>> StackPool =
             new DefaultObjectPool<Stack<Entity>>(new CollectionPoolPolicy<Stack<Entity>>(s => s.Clear()));
+        internal static readonly ObjectPool<Stack<Matrix4x4F>> MatrixStackPool =
+            new DefaultObjectPool<Stack<Matrix4x4F>>(new CollectionPoolPolicy<Stack<Matrix4x4F>>(s => s.Clear()));
         private static readonly ObjectPool<Queue<Entity>> QueuePool =
             new DefaultObjectPool<Queue<Entity>>(new CollectionPoolPolicy<Queue<Entity>>(q => q.Clear()));
 

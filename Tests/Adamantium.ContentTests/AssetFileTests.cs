@@ -181,6 +181,64 @@ public class AssetFileTests
         }
     }
 
+    [Test]
+    public void Edits_ReadBackOnTheirOwn()
+    {
+        var edits = new ModelEdits();
+        edits.Parts["Frame/Wheel[1]"] = new PartEdits
+        {
+            Collider = ColliderKind.Sphere,
+            Body = new BodyEdits { Kind = Adamantium.DarkMatter.BodyKind.Kinematic, Mass = 80, CanSleep = false }
+        };
+        edits.Parts[""] = new PartEdits { Body = new BodyEdits() };
+        var file = CreateFile();
+        file.Edits = ModelEditsSerializer.Serialize(edits);
+
+        var read = AssetFile.Read(new MemoryStream(Write(file)), AssetFileSection.Edits);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(read.Body, Is.Null);
+            Assert.That(read.Sections & AssetFileSection.Edits, Is.EqualTo(AssetFileSection.Edits));
+            var readEdits = ModelEditsSerializer.Deserialize(read.Edits);
+            var wheel = readEdits.Parts["Frame/Wheel[1]"];
+            Assert.That(wheel.Collider, Is.EqualTo(ColliderKind.Sphere));
+            Assert.That(wheel.Body.Kind, Is.EqualTo(Adamantium.DarkMatter.BodyKind.Kinematic));
+            Assert.That(wheel.Body.Mass, Is.EqualTo(80));
+            Assert.That(wheel.Body.CanSleep, Is.False);
+            Assert.That(readEdits.Parts[""].Collider, Is.Null, "the import's box stays");
+            Assert.That(readEdits.Parts[""].Body.Density, Is.EqualTo(1000));
+        });
+    }
+
+    [Test]
+    public void AFileWithoutEdits_HasNone()
+    {
+        var read = AssetFile.Read(new MemoryStream(Write(CreateFile())), AssetFileSection.All);
+
+        Assert.That(read.Edits, Is.Null);
+        Assert.That(read.Sections & AssetFileSection.Edits, Is.EqualTo(AssetFileSection.None));
+    }
+
+    // The file carries its edits as they are, so a spoiled one never stops it being read or written; only reading the
+    // edits themselves refuses them.
+    [Test]
+    public void SpoiledEdits_AreCarriedAsTheyAre_AndRefusedOnlyWhenRead()
+    {
+        var spoiled = ModelEditsSerializer.Serialize(new ModelEdits());
+        spoiled[^1] = 0xC1;
+        var bytes = Write(new AssetFile { Body = [1, 2, 3], Edits = spoiled });
+
+        var read = AssetFile.Read(new MemoryStream(bytes), AssetFileSection.All);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(read.Body, Is.EqualTo(new byte[] { 1, 2, 3 }));
+            Assert.That(read.Edits, Is.EqualTo(spoiled));
+            Assert.Throws<AssetFormatException>(() => ModelEditsSerializer.Deserialize(read.Edits));
+        });
+    }
+
     private static AssetFile CreateFile()
     {
         return new AssetFile

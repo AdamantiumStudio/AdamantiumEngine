@@ -1,12 +1,14 @@
 namespace Adamantium.Engine.Physics;
 
-/// <summary>Where a body stood and how it moved after a step, in the physics' own coordinates.</summary>
+/// <summary>Where a body's center of mass stood and how the body moved after a step, in the physics' own coordinates.
+/// </summary>
 internal readonly struct BodyMotion
 {
-    public BodyMotion(int key, Vector3F position, QuaternionF rotation, Vector3F linearVelocity, Vector3F angularVelocity)
+    public BodyMotion(int key, Vector3F centerOfMass, QuaternionF rotation, Vector3F linearVelocity,
+        Vector3F angularVelocity)
     {
         Key = key;
-        Position = position;
+        CenterOfMass = centerOfMass;
         Rotation = rotation;
         LinearVelocity = linearVelocity;
         AngularVelocity = angularVelocity;
@@ -14,7 +16,7 @@ internal readonly struct BodyMotion
 
     public int Key { get; }
 
-    public Vector3F Position { get; }
+    public Vector3F CenterOfMass { get; }
 
     public QuaternionF Rotation { get; }
 
