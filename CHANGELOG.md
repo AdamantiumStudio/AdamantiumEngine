@@ -590,6 +590,10 @@ All packages share one version.
   edges, and are drawn now only where the plane is seen edge on - a perspective's eye in it, a flat view along it. A
   pixel's share of the plane is its gradient's length on screen, so a line seen at a slant is as wide and as soft as one
   seen square.
+- PDF text: a big line's box - a title, a large figure - no longer reaches down over a much smaller line set close
+  under it: it stops halfway between its baseline and that line's top, so selecting or finding one does not cover the
+  other. Lines of like size overlap as before. A small glyph is no longer read into a big one's line by stepping back
+  under it: a step back is measured by the smaller of the two sizes.
 - A standalone `Universe` updates with the length of the frame that just passed, not the one before it, measured
   finer than a millisecond with the same clock as a hosted one: the first frame counts none, and a stall at most a
   quarter second; a fixed-step loop says a frame finished only when one ran. `TotalTime` counts the frame it is
