@@ -16,7 +16,7 @@ public class ColliderShapeTests
     {
         var capsule = With(new CapsuleCollider(), Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5)));
 
-        Assert.That(capsule.Direction, Is.EqualTo(CapsuleDirection.Y));
+        Assert.That(capsule.Axis, Is.EqualTo(ColliderAxis.Y));
         Assert.That(capsule.Radius, Is.EqualTo(0.5f).Within(1e-5f));
         Assert.That(capsule.Height, Is.EqualTo(4f).Within(1e-5f));
         Assert.That((capsule.Capsule.Start - new Vector3F(0, -1.5f, 0)).Length(), Is.LessThan(1e-5f));
@@ -28,10 +28,11 @@ public class ColliderShapeTests
     {
         var capsule = With(new CapsuleCollider(), Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5)));
 
-        capsule.Direction = CapsuleDirection.X;
+        capsule.Axis = ColliderAxis.X;
 
         Assert.That((capsule.Capsule.End - capsule.Capsule.Start).X, Is.GreaterThan(0));
         Assert.That((capsule.Capsule.End - capsule.Capsule.Start).Y, Is.EqualTo(0f));
+        Assert.That(capsule.IsFitted, Is.False, "an axis given by hand is kept");
     }
 
     [Test]
@@ -195,7 +196,7 @@ public class ColliderShapeTests
 
         var again = box.GetVisualRepresentation();
         var shownAgain = entity.ChangeCount;
-        box.Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(2), Quaternion<double>.Identity);
+        box.Size = new Vector3F(4);
         cylinder.Radius = 3;
         var edited = box.GetVisualRepresentation();
         cylinder.GetVisualRepresentation();
@@ -222,7 +223,7 @@ public class ColliderShapeTests
         var before = entity.ChangeCount;
 
         var bigger = Box(null, new Vector3<double>(-3, -3, -3), new Vector3<double>(3, 3, 3));
-        hull.CalculateFromMesh(bigger.GetComponent<MeshData>().Mesh);
+        hull.FitTo(bigger.GetComponent<MeshData>().Mesh);
         hull.GetVisualRepresentation();
 
         Assert.Multiple(() =>

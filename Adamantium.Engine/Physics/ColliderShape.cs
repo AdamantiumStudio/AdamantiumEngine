@@ -36,8 +36,7 @@ internal readonly struct ColliderShape
         {
             case BoxCollider box:
             {
-                var orientation = box.Bounds.Orientation.As<float>();
-                var turn = orientation.LengthSquared() > 0 ? QuaternionF.Normalize(orientation) : QuaternionF.Identity;
+                var turn = box.Turn;
                 if (!IsEven(size) && !IsAlongAxes(turn))
                     throw new ArgumentException("A box turned on an unevenly scaled entity is skewed; no box fits it.");
 
@@ -48,15 +47,15 @@ internal readonly struct ColliderShape
                     (Vector3F.Transform(Vector3F.UnitX, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitY, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitZ, turn) * size).Length());
-                var half = Vector3F.Max(box.Bounds.HalfExtent.As<float>() * stretch, new Vector3F(CollisionShape.MinimumSize));
-                shape = new ColliderShape(new BoxCollisionShape(half), box.Bounds.Center.As<float>() * scale, turn);
+                var own = Vector3F.Abs(box.Size * box.Scale) * 0.5f;
+                var half = Vector3F.Max(own * stretch, new Vector3F(CollisionShape.MinimumSize));
+                shape = new ColliderShape(new BoxCollisionShape(half), box.Position * scale, turn);
                 return true;
             }
             case SphereCollider sphere:
             {
-                var radius = MathF.Max(Vector3F.Max(sphere.Bounds.Size.As<float>()) * 0.5f * Vector3F.Max(size),
-                    CollisionShape.MinimumSize);
-                shape = new ColliderShape(new SphereCollisionShape(radius), sphere.Bounds.Center.As<float>() * scale,
+                var radius = MathF.Max(sphere.Sphere.Radius * Vector3F.Max(size), CollisionShape.MinimumSize);
+                shape = new ColliderShape(new SphereCollisionShape(radius), sphere.Sphere.Center * scale,
                     QuaternionF.Identity);
                 return true;
             }
@@ -76,7 +75,7 @@ internal readonly struct ColliderShape
             }
             case ConvexHullCollider hullCollider:
             {
-                if (hullCollider.Hull is not { } hull)
+                if (hullCollider.PlacedHull is not { } hull)
                     throw new ArgumentException("The hull collider holds no hull: its entity has no mesh.");
 
                 // A scale read back from a turned entity's matrix differs in its last digits: rounded for the key, copies
@@ -90,9 +89,11 @@ internal readonly struct ColliderShape
             {
                 var start = cylinder.Cylinder.Start * scale;
                 var end = cylinder.Cylinder.End * scale;
-                // A circle stays round only on an even scale: the radius takes the wider of the scales across the axis.
-                var across = cylinder.Axis == ColliderAxis.X ? MathF.Max(size.Y, size.Z)
-                    : cylinder.Axis == ColliderAxis.Y ? MathF.Max(size.X, size.Z)
+                // A circle stays round only on an even scale: the radius takes the wider of the scales across the axis,
+                // the entity's axis nearest the cylinder's left out.
+                var along = Vector3F.Abs(cylinder.Cylinder.End - cylinder.Cylinder.Start);
+                var across = along.X >= along.Y && along.X >= along.Z ? MathF.Max(size.Y, size.Z)
+                    : along.Y >= along.Z ? MathF.Max(size.X, size.Z)
                     : MathF.Max(size.X, size.Y);
                 var radius = MathF.Max(cylinder.Cylinder.Radius * across, CollisionShape.MinimumSize);
                 var axis = end - start;

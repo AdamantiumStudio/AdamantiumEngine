@@ -1,102 +1,95 @@
 ﻿using System;
 using System.Collections.Generic;
-using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 using Adamantium.ProceduralGeometry;
 using Adamantium.ProceduralGeometry.Shapes;
 
 namespace Adamantium.ECS.Components
 {
-   public class SphereCollider: Collider
-   {
-      private BoundingSphere<float> sphere;
-      protected Dictionary<CameraBase, BoundingSphere<float>> ColliderData { get; }
+    /// <summary>A sphere round an entity: <see cref="Radius"/> about the collider's <see cref="Collider.Position"/>,
+    /// grown by the largest of its <see cref="Collider.Scale"/>.</summary>
+    [ViewModel]
+    public partial class SphereCollider : Collider
+    {
+        private BoundingSphere<float> sphere;
 
-      public SphereCollider()
-      {
-         ColliderData = new Dictionary<CameraBase, BoundingSphere<float>>();
-      }
+        public SphereCollider()
+        {
+            ColliderData = new Dictionary<CameraBase, BoundingSphere<float>>();
+        }
 
-      public override void ClearData()
-      {
-         ColliderData.Clear();
-      }
+        protected Dictionary<CameraBase, BoundingSphere<float>> ColliderData { get; }
 
-      public override bool ContainsDataFor(CameraBase camera)
-      {
-         return ColliderData.ContainsKey(camera);
-      }
+        /// <summary>The radius, before <see cref="Collider.Scale"/>; a fit gives half the longest side of the mesh.
+        /// </summary>
+        [Bindable]
+        public partial float Radius { get; set; }
 
-      protected override Mesh BuildOutline()
-      {
-         return Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, Vector3F.Max(Bounds.Size.As<float>()), 40);
-      }
+        partial void OnRadiusChanged(float value) => Resize();
 
-      public override void CalculateFromMesh(Mesh mesh)
-      {
-         sphere = mesh.Bounds.ToBoundingSphere().As<float>();
-         base.CalculateFromMesh(mesh);
-      }
+        /// <summary>The sphere in its entity's own space.</summary>
+        public BoundingSphere<float> Sphere => sphere;
 
-      public override void UpdateForCamera(CameraBase camera)
-      {
-         // Same fix as BoxCollider: transform the LOCAL sphere by the composed world matrix (what the mesh is drawn with)
-         // so hierarchical (child) entities cull against their real world position, not their local offset.
-         var bb = sphere.Transform(Owner.Transform.GetMetadata(camera).WorldMatrixF);
-         if (!ColliderData.ContainsKey(camera))
-         {
-            ColliderData.Add(camera, bb);
-         }
-         else
-         {
-            ColliderData[camera] = bb;
-         }
-      }
+        public override void ClearData()
+        {
+            ColliderData.Clear();
+        }
 
-      public override ContainmentType IsInsideCameraFrustum(Camera camera)
-      {
-         BoundingSphere<float> data;
-         if (ColliderData.TryGetValue(camera, out data))
-         {
-            return camera.Frustum.Contains(data);
-         }
-         return camera.Frustum.Contains(sphere);
-      }
+        public override bool ContainsDataFor(CameraBase camera)
+        {
+            return ColliderData.ContainsKey(camera);
+        }
 
-      public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
-      {
-         sphere = sphere.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
-      }
+        public override void UpdateForCamera(CameraBase camera)
+        {
+            // The LOCAL sphere by the composed world matrix (what the mesh is drawn with), so a child culls where it is.
+            ColliderData[camera] = sphere.Transform(Owner.Transform.GetMetadata(camera).WorldMatrixF);
+        }
 
-      public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
-      {
-         sphere = sphere.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
-      }
+        public override ContainmentType IsInsideCameraFrustum(Camera camera)
+        {
+            return camera.Frustum.Contains(ColliderData.TryGetValue(camera, out var placed) ? placed : sphere);
+        }
 
-      public override void Merge(Collider collider)
-      {
-         throw new NotImplementedException();
-      }
+        public override bool Intersects(ref Ray<float> ray, out Vector3F point)
+        {
+            return sphere.Intersects(ray, out point);
+        }
 
-      public override bool Intersects(ref Ray<float> ray, out Vector3F point)
-      {
-         return sphere.Intersects(ray, out point);
-      }
+        public override IConvexShape<float> GetWorldShape()
+        {
+            return sphere.Transform(Owner.Transform.GetWorldMatrixF());
+        }
 
-      public override IConvexShape<float> GetWorldShape()
-      {
-         return sphere.Transform(Owner.Transform.GetWorldMatrixF());
-      }
+        public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
+        {
+            point = Vector3F.Zero;
+            return ColliderData.TryGetValue(camera, out var placed) && placed.Intersects(ray, out point);
+        }
 
-       public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
-       {
-           point = Vector3F.Zero;
-           if (ColliderData.ContainsKey(camera))
-           {
-               return ColliderData[camera].Intersects(ray, out point);
-           }
-           return false;
-       }
-   }
+        protected override void FitBox(Bounds box)
+        {
+            Radius = Vector3F.Max(box.Size.As<float>()) * 0.5f;
+            Position = box.Center.As<float>();
+            Rotation = TurnOf(box);
+        }
+
+        protected override void WriteSizes(ColliderShapeEdits shape) => shape.Radius = Radius;
+
+        protected override void TakeSizes(ColliderShapeEdits shape) => Radius = shape.Radius;
+
+        protected override Bounds PlaceShape()
+        {
+            sphere = new BoundingSphere<float>(Vector3F.Zero, Math.Abs(Radius)).Transform(Placement);
+            return new Bounds(sphere.Center.As<double>(), new Vector3<double>(sphere.Radius), Quaternion<double>.Identity);
+        }
+
+        protected override Mesh BuildOutline()
+        {
+            return Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, sphere.Radius * 2, 40,
+                Matrix4x4.CreateTranslation<double>(sphere.Center.As<double>()));
+        }
+    }
 }

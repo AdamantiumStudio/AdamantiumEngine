@@ -39,7 +39,7 @@ public class WorldPlacementTests
         scene.Place(model);
 
         var world = model.Transform.GetMetadata(scene.Camera).AbsoluteWorld;
-        var rendered = Vector3F.TransformCoordinate(model.GetComponent<Collider>().LocalCenter, world);
+        var rendered = Vector3F.TransformCoordinate(model.GetComponent<Collider>().Position, world);
 
         Assert.That((model.GetCenterAbsolute().As<float>() - rendered).Length(), Is.LessThan(1e-4f));
     }

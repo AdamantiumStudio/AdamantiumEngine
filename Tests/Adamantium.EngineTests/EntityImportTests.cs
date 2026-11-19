@@ -257,6 +257,47 @@ public class EntityImportTests
         });
     }
 
+    // Sizes kept for a part give its collider them, the import's box or the kind asked for; a hull keeps its mesh's hull.
+    [Test]
+    public void EditsSizingACollider_GiveThePartsColliderThoseSizes()
+    {
+        var scene = NewScene();
+        scene.CreateMesh(scene.Models, "crate", "Crate").Meshes.Add(Box(1));
+        scene.CreateMesh(scene.Models, "wheel", "Wheel").Meshes.Add(Box(1));
+        scene.CreateMesh(scene.Models, "rock", "Rock").Meshes.Add(Box(1));
+        scene.Edits = new ModelEdits();
+        scene.Edits.Parts["Crate"] = new PartEdits
+        {
+            ColliderShape = new ColliderShapeEdits { IsFitted = false, Size = new Vector3F(3), Position = new Vector3F(0, -1, 0) }
+        };
+        scene.Edits.Parts["Wheel"] = new PartEdits
+        {
+            Collider = ColliderKind.Cylinder,
+            ColliderShape = new ColliderShapeEdits { IsFitted = false, Radius = 2, Height = 0.5f, Axis = ColliderAxis.X }
+        };
+        scene.Edits.Parts["Rock"] = new PartEdits
+        {
+            Collider = ColliderKind.ConvexHull, ColliderShape = new ColliderShapeEdits { IsFitted = false, Position = new Vector3F(1, 0, 0) }
+        };
+
+        var model = Import(scene, Vector3<double>.Zero);
+
+        Assert.Multiple(() =>
+        {
+            var crate = (BoxCollider)model.Dependencies.First(part => part.Name == "Crate").GetComponent<Collider>();
+            Assert.That(crate.Size, Is.EqualTo(new Vector3F(3)));
+            Assert.That(crate.Position, Is.EqualTo(new Vector3F(0, -1, 0)));
+            Assert.That(crate.IsFitted, Is.False);
+            var wheel = (CylinderCollider)model.Dependencies.First(part => part.Name == "Wheel").GetComponent<Collider>();
+            Assert.That(wheel.Radius, Is.EqualTo(2f));
+            Assert.That(wheel.Height, Is.EqualTo(0.5f));
+            Assert.That(wheel.Axis, Is.EqualTo(ColliderAxis.X));
+            var rock = (ConvexHullCollider)model.Dependencies.First(part => part.Name == "Rock").GetComponent<Collider>();
+            Assert.That(rock.Hull, Is.Not.Null, "the mesh's hull, placed by hand");
+            Assert.That(rock.Position, Is.EqualTo(new Vector3F(1, 0, 0)));
+        });
+    }
+
     [Test]
     public void ABodyEditThisEngineCannotRead_IsLeftOut()
     {

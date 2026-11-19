@@ -9,8 +9,8 @@ using Adamantium.ProceduralGeometry.Shapes;
 namespace Adamantium.ECS.Components;
 
 /// <summary>
-/// A capsule round an entity: a segment along <see cref="Direction"/> through the middle of its mesh, rounded at both
-/// ends. Fitted to the mesh when added: along the mesh's longest side, as thick as the wider of the other two.
+/// A capsule round an entity: a segment along <see cref="Axis"/> through the collider's center, rounded at both ends.
+/// A fit stands it along the mesh's longest side, as thick as the wider of the other two.
 /// </summary>
 [ViewModel]
 public partial class CapsuleCollider : Collider
@@ -20,11 +20,14 @@ public partial class CapsuleCollider : Collider
 
     public CapsuleCollider()
     {
-        Direction = CapsuleDirection.Y;
+        BeginFit();
+        Axis = ColliderAxis.Y;
+        EndFit();
     }
 
+    /// <summary>The collider's own axis the capsule stands along.</summary>
     [Bindable]
-    public partial CapsuleDirection Direction { get; set; }
+    public partial ColliderAxis Axis { get; set; }
 
     [Bindable]
     public partial float Radius { get; set; }
@@ -33,26 +36,14 @@ public partial class CapsuleCollider : Collider
     [Bindable]
     public partial float Height { get; set; }
 
-    partial void OnDirectionChanged(CapsuleDirection value) => Rebuild();
+    partial void OnAxisChanged(ColliderAxis value) => Resize();
 
-    partial void OnRadiusChanged(float value) => Rebuild();
+    partial void OnRadiusChanged(float value) => Resize();
 
-    partial void OnHeightChanged(float value) => Rebuild();
-
-    protected override void FollowBounds() => Rebuild();
+    partial void OnHeightChanged(float value) => Resize();
 
     /// <summary>The capsule in its entity's own space.</summary>
     public BoundingCapsule Capsule => capsule;
-
-    public override void CalculateFromMesh(Mesh mesh)
-    {
-        base.CalculateFromMesh(mesh);
-        var size = Bounds.Size.As<float>();
-        Direction = size.X >= size.Y && size.X >= size.Z ? CapsuleDirection.X
-            : size.Y >= size.Z ? CapsuleDirection.Y
-            : CapsuleDirection.Z;
-        Fit(size);
-    }
 
     public override void ClearData()
     {
@@ -64,14 +55,6 @@ public partial class CapsuleCollider : Collider
         return colliderData.ContainsKey(camera);
     }
 
-    protected override Mesh BuildOutline()
-    {
-        var turn = Direction == CapsuleDirection.X ? Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(-90))
-            : Direction == CapsuleDirection.Z ? Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90))
-            : Matrix4x4<double>.Identity;
-        return Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, Radius * 2, 40, turn * Matrix4x4.CreateTranslation<double>(capsule.Center.As<double>()));
-    }
-
     public override void UpdateForCamera(CameraBase camera)
     {
         colliderData[camera] = capsule.Transform(Owner.Transform.GetMetadata(camera).WorldMatrixF);
@@ -81,31 +64,6 @@ public partial class CapsuleCollider : Collider
     {
         var placed = colliderData.TryGetValue(camera, out var data) ? data : capsule;
         return placed.Within(camera.Frustum);
-    }
-
-    public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
-    {
-        capsule = capsule.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
-    }
-
-    public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
-    {
-        capsule = capsule.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation));
-    }
-
-    /// <summary>
-    /// Grows the capsule, along the same direction, to take in <paramref name="collider"/> of this entity or of one
-    /// under it, as it stands here.
-    /// </summary>
-    public override void Merge(Collider collider)
-    {
-        Span<Vector3F> corners = stackalloc Vector3F[2 * OrientedBoundingBox<float>.CornerCount];
-        capsule.GetBoundingBox().GetCorners(corners[..OrientedBoundingBox<float>.CornerCount]);
-        collider.Bounds.ToOrientedBoundingBox().As<float>().Transform(PlacementOf(collider.Owner))
-            .GetCorners(corners[OrientedBoundingBox<float>.CornerCount..]);
-        var merged = OrientedBoundingBox.CreateFromPoints<float>(corners);
-        Bounds = Bounds.FromBoundingBox(merged.As<double>());
-        Fit(merged.Size);
     }
 
     public override bool Intersects(ref Ray<float> ray, out Vector3F point)
@@ -124,23 +82,53 @@ public partial class CapsuleCollider : Collider
         return capsule.Transform(Owner.Transform.GetWorldMatrixF());
     }
 
-    private void Fit(Vector3F size)
+    protected override void FitBox(Bounds box)
     {
-        var along = Direction == CapsuleDirection.X ? size.X : Direction == CapsuleDirection.Y ? size.Y : size.Z;
-        var across = Direction == CapsuleDirection.X ? Math.Max(size.Y, size.Z)
-            : Direction == CapsuleDirection.Y ? Math.Max(size.X, size.Z)
-            : Math.Max(size.X, size.Y);
-        Radius = across / 2;
-        Height = Math.Max(along, across);
-        Rebuild();
+        var size = box.Size.As<float>();
+        Axis = size.X >= size.Y && size.X >= size.Z ? ColliderAxis.X
+            : size.Y >= size.Z ? ColliderAxis.Y
+            : ColliderAxis.Z;
+        Radius = AxisShape.Across(size, Axis) / 2;
+        Height = Math.Max(AxisShape.Along(size, Axis), Radius * 2);
+        Position = box.Center.As<float>();
+        Rotation = TurnOf(box);
     }
 
-    private void Rebuild()
+    protected override void WriteSizes(ColliderShapeEdits shape)
     {
-        var axis = Direction == CapsuleDirection.X ? Vector3F.UnitX : Direction == CapsuleDirection.Y ? Vector3F.UnitY : Vector3F.UnitZ;
-        var half = Math.Max(Height / 2 - Radius, 0);
-        var center = LocalCenter;
-        capsule = new BoundingCapsule(center - axis * half, center + axis * half, Radius);
-        MarkOutlineStale();
+        shape.Axis = Axis;
+        shape.Radius = Radius;
+        shape.Height = Height;
+    }
+
+    protected override void TakeSizes(ColliderShapeEdits shape)
+    {
+        Axis = shape.Axis;
+        Radius = shape.Radius;
+        Height = shape.Height;
+    }
+
+    // The scale along the axis stretches the height, the wider of those across it the radius.
+    protected override Bounds PlaceShape()
+    {
+        var scale = Vector3F.Abs(Scale);
+        var radius = Math.Abs(Radius) * AxisShape.Across(scale, Axis);
+        var height = Math.Abs(Height) * AxisShape.Along(scale, Axis);
+        var half = AxisShape.Direction(Axis) * Math.Max(height / 2 - radius, 0);
+        var placed = new BoundingCapsule(-half, half, radius).Transform(Standing);
+        // Another capsule may stand in the same box: one turned the other way, or along another axis.
+        if (placed.Start != capsule.Start || placed.End != capsule.End || placed.Radius != capsule.Radius)
+        {
+            MarkOutlineStale();
+        }
+
+        capsule = placed;
+        return BoundsOf(capsule.GetBoundingBox());
+    }
+
+    protected override Mesh BuildOutline()
+    {
+        return Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, capsule.Radius * 2, 40,
+            AxisShape.StandUp(capsule.Start, capsule.End));
     }
 }

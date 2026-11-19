@@ -7,7 +7,7 @@ namespace Adamantium.Mathematics
    /// <see cref="Center"/>, and the radius of the sphere fitted inside it. Made float - a box, an oriented box, a
    /// sphere - only on request, as that loses precision far from the origin.
    /// </summary>
-   public struct Bounds
+   public struct Bounds : IEquatable<Bounds>
    {
       /// <summary>The middle.</summary>
       public Vector3<double> Center;
@@ -83,6 +83,18 @@ namespace Adamantium.Mathematics
       /// <summary>The bounds of <paramref name="sphere"/>: the cube around it.</summary>
       public static Bounds FromBoundingSphere(BoundingSphere<double> sphere) =>
          new(sphere.Center, new Vector3<double>(sphere.Radius), Quaternion<double>.Identity);
+
+      public readonly bool Equals(Bounds other) =>
+         Center.Equals(other.Center) && HalfExtent.Equals(other.HalfExtent) && Radius.Equals(other.Radius)
+         && Orientation.Equals(other.Orientation);
+
+      public override readonly bool Equals(object obj) => obj is Bounds other && Equals(other);
+
+      public override readonly int GetHashCode() => HashCode.Combine(Center, HalfExtent, Radius, Orientation);
+
+      public static bool operator ==(Bounds left, Bounds right) => left.Equals(right);
+
+      public static bool operator !=(Bounds left, Bounds right) => !left.Equals(right);
 
       /// <inheritdoc />
       public override readonly string ToString() =>

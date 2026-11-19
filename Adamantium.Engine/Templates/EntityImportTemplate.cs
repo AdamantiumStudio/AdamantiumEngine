@@ -259,6 +259,14 @@ public class EntityImportTemplate : IEntityTemplate
                 PhysicsParts.SetCollider(part, kind);
             }
 
+            // Only on a collider of the kind the edits keep - the import's box for none: one kept for a mesh it could
+            // not be fitted to has sizes of its own.
+            if (edits.ColliderShape is { } shape && part.GetComponent<Collider>() is { } collider
+                && PhysicsParts.KindOf(collider) == (edits.Collider ?? ColliderKind.Box))
+            {
+                PhysicsParts.SetShape(collider, shape);
+            }
+
             if (edits.Body is { } body && !PhysicsParts.SetBody(part, body))
             {
                 Log.Logger.Warning("The body {Model} keeps for {Part} is left out", model.Name, path);

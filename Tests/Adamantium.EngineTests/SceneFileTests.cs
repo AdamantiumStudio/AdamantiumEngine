@@ -158,6 +158,31 @@ public class SceneFileTests
             Assert.That(text, Does.Contain("<Collider Kind=\"Sphere\" />"));
             Assert.That(text, Does.Contain("<Collider Kind=\"None\" />"));
             Assert.That(Text(Sample()), Does.Not.Contain("<Body").And.Not.Contain("<Collider"));
+            Assert.That(back.Shapes[0].Collider.Shape, Is.Null, "fitted as its template makes it");
+        });
+    }
+
+    // A collider's sizes and placement are written as attributes, each only when it is not a new collider's own.
+    [Test]
+    public void AColliderSizedByHand_IsReadBack_WritingOnlyWhatIsNotByDefault()
+    {
+        var sized = new ColliderShapeEdits
+        {
+            IsFitted = false, Position = new Vector3F(0, -1, 0), Size = new Vector3F(3, 1, 2), Axis = ColliderAxis.X
+        };
+        var scene = Sample();
+        scene.Shapes[0].Collider = new SceneCollider { Kind = ColliderKind.Box, Shape = sized };
+        scene.Markers[0].Collider = new SceneCollider { Kind = ColliderKind.Sphere, Shape = new ColliderShapeEdits { Scale = new Vector3F(2) } };
+
+        var back = WriteAndRead(scene);
+        var text = Text(scene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Shapes[0].Collider.Shape, Is.EqualTo(sized));
+            Assert.That(back.Markers[0].Collider.Shape, Is.EqualTo(new ColliderShapeEdits { Scale = new Vector3F(2) }));
+            Assert.That(text, Does.Contain("<Collider Kind=\"Box\" Fitted=\"false\" Position=\"0, -1, 0\" Size=\"3, 1, 2\" Axis=\"X\" />"));
+            Assert.That(text, Does.Contain("<Collider Kind=\"Sphere\" Scale=\"2, 2, 2\" />"));
         });
     }
 

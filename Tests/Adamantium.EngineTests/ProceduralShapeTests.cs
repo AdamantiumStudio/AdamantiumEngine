@@ -242,7 +242,7 @@ public class ProceduralShapeTests
         var capsule = (CapsuleCollider)collider;
         Assert.Multiple(() =>
         {
-            Assert.That(capsule.Direction, Is.EqualTo(CapsuleDirection.Y));
+            Assert.That(capsule.Axis, Is.EqualTo(ColliderAxis.Y));
             Assert.That(capsule.Radius, Is.EqualTo(0.5f).Within(1e-3));
             Assert.That(capsule.Height, Is.EqualTo(2).Within(1e-3));
         });
