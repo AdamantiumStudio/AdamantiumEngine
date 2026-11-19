@@ -68,6 +68,20 @@ public partial class CylinderCollider : Collider
     /// <summary>The cylinder in its entity's own space.</summary>
     public BoundingCylinder Cylinder => cylinder;
 
+    // Its ends are carried by its entity's scale; it stays round, its radius grown by the wider of the scales across the
+    // entity's axis nearest its own.
+    public override double MeasureVolume(Vector3F scale)
+    {
+        var size = Vector3F.Abs(scale);
+        var along = Vector3F.Abs(cylinder.End - cylinder.Start);
+        var across = along.X >= along.Y && along.X >= along.Z ? Math.Max(size.Y, size.Z)
+            : along.Y >= along.Z ? Math.Max(size.X, size.Z)
+            : Math.Max(size.X, size.Y);
+        double radius = cylinder.Radius * across;
+        double height = ((cylinder.End - cylinder.Start) * scale).Length();
+        return Math.PI * radius * radius * height;
+    }
+
     public override void ClearData()
     {
         colliderData.Clear();

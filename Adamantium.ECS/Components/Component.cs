@@ -53,6 +53,10 @@ namespace Adamantium.ECS.Components
             owner?.NoteChanged();
         }
 
+        /// <summary>Says a value worked out from others changed: those others already counted as the entity's change,
+        /// so this one does not count again.</summary>
+        protected void RaiseWorkedOutChanged(string propertyName) => base.RaisePropertyChanged(propertyName);
+
 
         public virtual void Initialize()
         {

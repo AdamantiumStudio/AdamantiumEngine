@@ -133,15 +133,38 @@ namespace Adamantium.ECS.Components
         }
 
         // Every input of the world matrix marks it to be computed again.
-        partial void OnPivotRotationChanged(QuaternionF value) => IsWorldDirty = true;
+        partial void OnPivotRotationChanged(QuaternionF value) => Turn(Owner);
 
         partial void OnPositionChanged(Vector3<double> value) => IsWorldDirty = true;
 
-        partial void OnRotationChanged(QuaternionF value) => IsWorldDirty = true;
+        partial void OnRotationChanged(QuaternionF value) => Turn(Owner?.Owner);
 
-        partial void OnBaseScaleChanged(Vector3F value) => IsWorldDirty = true;
+        partial void OnBaseScaleChanged(Vector3F value) => Rescale();
 
-        partial void OnScaleFactorChanged(Vector3F value) => IsWorldDirty = true;
+        partial void OnScaleFactorChanged(Vector3F value) => Rescale();
+
+        // A scale changes the size of all under the entity: its world, and the weight of its bodies.
+        private void Rescale()
+        {
+            IsWorldDirty = true;
+            RigidBody.ReweighAround(Owner);
+        }
+
+        // A turn changes the sizes along their axes only of what a scale after it stretches unevenly: a rotation comes
+        // after the entity's own scale, so only those above count; a pivot's turn comes before it too. A body the physics
+        // turns every frame stands under an even scale, and weighs nothing anew.
+        private void Turn(Entity firstScaledAfter)
+        {
+            IsWorldDirty = true;
+            for (var at = firstScaledAfter; at != null; at = at.Owner)
+            {
+                if (at.Transform is { } transform && !Vector3.IsEven(transform.Scale))
+                {
+                    RigidBody.ReweighAround(Owner);
+                    return;
+                }
+            }
+        }
 
         public Vector3F Scale => baseScale * scaleFactor;
 

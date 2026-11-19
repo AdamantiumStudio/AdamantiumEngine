@@ -186,6 +186,9 @@ namespace Adamantium.ECS
             OwnerChanged?.Invoke(this, new OwnerChangedEventArgs(oldOwner, newOwner));
         }
 
+        // Turned off, its colliders weigh on no body.
+        partial void OnIsEnabledChanged(bool value) => RigidBody.ReweighAbove(Owner);
+
         public event EventHandler<OwnerChangedEventArgs> OwnerChanged;
 
         public ReadOnlyTrackingCollection<Entity> Dependencies => dependenciesReadOnly;
@@ -359,14 +362,20 @@ namespace Adamantium.ECS
             return componentCollection.GetAllInChildren<T>();
         }
 
+        // Where the tree changes shape: the part's colliders weigh on this entity's body, or no more, and the bodies in
+        // the part stand under another scale.
         internal void AddDependency(Entity entity)
         {
             dependencies.Add(entity);
+            RigidBody.ReweighAbove(this);
+            RigidBody.ReweighWithin(entity);
         }
 
         internal void RemoveDependency(Entity entity)
         {
             dependencies.Remove(entity);
+            RigidBody.ReweighAbove(this);
+            RigidBody.ReweighWithin(entity);
         }
 
         internal void MoveDependency(Entity entity, int index)
@@ -381,6 +390,18 @@ namespace Adamantium.ECS
 
         internal void OnComponentChanged(IComponent oldComponent, IComponent newComponent, ComponentChangedAction action)
         {
+            // A collider or a body that came or went: the body weighs anew, the component in its list or out of it. A body
+            // of its own takes this entity's colliders from the body above, or gives them back.
+            if (oldComponent is Collider or RigidBody || newComponent is Collider or RigidBody)
+                RigidBody.ReweighAbove(this);
+
+            if (oldComponent is RigidBody || newComponent is RigidBody)
+                RigidBody.ReweighAbove(Owner);
+
+            // A transform taken off or put on changes the scale all under it stands at.
+            if (oldComponent is Transform || newComponent is Transform)
+                RigidBody.ReweighAround(this);
+
             ComponentsChanged?.Invoke(this, new EntityComponentEventArgs(this, oldComponent, newComponent, action));
             NoteChanged();
         }

@@ -39,6 +39,26 @@ public sealed class ConvexHull : IConvexShape<float>
 
     public bool IsFlat => outline != null;
 
+    /// <summary>The space the hull holds, in cubic units; none for a flat one. Summed as tetrahedra from its first corner
+    /// to each face, in double so a large hull keeps its digits.</summary>
+    public double MeasureVolume()
+    {
+        if (IsFlat)
+            return 0;
+
+        var apex = vertices[0].As<double>();
+        var volume = 0.0;
+        for (var index = 0; index < triangles.Length; index += 3)
+        {
+            var first = vertices[triangles[index]].As<double>() - apex;
+            var second = vertices[triangles[index + 1]].As<double>() - apex;
+            var third = vertices[triangles[index + 2]].As<double>() - apex;
+            volume += Vector3<double>.Dot(first, Vector3<double>.Cross(second, third));
+        }
+
+        return Math.Abs(volume) / 6;
+    }
+
     /// <summary>Builds the hull by Quickhull: from the widest tetrahedron, always adding the farthest point outside.</summary>
     public static ConvexHull FromPoints(IReadOnlyList<Vector3F> points)
     {

@@ -45,6 +45,14 @@ public partial class CapsuleCollider : Collider
     /// <summary>The capsule in its entity's own space.</summary>
     public BoundingCapsule Capsule => capsule;
 
+    // Its ends are carried by its entity's scale; it stays round, its radius grown by the largest.
+    public override double MeasureVolume(Vector3F scale)
+    {
+        double radius = capsule.Radius * Vector3F.Max(Vector3F.Abs(scale));
+        double length = ((capsule.End - capsule.Start) * scale).Length();
+        return Math.PI * radius * radius * (length + 4.0 / 3.0 * radius);
+    }
+
     public override void ClearData()
     {
         colliderData.Clear();

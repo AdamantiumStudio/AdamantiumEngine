@@ -43,7 +43,7 @@ internal readonly struct ColliderShape
             {
                 var turn = box.Turn;
                 var own = Vector3F.Abs(box.Size * box.Scale) * 0.5f;
-                if (!IsEven(size) && !IsAlongAxes(turn))
+                if (!Vector3.IsEven(size) && !IsAlongAxes(turn))
                 {
                     // Turned on an unevenly scaled entity, a box is skewed: no box fits it, the hull of its corners does.
                     shape = new ColliderShape(SkewedBox(own, turn, scale, carriedShapes, taken), box.Position * scale,
@@ -138,9 +138,6 @@ internal readonly struct ColliderShape
                     Matrix4x4.CreateScale<float>(scale);
         return carriedShapes.Take(UnitCube, carry, 0, taken);
     }
-
-    private static bool IsEven(Vector3F size) =>
-        MathF.Abs(size.X - size.Y) <= 1e-5f * size.X && MathF.Abs(size.X - size.Z) <= 1e-5f * size.X;
 
     private static bool IsAlongAxes(QuaternionF turn) =>
         Vector3F.Max(Vector3F.Abs(Vector3F.Transform(Vector3F.UnitX, turn))) > 0.9999f

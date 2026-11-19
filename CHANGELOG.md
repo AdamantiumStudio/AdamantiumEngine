@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- `RigidBody.ComputedMass`: the mass the physics gives the body once it is dynamic - its `Mass` when above zero, else
+  its `Density` times the volume of its colliders, on its entity and on those below it with no body of their own, each
+  at the scale its world matrix has along its own axes - outside a game too. A collider changed, added, taken off or
+  turned off, a scale or a turn, an entity hung elsewhere, taken off or turned off, or the mass or density changed,
+  says it changed, not counted as the entity's change; it is weighed once, when next read. `Collider.MeasureVolume`
+  measures each collider as the physics does; a mesh collider weighs nothing, and a skewed or flattened part's
+  colliders are left out, as the physics leaves them. `ConvexHull.MeasureVolume` gives the space a hull holds;
+  `Matrix4x4.IsSkewed` and `Vector3.IsEven` are the tests the physics and the weighing share.
 - PDF: `PdfDocument.CollectFonts` and `PdfPage.CollectFonts` - the fonts a document uses, in page resources and their
   graphics states, forms, tiling patterns, soft-mask groups, Type 3 fonts' own resources and annotation appearances,
   each once and with the pages that use it (`PdfDocumentFont`), a page's own first; `PdfDocument.FileSize`.

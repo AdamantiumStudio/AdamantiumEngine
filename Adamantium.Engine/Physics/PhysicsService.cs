@@ -1315,13 +1315,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return world.Determinant() != 0 && !IsSkewed(world);
     }
 
-    private static bool IsSkewed(in Matrix4x4F world)
-    {
-        var axisX = Vector3F.TransformNormal(Vector3F.UnitX, world);
-        var axisY = Vector3F.TransformNormal(Vector3F.UnitY, world);
-        var axisZ = Vector3F.TransformNormal(Vector3F.UnitZ, world);
-        return !IsSquare(axisX, axisY) || !IsSquare(axisY, axisZ) || !IsSquare(axisZ, axisX);
-    }
+    private static bool IsSkewed(in Matrix4x4F world) => Matrix4x4.IsSkewed(world);
 
     private static bool IsTurnAndEvenScale(in Matrix4x4F world)
     {
@@ -1333,9 +1327,6 @@ public sealed class PhysicsService : GameService, IPhysicsService
         var lengthZ = Vector3F.TransformNormal(Vector3F.UnitZ, world).Length();
         return MathF.Abs(lengthX - lengthY) <= 1e-4f * lengthX && MathF.Abs(lengthX - lengthZ) <= 1e-4f * lengthX;
     }
-
-    private static bool IsSquare(Vector3F first, Vector3F second) =>
-        MathF.Abs(Vector3F.Dot(first, second)) <= 1e-4f * first.Length() * second.Length();
 
     private static int CountDepth(Entity entity)
     {
