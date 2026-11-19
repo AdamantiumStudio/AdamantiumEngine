@@ -7,6 +7,15 @@ All packages share one version.
 
 ### Added
 
+- Joints in the physics: `IPhysicsWorld.Add(JointDescription)` gives a `JointHandle`. `JointKind.Fixed` welds two
+  bodies, `Ball` shares a point, `Hinge` turns them about an axis, `Slider` slides them along one, `Distance` keeps
+  two points apart - as a rod, a rope between limits, or a spring. A joint holds the description's first body to its
+  second, or to the world; its point and axis are given in the world when it is added. Hinges and sliders take limits
+  and a motor (`SetMotor`), `GetJointPosition` reads a hinge's angle, a slider's offset or a distance. Joints are soft
+  constraints solved in the contacts' substeps, before them, as Box2D v3 solves them; their bodies sleep and wake as
+  one island, a moving body wakes a sleeping one held to it, and the bodies a joint holds do not collide unless
+  `CollideConnected` says so. A body taken out takes its joints.
+
 - Windows: `IAttachmentExecute` with `Win32Interop.ClsidAttachmentServices`, and `Win32Interop.AssocIsDangerous` - to
   open or mark a file from outside as the system's policy says. macOS: `PosixInterop.SetMacExtendedAttribute`.
 - `RigidBody.ComputedMass`: the mass the physics gives the body once it is dynamic - its `Mass` when above zero, else

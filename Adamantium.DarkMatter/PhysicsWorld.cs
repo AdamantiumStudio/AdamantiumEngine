@@ -166,6 +166,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public void Remove(BodyHandle body)
     {
         var index = Resolve(body);
+        RemoveJointsOf(index);
         TearOffContacts(index);
         ref var state = ref _bodies[index];
         RemoveParts(index);
@@ -339,6 +340,8 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         UpdateBroadPhase();
         FindNewPairs();
         UpdateContacts(stepSeconds);
+        // While the marks still say which bodies were put somewhere by hand, and before the woken wake what they touch.
+        WakeJointPartners();
         ClearMarks();
         WakeTouchedSleepers();
 
@@ -350,16 +353,21 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         }
 
         _solver.Prepare(_bodies, _contacts, _pieces);
+        _jointSolver.Prepare(_bodies, _joints);
         var contactHertz = MathF.Min(Settings.ContactHertz, 0.25f * inverseSubstep);
         var contactSoftness = Softness.Create(contactHertz, Settings.ContactDampingRatio, substep);
         var staticSoftness = Softness.Create(2f * contactHertz, Settings.ContactDampingRatio, substep);
 
+        // Joints before contacts in each pass, as Box2D v3 solves them: the contacts have the last word.
         for (var pass = 0; pass < Settings.Substeps; pass++)
         {
             IntegrateVelocities(substep);
+            _jointSolver.WarmStart(_bodies);
             _solver.WarmStart(_bodies);
+            _jointSolver.Solve(_bodies, true, substep, staticSoftness);
             _solver.Solve(_bodies, inverseSubstep, true, contactSoftness, staticSoftness, Settings.MaxPushOutSpeed);
             IntegratePositions(substep);
+            _jointSolver.Solve(_bodies, false, substep, staticSoftness);
             _solver.Solve(_bodies, inverseSubstep, false, contactSoftness, staticSoftness, Settings.MaxPushOutSpeed);
         }
 
@@ -438,7 +446,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                         continue;
 
                     var key = Contact.MakeKey(part, otherPart);
-                    if (!_contactsByKey.ContainsKey(key))
+                    if (!_contactsByKey.ContainsKey(key) && !AreHeldApart(index, other))
                         CreateContact(key, Math.Min(part, otherPart), Math.Max(part, otherPart));
                 }
             }
@@ -853,6 +861,29 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             if (first.IsDynamic && second.IsDynamic)
             {
                 JoinIslands(contact.First, contact.Second);
+                continue;
+            }
+
+            if (first.Kind == BodyKind.Kinematic && first.IsAwake)
+                second.SleepTime = 0;
+
+            if (second.Kind == BodyKind.Kinematic && second.IsAwake)
+                first.SleepTime = 0;
+        }
+
+        // A joint binds its bodies into one island, as a touch does; one held to a moving kinematic body stays awake.
+        var activeJoints = _jointSolver.Active;
+        for (var index = 0; index < activeJoints.Count; index++)
+        {
+            var joint = activeJoints[index];
+            if (joint.First == NoBody || joint.Second == NoBody)
+                continue;
+
+            ref var first = ref _bodies[joint.First];
+            ref var second = ref _bodies[joint.Second];
+            if (first.IsDynamic && second.IsDynamic)
+            {
+                JoinIslands(joint.First, joint.Second);
                 continue;
             }
 
