@@ -298,6 +298,27 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         earlier != null && _data.Length >= earlier._data.Length &&
         _data.Span[..earlier._data.Length].SequenceEqual(earlier._data.Span);
 
+    /// <summary>Tries the password <paramref name="earlier"/> was given on this document, when this <see
+    /// cref="Continues"/> it, encrypted the same way - the same file saved again asks for it no more. Rights this one
+    /// has already are never lowered. Called before anything is read; true when this document is open after it.
+    /// </summary>
+    public bool TakePasswordFrom(PdfDocument earlier)
+    {
+        // Nothing to raise, or nothing to carry: an owner already, no password given, no security there.
+        if (_security == null || _security.IsOwner || earlier?._password == null || earlier._security == null ||
+            (IsAuthenticated && !earlier._security.IsOwner))
+        {
+            return IsAuthenticated;
+        }
+
+        // An update appended to the file may not swap its encryption, say for none, and still take the password.
+        var sameEncryption = earlier._security.Revision == _security.Revision &&
+                             earlier._security.StringMethod == _security.StringMethod &&
+                             earlier._security.StreamMethod == _security.StreamMethod &&
+                             earlier._security.EmbeddedFileMethod == _security.EmbeddedFileMethod;
+        return (sameEncryption && Continues(earlier) && Authenticate(earlier._password)) || IsAuthenticated;
+    }
+
     public static PdfDocument Open(Stream stream, PdfReadOptions options = null)
     {
         using var copy = new MemoryStream();
@@ -687,7 +708,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         var id = Resolve(Trailer[PdfKeys.Id]) as PdfArray;
         var firstId = id is { Count: > 0 } ? (Resolve(id[0]) as PdfString)?.Bytes : null;
         _security = new PdfStandardSecurityHandler(dictionary, firstId);
-        if (_options.Password == null || !_security.Authenticate(_options.Password))
+        if (_options.Password != null && _security.Authenticate(_options.Password))
+        {
+            _password = _options.Password;
+        }
+        else
         {
             _security.Authenticate(string.Empty);
         }
