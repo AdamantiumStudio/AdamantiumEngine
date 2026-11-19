@@ -17,6 +17,7 @@ using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Imaging;
 using Adamantium.Mathematics;
+using Adamantium.Win32;
 using Serilog;
 
 namespace Adamantium.Multiverse;
@@ -508,6 +509,7 @@ public class Universe : IUniverse
         catch (Exception exception)
         {
             Log.Logger.Fatal(exception, "Universe loop stopped");
+            cancellationTokenSource.Cancel();
         }
         finally
         {
@@ -665,6 +667,7 @@ public class Universe : IUniverse
         if (Mode == UniverseMode.Standalone)
         {
             platform.Run(cancellationTokenSource.Token);
+            loopThread.Join();
         }
     }
 
@@ -854,33 +857,61 @@ public class Universe : IUniverse
         return isFramePaused ? appTime with { FrameTime = 0 } : appTime;
     }
 
-    /// <summary>
-    /// Runs the universe's own loop
-    /// </summary>
     private void RunLoop()
+    {
+        var finerTimers = IsFixedTimeStep && OperatingSystem.IsWindows();
+        if (finerTimers)
+        {
+            Win32Interop.TimeBeginPeriod(1);
+        }
+
+        try
+        {
+            PlayOwnLoop();
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Fatal(exception, "Universe failed to stop");
+        }
+        finally
+        {
+            if (finerTimers)
+            {
+                Win32Interop.TimeEndPeriod(1);
+            }
+        }
+    }
+
+    private void PlayOwnLoop()
     {
         try
         {
             OnStarted();
-
             while (IsRunning)
             {
-                if (IsFixedTimeStep)
+                var desiredFps = DesiredFPS;
+                if (IsFixedTimeStep && desiredFps > 0)
                 {
+                    var step = 1.0d / desiredFps;
                     accumulatedFrameTime += MeasureFrameTime();
-                    if (accumulatedFrameTime < TimeStep)
+                    if (accumulatedFrameTime < step)
+                    {
+                        cancellationTokenSource.Token.WaitHandle.WaitOne((int)((step - accumulatedFrameTime) * 1000));
                         continue;
+                    }
                 }
 
                 RunOwnFrame();
             }
-
-            OnStopped();
         }
         catch (Exception exception)
         {
-            // The loop thread's outermost frame: the only record that the loop stopped, and why.
             Log.Logger.Fatal(exception, "Universe loop stopped");
+            cancellationTokenSource.Cancel();
+        }
+        finally
+        {
+            OnStopped();
         }
     }
 
@@ -957,7 +988,7 @@ public class Universe : IUniverse
             
         if (Mode == UniverseMode.Standalone)
         {
-            GraphicsDeviceService.CreateMainDevice("");
+            GraphicsDeviceService.CreateMainDevice(string.IsNullOrEmpty(Title) ? "Universe" : Title);
         }
 
         cancellationTokenSource = new CancellationTokenSource();

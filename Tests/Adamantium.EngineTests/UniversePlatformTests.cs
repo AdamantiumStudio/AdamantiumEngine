@@ -63,7 +63,7 @@ public class UniversePlatformTests
     {
         var universe = new TestUniverse();
         var registry = (IContainerRegistry)universe.Container;
-        var host = new NoSurfaceHost();
+        var host = new HeadlessPlatform();
         registry.RegisterInstance<IOutputFactory>(host);
         registry.RegisterInstance<IWindowingPlatform>(host);
         registry.RegisterInstance<IGamepadBackend>(new NoGamepadBackend());
