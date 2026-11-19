@@ -231,6 +231,24 @@ public class EntityImportTemplate : IEntityTemplate
         }
     }
 
+    // A part's joint, held to the part of the same model its path names, or to the world; one whose other part a new
+    // import took away waits in the file.
+    private static void ApplyJoint(Entity model, Entity part, string path, JointEdits joint)
+    {
+        Entity connected = null;
+        if (joint.ConnectedPart != null && (connected = ModelPartPath.Find(model, joint.ConnectedPart)) == null)
+        {
+            Log.Logger.Warning("{Model} has no part {Other} any more; the joint of {Part} waits in the file", model.Name,
+                joint.ConnectedPart, path);
+            return;
+        }
+
+        if (!PhysicsParts.SetJoint(part, joint, connected))
+        {
+            Log.Logger.Warning("The joint {Model} keeps for {Part} is left out", model.Name, path);
+        }
+    }
+
     // The edits made in the editor, each on the part its path names; an edit whose part a new import took away waits in
     // the file.
     private void ApplyEdits(Entity model)
@@ -270,6 +288,11 @@ public class EntityImportTemplate : IEntityTemplate
             if (edits.Body is { } body && !PhysicsParts.SetBody(part, body))
             {
                 Log.Logger.Warning("The body {Model} keeps for {Part} is left out", model.Name, path);
+            }
+
+            if (edits.Joint is { } joint)
+            {
+                ApplyJoint(model, part, path, joint);
             }
         }
     }

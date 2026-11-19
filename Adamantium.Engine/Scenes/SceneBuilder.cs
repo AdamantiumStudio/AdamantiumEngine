@@ -120,6 +120,12 @@ public sealed class SceneBuilder
             }
         }
 
+        // Once every entry is made: a joint holds to an entry of any section.
+        foreach (var each in made)
+        {
+            ApplyJoint(each.Entity, each.Entry, byId);
+        }
+
         foreach (var entry in scene.GameComponents)
         {
             if (byId.TryGetValue(entry.On, out var entity))
@@ -473,6 +479,41 @@ public sealed class SceneBuilder
         {
             ApplyPhysics(entity, entry);
         }
+    }
+
+    /// <summary>Makes <paramref name="entity"/>'s joint the one <paramref name="entry"/> keeps, held to the entity of
+    /// <paramref name="byId"/> it names or to the world - none for none, but a model's root keeping the one its model's
+    /// edits give it. A kind this engine does not know, or an entity the scene does not hold, leaves the joint out,
+    /// logged. Building, and putting a scene back as it was; on the world's thread.</summary>
+    internal static void ApplyJoint(Entity entity, ScenePlacement entry, IReadOnlyDictionary<UInt128, Entity> byId)
+    {
+        if (entry is SceneLight or SceneCamera || entity.GetComponent<UnloadedShape>() != null)
+            return;
+
+        if (entry.Joint is not { } kept)
+        {
+            if (entry is not SceneModel && entity.GetComponent<Joint>() is { } given)
+                entity.RemoveComponent(given);
+
+            return;
+        }
+
+        if (kept.ToEdits() is not { } edits)
+        {
+            Log.Logger.Warning("Scene: the joint of {Name} is of a kind this engine does not know; it is left out",
+                entry.Name);
+            return;
+        }
+
+        Entity connected = null;
+        if (kept.Connected is { } uid && !byId.TryGetValue(uid, out connected))
+        {
+            Log.Logger.Warning("Scene: the joint of {Name} holds to {Connected}, which the scene does not hold; it is "
+                               + "left out", entry.Name, kept.ConnectedText);
+            return;
+        }
+
+        PhysicsParts.SetJoint(entity, edits, connected);
     }
 
     // The entity's physics made the entry's - built, or put back as it was when a game stops: its body, none for none

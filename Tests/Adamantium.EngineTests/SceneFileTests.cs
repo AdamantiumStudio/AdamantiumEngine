@@ -164,6 +164,32 @@ public class SceneFileTests
 
     // A collider's sizes and placement are written as attributes, each only when it is not a new collider's own.
     [Test]
+    public void AJoint_IsReadBack_WritingOnlyWhatIsNotByDefault()
+    {
+        var scene = Sample();
+        scene.Shapes[0].Joint = new SceneJoint
+        {
+            Kind = Adamantium.DarkMatter.JointKind.Hinge, Connected = Robot, Anchor = new Vector3F(-0.5f, 0, 0),
+            UsesLimits = true, LowerLimit = -45
+        };
+
+        var text = Text(scene);
+        var back = WriteAndRead(scene).Shapes[0].Joint;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text, Does.Contain("<Joint ").And.Contain("Kind=\"Hinge\"").And.Contain("UsesLimits=\"true\"")
+                .And.Contain("LowerLimit=\"-45\""));
+            Assert.That(text, Does.Not.Contain("SpringDampingRatio").And.Not.Contain("Axis="), "defaults left out");
+            Assert.That(back.Kind, Is.EqualTo(Adamantium.DarkMatter.JointKind.Hinge));
+            Assert.That(back.Connected, Is.EqualTo(Robot));
+            Assert.That(back.Anchor, Is.EqualTo(new Vector3F(-0.5f, 0, 0)));
+            Assert.That(back.LowerLimit, Is.EqualTo(-45));
+            Assert.That(back.ToEdits()?.UsesLimits, Is.True);
+        });
+    }
+
+    [Test]
     public void AColliderSizedByHand_IsReadBack_WritingOnlyWhatIsNotByDefault()
     {
         var sized = new ColliderShapeEdits

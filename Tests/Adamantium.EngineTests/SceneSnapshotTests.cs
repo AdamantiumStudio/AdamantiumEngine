@@ -70,6 +70,43 @@ public class SceneSnapshotTests
         });
     }
 
+    // A hinge from the scene held to the group: built so, written back so, and put back as it was after a game changed
+    // it - the same component - and took off a joint the game gave the group.
+    [Test]
+    public async Task AJoint_IsBuilt_Written_AndPutBack()
+    {
+        var file = new SceneFile();
+        file.Markers.Add(new SceneMarker { Uid = 20, Name = "Post" });
+        file.Markers.Add(new SceneMarker
+        {
+            Uid = 21, Name = "Gate", Position = new Vector3<double>(1, 0, 0),
+            Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic },
+            Joint = new SceneJoint { Kind = Adamantium.DarkMatter.JointKind.Hinge, Connected = 20, Anchor = new Vector3F(-1, 0, 0) }
+        });
+        await new SceneBuilder(_scene, new CountingAssets()).Build(file);
+        _world.ForceUpdate();
+        var gate = Named("Gate");
+        var post = Named("Post");
+        var hinge = gate.GetComponent<HingeJoint>();
+        var written = SceneCapture.Capture(_scene).Markers.Find(entry => entry.Name == "Gate")?.Joint;
+
+        var snapshot = SceneSnapshot.Take(_scene);
+        hinge.Anchor = new Vector3F(5, 5, 5);
+        post.AddComponent(new BallJoint());
+        _world.ForceUpdate();
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hinge?.ConnectedBody, Is.SameAs(post));
+            Assert.That(written?.Connected, Is.EqualTo((System.UInt128)20));
+            Assert.That(gate.GetComponent<HingeJoint>(), Is.SameAs(hinge), "the same component");
+            Assert.That(hinge?.Anchor, Is.EqualTo(new Vector3F(-1, 0, 0)));
+            Assert.That(post.GetComponent<Joint>(), Is.Null, "the game's joint taken off");
+        });
+    }
+
     // What a game did, kept: the scene stays as it left it; put before, it is as it was - what joined gone, what was
     // taken out back; put after again, as the game left it.
     [Test]

@@ -15,6 +15,15 @@ All packages share one version.
   constraints solved in the contacts' substeps, before them, as Box2D v3 solves them; their bodies sleep and wake as
   one island, a moving body wakes a sleeping one held to it, and the bodies a joint holds do not collide unless
   `CollideConnected` says so. A body taken out takes its joints.
+- Joint components, as Unity has them: `FixedJoint`, `BallJoint`, `HingeJoint` (axis, limits in degrees, motor),
+  `SliderJoint` (axis, limits in meters, motor) and `DistanceJoint` (the other end, limits, spring) on an entity with a
+  `RigidBody`, which one brings; `Joint` holds what they share - `ConnectedBody`, the entity whose body it holds to or
+  none for the world, the `Anchor` in its entity's space, `CollideConnected`. A copied joint held to an entity copied
+  with it is held to that copy. `PhysicsService` asks the physics for each joint once its bodies are there, anew when
+  it changes, and the physics adds it again when one of its bodies is made anew. A joint inside a model is kept in the
+  model's edits (`PartEdits.Joint`, `JointEdits`, its other part by path); one between a scene's entries in the scene
+  (`ScenePlacement.Joint`, `SceneJoint`, its other entry by id), put back as it was when a game stops.
+  `PhysicsParts.SetJoint` and `JointOf` give a joint to an entity and read it back.
 
 - Windows: `IAttachmentExecute` with `Win32Interop.ClsidAttachmentServices`, and `Win32Interop.AssocIsDangerous` - to
   open or mark a file from outside as the system's policy says. macOS: `PosixInterop.SetMacExtendedAttribute`.

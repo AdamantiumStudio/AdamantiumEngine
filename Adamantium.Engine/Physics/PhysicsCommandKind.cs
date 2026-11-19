@@ -19,5 +19,9 @@ internal enum PhysicsCommandKind
     /// <summary>The key's body changed where it stands: its kind, settings and shape, and put where its entity was
     /// moved by hand.</summary>
     ChangeBody,
-    RemoveBody
+    RemoveBody,
+
+    /// <summary>The joint under the key, as its request asks, in place of any it was before.</summary>
+    AddJoint,
+    RemoveJoint
 }

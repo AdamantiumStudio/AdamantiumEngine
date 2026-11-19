@@ -67,6 +67,11 @@ public abstract class ScenePlacement
     [XmlElement("Collider")]
     public SceneCollider Collider { get; set; }
 
+    /// <summary>Its joint, holding its body to another entry's or to the world; null for none. A light's and a
+    /// camera's are not read.</summary>
+    [XmlElement("Joint")]
+    public SceneJoint Joint { get; set; }
+
     /// <summary>Whether it works and is drawn, in the editor and in the game; written only when it does not.</summary>
     [XmlAttribute("Enabled")]
     public bool IsEnabled { get; set; } = true;

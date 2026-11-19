@@ -11,4 +11,7 @@ public sealed class PartEdits
 
     /// <summary>How the physics moves the part in a game; null when the part is no body of its own.</summary>
     public BodyEdits Body { get; set; }
+
+    /// <summary>The joint holding the part's body to another part's, or to the world; null for none.</summary>
+    public JointEdits Joint { get; set; }
 }
