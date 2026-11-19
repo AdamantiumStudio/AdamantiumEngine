@@ -131,7 +131,7 @@ internal readonly struct ColliderShape
     /// own axes by <paramref name="carry"/>, the entity's place left to the part's pose: a box as the hull of its
     /// corners, a hull or a mesh as it is; false for a round collider, which no hull fits skewed. Its key goes in
     /// <paramref name="taken"/>.</summary>
-    public static bool TryCreateCarried(Collider collider, in Matrix4x4F carry, CarriedShapeCache carriedShapes,
+    public static bool TryCreateSkewed(Collider collider, in Matrix4x4F carry, CarriedShapeCache carriedShapes,
         List<CarriedShapeKey> taken, out CollisionShape shape)
     {
         switch (collider)

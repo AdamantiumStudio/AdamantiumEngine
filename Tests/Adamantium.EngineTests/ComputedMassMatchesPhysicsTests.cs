@@ -69,7 +69,7 @@ public class ComputedMassMatchesPhysicsTests
         var carry = Matrix4x4.CreateFromQuaternion<float>(Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, 0.7f)) *
                     Matrix4x4.CreateScale<float>(1, 3, 1);
 
-        Assert.That(ColliderShape.TryCreateCarried(box, carry, new CarriedShapeCache(), new List<CarriedShapeKey>(),
+        Assert.That(ColliderShape.TryCreateSkewed(box, carry, new CarriedShapeCache(), new List<CarriedShapeKey>(),
             out var shape), Is.True);
         var physics = shape.ComputeMass(700).Mass;
 

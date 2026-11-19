@@ -759,7 +759,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             if (isSkewed)
             {
                 var position = Vector3F.Transform(ToPhysics(translation.As<double>()) - origin, unturn);
-                AddCarriedCollider(body, entity, collider, carry, position, carriedShapesTaken);
+                AddSkewedPartCollider(body, entity, collider, carry, position, carriedShapesTaken);
                 continue;
             }
 
@@ -793,12 +793,12 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
     // A skewed entity's collider as the hull its corners make, carried into the body and standing at position there; a
     // round one has no hull that fits it - a ball skewed is an egg - and is left out, said once.
-    private void AddCarriedCollider(Entity body, Entity entity, Collider collider, in Matrix4x4F carry,
+    private void AddSkewedPartCollider(Entity body, Entity entity, Collider collider, in Matrix4x4F carry,
         Vector3F position, List<CarriedShapeKey> carriedShapesTaken)
     {
         try
         {
-            if (!ColliderShape.TryCreateCarried(collider, carry, _carriedShapes, carriedShapesTaken, out var shape))
+            if (!ColliderShape.TryCreateSkewed(collider, carry, _carriedShapes, carriedShapesTaken, out var shape))
             {
                 if (_toldOfSkewedRound.Add(entity.Uid))
                     Log.Logger.Warning("{Entity} is skewed, and its {Collider} is round; the body of {Body} leaves it",
