@@ -86,6 +86,9 @@ public partial class MeshCollider : Collider
         return colliderData.TryGetValue(camera, out var placed) && IntersectsCarried(ray, carry * placed.World, out point);
     }
 
+    /// <summary>A surface holds no space: a mesh collider adds nothing to its body's weight.</summary>
+    public override double MeasureVolume(Vector3F scale) => 0;
+
     /// <summary>The box round the carried mesh where its entity stands: a mesh is no convex shape to test.</summary>
     public override IConvexShape<float> GetWorldShape()
     {

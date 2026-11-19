@@ -11,6 +11,14 @@ public static class Vector3
     /// <summary>A vector of <paramref name="x"/>, <paramref name="y"/> and <paramref name="z"/>.</summary>
     public static Vector3<T> Create<T>(T x, T y, T z) where T : unmanaged, INumber<T> => new(x, y, z);
 
+    /// <summary>Whether a scale of <paramref name="scale"/> stretches every way alike, its signs aside, to a
+    /// hundred-thousandth: a turn under it is still a turn.</summary>
+    public static bool IsEven<T>(Vector3<T> scale) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var tolerance = T.CreateTruncating(1e-5) * T.Abs(scale.X);
+        return T.Abs(T.Abs(scale.X) - T.Abs(scale.Y)) <= tolerance && T.Abs(T.Abs(scale.X) - T.Abs(scale.Z)) <= tolerance;
+    }
+
     /// <summary>A vector of <paramref name="value"/> in every component.</summary>
     public static Vector3<T> Create<T>(T value) where T : unmanaged, INumber<T> => new(value);
 

@@ -10,6 +10,26 @@ namespace Adamantium.MathTests;
 public class ConvexHullTests
 {
     [Test]
+    public void TheVolume_IsTheSpaceTheHullHolds_AndNoneForAFlatOne()
+    {
+        var box = ConvexHull.FromPoints([
+            new Vector3F(0, 0, 0), new Vector3F(2, 0, 0), new Vector3F(0, 3, 0), new Vector3F(2, 3, 0),
+            new Vector3F(0, 0, 4), new Vector3F(2, 0, 4), new Vector3F(0, 3, 4), new Vector3F(2, 3, 4),
+            new Vector3F(1, 1, 1)]);
+        var tetrahedron = ConvexHull.FromPoints([
+            new Vector3F(0, 0, 0), new Vector3F(1, 0, 0), new Vector3F(0, 1, 0), new Vector3F(0, 0, 1)]);
+        var flat = ConvexHull.FromPoints([
+            new Vector3F(0, 0, 0), new Vector3F(1, 0, 0), new Vector3F(0, 0, 1), new Vector3F(1, 0, 1)]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(box.MeasureVolume(), Is.EqualTo(24).Within(1e-9));
+            Assert.That(tetrahedron.MeasureVolume(), Is.EqualTo(1.0 / 6).Within(1e-9));
+            Assert.That(flat.MeasureVolume(), Is.Zero);
+        });
+    }
+
+    [Test]
     public void BoxCorners_WithPointsInside_GiveTheBox()
     {
         var random = new Random(21);

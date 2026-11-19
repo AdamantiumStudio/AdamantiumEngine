@@ -70,6 +70,14 @@ namespace Adamantium.ECS.Components
             return ColliderData.TryGetValue(camera, out var placed) && placed.Intersects(ray, out point);
         }
 
+        // Stretched or turned, a box's volume is its own times its entity's scale: the scale stretches all space alike.
+        public override double MeasureVolume(Vector3F scale)
+        {
+            var own = Vector3F.Abs(Size * Scale);
+            var size = Vector3F.Abs(scale);
+            return (double)own.X * own.Y * own.Z * size.X * size.Y * size.Z;
+        }
+
         protected override void FitBox(Bounds box)
         {
             Size = box.Size.As<float>();
