@@ -145,34 +145,14 @@ namespace Adamantium.ECS.Components
 
         public Vector3F Scale => baseScale * scaleFactor;
 
-        private Vector3F angles;
-        private QuaternionF anglesRotation = QuaternionF.Identity;
+        private TypedAngles angles;
 
         /// <summary><see cref="Rotation"/> in degrees about X, Y and Z (pitch, yaw, roll), as people type a turn. The angles
         /// set are given back as they were, 200 staying 200, until something else turns the entity.</summary>
         public Vector3F Angles
         {
-            get
-            {
-                var turn = rotation;
-                if (turn != anglesRotation)
-                {
-                    turn.ToYawPitchRoll(out var yaw, out var pitch, out var roll);
-                    angles = new Vector3F(float.RadiansToDegrees(pitch), float.RadiansToDegrees(yaw),
-                        float.RadiansToDegrees(roll));
-                    anglesRotation = turn;
-                }
-
-                return angles;
-            }
-            set
-            {
-                var turn = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(value.Y),
-                    float.DegreesToRadians(value.X), float.DegreesToRadians(value.Z));
-                angles = value;
-                anglesRotation = turn;
-                Rotation = turn;
-            }
+            get => angles.Read(rotation);
+            set => Rotation = angles.Take(value);
         }
 
         /// <summary>Set by the world-matrix input setters (position/rotation/scale/pivot). TransformService recomputes the
@@ -614,7 +594,6 @@ namespace Adamantium.ECS.Components
             if (component is Transform transform)
             {
                 transform.angles = angles;
-                transform.anglesRotation = anglesRotation;
                 transform.Rotation = Rotation;
                 transform.BaseScale = BaseScale;
                 transform.ScaleFactor = ScaleFactor;

@@ -16,6 +16,7 @@ namespace Adamantium.ECS.Components
         private bool outlineIsStale;
         private int fitDepth;
         private bool isShaped;
+        private TypedAngles angles;
 
         // A collider's own shape is not built here: it is not made yet. Its constructor sets its defaults between
         // BeginFit and EndFit.
@@ -38,8 +39,17 @@ namespace Adamantium.ECS.Components
         public partial Vector3F Position { get; set; }
 
         /// <summary>How the collider is turned against its entity.</summary>
-        [Bindable]
+        [Bindable, Affects(nameof(Angles))]
         public partial QuaternionF Rotation { get; set; }
+
+        /// <summary><see cref="Rotation"/> in degrees about X, Y and Z, as people type a turn; 200 stays 200 until the
+        /// collider is turned otherwise. Set by hand, as <see cref="Rotation"/> is, it makes the collider unfitted.</summary>
+        [DoNotClone]
+        public Vector3F Angles
+        {
+            get => angles.Read(Rotation);
+            set => Rotation = angles.Take(value);
+        }
 
         /// <summary>How the collider is stretched along its own axes, about its center; a fit leaves it as it is.
         /// </summary>
@@ -98,6 +108,7 @@ namespace Adamantium.ECS.Components
             {
                 base.CloneValues(clone);
                 copy.isShaped = isShaped;
+                copy.angles = angles;
             }
             finally
             {

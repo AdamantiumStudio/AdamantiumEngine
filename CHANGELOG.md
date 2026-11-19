@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `Collider.Angles`: the collider's `Rotation` in degrees about X, Y and Z, as `Transform.Angles` has it - 200 typed
+  stays 200, and set by hand it makes the collider unfitted, as its rotation does.
 - A collider stands on its entity where it is placed: `Collider.Position` (its center), `Rotation` and `Scale` (along
   its own axes) place its own shape - `BoxCollider.Size`, `SphereCollider.Radius`, a capsule's or cylinder's `Axis`,
   `Radius` and `Height`, a hull - for the physics, picking, culling and the shown outline alike. `Collider.Placement`

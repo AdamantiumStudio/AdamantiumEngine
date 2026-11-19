@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core;
@@ -55,6 +56,59 @@ public class ColliderPlacementTests
             Assert.That(box.IsFitted, Is.False);
             Assert.That(box.Size, Is.EqualTo(new Vector3F(5)));
             Assert.That(box.Bounds.Size.X, Is.EqualTo(5).Within(1e-5));
+        });
+    }
+
+    [Test]
+    public void AnglesTyped_AreGivenBack_TurnTheCollider_AndStopTheFit()
+    {
+        var box = With(new BoxCollider(), Shape(new Vector3F(-1), new Vector3F(1)));
+        var changed = new List<string>();
+        box.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        box.Angles = new Vector3F(0, 200, 0);
+
+        var expected = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(200), 0, 0);
+        Assert.Multiple(() =>
+        {
+            Assert.That(box.Angles, Is.EqualTo(new Vector3F(0, 200, 0)));
+            Assert.That(box.Rotation, Is.EqualTo(expected));
+            Assert.That(box.IsFitted, Is.False);
+            Assert.That(changed, Does.Contain(nameof(Collider.Angles)));
+        });
+    }
+
+    [Test]
+    public void ARotationSet_IsReadBackAsAngles()
+    {
+        var box = new BoxCollider
+        {
+            Rotation = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(30), float.DegreesToRadians(10), 0)
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(box.Angles.X, Is.EqualTo(10).Within(1e-3));
+            Assert.That(box.Angles.Y, Is.EqualTo(30).Within(1e-3));
+            Assert.That(box.Angles.Z, Is.EqualTo(0).Within(1e-3));
+        });
+    }
+
+    [Test]
+    public void ACopy_KeepsTheRotationExactly_AndTheTypedAngles()
+    {
+        var box = new BoxCollider { Rotation = new QuaternionF(0.1f, 0.2f, 0.3f, 0.927362f) };
+        var typed = new BoxCollider { Angles = new Vector3F(0, 200, 0) };
+        var copy = new BoxCollider();
+        var typedCopy = new BoxCollider();
+
+        box.CloneValues(copy);
+        typed.CloneValues(typedCopy);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(copy.Rotation, Is.EqualTo(box.Rotation));
+            Assert.That(typedCopy.Angles, Is.EqualTo(new Vector3F(0, 200, 0)));
         });
     }
 
