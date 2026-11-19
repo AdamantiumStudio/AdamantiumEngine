@@ -11,9 +11,9 @@ All packages share one version.
   bodies, `Ball` shares a point, `Hinge` turns them about an axis, `Slider` slides them along one, `Distance` keeps
   two points apart - as a rod, a rope between limits, or a spring. A joint holds the description's first body to its
   second, or to the world; its point and axis are given in the world when it is added. Hinges and sliders take limits
-  and a motor (`SetMotor`), `GetJointPosition` reads a hinge's angle, a slider's offset or a distance. Joints are soft
-  constraints solved in the contacts' substeps, before them, as Box2D v3 solves them; their bodies sleep and wake as
-  one island, a moving body wakes a sleeping one held to it, and the bodies a joint holds do not collide unless
+  and a motor (`SetMotor`), `GetJointPosition` reads a hinge's angle, a slider's offset or a distance. Each joint is a
+  few soft constraints, one along each direction or about each axis it keeps, solved in the contacts' substeps, before
+  them, as Box2D v3 solves them; their bodies sleep and wake as one island, a moving body wakes a sleeping one held to it, and the bodies a joint holds do not collide unless
   `CollideConnected` says so. A body taken out takes its joints.
 - Joint components, as Unity has them: `FixedJoint`, `BallJoint`, `HingeJoint` (axis, limits in degrees, motor),
   `SliderJoint` (axis, limits in meters, motor) and `DistanceJoint` (the other end, limits, spring), one of a kind per

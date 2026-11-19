@@ -2,9 +2,9 @@ using System;
 
 namespace Adamantium.DarkMatter.Dynamics;
 
-/// <summary>One pass's solving of a joint's rows: each row a direction two points must not part along, or an axis two
-/// bodies must not turn apart about, with the impulse it holds kept in the joint from substep to substep.</summary>
-internal readonly ref struct JointRows
+/// <summary>One pass's solving of a joint's constraints: each a direction two points must not part along, or an axis
+/// two bodies must not turn apart about, with the impulse it holds kept in the joint from substep to substep.</summary>
+internal readonly ref struct JointConstraints
 {
     private readonly Joint _joint;
     private readonly JointPass _pass;
@@ -12,7 +12,7 @@ internal readonly ref struct JointRows
     private readonly float _substep;
     private readonly Softness _softness;
 
-    public JointRows(Joint joint, JointPass pass, float inverseSubstep, float substep, Softness softness)
+    public JointConstraints(Joint joint, JointPass pass, float inverseSubstep, float substep, Softness softness)
     {
         _joint = joint;
         _pass = pass;
@@ -24,76 +24,82 @@ internal readonly ref struct JointRows
     /// <summary>Keeps the points from parting along <paramref name="direction"/>; <paramref name="error"/> is how far
     /// they part along it now.</summary>
     public void Along(ref BodyState first, ref BodyState second, Vector3F armOfFirst, Vector3F armOfSecond,
-        Vector3F direction, float error, int row)
+        Vector3F direction, float error, int constraint)
     {
-        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, row))
+        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, constraint))
             return;
 
         var speed = Vector3F.Dot(RelativeVelocity(first, second, armOfFirst, armOfSecond), direction);
-        var impulse = Solve(speed, error, false, LinearMass(first, second, armOfFirst, armOfSecond, direction), row,
-            float.NegativeInfinity);
+        var mass = LinearMass(first, second, armOfFirst, armOfSecond, direction);
+        var impulse = Solve(speed, error, false, mass, constraint, float.NegativeInfinity);
         Push(ref first, ref second, armOfFirst, armOfSecond, direction * impulse);
     }
 
     /// <summary>Keeps <paramref name="error"/> - how far the points stand past a limit along
     /// <paramref name="direction"/> - from going below zero, pushing one way only.</summary>
     public void AlongAtLeast(ref BodyState first, ref BodyState second, Vector3F armOfFirst, Vector3F armOfSecond,
-        Vector3F direction, float error, int row)
+        Vector3F direction, float error, int constraint)
     {
-        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, row))
+        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, constraint))
             return;
 
         var speed = Vector3F.Dot(RelativeVelocity(first, second, armOfFirst, armOfSecond), direction);
-        var impulse = Solve(speed, error, true, LinearMass(first, second, armOfFirst, armOfSecond, direction), row, 0);
+        var mass = LinearMass(first, second, armOfFirst, armOfSecond, direction);
+        var impulse = Solve(speed, error, true, mass, constraint, 0);
         Push(ref first, ref second, armOfFirst, armOfSecond, direction * impulse);
     }
 
     /// <summary>Keeps the bodies from turning apart about <paramref name="axis"/>; <paramref name="error"/> is how far
     /// they have.</summary>
-    public void About(ref BodyState first, ref BodyState second, Vector3F axis, float error, int row)
+    public void About(ref BodyState first, ref BodyState second, Vector3F axis, float error, int constraint)
     {
-        if (WarmStartsAbout(ref first, ref second, axis, row))
+        if (WarmStartsAbout(ref first, ref second, axis, constraint))
             return;
 
         var speed = Vector3F.Dot(second.AngularVelocity - first.AngularVelocity, axis);
-        var impulse = Solve(speed, error, false, AngularMass(first, second, axis), row, float.NegativeInfinity);
+        var mass = AngularMass(first, second, axis);
+        var impulse = Solve(speed, error, false, mass, constraint, float.NegativeInfinity);
         Turn(ref first, ref second, axis * impulse);
     }
 
     /// <summary>Keeps <paramref name="error"/> - how far the bodies stand past a limit about <paramref name="axis"/> -
     /// from going below zero, turning one way only.</summary>
-    public void AboutAtLeast(ref BodyState first, ref BodyState second, Vector3F axis, float error, int row)
+    public void AboutAtLeast(ref BodyState first, ref BodyState second, Vector3F axis, float error, int constraint)
     {
-        if (WarmStartsAbout(ref first, ref second, axis, row))
+        if (WarmStartsAbout(ref first, ref second, axis, constraint))
             return;
 
         var speed = Vector3F.Dot(second.AngularVelocity - first.AngularVelocity, axis);
-        var impulse = Solve(speed, error, true, AngularMass(first, second, axis), row, 0);
+        var mass = AngularMass(first, second, axis);
+        var impulse = Solve(speed, error, true, mass, constraint, 0);
         Turn(ref first, ref second, axis * impulse);
     }
 
     /// <summary>Drives the turn about <paramref name="axis"/> toward <paramref name="speed"/>, with no more than
     /// <paramref name="maxTorque"/>.</summary>
-    public void DriveAbout(ref BodyState first, ref BodyState second, Vector3F axis, float speed, float maxTorque, int row)
+    public void DriveAbout(ref BodyState first, ref BodyState second, Vector3F axis, float speed, float maxTorque,
+        int constraint)
     {
-        if (WarmStartsAbout(ref first, ref second, axis, row))
+        if (WarmStartsAbout(ref first, ref second, axis, constraint))
             return;
 
         var turning = Vector3F.Dot(second.AngularVelocity - first.AngularVelocity, axis);
-        var impulse = Drive(turning - speed, AngularMass(first, second, axis), maxTorque, row);
+        var mass = AngularMass(first, second, axis);
+        var impulse = Drive(turning - speed, mass, maxTorque, constraint);
         Turn(ref first, ref second, axis * impulse);
     }
 
     /// <summary>Drives the slide along <paramref name="direction"/> toward <paramref name="speed"/>, with no more than
     /// <paramref name="maxForce"/>.</summary>
     public void DriveAlong(ref BodyState first, ref BodyState second, Vector3F armOfFirst, Vector3F armOfSecond,
-        Vector3F direction, float speed, float maxForce, int row)
+        Vector3F direction, float speed, float maxForce, int constraint)
     {
-        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, row))
+        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, constraint))
             return;
 
         var sliding = Vector3F.Dot(RelativeVelocity(first, second, armOfFirst, armOfSecond), direction);
-        var impulse = Drive(sliding - speed, LinearMass(first, second, armOfFirst, armOfSecond, direction), maxForce, row);
+        var mass = LinearMass(first, second, armOfFirst, armOfSecond, direction);
+        var impulse = Drive(sliding - speed, mass, maxForce, constraint);
         Push(ref first, ref second, armOfFirst, armOfSecond, direction * impulse);
     }
 
@@ -101,12 +107,13 @@ internal readonly ref struct JointRows
     /// <paramref name="hertz"/> and <paramref name="dampingRatio"/>; relaxing leaves it alone, as its swing is its own.
     /// </summary>
     public void Spring(ref BodyState first, ref BodyState second, Vector3F armOfFirst, Vector3F armOfSecond,
-        Vector3F direction, float error, float hertz, float dampingRatio, int row)
+        Vector3F direction, float error, float hertz, float dampingRatio, int constraint)
     {
-        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, row) || _pass == JointPass.Relax)
+        if (WarmStartsAlong(ref first, ref second, armOfFirst, armOfSecond, direction, constraint)
+            || _pass == JointPass.Relax)
             return;
 
-        ref var held = ref _joint.Impulses[row];
+        ref var held = ref _joint.Impulses[constraint];
 
         var softness = Softness.Create(hertz, dampingRatio, _substep);
         var speed = Vector3F.Dot(RelativeVelocity(first, second, armOfFirst, armOfSecond), direction);
@@ -116,31 +123,31 @@ internal readonly ref struct JointRows
         Push(ref first, ref second, armOfFirst, armOfSecond, direction * impulse);
     }
 
-    // Warm starting, the row gives the impulse it held and nothing more is worked out.
+    // Warm starting, the constraint gives the impulse it held and nothing more is worked out.
     private bool WarmStartsAlong(ref BodyState first, ref BodyState second, Vector3F armOfFirst, Vector3F armOfSecond,
-        Vector3F direction, int row)
+        Vector3F direction, int constraint)
     {
         if (_pass != JointPass.WarmStart)
             return false;
 
-        Push(ref first, ref second, armOfFirst, armOfSecond, direction * _joint.Impulses[row]);
+        Push(ref first, ref second, armOfFirst, armOfSecond, direction * _joint.Impulses[constraint]);
         return true;
     }
 
-    private bool WarmStartsAbout(ref BodyState first, ref BodyState second, Vector3F axis, int row)
+    private bool WarmStartsAbout(ref BodyState first, ref BodyState second, Vector3F axis, int constraint)
     {
         if (_pass != JointPass.WarmStart)
             return false;
 
-        Turn(ref first, ref second, axis * _joint.Impulses[row]);
+        Turn(ref first, ref second, axis * _joint.Impulses[constraint]);
         return true;
     }
 
-    // A row's impulse this pass, the held one kept at least lowest; a one-sided row not yet past its limit only keeps
-    // the bodies from crossing it this substep, as a contact does.
-    private float Solve(float speed, float error, bool isOneSided, float mass, int row, float lowest)
+    // A constraint's impulse this pass, the held one kept at least lowest; a one-sided one not yet past its limit only
+    // keeps the bodies from crossing it this substep, as a contact does.
+    private float Solve(float speed, float error, bool isOneSided, float mass, int constraint, float lowest)
     {
-        ref var held = ref _joint.Impulses[row];
+        ref var held = ref _joint.Impulses[constraint];
         float bias;
         var massScale = 1f;
         var impulseScale = 0f;
@@ -167,9 +174,9 @@ internal readonly ref struct JointRows
     }
 
     // A motor's impulse this pass, the held one kept within what its force gives in a substep.
-    private float Drive(float speedPast, float mass, float maxForce, int row)
+    private float Drive(float speedPast, float mass, float maxForce, int constraint)
     {
-        ref var held = ref _joint.Impulses[row];
+        ref var held = ref _joint.Impulses[constraint];
         var most = maxForce * _substep;
         var total = Math.Clamp(held - mass * speedPast, -most, most);
         var impulse = total - held;

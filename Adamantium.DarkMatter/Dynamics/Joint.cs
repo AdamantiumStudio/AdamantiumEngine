@@ -4,12 +4,17 @@ namespace Adamantium.DarkMatter.Dynamics;
 /// origin - so a body weighed anew, its center of mass moved, keeps them where they were.</summary>
 internal sealed class Joint
 {
-    /// <summary>The most rows a joint solves: a slider's two sideways, three turns, a limit each way and a motor.
-    /// </summary>
-    public const int RowCapacity = 8;
+    /// <summary>The most constraints a joint solves: a slider's two sideways, three turns, a limit each way and a
+    /// motor.</summary>
+    public const int ConstraintCapacity = 8;
 
-    /// <summary>The row a hinge's or a slider's motor holds its impulse in.</summary>
-    public const int MotorRow = 0;
+    /// <summary>The constraint a hinge's or a slider's motor holds its impulse in.</summary>
+    public const int MotorConstraint = 0;
+
+    /// <summary>The constraints a hinge's, a slider's or a distance joint's lower and upper limits hold their impulses
+    /// in.</summary>
+    public const int LowerLimitConstraint = 1;
+    public const int UpperLimitConstraint = 2;
 
     public bool IsUsed;
     public int Generation;
@@ -46,8 +51,8 @@ internal sealed class Joint
     public float SpringHertz;
     public float SpringDampingRatio;
 
-    /// <summary>The impulse each row ended the last substep with, to start the next.</summary>
-    public readonly float[] Impulses = new float[RowCapacity];
+    /// <summary>The impulse each constraint ended the last substep with, to start the next.</summary>
+    public readonly float[] Impulses = new float[ConstraintCapacity];
 
     public int ListIndex;
 

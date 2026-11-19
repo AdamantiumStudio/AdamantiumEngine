@@ -86,7 +86,7 @@ public sealed partial class PhysicsWorld
         state.MotorSpeed = speed;
         state.MaxMotorForce = maxForce;
         // A motor set anew starts from nothing: the impulse it held at another force would kick.
-        state.Impulses[Joint.MotorRow] = 0;
+        state.Impulses[Joint.MotorConstraint] = 0;
         WakeJointBodies(state);
     }
 

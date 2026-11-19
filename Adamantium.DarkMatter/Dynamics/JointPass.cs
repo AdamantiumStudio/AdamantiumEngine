@@ -9,6 +9,6 @@ internal enum JointPass
     /// <summary>The soft spring closes the joints' errors.</summary>
     Push,
 
-    /// <summary>Only the speeds along the rows are taken out, the spring's included.</summary>
+    /// <summary>Only the speeds along the constraints are taken out, the spring's included.</summary>
     Relax
 }
