@@ -122,6 +122,63 @@ public class ForwardPlusWireframeTests
         });
     }
 
+    // An editor shows the collider of what is selected - a group's, under it, too - and none of the rest.
+    [Test]
+    public void TheCollidersOfWhatIsSelected_AreDrawn()
+    {
+        _processor.Display = ViewDisplay.Shaded;
+        _processor.ShowsSelectedColliders = true;
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new Vector3<double>(0, 0, -10);
+        eye.SetFreeLookAt(Vector3<double>.Zero);
+        var group = new Entity(null, "Group");
+        var part = new Entity(group, "Part");
+        var mesh = new Mesh(PrimitiveType.TriangleList);
+        mesh.SetPoints([new Vector3<double>(-1, 1, 0), new Vector3<double>(1, 1, 0), new Vector3<double>(0, -1, 0)])
+            .SetIndices([0, 1, 2]);
+        part.AddComponent(new MeshData { Mesh = mesh });
+        part.AddComponent(new Material());
+        part.AddComponent(new BoxCollider());
+        var other = new Entity(null, "Other");
+        other.AddComponent(new MeshData { Mesh = mesh });
+        other.AddComponent(new Material());
+        var otherCollider = new BoxCollider();
+        other.AddComponent(otherCollider);
+        var scene = _universe.EntityWorld.MainScene;
+        _universe.EntityWorld.EntityManager.AddEntity(group, scene);
+        _universe.EntityWorld.EntityManager.AddEntity(other, scene);
+
+        var unselected = CallsAfterFrames();
+        scene.Selection.Select([group]);
+        var groupSelected = CallsAfterFrames();
+        scene.Selection.Select([group, other]);
+        otherCollider.IsEnabled = false;
+        var otherDisabled = CallsAfterFrames();
+        scene.Selection.Select([]);
+        var deselected = CallsAfterFrames();
+        scene.Selection.Select([group]);
+        _processor.ShowsSelectedColliders = false;
+        var notAsked = CallsAfterFrames();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(groupSelected, Is.EqualTo(unselected + 1), "the part's collider, its group selected - not the other's");
+            Assert.That(otherDisabled, Is.EqualTo(groupSelected), "a collider turned off is not drawn, selected or not");
+            Assert.That(deselected, Is.EqualTo(unselected), "none, nothing selected");
+            Assert.That(notAsked, Is.EqualTo(unselected), "none unless asked");
+        });
+    }
+
+    private int CallsAfterFrames()
+    {
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        return _processor.DrawCalls;
+    }
+
     // A triangle bound whole to one joint, the joint then moved sideways.
     private void AddCarriedTriangle()
     {
