@@ -58,6 +58,7 @@ namespace Adamantium.ECS
         private EntityComponentCollection componentCollection;
         private ReadOnlyTrackingCollection<IComponent> readOnlyComponents;
         private List<IInitializable> pendingComponents = new List<IInitializable>();
+        private long changeCount;
 
         public Transform Transform { get; internal set; }
 
@@ -147,10 +148,16 @@ namespace Adamantium.ECS
         /// <summary>Tells <see cref="World"/> that what it shows keeps changing for <paramref name="duration"/>.</summary>
         public void NotifyUpdated(TimeSpan duration) => World?.Changed(new UniverseChangedEventArgs(duration));
 
+        /// <summary>How many times the entity changed: a value of it or of its components, a component added or taken off,
+        /// an entity hung under it or taken from it. Only grows; compare it with a count read earlier.</summary>
+        public long ChangeCount => changeCount;
+
         // A value of the entity or of a component changed, a component came or went, or its place did: its scene's changes
         // and its world are told. The scene found once: this runs on every value set.
         internal void NoteChanged()
         {
+            // Not atomic: two changes at once may count as one, still a change.
+            changeCount++;
             if (Scene is not { } own)
                 return;
 
@@ -170,6 +177,11 @@ namespace Adamantium.ECS
             oldOwner?.RemoveDependency(this);
             //Add current entity as dependency for its parent
             newOwner?.AddDependency(this);
+            changeCount++;
+            if (oldOwner != null)
+                oldOwner.changeCount++;
+            if (newOwner != null)
+                newOwner.changeCount++;
 
             OwnerChanged?.Invoke(this, new OwnerChangedEventArgs(oldOwner, newOwner));
         }

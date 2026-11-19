@@ -39,6 +39,8 @@ public partial class CapsuleCollider : Collider
 
     partial void OnHeightChanged(float value) => Rebuild();
 
+    protected override void FollowBounds() => Rebuild();
+
     /// <summary>The capsule in its entity's own space.</summary>
     public BoundingCapsule Capsule => capsule;
 
@@ -62,13 +64,12 @@ public partial class CapsuleCollider : Collider
         return colliderData.ContainsKey(camera);
     }
 
-    public override Mesh GetVisualRepresentation()
+    protected override Mesh BuildOutline()
     {
         var turn = Direction == CapsuleDirection.X ? Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(-90))
             : Direction == CapsuleDirection.Z ? Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90))
             : Matrix4x4<double>.Identity;
-        Geometry = Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, Radius * 2, 40, turn * Matrix4x4.CreateTranslation<double>(capsule.Center.As<double>()));
-        return Geometry;
+        return Shapes.Capsule.GenerateGeometry(GeometryType.Outlined, capsule.Length, Radius * 2, 40, turn * Matrix4x4.CreateTranslation<double>(capsule.Center.As<double>()));
     }
 
     public override void UpdateForCamera(CameraBase camera)
@@ -140,5 +141,6 @@ public partial class CapsuleCollider : Collider
         var half = Math.Max(Height / 2 - Radius, 0);
         var center = LocalCenter;
         capsule = new BoundingCapsule(center - axis * half, center + axis * half, Radius);
+        MarkOutlineStale();
     }
 }

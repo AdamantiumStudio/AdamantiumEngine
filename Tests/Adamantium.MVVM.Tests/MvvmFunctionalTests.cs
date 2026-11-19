@@ -183,6 +183,37 @@ public class MvvmFunctionalTests
     }
 
     [Test]
+    public void PartialProperty_KeepsTheAccessItWasDeclaredWith()
+    {
+        var vm = new PartialPropertyViewModel();
+        var raised = new List<string>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.CountUp();
+        vm.Classify("Box");
+        vm.Note = "Kept";
+        vm.Label = "Named";
+        var made = new PartialPropertyViewModel { Origin = "Made" };
+
+        var count = typeof(PartialPropertyViewModel).GetProperty(nameof(PartialPropertyViewModel.Count));
+        var kind = typeof(PartialPropertyViewModel).GetProperty(nameof(PartialPropertyViewModel.Kind));
+        var note = typeof(PartialPropertyViewModel).GetProperty(nameof(PartialPropertyViewModel.Note),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.Multiple(() =>
+        {
+            Assert.That(raised, Is.EqualTo(new[] { "Count", "Kind", "Note", "Label" }));
+            Assert.That(made.Origin, Is.EqualTo("Made"));
+            Assert.That(typeof(PartialPropertyViewModel).GetProperty("Label").GetMethod.IsVirtual, Is.True);
+            Assert.That(PropertyAccessors.Find(typeof(PartialPropertyViewModel), "Origin").CanWrite, Is.True);
+            Assert.That(count.SetMethod.IsPrivate, Is.True);
+            Assert.That(kind.SetMethod.IsFamily, Is.True);
+            Assert.That(note.GetMethod.IsAssembly, Is.True);
+            Assert.That(PropertyAccessors.Find(typeof(PartialPropertyViewModel), "Count").CanWrite, Is.False);
+            Assert.That(PropertyAccessors.Find(typeof(PartialPropertyViewModel), "Kind").CanWrite, Is.False);
+        });
+    }
+
+    [Test]
     public void PartialProperty_NotifiesWhatItAffects()
     {
         var vm = new PartialPropertyViewModel();

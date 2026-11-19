@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
+using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components;
 
@@ -11,14 +12,18 @@ namespace Adamantium.ECS.Components;
 /// The convex hull of an entity's mesh: the tightest convex shape round it. The mesh builds the hull once, and every
 /// entity drawing that mesh shares it. A mesh with no points leaves the collider empty, and nothing meets it.
 /// </summary>
-public class ConvexHullCollider : Collider
+[ViewModel]
+public partial class ConvexHullCollider : Collider
 {
     private readonly Dictionary<CameraBase, Placement> colliderData = new();
-    private ConvexHull hull;
     private Vector3F[] corners = [];
 
-    /// <summary>The hull in its entity's own space, or null while the collider is empty.</summary>
-    public ConvexHull Hull => hull;
+    /// <summary>The hull in its entity's own space, or null while the collider is empty; a new one tells what follows
+    /// the collider's shape - the physics.</summary>
+    [Bindable]
+    public partial ConvexHull Hull { get; private set; }
+
+    partial void OnHullChanged(ConvexHull value) => MarkOutlineStale();
 
     public override void CalculateFromMesh(Mesh mesh)
     {
@@ -36,29 +41,30 @@ public class ConvexHullCollider : Collider
         return colliderData.ContainsKey(camera);
     }
 
-    public override Mesh GetVisualRepresentation()
+    protected override Mesh BuildOutline()
     {
         List<Vector3<double>> lines = [];
+        var hull = Hull;
         if (hull != null)
         {
-            var edges = new HashSet<(int, int)>();
+            // An edge is kept once, by its two corners: the lower in the high half.
+            var edges = new HashSet<long>();
             for (int i = 0; i < hull.Triangles.Count; i += 3)
             {
                 for (int k = 0; k < 3; k++)
                 {
-                    var a = hull.Triangles[i + k];
-                    var b = hull.Triangles[i + (k + 1) % 3];
-                    if (edges.Add(a < b ? (a, b) : (b, a)))
+                    var from = hull.Triangles[i + k];
+                    var to = hull.Triangles[i + (k + 1) % 3];
+                    if (edges.Add(((long)Math.Min(from, to) << 32) | (uint)Math.Max(from, to)))
                     {
-                        lines.Add(hull.Vertices[a].As<double>());
-                        lines.Add(hull.Vertices[b].As<double>());
+                        lines.Add(hull.Vertices[from].As<double>());
+                        lines.Add(hull.Vertices[to].As<double>());
                     }
                 }
             }
         }
 
-        Geometry = new Mesh(PrimitiveType.LineList).SetPoints(lines);
-        return Geometry;
+        return new Mesh(PrimitiveType.LineList).SetPoints(lines);
     }
 
     public override void UpdateForCamera(CameraBase camera)
@@ -83,7 +89,7 @@ public class ConvexHullCollider : Collider
 
     public override ContainmentType IsInsideCameraFrustum(Camera camera)
     {
-        if (hull == null)
+        if (Hull == null)
         {
             return ContainmentType.Disjoint;
         }
@@ -93,12 +99,12 @@ public class ConvexHullCollider : Collider
 
     public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
     {
-        Take(hull?.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation)));
+        Take(Hull?.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation)));
     }
 
     public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
     {
-        Take(hull?.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation)));
+        Take(Hull?.Transform(Matrix4x4.CreateScale<float>(uniformScale) * Matrix4x4.CreateFromQuaternion<float>(rotation) * Matrix4x4.CreateTranslation<float>(translation)));
     }
 
     /// <summary>
@@ -130,20 +136,20 @@ public class ConvexHullCollider : Collider
     public override bool Intersects(ref Ray<float> ray, out Vector3F point)
     {
         point = Vector3F.Zero;
-        return hull != null && hull.Intersects(ray, out point);
+        return Hull != null && Hull.Intersects(ray, out point);
     }
 
     public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)
     {
         point = Vector3F.Zero;
-        if (hull == null || !colliderData.TryGetValue(camera, out var placement))
+        if (Hull == null || !colliderData.TryGetValue(camera, out var placement))
         {
             return false;
         }
 
         var inverse = Matrix4x4F.Invert(placement.World);
         var local = new Ray<float>(Vector3F.TransformCoordinate(ray.Position, inverse), Vector3F.TransformNormal(ray.Direction, inverse));
-        if (!hull.Intersects(local, out float distance))
+        if (!Hull.Intersects(local, out float distance))
         {
             return false;
         }
@@ -154,23 +160,22 @@ public class ConvexHullCollider : Collider
 
     public override IConvexShape<float> GetWorldShape()
     {
-        return hull?.Transform(Owner.Transform.GetWorldMatrixF());
+        return Hull?.Transform(Owner.Transform.GetWorldMatrixF());
     }
 
     private void Take(ConvexHull taken)
     {
-        hull = taken;
         corners = [];
-        if (hull == null)
+        if (taken != null)
         {
-            return;
+            corners = new Vector3F[taken.Vertices.Count];
+            for (int i = 0; i < corners.Length; i++)
+            {
+                corners[i] = taken.Vertices[i];
+            }
         }
 
-        corners = new Vector3F[hull.Vertices.Count];
-        for (int i = 0; i < corners.Length; i++)
-        {
-            corners[i] = hull.Vertices[i];
-        }
+        Hull = taken;
     }
 
     private sealed class Placement

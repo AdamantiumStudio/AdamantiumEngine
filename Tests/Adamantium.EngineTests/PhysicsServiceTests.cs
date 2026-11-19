@@ -336,6 +336,34 @@ public class PhysicsServiceTests
         Assert.Throws<ArgumentException>(() => _physics.ApplyImpulse(box, Vector3F.UnitX));
     }
 
+    // The game's code turns gravity and the settings its own way; the next game starts with the editor's again.
+    [Test]
+    public void GravityAndSettingsSetInAGame_GoBackWhenItStops()
+    {
+        UseSteppedPhysics();
+        var settings = new PhysicsSettings { StepRate = 90 };
+        _physics.Settings = settings;
+        _physics.Gravity = new Vector3F(0, 5, 0);
+        Play();
+
+        _physics.Gravity = new Vector3F(1, 0, 0);
+        _physics.Settings = new PhysicsSettings { StepRate = 30 };
+        _run.Stop();
+        _run = null;
+
+        Assert.That(_physics.Gravity, Is.EqualTo(new Vector3F(0, 5, 0)));
+        Assert.That(_physics.Settings, Is.SameAs(settings));
+    }
+
+    // Before the transforms, so the entities it stands are placed in the same frame.
+    [Test]
+    public void Physics_RunsBeforeTheTransforms()
+    {
+        UseSteppedPhysics();
+
+        Assert.That(_physics.Priority, Is.LessThan(new Adamantium.Engine.EntityServices.TransformService(_world).Priority));
+    }
+
     [Test]
     public void SceneKeptBeforeTheGame_PutsTheBodiesBackAfterIt()
     {
@@ -353,6 +381,496 @@ public class PhysicsServiceTests
         snapshot.Restore();
 
         Assert.That(box.Transform.Position, Is.EqualTo(start));
+    }
+
+    // A rigid body the game's code gives once the game plays - after the physics started - falls as one there before.
+    [Test]
+    public void BodyGivenDuringTheGame_Falls()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.RemoveComponent<RigidBody>();
+        Play();
+        Frames(0.2);
+        Assert.That(_physics.Moves(box), Is.False);
+
+        box.AddComponent(new RigidBody());
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // Moved by hand while it falls, the body goes on from where it was put, still falling.
+    [Test]
+    public void BodyMovedDuringTheGame_GoesOnFromWhereItWasPut()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        Play();
+        Frames(0.3);
+        var falling = _physics.GetLinearVelocity(box);
+
+        box.Transform.Position = new Vector3<double>(5, -6, 0);
+        Frame(FrameSeconds);
+        var after = box.Transform.Position;
+        var speed = _physics.GetLinearVelocity(box);
+        Frames(3);
+
+        Assert.That(after.X, Is.EqualTo(5).Within(1e-3));
+        Assert.That(after.Y, Is.EqualTo(-6).Within(0.1), "from where it was put, not from where it fell to");
+        Assert.That(speed.Y, Is.GreaterThan(falling.Y), "still falling as fast, and faster");
+        Assert.That(box.Transform.Position.X, Is.EqualTo(5).Within(0.02));
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // Its friction changed while it falls, the body is made anew where it stands, moving as it moved: no step back to
+    // where the entity was last drawn.
+    [Test]
+    public void BodyEditedDuringTheGame_KeepsHowItMoves()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        Play();
+        Frames(0.3);
+        var before = box.Transform.Position.Y;
+        var falling = _physics.GetLinearVelocity(box);
+
+        box.GetComponent<RigidBody>().Friction = 0.1f;
+        Frame(FrameSeconds);
+
+        Assert.That(box.Transform.Position.Y, Is.GreaterThan(before), "on down, not back");
+        Assert.That(_physics.GetLinearVelocity(box).Y, Is.GreaterThanOrEqualTo(falling.Y));
+    }
+
+    // The middle box's density dragged along by a slider, a frame at a time: changed where it stands, its contacts
+    // kept, the stack stands as it stood.
+    [Test]
+    public void StackedBoxsMassDraggedEachFrame_LeavesTheStackStanding()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var boxes = new Entity[5];
+        for (var index = 0; index < boxes.Length; index++)
+        {
+            boxes[index] = AddBox("Box" + index, new Vector3<double>(0, -0.5 - index, 0), 0.5);
+        }
+
+        Play();
+        Frames(3);
+        var settled = boxes[^1].Transform.Position.Y;
+        var middle = boxes[2].GetComponent<RigidBody>();
+        for (var frame = 0; frame < 60; frame++)
+        {
+            middle.Density = 1000 + frame * 10;
+            Frame(FrameSeconds);
+        }
+
+        Frames(1);
+
+        Assert.That(boxes[^1].Transform.Position.Y, Is.EqualTo(settled).Within(0.005));
+        Assert.That(Math.Abs(boxes[^1].Transform.Position.X) + Math.Abs(boxes[^1].Transform.Position.Z),
+            Is.LessThan(0.01));
+    }
+
+    // The middle box's density and friction cleared while typing - weighing nothing, rubbing by no number - keep what
+    // they were: the stack does not lose its support.
+    [Test]
+    public void StackedBoxsDensityClearedWhileTyping_LeavesTheStackStanding()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var boxes = new Entity[3];
+        for (var index = 0; index < boxes.Length; index++)
+        {
+            boxes[index] = AddBox("Box" + index, new Vector3<double>(0, -0.5 - index, 0), 0.5);
+        }
+
+        Play();
+        Frames(3);
+        var settled = boxes[^1].Transform.Position.Y;
+        var middle = boxes[1].GetComponent<RigidBody>();
+
+        middle.Density = 0;
+        middle.Friction = float.NaN;
+        Frames(0.5);
+        Assert.That(_physics.Moves(boxes[1]), Is.True, "while typing");
+        middle.Density = 800;
+        middle.Friction = 0.5f;
+        Frames(1);
+
+        Assert.That(_physics.Moves(boxes[1]), Is.True);
+        Assert.That(boxes[^1].Transform.Position.Y, Is.EqualTo(settled).Within(0.005));
+    }
+
+    // A static body weighing nothing made dynamic cannot be: the physics leaves it until it is given a weight, then
+    // it falls.
+    [Test]
+    public void WeightlessStaticBodyMadeDynamic_FallsOnceWeighed()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var body = box.GetComponent<RigidBody>();
+        body.Kind = BodyKind.Static;
+        body.Density = 0;
+        Play();
+        Frames(0.2);
+
+        body.Kind = BodyKind.Dynamic;
+        Frames(0.5);
+        Assert.That(_physics.Moves(box), Is.False);
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-4));
+
+        body.Density = 500;
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // Selected in the editor while it falls, the body falls on as it fell.
+    [Test]
+    public void BodySelectedDuringTheGame_FallsOn()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        Play();
+        Frames(0.3);
+        var before = box.Transform.Position.Y;
+
+        box.IsSelected = true;
+        Frame(FrameSeconds);
+
+        Assert.That(box.Transform.Position.Y, Is.GreaterThan(before));
+        Frames(3);
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // Its rigid body taken off, the entity stays where it was; disabled, too, and falls on once enabled again.
+    [Test]
+    public void BodyTakenOffOrDisabled_StopsAndComesBack()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var taken = AddBox("Taken", new Vector3<double>(-3, -4, 0), 0.5);
+        var disabled = AddBox("Disabled", new Vector3<double>(3, -4, 0), 0.5);
+        Play();
+        Frames(0.3);
+
+        taken.RemoveComponent<RigidBody>();
+        disabled.IsEnabled = false;
+        Settle();
+        Frame(FrameSeconds);
+        var takenAt = taken.Transform.Position;
+        var disabledAt = disabled.Transform.Position;
+        Frames(0.5);
+
+        Assert.That(_physics.Moves(taken), Is.False);
+        Assert.That(_physics.Moves(disabled), Is.False);
+        Assert.That(taken.Transform.Position, Is.EqualTo(takenAt));
+        Assert.That(disabled.Transform.Position, Is.EqualTo(disabledAt));
+
+        disabled.IsEnabled = true;
+        Settle();
+        Frames(3);
+        Assert.That(disabled.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // A static body made dynamic while the game plays starts to fall; a collider grown makes it rest higher.
+    [Test]
+    public void BodyMadeDynamicAndColliderGrown_FallsAndRestsOnTheNewSize()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.GetComponent<RigidBody>().Kind = BodyKind.Static;
+        Play();
+        Frames(0.3);
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-4));
+
+        box.GetComponent<RigidBody>().Kind = BodyKind.Dynamic;
+        box.GetComponent<BoxCollider>().Bounds =
+            new Bounds(Vector3<double>.Zero, new Vector3<double>(1), Quaternion<double>.Identity);
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
+    }
+
+    // A body hung under another, moved by the physics, does not keep the one above it being made anew: both sleep.
+    [Test]
+    public void BodyUnderAStaticBody_LetsBothSleep()
+    {
+        UseSteppedPhysics();
+        var level = AddGround();
+        var box = MakeBox("Box", new Vector3<double>(0, -3, 0), 0.5, level);
+        Settle();
+        Play();
+        Frames(4);
+
+        Assert.That(box.Transform.Position.Y, Is.LessThan(-0.4), "it fell onto the level");
+        Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
+    }
+
+    // Asleep on the ground and lifted by hand, a body falls again rather than hanging where it was put.
+    [Test]
+    public void SleepingBodyLiftedByHand_FallsAgain()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -0.6, 0), 0.5);
+        Play();
+        Frames(3);
+        Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
+
+        box.Transform.Position = new Vector3<double>(0, -4, 0);
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // A falling body made kinematic stops where it is, not drifting on at its fall's speed.
+    [Test]
+    public void FallingBodyMadeKinematic_Stops()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -6, 0), 0.5);
+        Play();
+        Frames(0.3);
+
+        box.GetComponent<RigidBody>().Kind = BodyKind.Kinematic;
+        Frame(FrameSeconds);
+        var stopped = box.Transform.Position;
+        Frames(1);
+
+        Assert.That(_physics.GetLinearVelocity(box), Is.EqualTo(Vector3F.Zero));
+        Assert.That((box.Transform.Position - stopped).Length(), Is.LessThan(0.05));
+    }
+
+    // A static floor stands where its parent puts it: the parent moved down, a box lands on the floor there.
+    [Test]
+    public void StaticBodyUnderAMovedParent_StandsWhereItIsPut()
+    {
+        UseSteppedPhysics();
+        var stage = new Entity(null, "Stage");
+        _world.EntityManager.AddEntity(stage, _world.MainScene);
+        var floor = AddPart(stage, "Floor", new Vector3<double>(0, 1, 0), new Vector3<double>(20, 1, 20));
+        floor.AddComponent(new RigidBody { Kind = BodyKind.Static });
+        Settle();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        Play();
+        Frames(0.1);
+
+        stage.Transform.Position = new Vector3<double>(0, 2, 0);
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(1.5).Within(0.02));
+    }
+
+    // A body the physics world will not take - a negative mass - is not one the physics moves.
+    [Test]
+    public void BodyTheWorldWillNotTake_IsNotMoved()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.GetComponent<RigidBody>().Mass = -1;
+        Play();
+        Frames(0.2);
+
+        Assert.That(_physics.Moves(box), Is.False);
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-4));
+    }
+
+    // Selecting a body of a sleeping stack changes nothing it is made of: the stack sleeps on.
+    [Test]
+    public void BodyOfASleepingStackSelected_LetsItSleep()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        AddBox("Bottom", new Vector3<double>(0, -0.5, 0), 0.5);
+        var top = AddBox("Top", new Vector3<double>(0, -1.5, 0), 0.5);
+        Play();
+        Frames(3);
+        Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
+
+        top.IsSelected = true;
+        Frames(0.1);
+
+        Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
+    }
+
+    // Tumbled, its parts' places read back through the turns differ in the last digits: still the same body, left
+    // asleep.
+    [Test]
+    public void TurnedSleepingBodySelected_LetsItSleep()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = MakeBox("Box", new Vector3<double>(0, -2, 0), 0.5);
+        box.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.Normalize(new Vector3F(1, 0.3f, 0.7f)), 0.8f);
+        AddPart(box, "Side", new Vector3<double>(0.8, 0.2, 0.1), new Vector3<double>(0.3));
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(6);
+        Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
+
+        box.IsSelected = true;
+        Frames(0.1);
+
+        Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
+    }
+
+    // A part given a body of its own and pushed at once leaves the body it was part of, not thrown out of its inside.
+    [Test]
+    public void PartGivenABodyDuringTheGame_ComesAwayGently()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var cart = AddBox("Cart", new Vector3<double>(0, -0.5, 0), 0.5);
+        var wheel = AddPart(cart, "Wheel", new Vector3<double>(1, 0, 0), new Vector3<double>(0.5));
+        Settle();
+        Play();
+        Frames(1);
+
+        wheel.AddComponent(new RigidBody());
+        _physics.SetLinearVelocity(wheel, new Vector3F(0.5f, 0, 0));
+        Frames(0.5);
+
+        Assert.That(_physics.GetLinearVelocity(wheel).Length(), Is.LessThan(1));
+        Assert.That(_physics.GetLinearVelocity(cart).Length(), Is.LessThan(1));
+    }
+
+    // A body pushed by a steady force, made kinematic: the force goes, and the physics steps on.
+    [Test]
+    public void PushedBodyMadeKinematic_KeepsThePhysicsStepping()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var pushed = AddBox("Pushed", new Vector3<double>(-3, -0.5, 0), 0.5);
+        var falling = AddBox("Falling", new Vector3<double>(3, -4, 0), 0.5);
+        Play();
+        _physics.SetForce(pushed, new Vector3F(10, 0, 0));
+        Frames(0.2);
+
+        pushed.GetComponent<RigidBody>().Kind = BodyKind.Kinematic;
+        Frames(3);
+
+        Assert.That(falling.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // A falling body made static stands where it is drawn: a box dropped on it rests right on top.
+    [Test]
+    public void FallingBodyMadeStatic_StandsWhereItIsDrawn()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var held = AddBox("Held", new Vector3<double>(0, -6, 0), 0.5);
+        Play();
+        Frames(0.3);
+
+        held.GetComponent<RigidBody>().Kind = BodyKind.Static;
+        Frame(FrameSeconds);
+        var at = held.Transform.Position.Y;
+        var dropped = AddBox("Dropped", new Vector3<double>(0, at - 3, 0), 0.5);
+        Frames(3);
+
+        Assert.That(held.Transform.Position.Y, Is.EqualTo(at));
+        Assert.That(dropped.Transform.Position.Y, Is.EqualTo(at - 1).Within(0.02));
+    }
+
+    // A rigid body the game's code gives can be pushed in the same frame, before the physics looks again.
+    [Test]
+    public void BodyGivenDuringTheGame_CanBePushedAtOnce()
+    {
+        UseSteppedPhysics();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.RemoveComponent<RigidBody>();
+        Play();
+        Frames(0.1);
+
+        box.AddComponent(new RigidBody { GravityScale = 0 });
+        _physics.SetLinearVelocity(box, new Vector3F(2, 0, 0));
+        Frames(0.5);
+
+        Assert.That(box.Transform.Position.X, Is.EqualTo(1).Within(0.05));
+    }
+
+    // Only its collider grown while it rests, the body rests on the new size.
+    [Test]
+    public void ColliderGrownDuringTheGame_RestsOnTheNewSize()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -0.5, 0), 0.5);
+        Play();
+        Frames(1);
+
+        box.GetComponent<BoxCollider>().Bounds =
+            new Bounds(Vector3<double>.Zero, new Vector3<double>(1), Quaternion<double>.Identity);
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
+    }
+
+    // An entity taken out of the world while it falls leaves the physics with it.
+    [Test]
+    public void EntityTakenOutDuringTheGame_LeavesThePhysics()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        Play();
+        Frames(0.3);
+
+        _world.EntityManager.RemoveEntity(box);
+        Settle();
+        Frame(FrameSeconds);
+
+        Assert.That(_physics.Moves(box), Is.False);
+    }
+
+    // A body with no collider is left; a part with one hung under it later makes it a body.
+    [Test]
+    public void PartWithAColliderHungUnderABodyLater_MakesItOne()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.RemoveComponent<BoxCollider>();
+        Play();
+        Frames(0.3);
+        Assert.That(_physics.Moves(box), Is.False);
+
+        AddPart(box, "Part", Vector3<double>.Zero, new Vector3<double>(0.5));
+        Settle();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // What watches the transform - an inspector - is told of the last place the body is stood at, not left at the start.
+    [Test]
+    public void BoxLanding_IsToldToWhatWatchesItsTransform()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var lastTold = double.NaN;
+        box.Transform.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(Transform.Position))
+                lastTold = box.Transform.Position.Y;
+        };
+        Play();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+        Assert.That(lastTold, Is.EqualTo(box.Transform.Position.Y));
     }
 
     [Test]

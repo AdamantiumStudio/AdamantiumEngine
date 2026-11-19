@@ -8,11 +8,12 @@ namespace Adamantium.Engine.Physics;
 /// thread of its own, and takes the game's pushes. Down is +Y in the engine's world, so gravity is too.</summary>
 public interface IPhysicsService : IGameService
 {
-    /// <summary>How the next game's physics steps and solves; a game playing keeps those it started with. Their gravity
-    /// is not used: <see cref="Gravity"/> is.</summary>
+    /// <summary>How the next game's physics steps and solves; a game playing keeps those it started with, and ones set
+    /// during it go back when it stops. Their gravity is not used: <see cref="Gravity"/> is.</summary>
     PhysicsSettings Settings { get; set; }
 
-    /// <summary>The pull every dynamic body feels while the game plays, in meters per second squared.</summary>
+    /// <summary>The pull every dynamic body feels while the game plays, in meters per second squared; set during a game,
+    /// it goes back when the game stops.</summary>
     Vector3F Gravity { get; set; }
 
     /// <summary>What the last step of the game's physics did.</summary>

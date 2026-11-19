@@ -9,26 +9,43 @@ namespace Adamantium.ECS.Components
     [ViewModel]
     public abstract partial class Collider : ActivatableComponent
     {
-        public Vector3F Size { get; set; }
+        private bool outlineIsStale;
+
+        [Bindable]
+        public partial Vector3F Size { get; set; }
 
         public Vector3F LocalCenter => Bounds.Center.As<float>();
 
-        public Vector3F Scale { get; set; }
+        [Bindable]
+        public partial Vector3F Scale { get; set; }
 
-        public QuaternionF Rotation { get; set; }
+        [Bindable]
+        public partial QuaternionF Rotation { get; set; }
 
-        public Vector3F Position { get; set; }
+        [Bindable]
+        public partial Vector3F Position { get; set; }
 
-        public Bounds Bounds { get; set; }
+        /// <summary>The box the collider is fitted to; a change tells what follows the collider's shape - the physics.
+        /// </summary>
+        [Bindable]
+        public partial Bounds Bounds { get; set; }
 
-        public Vector3F Center { get; set; }
+        partial void OnBoundsChanged(Bounds value) => FollowBounds();
+
+        /// <summary>Called when <see cref="Bounds"/> changes: a collider whose shape stands on them builds it anew.
+        /// </summary>
+        protected virtual void FollowBounds() => MarkOutlineStale();
+
+        [Bindable]
+        public partial Vector3F Center { get; set; }
 
         [Bindable]
         public partial bool DisplayCollider { get; set; }
 
         // The CPU mesh used to visualize the collider bounds (debug draw). Its GPU buffers are built + owned by the
         // render-layer geometry cache, keyed by this mesh - the collider no longer holds any GPU resource itself.
-        public Mesh Geometry { get; protected set; }
+        [Bindable]
+        public partial Mesh Geometry { get; protected set; }
 
         public override void Initialize()
         {
@@ -47,7 +64,27 @@ namespace Adamantium.ECS.Components
         {
         }
 
-        public abstract Mesh GetVisualRepresentation();
+        /// <summary>The shown collider: built the first time it is asked for, and filled anew in the same mesh when the
+        /// shape changed since.</summary>
+        public Mesh GetVisualRepresentation()
+        {
+            // Cleared before building, so a change made meanwhile is built next time.
+            var stale = outlineIsStale;
+            outlineIsStale = false;
+            if (Geometry == null)
+            {
+                Geometry = BuildOutline();
+            }
+            else if (stale)
+            {
+                Geometry.ReplaceWith(BuildOutline());
+            }
+
+            return Geometry;
+        }
+
+        /// <summary>A new outline mesh of what the collider holds now.</summary>
+        protected abstract Mesh BuildOutline();
 
         public abstract void UpdateForCamera(CameraBase camera);
 
@@ -62,19 +99,8 @@ namespace Adamantium.ECS.Components
             Bounds = mesh.Bounds;
         }
 
-        /// <summary>Makes the shown collider - if it has been shown - follow what it holds now, in the same mesh, which
-        /// what draws it uploads anew.</summary>
-        public void RefreshShownGeometry()
-        {
-            if (Geometry is not { } shown)
-            {
-                return;
-            }
-
-            var fresh = GetVisualRepresentation();
-            shown.ReplaceWith(fresh);
-            Geometry = shown;
-        }
+        /// <summary>Tells that the shape changed: the shown outline is built anew when it is next asked for.</summary>
+        protected void MarkOutlineStale() => outlineIsStale = true;
 
         public abstract void Merge(Collider collider);
 

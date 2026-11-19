@@ -55,7 +55,6 @@ public abstract partial class ProceduralShape : ActivatableComponent
         if (Owner.GetComponent<Collider>() is { } collider)
         {
             collider.CalculateFromMesh(data.Mesh);
-            collider.RefreshShownGeometry();
         }
 
         Owner.Transform.IsWorldDirty = true;

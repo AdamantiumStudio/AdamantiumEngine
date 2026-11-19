@@ -55,4 +55,9 @@ public sealed class BodyDescription
     /// <summary>Whether a dynamic body starts awake. A kinematic body is awake while it moves, a static one never.
     /// </summary>
     public bool IsAwake { get; set; } = true;
+
+    /// <summary>Whether two masses and densities weigh a body alike: the same mass, or with no mass the same density -
+    /// a density does not count beside a mass.</summary>
+    public static bool AreWeighedAlike(float firstMass, float firstDensity, float secondMass, float secondDensity) =>
+        firstMass > 0 || secondMass > 0 ? firstMass == secondMass : firstDensity == secondDensity;
 }

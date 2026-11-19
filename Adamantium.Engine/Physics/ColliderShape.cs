@@ -26,10 +26,10 @@ internal readonly struct ColliderShape
     public QuaternionF Turn { get; }
 
     /// <summary>The shape of <paramref name="collider"/> on an entity scaled by <paramref name="scale"/>; false for a
-    /// collider the physics has no shape for yet. A hull's shape is taken from <paramref name="hullShapes"/> when it
-    /// holds one for the hull at that scale, and kept there.</summary>
-    public static bool TryCreate(Collider collider, Vector3F scale,
-        Dictionary<HullShapeKey, ConvexHullCollisionShape> hullShapes, out ColliderShape shape)
+    /// collider the physics has no shape for yet. A hull's shape is taken from <paramref name="hullShapes"/>, its key
+    /// put in <paramref name="taken"/>.</summary>
+    public static bool TryCreate(Collider collider, Vector3F scale, HullShapeCache hullShapes, List<HullShapeKey> taken,
+        out ColliderShape shape)
     {
         var size = Vector3F.Abs(scale);
         switch (collider)
@@ -82,15 +82,8 @@ internal readonly struct ColliderShape
                 // A scale read back from a turned entity's matrix differs in its last digits: rounded for the key, copies
                 // share the shape the first of them made.
                 var rounded = new Vector3F(KeepSixDigits(scale.X), KeepSixDigits(scale.Y), KeepSixDigits(scale.Z));
-                var key = new HullShapeKey(hull, rounded);
-                if (!hullShapes.TryGetValue(key, out var hullShape))
-                {
-                    // A hull scaled is still a hull: carried as it is, not hulled anew from its corners.
-                    hullShape = new ConvexHullCollisionShape(hull.Transform(Matrix4x4.CreateScale<float>(scale)));
-                    hullShapes[key] = hullShape;
-                }
-
-                shape = new ColliderShape(hullShape, Vector3F.Zero, QuaternionF.Identity);
+                shape = new ColliderShape(hullShapes.Take(hull, scale, rounded, taken), Vector3F.Zero,
+                    QuaternionF.Identity);
                 return true;
             }
             case CylinderCollider cylinder:

@@ -853,14 +853,9 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         basicEffect.Wvp.SetValue(transform.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
         basicEffect.MeshColor.SetValue(Colors.White.ToVector3());
         basicEffect.BasicColoredPass.Apply();
-        if (collider.Geometry == null)
+        if (collider.GetVisualRepresentation() is { } outline)
         {
-            collider.GetVisualRepresentation();
-        }
-
-        if (collider.Geometry != null)
-        {
-            geometryCache.GetOrCreate(collider.Geometry, typeof(MeshVertex)).Draw(GraphicsDevice, RenderState.Default);
+            geometryCache.GetOrCreate(outline, typeof(MeshVertex)).Draw(GraphicsDevice, RenderState.Default);
         }
     }
 
