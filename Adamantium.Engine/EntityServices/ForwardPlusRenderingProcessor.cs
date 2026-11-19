@@ -41,7 +41,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private Buffer[] clusterLists = [];
     private ForwardPlusEffect effect;
     private ForwardPlusWireEffect wireEffect;
-    private readonly Stack<(Entity Entity, EditorDisplay Display)> walk = new();
+    private readonly Stack<WalkStep> walk = new();
     private BasicEffect basicEffect;
     private MeshGeometryCache geometryCache;
     private bool prepared;
@@ -111,6 +111,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     /// <summary>Whether every collider is drawn over what it holds, as each one's own
     /// <see cref="Collider.DisplayCollider"/> draws it.</summary>
     public bool ShowColliders { get; set; }
+
+    /// <summary>Whether the colliders of what is selected in its scene, and of all under it, are drawn - as an editor
+    /// shows the selected entity's collider; a model's root shows its parts'.</summary>
+    public bool ShowsSelectedColliders { get; set; }
+
+    /// <summary>The color colliders are drawn in.</summary>
+    public Vector3F ColliderColor { get; set; } = new(0.57f, 0.96f, 0.55f);
 
     /// <summary>The color wireframes are drawn in.</summary>
     public Vector3F WireColor { get; set; } = new(0.55f, 0.65f, 0.8f);
@@ -312,29 +319,36 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private void DrawTree(Entity root)
     {
-        walk.Push((root, null));
+        walk.Push(new WalkStep(root, null, false));
         while (walk.Count > 0)
         {
-            var (entity, display) = walk.Pop();
+            var step = walk.Pop();
+            var entity = step.Entity;
+            var display = step.Display;
             if (FollowsEditorDisplay
                 && entity.GetComponent<EditorDisplay>() is { IsEnabled: true, Display: not EntityDisplay.Inherited } own)
             {
                 display = own;
             }
 
-            if (!DrawEntity(entity, display))
+            // Carried down the walk: an entity selected, or one it stands under.
+            var underSelected = ShowsSelectedColliders && (step.UnderSelected || entity.IsSelected);
+            if (!DrawEntity(entity, display, underSelected))
             {
                 continue;
             }
 
             foreach (var child in entity.Dependencies.AsSpan())
             {
-                if (child != null) walk.Push((child, display));
+                if (child != null) walk.Push(new WalkStep(child, display, underSelected));
             }
         }
     }
 
-    private bool DrawEntity(Entity entity, EditorDisplay display)
+    // An entity still to draw, with the display it is drawn by and whether it is selected or stands under what is.
+    private readonly record struct WalkStep(Entity Entity, EditorDisplay Display, bool UnderSelected);
+
+    private bool DrawEntity(Entity entity, EditorDisplay display, bool underSelected)
     {
         if (!entity.Visible)
         {
@@ -353,7 +367,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         var inView = InView(entity, collider);
         if (collider != null && inView && collider.ContainsDataFor(ActiveCamera)
-            && (collider.DisplayCollider || ShowColliders || shown == EntityDisplay.Collider))
+            && (collider.DisplayCollider || ShowColliders || shown == EntityDisplay.Collider
+                || underSelected && collider.IsEnabled))
         {
             colliders.Add((entity, collider));
         }
@@ -851,7 +866,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         var transform = entity.Transform.GetMetadata(ActiveCamera);
         basicEffect.Wvp.SetValue(transform.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
-        basicEffect.MeshColor.SetValue(Colors.White.ToVector3());
+        basicEffect.MeshColor.SetValue(ColliderColor);
         basicEffect.BasicColoredPass.Apply();
         if (collider.GetVisualRepresentation() is { } outline)
         {

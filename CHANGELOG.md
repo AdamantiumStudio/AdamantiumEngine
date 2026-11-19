@@ -20,6 +20,10 @@ All packages share one version.
 - `TriangleTree.Query` finds the triangles in a box, and `Intersect` can name the triangle a ray meets.
   `Mesh.BuildTriangleTree` builds a tree of its own, and `Mesh.GatherTriangles` gives its triangles three corners to
   each, a strip's every other one turned back to wind as the first.
+- `ForwardPlusRenderingProcessor.ShowsSelectedColliders` draws the colliders of what is selected in its scene and of
+  all under it, as an editor shows the selected entity's collider - a model's root its parts' - but one turned off;
+  what is selected is carried down the scene's walk from `Entity.IsSelected`, nothing looked up per collider. Colliders
+  are drawn in `ColliderColor`, light green by default, where they were white.
 - `Collider.Angles`: the collider's `Rotation` in degrees about X, Y and Z, as `Transform.Angles` has it - 200 typed
   stays 200, and set by hand it makes the collider unfitted, as its rotation does.
 - A collider stands on its entity where it is placed: `Collider.Position` (its center), `Rotation` and `Scale` (along
