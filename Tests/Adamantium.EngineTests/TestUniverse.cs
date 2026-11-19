@@ -4,6 +4,7 @@ using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS;
 using Adamantium.Engine.Scenes;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Multiverse;
 
 namespace Adamantium.EngineTests;
@@ -37,6 +38,8 @@ public class TestUniverse : IUniverse
 
     public UniverseOutput MainOutput => outputs.Count > 0 ? outputs[0] : null;
 
+    public IAssetService CreateAssetService() => new AssetService(Container, Satellites);
+
     public IDependencyContainer Container { get; }
 
     public bool IsSimulationPaused { get; set; }
@@ -46,6 +49,14 @@ public class TestUniverse : IUniverse
     public double TimeStep => 0;
 
     public uint DesiredFPS { get; set; }
+
+    public float Fps => 0;
+
+    public float RenderFps => 0;
+
+    public double DrawTimeMs => 0;
+
+    public double GpuTimeMs => 0;
 
     public ShutDownMode ShutDownMode { get; set; }
 
