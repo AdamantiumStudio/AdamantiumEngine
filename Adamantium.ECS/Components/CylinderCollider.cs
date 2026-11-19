@@ -18,8 +18,10 @@ public partial class CylinderCollider : Collider
 
     public CylinderCollider()
     {
+        BeginFit();
         Axis = ColliderAxis.Y;
         ChoosesAxis = true;
+        EndFit();
     }
 
     /// <summary>Whether fitting to a mesh chooses the axis; false keeps <see cref="Axis"/> for a shape known to stand
@@ -27,6 +29,7 @@ public partial class CylinderCollider : Collider
     [Bindable]
     public partial bool ChoosesAxis { get; set; }
 
+    /// <summary>The collider's own axis the cylinder stands along.</summary>
     [Bindable]
     public partial ColliderAxis Axis { get; set; }
 
@@ -37,40 +40,33 @@ public partial class CylinderCollider : Collider
     [Bindable]
     public partial float Height { get; set; }
 
-    partial void OnAxisChanged(ColliderAxis value) => Rebuild();
+    // An axis the fit keeps is one the fitted cylinder fits along anew; otherwise it is set by hand.
+    partial void OnAxisChanged(ColliderAxis value)
+    {
+        if (IsFitted && !ChoosesAxis && Owner?.GetComponent<MeshData>() is { Mesh: { } mesh })
+        {
+            FitTo(mesh);
+            return;
+        }
 
-    partial void OnRadiusChanged(float value) => Rebuild();
+        Resize();
+    }
 
-    partial void OnHeightChanged(float value) => Rebuild();
+    partial void OnRadiusChanged(float value) => Resize();
 
-    protected override void FollowBounds() => Rebuild();
+    partial void OnHeightChanged(float value) => Resize();
 
-    // Let choose again, it fits the mesh it stands on anew; told to keep its axis, it keeps the one it has.
+    // Let choose again, a fitted cylinder fits the mesh it stands on anew; told to keep its axis, it keeps the one it has.
     partial void OnChoosesAxisChanged(bool value)
     {
-        if (value && Owner?.GetComponent<MeshData>() is { Mesh: { HasPoints: true } mesh })
-            CalculateFromMesh(mesh);
+        if (value && IsFitted && Owner?.GetComponent<MeshData>() is { Mesh: { } mesh })
+        {
+            FitTo(mesh);
+        }
     }
 
     /// <summary>The cylinder in its entity's own space.</summary>
     public BoundingCylinder Cylinder => cylinder;
-
-    public override void CalculateFromMesh(Mesh mesh)
-    {
-        base.CalculateFromMesh(mesh);
-        var size = Bounds.Size.As<float>();
-        if (ChoosesAxis)
-        {
-            var acrossX = Math.Abs(size.Y - size.Z);
-            var acrossY = Math.Abs(size.X - size.Z);
-            var acrossZ = Math.Abs(size.X - size.Y);
-            Axis = acrossY <= acrossX && acrossY <= acrossZ ? ColliderAxis.Y
-                : acrossX <= acrossZ ? ColliderAxis.X
-                : ColliderAxis.Z;
-        }
-
-        Fit(size);
-    }
 
     public override void ClearData()
     {
@@ -82,15 +78,6 @@ public partial class CylinderCollider : Collider
         return colliderData.ContainsKey(camera);
     }
 
-    protected override Mesh BuildOutline()
-    {
-        var turn = Axis == ColliderAxis.X ? Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(-90))
-            : Axis == ColliderAxis.Z ? Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90))
-            : Matrix4x4<double>.Identity;
-        return Shapes.Cylinder.GenerateGeometry(GeometryType.Outlined, cylinder.Length, Radius * 2, 40,
-            turn * Matrix4x4.CreateTranslation<double>(cylinder.Center.As<double>()));
-    }
-
     public override void UpdateForCamera(CameraBase camera)
     {
         colliderData[camera] = cylinder.Transform(Owner.Transform.GetMetadata(camera).WorldMatrixF);
@@ -100,34 +87,6 @@ public partial class CylinderCollider : Collider
     {
         var placed = colliderData.TryGetValue(camera, out var data) ? data : cylinder;
         return placed.Within(camera.Frustum);
-    }
-
-    public override void Transform(ref Vector3F scale, ref QuaternionF rotation, ref Vector3F translation)
-    {
-        cylinder = cylinder.Transform(Matrix4x4.CreateScale<float>(scale) * Matrix4x4.CreateFromQuaternion<float>(rotation)
-                                      * Matrix4x4.CreateTranslation<float>(translation));
-    }
-
-    public override void Transform(ref float uniformScale, ref QuaternionF rotation, ref Vector3F translation)
-    {
-        cylinder = cylinder.Transform(Matrix4x4.CreateScale<float>(uniformScale)
-                                      * Matrix4x4.CreateFromQuaternion<float>(rotation)
-                                      * Matrix4x4.CreateTranslation<float>(translation));
-    }
-
-    /// <summary>
-    /// Grows the cylinder, along the same axis, to take in <paramref name="collider"/> of this entity or of one under
-    /// it, as it stands here.
-    /// </summary>
-    public override void Merge(Collider collider)
-    {
-        Span<Vector3F> corners = stackalloc Vector3F[2 * OrientedBoundingBox<float>.CornerCount];
-        cylinder.GetBoundingBox().GetCorners(corners[..OrientedBoundingBox<float>.CornerCount]);
-        collider.Bounds.ToOrientedBoundingBox().As<float>().Transform(PlacementOf(collider.Owner))
-            .GetCorners(corners[OrientedBoundingBox<float>.CornerCount..]);
-        var merged = OrientedBoundingBox.CreateFromPoints<float>(corners);
-        Bounds = Bounds.FromBoundingBox(merged.As<double>());
-        Fit(merged.Size);
     }
 
     public override bool Intersects(ref Ray<float> ray, out Vector3F point)
@@ -146,23 +105,77 @@ public partial class CylinderCollider : Collider
         return cylinder.Transform(Owner.Transform.GetWorldMatrixF());
     }
 
-    private void Fit(Vector3F size)
+    protected override void FitBox(Bounds box)
     {
-        var along = Axis == ColliderAxis.X ? size.X : Axis == ColliderAxis.Y ? size.Y : size.Z;
-        var across = Axis == ColliderAxis.X ? Math.Max(size.Y, size.Z)
-            : Axis == ColliderAxis.Y ? Math.Max(size.X, size.Z)
-            : Math.Max(size.X, size.Y);
-        Radius = across / 2;
-        Height = along;
-        Rebuild();
+        var size = box.Size.As<float>();
+        if (ChoosesAxis)
+        {
+            var acrossX = Math.Abs(size.Y - size.Z);
+            var acrossY = Math.Abs(size.X - size.Z);
+            var acrossZ = Math.Abs(size.X - size.Y);
+            Axis = acrossY <= acrossX && acrossY <= acrossZ ? ColliderAxis.Y
+                : acrossX <= acrossZ ? ColliderAxis.X
+                : ColliderAxis.Z;
+        }
+
+        Radius = AxisShape.Across(size, Axis) / 2;
+        Height = AxisShape.Along(size, Axis);
+        Position = box.Center.As<float>();
+        Rotation = TurnOf(box);
     }
 
-    private void Rebuild()
+    protected override void WriteSizes(ColliderShapeEdits shape)
     {
-        var axis = Axis == ColliderAxis.X ? Vector3F.UnitX : Axis == ColliderAxis.Y ? Vector3F.UnitY : Vector3F.UnitZ;
-        var half = Math.Max(Height / 2, 0);
-        var center = LocalCenter;
-        cylinder = new BoundingCylinder(center - axis * half, center + axis * half, Radius);
-        MarkOutlineStale();
+        shape.Axis = Axis;
+        shape.Radius = Radius;
+        shape.Height = Height;
+    }
+
+    protected override void TakeSizes(ColliderShapeEdits shape)
+    {
+        Axis = shape.Axis;
+        Radius = shape.Radius;
+        Height = shape.Height;
+    }
+
+    // A fit that does not choose the axis keeps the one the cylinder has.
+    protected override void WriteKept(ColliderShapeEdits shape)
+    {
+        shape.ChoosesAxis = ChoosesAxis;
+        if (!ChoosesAxis)
+        {
+            shape.Axis = Axis;
+        }
+    }
+
+    protected override void TakeKept(ColliderShapeEdits shape)
+    {
+        ChoosesAxis = shape.ChoosesAxis;
+        if (!shape.ChoosesAxis)
+        {
+            Axis = shape.Axis;
+        }
+    }
+
+    // The scale along the axis stretches the height, the wider of those across it the radius.
+    protected override Bounds PlaceShape()
+    {
+        var scale = Vector3F.Abs(Scale);
+        var half = AxisShape.Direction(Axis) * (Math.Abs(Height) * AxisShape.Along(scale, Axis) / 2);
+        var placed = new BoundingCylinder(-half, half, Math.Abs(Radius) * AxisShape.Across(scale, Axis)).Transform(Standing);
+        // Another cylinder may stand in the same box: one turned the other way, or along another axis.
+        if (placed.Start != cylinder.Start || placed.End != cylinder.End || placed.Radius != cylinder.Radius)
+        {
+            MarkOutlineStale();
+        }
+
+        cylinder = placed;
+        return BoundsOf(cylinder.GetBoundingBox());
+    }
+
+    protected override Mesh BuildOutline()
+    {
+        return Shapes.Cylinder.GenerateGeometry(GeometryType.Outlined, cylinder.Length, cylinder.Radius * 2, 40,
+            AxisShape.StandUp(cylinder.Start, cylinder.End));
     }
 }

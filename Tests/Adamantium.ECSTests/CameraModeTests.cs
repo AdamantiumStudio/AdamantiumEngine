@@ -47,10 +47,7 @@ public class CameraModeTests
         {
             var part = new Entity(subject, "Part");
             part.Transform.Position = new Vector3<double>(x, 0, 0);
-            part.AddComponent(new BoxCollider
-            {
-                Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(0.5), Quaternion<double>.Identity)
-            });
+            part.AddComponent(new BoxCollider { Size = new Vector3F(1) });
         }
 
         var camera = new Camera(60, 800, 600, 0.1f, 10000f);
@@ -128,9 +125,6 @@ public class CameraModeTests
 
     private static void AddBox(Entity entity, Vector3<double> center)
     {
-        entity.AddComponent(new BoxCollider
-        {
-            Bounds = new Bounds(center, new Vector3<double>(0.5), Quaternion<double>.Identity)
-        });
+        entity.AddComponent(new BoxCollider { Size = new Vector3F(1), Position = center.As<float>() });
     }
 }

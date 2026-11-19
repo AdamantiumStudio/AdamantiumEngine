@@ -515,6 +515,15 @@ public sealed class SceneBuilder
                 PhysicsParts.SetCollider(entity, kind);
             }
 
+            // Only on a collider of that kind: one kept for a mesh it could not be fitted to has sizes of its own. A
+            // shape read with nothing but defaults is none.
+            var wanted = shape.Collider.Shape is { } read && !read.HoldsDefaults() ? read : null;
+            if (entity.GetComponent<Collider>() is { } collider && PhysicsParts.KindOf(collider) == kind
+                && collider.GetShape() != wanted)
+            {
+                PhysicsParts.SetShape(collider, wanted);
+            }
+
             return;
         }
 
@@ -524,9 +533,22 @@ public sealed class SceneBuilder
                                "template's", entry.Name);
         }
 
-        if (PhysicsParts.TemplateColliderOf(made) is { } template && current != PhysicsParts.KindOf(template))
+        if (PhysicsParts.TemplateColliderOf(made) is not { } template)
+        {
+            return;
+        }
+
+        if (current != PhysicsParts.KindOf(template))
         {
             PhysicsParts.PutCollider(entity, template);
+            return;
+        }
+
+        // Of the template's kind but sized otherwise - in a game: the same collider, sized as the template's.
+        var templateShape = template.GetShape();
+        if (colliders.Length == 1 && colliders[0].GetShape() != templateShape)
+        {
+            PhysicsParts.SetShape(colliders[0], templateShape);
         }
     }
 

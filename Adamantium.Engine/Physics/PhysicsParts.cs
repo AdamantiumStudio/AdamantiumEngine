@@ -2,6 +2,7 @@ using System;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
+using Adamantium.Mathematics;
 using Serilog;
 
 namespace Adamantium.Engine.Physics;
@@ -62,6 +63,23 @@ public static class PhysicsParts
             Log.Logger.Error(exception, "The shape {Type} could not make its collider", shape.GetType().FullName);
             return null;
         }
+    }
+
+    /// <summary>Gives <paramref name="collider"/> <paramref name="shape"/>'s sizes and placement, as a model's edits or a
+    /// scene keep them - fitted to its mesh for null; false, the collider left as it was and logged, for values this
+    /// engine cannot read.</summary>
+    public static bool SetShape(Collider collider, ColliderShapeEdits shape)
+    {
+        ArgumentNullException.ThrowIfNull(collider);
+        if (shape != null && !IsSound(shape))
+        {
+            Log.Logger.Warning("The collider shape given to {Entity} is not one this engine reads; it keeps what it has",
+                collider.Owner?.Name);
+            return false;
+        }
+
+        collider.SetShape(shape);
+        return true;
     }
 
     /// <summary>Whether <paramref name="body"/> has <paramref name="settings"/>.</summary>
@@ -154,4 +172,13 @@ public static class PhysicsParts
         && float.IsFinite(body.GravityScale);
 
     private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
+
+    // Numbers all finite, sizes not negative, an axis this engine knows and a rotation that turns.
+    private static bool IsSound(ColliderShapeEdits shape) =>
+        IsPoint(shape.Position) && IsPoint(shape.Scale) && IsPoint(shape.Size) && shape.Size.X >= 0 && shape.Size.Y >= 0
+        && shape.Size.Z >= 0 && IsAmount(shape.Radius) && IsAmount(shape.Height) && Enum.IsDefined(shape.Axis)
+        && float.IsFinite(shape.Rotation.LengthSquared()) && shape.Rotation.LengthSquared() > 1e-12f;
+
+    private static bool IsPoint(Vector3F value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 }

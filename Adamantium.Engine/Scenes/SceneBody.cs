@@ -100,26 +100,3 @@ public sealed class SceneBody
         GravityScale = edits.GravityScale, CanSleep = edits.CanSleep
     };
 }
-
-/// <summary>The collider of a scene's shape, in place of the one its template makes: of this kind, fitted to the mesh;
-/// <see cref="ColliderKind.None"/> for none.</summary>
-public sealed class SceneCollider
-{
-    // A kind this engine does not know, kept as read so the entry is written back as it was.
-    private string _unknownKind;
-
-    /// <summary>The kind; null for one this engine does not know, which leaves the template's.</summary>
-    [XmlIgnore]
-    public ColliderKind? Kind { get; set; }
-
-    [XmlAttribute("Kind"), EditorBrowsable(EditorBrowsableState.Never)]
-    public string KindText
-    {
-        get => Kind?.ToString() ?? _unknownKind;
-        set
-        {
-            Kind = Enum.TryParse<ColliderKind>(value, out var kind) && Enum.IsDefined(kind) ? kind : null;
-            _unknownKind = Kind == null ? value : null;
-        }
-    }
-}

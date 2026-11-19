@@ -23,9 +23,10 @@ public class EntityChangeCountTests
             Assert.That(Grows(entity, () => entity.AddComponent(new RigidBody())), Is.True, "a component added");
             var collider = new BoxCollider();
             entity.AddComponent(collider);
-            Assert.That(Grows(entity, () => collider.Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(2),
-                Quaternion<double>.Identity)), Is.True, "a collider refitted");
+            Assert.That(Grows(entity, () => collider.CalculateFromPoints([new Vector3F(-2), new Vector3F(2)])), Is.True,
+                "a collider refitted");
             Assert.That(Grows(entity, () => collider.Size = new Vector3F(1, 2, 3)), Is.True, "a collider's value");
+            Assert.That(Grows(entity, () => collider.Position = new Vector3F(0, 1, 0)), Is.True, "a collider moved");
             Assert.That(Grows(entity, () => entity.RemoveComponent<RigidBody>()), Is.True, "a component taken off");
             Assert.That(Grows(entity, () => _ = new Entity(entity, "Child")), Is.True, "an entity hung under it");
             Assert.That(Grows(entity, () => { }), Is.False, "nothing");

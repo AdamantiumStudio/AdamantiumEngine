@@ -204,10 +204,12 @@ public static class SceneCapture
             return;
         }
 
-        var kind = PhysicsParts.KindOf(entity.GetComponent<Collider>());
-        if (kind != PhysicsParts.KindOf(template))
+        var collider = entity.GetComponent<Collider>();
+        var kind = PhysicsParts.KindOf(collider);
+        var sizes = collider?.GetShape();
+        if (kind != PhysicsParts.KindOf(template) || sizes != template.GetShape())
         {
-            entry.Collider = new SceneCollider { Kind = kind };
+            entry.Collider = new SceneCollider { Kind = kind, Shape = sizes };
         }
     }
 

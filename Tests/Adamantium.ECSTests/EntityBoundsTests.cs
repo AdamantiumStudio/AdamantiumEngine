@@ -44,9 +44,6 @@ public class EntityBoundsTests
 
     private static void AddBox(Entity entity, double half, Vector3<double>? halfExtent = null)
     {
-        entity.AddComponent(new BoxCollider
-        {
-            Bounds = new Bounds(Vector3<double>.Zero, halfExtent ?? new Vector3<double>(half), Quaternion<double>.Identity)
-        });
+        entity.AddComponent(new BoxCollider { Size = (2 * (halfExtent ?? new Vector3<double>(half))).As<float>() });
     }
 }

@@ -107,6 +107,42 @@ public class SceneSnapshotTests
         });
     }
 
+    // A collider sized and moved in a game is the template's fitted one again; one the scene sizes keeps its sizes.
+    [Test]
+    public async Task AColliderSizedInAGame_GoesBack()
+    {
+        var file = new SceneFile();
+        file.Shapes.Add(new SceneShape { Uid = 11, Name = "Plain", Type = typeof(CubeShape).FullName });
+        var sized = new ColliderShapeEdits { IsFitted = false, Size = new Vector3F(3), Position = new Vector3F(0, -1, 0) };
+        file.Shapes.Add(new SceneShape
+        {
+            Uid = 12, Name = "Sized", Type = typeof(CubeShape).FullName,
+            Collider = new SceneCollider { Kind = ColliderKind.Box, Shape = sized }
+        });
+        await new SceneBuilder(_scene, new CountingAssets()).Build(file);
+        _world.ForceUpdate();
+        var plain = Named("Plain").GetComponent<BoxCollider>();
+        var kept = Named("Sized").GetComponent<BoxCollider>();
+        var snapshot = SceneSnapshot.Take(_scene);
+        plain.Size = new Vector3F(5);
+        plain.Position = new Vector3F(1, 0, 0);
+        kept.Size = new Vector3F(7);
+        _world.ForceUpdate();
+
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            var back = Named("Plain").GetComponent<BoxCollider>();
+            Assert.That(back.IsFitted, Is.True);
+            Assert.That(back.Size, Is.EqualTo(new Vector3F(1)));
+            Assert.That(back.Position.Length(), Is.LessThan(1e-6f));
+            Assert.That(Named("Sized").GetComponent<BoxCollider>().GetShape(), Is.EqualTo(sized));
+            Assert.That(back, Is.SameAs(plain), "the same collider, sized as the template's");
+        });
+    }
+
     [Test]
     public void WhatJoined_Goes_AndWhatWasTakenOut_ComesBack_TheSameObject()
     {

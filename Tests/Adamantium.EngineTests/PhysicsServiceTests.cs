@@ -592,8 +592,7 @@ public class PhysicsServiceTests
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-4));
 
         box.GetComponent<RigidBody>().Kind = BodyKind.Dynamic;
-        box.GetComponent<BoxCollider>().Bounds =
-            new Bounds(Vector3<double>.Zero, new Vector3<double>(1), Quaternion<double>.Identity);
+        box.GetComponent<BoxCollider>().Size = new Vector3F(2);
         Frames(3);
 
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
@@ -810,8 +809,7 @@ public class PhysicsServiceTests
         Play();
         Frames(1);
 
-        box.GetComponent<BoxCollider>().Bounds =
-            new Bounds(Vector3<double>.Zero, new Vector3<double>(1), Quaternion<double>.Identity);
+        box.GetComponent<BoxCollider>().Size = new Vector3F(2);
         Frames(3);
 
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
@@ -1052,10 +1050,7 @@ public class PhysicsServiceTests
         _world.EntityManager.AddEntity(level, _world.MainScene);
         var ground = new Entity(level, "Ground");
         ground.Transform.Position = new Vector3<double>(0, 1, 0);
-        ground.AddComponent(new BoxCollider
-        {
-            Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(20, 1, 20), Quaternion<double>.Identity)
-        });
+        ground.AddComponent(new BoxCollider { Size = new Vector3F(40, 2, 40) });
         ground.AddComponent(new RigidBody { Kind = BodyKind.Static });
         Settle();
         var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
@@ -1240,14 +1235,43 @@ public class PhysicsServiceTests
         Settle();
     }
 
+    // The collider, a unit above its entity, rests on the ground: the entity half a unit into it.
+    [Test]
+    public void AColliderMovedOnItsEntity_RestsWhereItIs()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        box.GetComponent<BoxCollider>().Position = new Vector3F(0, -1, 0);
+        Play();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(0.5).Within(0.02));
+    }
+
+    // A long box turned up on its end stands as tall as it is long; moved during the game, it is changed in place.
+    [Test]
+    public void AColliderTurnedOnItsEntity_StandsAsItIsTurned()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        Play();
+        Frames(1);
+
+        var collider = box.GetComponent<BoxCollider>();
+        collider.Size = new Vector3F(2, 1, 1);
+        collider.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, float.DegreesToRadians(90));
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
+    }
+
     private Entity AddGround()
     {
         var ground = new Entity(null, "Ground");
         ground.Transform.Position = new Vector3<double>(0, 1, 0);
-        ground.AddComponent(new BoxCollider
-        {
-            Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(20, 1, 20), Quaternion<double>.Identity)
-        });
+        ground.AddComponent(new BoxCollider { Size = new Vector3F(40, 2, 40) });
         ground.AddComponent(new RigidBody { Kind = BodyKind.Static });
         _world.EntityManager.AddEntity(ground, _world.MainScene);
         Settle();
@@ -1266,10 +1290,7 @@ public class PhysicsServiceTests
     {
         var box = new Entity(owner, name);
         box.Transform.Position = position;
-        box.AddComponent(new BoxCollider
-        {
-            Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(half), Quaternion<double>.Identity)
-        });
+        box.AddComponent(new BoxCollider { Size = new Vector3F((float)(2 * half)) });
         box.AddComponent(new RigidBody());
         return box;
     }
@@ -1278,7 +1299,7 @@ public class PhysicsServiceTests
     {
         var part = new Entity(owner, name);
         part.Transform.Position = position;
-        part.AddComponent(new BoxCollider { Bounds = new Bounds(Vector3<double>.Zero, half, Quaternion<double>.Identity) });
+        part.AddComponent(new BoxCollider { Size = (2 * half).As<float>() });
         return part;
     }
 

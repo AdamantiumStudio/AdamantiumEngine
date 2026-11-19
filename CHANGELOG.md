@@ -7,6 +7,22 @@ All packages share one version.
 
 ### Added
 
+- A collider stands on its entity where it is placed: `Collider.Position` (its center), `Rotation` and `Scale` (along
+  its own axes) place its own shape - `BoxCollider.Size`, `SphereCollider.Radius`, a capsule's or cylinder's `Axis`,
+  `Radius` and `Height`, a hull - for the physics, picking, culling and the shown outline alike. `Collider.Placement`
+  is that placement as a matrix, `Turn` its rotation made whole.
+- A collider sized by hand: `Collider.IsFitted` is true while the collider fits its mesh, and a fit takes the sizes,
+  the position and the rotation from it. A size, the position or the rotation set by hand makes it false, and a new
+  mesh leaves the collider as it is; a hull still takes the new mesh's hull, about where it is placed. Set true again,
+  the collider fits at once. A scale stretches a fitted collider too, about its center. `FitTo` fits whatever
+  `IsFitted` says, `FollowMesh` as it says. A copied collider is fitted or sized as the original, with an outline of
+  its own.
+- A model's edits and a scene keep a collider's sizes and placement: `PartEdits.ColliderShape` and
+  `SceneCollider.Shape` (`ColliderShapeEdits`; null for a fitted, unscaled collider), the scene's as attributes each
+  written only when it is not a new collider's own. `Collider.GetShape` reads them, `SetShape` gives them all at once;
+  `PhysicsParts.SetShape` checks them first - false, logged, for values not finite, sizes below zero, an axis not known
+  or a rotation of zero. They are given only to a collider of the kind they were kept for. A game stopped sizes a
+  shape's collider back as the scene keeps it, the same collider.
 - `IUniverse` gives what `Universe` has and a host needs: the frame statistics `Fps`, `RenderFps`, `DrawTimeMs` and
   `GpuTimeMs`, and `CreateAssetService`, an asset service of its own that loads as the universe's does.
 - `PhysicsService` follows the scene while a game plays, not only at its start. A rigid body given during the game, or
@@ -533,6 +549,15 @@ All packages share one version.
 
 ### Changed
 
+- `Collider.Bounds` is the box round the collider in its entity's space, built from its sizes and placement, and is
+  read only: a collider is sized by its own values. `Collider.Size` is `BoxCollider.Size`; `Center` and `LocalCenter`
+  are gone, `Position` is the center. `CalculateFromMesh` is `FitTo`, and `Merge` fits the box round both for every
+  kind - a sphere too, which threw. A hull merged stands unplaced.
+- `CapsuleCollider.Direction` is `Axis`, of `ColliderAxis` as a cylinder's, which moved to
+  `Adamantium.Graphics.Core.Models` beside `ColliderKind`; `CapsuleDirection` is gone.
+- A fitted sphere's radius is half the longest side of the mesh's box for picking and culling as well, as the physics
+  already had it, rather than half its diagonal.
+- `Bounds` is `IEquatable<Bounds>`: a bounds set on a component no longer boxes, so a collider's fit allocates nothing.
 - A collider builds its shown outline in `BuildOutline`, which a collider of its own overrides in place of
   `GetVisualRepresentation`. `GetVisualRepresentation` builds the outline the first time, keeps it as `Geometry` and
   fills it anew once the shape changed. `RefreshShownGeometry` is gone: a collider calls `MarkOutlineStale` itself.
@@ -834,6 +859,8 @@ All packages share one version.
 
 ### Removed
 
+- `Collider.Transform(ref scale, ref rotation, ref translation)`, both: nothing called them, and a collider is placed
+  by `Position`, `Rotation` and `Scale`.
 - `EntityIcons.ShowsLights` and `EntityIcons.ShowsCameras`: use `EntityIcons.Shows`.
 - `ContourProcessingHelper`, and the cut of crossing contours `Polygon.FillIndirect` fell back to: every fill goes
   through `RingFill`, which fills crossing contours by the overlay.
