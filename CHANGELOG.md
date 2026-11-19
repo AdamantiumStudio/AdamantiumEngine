@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `IUniverse` gives what `Universe` has and a host needs: the frame statistics `Fps`, `RenderFps`, `DrawTimeMs` and
+  `GpuTimeMs`, and `CreateAssetService`, an asset service of its own that loads as the universe's does.
 - `PhysicsService` follows the scene while a game plays, not only at its start. A rigid body given during the game, or
   on an entity enabled again, becomes a body - at once when the game pushes it in the same frame; one taken off,
   disabled or taken out of the world leaves. A body is changed where it stands, its contacts kept: put where it was

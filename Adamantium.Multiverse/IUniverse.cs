@@ -1,6 +1,7 @@
 ﻿using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS;
+using Adamantium.Graphics.Core.Assets;
 
 namespace Adamantium.Multiverse
 {
@@ -16,6 +17,10 @@ namespace Adamantium.Multiverse
         IReadOnlyList<UniverseOutput> Outputs { get; }
         
         UniverseOutput MainOutput { get; }
+
+        /// <summary>An asset service that loads as the universe's own does, but keeps what it loads apart, so whoever
+        /// made it unloads it alone.</summary>
+        IAssetService CreateAssetService();
 
         public void InitializeUniverse();
 
@@ -77,6 +82,19 @@ namespace Adamantium.Multiverse
         /// Desired number of frames per second
         /// </summary>
         UInt32 DesiredFPS { get; set; }
+
+        /// <summary>Frames the universe has run a second, over the last second; 0 while it has drawn nothing for a second.
+        /// </summary>
+        Single Fps { get; }
+
+        /// <summary>Frames per second the rendering could sustain, from <see cref="DrawTimeMs"/>.</summary>
+        Single RenderFps { get; }
+
+        /// <summary>CPU cost of one drawn frame, averaged over the last second.</summary>
+        Double DrawTimeMs { get; }
+
+        /// <summary>GPU time of one drawn frame, averaged over the last second.</summary>
+        Double GpuTimeMs { get; }
         
         /// <summary>
         /// Condition on which the loop will be exited
