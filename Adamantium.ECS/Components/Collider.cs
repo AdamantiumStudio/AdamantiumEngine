@@ -264,6 +264,11 @@ namespace Adamantium.ECS.Components
         /// physics measures its shape; none for a mesh.</summary>
         public abstract double MeasureVolume(Vector3F scale);
 
+        /// <summary>The space the collider holds on an entity skewed in its body, whose matrix stretches space by
+        /// <paramref name="stretch"/>, as the physics carries it there: nothing for a round collider, which it leaves
+        /// out.</summary>
+        public virtual double MeasureCarriedVolume(double stretch) => 0;
+
         // Turned on or off, the body it belongs to weighs anew; one added or taken off its entity tells it so.
         protected override void OnEnabledChanged() => RigidBody.ReweighAbove(Owner);
 

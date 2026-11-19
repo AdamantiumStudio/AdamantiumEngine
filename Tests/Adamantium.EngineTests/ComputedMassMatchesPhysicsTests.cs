@@ -60,6 +60,23 @@ public class ComputedMassMatchesPhysicsTests
         Assert.That(body.ComputedMass, Is.EqualTo(physics).Within(physics * tolerance));
     }
 
+    // A box on a part turned under a threefold stretch: the physics weighs the hull of its carried corners, the
+    // weighing the box's space stretched by the matrix's determinant.
+    [Test]
+    public void ACarriedBox_WeighsAsThePhysicsHull()
+    {
+        var box = new BoxCollider { Size = new Vector3F(1, 2, 3), Scale = new Vector3F(1, 1, 0.5f) };
+        var carry = Matrix4x4.CreateFromQuaternion<float>(Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, 0.7f)) *
+                    Matrix4x4.CreateScale<float>(1, 3, 1);
+
+        Assert.That(ColliderShape.TryCreateSkewed(box, carry, new CarriedShapeCache(), new List<CarriedShapeKey>(),
+            out var shape), Is.True);
+        var physics = shape.ComputeMass(700).Mass;
+
+        Assert.That(700 * box.MeasureCarriedVolume(System.Math.Abs(carry.Determinant())),
+            Is.EqualTo(physics).Within(physics * 1e-4));
+    }
+
     private static Mesh Tetrahedron()
     {
         Vector3<double>[] points = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0), new(0, 0, 1)];

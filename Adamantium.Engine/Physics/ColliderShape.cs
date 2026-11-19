@@ -127,16 +127,53 @@ internal readonly struct ColliderShape
         }
     }
 
-    // The box's corners turned, then scaled as the entity is, about the box's center; edges sharp, as a box's are. A
-    // side thinner than a thousandth of the box's longest is made that thick, so a flat box stays a solid.
+    /// <summary>The shape of <paramref name="collider"/> on an entity skewed in its body, carried there from the entity's
+    /// own axes by <paramref name="carry"/>, the entity's place left to the part's pose: a box as the hull of its
+    /// corners, a hull or a mesh as it is; false for a round collider, which no hull fits skewed. Its key goes in
+    /// <paramref name="taken"/>.</summary>
+    public static bool TryCreateSkewed(Collider collider, in Matrix4x4F carry, CarriedShapeCache carriedShapes,
+        List<CarriedShapeKey> taken, out CollisionShape shape)
+    {
+        switch (collider)
+        {
+            case BoxCollider box:
+                // Its own scale in the half sizes, so a flat side is made thick before anything stretches it.
+                var standing = Matrix4x4.CreateFromQuaternion<float>(box.Turn) *
+                               Matrix4x4.CreateTranslation<float>(box.Position);
+                shape = CarriedBox(Vector3F.Abs(box.Size * box.Scale) * 0.5f, standing * carry, carriedShapes, taken);
+                return true;
+            case ConvexHullCollider hullCollider:
+                if (hullCollider.PlacedHull is not { } hull)
+                    throw new ArgumentException("The hull collider holds no hull: its entity has no mesh.");
+
+                shape = carriedShapes.Take(hull, carry, CollisionShape.DefaultConvexRadius, taken);
+                return true;
+            case MeshCollider meshCollider:
+                if (meshCollider.Source is not { } mesh)
+                    throw new ArgumentException("The mesh collider holds no mesh: its entity has none with points.");
+
+                shape = carriedShapes.Take(mesh, meshCollider.Carry * carry, taken);
+                return true;
+            default:
+                shape = null;
+                return false;
+        }
+    }
+
+    // The box's corners turned, then scaled as the entity is, about the box's center.
     private static ConvexHullCollisionShape SkewedBox(Vector3F half, QuaternionF turn, Vector3F scale,
-        CarriedShapeCache carriedShapes, List<CarriedShapeKey> taken)
+        CarriedShapeCache carriedShapes, List<CarriedShapeKey> taken) =>
+        CarriedBox(half, Matrix4x4.CreateFromQuaternion<float>(turn) * Matrix4x4.CreateScale<float>(scale), carriedShapes,
+            taken);
+
+    // A box of half sizes half carried by carry, as the hull of its corners; edges sharp, as a box's are. A side thinner
+    // than a thousandth of the box's longest is made that thick, so a flat box stays a solid.
+    private static ConvexHullCollisionShape CarriedBox(Vector3F half, in Matrix4x4F carry, CarriedShapeCache carriedShapes,
+        List<CarriedShapeKey> taken)
     {
         var thinnest = MathF.Max(CollisionShape.MinimumSize, 1e-3f * Vector3F.Max(half));
         half = Vector3F.Max(half, new Vector3F(thinnest));
-        var carry = Matrix4x4.CreateScale<float>(half) * Matrix4x4.CreateFromQuaternion<float>(turn) *
-                    Matrix4x4.CreateScale<float>(scale);
-        return carriedShapes.Take(UnitCube, carry, 0, taken);
+        return carriedShapes.Take(UnitCube, Matrix4x4.CreateScale<float>(half) * carry, 0, taken);
     }
 
     private static bool IsAlongAxes(QuaternionF turn) =>

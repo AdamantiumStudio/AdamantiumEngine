@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using Adamantium.DarkMatter.Shapes;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Adamantium.MVVM;
@@ -76,6 +78,16 @@ namespace Adamantium.ECS.Components
             var own = Vector3F.Abs(Size * Scale);
             var size = Vector3F.Abs(scale);
             return (double)own.X * own.Y * own.Z * size.X * size.Y * size.Z;
+        }
+
+        // Carried as the hull of its corners, a side thinner than a thousandth of its longest is made that thick, as the
+        // physics makes it.
+        public override double MeasureCarriedVolume(double stretch)
+        {
+            var own = Vector3F.Abs(Size * Scale);
+            var thinnest = MathF.Max(2 * CollisionShape.MinimumSize, 1e-3f * Vector3F.Max(own));
+            own = Vector3F.Max(own, new Vector3F(thinnest));
+            return (double)own.X * own.Y * own.Z * stretch;
         }
 
         protected override void FitBox(Bounds box)

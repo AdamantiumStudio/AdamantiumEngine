@@ -141,6 +141,8 @@ public partial class ConvexHullCollider : Collider
         return placedVolume * size.X * size.Y * size.Z;
     }
 
+    public override double MeasureCarriedVolume(double stretch) => placedVolume * stretch;
+
     public override IConvexShape<float> GetWorldShape()
     {
         return placedHull?.Transform(Owner.Transform.GetWorldMatrixF());
