@@ -41,6 +41,12 @@ internal static class PdfEncryptKeys
     /// <summary>The crypt filter for strings.</summary>
     public const string StrF = "StrF";
 
+    /// <summary>The crypt filter for embedded file streams; the streams' one when not given.</summary>
+    public const string EFF = "EFF";
+
     /// <summary>A crypt filter's method.</summary>
     public const string CFM = "CFM";
+
+    /// <summary>When a crypt filter asks for the password: <c>DocOpen</c> (the default) or <c>EFOpen</c>.</summary>
+    public const string AuthEvent = "AuthEvent";
 }

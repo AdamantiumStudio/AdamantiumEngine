@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- PDF: `PdfDocument.CollectFonts` and `PdfPage.CollectFonts` - the fonts a document uses, in page resources and their
+  graphics states, forms, tiling patterns, soft-mask groups, Type 3 fonts' own resources and annotation appearances,
+  each once and with the pages that use it (`PdfDocumentFont`), a page's own first; `PdfDocument.FileSize`.
 - `SceneSnapshot.KeepChanges` leaves the scene as a game left it and gives `KeptChanges`: what changed, joined and was
   taken out since the snapshot, with how the scene stood then and now - `PutBefore` and `PutAfter` put either back, an
   undo of keeping what a game did and its redo. The snapshot's state is a `SceneState` of its own, taken at either end.
@@ -715,6 +718,12 @@ All packages share one version.
 
 ### Fixed
 
+- PDF: a file that encrypts only its embedded files (`/EFF`, strings and streams left plain) has its attachments
+  decrypted by the embedded files' own filter, even when their stream leaves `/Type` out - they gave garbage before.
+  When the filter asks at an attachment's opening (`/AuthEvent /EFOpen`) the document reads without a password, and
+  `PdfAttachment.NeedsPassword` says one is still to be given for `Authenticate`, which then keeps what was read; it
+  also takes marks without one. `PdfStandardSecurityHandler.EmbeddedFileMethod`, `EncryptsOnlyEmbeddedFiles`,
+  `AsksOnlyForEmbeddedFiles`. Encrypting or decrypting as plain no longer asks for the key.
 - The MVVM generator repeats the modifiers a `[Bindable]` partial property is declared with: `internal`, `virtual`,
   `required`, a `private set`, a `protected set` or an `init`. What is not public is left out of the property's
   description in `PropertyAccessors`. Before, the property was always written public with a public `set`, which did

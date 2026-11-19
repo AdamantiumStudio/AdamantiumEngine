@@ -25,6 +25,7 @@ public sealed class PdfStandardSecurityHandler
     private readonly byte[] _firstId;
     private readonly int _permissions;
     private readonly int _keyLength;
+    private readonly bool _embeddedFilesAskOnOpen;
     private byte[] _fileKey;
 
     public PdfStandardSecurityHandler(PdfDictionary encrypt, byte[] firstId)
@@ -46,7 +47,12 @@ public sealed class PdfStandardSecurityHandler
         EncryptsMetadata = encrypt[PdfEncryptKeys.EncryptMetadata] is not PdfBoolean { Value: false };
         StringMethod = MethodOf(encrypt[PdfEncryptKeys.StrF]);
         StreamMethod = MethodOf(encrypt[PdfEncryptKeys.StmF]);
-        var aes128 = StringMethod == PdfCryptMethod.Aes128 || StreamMethod == PdfCryptMethod.Aes128;
+        EmbeddedFileMethod = encrypt[PdfEncryptKeys.EFF] != null ? MethodOf(encrypt[PdfEncryptKeys.EFF]) : StreamMethod;
+        var embeddedFilter = (encrypt[PdfEncryptKeys.CF] as PdfDictionary)?[
+            (encrypt[PdfEncryptKeys.EFF] as PdfName)?.Value ?? string.Empty] as PdfDictionary;
+        _embeddedFilesAskOnOpen = embeddedFilter?[PdfEncryptKeys.AuthEvent] is PdfName { Value: PdfCryptNames.EFOpen };
+        var aes128 = StringMethod == PdfCryptMethod.Aes128 || StreamMethod == PdfCryptMethod.Aes128 ||
+                     EmbeddedFileMethod == PdfCryptMethod.Aes128;
         _keyLength = Revision >= 5 ? 32
             : Revision == 2 ? 5
             : aes128 ? 16
@@ -66,6 +72,18 @@ public sealed class PdfStandardSecurityHandler
     public PdfCryptMethod StringMethod { get; }
 
     public PdfCryptMethod StreamMethod { get; }
+
+    /// <summary>How embedded files are encrypted (<c>EFF</c>); as the other streams when the file does not say.</summary>
+    public PdfCryptMethod EmbeddedFileMethod { get; }
+
+    /// <summary>Whether only embedded files are encrypted, strings and the other streams left plain.</summary>
+    public bool EncryptsOnlyEmbeddedFiles => StringMethod == PdfCryptMethod.None &&
+                                             StreamMethod == PdfCryptMethod.None &&
+                                             EmbeddedFileMethod != PdfCryptMethod.None;
+
+    /// <summary>Whether the password is asked for only when an embedded file is opened (its filter's <c>AuthEvent</c>
+    /// <c>EFOpen</c>): the document reads without one. Otherwise it is asked for when the document opens.</summary>
+    public bool AsksOnlyForEmbeddedFiles => EncryptsOnlyEmbeddedFiles && _embeddedFilesAskOnOpen;
 
     /// <summary>Whether a password has opened the file.</summary>
     public bool IsAuthenticated => _fileKey != null;
@@ -99,6 +117,11 @@ public sealed class PdfStandardSecurityHandler
 
     public byte[] Decrypt(PdfObjectId id, ReadOnlySpan<byte> data, PdfCryptMethod method)
     {
+        if (method == PdfCryptMethod.None)
+        {
+            return data.ToArray();
+        }
+
         if (_fileKey == null)
         {
             throw new PdfException("The file is encrypted and no password has opened it.");
@@ -117,6 +140,12 @@ public sealed class PdfStandardSecurityHandler
     /// object written into it; AES behind a random initialization vector.</summary>
     public byte[] Encrypt(PdfObjectId id, ReadOnlySpan<byte> data, PdfCryptMethod method)
     {
+        // Plain needs no key: a file that encrypts only its attachments writes its other objects so without one.
+        if (method == PdfCryptMethod.None)
+        {
+            return data.ToArray();
+        }
+
         if (_fileKey == null)
         {
             throw new PdfException("The file is encrypted and no password has opened it.");

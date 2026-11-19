@@ -8,4 +8,5 @@ internal static class PdfObjectTypes
     public const string XRef = "XRef";
     public const string ObjStm = "ObjStm";
     public const string Metadata = "Metadata";
+    public const string EmbeddedFile = "EmbeddedFile";
 }
