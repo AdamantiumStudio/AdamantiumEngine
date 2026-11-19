@@ -61,6 +61,19 @@ internal sealed class ManifoldBuffer
         Count++;
     }
 
+    /// <summary>The index of the point of least separation - the deepest; the first for none.</summary>
+    public int FindDeepest()
+    {
+        var deepest = 0;
+        for (var index = 1; index < Count; index++)
+        {
+            if (Separations[index] < Separations[deepest])
+                deepest = index;
+        }
+
+        return deepest;
+    }
+
     /// <summary>Keeps at most <paramref name="limit"/> points spread as widely as they can be: the deepest first, then
     /// each time the one farthest from all kept.</summary>
     public void ReduceTo(int limit)
@@ -73,12 +86,7 @@ internal sealed class ManifoldBuffer
             _nearestChosen[index] = float.MaxValue;
         }
 
-        var deepest = 0;
-        for (var index = 1; index < Count; index++)
-        {
-            if (Separations[index] < Separations[deepest])
-                deepest = index;
-        }
+        var deepest = FindDeepest();
 
         var kept = 0;
         var next = deepest;
