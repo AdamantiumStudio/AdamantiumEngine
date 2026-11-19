@@ -87,4 +87,10 @@ public static unsafe class PosixInterop
 
     [DllImport(LibC, EntryPoint = "getuid")]
     public static extern uint GetUid();
+
+    /// <summary>macOS <c>setxattr(2)</c>, which takes a position and options Linux's does not: names and replaces an
+    /// extended attribute of a file, such as its quarantine mark.</summary>
+    [DllImport(LibC, EntryPoint = "setxattr", SetLastError = true)]
+    public static extern int SetMacExtendedAttribute([MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+        [MarshalAs(UnmanagedType.LPStr)] string name, byte* value, nuint size, uint position, int options);
 }

@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- Windows: `IAttachmentExecute` with `Win32Interop.ClsidAttachmentServices`, and `Win32Interop.AssocIsDangerous` - to
+  open or mark a file from outside as the system's policy says. macOS: `PosixInterop.SetMacExtendedAttribute`.
 - PDF: `PdfDocument.CollectFonts` and `PdfPage.CollectFonts` - the fonts a document uses, in page resources and their
   graphics states, forms, tiling patterns, soft-mask groups, Type 3 fonts' own resources and annotation appearances,
   each once and with the pages that use it (`PdfDocumentFont`), a page's own first; `PdfDocument.FileSize`.
