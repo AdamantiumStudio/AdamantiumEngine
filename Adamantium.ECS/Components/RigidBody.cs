@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Adamantium.DarkMatter;
 using Adamantium.Mathematics;
@@ -183,16 +184,25 @@ public partial class RigidBody : Component
         if (entity == null || (!isBody && (!entity.IsEnabled || entity.ContainsComponent<RigidBody>())))
             return 0;
 
-        // A part flattened or skewed is left out by the physics, its own colliders; those below stand on their own.
+        // A flattened part is left out by the physics, its own colliders; a skewed one's are carried into the body by its
+        // whole matrix, which stretches their space by its determinant. Those below stand on their own.
         var world = LocalOf(entity) * parentWorld;
+        // A body skewed or flattened itself the physics does not take at all.
+        var stretch = (double)world.Determinant();
         var volume = 0.0;
-        if (!IsSkewedOrFlat(world) && world.Decompose(out var decomposed, out _, out _))
+        var isSkewed = stretch != 0 && Matrix4x4.IsSkewed(world);
+        if (isBody && (isSkewed || stretch == 0))
+            return 0;
+
+        var scale = Vector3F.Zero;
+        if (isSkewed || (stretch != 0 && world.Decompose(out scale, out _, out _)))
         {
-            var scale = Vector3F.Abs(decomposed);
             foreach (var component in entity.Components.AsSpan())
             {
                 if (component is Collider { IsEnabled: true } collider)
-                    volume += collider.MeasureVolume(scale);
+                    volume += isSkewed
+                        ? collider.MeasureCarriedVolume(Math.Abs(stretch))
+                        : collider.MeasureVolume(Vector3F.Abs(scale));
             }
         }
 
@@ -204,8 +214,6 @@ public partial class RigidBody : Component
 
         return volume;
     }
-
-    private static bool IsSkewedOrFlat(in Matrix4x4F world) => world.Determinant() == 0 || Matrix4x4.IsSkewed(world);
 
     // An entity whose transform was taken off stands as it is.
     private static Matrix4x4F LocalOf(Entity entity) =>

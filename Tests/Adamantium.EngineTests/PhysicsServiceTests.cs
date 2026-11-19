@@ -1267,6 +1267,53 @@ public class PhysicsServiceTests
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
     }
 
+    // A part a unit below its body, turned about Y under the body's stretch along X, is skewed: its box comes in as the
+    // hull of its corners and the body rests on it, a unit higher than on its own box.
+    [Test]
+    public void APartTurnedUnderAStretchedBody_IsCarriedIn_AndBearsIt()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = MakeBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.Transform.BaseScale = new Vector3F(2, 1, 1);
+        var part = AddPart(box, "Leg", new Vector3<double>(0, 1, 0), new Vector3<double>(0.5));
+        part.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, float.DegreesToRadians(45));
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-1.5).Within(0.02));
+    }
+
+    // Mirrored too, the turned part still bears the body; moved by hand during the game, it keeps the shape it has.
+    [Test]
+    public void AMirroredSkewedPart_BearsTheBody_AndKeepsItsShapeWhenTheBodyIsMoved()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = MakeBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        box.Transform.BaseScale = new Vector3F(2, 1, 1);
+        var part = AddPart(box, "Leg", new Vector3<double>(0, 1, 0), new Vector3<double>(0.5));
+        part.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, float.DegreesToRadians(30));
+        part.Transform.BaseScale = new Vector3F(-1, 1, 1);
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(3);
+        var rested = box.Transform.Position.Y;
+
+        box.Transform.Position = new Vector3<double>(5, -3, 0);
+        Frames(3);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rested, Is.EqualTo(-1.5).Within(0.02));
+            Assert.That(box.Transform.Position.Y, Is.EqualTo(-1.5).Within(0.02));
+            Assert.That(box.Transform.Position.X, Is.EqualTo(5).Within(0.02));
+        });
+    }
+
     // Turned about Y on an entity stretched along X, the box is skewed flat: the hull of its corners rests, not falls.
     [Test]
     public void ABoxTurnedOnAnUnevenlyScaledEntity_RestsAsItsHull()

@@ -12,8 +12,8 @@ All packages share one version.
   at the scale its world matrix has along its own axes - outside a game too. A collider changed, added, taken off or
   turned off, a scale or a turn, an entity hung elsewhere, taken off or turned off, or the mass or density changed,
   says it changed, not counted as the entity's change; it is weighed once, when next read. `Collider.MeasureVolume`
-  measures each collider as the physics does; a mesh collider weighs nothing, and a skewed or flattened part's
-  colliders are left out, as the physics leaves them. `ConvexHull.MeasureVolume` gives the space a hull holds;
+  measures each collider as the physics does, `MeasureCarriedVolume` on a skewed part; a mesh collider weighs nothing,
+  and a flattened part's colliders, or a skewed part's round ones, are left out, as the physics leaves them. `ConvexHull.MeasureVolume` gives the space a hull holds;
   `Matrix4x4.IsSkewed` and `Vector3.IsEven` are the tests the physics and the weighing share.
 - PDF: `PdfDocument.CollectFonts` and `PdfPage.CollectFonts` - the fonts a document uses, in page resources and their
   graphics states, forms, tiling patterns, soft-mask groups, Type 3 fonts' own resources and annotation appearances,
@@ -138,8 +138,10 @@ All packages share one version.
   friction and the rest - colliding with the box, sphere, capsule, cylinder and convex hull colliders on it and on the enabled
   entities below it that have no rigid body of their own, scaled as each entity is: a model's parts make one body (a
   hull collider with no mesh, or a moving body that is mirrored, or under a stretched or skewed parent, is left out,
-  said in the log; a box turned on an unevenly scaled entity, skewed, is the hull of its corners). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
-  game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
+  said in the log; a box turned on an unevenly scaled entity, skewed, is the hull of its corners, and a part turned
+  under an uneven scale, skewed, has its boxes, hulls and meshes carried in by its whole matrix - a box as the hull of
+  its corners - its spheres, capsules and cylinders left out, said in the log). `PhysicsService`, a game service used
+  through `IPhysicsService`, runs while a game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
   commands - velocities and impulses at the next step; a body's force (`SetForce`), felt at every step until set
   again; gravity - and each frame stands the entities between the last two steps, parents before children. Down is
   +Y, so the service's gravity is too; that of its `Settings` is not used. What it moves is recorded as the scene's

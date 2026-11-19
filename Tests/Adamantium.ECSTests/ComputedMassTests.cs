@@ -144,16 +144,18 @@ public class ComputedMassTests
         Assert.That(body.ComputedMass, Is.EqualTo(expected).Within(expected * 1e-4));
     }
 
-    // Turned 45 degrees under a stretch, a part is skewed: the physics leaves it out, and so does its weight.
+    // Turned 45 degrees under a threefold stretch, a part is skewed: the physics carries its box in as the hull of its
+    // corners, three times the box's space; a ball skewed is an egg, and is left out.
     [Test]
-    public void ASkewedPart_WeighsNothing_AsThePhysicsLeavesItOut()
+    public void ASkewedPartsBox_WeighsAsItsCarriedHull_AndABallNothing()
     {
         var body = Body(out _);
         body.Owner.Transform.BaseScale = new Vector3F(1, 3, 1);
         var part = Part(body.Owner, new Vector3F(1));
         part.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
+        part.AddComponent(new SphereCollider { Radius = 1 });
 
-        Assert.That(body.ComputedMass, Is.EqualTo(3000).Within(1e-2));
+        Assert.That(body.ComputedMass, Is.EqualTo(6000).Within(1e-1));
     }
 
     [Test]

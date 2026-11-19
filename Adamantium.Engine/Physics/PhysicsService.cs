@@ -40,6 +40,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
     // The entities whose mesh colliders on dynamic bodies were already said in the log, by id, so a body made again does
     // not say it each time and a gone entity is not held.
     private readonly HashSet<UInt128> _toldOfDynamicMesh = [];
+    // Likewise the skewed entities whose round colliders were said to be left out.
+    private readonly HashSet<UInt128> _toldOfSkewedRound = [];
     private readonly List<CompoundPart> _shapeParts = [];
     private readonly CarriedShapeCache _carriedShapes = new();
     private readonly List<int> _freeKeys = [];
@@ -228,6 +230,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _forces.Clear();
         _toldOfRefusal.Clear();
         _toldOfDynamicMesh.Clear();
+        _toldOfSkewedRound.Clear();
         _carriedShapes.Clear();
         _freeKeys.Clear();
         _keyGenerations.Clear();
@@ -715,6 +718,9 @@ public sealed class PhysicsService : GameService, IPhysicsService
         var scale = bodyScale;
         var turn = QuaternionF.Identity;
         var translation = Vector3F.Zero;
+        // An entity turned under an uneven scale is skewed: its colliders are carried into the body by its whole matrix.
+        var isSkewed = false;
+        var carry = Matrix4x4F.Identity;
         foreach (var component in entity.Components)
         {
             if (component is not Collider { IsEnabled: true } collider)
@@ -733,14 +739,28 @@ public sealed class PhysicsService : GameService, IPhysicsService
             if (!placed)
             {
                 var world = entity.Transform.GetWorldMatrixF();
-                if (world.Determinant() == 0 || IsSkewed(world) || !world.Decompose(out scale, out turn, out translation))
+                isSkewed = world.Determinant() != 0 && IsSkewed(world);
+                if (!isSkewed && (world.Determinant() == 0 || !world.Decompose(out scale, out turn, out translation)))
                 {
-                    Log.Logger.Warning("{Entity} is flattened or skewed; the body of {Body} leaves its colliders",
-                        entity.Name, body.Name);
+                    Log.Logger.Warning("{Entity} is flattened; the body of {Body} leaves its colliders", entity.Name,
+                        body.Name);
                     return;
                 }
 
+                if (isSkewed)
+                {
+                    carry = CarryIntoBody(body, entity, bodyScale);
+                    translation = world.TranslationVector;
+                }
+
                 placed = true;
+            }
+
+            if (isSkewed)
+            {
+                var position = Vector3F.Transform(ToPhysics(translation.As<double>()) - origin, unturn);
+                AddCarriedCollider(body, entity, collider, carry, position, carriedShapesTaken);
+                continue;
             }
 
             ColliderShape shape;
@@ -769,6 +789,46 @@ public sealed class PhysicsService : GameService, IPhysicsService
             _shapeParts.Add(new CompoundPart(shape.Shape,
                 new Pose(Vector3F.Transform(center - origin, unturn), unturn * turn * shape.Turn)));
         }
+    }
+
+    // A skewed entity's collider as the hull its corners make, carried into the body and standing at position there; a
+    // round one has no hull that fits it - a ball skewed is an egg - and is left out, said once.
+    private void AddCarriedCollider(Entity body, Entity entity, Collider collider, in Matrix4x4F carry,
+        Vector3F position, List<CarriedShapeKey> carriedShapesTaken)
+    {
+        try
+        {
+            if (!ColliderShape.TryCreateCarried(collider, carry, _carriedShapes, carriedShapesTaken, out var shape))
+            {
+                if (_toldOfSkewedRound.Add(entity.Uid))
+                    Log.Logger.Warning("{Entity} is skewed, and its {Collider} is round; the body of {Body} leaves it",
+                        entity.Name, collider.GetType().Name, body.Name);
+
+                return;
+            }
+
+            _shapeParts.Add(new CompoundPart(shape, new Pose(position)));
+        }
+        catch (ArgumentException exception)
+        {
+            Log.Logger.Warning(exception, "The body of {Body} leaves the collider of {Entity}", body.Name, entity.Name);
+        }
+    }
+
+    // How the part's own axes stand in the body's, its place left out: the turns and scales between them, then the
+    // body's scale. The body's own turn and its parents' are the body's frame, so they do not enter: no rounding of a
+    // body turned in the world reaches the shape, and the shape stays the same while the body moves.
+    private static Matrix4x4F CarryIntoBody(Entity body, Entity part, Vector3F bodyScale)
+    {
+        var carry = Matrix4x4F.Identity;
+        for (var at = part; at != body && at != null; at = at.Owner)
+        {
+            var local = at.Transform.GetLocalMatrixF();
+            local.TranslationVector = Vector3F.Zero;
+            carry *= local;
+        }
+
+        return carry * Matrix4x4.CreateScale<float>(bodyScale);
     }
 
     private void RunPhysics()
