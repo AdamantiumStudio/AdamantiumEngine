@@ -60,6 +60,39 @@ public class PdfSecurityTests
     }
 
     [TestCase(3)]
+    [TestCase(6)]
+    public void TheSameFileSavedAgain_TakesThePasswordItWasGiven_AnotherFileDoesNot(int revision)
+    {
+        var bytes = EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904));
+        byte[] grown = [.. bytes, .. "\n% saved again\n"u8];
+        var given = PdfDocument.Open(bytes);
+        var ownerGiven = given.Authenticate("owner");
+        var byOptions = PdfDocument.Open(bytes, new PdfReadOptions { Password = "user" });
+        var wrongOptions = PdfDocument.Open(bytes, new PdfReadOptions { Password = "typo" });
+        var savedAgain = PdfDocument.Open(grown);
+        var savedAgainToo = PdfDocument.Open(grown);
+        var ownerAlready = PdfDocument.Open(grown, new PdfReadOptions { Password = "owner" });
+        var another = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -4)));
+        var locked = PdfDocument.Open(bytes);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ownerGiven, Is.True);
+            Assert.That(savedAgain.TakePasswordFrom(given), Is.True);
+            Assert.That(savedAgain.Security.IsOwner, Is.True, "the owner's, as given");
+            Assert.That(savedAgainToo.TakePasswordFrom(byOptions), Is.True, "a password given when opening too");
+            Assert.That(savedAgainToo.Security.IsOwner, Is.False, "the user's, as given");
+            Assert.That(ownerAlready.TakePasswordFrom(byOptions), Is.True);
+            Assert.That(ownerAlready.Security.IsOwner, Is.True, "the user's password does not lower the owner's rights");
+            Assert.That(PdfDocument.Open(grown).TakePasswordFrom(wrongOptions), Is.False, "a password that opened nothing");
+            Assert.That(another.TakePasswordFrom(given), Is.False, "another file, though its password is the same");
+            Assert.That(another.IsAuthenticated, Is.False);
+            Assert.That(PdfDocument.Open(bytes).TakePasswordFrom(locked), Is.False, "nothing was given");
+            Assert.That(PdfDocument.Open(bytes).TakePasswordFrom(null), Is.False);
+        });
+    }
+
+    [TestCase(3)]
     [TestCase(4)]
     [TestCase(6)]
     public void AWrongPasswordAfterTheOwnersKeepsTheOwnersAccess(int revision)

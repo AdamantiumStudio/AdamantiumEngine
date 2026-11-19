@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- PDF: `PdfDocument.TakePasswordFrom` tries the password an earlier document was given - opened with or authenticated
+  later - on its file saved again (`Continues`), so a viewer showing the saved file asks for it no more.
 - Windows: `IAttachmentExecute` with `Win32Interop.ClsidAttachmentServices`, and `Win32Interop.AssocIsDangerous` - to
   open or mark a file from outside as the system's policy says. macOS: `PosixInterop.SetMacExtendedAttribute`.
 - `RigidBody.ComputedMass`: the mass the physics gives the body once it is dynamic - its `Mass` when above zero, else
