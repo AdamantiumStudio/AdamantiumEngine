@@ -25,6 +25,10 @@ internal sealed class BodyParts
     /// </summary>
     public CompoundPart[] ShapeParts { get; set; } = [];
 
+    /// <summary>The body's entity's scale when the body was made: what its joints' points on it are scaled by, read
+    /// once, not every frame from a matrix the physics keeps turning.</summary>
+    public Vector3F Scale { get; set; } = Vector3F.One;
+
     /// <summary>Whether the body could not be made for how it or its parent is flattened, mirrored, skewed or
     /// stretched: tried again once that is undone.</summary>
     public bool WaitsToStand { get; set; }

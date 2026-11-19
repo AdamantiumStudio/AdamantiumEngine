@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
@@ -155,6 +156,155 @@ public static class PhysicsParts
             CanSleep = body.CanSleep
         };
     }
+
+    /// <summary>Gives <paramref name="entity"/> the joint <paramref name="joint"/> keeps, held to
+    /// <paramref name="connected"/>'s body or to the world for none: the joint of that kind it has, or a new one; its
+    /// joints of other kinds stay. False, the entity left as it was and logged, for edits this engine cannot read.
+    /// </summary>
+    public static bool SetJoint(Entity entity, JointEdits joint, Entity connected)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(joint);
+        if (!IsSound(joint))
+        {
+            Log.Logger.Warning("The joint given to {Entity} is not one this engine reads; it keeps what it has", entity.Name);
+            return false;
+        }
+
+        var own = JointOfKind(entity, joint.Kind);
+        var target = own ?? MakeJoint(joint.Kind);
+        // Given as kept, it works: one a game turned off is turned on again.
+        target.IsEnabled = true;
+        target.ConnectedBody = connected;
+        target.Anchor = joint.Anchor;
+        target.CollideConnected = joint.CollideConnected;
+        switch (target)
+        {
+            case HingeJoint hinge:
+                hinge.Axis = joint.Axis;
+                hinge.UsesLimits = joint.UsesLimits;
+                hinge.LowerAngle = joint.LowerLimit;
+                hinge.UpperAngle = joint.UpperLimit;
+                hinge.UsesMotor = joint.UsesMotor;
+                hinge.MotorSpeed = joint.MotorSpeed;
+                hinge.MaxMotorTorque = joint.MaxMotorForce;
+                break;
+            case SliderJoint slider:
+                slider.Axis = joint.Axis;
+                slider.UsesLimits = joint.UsesLimits;
+                slider.LowerLimit = joint.LowerLimit;
+                slider.UpperLimit = joint.UpperLimit;
+                slider.UsesMotor = joint.UsesMotor;
+                slider.MotorSpeed = joint.MotorSpeed;
+                slider.MaxMotorForce = joint.MaxMotorForce;
+                break;
+            case DistanceJoint distance:
+                distance.ConnectedAnchor = joint.ConnectedAnchor.As<double>();
+                distance.UsesLimits = joint.UsesLimits;
+                distance.MinDistance = joint.LowerLimit;
+                distance.MaxDistance = joint.UpperLimit;
+                distance.SpringHertz = joint.SpringHertz;
+                distance.SpringDampingRatio = joint.SpringDampingRatio;
+                break;
+        }
+
+        if (own == null)
+            entity.AddComponent(target);
+
+        return true;
+    }
+
+    /// <summary>Takes off <paramref name="entity"/>'s joints of kinds no edits of <paramref name="kept"/> name - all of
+    /// them for none.</summary>
+    public static void RemoveJointsNotIn(Entity entity, IReadOnlyList<JointEdits> kept)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        foreach (var joint in entity.GetComponents<Joint>())
+        {
+            if (!Names(kept, joint.Kind))
+                entity.RemoveComponent(joint);
+        }
+    }
+
+    private static bool Names(IReadOnlyList<JointEdits> kept, DarkMatter.JointKind kind)
+    {
+        for (var index = 0; kept != null && index < kept.Count; index++)
+        {
+            if (kept[index]?.Kind == kind)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static Joint JointOfKind(Entity entity, DarkMatter.JointKind kind)
+    {
+        foreach (var component in entity.Components.AsSpan())
+        {
+            if (component is Joint joint && joint.Kind == kind)
+                return joint;
+        }
+
+        return null;
+    }
+
+    /// <summary>The edits of <paramref name="joint"/>, its connected body named by <paramref name="connectedPart"/> -
+    /// a part's path in a model, or null for the world.</summary>
+    public static JointEdits JointOf(Joint joint, string connectedPart)
+    {
+        ArgumentNullException.ThrowIfNull(joint);
+        var edits = new JointEdits
+        {
+            Kind = joint.Kind,
+            ConnectedPart = connectedPart,
+            Anchor = joint.Anchor,
+            CollideConnected = joint.CollideConnected
+        };
+
+        return joint switch
+        {
+            HingeJoint hinge => edits with
+            {
+                Axis = hinge.Axis, UsesLimits = hinge.UsesLimits, LowerLimit = hinge.LowerAngle,
+                UpperLimit = hinge.UpperAngle, UsesMotor = hinge.UsesMotor, MotorSpeed = hinge.MotorSpeed,
+                MaxMotorForce = hinge.MaxMotorTorque
+            },
+            SliderJoint slider => edits with
+            {
+                Axis = slider.Axis, UsesLimits = slider.UsesLimits, LowerLimit = slider.LowerLimit,
+                UpperLimit = slider.UpperLimit, UsesMotor = slider.UsesMotor, MotorSpeed = slider.MotorSpeed,
+                MaxMotorForce = slider.MaxMotorForce
+            },
+            DistanceJoint distance => edits with
+            {
+                ConnectedAnchor = distance.ConnectedAnchor.As<float>(), UsesLimits = distance.UsesLimits,
+                LowerLimit = distance.MinDistance, UpperLimit = distance.MaxDistance,
+                SpringHertz = distance.SpringHertz, SpringDampingRatio = distance.SpringDampingRatio
+            },
+            _ => edits
+        };
+    }
+
+    private static Joint MakeJoint(DarkMatter.JointKind kind) => kind switch
+    {
+        DarkMatter.JointKind.Fixed => new FixedJoint(),
+        DarkMatter.JointKind.Hinge => new HingeJoint(),
+        DarkMatter.JointKind.Slider => new SliderJoint(),
+        DarkMatter.JointKind.Distance => new DistanceJoint(),
+        _ => new BallJoint()
+    };
+
+    // A kind this engine knows, points finite, amounts not below zero; limits in order and a motor finite only when
+    // they are used, as the physics reads them.
+    private static bool IsSound(JointEdits joint) =>
+        Enum.IsDefined(joint.Kind) && IsFinite(joint.Anchor) && IsFinite(joint.Axis) && IsFinite(joint.ConnectedAnchor)
+        && float.IsFinite(joint.LowerLimit) && float.IsFinite(joint.UpperLimit)
+        && (!joint.UsesLimits || joint.LowerLimit <= joint.UpperLimit)
+        && (!joint.UsesMotor || (float.IsFinite(joint.MotorSpeed) && IsAmount(joint.MaxMotorForce)))
+        && IsAmount(joint.SpringHertz) && IsAmount(joint.SpringDampingRatio);
+
+    private static bool IsFinite(Vector3F value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 
     private static Collider Make(ColliderKind kind) => kind switch
     {

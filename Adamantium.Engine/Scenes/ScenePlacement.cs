@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Xml.Serialization;
 using Adamantium.Mathematics;
@@ -66,6 +67,11 @@ public abstract class ScenePlacement
     /// point has no mesh to fit one to.</summary>
     [XmlElement("Collider")]
     public SceneCollider Collider { get; set; }
+
+    /// <summary>Its joints, each of its own kind, holding its body to another entry's or to the world; null or empty for
+    /// none. A light's and a camera's are not read.</summary>
+    [XmlElement("Joint")]
+    public List<SceneJoint> Joints { get; set; }
 
     /// <summary>Whether it works and is drawn, in the editor and in the game; written only when it does not.</summary>
     [XmlAttribute("Enabled")]

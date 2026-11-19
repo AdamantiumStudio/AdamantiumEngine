@@ -3,13 +3,15 @@ namespace Adamantium.Engine.Physics;
 /// <summary>One request of the game, sent to the physics thread and done before its next step.</summary>
 internal readonly struct PhysicsCommand
 {
-    public PhysicsCommand(PhysicsCommandKind kind, int key, Vector3F value, Vector3F point, BodyRequest body = null)
+    public PhysicsCommand(PhysicsCommandKind kind, int key, Vector3F value, Vector3F point, BodyRequest body = null,
+        JointRequest joint = default)
     {
         Kind = kind;
         Key = key;
         Value = value;
         Point = point;
         Body = body;
+        Joint = joint;
     }
 
     public PhysicsCommandKind Kind { get; }
@@ -24,4 +26,7 @@ internal readonly struct PhysicsCommand
 
     /// <summary>The body to add, or to put in place of the key's one.</summary>
     public BodyRequest Body { get; }
+
+    /// <summary>The joint to add under the key, a joint's own key.</summary>
+    public JointRequest Joint { get; }
 }

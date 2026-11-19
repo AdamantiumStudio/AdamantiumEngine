@@ -36,6 +36,28 @@ public interface IPhysicsWorld
     /// <summary>Whether <paramref name="body"/> is in this world.</summary>
     bool Contains(BodyHandle body);
 
+    /// <summary>How many joints the world holds.</summary>
+    int JointCount { get; }
+
+    /// <summary>Adds a joint as <paramref name="description"/> describes it and gives its handle; its bodies wake. A
+    /// body taken out takes its joints with it.</summary>
+    JointHandle Add(JointDescription description);
+
+    /// <summary>Takes <paramref name="joint"/> out of the world; its bodies wake, and collide again if it kept them
+    /// from it.</summary>
+    void Remove(JointHandle joint);
+
+    /// <summary>Whether <paramref name="joint"/> is in this world.</summary>
+    bool Contains(JointHandle joint);
+
+    /// <summary>Drives a hinge's or a slider's motor at <paramref name="speed"/> with no more than
+    /// <paramref name="maxForce"/> - zero stops it - and wakes its bodies; another kind of joint has none.</summary>
+    void SetMotor(JointHandle joint, float speed, float maxForce);
+
+    /// <summary>Where <paramref name="joint"/> stands: a hinge's angle in radians or a slider's offset in meters from
+    /// where it was added, a distance joint's length; zero for a weld or a ball.</summary>
+    float GetJointPosition(JointHandle joint);
+
     /// <summary>How <paramref name="body"/> moves.</summary>
     BodyKind GetKind(BodyHandle body);
 

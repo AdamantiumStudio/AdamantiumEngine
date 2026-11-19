@@ -1366,6 +1366,156 @@ public class PhysicsServiceTests
         Assert.That(rock.Transform.Position.Y, Is.EqualTo(-3).Within(1e-9), "no shape, so no body to fall");
     }
 
+    // A box hinged to the world at its edge, up off the ground: it does not fall, and a turn swings it about the hinge.
+    [Test]
+    public void ABoxOnAHinge_HangsInTheAir_AndSwingsAboutIt()
+    {
+        UseSteppedPhysics();
+        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        door.AddComponent(new HingeJoint { Anchor = new Vector3F(-0.5f, 0, 0), Axis = Vector3F.UnitY });
+        _world.EntityManager.AddEntity(door, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+        _physics.SetAngularVelocity(door, new Vector3F(0, 2, 0));
+        Frames(0.5);
+
+        var position = door.Transform.Position;
+        Assert.Multiple(() =>
+        {
+            Assert.That(position.Y, Is.EqualTo(-3).Within(0.01), "held up by its hinge");
+            Assert.That(Math.Sqrt(position.X * position.X + position.Z * position.Z), Is.EqualTo(0.5).Within(0.01),
+                "half a meter from the hinge");
+            Assert.That(Math.Abs(position.Z), Is.GreaterThan(0.1), "swung about it");
+        });
+    }
+
+    // The hinge on an entity of its own under the door, at the door's edge and turned so its X is the door's up: it
+    // holds the door's body about that edge as one on the door would.
+    [Test]
+    public void AHingeUnderItsBody_HoldsThatBody_AboutItsOwnPlaceAndAxis()
+    {
+        UseSteppedPhysics();
+        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        var hinges = new Entity(door, "Hinges");
+        hinges.Transform.Position = new Vector3<double>(-0.5, 0, 0);
+        hinges.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
+        hinges.AddComponent(new HingeJoint { Axis = Vector3F.UnitX });
+        _world.EntityManager.AddEntity(door, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+        _physics.SetAngularVelocity(door, new Vector3F(0, 2, 0));
+        Frames(0.5);
+
+        var position = door.Transform.Position;
+        Assert.Multiple(() =>
+        {
+            Assert.That(position.Y, Is.EqualTo(-3).Within(0.01), "held up by its hinge");
+            Assert.That(Math.Sqrt(position.X * position.X + position.Z * position.Z), Is.EqualTo(0.5).Within(0.01),
+                "half a meter from the hinge");
+            Assert.That(Math.Abs(position.Z), Is.GreaterThan(0.1), "swung about it");
+        });
+    }
+
+    // A box hung from a hook under a static beam - an entity with no body of its own - hangs from the beam.
+    [Test]
+    public void ABoxHungFromAHookUnderABeam_HangsFromTheBeam()
+    {
+        UseSteppedPhysics();
+        var beam = new Entity(null, "Beam");
+        beam.Transform.Position = new Vector3<double>(0, -6, 0);
+        beam.AddComponent(new BoxCollider { Size = new Vector3F(2, 0.2f, 0.2f) });
+        beam.AddComponent(new RigidBody { Kind = BodyKind.Static });
+        var hook = new Entity(beam, "Hook");
+        hook.Transform.Position = new Vector3<double>(0.5, 0, 0);
+        _world.EntityManager.AddEntity(beam, _world.MainScene);
+        var box = MakeBox("Box", new Vector3<double>(0.5, -5, 0), 0.25);
+        box.AddComponent(new BallJoint { ConnectedBody = hook, Anchor = new Vector3F(0, -1, 0) });
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-5).Within(0.01));
+    }
+
+    // A door limited to 30 degrees either way, swung hard and turned by the physics frame after frame: the joint is asked
+    // for once, so its limit counts from where the game started and holds.
+    [Test]
+    public void AHingesLimit_HoldsWhileItsBodyTurns()
+    {
+        UseSteppedPhysics();
+        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        door.AddComponent(new HingeJoint
+        {
+            Anchor = new Vector3F(-0.5f, 0, 0), Axis = Vector3F.UnitY, UsesLimits = true, LowerAngle = -30, UpperAngle = 30
+        });
+        _world.EntityManager.AddEntity(door, _world.MainScene);
+        Settle();
+        Play();
+        Frames(0.1);
+        _physics.SetAngularVelocity(door, new Vector3F(0, 3, 0));
+        var widest = 0.0;
+        for (var frame = 0; frame < 90; frame++)
+        {
+            Frames(1.0 / 60);
+            widest = Math.Max(widest, Math.Abs(Math.Atan2(door.Transform.Position.Z, door.Transform.Position.X)));
+        }
+
+        Assert.That(widest, Is.LessThan(double.DegreesToRadians(32)));
+    }
+
+    // A box hung under a static beam on a ball joint a meter above it stays hung; its joint taken off, it falls.
+    [Test]
+    public void ABoxHungFromABeam_Hangs_UntilItsJointIsTakenOff()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var beam = new Entity(null, "Beam");
+        beam.Transform.Position = new Vector3<double>(0, -6, 0);
+        beam.AddComponent(new BoxCollider { Size = new Vector3F(2, 0.2f, 0.2f) });
+        beam.AddComponent(new RigidBody { Kind = BodyKind.Static });
+        _world.EntityManager.AddEntity(beam, _world.MainScene);
+        var box = MakeBox("Box", new Vector3<double>(0, -5, 0), 0.25);
+        box.AddComponent(new BallJoint { ConnectedBody = beam, Anchor = new Vector3F(0, -1, 0) });
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+        var hung = box.Transform.Position.Y;
+
+        box.RemoveComponent<BallJoint>();
+        Frames(2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hung, Is.EqualTo(-5).Within(0.01));
+            Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.25).Within(0.02), "on the ground");
+        });
+    }
+
+    // A ball on a rope two meters long from a point of the world falls until the rope is taut.
+    [Test]
+    public void ABallOnARope_FallsUntilTaut()
+    {
+        UseSteppedPhysics();
+        var ball = new Entity(null, "Ball");
+        ball.Transform.Position = new Vector3<double>(0, -6, 0);
+        ball.AddComponent(new SphereCollider { Radius = 0.1f });
+        ball.AddComponent(new RigidBody());
+        ball.AddComponent(new DistanceJoint
+        {
+            ConnectedAnchor = new Vector3<double>(0, -7, 0), UsesLimits = true, MinDistance = 0, MaxDistance = 2
+        });
+        _world.EntityManager.AddEntity(ball, _world.MainScene);
+        Settle();
+        Play();
+        Frames(2);
+
+        Assert.That(ball.Transform.Position.Y, Is.EqualTo(-5).Within(0.02));
+    }
+
     // A square floor at Y = 0, half wide each way, of two triangles.
     private static Mesh FloorMesh(float half)
     {

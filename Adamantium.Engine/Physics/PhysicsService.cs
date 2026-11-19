@@ -15,7 +15,7 @@ namespace Adamantium.Engine.Physics;
 
 /// <summary>The physics of a game: a world of the scene's rigid bodies stepped on a thread of its own, the entities
 /// stood between its last two steps each frame, the game's pushes sent to it as commands.</summary>
-public sealed class PhysicsService : GameService, IPhysicsService
+public sealed partial class PhysicsService : GameService, IPhysicsService
 {
     /// <summary>The service's <see cref="EntityService.Priority"/>: before the others, so the entities it stands are
     /// placed by the transforms in the same frame.</summary>
@@ -238,6 +238,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _generations.Clear();
         _names.Clear();
         _refusals.Clear();
+        ForgetJoints();
         _lastStep = default;
         while (_commands.Reader.TryRead(out _))
         {
@@ -300,6 +301,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         }
 
         ForgetRefusalsGone();
+        FollowJoints();
     }
 
     // An entity's own body gone, it may be a part of the body above it now: that body is made anew.
@@ -628,6 +630,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             return null;
         }
 
+        parts.Scale = scale;
         // A static body stands where its parents put it: one of them moved, it is moved too.
         if (body.Kind == BodyKind.Static)
         {
@@ -873,6 +876,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             return 0;
 
         DoCommands();
+        KeepJoints();
         for (var step = 0; step < steps; step++)
         {
             ApplyForces();
@@ -978,6 +982,12 @@ public sealed class PhysicsService : GameService, IPhysicsService
                 _forces.Remove(command.Key);
                 _toldOfRefusal.Remove(command.Key);
                 break;
+            case PhysicsCommandKind.AddJoint:
+                PutJoint(command.Key, command.Joint);
+                break;
+            case PhysicsCommandKind.RemoveJoint:
+                PutJoint(command.Key, null);
+                break;
         }
     }
 
@@ -993,6 +1003,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
         _generations[key] = request.Generation;
         _names[key] = request.Name;
+        SetAddedAs(key, request.AddedAs);
         try
         {
             _handles[key] = _world.Add(request.Description);

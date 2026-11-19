@@ -74,6 +74,7 @@ internal sealed class SceneState
         var returned = ReturnRemoved(comingBack, manager, toPut);
         AddWithWhatTheyHold(toPut, returned);
         Dictionary<UInt128, ScenePlacement> entries = null;
+        Dictionary<UInt128, Entity> entities = null;
         Dictionary<UInt128, List<SceneGameComponent>> components = null;
         var code = Scene.World.Satellites.Get<IWorldCode>();
         var problems = new List<GameComponentProblem>();
@@ -88,6 +89,11 @@ internal sealed class SceneState
             if (entries.TryGetValue(entity.Uid, out var entry))
             {
                 SceneBuilder.Apply(entity, entry);
+                if (entry.Joints is { Count: > 0 } ||entity.GetComponent<ECS.Components.Joint>() != null)
+                {
+                    entities ??= GetEntitiesById();
+                    SceneBuilder.ApplyJoints(entity, entry, entities);
+                }
                 components ??= GetGameComponentsById();
                 SceneBuilder.ApplyGameComponents(entity, components.GetValueOrDefault(entity.Uid), code, problems);
             }
@@ -237,6 +243,18 @@ internal sealed class SceneState
         }
 
         return false;
+    }
+
+    // The scene's entities kept, by id: what a joint put back holds to.
+    private Dictionary<UInt128, Entity> GetEntitiesById()
+    {
+        var byId = new Dictionary<UInt128, Entity>(_states.Count);
+        foreach (var entity in _states.Keys)
+        {
+            byId[entity.Uid] = entity;
+        }
+
+        return byId;
     }
 
     private Dictionary<UInt128, ScenePlacement> GetEntriesById()

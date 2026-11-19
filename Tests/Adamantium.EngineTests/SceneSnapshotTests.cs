@@ -70,6 +70,56 @@ public class SceneSnapshotTests
         });
     }
 
+    // A hinge and a fixed joint from the scene, the hinge held to the post: built so, written back so, and put back as
+    // they were after a game changed the hinge - the same component - and gave the gate and the post joints of their own.
+    [Test]
+    public async Task Joints_AreBuilt_Written_AndPutBack()
+    {
+        var file = new SceneFile();
+        file.Markers.Add(new SceneMarker { Uid = 20, Name = "Post" });
+        var gateEntry = new SceneMarker
+        {
+            Uid = 21, Name = "Gate", Position = new Vector3<double>(1, 0, 0),
+            Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic },
+            Joints =
+            [
+                new SceneJoint
+                {
+                    Kind = Adamantium.DarkMatter.JointKind.Hinge, Connected = 20, Anchor = new Vector3F(-1, 0, 0)
+                },
+                new SceneJoint { Kind = Adamantium.DarkMatter.JointKind.Fixed }
+            ]
+        };
+        file.Markers.Add(gateEntry);
+        await new SceneBuilder(_scene, new CountingAssets()).Build(file);
+        _world.ForceUpdate();
+        var gate = Named("Gate");
+        var post = Named("Post");
+        var hinge = gate.GetComponent<HingeJoint>();
+        var written = SceneCapture.Capture(_scene).Markers.Find(entry => entry.Name == "Gate")?.Joints;
+
+        var snapshot = SceneSnapshot.Take(_scene);
+        hinge.Anchor = new Vector3F(5, 5, 5);
+        post.AddComponent(new BallJoint());
+        gate.AddComponent(new SliderJoint());
+        _world.ForceUpdate();
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hinge?.ConnectedBody, Is.SameAs(post));
+            Assert.That(written, Has.Count.EqualTo(2));
+            Assert.That(written?.Find(joint => joint.Kind == Adamantium.DarkMatter.JointKind.Hinge)?.Connected,
+                Is.EqualTo((System.UInt128)20));
+            Assert.That(gate.GetComponent<HingeJoint>(), Is.SameAs(hinge), "the same component");
+            Assert.That(gate.GetComponent<FixedJoint>(), Is.Not.Null);
+            Assert.That(gate.GetComponent<SliderJoint>(), Is.Null, "the game's joint on the gate taken off");
+            Assert.That(hinge?.Anchor, Is.EqualTo(new Vector3F(-1, 0, 0)));
+            Assert.That(post.GetComponent<Joint>(), Is.Null, "the game's joint taken off");
+        });
+    }
+
     // What a game did, kept: the scene stays as it left it; put before, it is as it was - what joined gone, what was
     // taken out back; put after again, as the game left it.
     [Test]
