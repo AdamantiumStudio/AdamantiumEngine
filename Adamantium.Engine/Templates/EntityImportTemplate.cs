@@ -290,9 +290,12 @@ public class EntityImportTemplate : IEntityTemplate
                 Log.Logger.Warning("The body {Model} keeps for {Part} is left out", model.Name, path);
             }
 
-            if (edits.Joint is { } joint)
+            foreach (var joint in edits.Joints ?? [])
             {
-                ApplyJoint(model, part, path, joint);
+                if (joint != null)
+                {
+                    ApplyJoint(model, part, path, joint);
+                }
             }
         }
     }

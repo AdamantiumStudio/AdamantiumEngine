@@ -665,7 +665,8 @@ public sealed class ContentBuilder
         var kept = new ModelEdits();
         foreach (var (path, part) in edits.Parts ?? [])
         {
-            if (part is { Collider: not null } or { ColliderShape: not null } or { Body: not null } or { Joint: not null })
+            if (part is { Collider: not null } or { ColliderShape: not null } or { Body: not null }
+                or { Joints.Count: > 0 })
             {
                 kept.Parts[path] = part;
             }

@@ -123,7 +123,8 @@ public sealed class SceneBuilder
         // Once every entry is made: a joint holds to an entry of any section.
         foreach (var each in made)
         {
-            ApplyJoint(each.Entity, each.Entry, byId);
+            if (each.Entry.Joints is { Count: > 0 })
+                ApplyJoints(each.Entity, each.Entry, byId);
         }
 
         foreach (var entry in scene.GameComponents)
@@ -481,39 +482,41 @@ public sealed class SceneBuilder
         }
     }
 
-    /// <summary>Makes <paramref name="entity"/>'s joint the one <paramref name="entry"/> keeps, held to the entity of
-    /// <paramref name="byId"/> it names or to the world - none for none, but a model's root keeping the one its model's
-    /// edits give it. A kind this engine does not know, or an entity the scene does not hold, leaves the joint out,
-    /// logged. Building, and putting a scene back as it was; on the world's thread.</summary>
-    internal static void ApplyJoint(Entity entity, ScenePlacement entry, IReadOnlyDictionary<UInt128, Entity> byId)
+    /// <summary>Makes <paramref name="entity"/>'s joints the ones <paramref name="entry"/> keeps, each held to the
+    /// entity of <paramref name="byId"/> it names or to the world; joints of other kinds are taken off, but a model's
+    /// root keeps the ones its model's edits give it. A kind this engine does not know, or an entity the scene does not
+    /// hold, leaves that joint out, logged - the entity's joint of that kind as it is. Building, and putting a scene back
+    /// as it was; on the world's thread.</summary>
+    internal static void ApplyJoints(Entity entity, ScenePlacement entry, IReadOnlyDictionary<UInt128, Entity> byId)
     {
         if (entry is SceneLight or SceneCamera || entity.GetComponent<UnloadedShape>() != null)
             return;
 
-        if (entry.Joint is not { } kept)
+        List<JointEdits> named = null;
+        foreach (var kept in entry.Joints ?? [])
         {
-            if (entry is not SceneModel && entity.GetComponent<Joint>() is { } given)
-                entity.RemoveComponent(given);
+            if (kept?.ToEdits() is not { } edits)
+            {
+                Log.Logger.Warning("Scene: a joint of {Name} is of a kind this engine does not know; it is left out",
+                    entry.Name);
+                continue;
+            }
 
-            return;
+            // Named, it stays even when left out below: the entity keeps the joint of that kind it has.
+            (named ??= []).Add(edits);
+            Entity connected = null;
+            if (kept.Connected is { } uid && !byId.TryGetValue(uid, out connected))
+            {
+                Log.Logger.Warning("Scene: a joint of {Name} holds to {Connected}, which the scene does not hold; it is "
+                                   + "left out", entry.Name, kept.ConnectedText);
+                continue;
+            }
+
+            PhysicsParts.SetJoint(entity, edits, connected);
         }
 
-        if (kept.ToEdits() is not { } edits)
-        {
-            Log.Logger.Warning("Scene: the joint of {Name} is of a kind this engine does not know; it is left out",
-                entry.Name);
-            return;
-        }
-
-        Entity connected = null;
-        if (kept.Connected is { } uid && !byId.TryGetValue(uid, out connected))
-        {
-            Log.Logger.Warning("Scene: the joint of {Name} holds to {Connected}, which the scene does not hold; it is "
-                               + "left out", entry.Name, kept.ConnectedText);
-            return;
-        }
-
-        PhysicsParts.SetJoint(entity, edits, connected);
+        if (entry is not SceneModel)
+            PhysicsParts.RemoveJointsNotIn(entity, named);
     }
 
     // The entity's physics made the entry's - built, or put back as it was when a game stops: its body, none for none

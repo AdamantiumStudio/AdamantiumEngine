@@ -1390,6 +1390,56 @@ public class PhysicsServiceTests
         });
     }
 
+    // The hinge on an entity of its own under the door, at the door's edge and turned so its X is the door's up: it
+    // holds the door's body about that edge as one on the door would.
+    [Test]
+    public void AHingeUnderItsBody_HoldsThatBody_AboutItsOwnPlaceAndAxis()
+    {
+        UseSteppedPhysics();
+        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        var hinges = new Entity(door, "Hinges");
+        hinges.Transform.Position = new Vector3<double>(-0.5, 0, 0);
+        hinges.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
+        hinges.AddComponent(new HingeJoint { Axis = Vector3F.UnitX });
+        _world.EntityManager.AddEntity(door, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+        _physics.SetAngularVelocity(door, new Vector3F(0, 2, 0));
+        Frames(0.5);
+
+        var position = door.Transform.Position;
+        Assert.Multiple(() =>
+        {
+            Assert.That(position.Y, Is.EqualTo(-3).Within(0.01), "held up by its hinge");
+            Assert.That(Math.Sqrt(position.X * position.X + position.Z * position.Z), Is.EqualTo(0.5).Within(0.01),
+                "half a meter from the hinge");
+            Assert.That(Math.Abs(position.Z), Is.GreaterThan(0.1), "swung about it");
+        });
+    }
+
+    // A box hung from a hook under a static beam - an entity with no body of its own - hangs from the beam.
+    [Test]
+    public void ABoxHungFromAHookUnderABeam_HangsFromTheBeam()
+    {
+        UseSteppedPhysics();
+        var beam = new Entity(null, "Beam");
+        beam.Transform.Position = new Vector3<double>(0, -6, 0);
+        beam.AddComponent(new BoxCollider { Size = new Vector3F(2, 0.2f, 0.2f) });
+        beam.AddComponent(new RigidBody { Kind = BodyKind.Static });
+        var hook = new Entity(beam, "Hook");
+        hook.Transform.Position = new Vector3<double>(0.5, 0, 0);
+        _world.EntityManager.AddEntity(beam, _world.MainScene);
+        var box = MakeBox("Box", new Vector3<double>(0.5, -5, 0), 0.25);
+        box.AddComponent(new BallJoint { ConnectedBody = hook, Anchor = new Vector3F(0, -1, 0) });
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-5).Within(0.01));
+    }
+
     // A door limited to 30 degrees either way, swung hard and turned by the physics frame after frame: the joint is asked
     // for once, so its limit counts from where the game started and holds.
     [Test]

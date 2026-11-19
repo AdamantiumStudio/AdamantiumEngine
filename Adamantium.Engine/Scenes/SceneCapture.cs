@@ -162,7 +162,7 @@ public static class SceneCapture
             // Nothing made of it to read them from: kept as read.
             kept.Body = unloaded.Entry.Body;
             kept.Collider = unloaded.Entry.Collider;
-            kept.Joint = unloaded.Entry.Joint;
+            kept.Joints = unloaded.Entry.Joints;
             entry = kept;
         }
         else if (entity.ContainsComponent<Marker>())
@@ -199,10 +199,10 @@ public static class SceneCapture
             entry.Body = SceneBody.From(PhysicsParts.BodyOf(body));
         }
 
-        // A joint between the scene's own entries; a model's part keeps its own in the model's edits.
-        if (entity.GetComponent<Joint>() is { } joint)
+        // Joints between the scene's own entries; a model's part keeps its own in the model's edits.
+        foreach (var joint in entity.GetComponents<Joint>())
         {
-            entry.Joint = SceneJoint.From(PhysicsParts.JointOf(joint, null), joint.ConnectedBody?.Uid);
+            (entry.Joints ??= []).Add(SceneJoint.From(PhysicsParts.JointOf(joint, null), joint.ConnectedBody?.Uid));
         }
 
         if (entry is not SceneShape || entity.GetComponent<ProceduralShape>() is not { } shape

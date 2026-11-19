@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Adamantium.Graphics.Core.Models;
 
 /// <summary>The edits of one part of a model.</summary>
@@ -12,6 +14,7 @@ public sealed class PartEdits
     /// <summary>How the physics moves the part in a game; null when the part is no body of its own.</summary>
     public BodyEdits Body { get; set; }
 
-    /// <summary>The joint holding the part's body to another part's, or to the world; null for none.</summary>
-    public JointEdits Joint { get; set; }
+    /// <summary>The part's joints, each of its own kind, holding its body to another part's or to the world; null or
+    /// empty for none.</summary>
+    public List<JointEdits> Joints { get; set; }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
@@ -157,8 +158,9 @@ public static class PhysicsParts
     }
 
     /// <summary>Gives <paramref name="entity"/> the joint <paramref name="joint"/> keeps, held to
-    /// <paramref name="connected"/>'s body or to the world for none, in place of the joint it has - the same component
-    /// for the same kind; false, the entity left as it was and logged, for edits this engine cannot read.</summary>
+    /// <paramref name="connected"/>'s body or to the world for none: the joint of that kind it has, or a new one; its
+    /// joints of other kinds stay. False, the entity left as it was and logged, for edits this engine cannot read.
+    /// </summary>
     public static bool SetJoint(Entity entity, JointEdits joint, Entity connected)
     {
         ArgumentNullException.ThrowIfNull(entity);
@@ -169,8 +171,8 @@ public static class PhysicsParts
             return false;
         }
 
-        var own = entity.GetComponent<Joint>();
-        var target = own != null && own.Kind == joint.Kind ? own : MakeJoint(joint.Kind);
+        var own = JointOfKind(entity, joint.Kind);
+        var target = own ?? MakeJoint(joint.Kind);
         // Given as kept, it works: one a game turned off is turned on again.
         target.IsEnabled = true;
         target.ConnectedBody = connected;
@@ -206,15 +208,44 @@ public static class PhysicsParts
                 break;
         }
 
-        if (target != own)
-        {
-            if (own != null)
-                entity.RemoveComponent(own);
-
+        if (own == null)
             entity.AddComponent(target);
-        }
 
         return true;
+    }
+
+    /// <summary>Takes off <paramref name="entity"/>'s joints of kinds no edits of <paramref name="kept"/> name - all of
+    /// them for none.</summary>
+    public static void RemoveJointsNotIn(Entity entity, IReadOnlyList<JointEdits> kept)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        foreach (var joint in entity.GetComponents<Joint>())
+        {
+            if (!Names(kept, joint.Kind))
+                entity.RemoveComponent(joint);
+        }
+    }
+
+    private static bool Names(IReadOnlyList<JointEdits> kept, DarkMatter.JointKind kind)
+    {
+        for (var index = 0; kept != null && index < kept.Count; index++)
+        {
+            if (kept[index]?.Kind == kind)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static Joint JointOfKind(Entity entity, DarkMatter.JointKind kind)
+    {
+        foreach (var component in entity.Components.AsSpan())
+        {
+            if (component is Joint joint && joint.Kind == kind)
+                return joint;
+        }
+
+        return null;
     }
 
     /// <summary>The edits of <paramref name="joint"/>, its connected body named by <paramref name="connectedPart"/> -

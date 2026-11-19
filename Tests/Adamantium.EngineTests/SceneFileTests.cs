@@ -162,25 +162,32 @@ public class SceneFileTests
         });
     }
 
-    // A collider's sizes and placement are written as attributes, each only when it is not a new collider's own.
+    // An entry's joints are written each as an element of attributes, each only when it is not a new joint's own.
     [Test]
-    public void AJoint_IsReadBack_WritingOnlyWhatIsNotByDefault()
+    public void Joints_AreReadBack_WritingOnlyWhatIsNotByDefault()
     {
         var scene = Sample();
-        scene.Shapes[0].Joint = new SceneJoint
-        {
-            Kind = Adamantium.DarkMatter.JointKind.Hinge, Connected = Robot, Anchor = new Vector3F(-0.5f, 0, 0),
-            UsesLimits = true, LowerLimit = -45
-        };
+        scene.Shapes[0].Joints =
+        [
+            new SceneJoint
+            {
+                Kind = Adamantium.DarkMatter.JointKind.Hinge, Connected = Robot, Anchor = new Vector3F(-0.5f, 0, 0),
+                UsesLimits = true, LowerLimit = -45
+            },
+            new SceneJoint { Kind = Adamantium.DarkMatter.JointKind.Fixed }
+        ];
 
         var text = Text(scene);
-        var back = WriteAndRead(scene).Shapes[0].Joint;
+        var joints = WriteAndRead(scene).Shapes[0].Joints;
+        var back = joints[0];
 
         Assert.Multiple(() =>
         {
             Assert.That(text, Does.Contain("<Joint ").And.Contain("Kind=\"Hinge\"").And.Contain("UsesLimits=\"true\"")
                 .And.Contain("LowerLimit=\"-45\""));
             Assert.That(text, Does.Not.Contain("SpringDampingRatio").And.Not.Contain("Axis="), "defaults left out");
+            Assert.That(joints, Has.Count.EqualTo(2));
+            Assert.That(joints[^1].Kind, Is.EqualTo(Adamantium.DarkMatter.JointKind.Fixed));
             Assert.That(back.Kind, Is.EqualTo(Adamantium.DarkMatter.JointKind.Hinge));
             Assert.That(back.Connected, Is.EqualTo(Robot));
             Assert.That(back.Anchor, Is.EqualTo(new Vector3F(-0.5f, 0, 0)));

@@ -72,26 +72,34 @@ public sealed partial class PhysicsService
         _jointsGone.Clear();
     }
 
-    // What the joint asks of the physics, its points and axis on its bodies scaled as each body was made; null while one
-    // of its bodies is not there, or it holds its body to itself.
+    // What the joint asks of the physics, its points and axis carried onto its bodies - each its entity's or the one
+    // above it - and scaled as each body was made; null while a body is not there, or it holds a body to itself.
     private JointRequest? Describe(Joint joint)
     {
         var owner = joint.Owner;
-        if (!_keys.TryGetValue(owner, out var ownerKey))
+        var ownerFound = FindBodyOf(owner, out var ownerKey, out var intoOwner);
+        if (ownerFound != BodyFound.Made)
+        {
+            if (ownerFound == BodyFound.None && _toldOfJointWaiting.Add(owner.Uid))
+                Log.Logger.Warning("The joint of {Entity} has no rigid body on its entity or above it; the physics leaves it",
+                    owner.Name);
+
             return null;
+        }
 
         var connectedKey = -1;
         var connectedGeneration = 0;
+        var intoConnected = Matrix4x4F.Identity;
         var connected = joint.ConnectedBody;
         if (connected != null)
         {
-            if (connected == owner || !_keys.TryGetValue(connected, out connectedKey))
+            var connectedFound = FindBodyOf(connected, out connectedKey, out intoConnected);
+            if (connectedFound != BodyFound.Made || connectedKey == ownerKey)
             {
-                // A part of another body's compound, or the joint's own entity, has no other body to hold to; one whose
-                // body is not made yet waits quietly.
-                if ((connected == owner || !connected.ContainsComponent<RigidBody>()) && _toldOfJointWaiting.Add(owner.Uid))
-                    Log.Logger.Warning("The joint of {Entity} holds to {Connected}, which has no rigid body of its own; "
-                                       + "the physics leaves the joint", owner.Name, connected.Name);
+                // No body to hold to, or the same body: said once; one whose body is not made yet waits quietly.
+                if ((connectedFound == BodyFound.None || connectedKey == ownerKey) && _toldOfJointWaiting.Add(owner.Uid))
+                    Log.Logger.Warning("The joint of {Entity} holds to {Connected}, which has no other rigid body; the "
+                                       + "physics leaves the joint", owner.Name, connected.Name);
 
                 return null;
             }
@@ -108,7 +116,7 @@ public sealed partial class PhysicsService
             OwnerGeneration = ownerLink.AddedAs,
             ConnectedKey = connectedKey,
             ConnectedGeneration = connectedGeneration,
-            Anchor = joint.Anchor * ownerScale,
+            Anchor = Vector3F.TransformCoordinate(joint.Anchor, intoOwner) * ownerScale,
             Axis = Vector3F.UnitY,
             CollideConnected = joint.CollideConnected,
             SpringDampingRatio = 1
@@ -119,7 +127,7 @@ public sealed partial class PhysicsService
         {
             HingeJoint hinge => request with
             {
-                Axis = Normalized(hinge.Axis * ownerScale),
+                Axis = Normalized(Vector3F.TransformNormal(hinge.Axis, intoOwner) * ownerScale),
                 HasLimits = hinge.UsesLimits,
                 LowerLimit = hinge.UsesLimits ? float.DegreesToRadians(Math.Clamp(hinge.LowerAngle, -180, 180)) : 0,
                 UpperLimit = hinge.UsesLimits ? float.DegreesToRadians(Math.Clamp(hinge.UpperAngle, -180, 180)) : 0,
@@ -128,7 +136,7 @@ public sealed partial class PhysicsService
             },
             SliderJoint slider => request with
             {
-                Axis = Normalized(slider.Axis * ownerScale),
+                Axis = Normalized(Vector3F.TransformNormal(slider.Axis, intoOwner) * ownerScale),
                 HasLimits = slider.UsesLimits,
                 LowerLimit = slider.UsesLimits ? slider.LowerLimit : 0,
                 UpperLimit = slider.UsesLimits ? slider.UpperLimit : 0,
@@ -138,7 +146,8 @@ public sealed partial class PhysicsService
             DistanceJoint distance => request with
             {
                 ConnectedAnchor = connected != null
-                    ? distance.ConnectedAnchor.As<float>() * _links[connectedKey].Parts.Scale
+                    ? Vector3F.TransformCoordinate(distance.ConnectedAnchor.As<float>(), intoConnected)
+                      * _links[connectedKey].Parts.Scale
                     : ToPhysics(distance.ConnectedAnchor),
                 HasLimits = distance.UsesLimits,
                 LowerLimit = distance.UsesLimits ? distance.MinDistance : 0,
@@ -148,6 +157,31 @@ public sealed partial class PhysicsService
             },
             _ => request
         };
+    }
+
+    // The body of entity - its own, or the one above it as for a collider - and how entity's own space stands in the
+    // body's entity's, from the entities' own transforms between them: none of the world's turns, which the physics
+    // keeps changing, enter it.
+    private BodyFound FindBodyOf(Entity entity, out int key, out Matrix4x4F intoBody)
+    {
+        intoBody = Matrix4x4F.Identity;
+        for (var at = entity; at != null; at = at.Owner)
+        {
+            if (_keys.TryGetValue(at, out key))
+                return BodyFound.Made;
+
+            if (at.ContainsComponent<RigidBody>())
+            {
+                key = -1;
+                return BodyFound.Waiting;
+            }
+
+            if (at.Transform is { } transform)
+                intoBody *= transform.GetLocalMatrixF();
+        }
+
+        key = -1;
+        return BodyFound.None;
     }
 
     private static Vector3F Normalized(Vector3F axis) =>

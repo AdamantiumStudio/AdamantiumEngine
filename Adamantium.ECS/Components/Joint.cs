@@ -5,14 +5,15 @@ using Adamantium.MVVM;
 
 namespace Adamantium.ECS.Components;
 
-/// <summary>Holds its entity's rigid body to another's, or to the world, while a game plays: the kind of hold is the
-/// component's own. Its anchor is a point of its entity; the other body is held where it stands when the game
-/// starts.</summary>
+/// <summary>Holds a rigid body to another's, or to the world, while a game plays: the kind of hold is the component's
+/// own. The body is its entity's, or the one above it, as for a collider - several joints of one kind on a body stand on
+/// entities of their own under it. Its anchor is a point of its entity; the other body is held where it stands when the
+/// game starts.</summary>
 [ViewModel]
-[RequiredComponent(typeof(RigidBody))]
 public abstract partial class Joint : ActivatableComponent
 {
-    /// <summary>The entity whose rigid body this one is held to; none holds it to the world.</summary>
+    /// <summary>The entity whose rigid body - its own, or the one above it - this one is held to; none holds it to the
+    /// world.</summary>
     [Bindable, DoNotClone]
     public partial Entity ConnectedBody { get; set; }
 

@@ -89,10 +89,10 @@ internal sealed class SceneState
             if (entries.TryGetValue(entity.Uid, out var entry))
             {
                 SceneBuilder.Apply(entity, entry);
-                if (entry.Joint != null || entity.GetComponent<ECS.Components.Joint>() != null)
+                if (entry.Joints is { Count: > 0 } ||entity.GetComponent<ECS.Components.Joint>() != null)
                 {
                     entities ??= GetEntitiesById();
-                    SceneBuilder.ApplyJoint(entity, entry, entities);
+                    SceneBuilder.ApplyJoints(entity, entry, entities);
                 }
                 components ??= GetGameComponentsById();
                 SceneBuilder.ApplyGameComponents(entity, components.GetValueOrDefault(entity.Uid), code, problems);
