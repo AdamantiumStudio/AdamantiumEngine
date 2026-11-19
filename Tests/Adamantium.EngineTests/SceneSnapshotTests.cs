@@ -70,6 +70,53 @@ public class SceneSnapshotTests
         });
     }
 
+    // What a game did, kept: the scene stays as it left it; put before, it is as it was - what joined gone, what was
+    // taken out back; put after again, as the game left it.
+    [Test]
+    public void ChangesKept_PutBeforeAndAfter()
+    {
+        var snapshot = SceneSnapshot.Take(_scene);
+        _group.Transform.Position = new Vector3<double>(9, 9, 9);
+        _body.GetComponent<Pushed>().Speed = 7;
+        _lamp.GetComponent<Light>().Intensity = 0.5f;
+        var made = new Entity(null, "Made");
+        _world.EntityManager.AddEntity(made, _scene);
+        _world.EntityManager.RemoveEntity(_lamp);
+        _world.ForceUpdate();
+
+        var kept = snapshot.KeepChanges();
+        _world.ForceUpdate();
+        var keptAsLeft = InScene(made) && !InScene(_lamp) && _group.Transform.Position == new Vector3<double>(9, 9, 9);
+
+        kept.PutBefore();
+        _world.ForceUpdate();
+        var groupBefore = _group.Transform.Position;
+        var speedBefore = _body.GetComponent<Pushed>().Speed;
+        var madeBefore = InScene(made);
+        var lampBefore = InScene(_lamp);
+        var intensityBefore = _lamp.GetComponent<Light>().Intensity;
+
+        kept.PutAfter();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(keptAsLeft, Is.True, "kept as the game left it");
+            Assert.That(groupBefore, Is.EqualTo(new Vector3<double>(1, 0, 0)));
+            Assert.That(speedBefore, Is.EqualTo(2));
+            Assert.That(madeBefore, Is.False, "what joined, gone");
+            Assert.That(lampBefore, Is.True, "what was taken out, back");
+            Assert.That(intensityBefore, Is.EqualTo(3));
+            Assert.That(_group.Transform.Position, Is.EqualTo(new Vector3<double>(9, 9, 9)), "after: as the game left it");
+            Assert.That(_body.GetComponent<Pushed>().Speed, Is.EqualTo(7));
+            Assert.That(InScene(made), Is.True, "what joined, back");
+            Assert.That(InScene(_lamp), Is.False, "what was taken out, out again");
+        });
+    }
+
+    private bool InScene(Entity entity) =>
+        entity.Scene == _scene && !_world.EntityManager.IsBeingRemoved(entity) && _world.EntityManager.GetSiblingIndex(entity) >= 0;
+
     // A game's physics changes put back: a body given during the game goes, one changed is as it was, a shape's collider
     // swapped is its template's again.
     [Test]

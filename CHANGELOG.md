@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `SceneSnapshot.KeepChanges` leaves the scene as a game left it and gives `KeptChanges`: what changed, joined and was
+  taken out since the snapshot, with how the scene stood then and now - `PutBefore` and `PutAfter` put either back, an
+  undo of keeping what a game did and its redo. The snapshot's state is a `SceneState` of its own, taken at either end.
 - Surfaces in the physics: `TriangleMeshCollisionShape`, a level's or a building's triangles, and
   `HeightFieldCollisionShape`, ground as heights over a grid, a height that is not a number a hole - both
   `SurfaceCollisionShape`, which only a static or kinematic body holds. A body meets each triangle near it on its own
