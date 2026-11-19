@@ -7,6 +7,19 @@ namespace Adamantium.Mathematics;
 /// those without LH or RH in the name are for Vulkan's clip space, Y down.</summary>
 public static class Matrix4x4
 {
+    /// <summary>Whether <paramref name="matrix"/> skews: the axes it carries are no longer square to each other, as a turn
+    /// under an uneven scale makes them; no box or sphere stays one under it.</summary>
+    public static bool IsSkewed<T>(in Matrix4x4<T> matrix) where T : unmanaged, IFloatingPointIeee754<T>
+    {
+        var axisX = Vector3<T>.TransformNormal(Vector3<T>.UnitX, matrix);
+        var axisY = Vector3<T>.TransformNormal(Vector3<T>.UnitY, matrix);
+        var axisZ = Vector3<T>.TransformNormal(Vector3<T>.UnitZ, matrix);
+        return !AreSquare(axisX, axisY) || !AreSquare(axisY, axisZ) || !AreSquare(axisZ, axisX);
+    }
+
+    private static bool AreSquare<T>(Vector3<T> first, Vector3<T> second) where T : unmanaged, IFloatingPointIeee754<T> =>
+        T.Abs(Vector3<T>.Dot(first, second)) <= T.CreateTruncating(1e-4) * first.Length() * second.Length();
+
     /// <summary>A matrix of the four rows.</summary>
     public static Matrix4x4<T> Create<T>(Vector4<T> row1, Vector4<T> row2, Vector4<T> row3, Vector4<T> row4)
         where T : unmanaged, IFloatingPointIeee754<T> => new(row1, row2, row3, row4);

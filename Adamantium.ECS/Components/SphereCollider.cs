@@ -32,6 +32,13 @@ namespace Adamantium.ECS.Components
         /// <summary>The sphere in its entity's own space.</summary>
         public BoundingSphere<float> Sphere => sphere;
 
+        // A ball stays round: it grows by its entity's largest scale.
+        public override double MeasureVolume(Vector3F scale)
+        {
+            double radius = sphere.Radius * Vector3F.Max(Vector3F.Abs(scale));
+            return 4.0 / 3.0 * Math.PI * radius * radius * radius;
+        }
+
         public override void ClearData()
         {
             ColliderData.Clear();

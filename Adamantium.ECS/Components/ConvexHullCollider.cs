@@ -20,6 +20,7 @@ public partial class ConvexHullCollider : Collider
     private ConvexHull placedFrom;
     private Matrix4x4F placedBy;
     private Vector3F hullCenter;
+    private double placedVolume;
     private Vector3F[] corners = [];
 
     /// <summary>The mesh's hull, in its entity's space as the mesh stands, or null while the collider is empty. The
@@ -133,6 +134,13 @@ public partial class ConvexHullCollider : Collider
         return true;
     }
 
+    // The scale stretches all the hull's space alike; the hull's own volume is measured once, when it is placed.
+    public override double MeasureVolume(Vector3F scale)
+    {
+        var size = Vector3F.Abs(scale);
+        return placedVolume * size.X * size.Y * size.Z;
+    }
+
     public override IConvexShape<float> GetWorldShape()
     {
         return placedHull?.Transform(Owner.Transform.GetWorldMatrixF());
@@ -177,6 +185,7 @@ public partial class ConvexHullCollider : Collider
         placedFrom = Hull;
         placedBy = carry;
         placedHull = Hull == null ? null : carry.Equals(Matrix4x4F.Identity) ? Hull : Hull.Transform(carry);
+        placedVolume = placedHull?.MeasureVolume() ?? 0;
         MarkOutlineStale();
         corners = [];
         if (placedHull == null)

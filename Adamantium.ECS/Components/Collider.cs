@@ -260,6 +260,13 @@ namespace Adamantium.ECS.Components
         /// </summary>
         public abstract IConvexShape<float> GetWorldShape();
 
+        /// <summary>The space the collider holds, in cubic meters, its entity scaled by <paramref name="scale"/>, as the
+        /// physics measures its shape; none for a mesh.</summary>
+        public abstract double MeasureVolume(Vector3F scale);
+
+        // Turned on or off, the body it belongs to weighs anew; one added or taken off its entity tells it so.
+        protected override void OnEnabledChanged() => RigidBody.ReweighAbove(Owner);
+
         /// <summary>Whether this collider and <paramref name="other"/> share a point where their entities stand.</summary>
         public bool Intersects(Collider other)
         {
@@ -365,10 +372,11 @@ namespace Adamantium.ECS.Components
             var changed = outlineIsStale;
             outlineIsStale |= staleBefore;
 
-            // Where each camera sees a changed shape is placed anew with the entity's world.
+            // Where each camera sees a changed shape is placed anew with the entity's world, and its body weighs anew.
             if (changed && Owner is { } owner)
             {
                 owner.Transform.IsWorldDirty = true;
+                RigidBody.ReweighAbove(owner);
             }
         }
 
