@@ -301,6 +301,8 @@ public class Universe : IUniverse
         return assets;
     }
 
+    IAssetService IUniverse.CreateAssetService() => CreateAssetService();
+
     private void RemoveRenderProcessor(UniverseOutput window)
     {
         lock (drawSystems)
