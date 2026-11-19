@@ -190,7 +190,7 @@ public class SceneFileTests
     [Test]
     public void AKindNotKnown_LeavesOnlyThatOut()
     {
-        var text = Text(Sample()).Replace("Name=\"Floor\"", "Name=\"Floor\"><Body Kind=\"Floating\" /><Collider Kind=\"Mesh\" /></Shape><Shape Uid=\"99\" Name=\"Spare\"");
+        var text = Text(Sample()).Replace("Name=\"Floor\"", "Name=\"Floor\"><Body Kind=\"Floating\" /><Collider Kind=\"Torus\" /></Shape><Shape Uid=\"99\" Name=\"Spare\"");
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
 
         var back = SceneFile.Read(stream);
@@ -201,7 +201,7 @@ public class SceneFileTests
             Assert.That(floor.Body?.Kind, Is.Null);
             Assert.That(floor.Body?.ToEdits(), Is.Null);
             Assert.That(floor.Collider?.Kind, Is.Null);
-            Assert.That(Text(back), Does.Contain("Kind=\"Floating\"").And.Contain("Kind=\"Mesh\""), "written back as read");
+            Assert.That(Text(back), Does.Contain("Kind=\"Floating\"").And.Contain("Kind=\"Torus\""), "written back as read");
         });
     }
 

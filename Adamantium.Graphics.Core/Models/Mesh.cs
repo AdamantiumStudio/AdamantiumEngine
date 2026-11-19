@@ -15,6 +15,9 @@ public class Mesh
     private int version;
     private TriangleTree triangleTree;
     private int triangleTreeVersion;
+    private Vector3<double>[] triangleTreePoints;
+    private int[] triangleTreeIndices;
+    private PrimitiveType triangleTreeTopology;
     private ConvexHull convexHull;
     private int convexHullVersion;
     private Vector3<double>[] convexHullPoints;
@@ -161,13 +164,68 @@ public class Mesh
     /// </summary>
     public TriangleTree GetTriangleTree()
     {
-        if (triangleTree == null || triangleTreeVersion != version || !triangleTree.Describes(Points, Indices, MeshTopology))
+        if (triangleTree == null || triangleTreeVersion != version || !ReferenceEquals(triangleTreePoints, Points)
+            || !ReferenceEquals(triangleTreeIndices, Indices) || triangleTreeTopology != MeshTopology)
         {
-            triangleTree = new TriangleTree(Points, Indices, MeshTopology);
+            triangleTree = BuildTriangleTree();
             triangleTreeVersion = version;
+            triangleTreePoints = Points;
+            triangleTreeIndices = Indices;
+            triangleTreeTopology = MeshTopology;
         }
 
         return triangleTree;
+    }
+
+    /// <summary>A new tree of the mesh's triangles as they are now, kept by the caller: a skin refits its own.</summary>
+    public TriangleTree BuildTriangleTree()
+    {
+        var points = new Vector3F[Points.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            points[i] = Points[i].As<float>();
+        }
+
+        return new TriangleTree(points, GatherTriangles());
+    }
+
+    /// <summary>The corners of the mesh's triangles, three to each, as indices of its points and wound as the first
+    /// triangle is: a list as it is, a strip unrolled with every other triangle turned back and its restarts left out;
+    /// none for lines or points.</summary>
+    public int[] GatherTriangles()
+    {
+        var isList = MeshTopology == PrimitiveType.TriangleList;
+        if (!isList && MeshTopology != PrimitiveType.TriangleStrip)
+        {
+            return [];
+        }
+
+        var indexed = Indices.Length > 0;
+        var count = indexed ? Indices.Length : Points.Length;
+        var gathered = new List<int>(isList ? count : 3 * count);
+        var stripStart = 0;
+        for (int i = 0; i + 2 < count; i += isList ? 3 : 1)
+        {
+            var first = indexed ? Indices[i] : i;
+            var second = indexed ? Indices[i + 1] : i + 1;
+            var third = indexed ? Indices[i + 2] : i + 2;
+            if (first < 0 || second < 0 || third < 0)
+            {
+                if (first < 0)
+                {
+                    stripStart = i + 1;
+                }
+
+                continue;
+            }
+
+            var turnsBack = !isList && (i - stripStart) % 2 == 1;
+            gathered.Add(turnsBack ? second : first);
+            gathered.Add(turnsBack ? first : second);
+            gathered.Add(third);
+        }
+
+        return gathered.ToArray();
     }
 
     /// <summary>

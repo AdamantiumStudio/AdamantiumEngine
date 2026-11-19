@@ -15,9 +15,18 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private const int NoPart = -1;
     private const float MatchDistanceSquared = 0.02f * 0.02f;
 
+    // The cosine of the widest turn between two triangles' contact normals for their points to be one contact: about
+    // two degrees.
+    private const float SameWay = 0.9995f;
+
     private readonly DynamicAabbTree<int> _tree;
     private readonly Dictionary<ulong, Contact> _contactsByKey = new(PairKeyComparer.Instance);
     private readonly List<Contact> _contacts = [];
+    private readonly List<Contact> _pieces = [];
+    private readonly List<int> _triangles = [];
+    private readonly TriangleCollisionShape _triangle = new();
+    private readonly List<ManifoldBuffer> _groups = [];
+    private int _groupCount;
     private readonly Stack<Contact> _spareContacts = new();
     private readonly Stack<int> _freeSlots = new();
     private readonly Stack<int> _freeParts = new();
@@ -90,6 +99,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public BodyHandle Add(BodyDescription description)
     {
         ValidateDescription(description);
+        RequireVolume(description.Kind, description.Shape, nameof(description));
         var rotation = NormalizeRotation(description.Rotation, nameof(description));
         var mass = default(MassProperties);
         if (description.Kind == BodyKind.Dynamic)
@@ -299,7 +309,13 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public void GetContactPoints(ICollection<ContactPoint> into)
     {
         ArgumentNullException.ThrowIfNull(into);
-        foreach (var contact in _contacts)
+        AddContactPoints(_contacts, into);
+        AddContactPoints(_pieces, into);
+    }
+
+    private void AddContactPoints(List<Contact> contacts, ICollection<ContactPoint> into)
+    {
+        foreach (var contact in contacts)
         {
             var first = GetHandle(contact.First);
             var second = GetHandle(contact.Second);
@@ -333,7 +349,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             body.StartRotation = body.Rotation;
         }
 
-        _solver.Prepare(_bodies, _contacts);
+        _solver.Prepare(_bodies, _contacts, _pieces);
         var contactHertz = MathF.Min(Settings.ContactHertz, 0.25f * inverseSubstep);
         var contactSoftness = Softness.Create(contactHertz, Settings.ContactDampingRatio, substep);
         var staticSoftness = Softness.Create(2f * contactHertz, Settings.ContactDampingRatio, substep);
@@ -451,31 +467,245 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 continue;
             }
 
-            var closingSpeed = (second.LinearVelocity - first.LinearVelocity).Length()
-                               + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
+            var relativeSpeed = (second.LinearVelocity - first.LinearVelocity).Length();
+            if (firstPart.Shape is SurfaceCollisionShape || secondPart.Shape is SurfaceCollisionShape)
+            {
+                // A turning surface sweeps as fast as its points under the other part move, not as its far rim does.
+                var surfaceIsFirst = firstPart.Shape is SurfaceCollisionShape;
+                ref var surfaceBody = ref surfaceIsFirst ? ref first : ref second;
+                ref var otherBody = ref surfaceIsFirst ? ref second : ref first;
+                ref var otherPart = ref surfaceIsFirst ? ref secondPart : ref firstPart;
+                var reach = (PlacePart(otherBody, otherPart).Position - surfaceBody.Position).Length()
+                            + otherPart.Shape.BoundingRadius;
+                var surfaceSpeed = relativeSpeed + surfaceBody.AngularVelocity.Length() * reach
+                                   + MeasureSweepSpeed(otherBody, otherPart);
+                CollideWithSurface(contact, Settings.SpeculativeDistance + surfaceSpeed * stepSeconds);
+                contactIndex++;
+                continue;
+            }
+
+            var closingSpeed = relativeSpeed + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
             var speculativeDistance = Settings.SpeculativeDistance + closingSpeed * stepSeconds;
+
             if (NarrowPhase.Collide(firstPart.Shape, PlacePart(first, firstPart), secondPart.Shape,
                     PlacePart(second, secondPart), speculativeDistance, _manifold))
             {
                 _manifold.ReduceTo(Settings.MaxContactPointsPerPair);
-                RefreshPoints(contact, first.Pose, second.Pose);
+                RefreshPoints(contact, _manifold, first.Pose, second.Pose);
             }
             else
             {
                 contact.PointCount = 0;
             }
 
-            if (contact.IsTouching)
-            {
-                if (first.IsDynamic && !first.IsAwake && (second.IsMoving || (second.IsPlaced && !first.IsNew)))
-                    WakeIsland(contact.First);
-
-                if (second.IsDynamic && !second.IsAwake && (first.IsMoving || (first.IsPlaced && !second.IsNew)))
-                    WakeIsland(contact.Second);
-            }
-
+            WakeOnTouch(contact);
             contactIndex++;
         }
+    }
+
+    // A touch wakes a sleeper when the other body moves, or was put there by hand after the sleeper was.
+    private void WakeOnTouch(Contact contact)
+    {
+        if (!contact.IsTouching)
+            return;
+
+        ref var first = ref _bodies[contact.First];
+        ref var second = ref _bodies[contact.Second];
+        if (first.IsDynamic && !first.IsAwake && (second.IsMoving || (second.IsPlaced && !first.IsNew)))
+            WakeIsland(contact.First);
+
+        if (second.IsDynamic && !second.IsAwake && (first.IsMoving || (first.IsPlaced && !second.IsNew)))
+            WakeIsland(contact.Second);
+    }
+
+    // A part meets each triangle of the surface near it on its own, as Jolt does; a normal off an edge or a corner inside
+    // the surface is the triangle's, so a body sliding over a seam does not catch on it. The points of triangles facing
+    // the same way are one contact, kept from step to step while it touches: a box on flat ground has four points, not
+    // four for every triangle under it.
+    private void CollideWithSurface(Contact holder, float speculativeDistance)
+    {
+        ref var first = ref _bodies[holder.First];
+        ref var second = ref _bodies[holder.Second];
+        ref var firstPart = ref _parts[holder.FirstPart];
+        ref var secondPart = ref _parts[holder.SecondPart];
+        var surfaceIsFirst = firstPart.Shape is SurfaceCollisionShape;
+        var surface = (SurfaceCollisionShape)(surfaceIsFirst ? firstPart.Shape : secondPart.Shape);
+        var other = surfaceIsFirst ? secondPart.Shape : firstPart.Shape;
+        var surfacePose = surfaceIsFirst ? PlacePart(first, firstPart) : PlacePart(second, secondPart);
+        var otherPose = surfaceIsFirst ? PlacePart(second, secondPart) : PlacePart(first, firstPart);
+        var near = other.ComputeBounds(surfacePose.InverseTransform(otherPose));
+        var reach = new Vector3F(speculativeDistance);
+        _triangles.Clear();
+        surface.FindTriangles(new BoundingBox<float>(near.Minimum - reach, near.Maximum + reach), _triangles);
+        var pieces = holder.Pieces;
+        if (pieces != null)
+        {
+            foreach (var piece in pieces)
+            {
+                piece.IsSeen = false;
+            }
+        }
+
+        _groupCount = 0;
+        foreach (var triangle in _triangles)
+        {
+            if (!surface.TryGetTriangle(triangle, out var corner1, out var corner2, out var corner3))
+                continue;
+
+            _triangle.Set(corner1, corner2, corner3, surface.GetTriangleNormal(triangle, corner1, corner2, corner3));
+            _manifold.Clear();
+            var found = surfaceIsFirst
+                ? ConvexCollisions.Collide(_triangle, surfacePose, other, otherPose, speculativeDistance, _manifold)
+                : ConvexCollisions.Collide(other, otherPose, _triangle, surfacePose, speculativeDistance, _manifold);
+            if (!found)
+                continue;
+
+            KeepOffInnerEdges(surface.GetActiveEdges(triangle), surfacePose);
+            _manifold.ReduceTo(Settings.MaxContactPointsPerPair);
+            var group = TakeGroup(_manifold.Normal);
+            // A group as full as a buffer holds keeps the spread of its points before taking more: many small triangles
+            // under a body lose none of its corners.
+            if (group.Count + _manifold.Count > ManifoldBuffer.PointCapacity)
+                group.ReduceTo(Settings.MaxContactPointsPerPair);
+
+            for (var index = 0; index < _manifold.Count; index++)
+            {
+                group.Add(_manifold.Positions[index], _manifold.Separations[index]);
+            }
+        }
+
+        for (var index = 0; index < _groupCount; index++)
+        {
+            var group = _groups[index];
+            group.ReduceTo(Settings.MaxContactPointsPerPair);
+            var surfaceNormal = surfacePose.InverseTransformDirection(group.Normal);
+            var contact = FindPiece(holder, surfaceNormal) ?? CreatePiece(holder);
+            contact.IsSeen = true;
+            contact.SurfaceNormal = surfaceNormal;
+            RefreshPoints(contact, group, first.Pose, second.Pose);
+            WakeOnTouch(contact);
+        }
+
+        pieces = holder.Pieces;
+        if (pieces == null)
+            return;
+
+        for (var index = pieces.Count - 1; index >= 0; index--)
+        {
+            if (!pieces[index].IsSeen)
+                DestroyContact(pieces[index]);
+        }
+    }
+
+    // Where the deepest point lies on the triangle - inside it, on an edge or at a corner - tells whether the normal
+    // stands: one off an edge or a corner a body can catch on does; any other is turned to the triangle's own.
+    private void KeepOffInnerEdges(int activeEdges, in Pose surfacePose)
+    {
+        var faceNormal = surfacePose.TransformDirection(_triangle.Normal);
+        if (Vector3F.Dot(_manifold.Normal, faceNormal) < 0)
+            faceNormal = -faceNormal;
+
+        if (Vector3F.Dot(_manifold.Normal, faceNormal) > 0.9999f || _manifold.Count == 0)
+            return;
+
+        var deepest = 0;
+        for (var index = 1; index < _manifold.Count; index++)
+        {
+            if (_manifold.Separations[index] < _manifold.Separations[deepest])
+                deepest = index;
+        }
+
+        var point = surfacePose.InverseTransformPoint(_manifold.Positions[deepest]).As<double>();
+        var first = _triangle.First.As<double>();
+        var second = _triangle.Second.As<double>();
+        var third = _triangle.Third.As<double>();
+        TriangleMath.FindNearestWeights(first, second, third, point, out var firstWeight, out var secondWeight,
+            out var thirdWeight);
+        // A corner's weight times the triangle's height over the edge across from it is how far the point stands from
+        // that edge: within a millimeter it is on it, however large the triangle.
+        const double onTheRim = 1e-3;
+        var twiceArea = Vector3<double>.Cross(second - first, third - first).Length();
+        var offFirst = firstWeight * twiceArea <= onTheRim * (third - second).Length();
+        var offSecond = secondWeight * twiceArea <= onTheRim * (first - third).Length();
+        var offThird = thirdWeight * twiceArea <= onTheRim * (second - first).Length();
+        // Edge 0 runs from the first corner to the second, 1 from the second to the third, 2 from the third back.
+        var edges = (offThird ? 1 : 0) | (offFirst ? 2 : 0) | (offSecond ? 4 : 0);
+        var touched = offFirst && offSecond ? 2 | 4
+            : offSecond && offThird ? 1 | 4
+            : offThird && offFirst ? 1 | 2
+            : 0;
+        if (touched == 0)
+            touched = edges;
+
+        // A corner counts as an edge to catch on when either edge at it is one.
+        if (touched != 0 && (touched & activeEdges) != 0)
+            return;
+
+        // The gap between the surfaces at each point lay along the old normal: along the triangle's, it is that much
+        // shorter - an overlap off a seam's side is not one into the floor.
+        var cosine = Vector3F.Dot(_manifold.Normal, faceNormal);
+        for (var index = 0; index < _manifold.Count; index++)
+        {
+            _manifold.Separations[index] *= cosine;
+        }
+
+        _manifold.Normal = faceNormal;
+    }
+
+    // The points met this step of the triangles facing about as normal does, a new group when none is.
+    private ManifoldBuffer TakeGroup(Vector3F normal)
+    {
+        for (var index = 0; index < _groupCount; index++)
+        {
+            if (Vector3F.Dot(_groups[index].Normal, normal) >= SameWay)
+                return _groups[index];
+        }
+
+        if (_groupCount == _groups.Count)
+            _groups.Add(new ManifoldBuffer());
+
+        var group = _groups[_groupCount++];
+        group.Clear();
+        group.Normal = normal;
+        return group;
+    }
+
+    // The pair's contact, not yet met this step, facing about as surfaceNormal does in the surface's axes; it keeps its
+    // points' impulses, a turning surface's too.
+    private static Contact FindPiece(Contact holder, Vector3F surfaceNormal)
+    {
+        if (holder.Pieces == null)
+            return null;
+
+        foreach (var piece in holder.Pieces)
+        {
+            if (!piece.IsSeen && Vector3F.Dot(piece.SurfaceNormal, surfaceNormal) >= SameWay)
+                return piece;
+        }
+
+        return null;
+    }
+
+    private Contact CreatePiece(Contact holder)
+    {
+        var piece = _spareContacts.Count > 0 ? _spareContacts.Pop() : new Contact(Settings.MaxContactPointsPerPair);
+        piece.Key = holder.Key;
+        piece.First = holder.First;
+        piece.Second = holder.Second;
+        piece.FirstPart = holder.FirstPart;
+        piece.SecondPart = holder.SecondPart;
+        piece.PointCount = 0;
+        piece.Friction = holder.Friction;
+        piece.Restitution = holder.Restitution;
+        piece.Holder = holder;
+        holder.Pieces ??= [];
+        piece.PieceIndex = holder.Pieces.Count;
+        holder.Pieces.Add(piece);
+        piece.ListIndex = _pieces.Count;
+        _pieces.Add(piece);
+        LinkContact(piece, piece.First);
+        LinkContact(piece, piece.Second);
+        return piece;
     }
 
     private void WakeTouchedSleepers()
@@ -497,7 +727,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         _woken.Clear();
     }
 
-    private void RefreshPoints(Contact contact, in Pose firstPose, in Pose secondPose)
+    private void RefreshPoints(Contact contact, ManifoldBuffer manifold, in Pose firstPose, in Pose secondPose)
     {
         var previousCount = contact.PointCount;
         for (var index = 0; index < previousCount; index++)
@@ -506,14 +736,14 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             _matched[index] = false;
         }
 
-        contact.Normal = _manifold.Normal;
-        contact.PointCount = _manifold.Count;
-        for (var index = 0; index < _manifold.Count; index++)
+        contact.Normal = manifold.Normal;
+        contact.PointCount = manifold.Count;
+        for (var index = 0; index < manifold.Count; index++)
         {
             ref var point = ref contact.Points[index];
             point = default;
-            point.Position = _manifold.Positions[index];
-            point.Separation = _manifold.Separations[index];
+            point.Position = manifold.Positions[index];
+            point.Separation = manifold.Separations[index];
             point.LocalAnchorFirst = firstPose.InverseTransformPoint(point.Position);
             point.LocalAnchorSecond = secondPose.InverseTransformPoint(point.Position);
 
@@ -676,15 +906,25 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 awake++;
         }
 
+        // A pair with a surface touches once, however many ways its triangles face.
         var touching = 0;
         var points = 0;
         foreach (var contact in _contacts)
         {
-            if (!contact.IsTouching)
+            var pairPoints = contact.PointCount;
+            if (contact.Pieces != null)
+            {
+                foreach (var piece in contact.Pieces)
+                {
+                    pairPoints += piece.PointCount;
+                }
+            }
+
+            if (pairPoints == 0)
                 continue;
 
             touching++;
-            points += contact.PointCount;
+            points += pairPoints;
         }
 
         LastStep = new StepStatistics(awake, _contacts.Count, touching, points,
@@ -825,15 +1065,39 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         LinkContact(contact, second);
     }
 
+    // A pair with a surface goes with the contacts of its triangles; a triangle's leaves its pair.
     private void DestroyContact(Contact contact)
     {
+        var pieces = contact.Pieces;
+        if (pieces != null)
+        {
+            while (pieces.Count > 0)
+            {
+                DestroyContact(pieces[^1]);
+            }
+        }
+
         UnlinkContact(contact, contact.First);
         UnlinkContact(contact, contact.Second);
-        var last = _contacts[^1];
-        _contacts[contact.ListIndex] = last;
+        var holder = contact.Holder;
+        var list = holder != null ? _pieces : _contacts;
+        var last = list[^1];
+        list[contact.ListIndex] = last;
         last.ListIndex = contact.ListIndex;
-        _contacts.RemoveAt(_contacts.Count - 1);
-        _contactsByKey.Remove(contact.Key);
+        list.RemoveAt(list.Count - 1);
+        if (holder != null)
+        {
+            var lastPiece = holder.Pieces[^1];
+            holder.Pieces[contact.PieceIndex] = lastPiece;
+            lastPiece.PieceIndex = contact.PieceIndex;
+            holder.Pieces.RemoveAt(holder.Pieces.Count - 1);
+            contact.Holder = null;
+        }
+        else
+        {
+            _contactsByKey.Remove(contact.Key);
+        }
+
         _spareContacts.Push(contact);
     }
 
@@ -1026,6 +1290,14 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         RequireFiniteNotNegative(description.AngularDamping, nameof(description));
         if (!float.IsFinite(description.GravityScale))
             throw new ArgumentOutOfRangeException(nameof(description), "The gravity scale must be finite.");
+    }
+
+    // A dynamic body is weighed: a mesh or a height field has no volume to weigh.
+    private static void RequireVolume(BodyKind kind, CollisionShape shape, string parameterName)
+    {
+        if (kind == BodyKind.Dynamic && SurfaceCollisionShape.HoldsSurface(shape))
+            throw new ArgumentException("A body with a mesh or a height field has no volume to weigh; it must be "
+                                        + "static or kinematic.", parameterName);
     }
 
     private static void RequireFiniteNotNegative(float value, string parameterName)

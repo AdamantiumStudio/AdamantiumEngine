@@ -13,11 +13,17 @@ internal sealed class ContactSolver
     /// <summary>The contacts solved this step.</summary>
     public IReadOnlyList<Contact> Active => _active;
 
-    /// <summary>Takes the touching contacts with a moving body and works out, from where the bodies stand at the start
-    /// of the step, what each point needs.</summary>
-    public void Prepare(BodyState[] bodies, List<Contact> contacts)
+    /// <summary>Takes the touching contacts with a moving body, of convex parts and with surfaces' triangles, and works
+    /// out, from where the bodies stand at the start of the step, what each point needs.</summary>
+    public void Prepare(BodyState[] bodies, List<Contact> contacts, List<Contact> pieces)
     {
         _active.Clear();
+        Prepare(bodies, contacts);
+        Prepare(bodies, pieces);
+    }
+
+    private void Prepare(BodyState[] bodies, List<Contact> contacts)
+    {
         foreach (var contact in contacts)
         {
             if (!contact.IsTouching)

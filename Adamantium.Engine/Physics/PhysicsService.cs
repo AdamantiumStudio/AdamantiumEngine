@@ -37,8 +37,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
     private readonly List<PhysicsBodyLink> _placing = [];
     private readonly Dictionary<int, Vector3F> _forces = new();
     private readonly HashSet<int> _toldOfRefusal = [];
+    // The entities whose mesh colliders on dynamic bodies were already said in the log, by id, so a body made again does
+    // not say it each time and a gone entity is not held.
+    private readonly HashSet<UInt128> _toldOfDynamicMesh = [];
     private readonly List<CompoundPart> _shapeParts = [];
-    private readonly HullShapeCache _hullShapes = new();
+    private readonly CarriedShapeCache _carriedShapes = new();
     private readonly List<int> _freeKeys = [];
     private readonly List<int> _keyGenerations = [];
     // Rigid bodies the physics could not make, tried again once what they are made of changes.
@@ -224,7 +227,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
         _placing.Clear();
         _forces.Clear();
         _toldOfRefusal.Clear();
-        _hullShapes.Clear();
+        _toldOfDynamicMesh.Clear();
+        _carriedShapes.Clear();
         _freeKeys.Clear();
         _keyGenerations.Clear();
         _refused.Clear();
@@ -358,15 +362,15 @@ public sealed class PhysicsService : GameService, IPhysicsService
         var moves = WasMovedByHand(link, description) || changesKind;
         if (changesShape)
         {
-            // After the new parts took their hull shapes, so the ones both use are not made again.
-            _hullShapes.GiveBack(link.Parts.HullShapes);
+            // After the new parts took their hull and mesh shapes, so the ones both use are not made again.
+            _carriedShapes.GiveBack(link.Parts.CarriedShapes);
         }
         else
         {
             // The body keeps the shapes it has: compared with them later, so changes too small to count each time add
-            // up, and holding the hull shapes it uses.
-            _hullShapes.GiveBack(parts.HullShapes);
-            parts.HullShapes.AddRange(link.Parts.HullShapes);
+            // up, and holding the hull and mesh shapes it uses.
+            _carriedShapes.GiveBack(parts.CarriedShapes);
+            parts.CarriedShapes.AddRange(link.Parts.CarriedShapes);
             parts.ShapeParts = link.Parts.ShapeParts;
         }
 
@@ -512,13 +516,13 @@ public sealed class PhysicsService : GameService, IPhysicsService
         BodyDescription description, Matrix4x4F parentWorld)
     {
         var entity = body.Owner;
-        // After the new body took its hull shapes, so the ones both use are not made again.
+        // After the new body took its hull and mesh shapes, so the ones both use are not made again.
         if (previous != null)
             Retire(previous);
 
         if (description == null)
         {
-            _hullShapes.GiveBack(parts.HullShapes);
+            _carriedShapes.GiveBack(parts.CarriedShapes);
             _refused[entity] = parts;
             if (previous != null)
                 FreeKey(previous);
@@ -575,11 +579,11 @@ public sealed class PhysicsService : GameService, IPhysicsService
         FreeKey(link);
     }
 
-    // The link is passed over from now on, its hull shapes given back; its key stays the entity's.
+    // The link is passed over from now on, its hull and mesh shapes given back; its key stays the entity's.
     private void Retire(PhysicsBodyLink link)
     {
         link.IsGone = true;
-        _hullShapes.GiveBack(link.Parts.HullShapes);
+        _carriedShapes.GiveBack(link.Parts.CarriedShapes);
         if (link.IsParented && link.Kind != BodyKind.Static)
             _parented.Remove(link);
     }
@@ -631,7 +635,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         }
 
         var position = ToPhysics(translation.As<double>());
-        var shape = CreateShape(entity, position, rotation, scale, parts);
+        var shape = CreateShape(entity, body.Kind, position, rotation, scale, parts);
         if (shape == null)
         {
             Log.Logger.Warning("{Entity} has a rigid body but no collider on it or below it; the physics leaves it",
@@ -658,10 +662,10 @@ public sealed class PhysicsService : GameService, IPhysicsService
 
     /// <summary>The shape of the colliders on <paramref name="entity"/> and on the entities below it that have no rigid
     /// body of their own, around the body's origin at <paramref name="origin"/> turned by <paramref name="rotation"/>,
-    /// the entity scaled by <paramref name="scale"/>; null when there are none. The entities below it it looks at, and
-    /// the hull shapes it takes, go in <paramref name="parts"/>.</summary>
-    private CollisionShape CreateShape(Entity entity, Vector3F origin, QuaternionF rotation, Vector3F scale,
-        BodyParts parts)
+    /// the entity scaled by <paramref name="scale"/>, for a body of <paramref name="kind"/>; null when there are none.
+    /// The entities below it it looks at, and the hull and mesh shapes it takes, go in <paramref name="parts"/>.</summary>
+    private CollisionShape CreateShape(Entity entity, BodyKind kind, Vector3F origin, QuaternionF rotation,
+        Vector3F scale, BodyParts parts)
     {
         _shapeParts.Clear();
         var unturn = QuaternionF.Conjugate(rotation);
@@ -669,7 +673,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
         {
             if (current == entity)
             {
-                AddColliders(entity, current, origin, unturn, scale, parts.HullShapes);
+                AddColliders(entity, kind, current, origin, unturn, scale, parts.CarriedShapes);
                 return true;
             }
 
@@ -688,7 +692,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             if (!current.IsEnabled)
                 return false;
 
-            AddColliders(entity, current, origin, unturn, scale, parts.HullShapes);
+            AddColliders(entity, kind, current, origin, unturn, scale, parts.CarriedShapes);
             return true;
         });
 
@@ -703,8 +707,8 @@ public sealed class PhysicsService : GameService, IPhysicsService
         return new CompoundCollisionShape(_shapeParts);
     }
 
-    private void AddColliders(Entity body, Entity entity, Vector3F origin, QuaternionF unturn, Vector3F bodyScale,
-        List<HullShapeKey> hullShapesTaken)
+    private void AddColliders(Entity body, BodyKind kind, Entity entity, Vector3F origin, QuaternionF unturn,
+        Vector3F bodyScale, List<CarriedShapeKey> carriedShapesTaken)
     {
         // The body's own colliders stand on it exactly, as their offsets say.
         var placed = entity == body;
@@ -715,6 +719,16 @@ public sealed class PhysicsService : GameService, IPhysicsService
         {
             if (component is not Collider { IsEnabled: true } collider)
                 continue;
+
+            // A mesh holds no volume to weigh: a body moved by forces cannot hold one.
+            if (collider is MeshCollider && kind == BodyKind.Dynamic)
+            {
+                if (_toldOfDynamicMesh.Add(entity.Uid))
+                    Log.Logger.Warning("A mesh collider is for a static or kinematic body; the dynamic body of {Body} "
+                                       + "leaves the one of {Entity}", body.Name, entity.Name);
+
+                continue;
+            }
 
             if (!placed)
             {
@@ -732,7 +746,7 @@ public sealed class PhysicsService : GameService, IPhysicsService
             ColliderShape shape;
             try
             {
-                if (!ColliderShape.TryCreate(collider, scale, _hullShapes, hullShapesTaken, out shape))
+                if (!ColliderShape.TryCreate(collider, scale, _carriedShapes, carriedShapesTaken, out shape))
                 {
                     Log.Logger.Warning("The physics has no shape for the {Collider} of {Entity} yet; the body of {Body} "
                                        + "leaves it", collider.GetType().Name, entity.Name, body.Name);

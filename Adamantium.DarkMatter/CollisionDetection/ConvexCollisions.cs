@@ -237,7 +237,7 @@ internal static class ConvexCollisions
 
     // Shapes whose faces' edges are real: a cylinder's end is a circle, its corners only drawn round it.
     private static bool HasEdges(CollisionShape shape) =>
-        shape.Kind is CollisionShapeKind.Box or CollisionShapeKind.ConvexHull;
+        shape.Kind is CollisionShapeKind.Box or CollisionShapeKind.ConvexHull or CollisionShapeKind.Triangle;
 
     // Of the faces of shape whose normal turns toward toward by at least the cosine nearness, the one whose outward
     // normal parts it most from other, that normal in the world and how far they part along it; -1 when it has none

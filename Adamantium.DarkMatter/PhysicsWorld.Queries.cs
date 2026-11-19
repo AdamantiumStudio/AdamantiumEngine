@@ -51,6 +51,10 @@ public sealed partial class PhysicsWorld
     {
         ArgumentNullException.ThrowIfNull(shape);
         ArgumentNullException.ThrowIfNull(into);
+        if (SurfaceCollisionShape.HoldsSurface(shape))
+            throw new ArgumentException("A mesh or a height field holds no volume to look for overlaps with.",
+                nameof(shape));
+
         var placedPose = new Pose(pose.Position, NormalizeRotation(pose.Rotation, nameof(pose)));
         _overlapped.Clear();
         _overlappedBodies.Clear();
@@ -83,12 +87,35 @@ public sealed partial class PhysicsWorld
             if (_overlappedBodies.Contains(part.Body))
                 continue;
 
-            if (Gjk.Intersects(placed, new PlacedShape(part.Shape, PlacePart(_bodies[part.Body], part))))
+            var partPose = PlacePart(_bodies[part.Body], part);
+            var meets = part.Shape is SurfaceCollisionShape surface
+                ? MeetsSurface(shape, pose, surface, partPose)
+                : Gjk.Intersects(placed, new PlacedShape(part.Shape, partPose));
+            if (meets)
             {
                 _overlappedBodies.Add(part.Body);
                 _overlapped.Add(part.Body);
             }
         }
+    }
+
+    // A shape meets a surface where it meets one of the triangles near it.
+    private bool MeetsSurface(CollisionShape shape, in Pose pose, SurfaceCollisionShape surface, in Pose surfacePose)
+    {
+        var placed = new PlacedShape(shape, pose);
+        _triangles.Clear();
+        surface.FindTriangles(shape.ComputeBounds(surfacePose.InverseTransform(pose)), _triangles);
+        foreach (var triangle in _triangles)
+        {
+            if (!surface.TryGetTriangle(triangle, out var first, out var second, out var third))
+                continue;
+
+            _triangle.Set(first, second, third, surface.GetTriangleNormal(triangle, first, second, third));
+            if (Gjk.Intersects(placed, new PlacedShape(_triangle, surfacePose)))
+                return true;
+        }
+
+        return false;
     }
 
     private static int CompareEntries((int Item, float Entry) first, (int Item, float Entry) second) =>

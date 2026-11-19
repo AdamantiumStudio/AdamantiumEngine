@@ -31,10 +31,10 @@ internal readonly struct ColliderShape
     public QuaternionF Turn { get; }
 
     /// <summary>The shape of <paramref name="collider"/> on an entity scaled by <paramref name="scale"/>; false for a
-    /// collider the physics has no shape for yet. A hull's shape is taken from <paramref name="hullShapes"/>, its key
-    /// put in <paramref name="taken"/>.</summary>
-    public static bool TryCreate(Collider collider, Vector3F scale, HullShapeCache hullShapes, List<HullShapeKey> taken,
-        out ColliderShape shape)
+    /// collider the physics has no shape for yet. A hull's or a mesh's shape is taken from
+    /// <paramref name="carriedShapes"/>, its key put in <paramref name="taken"/>.</summary>
+    public static bool TryCreate(Collider collider, Vector3F scale, CarriedShapeCache carriedShapes,
+        List<CarriedShapeKey> taken, out ColliderShape shape)
     {
         var size = Vector3F.Abs(scale);
         switch (collider)
@@ -46,7 +46,7 @@ internal readonly struct ColliderShape
                 if (!IsEven(size) && !IsAlongAxes(turn))
                 {
                     // Turned on an unevenly scaled entity, a box is skewed: no box fits it, the hull of its corners does.
-                    shape = new ColliderShape(SkewedBox(own, turn, scale, hullShapes, taken), box.Position * scale,
+                    shape = new ColliderShape(SkewedBox(own, turn, scale, carriedShapes, taken), box.Position * scale,
                         QuaternionF.Identity);
                     return true;
                 }
@@ -89,7 +89,17 @@ internal readonly struct ColliderShape
                     throw new ArgumentException("The hull collider holds no hull: its entity has no mesh.");
 
                 shape = new ColliderShape(
-                    hullShapes.Take(hull, Matrix4x4.CreateScale<float>(scale), CollisionShape.DefaultConvexRadius, taken),
+                    carriedShapes.Take(hull, Matrix4x4.CreateScale<float>(scale), CollisionShape.DefaultConvexRadius, taken),
+                    Vector3F.Zero, QuaternionF.Identity);
+                return true;
+            }
+            case MeshCollider meshCollider:
+            {
+                if (meshCollider.Source is not { } mesh)
+                    throw new ArgumentException("The mesh collider holds no mesh: its entity has none with points.");
+
+                shape = new ColliderShape(
+                    carriedShapes.Take(mesh, meshCollider.Carry * Matrix4x4.CreateScale<float>(scale), taken),
                     Vector3F.Zero, QuaternionF.Identity);
                 return true;
             }
@@ -120,13 +130,13 @@ internal readonly struct ColliderShape
     // The box's corners turned, then scaled as the entity is, about the box's center; edges sharp, as a box's are. A
     // side thinner than a thousandth of the box's longest is made that thick, so a flat box stays a solid.
     private static ConvexHullCollisionShape SkewedBox(Vector3F half, QuaternionF turn, Vector3F scale,
-        HullShapeCache hullShapes, List<HullShapeKey> taken)
+        CarriedShapeCache carriedShapes, List<CarriedShapeKey> taken)
     {
         var thinnest = MathF.Max(CollisionShape.MinimumSize, 1e-3f * Vector3F.Max(half));
         half = Vector3F.Max(half, new Vector3F(thinnest));
         var carry = Matrix4x4.CreateScale<float>(half) * Matrix4x4.CreateFromQuaternion<float>(turn) *
                     Matrix4x4.CreateScale<float>(scale);
-        return hullShapes.Take(UnitCube, carry, 0, taken);
+        return carriedShapes.Take(UnitCube, carry, 0, taken);
     }
 
     private static bool IsEven(Vector3F size) =>

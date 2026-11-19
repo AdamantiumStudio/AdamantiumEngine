@@ -7,6 +7,19 @@ All packages share one version.
 
 ### Added
 
+- Surfaces in the physics: `TriangleMeshCollisionShape`, a level's or a building's triangles, and
+  `HeightFieldCollisionShape`, ground as heights over a grid, a height that is not a number a hole - both
+  `SurfaceCollisionShape`, which only a static or kinematic body holds. A body meets each triangle near it on its own
+  through GJK and EPA, as Jolt does. The points of triangles facing the same way are one contact, so a box on flat
+  ground has four points. An edge inside the surface - flat, or concave - gives the triangle's own normal, so a body
+  sliding over a seam does not catch on it; the rim, ridges and corners still do. Rays meet surfaces, and `Overlap`
+  finds bodies overlapping them. `Pose.InverseTransform` takes a pose into a body's own axes.
+- `MeshCollider`: an entity's mesh itself as its collider, carried from its center by the collider's placement, for a
+  static or kinematic body; a dynamic one leaves it, said in the log. Picking meets its triangles. `ColliderKind.Mesh`
+  gives a model's part one.
+- `TriangleTree.Query` finds the triangles in a box, and `Intersect` can name the triangle a ray meets.
+  `Mesh.BuildTriangleTree` builds a tree of its own, and `Mesh.GatherTriangles` gives its triangles three corners to
+  each, a strip's every other one turned back to wind as the first.
 - `Collider.Angles`: the collider's `Rotation` in degrees about X, Y and Z, as `Transform.Angles` has it - 200 typed
   stays 200, and set by hand it makes the collider unfitted, as its rotation does.
 - A collider stands on its entity where it is placed: `Collider.Position` (its center), `Rotation` and `Scale` (along
@@ -551,6 +564,9 @@ All packages share one version.
 
 ### Changed
 
+- `TriangleTree` moved to `Adamantium.Mathematics`, so the physics shares it with picking; it is built from points
+  and the corners of triangles, not from a mesh's topology.
+- `CollisionShapeKind` has `Triangle`, `TriangleMesh` and `HeightField` before `Compound`.
 - `Collider.Bounds` is the box round the collider in its entity's space, built from its sizes and placement, and is
   read only: a collider is sized by its own values. `Collider.Size` is `BoxCollider.Size`; `Center` and `LocalCenter`
   are gone, `Position` is the center. `CalculateFromMesh` is `FitTo`, and `Merge` fits the box round both for every

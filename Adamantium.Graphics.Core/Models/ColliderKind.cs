@@ -12,5 +12,8 @@ public enum ColliderKind
     Cylinder,
 
     /// <summary>The convex hull of the part's mesh.</summary>
-    ConvexHull
+    ConvexHull,
+
+    /// <summary>The part's mesh itself, triangle by triangle: only for a body that does not move by forces.</summary>
+    Mesh
 }

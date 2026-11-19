@@ -101,6 +101,7 @@ public static class PhysicsParts
         CapsuleCollider => ColliderKind.Capsule,
         CylinderCollider => ColliderKind.Cylinder,
         ConvexHullCollider => ColliderKind.ConvexHull,
+        MeshCollider => ColliderKind.Mesh,
         _ => ColliderKind.None
     };
 
@@ -162,6 +163,7 @@ public static class PhysicsParts
         ColliderKind.Capsule => new CapsuleCollider(),
         ColliderKind.Cylinder => new CylinderCollider(),
         ColliderKind.ConvexHull => new ConvexHullCollider(),
+        ColliderKind.Mesh => new MeshCollider(),
         _ => null
     };
 

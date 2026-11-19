@@ -38,6 +38,10 @@ public struct Pose
     public readonly Vector3F InverseTransformPoint(Vector3F point) =>
         Vector3F.Transform(point - Position, QuaternionF.Conjugate(Rotation));
 
+    /// <summary>A pose of the world in the body's own axes.</summary>
+    public readonly Pose InverseTransform(in Pose pose) =>
+        new(InverseTransformPoint(pose.Position), QuaternionF.Conjugate(Rotation) * pose.Rotation);
+
     /// <summary>A direction of the world in the body's own axes.</summary>
     public readonly Vector3F InverseTransformDirection(Vector3F direction) =>
         Vector3F.Transform(direction, QuaternionF.Conjugate(Rotation));
