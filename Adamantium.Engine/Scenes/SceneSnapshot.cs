@@ -12,13 +12,98 @@ namespace Adamantium.Engine.Scenes;
 /// cost follows the changes, not the scene's size. On the world's thread.</summary>
 public sealed class SceneSnapshot
 {
+    private readonly SceneState _state;
+
+    private SceneSnapshot(SceneState state)
+    {
+        _state = state;
+    }
+
+    /// <summary>The scene.</summary>
+    public Scene Scene => _state.Scene;
+
+    /// <summary>The state of <paramref name="scene"/> now; its changes are recorded from here.</summary>
+    public static SceneSnapshot Take(Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        var state = SceneState.Take(scene);
+        scene.Changes.Start();
+        return new SceneSnapshot(state);
+    }
+
+    /// <summary>Whether <paramref name="entity"/> was in the scene when the state was taken.</summary>
+    public bool Contains(Entity entity) => _state.Contains(entity);
+
+    /// <summary>Puts the scene back as it was: an entity that joined it since is taken out - unless it, or one it stands
+    /// in, is in <paramref name="keep"/>; one taken out comes back where it stood, the same object; one changed gets its
+    /// state back, its game's components with it. Recording stops.</summary>
+    public void Restore(IReadOnlySet<Entity> keep = null)
+    {
+        var changes = Scene.Changes;
+        changes.Stop();
+        _state.PutOn(changes.Changed, changes.Removed, changes.Added, keep);
+        changes.Clear();
+    }
+
+    /// <summary>Leaves the scene as it stands and stops recording: what changed since the state was taken, with how it
+    /// stood then and how it stands now, either of which <see cref="KeptChanges"/> puts back - an undo of keeping what a
+    /// game did, and its redo.</summary>
+    public KeptChanges KeepChanges()
+    {
+        var changes = Scene.Changes;
+        changes.Stop();
+        var kept = new KeptChanges(_state, SceneState.Take(Scene), [.. changes.Changed], [.. changes.Added],
+            [.. changes.Removed]);
+        changes.Clear();
+        return kept;
+    }
+}
+
+/// <summary>What changed in a scene between two moments - the entities changed, joined and taken out - with how the
+/// scene stood at each, either put back on it. On the world's thread.</summary>
+public sealed class KeptChanges
+{
+    private readonly SceneState _before;
+    private readonly SceneState _after;
+    private readonly Entity[] _changed;
+    private readonly Entity[] _added;
+    private readonly Entity[] _removed;
+
+    internal KeptChanges(SceneState before, SceneState after, Entity[] changed, Entity[] added, Entity[] removed)
+    {
+        _before = before;
+        _after = after;
+        _changed = changed;
+        _added = added;
+        _removed = removed;
+    }
+
+    /// <summary>The scene.</summary>
+    public Scene Scene => _before.Scene;
+
+    /// <summary>The entities changed, those taken out among them.</summary>
+    public IReadOnlyList<Entity> Changed => _changed;
+
+    /// <summary>Whether anything changed, joined or was taken out.</summary>
+    public bool HasChanges => _changed.Length > 0 || _added.Length > 0 || _removed.Length > 0;
+
+    /// <summary>Puts the scene as it stood at first: what joined goes, what was taken out comes back.</summary>
+    public void PutBefore() => _before.PutOn(_changed, _removed, _added, null);
+
+    /// <summary>Puts the scene as it stood at last: what joined comes back, what was taken out goes again.</summary>
+    public void PutAfter() => _after.PutOn(_changed, _added, _removed, null);
+}
+
+// How a scene stood at one moment: its file, and how each entity stood in it.
+internal sealed class SceneState
+{
     private readonly SceneFile _file;
     private readonly Dictionary<Entity, EntityState> _states;
     // The roots, and each entity's children, in the order they stood: siblings are put back in it.
     private readonly List<Entity> _roots;
     private readonly Dictionary<Entity, Entity[]> _children;
 
-    private SceneSnapshot(Scene scene, SceneFile file, Dictionary<Entity, EntityState> states, List<Entity> roots,
+    private SceneState(Scene scene, SceneFile file, Dictionary<Entity, EntityState> states, List<Entity> roots,
         Dictionary<Entity, Entity[]> children)
     {
         Scene = scene;
@@ -28,13 +113,10 @@ public sealed class SceneSnapshot
         _children = children;
     }
 
-    /// <summary>The scene.</summary>
     public Scene Scene { get; }
 
-    /// <summary>The state of <paramref name="scene"/> now; its changes are recorded from here.</summary>
-    public static SceneSnapshot Take(Scene scene)
+    public static SceneState Take(Scene scene)
     {
-        ArgumentNullException.ThrowIfNull(scene);
         var file = SceneCapture.Capture(scene);
         var states = new Dictionary<Entity, EntityState>();
         var roots = new List<Entity>();
@@ -70,25 +152,22 @@ public sealed class SceneSnapshot
             children[owner] = ownChildren;
         }
 
-        scene.Changes.Start();
-        return new SceneSnapshot(scene, file, states, roots, children);
+        return new SceneState(scene, file, states, roots, children);
     }
 
-    /// <summary>Whether <paramref name="entity"/> was in the scene when the state was taken.</summary>
     public bool Contains(Entity entity) => _states.ContainsKey(entity);
 
-    /// <summary>Puts the scene back as it was: an entity that joined it since is taken out - unless it, or one it stands
-    /// in, is in <paramref name="keep"/>; one taken out comes back where it stood, the same object; one changed gets its
-    /// state back, its game's components with it. Recording stops.</summary>
-    public void Restore(IReadOnlySet<Entity> keep = null)
+    // Puts this state on the scene: those of comingBack it held come back where they stood, the same objects; each of
+    // changed - and those coming back, with what stands in them - gets its state back, its game's components with it;
+    // those of going it did not hold go, unless one of keep holds them.
+    public void PutOn(IReadOnlyCollection<Entity> changed, IReadOnlyCollection<Entity> comingBack,
+        IReadOnlyCollection<Entity> going, IReadOnlySet<Entity> keep)
     {
-        var changes = Scene.Changes;
-        changes.Stop();
         var manager = Scene.World.EntityManager;
-        var changed = new HashSet<Entity>(changes.Changed);
-        var returned = ReturnRemoved(changes.Removed, manager, changed);
+        var toPut = new HashSet<Entity>(changed);
+        var returned = ReturnRemoved(comingBack, manager, toPut);
         // Those coming back get their state too, with what stands in them: it may have changed while they were out.
-        AddWithWhatTheyHold(changed, returned);
+        AddWithWhatTheyHold(toPut, returned);
         Dictionary<UInt128, ScenePlacement> entries = null;
         Dictionary<UInt128, List<SceneGameComponent>> components = null;
         var code = Scene.World.Satellites.Get<IWorldCode>();
@@ -96,7 +175,7 @@ public sealed class SceneSnapshot
         // The entities whose children, and whether the scene's roots, are to be put in order again; none for the roots.
         var reorder = new HashSet<Entity>();
         var reorderRoots = false;
-        foreach (var entity in changed)
+        foreach (var entity in toPut)
         {
             if (!_states.TryGetValue(entity, out var state))
                 continue;
@@ -111,8 +190,8 @@ public sealed class SceneSnapshot
 
             // Last: the file places an entity standing in a model's part as it stands, not as it hangs. One coming back
             // is hung back by the return, among siblings put in order after.
-            var comingBack = returned.Contains(entity);
-            if (state.ApplyTo(entity, manager, hangBack: !comingBack) || comingBack)
+            var isComingBack = returned.Contains(entity);
+            if (state.ApplyTo(entity, manager, hangBack: !isComingBack) || isComingBack)
             {
                 if (state.Owner == null)
                     reorderRoots = true;
@@ -123,15 +202,31 @@ public sealed class SceneSnapshot
 
         PutInOrder(reorder, reorderRoots, manager);
 
-        // After those hung under them in the game are hung back: they do not go with them.
+        // After those hung under them are hung back: they do not go with them. One whose owner goes too goes with it.
         var viewCameras = ViewCameraEntities(Scene);
-        foreach (var entity in changes.Added)
+        var leaving = new HashSet<Entity>();
+        foreach (var entity in going)
         {
             if (!_states.ContainsKey(entity) && !IsKept(entity, keep) && !viewCameras.Contains(entity))
-                manager.RemoveEntity(entity);
+                leaving.Add(entity);
         }
 
-        changes.Clear();
+        foreach (var entity in leaving)
+        {
+            if (!GoesWithOwner(entity, leaving))
+                manager.RemoveEntity(entity);
+        }
+    }
+
+    private static bool GoesWithOwner(Entity entity, HashSet<Entity> leaving)
+    {
+        for (var owner = entity.Owner; owner != null; owner = owner.Owner)
+        {
+            if (leaving.Contains(owner))
+                return true;
+        }
+
+        return false;
     }
 
     // Owners first: one taken out of an entity taken out after it comes back once that one has. One hung under an entity
@@ -164,7 +259,7 @@ public sealed class SceneSnapshot
     }
 
     // Every child that stood under an entity of reorder - and every root, when reorderRoots - goes to its place, in the
-    // order they stood: each put at its own index lands there, whatever the game moved around it.
+    // order they stood: each put at its own index lands there, whatever was moved around it.
     private void PutInOrder(HashSet<Entity> reorder, bool reorderRoots, EntityManager manager)
     {
         if (reorderRoots)
