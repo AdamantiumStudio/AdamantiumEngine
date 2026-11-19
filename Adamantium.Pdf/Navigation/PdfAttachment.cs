@@ -38,8 +38,12 @@ public sealed class PdfAttachment
     /// <summary>The embedded file stream.</summary>
     public PdfStream Stream { get; }
 
+    /// <summary>Whether its bytes need a password not given yet: the document encrypts only its embedded files, and
+    /// opened without one. <see cref="PdfDocument.Authenticate"/> with it, then <see cref="GetData"/>.</summary>
+    public bool NeedsPassword => _document.NeedsPasswordFor(Stream, true);
+
     /// <summary>The file's bytes, decoded.</summary>
-    public ReadOnlyMemory<byte> GetData() => _document.Decode(Stream).Data;
+    public ReadOnlyMemory<byte> GetData() => _document.Decode(Stream, true).Data;
 
     /// <summary>The attachment of the file specification <paramref name="value"/>; null when it embeds no file.
     /// </summary>

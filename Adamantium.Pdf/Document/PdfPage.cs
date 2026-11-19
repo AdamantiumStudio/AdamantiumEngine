@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Adamantium.Pdf.Annotations;
+using Adamantium.Pdf.Fonts;
 using Adamantium.Pdf.Measurement;
 using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
@@ -120,6 +121,11 @@ public sealed class PdfPage
             return annotations;
         }
     }
+
+    /// <summary>The fonts the page uses - in its resources and their graphics states, forms, tiling patterns, soft-mask
+    /// groups, Type 3 fonts and annotation appearances - each once, in the order they are met, its content before its
+    /// annotations.</summary>
+    public IReadOnlyList<PdfFont> CollectFonts() => new PdfFontCollector(_document).Collect(this);
 
     /// <summary>The page's links, in the order of its annotations; hidden ones left out.</summary>
     public IReadOnlyList<PdfLink> Links

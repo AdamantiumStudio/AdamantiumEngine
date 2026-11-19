@@ -102,8 +102,12 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     public bool IsEncrypted => _security != null;
 
-    /// <summary>Whether the content can be read: the file is not encrypted, or a password has opened it.</summary>
-    public bool IsAuthenticated => _security == null || _security.IsAuthenticated;
+    /// <summary>Whether the content can be read: the file is not encrypted, a password has opened it, or it encrypts
+    /// only its embedded files - which then ask for one (<see cref="PdfAttachment.NeedsPassword"/>).</summary>
+    public bool IsAuthenticated => _security == null || _security.IsAuthenticated || _security.AsksOnlyForEmbeddedFiles;
+
+    /// <summary>How many bytes the file has, as it was opened.</summary>
+    public long FileSize => _data.Length;
 
     public PdfPermissions Permissions => _security?.Permissions ?? PdfPermissions.All;
 
@@ -151,6 +155,37 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
             return attachments;
         }
+    }
+
+    /// <summary>The fonts the document uses - in page resources and their graphics states, forms, tiling patterns,
+    /// soft-mask groups, Type 3 fonts and annotation appearances - each once, with the pages that use it; in the order
+    /// they are first met, a page's content before its annotations. Reads every page.</summary>
+    public IReadOnlyList<PdfDocumentFont> CollectFonts()
+    {
+        var collector = new PdfFontCollector(this);
+        var order = new List<PdfFont>();
+        var pages = new Dictionary<PdfFont, List<int>>(ReferenceEqualityComparer.Instance);
+        foreach (var page in Pages)
+        {
+            foreach (var font in collector.Collect(page))
+            {
+                if (!pages.TryGetValue(font, out var on))
+                {
+                    pages[font] = on = [];
+                    order.Add(font);
+                }
+
+                on.Add(page.Index);
+            }
+        }
+
+        var fonts = new List<PdfDocumentFont>(order.Count);
+        foreach (var font in order)
+        {
+            fonts.Add(new PdfDocumentFont(font, pages[font]));
+        }
+
+        return fonts;
     }
 
     /// <summary>The index of the page whose object is <paramref name="id"/>; -1 when it is not a page of the document.
@@ -284,11 +319,16 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         }
 
         _password = password;
-        var encrypt = _encryptNumber >= 0 ? _objects.GetValueOrDefault(_encryptNumber) : null;
-        ForgetReadObjects();
-        if (encrypt != null)
+
+        // Strings and streams plain, only embedded files encrypted: nothing read so far was, and all of it stands.
+        if (_security.StringMethod != PdfCryptMethod.None || _security.StreamMethod != PdfCryptMethod.None)
         {
-            _objects[_encryptNumber] = encrypt;
+            var encrypt = _encryptNumber >= 0 ? _objects.GetValueOrDefault(_encryptNumber) : null;
+            ForgetReadObjects();
+            if (encrypt != null)
+            {
+                _objects[_encryptNumber] = encrypt;
+            }
         }
 
         if (_crossReference.IsRepaired)
@@ -364,11 +404,15 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     /// <summary>A stream's bytes decrypted and through its general filters.</summary>
     /// <exception cref="PdfException">The stream cannot be decrypted or decoded.</exception>
-    public PdfDecodedStream Decode(PdfStream stream)
+    public PdfDecodedStream Decode(PdfStream stream) => Decode(stream, false);
+
+    /// <summary><see cref="Decode(PdfStream)"/> for a stream known to be an embedded file, whose <c>Type</c> may be
+    /// left out yet whose encryption is the embedded files' own.</summary>
+    internal PdfDecodedStream Decode(PdfStream stream, bool embeddedFile)
     {
         try
         {
-            var data = Decrypt(stream);
+            var data = Decrypt(stream, embeddedFile);
             return PdfStreamDecoder.Decode(stream.Dictionary, data, this, _options.DecodeLimits);
         }
         catch (Exception exception) when (exception is InvalidDataException or
@@ -527,14 +571,14 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     /// <summary>The bytes of <paramref name="stream"/>, a stream of this file, decrypted when the file is encrypted; a
     /// stream of no object (number 0, which no object has) is one built in memory, plain.</summary>
-    internal ReadOnlyMemory<byte> Decrypt(PdfStream stream)
+    internal ReadOnlyMemory<byte> Decrypt(PdfStream stream, bool embeddedFile = false)
     {
         if (_security == null || stream.Id.Number == 0 || stream.Id.Number == _encryptNumber)
         {
             return stream.Data;
         }
 
-        var method = StreamMethodOf(stream.Dictionary);
+        var method = StreamMethodOf(stream.Dictionary, embeddedFile);
         if (method == PdfCryptMethod.None)
         {
             return stream.Data;
@@ -544,9 +588,16 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         return _security.Decrypt(stream.Id, stream.Data.Span, method);
     }
 
+    /// <summary>Whether reading <paramref name="stream"/> needs a password no one has given yet - in a file that
+    /// encrypts only its embedded files, or one not opened at all.</summary>
+    internal bool NeedsPasswordFor(PdfStream stream, bool embeddedFile) =>
+        _security is { IsAuthenticated: false } && stream.Id.Number != 0 && stream.Id.Number != _encryptNumber &&
+        StreamMethodOf(stream.Dictionary, embeddedFile) != PdfCryptMethod.None;
+
     /// <summary>How a stream of <paramref name="dictionary"/> is encrypted in this file: not at all for a file that is
-    /// not, a cross-reference stream, metadata the file keeps plain, or a stream whose crypt filter says so.</summary>
-    internal PdfCryptMethod StreamMethodOf(PdfDictionary dictionary)
+    /// not, a cross-reference stream, metadata the file keeps plain, or a stream whose crypt filter says so; an
+    /// embedded file as the file encrypts those.</summary>
+    internal PdfCryptMethod StreamMethodOf(PdfDictionary dictionary, bool embeddedFile = false)
     {
         if (_security == null || dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.XRef })
         {
@@ -560,7 +611,9 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
         if (FirstFilter(dictionary) != PdfFilterNames.Crypt)
         {
-            return _security.StreamMethod;
+            return embeddedFile || dictionary[PdfKeys.Type] is PdfName { Value: PdfObjectTypes.EmbeddedFile }
+                ? _security.EmbeddedFileMethod
+                : _security.StreamMethod;
         }
 
         var parameters = Resolve(dictionary[PdfKeys.DecodeParms]);
@@ -645,7 +698,7 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
             _objects[_encryptNumber] = dictionary;
         }
 
-        if (_crossReference.IsRepaired && _security.IsAuthenticated)
+        if (_crossReference.IsRepaired && IsAuthenticated)
         {
             AddObjectStreams(_crossReference);
         }

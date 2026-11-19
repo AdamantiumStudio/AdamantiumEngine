@@ -17,4 +17,7 @@ internal static class PdfCryptNames
 
     /// <summary>AES with a 256-bit key.</summary>
     public const string AESV3 = "AESV3";
+
+    /// <summary>The password is asked for when an embedded file is opened, not the document.</summary>
+    public const string EFOpen = "EFOpen";
 }

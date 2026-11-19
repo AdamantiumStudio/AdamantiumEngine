@@ -83,6 +83,108 @@ public class PdfSecurityTests
         Assert.That(Encoding.ASCII.GetString(document.Pages[0].GetContents().Span), Is.EqualTo("BT (secret) Tj ET"));
     }
 
+    // A file that encrypts only its embedded files (EFF; strings and streams Identity), its one attachment's stream
+    // written with or without its optional /Type.
+    private static byte[] OnlyAttachmentsEncrypted(PdfTestEncryption encryption, bool typed, bool asksOnOpen = true)
+    {
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(data.txt) 5 0 R] >> >> >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>");
+        builder.Add(PdfFileBuilder.Stream(string.Empty, Encoding.ASCII.GetBytes("BT (plain) Tj ET")));
+        builder.Add("<< /Type /Filespec /F (data.txt) /EF << /F 6 0 R >> >>");
+        builder.Add(PdfFileBuilder.Stream(typed ? "/Type /EmbeddedFile" : string.Empty,
+            encryption.Encrypt(6, Encoding.ASCII.GetBytes("attached secret"))));
+        var dictionary = encryption.Dictionary.Replace("/StmF /StdCF /StrF /StdCF", "/StmF /Identity /StrF /Identity /EFF /StdCF");
+        if (asksOnOpen)
+        {
+            dictionary = dictionary.Replace("/StdCF << ", "/StdCF << /AuthEvent /EFOpen ");
+        }
+
+        builder.Add(dictionary);
+        return builder.Build("/Root 1 0 R /Encrypt 7 0 R /ID " + encryption.IdArray);
+    }
+
+    // Strings and streams are plain there, so a mark is written in without the password - and reads back.
+    [Test]
+    public void AFileEncryptingOnlyItsAttachments_TakesAMark_WithoutThePassword()
+    {
+        var document = PdfDocument.Open(OnlyAttachmentsEncrypted(new PdfTestEncryption(4, "user", "owner"), true));
+        var update = new Adamantium.Pdf.Writing.PdfIncrementalUpdate(document);
+        update.AddAnnotation(document.Pages[0],
+            new Adamantium.Pdf.Annotations.PdfNewAnnotation(Adamantium.Pdf.Annotations.PdfAnnotationTypes.Square,
+                new PdfRectangle(0, 0, 50, 50)) { Contents = "plain note" });
+
+        var again = PdfDocument.Open(update.Write());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(again.IsAuthenticated, Is.True);
+            Assert.That(again.Pages[0].Annotations, Has.Count.EqualTo(1));
+            Assert.That(again.Pages[0].Annotations[0].Contents, Is.EqualTo("plain note"));
+        });
+    }
+
+    // Without AuthEvent EFOpen the filter asks at the document's opening, as by default.
+    [Test]
+    public void AFileEncryptingOnlyItsAttachments_ButAskingAtOpening_NeedsThePasswordFirst()
+    {
+        var document = PdfDocument.Open(OnlyAttachmentsEncrypted(new PdfTestEncryption(4, "user", "owner"), true, false));
+
+        Assert.That(document.IsAuthenticated, Is.False);
+        Assert.That(document.Authenticate("user"), Is.True);
+        Assert.That(Encoding.ASCII.GetString(document.Attachments[0].GetData().Span), Is.EqualTo("attached secret"));
+    }
+
+    [TestCase(4, true)]
+    [TestCase(4, false)]
+    [TestCase(6, true)]
+    public void AFileEncryptingOnlyItsAttachments_ReadsWithoutAPassword_AndAsksOneForThem(int revision, bool typed)
+    {
+        var document = PdfDocument.Open(OnlyAttachmentsEncrypted(new PdfTestEncryption(revision, "user", "owner"), typed));
+        var attachment = document.Attachments[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(document.IsEncrypted, Is.True);
+            Assert.That(document.IsAuthenticated, Is.True, "the document itself is plain");
+            Assert.That(document.Security.EncryptsOnlyEmbeddedFiles, Is.True);
+            Assert.That(Encoding.ASCII.GetString(document.Pages[0].GetContents().Span), Is.EqualTo("BT (plain) Tj ET"));
+            Assert.That(attachment.NeedsPassword, Is.True);
+            Assert.Throws<PdfException>(() => attachment.GetData(), "read without the password");
+        });
+
+        Assert.That(document.Authenticate("wrong"), Is.False);
+        Assert.That(document.Authenticate("user"), Is.True);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(attachment.NeedsPassword, Is.False);
+            Assert.That(Encoding.ASCII.GetString(attachment.GetData().Span), Is.EqualTo("attached secret"));
+        });
+    }
+
+    [Test]
+    public void AnAttachmentOfAFileEncryptingEverything_IsDecryptedAsItsOtherStreams()
+    {
+        var encryption = new PdfTestEncryption(4, string.Empty, "owner");
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(a.txt) 4 0 R] >> >> >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R >>");
+        builder.Add("<< /Type /Filespec /F (a.txt) /EF << /F 5 0 R >> >>");
+        builder.Add(PdfFileBuilder.Stream(string.Empty, encryption.Encrypt(5, Encoding.ASCII.GetBytes("everything"))));
+        builder.Add(encryption.Dictionary);
+        var document = PdfDocument.Open(builder.Build("/Root 1 0 R /Encrypt 6 0 R /ID " + encryption.IdArray));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(document.Security.EncryptsOnlyEmbeddedFiles, Is.False);
+            Assert.That(document.Attachments[0].NeedsPassword, Is.False);
+            Assert.That(Encoding.ASCII.GetString(document.Attachments[0].GetData().Span), Is.EqualTo("everything"));
+        });
+    }
+
     [TestCase(3)]
     [TestCase(4)]
     [TestCase(6)]
