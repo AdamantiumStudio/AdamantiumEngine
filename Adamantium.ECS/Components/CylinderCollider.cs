@@ -43,6 +43,8 @@ public partial class CylinderCollider : Collider
 
     partial void OnHeightChanged(float value) => Rebuild();
 
+    protected override void FollowBounds() => Rebuild();
+
     // Let choose again, it fits the mesh it stands on anew; told to keep its axis, it keeps the one it has.
     partial void OnChoosesAxisChanged(bool value)
     {
@@ -80,14 +82,13 @@ public partial class CylinderCollider : Collider
         return colliderData.ContainsKey(camera);
     }
 
-    public override Mesh GetVisualRepresentation()
+    protected override Mesh BuildOutline()
     {
         var turn = Axis == ColliderAxis.X ? Matrix4x4.CreateRotationZ<double>(float.DegreesToRadians(-90))
             : Axis == ColliderAxis.Z ? Matrix4x4.CreateRotationX<double>(float.DegreesToRadians(90))
             : Matrix4x4<double>.Identity;
-        Geometry = Shapes.Cylinder.GenerateGeometry(GeometryType.Outlined, cylinder.Length, Radius * 2, 40,
+        return Shapes.Cylinder.GenerateGeometry(GeometryType.Outlined, cylinder.Length, Radius * 2, 40,
             turn * Matrix4x4.CreateTranslation<double>(cylinder.Center.As<double>()));
-        return Geometry;
     }
 
     public override void UpdateForCamera(CameraBase camera)
@@ -162,5 +163,6 @@ public partial class CylinderCollider : Collider
         var half = Math.Max(Height / 2, 0);
         var center = LocalCenter;
         cylinder = new BoundingCylinder(center - axis * half, center + axis * half, Radius);
+        MarkOutlineStale();
     }
 }

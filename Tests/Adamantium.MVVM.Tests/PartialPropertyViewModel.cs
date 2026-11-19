@@ -12,6 +12,20 @@ public partial class PartialPropertyViewModel : AdamantiumViewModel
 
     public string Caption => Subtitle;
 
+    [Bindable] public partial int Count { get; private set; }
+
+    [Bindable] public partial string Kind { get; protected set; }
+
+    [Bindable] internal partial string Note { get; set; }
+
+    [Bindable] public virtual partial string Label { get; set; }
+
+    [Bindable] public partial string Origin { get; init; }
+
+    public void CountUp() => Count++;
+
+    public void Classify(string kind) => Kind = kind;
+
     public string LastChanged;
 
     partial void OnTitleChanged(string value) => LastChanged = value;

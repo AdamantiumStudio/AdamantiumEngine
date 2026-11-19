@@ -182,6 +182,57 @@ public class ColliderShapeTests
         Assert.That(cylinder.Intersects(other), Is.False, "beside the round side, where a box round it would reach");
     }
 
+    [Test]
+    public void AShownCollider_IsBuiltOnce_AndFollowsItsShape()
+    {
+        var entity = Box(null, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1));
+        var box = With(new BoxCollider(), entity);
+        var cylinder = With(new CylinderCollider(), Box(null, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1)));
+        var beforeShown = entity.ChangeCount;
+        var shownBox = box.GetVisualRepresentation();
+        var shownCylinder = cylinder.GetVisualRepresentation();
+        var shown = entity.ChangeCount;
+
+        var again = box.GetVisualRepresentation();
+        var shownAgain = entity.ChangeCount;
+        box.Bounds = new Bounds(Vector3<double>.Zero, new Vector3<double>(2), Quaternion<double>.Identity);
+        cylinder.Radius = 3;
+        var edited = box.GetVisualRepresentation();
+        cylinder.GetVisualRepresentation();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shown, Is.EqualTo(beforeShown + 1), "the outline made is one change");
+            Assert.That(again, Is.SameAs(shownBox));
+            Assert.That(shownAgain, Is.EqualTo(shown), "shown again, nothing changed");
+            Assert.That(edited, Is.SameAs(shownBox));
+            Assert.That(shownBox.Bounds.Size.X, Is.EqualTo(4).Within(1e-5));
+            Assert.That(shownCylinder.Bounds.Size.X, Is.EqualTo(6).Within(1e-4));
+        });
+    }
+
+    [Test]
+    public void ANewHull_IsToldAndShown()
+    {
+        var entity = Box(null, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1));
+        var hull = With(new ConvexHullCollider(), entity);
+        var shown = hull.GetVisualRepresentation();
+        var raised = new System.Collections.Generic.List<string>();
+        hull.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        var before = entity.ChangeCount;
+
+        var bigger = Box(null, new Vector3<double>(-3, -3, -3), new Vector3<double>(3, 3, 3));
+        hull.CalculateFromMesh(bigger.GetComponent<MeshData>().Mesh);
+        hull.GetVisualRepresentation();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(raised, Does.Contain(nameof(ConvexHullCollider.Hull)));
+            Assert.That(entity.ChangeCount, Is.GreaterThan(before));
+            Assert.That(shown.Bounds.Size.X, Is.EqualTo(6).Within(1e-4));
+        });
+    }
+
     private static T With<T>(T collider, Entity entity) where T : Collider
     {
         entity.AddComponent(collider);

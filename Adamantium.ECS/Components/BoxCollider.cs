@@ -30,10 +30,9 @@ namespace Adamantium.ECS.Components
             return ColliderData.ContainsKey(camera);
         }
 
-        public override Mesh GetVisualRepresentation()
+        protected override Mesh BuildOutline()
         {
-            Geometry = Shapes.Cube.GenerateGeometry(GeometryType.Outlined, Bounds.Size.X, Bounds.Size.Y, Bounds.Size.Z, 1, Matrix4x4.CreateTranslation<double>(Bounds.Center));
-            return Geometry;
+            return Shapes.Cube.GenerateGeometry(GeometryType.Outlined, Bounds.Size.X, Bounds.Size.Y, Bounds.Size.Z, 1, Matrix4x4.CreateTranslation<double>(Bounds.Center));
         }
 
         public override void UpdateForCamera(CameraBase camera)

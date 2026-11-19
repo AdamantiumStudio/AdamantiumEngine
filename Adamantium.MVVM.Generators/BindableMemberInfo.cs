@@ -20,4 +20,5 @@ internal sealed record BindableMemberInfo(
     string DescribedType,
     string PlainPropertyType,
     bool HostIsValueType,
+    PropertyAccess Access,
     DiagnosticInfo Warning = null);

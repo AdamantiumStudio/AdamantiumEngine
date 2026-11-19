@@ -24,9 +24,9 @@ All packages share one version.
   two masses and densities weigh a body alike; a static or kinematic body's weight is not looked at until it is made
   dynamic.
 - A collider's values are made by the MVVM generator (`[Bindable]`) and tell of their change: `Collider.Bounds`,
-  `Size`, `Center`, `Position`, `Rotation`, `Scale` and `CylinderCollider.ChoosesAxis`. What follows a collider's
-  shape - the physics - sees `Bounds` refitted and a `ConvexHullCollider`'s new hull; a cylinder let choose its axis
-  again fits its mesh anew.
+  `Size`, `Center`, `Position`, `Rotation`, `Scale`, `Geometry`, `ConvexHullCollider.Hull` and
+  `CylinderCollider.ChoosesAxis`. What follows a collider's shape - the physics - sees `Bounds` refitted and a new
+  hull; a cylinder let choose its axis again fits its mesh anew.
 - `PdfAnnotation.Line`, `Vertices` and `Intent`: a line annotation's two ends (`L`), a polygon's or polyline's corners
   (`Vertices`) and what it is meant as (`IT`, such as `LineDimension`) - what a measurement is read back by.
 
@@ -531,6 +531,9 @@ All packages share one version.
 
 ### Changed
 
+- A collider builds its shown outline in `BuildOutline`, which a collider of its own overrides in place of
+  `GetVisualRepresentation`. `GetVisualRepresentation` builds the outline the first time, keeps it as `Geometry` and
+  fills it anew once the shape changed. `RefreshShownGeometry` is gone: a collider calls `MarkOutlineStale` itself.
 - `PhysicsParts.SetBody` gives the entity's own `RigidBody` the settings rather than putting a new one in its place:
   the body stays the same component, so the physics, once it follows edits made in a game, can keep its speed. An
   entity with no body still gets a new one.
@@ -660,6 +663,14 @@ All packages share one version.
 
 ### Fixed
 
+- The MVVM generator repeats the modifiers a `[Bindable]` partial property is declared with: `internal`, `virtual`,
+  `required`, a `private set`, a `protected set` or an `init`. What is not public is left out of the property's
+  description in `PropertyAccessors`. Before, the property was always written public with a public `set`, which did
+  not compile.
+- A shown collider follows its shape: new bounds, a new hull, a capsule's or cylinder's radius, height or axis. The
+  outline is built anew when it is next drawn, so a hidden one costs nothing. Before, only a procedural shape made
+  again refreshed it, and an edit in the inspector left the old outline drawn. A capsule or cylinder given new bounds
+  stands on their center.
 - A mesh with no collider is drawn: `ForwardPlusRenderingProcessor` skipped any entity without one, so a shape or a
   model's part given no collider (`ColliderKind.None`) vanished from the view. Colliders are for the physics only. A
   mesh without one is culled by its box in the scene's index; one the index leaves out - a mesh on the view's own

@@ -125,9 +125,10 @@ public sealed class MvvmGenerator : IIncrementalGenerator
             .Where(static d => d is not null)
             .Collect();
         var generatedProperties = bindable
-            .Select(static (r, _) => r.Value is { HasInpcBase: true, DescribedType: not null } m
+            .Select(static (r, _) => r.Value is { HasInpcBase: true, DescribedType: not null, Access.IsPublic: true } m
                 ? Generated(m.DescribedType, m.Namespace, m.TypeName,
-                    new DescribedPropertyInfo(m.PropertyName, m.PlainPropertyType, true, !m.HostIsValueType, false))
+                    new DescribedPropertyInfo(m.PropertyName, m.PlainPropertyType, m.Access.GetterIsPublic,
+                        !m.HostIsValueType && m.Access.SetterIsPublic, m.Access.SetterKeyword == "init"))
                 : null)
             .Where(static d => d is not null)
             .Collect();
@@ -157,6 +158,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         ISymbol member;
         string fieldName, propName, propType, plainType;
         bool isPartialProperty;
+        PropertyAccess access;
 
         switch (ctx.TargetSymbol)
         {
@@ -171,6 +173,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
                 propType = field.Type.ToDisplayString(FqnFormat);
                 plainType = field.Type.ToDisplayString(PlainFormat);
                 isPartialProperty = false;
+                access = PropertyAccess.Public;
                 break;
 
             case IPropertySymbol property:
@@ -184,6 +187,8 @@ public sealed class MvvmGenerator : IIncrementalGenerator
                 propType = property.Type.ToDisplayString(FqnFormat);
                 plainType = property.Type.ToDisplayString(PlainFormat);
                 isPartialProperty = true;
+                if (ctx.TargetNode is not PropertyDeclarationSyntax declaration) return null;
+                access = AccessOf(property, declaration);
                 break;
 
             default:
@@ -249,8 +254,28 @@ public sealed class MvvmGenerator : IIncrementalGenerator
                 ctx.SemanticModel.Compilation),
             plainType,
             type.IsValueType,
+            access,
             warning), null);
     }
+
+    // The implementing declaration must repeat the defining one's modifiers, so they are copied as written.
+    private static PropertyAccess AccessOf(IPropertySymbol property, PropertyDeclarationSyntax declaration)
+    {
+        var modifiers = string.Join(" ", declaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.PartialKeyword))
+            .Select(m => m.Text));
+        var accessors = declaration.AccessorList?.Accessors ?? default;
+        var getter = accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration));
+        var setter = accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.SetAccessorDeclaration) ||
+                                                   a.IsKind(SyntaxKind.InitAccessorDeclaration));
+        var isPublic = property.DeclaredAccessibility == Accessibility.Public;
+        return new PropertyAccess(modifiers, AccessorModifiers(getter), AccessorModifiers(setter),
+            property.SetMethod.IsInitOnly ? "init" : "set", isPublic,
+            isPublic && property.GetMethod.DeclaredAccessibility == Accessibility.Public,
+            isPublic && property.SetMethod.DeclaredAccessibility == Accessibility.Public);
+    }
+
+    private static string AccessorModifiers(AccessorDeclarationSyntax accessor) =>
+        accessor is { Modifiers.Count: > 0 } ? accessor.Modifiers.ToString() + " " : "";
 
     private static Result<CommandMemberInfo> GetCommand(GeneratorAttributeSyntaxContext ctx, CancellationToken ct)
     {
@@ -389,10 +414,10 @@ public sealed class MvvmGenerator : IIncrementalGenerator
     // so there is no separately declared backing field.
     private static void EmitPartialProperty(StringBuilder sb, BindableMemberInfo m)
     {
-        sb.AppendLine($"    public partial {m.PropertyType} {m.PropertyName}");
+        sb.AppendLine($"    {m.Access.Modifiers} partial {m.PropertyType} {m.PropertyName}");
         sb.AppendLine("    {");
-        sb.AppendLine("        get => field;");
-        sb.AppendLine("        set");
+        sb.AppendLine($"        {m.Access.Getter}get => field;");
+        sb.AppendLine($"        {m.Access.Setter}{m.Access.SetterKeyword}");
         sb.AppendLine("        {");
         sb.AppendLine($"            On{m.PropertyName}Changing(value);");
         sb.AppendLine($"            if (!global::System.Collections.Generic.EqualityComparer<{m.PropertyType}>.Default.Equals(field, value))");

@@ -28,10 +28,9 @@ namespace Adamantium.ECS.Components
          return ColliderData.ContainsKey(camera);
       }
 
-      public override Mesh GetVisualRepresentation()
+      protected override Mesh BuildOutline()
       {
-         Geometry = Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, Vector3F.Max(Bounds.Size.As<float>()), 40);
-         return Geometry;
+         return Shapes.Sphere.GenerateGeometry(GeometryType.Outlined, SphereType.UVSphere, Vector3F.Max(Bounds.Size.As<float>()), 40);
       }
 
       public override void CalculateFromMesh(Mesh mesh)
