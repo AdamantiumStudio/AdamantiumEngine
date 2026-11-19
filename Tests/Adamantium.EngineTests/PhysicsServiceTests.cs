@@ -1284,6 +1284,51 @@ public class PhysicsServiceTests
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
     }
 
+    [Test]
+    public void ABoxDroppedOnAMeshFloor_RestsOnItsTriangles()
+    {
+        UseSteppedPhysics();
+        var floor = new Entity(null, "Floor");
+        floor.AddComponent(new MeshData { Mesh = FloorMesh(10) });
+        floor.AddComponent(new MeshCollider());
+        floor.AddComponent(new RigidBody { Kind = BodyKind.Static });
+        _world.EntityManager.AddEntity(floor, _world.MainScene);
+        Settle();
+        var box = AddBox("Box", new Vector3<double>(0.3, -3, 0.2), 0.5);
+        Play();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    [Test]
+    public void ADynamicBodyWithAMeshCollider_LeavesIt()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var rock = new Entity(null, "Rock");
+        rock.Transform.Position = new Vector3<double>(0, -3, 0);
+        rock.AddComponent(new MeshData { Mesh = FloorMesh(1) });
+        rock.AddComponent(new MeshCollider());
+        rock.AddComponent(new RigidBody());
+        _world.EntityManager.AddEntity(rock, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+
+        Assert.That(rock.Transform.Position.Y, Is.EqualTo(-3).Within(1e-9), "no shape, so no body to fall");
+    }
+
+    // A square floor at Y = 0, half wide each way, of two triangles.
+    private static Mesh FloorMesh(float half)
+    {
+        Vector3<double>[] points =
+        [
+            new(-half, 0, -half), new(-half, 0, half), new(half, 0, half), new(half, 0, -half)
+        ];
+        return new Mesh(PrimitiveType.TriangleList).SetPoints(points).SetIndices([0, 1, 2, 0, 2, 3]);
+    }
+
     private Entity AddGround()
     {
         var ground = new Entity(null, "Ground");

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
@@ -23,7 +24,7 @@ public class TriangleTreeTests
             }
         }
 
-        var tree = new TriangleTree(points, [], PrimitiveType.TriangleList);
+        var tree = new Mesh(PrimitiveType.TriangleList).SetPoints(points).BuildTriangleTree();
 
         for (int i = 0; i < 1000; i++)
         {
@@ -43,6 +44,53 @@ public class TriangleTreeTests
     }
 
     [Test]
+    public void RandomSoup_FindsInABoxWhatTestingEveryTriangleFinds_AndNamesTheTriangleARayMeets()
+    {
+        var random = new Random(11);
+        var points = new Vector3F[2000 * 3];
+        var triangles = new int[points.Length];
+        for (int i = 0; i < points.Length; i += 3)
+        {
+            var center = new Vector3F(Next(random), Next(random), Next(random)) * 50;
+            for (int k = 0; k < 3; k++)
+            {
+                points[i + k] = center + new Vector3F(Next(random), Next(random), Next(random)) * 3;
+                triangles[i + k] = i + k;
+            }
+        }
+
+        var tree = new TriangleTree(points, triangles);
+        var found = new List<int>();
+        for (int i = 0; i < 200; i++)
+        {
+            var center = new Vector3F(Next(random), Next(random), Next(random)) * 50;
+            var box = new BoundingBox<float>(center - new Vector3F(4), center + new Vector3F(4));
+            found.Clear();
+            tree.Query(box, found);
+            for (int triangle = 0; triangle < points.Length / 3; triangle++)
+            {
+                var low = Vector3F.Min(points[3 * triangle], Vector3F.Min(points[3 * triangle + 1], points[3 * triangle + 2]));
+                var high = Vector3F.Max(points[3 * triangle], Vector3F.Max(points[3 * triangle + 1], points[3 * triangle + 2]));
+                var meets = low.X <= box.Maximum.X && high.X >= box.Minimum.X && low.Y <= box.Maximum.Y
+                            && high.Y >= box.Minimum.Y && low.Z <= box.Maximum.Z && high.Z >= box.Minimum.Z;
+                if (meets)
+                {
+                    Assert.That(found, Does.Contain(triangle), $"box {i}");
+                }
+            }
+        }
+
+        // Aimed at the middle of the first triangle, the ray meets it or one nearer, and the tree names which.
+        var middle = (points[0] + points[1] + points[2]) / 3;
+        var from = new Vector3F(-100, 70, 30);
+        var ray = new Ray<float>(from, Vector3F.Normalize(middle - from));
+        Assert.That(tree.Intersect(ray, float.MaxValue, out var distance, out var hit), Is.True);
+        Assert.That(Collision.RayIntersectsTriangle(ray, points[3 * hit], points[3 * hit + 1], points[3 * hit + 2],
+            out float own), Is.True);
+        Assert.That(own, Is.EqualTo(distance));
+    }
+
+    [Test]
     public void Strip_SkipsWhatARestartSeparates()
     {
         Vector3<double>[] points =
@@ -50,7 +98,8 @@ public class TriangleTreeTests
             new(-1, -1, 10), new(-1, 1, 10), new(1, -1, 10), new(1, 1, 10),
             new(4, -1, 20), new(4, 1, 20), new(6, -1, 20), new(6, 1, 20)
         ];
-        var tree = new TriangleTree(points, [0, 1, 2, 3, -1, 4, 5, 6, 7], PrimitiveType.TriangleStrip);
+        var tree = new Mesh(PrimitiveType.TriangleStrip).SetPoints(points).SetIndices([0, 1, 2, 3, -1, 4, 5, 6, 7])
+            .BuildTriangleTree();
 
         Assert.That(tree.TriangleCount, Is.EqualTo(4));
         Assert.That(tree.Intersect(new Ray<float>(new Vector3F(5, 0, 0), Vector3F.UnitZ), out var distance), Is.True);
@@ -79,7 +128,8 @@ public class TriangleTreeTests
     [Test]
     public void Lines_HaveNoTriangles()
     {
-        var tree = new TriangleTree([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0)], [], PrimitiveType.LineList);
+        var tree = new Mesh(PrimitiveType.LineList).SetPoints([new Vector3<double>(0, 0, 0), new Vector3<double>(1, 0, 0)])
+            .BuildTriangleTree();
 
         Assert.That(tree.TriangleCount, Is.Zero);
         Assert.That(tree.Intersect(new Ray<float>(Vector3F.Zero, Vector3F.UnitX), out _), Is.False);

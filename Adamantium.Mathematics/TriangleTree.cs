@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.Mathematics;
 
-namespace Adamantium.Graphics.Core.Models;
+namespace Adamantium.Mathematics;
 
 /// <summary>
-/// A mesh's triangles sorted into a bounding volume hierarchy, so a ray visits the few boxes it passes through instead
-/// of every triangle. Split by the surface area heuristic over binned centers.
+/// Triangles sorted into a bounding volume hierarchy, so a ray or a box visits the few boxes it meets instead of every
+/// triangle. Split by the surface area heuristic over binned centers. A triangle keeps the number it was given in.
 /// </summary>
 public sealed class TriangleTree
 {
@@ -17,28 +16,25 @@ public sealed class TriangleTree
     private const int StackSize = MaxDepth + 16;
     private const float Padding = 1e-5f;
 
-    private readonly Vector3<double>[] points;
-    private readonly int[] indices;
-    private readonly PrimitiveType topology;
     private readonly Vector3F[] corners;
     private readonly int[] cornerPoints;
+    private readonly int[] triangleOf;
     private readonly Node[] nodes;
     private int nodeCount;
 
-    public TriangleTree(Vector3<double>[] points, int[] indices, PrimitiveType topology)
+    /// <summary>A tree of the triangles <paramref name="triangles"/> lists three corners to each, as indices of
+    /// <paramref name="points"/>; triangle n is the one at 3n.</summary>
+    public TriangleTree(IReadOnlyList<Vector3F> points, int[] triangles)
     {
-        this.points = points;
-        this.indices = indices;
-        this.topology = topology;
-
-        var triangles = Gather(points.Length, indices, topology);
-        var gathered = new Vector3F[triangles.Length];
-        for (int i = 0; i < triangles.Length; i++)
+        ArgumentNullException.ThrowIfNull(points);
+        ArgumentNullException.ThrowIfNull(triangles);
+        var count = triangles.Length / 3;
+        var gathered = new Vector3F[count * 3];
+        for (int i = 0; i < gathered.Length; i++)
         {
-            gathered[i] = points[triangles[i]].As<float>();
+            gathered[i] = points[triangles[i]];
         }
 
-        var count = triangles.Length / 3;
         var scratch = new Scratch(gathered, count);
         nodes = new Node[Math.Max(1, 2 * count - 1)];
         if (count > 0)
@@ -48,9 +44,11 @@ public sealed class TriangleTree
 
         corners = new Vector3F[count * 3];
         cornerPoints = new int[count * 3];
+        triangleOf = new int[count];
         for (int i = 0; i < count; i++)
         {
             var triangle = scratch.Order[i];
+            triangleOf[i] = triangle;
             for (int corner = 0; corner < 3; corner++)
             {
                 corners[i * 3 + corner] = gathered[triangle * 3 + corner];
@@ -59,19 +57,20 @@ public sealed class TriangleTree
         }
     }
 
-    public int TriangleCount => corners.Length / 3;
+    public int TriangleCount => triangleOf.Length;
 
-    /// <summary>Whether the tree was built from these very arrays in this topology.</summary>
-    public bool Describes(Vector3<double>[] points, int[] indices, PrimitiveType topology)
-    {
-        return ReferenceEquals(this.points, points) && ReferenceEquals(this.indices, indices) && this.topology == topology;
-    }
+    /// <summary>The box round every triangle; empty for a tree of none.</summary>
+    public BoundingBox<float> Bounds => TriangleCount > 0 ? new BoundingBox<float>(nodes[0].Min, nodes[0].Max) : default;
 
     /// <summary>The nearest triangle along the ray, as a distance in lengths of the ray's direction.</summary>
-    public bool Intersect(Ray<float> ray, out float distance)
+    public bool Intersect(Ray<float> ray, out float distance) => Intersect(ray, float.MaxValue, out distance, out _);
+
+    /// <summary>The nearest triangle along the ray within <paramref name="maxDistance"/>, its number and the distance in
+    /// lengths of the ray's direction; boxes past the distance are not looked into.</summary>
+    public bool Intersect(Ray<float> ray, float maxDistance, out float distance, out int triangle)
     {
-        distance = float.MaxValue;
-        var found = false;
+        distance = maxDistance;
+        triangle = -1;
         if (corners.Length == 0)
         {
             distance = 0;
@@ -104,10 +103,10 @@ public sealed class TriangleTree
                 for (int i = node.First; i < node.First + node.Count; i++)
                 {
                     if (Collision.RayIntersectsTriangle(ray, corners[i * 3], corners[i * 3 + 1], corners[i * 3 + 2], out float hit)
-                        && hit < distance)
+                        && (hit < distance || (triangle < 0 && hit <= distance)))
                     {
                         distance = hit;
-                        found = true;
+                        triangle = triangleOf[i];
                     }
                 }
 
@@ -137,12 +136,51 @@ public sealed class TriangleTree
             }
         }
 
-        if (!found)
+        if (triangle < 0)
         {
             distance = 0;
+            return false;
         }
 
-        return found;
+        return true;
+    }
+
+    /// <summary>Adds to <paramref name="into"/> the numbers of the triangles whose boxes meet <paramref name="box"/>.
+    /// </summary>
+    public void Query(in BoundingBox<float> box, List<int> into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        if (corners.Length == 0)
+        {
+            return;
+        }
+
+        Span<int> stack = stackalloc int[StackSize];
+        var top = 0;
+        stack[top++] = 0;
+        while (top > 0)
+        {
+            var current = stack[--top];
+            ref readonly var node = ref nodes[current];
+            if (node.Min.X > box.Maximum.X || node.Max.X < box.Minimum.X || node.Min.Y > box.Maximum.Y
+                || node.Max.Y < box.Minimum.Y || node.Min.Z > box.Maximum.Z || node.Max.Z < box.Minimum.Z)
+            {
+                continue;
+            }
+
+            if (node.Count > 0)
+            {
+                for (int i = node.First; i < node.First + node.Count; i++)
+                {
+                    into.Add(triangleOf[i]);
+                }
+
+                continue;
+            }
+
+            stack[top++] = node.First;
+            stack[top++] = current + 1;
+        }
     }
 
     /// <summary>
@@ -181,45 +219,6 @@ public sealed class TriangleTree
                 node.Max = Vector3F.Max(nodes[i + 1].Max, nodes[node.First].Max);
             }
         }
-    }
-
-    private static int StepOf(PrimitiveType topology)
-    {
-        if (topology == PrimitiveType.TriangleList)
-        {
-            return 3;
-        }
-
-        return topology == PrimitiveType.TriangleStrip ? 1 : 0;
-    }
-
-    private static int[] Gather(int pointCount, int[] indices, PrimitiveType topology)
-    {
-        var step = StepOf(topology);
-        if (step == 0)
-        {
-            return [];
-        }
-
-        List<int> gathered = [];
-        var indexed = indices.Length > 0;
-        var count = indexed ? indices.Length : pointCount;
-        for (int i = 0; i + 2 < count; i += step)
-        {
-            var a = indexed ? indices[i] : i;
-            var b = indexed ? indices[i + 1] : i + 1;
-            var c = indexed ? indices[i + 2] : i + 2;
-            if (a < 0 || b < 0 || c < 0)
-            {
-                continue;
-            }
-
-            gathered.Add(a);
-            gathered.Add(b);
-            gathered.Add(c);
-        }
-
-        return gathered.ToArray();
     }
 
     private static float Inverse(float value)

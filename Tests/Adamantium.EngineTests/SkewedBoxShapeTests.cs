@@ -18,7 +18,7 @@ public class SkewedBoxShapeTests
     [TestCase(-2f)]
     public void ABoxTurnedThenStretched_IsTheHullOfItsCorners(float stretch)
     {
-        var shape = Make(new Vector3F(1), 30, new Vector3F(stretch, 1, 1), new HullShapeCache());
+        var shape = Make(new Vector3F(1), 30, new Vector3F(stretch, 1, 1), new CarriedShapeCache());
         var hull = (ConvexHullCollisionShape)shape.Shape;
         var turned = MathF.Cos(MathF.PI / 6) / 2;
         var corner = new Vector3F((turned + 0.25f) * stretch, 0.25f - turned, 0.5f);
@@ -37,7 +37,7 @@ public class SkewedBoxShapeTests
     [Test]
     public void AFlatBoxTurnedThenStretched_IsAThinSolid()
     {
-        var shape = Make(new Vector3F(1, 0, 1), 30, new Vector3F(10, 1, 5), new HullShapeCache());
+        var shape = Make(new Vector3F(1, 0, 1), 30, new Vector3F(10, 1, 5), new CarriedShapeCache());
         var reach = Reach((ConvexHullCollisionShape)shape.Shape);
 
         Assert.Multiple(() =>
@@ -51,7 +51,7 @@ public class SkewedBoxShapeTests
     [Test]
     public void AThinWallTurnedThenStretched_KeepsItsThickness()
     {
-        var shape = Make(new Vector3F(2, 0.01f, 1), 60, new Vector3F(1, 3, 1), new HullShapeCache());
+        var shape = Make(new Vector3F(2, 0.01f, 1), 60, new Vector3F(1, 3, 1), new CarriedShapeCache());
         var reach = Reach((ConvexHullCollisionShape)shape.Shape);
 
         Assert.That(reach.X, Is.EqualTo(0.5f + 0.005f * MathF.Sin(MathF.PI / 3)).Within(1e-5));
@@ -60,10 +60,10 @@ public class SkewedBoxShapeTests
     [Test]
     public void TheSameSkewedBox_SharesOneShape()
     {
-        var hullShapes = new HullShapeCache();
-        var first = Make(new Vector3F(1), 30, new Vector3F(2, 1, 1), hullShapes);
-        var second = Make(new Vector3F(1), 30, new Vector3F(2, 1, 1), hullShapes);
-        var other = Make(new Vector3F(1), 40, new Vector3F(2, 1, 1), hullShapes);
+        var carriedShapes = new CarriedShapeCache();
+        var first = Make(new Vector3F(1), 30, new Vector3F(2, 1, 1), carriedShapes);
+        var second = Make(new Vector3F(1), 30, new Vector3F(2, 1, 1), carriedShapes);
+        var other = Make(new Vector3F(1), 40, new Vector3F(2, 1, 1), carriedShapes);
 
         Assert.Multiple(() =>
         {
@@ -72,7 +72,7 @@ public class SkewedBoxShapeTests
         });
     }
 
-    private static ColliderShape Make(Vector3F size, float degrees, Vector3F scale, HullShapeCache hullShapes)
+    private static ColliderShape Make(Vector3F size, float degrees, Vector3F scale, CarriedShapeCache carriedShapes)
     {
         var box = new BoxCollider
         {
@@ -80,7 +80,8 @@ public class SkewedBoxShapeTests
             Position = new Vector3F(1, 0, 0),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, float.DegreesToRadians(degrees))
         };
-        Assert.That(ColliderShape.TryCreate(box, scale, hullShapes, new List<HullShapeKey>(), out var shape), Is.True);
+        Assert.That(ColliderShape.TryCreate(box, scale, carriedShapes, new List<CarriedShapeKey>(), out var shape),
+            Is.True);
         return shape;
     }
 

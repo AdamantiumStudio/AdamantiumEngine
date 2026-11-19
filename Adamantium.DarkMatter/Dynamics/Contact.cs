@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Adamantium.DarkMatter.Dynamics;
 
 /// <summary>Two parts of two bodies whose boxes in the broad phase overlap, kept from step to step so the impulses of
@@ -12,6 +14,23 @@ internal sealed class Contact
     public int ListIndex;
     public float Friction;
     public float Restitution;
+
+    /// <summary>The pair of a part and a surface this contact with it belongs to, one for each way the surface faces the
+    /// part; null for a contact of two convex parts or for the pair itself.</summary>
+    public Contact Holder;
+
+    /// <summary>The contacts of a part and a surface, one for each way the triangles touched face, kept by their pair.
+    /// </summary>
+    public List<Contact> Pieces;
+
+    /// <summary>Where this contact stands in its holder's <see cref="Pieces"/>.</summary>
+    public int PieceIndex;
+
+    /// <summary>Whether triangles facing this way were met in this step.</summary>
+    public bool IsSeen;
+
+    /// <summary>The normal of a contact with a surface in the surface's own axes, which a turning surface keeps.</summary>
+    public Vector3F SurfaceNormal;
 
     public Vector3F Normal;
     public Vector3F Tangent;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
@@ -24,6 +25,10 @@ public class Skin : Component
     private int posedVersion;
     private Vector3F[] posed = [];
     private TriangleTree posedTree;
+    private Mesh treeMesh;
+    private Vector3<double>[] treePoints;
+    private int[] treeIndices;
+    private PrimitiveType treeTopology;
     private int treeVersion;
     private bool treeFitted;
     private int[] usedJoints = [];
@@ -277,9 +282,16 @@ public class Skin : Component
     public bool Intersect(Mesh mesh, Ray<float> ray, CameraBase camera, out float distance)
     {
         Pose(mesh, camera);
-        if (posedTree == null || treeVersion != mesh.Version || !posedTree.Describes(mesh.Points, mesh.Indices, mesh.MeshTopology))
+        // The mesh's own tree, refitted by the skin, is not shared: a tree of its own, built as the mesh builds one.
+        if (posedTree == null || treeVersion != mesh.Version || !ReferenceEquals(treeMesh, mesh)
+            || !ReferenceEquals(treePoints, mesh.Points) || !ReferenceEquals(treeIndices, mesh.Indices)
+            || treeTopology != mesh.MeshTopology)
         {
-            posedTree = new TriangleTree(mesh.Points, mesh.Indices, mesh.MeshTopology);
+            posedTree = mesh.BuildTriangleTree();
+            treeMesh = mesh;
+            treeTopology = mesh.MeshTopology;
+            treePoints = mesh.Points;
+            treeIndices = mesh.Indices;
             treeVersion = mesh.Version;
             treeFitted = false;
         }

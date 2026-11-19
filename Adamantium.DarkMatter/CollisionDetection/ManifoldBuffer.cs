@@ -15,6 +15,9 @@ internal sealed class ManifoldBuffer
     /// </summary>
     private const int ClipCapacity = 2 * FaceCapacity + 8;
 
+    /// <summary>The most points it holds before <see cref="ReduceTo"/>.</summary>
+    public const int PointCapacity = ClipCapacity;
+
     private readonly float[] _nearestChosen = new float[ClipCapacity];
 
     public Vector3F Normal;

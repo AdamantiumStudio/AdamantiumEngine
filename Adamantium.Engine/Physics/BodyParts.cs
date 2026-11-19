@@ -5,7 +5,7 @@ using Adamantium.ECS;
 namespace Adamantium.Engine.Physics;
 
 /// <summary>What a body is made of: its entities - its own first, then those it watches - with their change counts when
-/// the body was made, so a change to any of them is seen, and the hull shapes it took.</summary>
+/// the body was made, so a change to any of them is seen, and the hull and mesh shapes it took.</summary>
 internal sealed class BodyParts
 {
     private readonly List<Entity> _entities = [];
@@ -18,8 +18,8 @@ internal sealed class BodyParts
     /// <summary>The number of the last look over the scene's bodies that found this one.</summary>
     public long SeenInLook { get; set; }
 
-    /// <summary>The hull shapes the body took, to give back when it goes.</summary>
-    public List<HullShapeKey> HullShapes { get; } = [];
+    /// <summary>The hull and mesh shapes the body took, to give back when it goes.</summary>
+    public List<CarriedShapeKey> CarriedShapes { get; } = [];
 
     /// <summary>The shapes the body was made of, where they stand on it, to tell whether a body made again differs.
     /// </summary>

@@ -14,6 +14,7 @@ public sealed partial class PhysicsWorld
         ValidateDescription(description);
         ref var state = ref _bodies[index];
         var shape = changesShape ? description.Shape : state.Shape;
+        RequireVolume(description.Kind, shape, nameof(description));
         // Weighed as it will be, before anything changes: a change it cannot take leaves it as it was.
         var isDynamic = description.Kind == BodyKind.Dynamic;
         var changesKind = state.Kind != description.Kind;
@@ -66,6 +67,7 @@ public sealed partial class PhysicsWorld
         if (state.Kind == kind)
             return;
 
+        RequireVolume(kind, state.Shape, nameof(kind));
         var mass = kind == BodyKind.Dynamic ? ComputeMass(state.Shape, state.Mass, state.Density) : default;
         TakeKind(index, kind);
         Weigh(index, mass);
@@ -77,6 +79,7 @@ public sealed partial class PhysicsWorld
         var index = Resolve(body);
         ArgumentNullException.ThrowIfNull(shape);
         ref var state = ref _bodies[index];
+        RequireVolume(state.Kind, shape, nameof(shape));
         var mass = state.IsDynamic ? ComputeMass(shape, state.Mass, state.Density) : default;
         TakeShape(index, shape);
         Weigh(index, mass);
