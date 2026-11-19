@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- Windows: `IAttachmentExecute` with `Win32Interop.ClsidAttachmentServices`, and `Win32Interop.AssocIsDangerous` - to
+  open or mark a file from outside as the system's policy says. macOS: `PosixInterop.SetMacExtendedAttribute`.
 - `RigidBody.ComputedMass`: the mass the physics gives the body once it is dynamic - its `Mass` when above zero, else
   its `Density` times the volume of its colliders, on its entity and on those below it with no body of their own, each
   at the scale its world matrix has along its own axes - outside a game too. A collider changed, added, taken off or

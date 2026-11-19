@@ -611,6 +611,15 @@ namespace Adamantium.Win32
         /// the desktop picture behind the window, not the frame behind the element).</summary>
         public static readonly Guid ClsidDesktopWallpaper = new("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD");
 
+        /// <summary>CLSID_AttachmentServices: the shell's <see cref="Shell.IAttachmentExecute"/>, in-process.</summary>
+        public static readonly Guid ClsidAttachmentServices = new("4125DD96-E03A-4103-8F70-E0597D803B9C");
+
+        /// <summary>Whether the system takes files of this kind - an extension such as ".exe" - for ones that run code
+        /// when opened: programs, scripts, shortcuts, installers.</summary>
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AssocIsDangerous(string association);
+
         /// <summary>Register (or look up) a private clipboard format by name - how a non-standard payload crosses
         /// processes.</summary>
         [DllImport("user32.dll", EntryPoint = "RegisterClipboardFormatW", CharSet = CharSet.Unicode, SetLastError = true)]
