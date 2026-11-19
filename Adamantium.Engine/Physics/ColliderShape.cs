@@ -10,6 +10,11 @@ namespace Adamantium.Engine.Physics;
 /// </summary>
 internal readonly struct ColliderShape
 {
+    // A skewed box's hull is this cube carried, not hulled anew from its corners.
+    private static readonly ConvexHull UnitCube = ConvexHull.FromPoints([
+        new Vector3F(-1, -1, -1), new Vector3F(1, -1, -1), new Vector3F(-1, 1, -1), new Vector3F(1, 1, -1),
+        new Vector3F(-1, -1, 1), new Vector3F(1, -1, 1), new Vector3F(-1, 1, 1), new Vector3F(1, 1, 1)]);
+
     private ColliderShape(CollisionShape shape, Vector3F offset, QuaternionF turn)
     {
         Shape = shape;
@@ -37,8 +42,14 @@ internal readonly struct ColliderShape
             case BoxCollider box:
             {
                 var turn = box.Turn;
+                var own = Vector3F.Abs(box.Size * box.Scale) * 0.5f;
                 if (!IsEven(size) && !IsAlongAxes(turn))
-                    throw new ArgumentException("A box turned on an unevenly scaled entity is skewed; no box fits it.");
+                {
+                    // Turned on an unevenly scaled entity, a box is skewed: no box fits it, the hull of its corners does.
+                    shape = new ColliderShape(SkewedBox(own, turn, scale, hullShapes, taken), box.Position * scale,
+                        QuaternionF.Identity);
+                    return true;
+                }
 
                 if (scale.X < 0)
                     turn = new QuaternionF(turn.X, -turn.Y, -turn.Z, turn.W);
@@ -47,7 +58,6 @@ internal readonly struct ColliderShape
                     (Vector3F.Transform(Vector3F.UnitX, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitY, turn) * size).Length(),
                     (Vector3F.Transform(Vector3F.UnitZ, turn) * size).Length());
-                var own = Vector3F.Abs(box.Size * box.Scale) * 0.5f;
                 var half = Vector3F.Max(own * stretch, new Vector3F(CollisionShape.MinimumSize));
                 shape = new ColliderShape(new BoxCollisionShape(half), box.Position * scale, turn);
                 return true;
@@ -78,11 +88,9 @@ internal readonly struct ColliderShape
                 if (hullCollider.PlacedHull is not { } hull)
                     throw new ArgumentException("The hull collider holds no hull: its entity has no mesh.");
 
-                // A scale read back from a turned entity's matrix differs in its last digits: rounded for the key, copies
-                // share the shape the first of them made.
-                var rounded = new Vector3F(KeepSixDigits(scale.X), KeepSixDigits(scale.Y), KeepSixDigits(scale.Z));
-                shape = new ColliderShape(hullShapes.Take(hull, scale, rounded, taken), Vector3F.Zero,
-                    QuaternionF.Identity);
+                shape = new ColliderShape(
+                    hullShapes.Take(hull, Matrix4x4.CreateScale<float>(scale), CollisionShape.DefaultConvexRadius, taken),
+                    Vector3F.Zero, QuaternionF.Identity);
                 return true;
             }
             case CylinderCollider cylinder:
@@ -109,13 +117,16 @@ internal readonly struct ColliderShape
         }
     }
 
-    private static float KeepSixDigits(float value)
+    // The box's corners turned, then scaled as the entity is, about the box's center; edges sharp, as a box's are. A
+    // side thinner than a thousandth of the box's longest is made that thick, so a flat box stays a solid.
+    private static ConvexHullCollisionShape SkewedBox(Vector3F half, QuaternionF turn, Vector3F scale,
+        HullShapeCache hullShapes, List<HullShapeKey> taken)
     {
-        if (value == 0 || !float.IsFinite(value))
-            return value;
-
-        var unit = Math.Pow(10, Math.Floor(Math.Log10(Math.Abs(value))) - 5);
-        return (float)(Math.Round(value / unit) * unit);
+        var thinnest = MathF.Max(CollisionShape.MinimumSize, 1e-3f * Vector3F.Max(half));
+        half = Vector3F.Max(half, new Vector3F(thinnest));
+        var carry = Matrix4x4.CreateScale<float>(half) * Matrix4x4.CreateFromQuaternion<float>(turn) *
+                    Matrix4x4.CreateScale<float>(scale);
+        return hullShapes.Take(UnitCube, carry, 0, taken);
     }
 
     private static bool IsEven(Vector3F size) =>

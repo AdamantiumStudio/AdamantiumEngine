@@ -2,5 +2,6 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Physics;
 
-/// <summary>A collider's hull at a scale: the bodies of a game that share both share one physics shape.</summary>
-internal readonly record struct HullShapeKey(ConvexHull Hull, Vector3F Scale);
+/// <summary>A hull, how it is carried, rounded, and how round its edges are: the bodies of a game that share these share
+/// one physics shape.</summary>
+internal readonly record struct HullShapeKey(ConvexHull Hull, Matrix4x4F Carry, float ConvexRadius);

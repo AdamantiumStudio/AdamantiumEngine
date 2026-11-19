@@ -1267,6 +1267,23 @@ public class PhysicsServiceTests
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-1).Within(0.02));
     }
 
+    // Turned about Y on an entity stretched along X, the box is skewed flat: the hull of its corners rests, not falls.
+    [Test]
+    public void ABoxTurnedOnAnUnevenlyScaledEntity_RestsAsItsHull()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = MakeBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        box.Transform.BaseScale = new Vector3F(2, 1, 1);
+        box.GetComponent<BoxCollider>().Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, float.DegreesToRadians(45));
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
     private Entity AddGround()
     {
         var ground = new Entity(null, "Ground");

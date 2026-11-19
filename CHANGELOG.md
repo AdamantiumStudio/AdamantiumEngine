@@ -107,7 +107,7 @@ All packages share one version.
   friction and the rest - colliding with the box, sphere, capsule, cylinder and convex hull colliders on it and on the enabled
   entities below it that have no rigid body of their own, scaled as each entity is: a model's parts make one body (a
   hull collider with no mesh, or a moving body that is mirrored, or under a stretched or skewed parent, is left out,
-  said in the log). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
+  said in the log; a box turned on an unevenly scaled entity, skewed, is the hull of its corners). `PhysicsService`, a game service used through `IPhysicsService`, runs while a
   game plays: it makes a world of the scene's bodies, steps it on a thread of its own and takes the game's pushes as
   commands - velocities and impulses at the next step; a body's force (`SetForce`), felt at every step until set
   again; gravity - and each frame stands the entities between the last two steps, parents before children. Down is
