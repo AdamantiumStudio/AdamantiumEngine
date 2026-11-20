@@ -760,6 +760,9 @@ All packages share one version.
 
 ### Fixed
 
+- Adamantium.Vulkan 1.3.1, Slang 1.1.2 and Spirv 2.0.2: an empty string in a structure's field (an empty application
+  name, say) no longer runs past the marshalling buffer.
+
 - PDF: a file that encrypts only its embedded files (`/EFF`, strings and streams left plain) has its attachments
   decrypted by the embedded files' own filter, even when their stream leaves `/Type` out - they gave garbage before.
   When the filter asks at an attachment's opening (`/AuthEvent /EFOpen`) the document reads without a password, and
