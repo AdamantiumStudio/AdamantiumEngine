@@ -58,6 +58,9 @@ internal struct BodyState
 
     public readonly bool IsDynamic => Kind == BodyKind.Dynamic;
 
+    /// <summary>What it weighs, in kilograms; zero for one not dynamic.</summary>
+    public readonly float WeighedMass => InverseMass > 0 ? 1f / InverseMass : 0;
+
     public readonly bool IsMoved => (Marks & BodyMarks.Moved) != 0;
 
     public readonly bool IsNew => (Marks & BodyMarks.New) != 0;

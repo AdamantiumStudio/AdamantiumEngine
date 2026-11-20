@@ -146,9 +146,7 @@ public sealed unsafe class SharedSurface : Texture
             return;
         }
 
-        var description = BuildDescription(Width, Height, Description.Format);
-        description.Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit;
-        _copy ??= New(device, description, "SharedSurface(copy)");
+        _copy ??= New(device, BuildDescription(Width, Height, Description.Format), "SharedSurface(copy)");
 
         var released = new System.Collections.Generic.List<(Semaphore, ulong)>(BufferCount);
         for (var i = 0; i < BufferCount; i++)
