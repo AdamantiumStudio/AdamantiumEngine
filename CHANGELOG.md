@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `IUniverseHostService.AskNewSurface`: a viewer that left the view which imported its surfaces asks the universe host
+  for new ones of the same size, since a second import of a surface would read frames the first gave back.
 - `PhysicsSimulation`: the physics as a game uses it, with no ECS. Bodies and joints are named by `BodyId` and
   `JointId`, added from `BodySettings` (one shape or `BodyPart`s, a `PhysicsMaterial`, the caller's own data per body
   and part) and `JointSettings` (`JointLimits`, `JointMotor`, `JointSpring`). Every action - impulses, velocities,

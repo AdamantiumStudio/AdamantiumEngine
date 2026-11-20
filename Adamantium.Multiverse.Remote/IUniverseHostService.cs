@@ -20,6 +20,10 @@ public partial interface IUniverseHostService
     /// <summary>The viewer asks for frame <paramref name="frame"/>: it has shown the ones before.</summary>
     void AskFrame(ulong frame);
 
+    /// <summary>The viewer asks for surfaces of the same size it has not imported yet - the ones it has were imported
+    /// by a view it left - and is shown them as any new surface.</summary>
+    void AskNewSurface();
+
     /// <summary>Puts the pointer at <paramref name="x"/>, <paramref name="y"/> in the surface's pixels;
     /// <paramref name="isOver"/> says whether it is over the view.</summary>
     void MovePointer(float x, float y, bool isOver);

@@ -153,6 +153,31 @@ public class UniverseHostTests
         });
     }
 
+    // A viewer that left the view which imported its surfaces asks for new ones: they come at the same size, in another
+    // ring, and its frames keep coming.
+    [Test]
+    public async Task AViewerAskingForANewSurface_IsGivenOneOfTheSameSize()
+    {
+        await Launch("Drift.ascene", 160, 90, FrameSharing.HostMemory);
+        Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
+
+        _connection.Host.AskNewSurface();
+        _connection.Host.AskFrame(_viewer.LastFrame + 1);
+        Assert.That(_viewer.Surfaces.TryTake(out var second, Patience), Is.True, "given a new surface");
+        using var reader = new Adamantium.Graphics.HostFrameReader(second.ToDescriptor());
+        var frame = TakeFrame(reader, out _);
+        reader.GiveBack(frame);
+        await _connection.Host.StopAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(second.Width, Is.EqualTo(first.Width));
+            Assert.That(second.Height, Is.EqualTo(first.Height));
+            Assert.That(second.MemoryPath, Is.Not.EqualTo(first.MemoryPath), "another ring");
+            Assert.That(frame, Is.GreaterThan(0ul), "its frames come");
+        });
+    }
+
     // A scene or code the host cannot load fails the launch with the reason, and the host exits with 1.
     [Test]
     public void ALaunchThatCannotLoad_FailsWithTheReason()
