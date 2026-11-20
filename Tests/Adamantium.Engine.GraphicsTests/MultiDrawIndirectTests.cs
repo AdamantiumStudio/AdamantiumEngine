@@ -109,6 +109,12 @@ public class MultiDrawIndirectTests
         using var effect = new Effect(device, compiled.EffectData);
         using var indirect = Adamantium.Graphics.Buffer.New(gd, 32, BufferUsageFlags.IndirectBuffer,
             MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+        var parameters = new PresentationParameters(PresenterType.RenderTarget, Size, Size, IntPtr.Zero);
+        using var presenter = GraphicsPresenter.Create(device, parameters, "multi_draw_indirect_refused");
+        device.SetRenderTargets(presenter.RenderTarget);
+        device.SetDepthBuffer(presenter.DepthBuffer);
+        device.Presenter = presenter;
+        Assert.That(device.BeginDraw(), Is.True);
         effect.Techniques[0].Passes[0].Apply();
 
         Assert.Multiple(() =>
@@ -125,5 +131,10 @@ public class MultiDrawIndirectTests
                 Assert.Throws<InvalidOperationException>(() => gd.DrawIndirect(indirect, 0, 2), "two draws at once");
             }
         });
+        device.EndDraw();
+        device.Submit();
+        presenter.Present();
+        device.FrameEnded();
+        device.DeviceWaitIdle();
     }
 }
