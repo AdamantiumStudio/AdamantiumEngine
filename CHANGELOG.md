@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `SharedSurfaceProducer` sends an output's frames to an `ISharedSurfaceConsumer` through a ring of shared surfaces:
+  each frame goes to the surface the consumer gave back, and a new size starts a new ring, handed over once it holds
+  its first frame. The UI's render target panel takes its frames this way; a process of its own will too.
+
 - `Adamantium.UniverseHost`: runs a universe with no window and no editor - its scene built from its content folders,
   the game's code loaded by path with the PDB beside it (for a debugger to see), its services started - drawn by the
   scene's camera into an offscreen output. The editor will start it to debug the game. `--frames`, `--capture` and
