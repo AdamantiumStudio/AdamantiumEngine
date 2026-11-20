@@ -15,6 +15,11 @@ All packages share one version.
   into the viewer's process - on Windows, for now), each new frame and the end. `Adamantium.UniverseHost` takes only
   the pipe to serve on. `GraphicsAdapter.DeviceUuid` names the GPU the same in every process.
 
+- `WorldPosition`: a point of the world, the type every far-reaching position will take - double inside for now, so
+  what it is kept in can change without the code around it. A position moves by a float or double vector, two differ
+  by a double one, `OffsetFrom` gives the way from a near origin in float - a frame's own numbers - and `Lerp`
+  blends two.
+
 - `ISharedSurfaceProducer`, made by `SharedSurfaceProducer`, sends an output's frames to an `ISharedSurfaceConsumer`
   through a ring of shared surfaces:
   each frame goes to the surface the consumer gave back, and a new size starts a new ring, handed over once it holds
@@ -639,15 +644,17 @@ All packages share one version.
 
 ### Changed
 
-- The physics keeps positions in double: a body's, a `Pose`'s, a description's, a joint's points, a query's start and
-  every hit and contact point. Collisions are worked out in float in the frame of the pair's first body, queries in the
-  frame of where they start, joints from the gap between their bodies, so a world's scene ten kilometers, a thousand or
-  a million away stands, swings and is met as at the origin, to the millimeter; the broad phase holds its boxes in
-  double. `DynamicAabbTree` takes the type of its boxes' numbers (`DynamicAabbTree<TItem, TNumber>`).
-  `IPhysicsWorld.RayCast` takes an origin and a direction; `GetCenterOfMass`, `GetBounds` and `ApplyImpulse`'s point
-  are double; the queries refuse a start that is not finite. The game's physics drops its unused origin shift and
-  carries positions in double, though it still reads its entities' places from their float world matrices. A step
-  costs as before (A/B on the same scenes: -3 % to +1 %).
+- The physics' positions are `WorldPosition`s: a body's, `Pose.Position`, a description's, a joint's points, a ray's
+  origin, every hit and contact point, `GetCenterOfMass` and `ApplyImpulse`'s point; `GetBounds` is double. A pose in a
+  body's own axes is the float `LocalPose`, public now: a compound's parts take it. Collisions are worked out in float
+  in the frame of the pair's first body, queries in the frame of where they start, joints from the gap between their
+  bodies, so a world's scene ten kilometers, a thousand or a million away stands, swings and is met as at the origin,
+  to the millimeter; the broad phase holds its boxes in double. `DynamicAabbTree` takes the type of its boxes' numbers
+  (`DynamicAabbTree<TItem, TNumber>`). `IPhysicsWorld.RayCast` takes an origin and a direction; the queries refuse a
+  start that is not finite. The game's physics drops its unused origin shift and carries world positions, though it
+  still reads its entities' places from their float world matrices; `IPhysicsService.ApplyImpulse` refuses a point
+  that is not finite at once, not on the physics thread. A step costs as before (A/B on the same scenes against float
+  positions: -3 % to +1 %; against double ones: -2 % to +4 %).
 - The physics' GJK is quicker: a shape's turn is made a matrix once per query, not worked out of the quaternion for
   every support point; a hull reads its corners' coordinates from arrays of their own; a tetrahedron weighs its faces
   by their points alone, the face it grew from passed by. A shape cast starts each step's GJK from the last step's

@@ -14,10 +14,10 @@ public sealed class JointDescription
 
     /// <summary>Where the joint stands in the world when it is added: the shared point, or a distance joint's end on the
     /// first body.</summary>
-    public Vector3<double> Point { get; set; }
+    public WorldPosition Point { get; set; }
 
     /// <summary>A distance joint's end on the second body, in the world when it is added.</summary>
-    public Vector3<double> SecondPoint { get; set; }
+    public WorldPosition SecondPoint { get; set; }
 
     /// <summary>The axis a hinge turns about or a slider slides along, in the world when it is added.</summary>
     public Vector3F Axis { get; set; } = Vector3F.UnitY;

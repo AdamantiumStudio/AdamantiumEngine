@@ -26,8 +26,8 @@ public abstract class CollisionShape
     public BoundingBox<double> ComputeBounds(in Pose pose)
     {
         var bounds = ComputeBounds(new LocalPose(Vector3F.Zero, pose.Rotation));
-        return new BoundingBox<double>(pose.Position + bounds.Minimum.As<double>(),
-            pose.Position + bounds.Maximum.As<double>());
+        var center = pose.Position.ToVector();
+        return new BoundingBox<double>(center + bounds.Minimum.As<double>(), center + bounds.Maximum.As<double>());
     }
 
     /// <summary>The box, aligned with its frame's axes, that holds the shape standing at <paramref name="pose"/>.

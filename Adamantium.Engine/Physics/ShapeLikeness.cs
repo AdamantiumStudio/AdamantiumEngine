@@ -19,9 +19,7 @@ internal static class ShapeLikeness
         {
             var firstPose = first[index].Pose;
             var secondPose = second[index].Pose;
-            // A part stands near its body's origin: its place is compared in float, as the shapes were made.
-            if (!AreClose(firstPose.Position.As<float>(), secondPose.Position.As<float>())
-                || !AreClose(firstPose.Rotation, secondPose.Rotation)
+            if (!AreClose(firstPose.Position, secondPose.Position) || !AreClose(firstPose.Rotation, secondPose.Rotation)
                 || !AreAlike(first[index].Shape, second[index].Shape))
                 return false;
         }

@@ -17,7 +17,7 @@ public class BodyChangeTests
         scene.AddGround();
         var box = scene.World.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f), Position = new Vector3<double>(0, 3, 0)
+            Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f), Position = new WorldPosition(0, 3, 0)
         });
         scene.Run(0.5f);
         Assert.That(scene.World.GetPose(box).Position.Y, Is.EqualTo(3));
@@ -55,19 +55,19 @@ public class BodyChangeTests
         var scene = new SceneBuilder();
         scene.AddGround();
         var shape = new CompoundCollisionShape([
-            new CompoundPart(new BoxCollisionShape(0.5f, 0.5f, 0.5f), new Pose(new Vector3<double>(1, 0, 0))),
-            new CompoundPart(new BoxCollisionShape(0.5f, 0.5f, 0.5f), new Pose(new Vector3<double>(2, 0, 0)))
+            new CompoundPart(new BoxCollisionShape(0.5f, 0.5f, 0.5f), new LocalPose(new Vector3F(1, 0, 0))),
+            new CompoundPart(new BoxCollisionShape(0.5f, 0.5f, 0.5f), new LocalPose(new Vector3F(2, 0, 0)))
         ]);
         var body = scene.World.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = shape, Position = new Vector3<double>(0, 3, 0)
+            Kind = BodyKind.Static, Shape = shape, Position = new WorldPosition(0, 3, 0)
         });
 
         scene.World.SetKind(body, BodyKind.Dynamic);
         var origin = scene.World.GetPose(body).Position;
         scene.Run(3);
 
-        Assert.That(origin, Is.EqualTo(new Vector3<double>(0, 3, 0)));
+        Assert.That(origin, Is.EqualTo(new WorldPosition(0, 3, 0)));
         Assert.That(scene.World.GetLocalCenterOfMass(body).X, Is.EqualTo(1.5f).Within(1e-4f));
         Assert.That(scene.World.GetPose(body).Position.Y, Is.EqualTo(0.5f).Within(0.02f));
         Assert.That(scene.World.GetPose(body).Position.X, Is.EqualTo(0).Within(0.02f));
@@ -160,7 +160,7 @@ public class BodyChangeTests
         scene.AddGround();
         var box = scene.World.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f), Position = new Vector3<double>(0, 3, 0),
+            Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f), Position = new WorldPosition(0, 3, 0),
             Mass = 0, Density = 0
         });
 
@@ -218,7 +218,7 @@ public class BodyChangeTests
         scene.AddGround();
         var box = scene.World.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f), Position = new Vector3<double>(0, 0.5f, 0), Mass = 5
+            Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f), Position = new WorldPosition(0, 0.5f, 0), Mass = 5
         });
         scene.Run(3);
         Assert.That(scene.World.IsAwake(box), Is.False);
