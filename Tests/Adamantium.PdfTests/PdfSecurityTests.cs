@@ -221,6 +221,48 @@ public class PdfSecurityTests
         });
     }
 
+    // The document opens without a password: the one its attachments asked for is not told as opening it - unless the
+    // filter asks for it at the document's opening.
+    [Test]
+    public void TheAttachmentsPassword_IsNotToldAsOpeningTheDocument()
+    {
+        var encryption = new PdfTestEncryption(4, "user", "owner");
+        var asksForAttachments = PdfDocument.Open(OnlyAttachmentsEncrypted(encryption, true));
+        asksForAttachments.Authenticate("user");
+        var asksAtOpening = PdfDocument.Open(OnlyAttachmentsEncrypted(encryption, true, false));
+        asksAtOpening.Authenticate("user");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(asksForAttachments.IsOpenedWithPassword, Is.False);
+            Assert.That(asksAtOpening.IsOpenedWithPassword, Is.True);
+        });
+    }
+
+    // The owner password is told apart on the side: neither a wrong one nor the user's, nor the owner's, changes the
+    // handler's access.
+    [TestCase(3)]
+    [TestCase(6)]
+    public void TheOwnerPassword_IsToldOnTheSide(int revision)
+    {
+        var document = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904)));
+        document.Authenticate("user");
+        var security = document.Security;
+        var user = security.IsOwnerPassword("user");
+        var typo = security.IsOwnerPassword("typo");
+        // The owner's last: told, it would leave the handler the owner's.
+        var owner = security.IsOwnerPassword("owner");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(user, Is.False, "the user's password is told as the owner's");
+            Assert.That(typo, Is.False);
+            Assert.That(owner, Is.True);
+            Assert.That(security.IsOwner, Is.False, "the owner's password, told, opened the handler as the owner's");
+            Assert.That(document.Permissions, Is.EqualTo((PdfPermissions)(-3904) & PdfPermissions.All));
+        });
+    }
+
     // Without AuthEvent EFOpen the filter asks at the document's opening, as by default.
     [Test]
     public void AFileEncryptingOnlyItsAttachments_ButAskingAtOpening_NeedsThePasswordFirst()

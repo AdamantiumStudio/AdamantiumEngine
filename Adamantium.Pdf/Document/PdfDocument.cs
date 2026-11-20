@@ -109,8 +109,8 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     /// <summary>Whether a password opened it - given to <see cref="Authenticate"/>, carried by <see
     /// cref="TakePasswordFrom"/> or in the read options - not the empty one a file that only restricts its rights opens
-    /// with.</summary>
-    public bool IsOpenedWithPassword => !string.IsNullOrEmpty(_password);
+    /// with, nor one its attachments asked for when the document itself opens without.</summary>
+    public bool IsOpenedWithPassword => !string.IsNullOrEmpty(_password) && _security is { AsksOnlyForEmbeddedFiles: false };
 
     /// <summary>How many bytes the file has, as it was opened.</summary>
     public long FileSize => _data.Length;
@@ -165,9 +165,12 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
     /// <summary>The fonts the document uses - in page resources and their graphics states, forms, tiling patterns,
     /// soft-mask groups, Type 3 fonts and annotation appearances - each once, with the pages that use it; in the order
-    /// they are first met, a page's content before its annotations. Reads every page; <paramref name="stop"/> is heard
+    /// they are first met, a page's content before its annotations. Reads every page.</summary>
+    public IReadOnlyList<PdfDocumentFont> CollectFonts() => CollectFonts(CancellationToken.None);
+
+    /// <summary>The fonts the document uses, as <see cref="CollectFonts()"/> finds them; <paramref name="stop"/> is heard
     /// between pages.</summary>
-    public IReadOnlyList<PdfDocumentFont> CollectFonts(CancellationToken stop = default)
+    public IReadOnlyList<PdfDocumentFont> CollectFonts(CancellationToken stop)
     {
         var collector = new PdfFontCollector(this);
         var order = new List<PdfFont>();

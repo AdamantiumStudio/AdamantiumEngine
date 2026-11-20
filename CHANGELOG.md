@@ -10,7 +10,9 @@ All packages share one version.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
-  only restricts its rights opens with. `PdfDocument.CollectFonts` takes a `CancellationToken`, heard between pages.
+  only restricts its rights opens with, nor one only its attachments asked for.
+  `PdfStandardSecurityHandler.IsOwnerPassword` tells the owner password on the side, the handler's access left as it
+  is, so any thread may ask. `PdfDocument.CollectFonts(CancellationToken)` hears its token between pages.
 - `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
   `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
   thrown at the next `Update`. The two threads talk through unbounded channels, each side giving back what it read

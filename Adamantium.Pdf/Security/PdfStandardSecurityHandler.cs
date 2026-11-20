@@ -115,6 +115,14 @@ public sealed class PdfStandardSecurityHandler
         return false;
     }
 
+    /// <summary>Whether <paramref name="password"/> is the owner password - tried on the side, from the same encryption
+    /// dictionary: this handler's access stays as it is, so it may be asked on any thread.</summary>
+    public bool IsOwnerPassword(string password)
+    {
+        var trial = new PdfStandardSecurityHandler(_encrypt, _firstId);
+        return trial.Authenticate(password) && trial.IsOwner;
+    }
+
     /// <summary>The crypt method of the named crypt filter, as a stream's <c>/Crypt</c> filter asks for it.</summary>
     public PdfCryptMethod MethodOf(string cryptFilter) => MethodOf(new PdfName(cryptFilter));
 
