@@ -811,6 +811,9 @@ All packages share one version.
 
 ### Fixed
 
+- A standalone universe disposes its main graphics device when it shuts down: `GraphicsDeviceService` is
+  `IDisposable` now, so the device and the resources it retires are released.
+
 - The physics' step allocates nothing without the JIT's optimizations too, as in Debug: GJK's and EPA's tables of
   constants were spans made by reflection on every call there (940 KB per 240 steps on a height field), and the solved
   contacts were walked through an interface, boxing the enumerator each step. Tests hold the warmed step of nine scenes
