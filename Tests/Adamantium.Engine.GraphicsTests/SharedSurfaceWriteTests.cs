@@ -160,7 +160,12 @@ public class SharedSurfaceWriteTests
         }
         finally
         {
-            logical.SignalSemaphore(new SemaphoreSignalInfo { Semaphore = gate, Value = 1 });
+            logical.GetSemaphoreCounterValue(gate, out var reached);
+            if (reached < 1)
+            {
+                logical.SignalSemaphore(new SemaphoreSignalInfo { Semaphore = gate, Value = 1 });
+            }
+
             logical.DeviceWaitIdle();
             logical.DestroySemaphore(gate);
         }
