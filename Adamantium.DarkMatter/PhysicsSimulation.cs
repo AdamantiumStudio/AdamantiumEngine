@@ -17,6 +17,8 @@ public sealed partial class PhysicsSimulation : IDisposable
     private const int NoSlot = -1;
     private const int MaxStepsPerAdvance = 8;
     private const int MaxUnreadResults = 32;
+    // The batches of commands going round to its thread, made at once: however far the thread lags, no more are made.
+    private const int MaxBatchesHanded = 4;
     // The simulation's own thread's stack: the core takes what it needs of it, the caller's stack is not its.
     private const int ThreadStackSize = 1024 * 1024;
 
@@ -37,6 +39,8 @@ public sealed partial class PhysicsSimulation : IDisposable
         Settings = _stepper.World.Settings;
         _gravity = _stepper.World.Gravity;
         _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
+        for (var batch = 0; batch < MaxBatchesHanded; batch++)
+            _spareBatches.Writer.TryWrite(new CommandBatch());
     }
 
     /// <summary>How the simulation steps and solves, read once when it is made.</summary>
@@ -100,6 +104,7 @@ public sealed partial class PhysicsSimulation : IDisposable
 
         StopThread();
         _wake.Dispose();
+        _parked.Dispose();
         _isDisposed = true;
         _commands.Clear();
         _bodySlots.Clear();

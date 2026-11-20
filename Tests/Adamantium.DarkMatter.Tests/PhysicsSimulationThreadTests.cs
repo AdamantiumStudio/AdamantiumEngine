@@ -303,6 +303,13 @@ public class PhysicsSimulationThreadTests
             simulation.RayCast(new WorldPosition(0, 10, 0), -Vector3F.UnitY, 20, out _);
         }
 
+        // A frame slow enough for every run the thread may leave unread to pile up.
+        void SlowFrame()
+        {
+            Thread.Sleep(700);
+            Frame();
+        }
+
         // Frames as a game's: its buffers grow to what that takes while warming, and no more after.
         var warm = Stopwatch.StartNew();
         while (warm.ElapsedMilliseconds < 1000)
@@ -311,17 +318,56 @@ public class PhysicsSimulationThreadTests
             Thread.Sleep(1);
         }
 
+        SlowFrame();
+        SlowFrame();
         var before = GC.GetAllocatedBytesForCurrentThread();
+        var beforeOnThread = simulation.ThreadAllocatedBytes;
         for (var frame = 0; frame < 200; frame++)
         {
             Frame();
             Thread.Sleep(1);
         }
 
+        SlowFrame();
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var allocatedOnThread = simulation.ThreadAllocatedBytes - beforeOnThread;
         simulation.Stop();
 
-        Assert.That(allocated, Is.Zero);
+        Assert.That(allocated, Is.Zero, "the caller's thread");
+        Assert.That(allocatedOnThread, Is.Zero, "the simulation's thread");
+    }
+
+    // Paused, the frames' actions outnumber the batches that go round; each is done once it goes on, in order.
+    [Test]
+    public void ActionsAskedWhilePaused_AreAllDone_OnceItGoesOn()
+    {
+        using var simulation = new PhysicsSimulation(new PhysicsSettings { Gravity = Vector3F.Zero });
+        var body = simulation.AddBody(new BodySettings { Shape = Crate, Mass = 1, CanSleep = false });
+        simulation.Start();
+        UpdateUntil(simulation, () => simulation.StatusOf(body) == PhysicsStatus.Active);
+
+        simulation.Pause();
+        for (var frame = 0; frame < 50; frame++)
+        {
+            simulation.ApplyImpulse(body, new Vector3F(0.1f, 0, 0));
+            simulation.Update();
+        }
+
+        simulation.SetLinearVelocity(body, new Vector3F(0, 0, 2));
+        simulation.ApplyImpulse(body, new Vector3F(1, 0, 0));
+        simulation.Update();
+        var heldStill = simulation.LinearVelocityOf(body);
+        simulation.Start();
+        var done = UpdateUntil(simulation, () => simulation.LinearVelocityOf(body).Z > 1.9f);
+        var velocity = simulation.LinearVelocityOf(body);
+        simulation.Stop();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(heldStill, Is.EqualTo(Vector3F.Zero), "nothing done while paused");
+            Assert.That(done, Is.True);
+            Assert.That(velocity.X, Is.EqualTo(1).Within(1e-3f), "done in order: the velocity set over the impulses before");
+        });
     }
 
     // Updates until the condition holds, up to a few seconds; whether it did.

@@ -2,32 +2,48 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Channels;
 using Adamantium.DarkMatter.Simulation;
 
 namespace Adamantium.DarkMatter;
 
-// Its own thread: the caller hands over the commands asked and reads the runs done at each Update; the thread waits
-// for its next step, not spinning, and waits while too many runs lie unread.
+// Its own thread, talked to through channels: the caller sends the commands asked as a batch at each Update and reads
+// the runs the thread sends back; each side gives back what it read through a channel of spares, to be filled again.
+// The thread waits for its next step, not spinning, and waits while too many runs lie unread.
 public sealed partial class PhysicsSimulation
 {
-    // Under _gate: the commands handed over and not yet run, the runs done and not yet read, and the spare ones.
-    private readonly object _gate = new();
-    private readonly List<SimulationCommand> _handedCommands = [];
-    private readonly Queue<SimulationResult> _readyResults = new();
-    private readonly Stack<SimulationResult> _spareResults = new();
-    // The thread's own: the commands it took over to run.
+    private static readonly UnboundedChannelOptions OneWriterOneReader = new()
+    {
+        SingleWriter = true, SingleReader = true
+    };
+
+    // The caller to the thread: the batches of commands; the thread to the caller: the runs done.
+    private readonly Channel<CommandBatch> _batches = Channel.CreateUnbounded<CommandBatch>(OneWriterOneReader);
+    private readonly Channel<SimulationResult> _results = Channel.CreateUnbounded<SimulationResult>(OneWriterOneReader);
+    // What each side read, given back to the other to fill again.
+    private readonly Channel<CommandBatch> _spareBatches = Channel.CreateUnbounded<CommandBatch>(OneWriterOneReader);
+    private readonly Channel<SimulationResult> _spareResults =
+        Channel.CreateUnbounded<SimulationResult>(OneWriterOneReader);
+    // The thread's own: the commands it took over to run, and the number of the last batch among them.
     private readonly List<SimulationCommand> _threadCommands = [];
+    private long _threadBatch;
+    // Wakes the thread: a channel wakes only an asynchronous reader, and the thread is not one.
     private readonly AutoResetEvent _wake = new(false);
+    // Tells a Pause the thread holds: a run under way when it was asked has ended.
+    private readonly ManualResetEventSlim _parked = new(false);
     private Thread _thread;
     private volatile bool _stopping;
     private volatile bool _paused;
     private volatile Exception _failure;
     // The caller's count of batches of commands handed over: a slot taken out is free once its batch was run.
     private long _handedBatches;
-    private long _handedBatchesUnderGate;
     private int _unreadResults;
     private int _lastResultSteps = 1;
     private long _lastResultAt;
+    private long _threadAllocatedBytes;
+
+    // What its thread allocated, as of its last run: for the tests to see that it allocates none.
+    internal long ThreadAllocatedBytes => Volatile.Read(ref _threadAllocatedBytes);
 
     /// <summary>Steps on a thread of its own from now on, at <see cref="PhysicsSettings.StepRate"/>; paused, it goes
     /// on. What it does is read at each <see cref="Update"/>.</summary>
@@ -49,15 +65,15 @@ public sealed partial class PhysicsSimulation
         _stopping = false;
         _paused = false;
         _failure = null;
-        // Its first run tells the last batch run; those handed over and put back by a Stop go again as the next.
-        _handedBatchesUnderGate = _batchesRead;
+        // Its first run tells the last batch run; those put back by a Stop go again as the next.
+        _threadBatch = _batchesRead;
         _lastResultAt = Stopwatch.GetTimestamp();
         State = SimulationState.Running;
         _thread = new Thread(RunThread, ThreadStackSize) { IsBackground = true, Name = "DarkMatter simulation" };
         _thread.Start();
     }
 
-    /// <summary>Holds its thread: nothing moves until it is started again, but for a step already under way, which is
+    /// <summary>Holds its thread: nothing moves until it is started again. A step already under way is waited for, and
     /// read at the next <see cref="Update"/>.</summary>
     public void Pause()
     {
@@ -65,9 +81,13 @@ public sealed partial class PhysicsSimulation
         if (State != SimulationState.Running)
             return;
 
+        _parked.Reset();
         _paused = true;
         State = SimulationState.Paused;
         _wake.Set();
+        // A thread that failed holds already; its failure is thrown at the next Update.
+        if (_failure == null)
+            _parked.Wait();
     }
 
     /// <summary>Ends its thread, what it did read; it steps by hand again, the actions asked and not yet done
@@ -100,13 +120,13 @@ public sealed partial class PhysicsSimulation
         if (_commands.Count == 0)
             return;
 
-        _handedBatches++;
-        lock (_gate)
-        {
-            _handedCommands.AddRange(_commands);
-            _handedBatchesUnderGate = _handedBatches;
-        }
+        // All the batches with the thread, it took none of them yet: these wait for the next Update, to run as soon.
+        if (!_spareBatches.Reader.TryRead(out var batch))
+            return;
 
+        batch.Commands.AddRange(_commands);
+        batch.Number = ++_handedBatches;
+        _batches.Writer.TryWrite(batch);
         _commands.Clear();
     }
 
@@ -114,15 +134,8 @@ public sealed partial class PhysicsSimulation
     {
         var read = false;
         _snapshotMark++;
-        while (true)
+        while (_results.Reader.TryRead(out var result))
         {
-            SimulationResult result;
-            lock (_gate)
-            {
-                if (!_readyResults.TryDequeue(out result))
-                    break;
-            }
-
             if (!read)
                 ForgetRefusals();
 
@@ -130,11 +143,8 @@ public sealed partial class PhysicsSimulation
             Read(result);
             _lastResultSteps = result.Steps;
             _lastResultAt = result.SteppedAt;
-            lock (_gate)
-            {
-                _spareResults.Push(result);
-                _unreadResults--;
-            }
+            _spareResults.Writer.TryWrite(result);
+            Interlocked.Decrement(ref _unreadResults);
         }
 
         if (!read)
@@ -157,13 +167,9 @@ public sealed partial class PhysicsSimulation
         _thread.Join();
         _thread = null;
         ReadResults();
-        // What it took over and had not run yet goes first, then what was handed over, then what was asked since.
-        lock (_gate)
-        {
-            _threadCommands.AddRange(_handedCommands);
-            _handedCommands.Clear();
-        }
-
+        // The thread has ended: its side is the caller's now. What it took over and had not run yet goes first, then
+        // the batches it did not take, then what was asked since.
+        TakeBatches();
         _threadCommands.AddRange(_commands);
         _commands.Clear();
         _commands.AddRange(_threadCommands);
@@ -182,6 +188,7 @@ public sealed partial class PhysicsSimulation
             {
                 if (_paused)
                 {
+                    _parked.Set();
                     _wake.WaitOne();
                     clock.Reset();
                     previous = Stopwatch.GetTimestamp();
@@ -210,26 +217,35 @@ public sealed partial class PhysicsSimulation
         {
             _failure = exception;
         }
+        finally
+        {
+            // Ended, it holds: a Pause does not wait for it.
+            _parked.Set();
+        }
     }
 
     private void RunOnThread(int steps)
     {
-        SimulationResult result;
-        long batch;
-        lock (_gate)
-        {
-            _threadCommands.AddRange(_handedCommands);
-            _handedCommands.Clear();
-            batch = _handedBatchesUnderGate;
-            result = _spareResults.Count > 0 ? _spareResults.Pop() : new SimulationResult();
-        }
+        TakeBatches();
+        if (!_spareResults.Reader.TryRead(out var result))
+            result = new SimulationResult();
 
-        _stepper.Run(_threadCommands, steps, batch, result);
+        _stepper.Run(_threadCommands, steps, _threadBatch, result);
         _threadCommands.Clear();
-        lock (_gate)
+        Interlocked.Increment(ref _unreadResults);
+        _results.Writer.TryWrite(result);
+        Volatile.Write(ref _threadAllocatedBytes, GC.GetAllocatedBytesForCurrentThread());
+    }
+
+    // The batches sent, their commands taken over in order, each batch given back.
+    private void TakeBatches()
+    {
+        while (_batches.Reader.TryRead(out var batch))
         {
-            _readyResults.Enqueue(result);
-            _unreadResults++;
+            _threadCommands.AddRange(batch.Commands);
+            _threadBatch = batch.Number;
+            batch.Commands.Clear();
+            _spareBatches.Writer.TryWrite(batch);
         }
     }
 

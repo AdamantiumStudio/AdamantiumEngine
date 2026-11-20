@@ -9,10 +9,11 @@ All packages share one version.
 
 - `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
   `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
-  thrown at the next `Update`. The thread waits for its next step instead of spinning, and while too many steps lie
-  unread. `InterpolatedPoseOf` draws a body between its last two steps read, turned about its center of mass; a body
-  put by hand (`SetPose`) is drawn there at once, not as a motion; while the thread runs, queries meet a snapshot of
-  the bodies as last read.
+  thrown at the next `Update`. The two threads talk through unbounded channels, each side giving back what it read
+  through a channel of spares, so neither allocates a frame. The thread waits for its next step instead of spinning,
+  and while too many steps lie unread; `Pause` waits for a step under way to end. `InterpolatedPoseOf` draws a body
+  between its last two steps read, turned about its center of mass; a body put by hand (`SetPose`) is drawn there at
+  once, not as a motion; while the thread runs, queries meet a snapshot of the bodies as last read.
   `Advance(seconds)` takes the steps a span of time makes due on the caller's own thread. A body's mass, damping,
   gravity scale and whether it may sleep are set after it is added (`SetMass`, `SetDamping`, `SetGravityScale`,
   `SetCanSleep`); a joint's points and axis are given on its bodies with `JointSpace.Bodies`, put in the world where the
