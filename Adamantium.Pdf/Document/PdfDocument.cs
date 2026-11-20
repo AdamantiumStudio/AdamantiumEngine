@@ -354,11 +354,15 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
 
         _password = password;
 
-        // Strings and streams plain, only embedded files encrypted: nothing read so far was, and all of it stands. Nor
-        // does it when the key stays the same - the owner's password after the user's opens with the user's key
-        // (ISO 32000-2, 7.6.4.4): only the rights change.
-        var sameKey = keyBefore != null && keyBefore.AsSpan().SequenceEqual(_security.FileKey);
-        if ((_security.StringMethod != PdfCryptMethod.None || _security.StreamMethod != PdfCryptMethod.None) && !sameKey)
+        // The key the same - the owner's password after the user's opens with the user's key (ISO 32000-2, 7.6.4.4):
+        // all read so far stands, only the rights change.
+        if (keyBefore != null && keyBefore.AsSpan().SequenceEqual(_security.FileKey))
+        {
+            return true;
+        }
+
+        // Strings and streams plain, only embedded files encrypted: nothing read so far was, and all of it stands.
+        if (_security.StringMethod != PdfCryptMethod.None || _security.StreamMethod != PdfCryptMethod.None)
         {
             var encrypt = _encryptNumber >= 0 ? _objects.GetValueOrDefault(_encryptNumber) : null;
             ForgetReadObjects();
