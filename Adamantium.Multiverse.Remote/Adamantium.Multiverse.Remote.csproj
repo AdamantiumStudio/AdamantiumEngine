@@ -8,6 +8,7 @@
 		<Configurations>Debug;Release</Configurations>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<IsPackable>true</IsPackable>
 		<Description>A universe of the Adamantium engine shown in another process: the host's service, its viewer's callbacks and the connection between them.</Description>
 		<PackageTags>adamantium;engine;remote;rpc</PackageTags>

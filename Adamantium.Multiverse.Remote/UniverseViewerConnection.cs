@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
+using Adamantium.Core;
 using Adamantium.Win32;
 using StreamJsonRpc;
 
@@ -57,18 +59,40 @@ public sealed class UniverseViewerConnection : IDisposable
         _pipe.Dispose();
     }
 
-    private static int ClientProcessId(NamedPipeServerStream pipe)
+    private static unsafe int ClientProcessId(NamedPipeServerStream pipe)
     {
-        if (!OperatingSystem.IsWindows())
+        var handle = pipe.SafePipeHandle.DangerousGetHandle();
+        if (OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("A viewer in another process is shown on Windows only, for now.");
+            if (!Win32Interop.GetNamedPipeClientProcessId(handle, out var processId))
+            {
+                throw new Win32Exception();
+            }
+
+            return (int)processId;
         }
 
-        if (!Win32Interop.GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var processId))
+        if (OperatingSystem.IsMacOS())
         {
-            throw new Win32Exception();
+            var peer = 0;
+            var size = (uint)sizeof(int);
+            if (PosixInterop.GetSocketOption((int)handle, PosixInterop.LocalSocketLevel, PosixInterop.LocalPeerProcessId,
+                    &peer, ref size) != 0)
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            return peer;
         }
 
-        return (int)processId;
+        var credentials = stackalloc int[3];
+        var length = (uint)(3 * sizeof(int));
+        if (PosixInterop.GetSocketOption((int)handle, PosixInterop.SocketLevel, PosixInterop.SocketPeerCredentials,
+                credentials, ref length) != 0)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+
+        return credentials[0];
     }
 }
