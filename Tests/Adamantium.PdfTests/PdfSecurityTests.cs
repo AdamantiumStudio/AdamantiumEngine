@@ -104,6 +104,16 @@ public class PdfSecurityTests
         Assert.That(document.Permissions, Is.EqualTo(PdfPermissions.All));
     }
 
+    // How long the key is, as a viewer tells it: 128 bits for RC4 here, 128 for AES-128, 256 for AES-256.
+    [TestCase(3, 128)]
+    [TestCase(4, 128)]
+    [TestCase(6, 256)]
+    public void TheKeysLength_IsToldInBits(int revision, int bits)
+    {
+        var document = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, string.Empty, "owner")));
+        Assert.That(document.Security.KeyBits, Is.EqualTo(bits));
+    }
+
     [Test]
     public void AesV2TakesA128BitKeyWhateverTheLengthSays()
     {
@@ -113,6 +123,7 @@ public class PdfSecurityTests
         var document = PdfDocument.Open(Encoding.Latin1.GetBytes(shortLength));
         Assert.That(document.IsRepaired, Is.False);
         Assert.That(document.IsAuthenticated, Is.True);
+        Assert.That(document.Security.KeyBits, Is.EqualTo(128));
         Assert.That(Encoding.ASCII.GetString(document.Pages[0].GetContents().Span), Is.EqualTo("BT (secret) Tj ET"));
     }
 

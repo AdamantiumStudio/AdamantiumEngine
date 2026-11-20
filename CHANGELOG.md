@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 or 128 bits for RC4, 128 or 256 for
+  AES - what a viewer says of the file's encryption.
 - `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
   `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
   thrown at the next `Update`. The two threads talk through unbounded channels, each side giving back what it read
