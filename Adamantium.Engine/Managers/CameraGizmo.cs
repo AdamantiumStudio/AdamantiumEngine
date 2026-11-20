@@ -63,11 +63,11 @@ public class CameraGizmo
             cameraNumber++;
         }
 
-        var position = Vector3<double>.Zero;
+        var position = WorldPosition.Zero;
         var current = output.Camera;
         if (current != null)
         {
-            position = (CameraIcon.GetDiameter() * 2 * (Vector3<double>)current.Forward) + current.GetOwnerPosition();
+            position = current.GetOwnerPosition() + CameraIcon.GetDiameter() * 2 * (Vector3<double>)current.Forward;
         }
 
         var entity = new CameraTemplate().BuildEntity(null, name, position, Vector3<double>.ForwardLH, -Vector3<double>.Up, output.Width, output.Height, DefaultZNear, DefaultZFar);

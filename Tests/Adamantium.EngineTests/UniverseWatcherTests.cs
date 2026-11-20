@@ -45,7 +45,7 @@ public class UniverseWatcherTests
     {
         model.Name = "One";
         model.Name = "Two";
-        model.Transform.Position = new Vector3<double>(1, 0, 0);
+        model.Transform.Position = new WorldPosition(1, 0, 0);
 
         Assert.Multiple(() =>
         {

@@ -232,7 +232,7 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
         var forward = -ViewDirection;
         var right = Vector3.Normalize(Vector3<double>.Cross(-Vector3<double>.Up, forward));
         var up = Vector3<double>.Cross(forward, right);
-        var cameraEntity = new CameraTemplate().BuildEntity(null, "Screenshot camera", Vector3<double>.Zero, forward,
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Screenshot camera", WorldPosition.Zero, forward,
             -Vector3<double>.Up, Window.Width, Window.Height, 0.1f, 1000f);
         var camera = cameraEntity.GetComponent<Camera>();
         var reach = Math.Tan(double.DegreesToRadians(camera.Fov) / 2) * Fill;
@@ -247,10 +247,10 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
             radius = Math.Max(radius, offset.Length());
         }
 
-        cameraEntity.Transform.Position = center + ViewDirection * distance;
+        cameraEntity.Transform.Position = new WorldPosition(center + ViewDirection * distance);
         camera.ZNear = (float)Math.Max(distance - radius * 1.5, distance / 1000);
         camera.ZFar = (float)(distance + radius * 1.5);
-        camera.SetFreeLookAt(center);
+        camera.SetFreeLookAt(new WorldPosition(center));
         camera.Update(default);
         return camera;
     }

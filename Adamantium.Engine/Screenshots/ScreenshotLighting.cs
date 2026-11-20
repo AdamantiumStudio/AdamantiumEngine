@@ -32,12 +32,12 @@ public sealed class ScreenshotLighting
     public static ScreenshotLighting Studio()
     {
         var key = new LightTemplate().BuildEntity(null, "Key light", LightType.Directional);
-        key.Transform.Position = new Vector3<double>(4, -8, -6);
+        key.Transform.Position = new WorldPosition(4, -8, -6);
         key.Transform.Rotation = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(-30),
             float.DegreesToRadians(140), 0);
 
         var fill = new LightTemplate().BuildEntity(null, "Fill light", LightType.Directional);
-        fill.Transform.Position = new Vector3<double>(-6, -2, -4);
+        fill.Transform.Position = new WorldPosition(-6, -2, -4);
         fill.Transform.Rotation = Quaternion.CreateFromYawPitchRoll<float>(float.DegreesToRadians(50),
             float.DegreesToRadians(170), 0);
         fill.GetComponent<Light>().Intensity = 0.4f;

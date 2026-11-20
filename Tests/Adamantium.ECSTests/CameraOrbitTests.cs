@@ -11,7 +11,7 @@ namespace Adamantium.ECSTests;
 [TestFixture]
 public class CameraOrbitTests
 {
-    private static readonly Vector3<double> Pivot = new(3, -1, 4);
+    private static readonly WorldPosition Pivot = new(3, -1, 4);
 
     [TestCase(CameraOrbitStyle.Turntable)]
     [TestCase(CameraOrbitStyle.Trackball)]
@@ -28,7 +28,7 @@ public class CameraOrbitTests
             Assert.That(after.X, Is.EqualTo(before.X).Within(1e-4));
             Assert.That(after.Y, Is.EqualTo(before.Y).Within(1e-4));
             Assert.That(after.Z, Is.EqualTo(before.Z).Within(1e-4));
-            Assert.That(camera.Owner.Transform.Position, Is.Not.EqualTo(new Vector3<double>(0, 0, -10)), "the camera went round");
+            Assert.That(camera.Owner.Transform.Position, Is.Not.EqualTo(new WorldPosition(0, 0, -10)), "the camera went round");
         });
     }
 
@@ -316,7 +316,7 @@ public class CameraOrbitTests
     }
 
     // The pivot from the camera, in the axes of its view: where it is on the screen and how deep.
-    private static Vector3F InView(Camera camera, Vector3<double> point) =>
+    private static Vector3F InView(Camera camera, WorldPosition point) =>
         Vector3F.TransformNormal((point - camera.Owner.Transform.Position).As<float>(),
             Matrix4x4.CreateFromQuaternion<float>(camera.Rotation));
 
@@ -325,7 +325,7 @@ public class CameraOrbitTests
         var camera = new Camera(60, 800, 600, 0.1f, 10000f);
         var entity = new Entity(host, "Camera");
         entity.AddComponent(camera);
-        entity.Transform.Position = new Vector3<double>(0, 0, -10);
+        entity.Transform.Position = new WorldPosition(0, 0, -10);
         camera.Update(new AppTime());
         return camera;
     }

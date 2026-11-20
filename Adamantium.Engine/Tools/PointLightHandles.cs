@@ -22,7 +22,7 @@ public class PointLightHandles : Handles
     ];
 
     private readonly Entity[] anchors;
-    private Vector3<double> center;
+    private WorldPosition center;
     private Vector3F direction;
 
     public PointLightHandles()

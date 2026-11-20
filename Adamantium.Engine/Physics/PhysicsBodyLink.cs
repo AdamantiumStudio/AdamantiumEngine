@@ -58,7 +58,7 @@ internal sealed class PhysicsBodyLink
     public bool IsGone { get; set; }
 
     /// <summary>The entity's position the physics last gave it, or found when it made the body.</summary>
-    public Vector3<double> WrittenPosition { get; set; }
+    public WorldPosition WrittenPosition { get; set; }
 
     /// <summary>The entity's rotation the physics last gave it, or found when it made the body.</summary>
     public QuaternionF WrittenRotation { get; set; }

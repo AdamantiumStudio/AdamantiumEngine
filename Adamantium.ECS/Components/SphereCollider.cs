@@ -65,7 +65,7 @@ namespace Adamantium.ECS.Components
             return sphere.Intersects(ray, out point);
         }
 
-        public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
+        public override IConvexShape<float> GetWorldShape(WorldPosition origin)
         {
             return sphere.Transform(Owner.Transform.GetWorldMatrixF(origin));
         }

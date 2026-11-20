@@ -23,7 +23,7 @@ public sealed class PushingService : GameService
             return;
 
         var position = pushed.Owner.Transform.Position;
-        pushed.Owner.Transform.Position = new Vector3<double>(position.X, pushed.Speed, position.Z);
+        pushed.Owner.Transform.Position = new WorldPosition(position.X, pushed.Speed, position.Z);
     }
 
     public bool Started { get; private set; }

@@ -56,7 +56,7 @@ public class LightManager
 
     public IReadOnlyList<Light> SpotLights { get; private set; } = [];
 
-    public Entity CreateLight(Vector3<double> position, LightType type, string name)
+    public Entity CreateLight(WorldPosition position, LightType type, string name)
     {
         if (string.IsNullOrEmpty(name))
             name = type.ToString();

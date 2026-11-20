@@ -25,14 +25,14 @@ public abstract class PointerTool : ToolsProcessor
     private Handles dragged;
     private Entity dragTarget;
     private Camera dragCamera;
-    private Vector3<double> dragEye;
+    private WorldPosition dragEye;
     private bool dragBegun;
     private PickRay pressRay;
     private Vector2F pressedAt;
     private readonly Entity group = new(null, "Selection");
     private readonly List<Held> held = [];
     private IReadOnlyList<Entity> groupItems;
-    private Vector3<double> groupStart;
+    private WorldPosition groupStart;
     private Scene targetScene;
     private readonly List<Entity> _edited = [];
     private readonly List<EditedState> _editedBefore = [];
@@ -90,7 +90,7 @@ public abstract class PointerTool : ToolsProcessor
                 && (target != group || ReferenceEquals(Tools.Selection.Items, groupItems))
                 && (active.Contains(dragged) || dragged == DragsClicked(target)))
             {
-                var fromEye = (dragEye - camera.WorldPosition).As<float>();
+                var fromEye = dragEye.OffsetFrom(camera.WorldPosition);
                 if (!dragBegun)
                 {
                     // A press on the entity is a click until the pointer moves away from where it went down.
@@ -196,13 +196,15 @@ public abstract class PointerTool : ToolsProcessor
 
         if (dragged == null || dragTarget != group)
         {
-            var center = Vector3<double>.Zero;
-            for (int i = 0; i < items.Count; i++)
+            // The mean of the pivots, as the first one plus the mean way from it: points add only as ways between them.
+            var first = Handles.PivotOf(items[0]);
+            var fromFirst = Vector3<double>.Zero;
+            for (int i = 1; i < items.Count; i++)
             {
-                center += Handles.PivotOf(items[i]);
+                fromFirst += Handles.PivotOf(items[i]) - first;
             }
 
-            group.Transform.Position = center / items.Count;
+            group.Transform.Position = first + fromFirst / items.Count;
             group.Transform.Rotation = QuaternionF.Identity;
             group.Transform.ScaleFactor = Vector3F.One;
         }
@@ -279,7 +281,7 @@ public abstract class PointerTool : ToolsProcessor
         return false;
     }
 
-    private readonly record struct Held(Entity Entity, Vector3<double> Pivot, Vector3<double> Position, QuaternionF Rotation, Vector3F Scale,
+    private readonly record struct Held(Entity Entity, WorldPosition Pivot, WorldPosition Position, QuaternionF Rotation, Vector3F Scale,
         Matrix4x4F Axes);
 
     private static Vector3F AlongOwnAxes(in Matrix4x4F axes, Vector3F worldScale) => new(

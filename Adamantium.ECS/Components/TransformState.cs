@@ -10,7 +10,7 @@ namespace Adamantium.ECS.Components;
 /// <param name="PivotOffset">Where the pivot stands from the position, as the transform keeps it.</param>
 /// <param name="PivotRotation">The rotation of the pivot's own axes.</param>
 public readonly record struct TransformState(
-    Vector3<double> Position,
+    WorldPosition Position,
     QuaternionF Rotation,
     Vector3F ScaleFactor,
     Vector3<double> PivotOffset,

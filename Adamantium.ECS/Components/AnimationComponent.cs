@@ -62,7 +62,7 @@ namespace Adamantium.ECS.Components
             {
                 if (Targets.TryGetValue(key, out var target))
                 {
-                    target.Transform.SetPose(rest.Position.As<double>(), rest.Rotation, rest.Scale);
+                    target.Transform.SetPose(new WorldPosition(rest.Position), rest.Rotation, rest.Scale);
                 }
             }
         }
@@ -251,7 +251,7 @@ namespace Adamantium.ECS.Components
                 if (frames.Count == 0 || !Targets.TryGetValue(key, out var target)) continue;
 
                 var pose = Sample(frames, time);
-                target.Transform.SetPose(pose.Position.As<double>(), pose.Rotation, pose.Scale);
+                target.Transform.SetPose(new WorldPosition(pose.Position), pose.Rotation, pose.Scale);
             }
         }
 

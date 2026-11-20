@@ -40,7 +40,7 @@ public class ColliderShapeTests
     {
         var scene = new PickScene();
         var entity = Box(null, new Vector3<double>(-2, -0.5, -0.5), new Vector3<double>(2, 0.5, 0.5));
-        entity.Transform.Position = new Vector3<double>(0, 0, 10);
+        entity.Transform.Position = new WorldPosition(0, 0, 10);
         With(new CapsuleCollider(), entity);
         scene.Place(entity);
 
@@ -74,10 +74,10 @@ public class ColliderShapeTests
         var hullEntity = Box(null, new Vector3<double>(-0.5, -0.5, -0.5), new Vector3<double>(0.5, 0.5, 0.5));
         var hull = With(new ConvexHullCollider(), hullEntity);
 
-        hullEntity.Transform.Position = new Vector3<double>(0.8, 1, 0);
+        hullEntity.Transform.Position = new WorldPosition(0.8, 1, 0);
         Assert.That(capsule.Intersects(hull), Is.True);
 
-        hullEntity.Transform.Position = new Vector3<double>(3, 1, 0);
+        hullEntity.Transform.Position = new WorldPosition(3, 1, 0);
         Assert.That(capsule.Intersects(hull), Is.False);
     }
 
@@ -86,9 +86,9 @@ public class ColliderShapeTests
     {
         var scene = new PickScene();
         var ahead = Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5));
-        ahead.Transform.Position = new Vector3<double>(0, 0, 10);
+        ahead.Transform.Position = new WorldPosition(0, 0, 10);
         var behind = Box(null, new Vector3<double>(-0.5, -2, -0.5), new Vector3<double>(0.5, 2, 0.5));
-        behind.Transform.Position = new Vector3<double>(0, 0, -10);
+        behind.Transform.Position = new WorldPosition(0, 0, -10);
         var seen = With(new CapsuleCollider(), ahead);
         var hidden = With(new CapsuleCollider(), behind);
         scene.Place(ahead);
@@ -106,7 +106,7 @@ public class ColliderShapeTests
         var root = Box(null, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1));
         var rootHull = With(new ConvexHullCollider(), root);
         var part = Box(root, new Vector3<double>(-1, -1, -1), new Vector3<double>(1, 1, 1));
-        part.Transform.Position = new Vector3<double>(5, 0, 0);
+        part.Transform.Position = new WorldPosition(5, 0, 0);
         var partHull = With(new ConvexHullCollider(), part);
 
         rootHull.Merge(partHull);
@@ -135,7 +135,7 @@ public class ColliderShapeTests
     {
         var scene = new PickScene();
         var entity = Box(null, new Vector3<double>(-1, -0.5, -1), new Vector3<double>(1, 0.5, 1));
-        entity.Transform.Position = new Vector3<double>(0, 0, 10);
+        entity.Transform.Position = new WorldPosition(0, 0, 10);
         var cylinder = With(new CylinderCollider(), entity);
         scene.Place(entity);
 
@@ -155,9 +155,9 @@ public class ColliderShapeTests
     {
         var scene = new PickScene();
         var ahead = Box(null, new Vector3<double>(-0.5, -0.5, -0.2), new Vector3<double>(0.5, 0.5, 0.2));
-        ahead.Transform.Position = new Vector3<double>(0, 0, 10);
+        ahead.Transform.Position = new WorldPosition(0, 0, 10);
         var behind = Box(null, new Vector3<double>(-0.5, -0.5, -0.2), new Vector3<double>(0.5, 0.5, 0.2));
-        behind.Transform.Position = new Vector3<double>(0, 0, -10);
+        behind.Transform.Position = new WorldPosition(0, 0, -10);
         var seen = With(new CylinderCollider(), ahead);
         var hidden = With(new CylinderCollider(), behind);
         scene.Place(ahead);
@@ -176,10 +176,10 @@ public class ColliderShapeTests
         var otherEntity = Box(null, new Vector3<double>(-0.2, -0.2, -0.2), new Vector3<double>(0.2, 0.2, 0.2));
         var other = With(new BoxCollider(), otherEntity);
 
-        otherEntity.Transform.Position = new Vector3<double>(1.1, 0, 0);
+        otherEntity.Transform.Position = new WorldPosition(1.1, 0, 0);
         Assert.That(cylinder.Intersects(other), Is.True);
 
-        otherEntity.Transform.Position = new Vector3<double>(1, 0, 1);
+        otherEntity.Transform.Position = new WorldPosition(1, 0, 1);
         Assert.That(cylinder.Intersects(other), Is.False, "beside the round side, where a box round it would reach");
     }
 
@@ -188,7 +188,7 @@ public class ColliderShapeTests
     [Test]
     public void FarFromTheOrigin_CollidersMeetAsNearIt()
     {
-        var far = new Vector3<double>(1e9, 5e8, -1e9);
+        var far = new WorldPosition(1e9, 5e8, -1e9);
         var firstEntity = Box(null, new Vector3<double>(-0.5), new Vector3<double>(0.5));
         var secondEntity = Box(null, new Vector3<double>(-0.5), new Vector3<double>(0.5));
         var first = With(new BoxCollider(), firstEntity);

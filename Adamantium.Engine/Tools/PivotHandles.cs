@@ -24,8 +24,8 @@ public class PivotHandles : Handles
     private readonly Entity point;
     private readonly Entity central;
     private readonly RingDrag ringDrag = new();
-    private Vector3<double> anchor;
-    private Vector3<double> startPivot;
+    private WorldPosition anchor;
+    private WorldPosition startPivot;
     private QuaternionF startPivotRotation;
     private Vector3F direction;
     private Vector3F startVector;

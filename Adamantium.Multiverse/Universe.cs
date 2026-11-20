@@ -1177,11 +1177,11 @@ public class Universe : IUniverse
     private void OnOutputCreated(UniverseOutput output)
     {
         var entity = new CameraTemplate().BuildEntity(
-            null, $"Main camera for {output.Name}", Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
+            null, $"Main camera for {output.Name}", WorldPosition.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             output.Width, output.Height, 0.1f, 1000000.0f);
-        entity.Transform.Position = new Vector3<double>(0, -3, -20);
+        entity.Transform.Position = new WorldPosition(0, -3, -20);
         var camera = entity.GetComponent<Camera>();
-        camera.SetFreeLookAt(Vector3<double>.Zero);
+        camera.SetFreeLookAt(WorldPosition.Zero);
         output.Scene ??= EntityWorld.MainScene;
         EntityWorld.EntityManager.AddEntity(entity, output.Scene);
         output.OwnCamera = camera;

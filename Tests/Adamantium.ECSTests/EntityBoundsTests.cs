@@ -15,12 +15,12 @@ public class EntityBoundsTests
     public void Bounds_HoldEveryPartUnderTheEntityInItsOwnAxes()
     {
         var model = new Entity(null, "Model");
-        model.Transform.Position = new Vector3<double>(100, 0, 0);
+        model.Transform.Position = new WorldPosition(100, 0, 0);
         var near = new Entity(model, "Near");
-        near.Transform.Position = new Vector3<double>(-2, 0, 0);
+        near.Transform.Position = new WorldPosition(-2, 0, 0);
         AddBox(near, 0.5);
         var far = new Entity(model, "Far");
-        far.Transform.Position = new Vector3<double>(4, 0, 0);
+        far.Transform.Position = new WorldPosition(4, 0, 0);
         far.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians(90));
         AddBox(far, 1, new Vector3<double>(2, 0.5, 0.5));
 

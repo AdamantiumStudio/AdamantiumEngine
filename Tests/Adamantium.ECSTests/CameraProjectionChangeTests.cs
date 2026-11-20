@@ -22,7 +22,7 @@ public class CameraProjectionChangeTests
         var camera = new Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = Focus };
         new Entity(null, "Camera").AddComponent(camera);
         camera.Update(new AppTime());
-        camera.Owner.Transform.Position = new Vector3<double>(3, -2, 1);
+        camera.Owner.Transform.Position = new WorldPosition(3, -2, 1);
         camera.Rotation = Quaternion.CreateFromYawPitchRoll<float>(0.4f, 0.2f, 0);
         camera.Update(new AppTime());
         return camera;
@@ -282,7 +282,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Position = new Vector3<double>(0, 0, 10);
+        host.Transform.Position = new WorldPosition(0, 0, 10);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
@@ -311,7 +311,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Position = new Vector3<double>(0, 0, 10);
+        host.Transform.Position = new WorldPosition(0, 0, 10);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
@@ -338,7 +338,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var host = new Entity(null, "Host");
-        host.Transform.Position = new Vector3<double>(0, 0, 10);
+        host.Transform.Position = new WorldPosition(0, 0, 10);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(host);
         world.EntityManager.AddEntity(camera.Owner);
@@ -471,7 +471,7 @@ public class CameraProjectionChangeTests
         world.EntityManager.AddEntity(camera.Owner);
         world.EntityManager.SetOwner(camera.Owner, host);
         camera.HostChangeTime = 0;
-        camera.SetFirstPersonCamera(Vector3<double>.Zero, QuaternionF.Identity, 0);
+        camera.SetFirstPersonCamera(WorldPosition.Zero, QuaternionF.Identity, 0);
         Step(camera, 16);
         camera.IsIsometric = true;
         Step(camera, 1000);
@@ -527,7 +527,7 @@ public class CameraProjectionChangeTests
         var camera = FreeCamera();
         var stood = camera.WorldPosition;
         var subject = new Entity(null, "Subject");
-        subject.Transform.Position = new Vector3<double>(40, -3, 25);
+        subject.Transform.Position = new WorldPosition(40, -3, 25);
 
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(subject);
@@ -578,7 +578,7 @@ public class CameraProjectionChangeTests
     {
         var camera = FreeCamera();
         var subject = new Entity(null, "Subject");
-        subject.Transform.Position = new Vector3<double>(10, -2, 30);
+        subject.Transform.Position = new WorldPosition(10, -2, 30);
         subject.Transform.ScaleFactor = new Vector3F(0.01f);
         var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
         world.EntityManager.AddEntity(subject);
@@ -657,7 +657,7 @@ public class CameraProjectionChangeTests
         world.EntityManager.SetOwner(camera.Owner, host);
         camera.HostChangeTime = 0;
 
-        camera.SetFirstPersonCamera(Vector3<double>.Zero, QuaternionF.Identity, 0);
+        camera.SetFirstPersonCamera(WorldPosition.Zero, QuaternionF.Identity, 0);
         Step(camera, 16);
 
         var faces = Matrix4x4.CreateFromQuaternion<float>(host.Transform.Rotation).Forward;

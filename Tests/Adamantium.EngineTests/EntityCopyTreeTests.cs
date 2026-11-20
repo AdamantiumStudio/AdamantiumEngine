@@ -20,7 +20,7 @@ public class EntityCopyTreeTests
         var earth = new Entity(root, "Earth");
         var moon = new Entity(earth, "Moon");
         earth.AddComponent(new Pushed { Speed = 3 });
-        earth.Transform.Position = new Vector3<double>(5, 0, 0);
+        earth.Transform.Position = new WorldPosition(5, 0, 0);
         var copies = new Dictionary<Entity, Entity>();
 
         var copy = root.CopyTree(copies);
@@ -34,7 +34,7 @@ public class EntityCopyTreeTests
             Assert.That(copies[moon].Owner, Is.SameAs(copiedEarth));
             Assert.That(copiedEarth.GetComponent<Pushed>(), Is.Not.SameAs(earth.GetComponent<Pushed>()));
             Assert.That(copiedEarth.GetComponent<Pushed>().Speed, Is.EqualTo(3));
-            Assert.That(copiedEarth.Transform.Position, Is.EqualTo(new Vector3<double>(5, 0, 0)));
+            Assert.That(copiedEarth.Transform.Position, Is.EqualTo(new WorldPosition(5, 0, 0)));
         });
     }
 

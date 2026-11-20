@@ -82,6 +82,7 @@ public class SceneBuilderTests
         patrol.Values.Add(new SceneValue(nameof(Patrol.Speed), "2.5"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Route), "A, B"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Goal), "1, 2, 3"));
+        patrol.Values.Add(new SceneValue(nameof(Patrol.Post), "1000000000.001, 0, 2"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Mode), nameof(PatrolMode.Loop)));
         scene.GameComponents.Add(patrol);
         var unloaded = new SceneGameComponent { On = 30, Type = "SomeMod.Unknown" };
@@ -271,7 +272,8 @@ public class SceneBuilderTests
             Assert.That(patrol.Values, Is.EquivalentTo(new[]
             {
                 new SceneValue(nameof(Patrol.Speed), "2.5"), new SceneValue(nameof(Patrol.Route), "A, B"),
-                new SceneValue(nameof(Patrol.Goal), "1, 2, 3"), new SceneValue(nameof(Patrol.Mode), "Loop")
+                new SceneValue(nameof(Patrol.Goal), "1, 2, 3"), new SceneValue(nameof(Patrol.Post), "1000000000.001, 0, 2"),
+                new SceneValue(nameof(Patrol.Mode), "Loop")
             }));
 
             var unloaded = back.GameComponents.Single(entry => entry.Type == "SomeMod.Unknown");
@@ -303,6 +305,7 @@ public class SceneBuilderTests
             Assert.That(patrol.Speed, Is.EqualTo(2.5));
             Assert.That(patrol.Route, Is.EqualTo("A, B"));
             Assert.That(patrol.Goal, Is.EqualTo(new Vector3F(1, 2, 3)));
+            Assert.That(patrol.Post, Is.EqualTo(new WorldPosition(1000000000.001, 0, 2)));
             Assert.That(patrol.Mode, Is.EqualTo(PatrolMode.Loop));
         });
     }
@@ -445,10 +448,10 @@ public class SceneBuilderTests
         scene.Models.Add(new SceneModel { Uid = 1, Name = "Robot", Asset = RobotAsset });
         var entities = await Build(scene);
         var body = entities[0].Dependencies.Single(part => part.Name == "Body");
-        body.Transform.Position = new Vector3<double>(0, 2, 0);
+        body.Transform.Position = new WorldPosition(0, 2, 0);
         var lamp = new Entity(null, "Lamp");
         new Adamantium.Engine.Templates.Lights.LightTemplate().Build(lamp, LightType.Point);
-        lamp.Transform.Position = new Vector3<double>(0, 1, 0);
+        lamp.Transform.Position = new WorldPosition(0, 1, 0);
         universe.EntityWorld.EntityManager.SetOwner(lamp, body);
         universe.EntityWorld.ForceUpdate();
 

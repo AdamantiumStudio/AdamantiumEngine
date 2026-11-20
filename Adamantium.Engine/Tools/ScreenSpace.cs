@@ -6,22 +6,22 @@ namespace Adamantium.Engine.Tools;
 
 internal static class ScreenSpace
 {
-    public static float UnitsPerPixel(CameraBase camera, Vector3<double> worldPoint)
+    public static float UnitsPerPixel(CameraBase camera, WorldPosition worldPoint)
     {
         var projection = camera.ProjectionMatrix;
-        var depth = Vector3F.Dot((worldPoint - camera.WorldPosition).As<float>(), camera.Forward.As<float>());
+        var depth = Vector3F.Dot(worldPoint.OffsetFrom(camera.WorldPosition), camera.Forward.As<float>());
         var w = depth * projection.M34 + projection.M44;
         return 2f * Math.Abs(w) / (camera.Width * projection.M11);
     }
 
-    public static float UnitsPerPoint(CameraBase camera, Vector3<double> worldPoint)
+    public static float UnitsPerPoint(CameraBase camera, WorldPosition worldPoint)
     {
         return UnitsPerPixel(camera, worldPoint) * camera.PixelsPerPoint;
     }
 
-    public static Vector3F InRender(Vector3<double> worldPoint, CameraBase camera)
+    public static Vector3F InRender(WorldPosition worldPoint, CameraBase camera)
     {
-        return (worldPoint - camera.WorldPosition).As<float>();
+        return worldPoint.OffsetFrom(camera.WorldPosition);
     }
 
     public static QuaternionF Facing(CameraBase camera)

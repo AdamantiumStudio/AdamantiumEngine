@@ -23,11 +23,11 @@ public class SkinAndClipTests
     public void APose_StandsTheNodeAsTheFileHasIt_WhateverItsPivot()
     {
         var entity = new Entity(null, "Wheel");
-        entity.Transform.Position = new Vector3<double>(1, 0, 0);
-        entity.Transform.Pivot = new Vector3<double>(3, 2, 1);
+        entity.Transform.Position = new WorldPosition(1, 0, 0);
+        entity.Transform.Pivot = new WorldPosition(3, 2, 1);
         var turn = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.7f);
 
-        entity.Transform.SetPose(new Vector3<double>(5, 6, 7), turn, new Vector3F(2, 1, 1));
+        entity.Transform.SetPose(new WorldPosition(5, 6, 7), turn, new Vector3F(2, 1, 1));
 
         var expected = Matrix4x4.CreateScale<float>(2, 1, 1) * Matrix4x4.CreateFromQuaternion<float>(turn) * Matrix4x4.CreateTranslation<float>(5, 6, 7);
         Assert.That(entity.Transform.GetLocalMatrixF(), Is.EqualTo(expected).Using<Matrix4x4F>(Near));
@@ -74,7 +74,7 @@ public class SkinAndClipTests
     public void AVertex_GoesWhereItsJointCarriesIt_HoweverTheMeshsNodeStands()
     {
         Import(SkinnedScene(), out var leg, out _, out var knee);
-        leg.Transform.Position = new Vector3<double>(5, 0, 0);
+        leg.Transform.Position = new WorldPosition(5, 0, 0);
         leg.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.5f);
         knee.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, MathF.PI / 2);
         var palette = new Matrix4x4F[4];
@@ -97,11 +97,11 @@ public class SkinAndClipTests
         universe.Satellites.Add<IUniverse>(universe);
         var output = new TestOutput();
         universe.Add(output);
-        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", WorldPosition.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             800, 600, 0.1f, 1000f);
         output.Camera = cameraEntity.GetComponent<Camera>();
         var model = Import(SkinnedScene(), out var leg, out _, out var knee);
-        model.Transform.Position = new Vector3<double>(2, 0, 5);
+        model.Transform.Position = new WorldPosition(2, 0, 5);
         leg.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, 0.5f);
         knee.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, MathF.PI / 2);
         universe.EntityWorld.EntityManager.AddEntity(cameraEntity);
@@ -117,7 +117,7 @@ public class SkinAndClipTests
 
         skin.FillPalette(composed);
         skin.FillPalette(looked, output.Camera);
-        skin.FillPalette(unseen, new CameraTemplate().BuildEntity(null, "Other", Vector3<double>.Zero, Vector3<double>.ForwardLH,
+        skin.FillPalette(unseen, new CameraTemplate().BuildEntity(null, "Other", WorldPosition.Zero, Vector3<double>.ForwardLH,
             -Vector3<double>.Up, 800, 600, 0.1f, 1000f).GetComponent<Camera>());
         knee.Transform.Position += new Vector3<double>(1, 0, 0);
         transforms.Update(new AppTime());
@@ -299,7 +299,7 @@ public class SkinAndClipTests
     public void ADuplicate_StandsWhereTheOriginalStands()
     {
         var model = Import(SkinnedScene(), out _, out _, out var knee);
-        model.Transform.Position = new Vector3<double>(4, 0, 0);
+        model.Transform.Position = new WorldPosition(4, 0, 0);
         knee.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, 0.5f);
 
         var copy = model.Duplicate();
@@ -307,7 +307,7 @@ public class SkinAndClipTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(copy.Transform.Position, Is.EqualTo(new Vector3<double>(4, 0, 0)));
+            Assert.That(copy.Transform.Position, Is.EqualTo(new WorldPosition(4, 0, 0)));
             Assert.That(copiedKnee.Transform.GetLocalMatrixF(), Is.EqualTo(knee.Transform.GetLocalMatrixF()).Using<Matrix4x4F>(Near));
         });
     }
@@ -404,7 +404,7 @@ public class SkinAndClipTests
         animation.IsEnabled = false;
         animation.Update(At(0.6));
         var off = knee.Transform.GetLocalMatrixF().TranslationVector;
-        knee.Transform.Position = new Vector3<double>(7, -1, 0);
+        knee.Transform.Position = new WorldPosition(7, -1, 0);
         animation.Update(At(0.7));
         var moved = knee.Transform.GetLocalMatrixF().TranslationVector;
         animation.IsEnabled = true;
@@ -447,7 +447,7 @@ public class SkinAndClipTests
         var mesh = leg.GetComponent<MeshData>().Mesh;
         mesh.SetJointIndices([new Vector4F(-1, 0, 0, 0), new Vector4F(-1, 0, 0, 0), new Vector4F(-1, 0, 0, 0)]);
         mesh.SetJointWeights([Vector4F.UnitX, Vector4F.UnitX, Vector4F.UnitX]);
-        hip.Transform.Position = new Vector3<double>(3, 0, 0);
+        hip.Transform.Position = new WorldPosition(3, 0, 0);
         knee.Transform.Position += new Vector3<double>(10, 0, 0);
 
         var posed = leg.GetComponent<Skin>().PosePoints(mesh);
@@ -461,13 +461,13 @@ public class SkinAndClipTests
     public void FarFromTheOrigin_TheJointsCarryTheMeshAsNearIt()
     {
         var model = Import(SkinnedScene(), out var leg, out var hip, out var knee);
-        hip.Transform.Position = new Vector3<double>(0.3, 0.01, 0);
+        hip.Transform.Position = new WorldPosition(0.3, 0.01, 0);
         knee.Transform.Rotation = Quaternion.CreateFromYawPitchRoll<float>(0.4f, 0.2f, 0);
         var skin = leg.GetComponent<Skin>();
         var near = new Matrix4x4F[skin.Joints.Count];
         skin.FillPalette(near);
 
-        model.Transform.Position = new Vector3<double>(1e9, 5e8, -1e9);
+        model.Transform.Position = new WorldPosition(1e9, 5e8, -1e9);
         var far = new Matrix4x4F[skin.Joints.Count];
         skin.FillPalette(far);
 
@@ -481,7 +481,7 @@ public class SkinAndClipTests
         Import(SkinnedScene(), out var leg, out var hip, out _);
         var mesh = leg.GetComponent<MeshData>().Mesh;
         mesh.SetJointWeights([new Vector4F(1.5f, -0.5f, 0, 0), new Vector4F(1.5f, -0.5f, 0, 0), new Vector4F(1.5f, -0.5f, 0, 0)]);
-        hip.Transform.Position = new Vector3<double>(4, 0, 0);
+        hip.Transform.Position = new WorldPosition(4, 0, 0);
         var skin = leg.GetComponent<Skin>();
 
         var posed = skin.PosePoints(mesh);
@@ -502,7 +502,7 @@ public class SkinAndClipTests
         Import(SkinnedScene(), out var leg, out var hip, out var knee);
         var mesh = leg.GetComponent<MeshData>().Mesh;
         mesh.SetJointWeights([Vector4F.UnitX, new Vector4F(0.3f, 0.7f, 0, 0), Vector4F.Zero]);
-        hip.Transform.Position = new Vector3<double>(2, -1, 5);
+        hip.Transform.Position = new WorldPosition(2, -1, 5);
         hip.Transform.BaseScale = new Vector3F(1, 3, 0.5f);
         knee.Transform.Rotation = Quaternion.CreateFromYawPitchRoll<float>(0.7f, -0.4f, 1.1f);
         knee.Transform.Position += new Vector3<double>(1, 2, 0);
@@ -526,7 +526,7 @@ public class SkinAndClipTests
         var movedDown = new Ray<float>(new Vector3F(4.25f, -0.25f, -5), Vector3F.UnitZ);
 
         var atRest = skin.Intersect(mesh, down, out _);
-        hip.Transform.Position = new Vector3<double>(4, 0, 0);
+        hip.Transform.Position = new WorldPosition(4, 0, 0);
         var whereItWas = skin.Intersect(mesh, down, out _);
         var whereItWent = skin.Intersect(mesh, movedDown, out var distance);
         var again = skin.Intersect(mesh, movedDown, out _);
@@ -611,7 +611,7 @@ public class SkinAndClipTests
 
     private static Entity Import(SceneData scene, out Entity leg, out Entity hip, out Entity knee)
     {
-        var model = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity());
+        var model = new EntityImportTemplate(scene, null, WorldPosition.Zero).Build(new Entity());
         leg = model.Dependencies.Single(e => e.Name.StartsWith("Leg"));
         hip = model.Dependencies.Single(e => e.Name.StartsWith("Hip"));
         knee = hip.Dependencies.Single();

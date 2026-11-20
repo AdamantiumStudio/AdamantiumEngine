@@ -55,8 +55,8 @@ public class ForwardPlusTransparencyTests
         _rendering = _universe.CreateRenderService<RenderingService>(_output);
         _rendering.AttachProcessor(new ForwardPlusRenderingProcessor { Ambient = Vector3F.One });
         var eye = _output.Camera;
-        eye.Owner.Transform.Position = new Vector3<double>(0, 0, -6);
-        eye.SetFreeLookAt(Vector3<double>.Zero);
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -6);
+        eye.SetFreeLookAt(WorldPosition.Zero);
     }
 
     [TearDown]
@@ -71,8 +71,8 @@ public class ForwardPlusTransparencyTests
     [Test]
     public void AHalfTransparentCube_OverAnOpaqueOne_ShowsWhatIsBehind()
     {
-        AddCube("Behind", new Vector3<double>(0, 0, 2), new Vector4F(0, 0, 1, 1), AlphaMode.Opaque);
-        AddCube("Glass", Vector3<double>.Zero, new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
+        AddCube("Behind", new WorldPosition(0, 0, 2), new Vector4F(0, 0, 1, 1), AlphaMode.Opaque);
+        AddCube("Glass", WorldPosition.Zero, new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
 
         var center = CenterPixel("forward-plus-glass.png");
 
@@ -88,8 +88,8 @@ public class ForwardPlusTransparencyTests
     [Test]
     public void ATexturedTransparentCube_TakesItsTexelsAlphaTimesItsColors()
     {
-        AddCube("Behind", new Vector3<double>(0, 0, 2), new Vector4F(0, 0, 1, 1), AlphaMode.Opaque);
-        var glass = AddCube("Glass", Vector3<double>.Zero, new Vector4F(1, 1, 1, 0.5f), AlphaMode.Blend);
+        AddCube("Behind", new WorldPosition(0, 0, 2), new Vector4F(0, 0, 1, 1), AlphaMode.Opaque);
+        var glass = AddCube("Glass", WorldPosition.Zero, new Vector4F(1, 1, 1, 0.5f), AlphaMode.Blend);
         _texture = Texture.CreateFrom(_rendering.GraphicsDevice, TexelsDescription(), RedTexels(255));
         glass.GetComponent<Material>().Texture = _texture;
 
@@ -107,14 +107,14 @@ public class ForwardPlusTransparencyTests
     [Test]
     public void TwoTransparentCubes_GiveOnePicture_InEitherOrder_TheNearOneWeighingMore()
     {
-        var near = AddCube("Near", new Vector3<double>(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
-        var far = AddCube("Far", new Vector3<double>(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
+        var near = AddCube("Near", new WorldPosition(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
+        var far = AddCube("Far", new WorldPosition(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
         var nearFirst = CenterPixel("forward-plus-near-first.png");
 
         _universe.EntityWorld.EntityManager.RemoveEntity(near);
         _universe.EntityWorld.EntityManager.RemoveEntity(far);
-        AddCube("Far", new Vector3<double>(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
-        AddCube("Near", new Vector3<double>(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
+        AddCube("Far", new WorldPosition(0, 0, 1.5), new Vector4F(0, 1, 0, 0.5f), AlphaMode.Blend);
+        AddCube("Near", new WorldPosition(0, 0, -1.5), new Vector4F(1, 0, 0, 0.5f), AlphaMode.Blend);
         var farFirst = CenterPixel("forward-plus-far-first.png");
 
         Assert.Multiple(() =>
@@ -131,7 +131,7 @@ public class ForwardPlusTransparencyTests
     [TestCase(0.3f, 0)]
     public void AMaskedCube_IsWholeAboveItsCutoffAndLeftOutBelow(float alpha, int red)
     {
-        AddCube("Masked", Vector3<double>.Zero, new Vector4F(1, 0, 0, alpha), AlphaMode.Mask);
+        AddCube("Masked", WorldPosition.Zero, new Vector4F(1, 0, 0, alpha), AlphaMode.Mask);
 
         var center = CenterPixel("forward-plus-masked.png");
 
@@ -143,7 +143,7 @@ public class ForwardPlusTransparencyTests
     [TestCase((byte)70, 0)]
     public void AMaskedTexturedCube_IsLeftOutWhereItsTextureIsBelowTheCutoff(byte texelAlpha, int red)
     {
-        var cube = AddCube("Masked", Vector3<double>.Zero, Vector4F.One, AlphaMode.Mask);
+        var cube = AddCube("Masked", WorldPosition.Zero, Vector4F.One, AlphaMode.Mask);
         _texture = Texture.CreateFrom(_rendering.GraphicsDevice, TexelsDescription(), RedTexels(texelAlpha));
         cube.GetComponent<Material>().Texture = _texture;
 
@@ -160,7 +160,7 @@ public class ForwardPlusTransparencyTests
     [TestCase(MaterialFaces.Front, false, true, 0)]
     public void ACubesFaces_AreWhatItsMaterialShows(MaterialFaces faces, bool fromOutside, bool mirrored, int red)
     {
-        var cube = AddCube("Box", fromOutside ? Vector3<double>.Zero : new Vector3<double>(0, 0, -6),
+        var cube = AddCube("Box", fromOutside ? WorldPosition.Zero : new WorldPosition(0, 0, -6),
             new Vector4F(1, 0, 0, 1), AlphaMode.Opaque);
         cube.GetComponent<Material>().Faces = faces;
         cube.Transform.ScaleFactor = new Vector3F(mirrored ? -1 : 1, 1, 1) * (fromOutside ? 1 : 4);
@@ -173,14 +173,14 @@ public class ForwardPlusTransparencyTests
     [Test]
     public void AnOpaqueCube_IgnoresItsAlpha()
     {
-        AddCube("Opaque", Vector3<double>.Zero, new Vector4F(1, 0, 0, 0.2f), AlphaMode.Opaque);
+        AddCube("Opaque", WorldPosition.Zero, new Vector4F(1, 0, 0, 0.2f), AlphaMode.Opaque);
 
         var center = CenterPixel("forward-plus-opaque.png");
 
         Assert.That(center.Red, Is.EqualTo(255).Within(Within));
     }
 
-    private Entity AddCube(string name, Vector3<double> position, Vector4F color, AlphaMode alphaMode)
+    private Entity AddCube(string name, WorldPosition position, Vector4F color, AlphaMode alphaMode)
     {
         var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, name));
         cube.Transform.Position = position;

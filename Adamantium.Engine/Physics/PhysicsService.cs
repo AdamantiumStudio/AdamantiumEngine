@@ -151,14 +151,13 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     }
 
     /// <inheritdoc/>
-    public void ApplyImpulse(Entity entity, Vector3F impulse, Vector3<double> point)
+    public void ApplyImpulse(Entity entity, Vector3F impulse, WorldPosition point)
     {
         RequireFinite(impulse, nameof(impulse));
-        var strikesAt = new WorldPosition(point);
-        if (!strikesAt.IsFinite)
+        if (!point.IsFinite)
             throw new ArgumentOutOfRangeException(nameof(point), point, "The point must be finite.");
 
-        Send(PhysicsCommandKind.ApplyImpulse, FindDynamicKey(entity), impulse, strikesAt);
+        Send(PhysicsCommandKind.ApplyImpulse, FindDynamicKey(entity), impulse, point);
     }
 
     /// <inheritdoc/>
@@ -1263,7 +1262,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private void PlaceEntity(PhysicsBodyLink link, bool hasParent, in Matrix4x4<double> parentWorld,
         WorldPosition centerOfMass, QuaternionF entityRotation)
     {
-        var entityPosition = (centerOfMass - Vector3F.Transform(link.CenterOfMass, entityRotation)).ToVector();
+        var entityPosition = centerOfMass - Vector3F.Transform(link.CenterOfMass, entityRotation);
         var transform = link.Entity.Transform;
         // Changed by another since the last look: left for the next one to see, not taken as the physics' own.
         var isAsRead = link.Parts.IsBodyAsRead();
@@ -1277,7 +1276,8 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 return;
 
             // Into the parent's axes in double: both may stand far out, the way between them small.
-            var local = Vector3<double>.TransformCoordinate(entityPosition, Matrix4x4<double>.Invert(parentWorld));
+            var local = new WorldPosition(Vector3<double>.TransformCoordinate(entityPosition.ToVector(),
+                Matrix4x4<double>.Invert(parentWorld)));
             transform.SetPose(local, QuaternionF.Conjugate(parentRotation) * entityRotation, transform.BaseScale);
         }
 

@@ -156,7 +156,7 @@ public class SceneDataAssetReaderTests
         var scene = new SceneData { Name = "box.obj", Source = "Models/Box/box.obj" };
         scene.Models = scene.CreateMesh(null, "", "Model");
 
-        var model = new EntityImportTemplate(scene, null, Vector3<double>.Zero).Build(new Entity());
+        var model = new EntityImportTemplate(scene, null, WorldPosition.Zero).Build(new Entity());
 
         Assert.Multiple(() =>
         {
