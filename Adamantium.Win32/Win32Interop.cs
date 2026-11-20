@@ -339,6 +339,26 @@ namespace Adamantium.Win32
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CloseHandle(IntPtr hObject);
 
+        /// <summary>For <see cref="OpenProcess"/>: the right to duplicate handles into the process.</summary>
+        public const uint ProcessDuplicateHandle = 0x0040;
+
+        /// <summary>For <see cref="DuplicateHandle"/>: the copy has the same access as the source.</summary>
+        public const uint DuplicateSameAccess = 0x00000002;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
+            int processId);
+
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetCurrentProcess();
+
+        /// <summary>Copies <paramref name="sourceHandle"/> of <paramref name="sourceProcess"/> into
+        /// <paramref name="targetProcess"/>, where <paramref name="targetHandle"/> is its value.</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr sourceHandle, IntPtr targetProcess,
+            out IntPtr targetHandle, uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint options);
+
         /// <summary>For <see cref="CreateDesktopW"/>: every right on the desktop.</summary>
         public const uint DesktopAllAccess = 0x10000000;
 

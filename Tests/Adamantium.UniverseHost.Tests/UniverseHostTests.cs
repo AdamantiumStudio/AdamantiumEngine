@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.IO.Pipes;
 using Adamantium.Engine.Scenes;
 using Adamantium.Imaging;
+using Adamantium.Multiverse.Remote;
 using NUnit.Framework;
 
 namespace Adamantium.UniverseHost.Tests;
@@ -111,7 +113,66 @@ public class UniverseHostTests
         });
     }
 
-    private static HostRun RunHost(params string[] arguments)
+    // A viewer in another process: the host greets it, hands it the handles of surfaces of the size asked, tells it of
+    // each frame, draws at a new size when asked, and stops when told.
+    [Test]
+    public void AViewer_IsGivenTheSurfacesAndFrames_AndResizesAndStopsTheHost()
+    {
+        var pipeName = "adamantium-universe-host-" + Guid.NewGuid().ToString("N");
+        using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+        var viewer = new WatchingViewer();
+        using var host = StartHost("--scene", Path.Combine(_folder, "Drift.ascene"),
+            "--code", Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.TestGame.dll"),
+            "--size", "160x90", "--viewer", pipeName, "--viewer-process", Environment.ProcessId.ToString());
+        var errors = host.StandardError.ReadToEndAsync();
+        _ = host.StandardOutput.ReadToEndAsync();
+        try
+        {
+            WatchHost(host, pipe, viewer, errors);
+        }
+        finally
+        {
+            if (!host.HasExited)
+                host.Kill();
+        }
+    }
+
+    private static void WatchHost(Process host, NamedPipeServerStream pipe, WatchingViewer viewer, Task<string> errors)
+    {
+        Assert.That(pipe.WaitForConnectionAsync().Wait(TimeSpan.FromSeconds(20)), Is.True, "the host connects");
+        using var channel = new UniverseViewerChannel(pipe, viewer);
+        channel.Start();
+
+        Assert.That(viewer.Hellos.TryTake(out var hello, TimeSpan.FromSeconds(30)), Is.True, "greeted");
+        Assert.That(viewer.Surfaces.TryTake(out var first, TimeSpan.FromSeconds(30)), Is.True, "given a surface");
+        Assert.That(viewer.Frames.TryTake(out var frame, TimeSpan.FromSeconds(30)), Is.True, "told of a frame");
+        Assert.Multiple(() =>
+        {
+            Assert.That(hello.ProcessId, Is.EqualTo(host.Id));
+            Assert.That(hello.DeviceUuid, Is.Not.EqualTo(Guid.Empty), "the GPU it draws on");
+            Assert.That(first.Width, Is.EqualTo(160u));
+            Assert.That(first.Height, Is.EqualTo(90u));
+            Assert.That(first.Buffers, Has.Length.EqualTo(3));
+            Assert.That(first.Buffers.All(buffer => buffer.MemoryHandle != 0 && buffer.ProduceSemaphoreHandle != 0
+                                                  && buffer.ConsumeSemaphoreHandle != 0), Is.True, "handles of this process");
+            Assert.That(frame, Is.GreaterThan(0ul));
+        });
+        first.CloseHandles();
+
+        channel.SendResize(320, 180, 1);
+        channel.SendFrameAsked(frame + 1);
+        Assert.That(viewer.Surfaces.TryTake(out var resized, TimeSpan.FromSeconds(30)), Is.True, "given a surface of the new size");
+        Assert.That(resized.Width, Is.EqualTo(320u));
+        resized.CloseHandles();
+
+        channel.SendStop();
+        Assert.That(viewer.Ended.Wait(TimeSpan.FromSeconds(30)), Is.True, "told the universe stopped");
+        Assert.That(host.WaitForExit(TimeSpan.FromSeconds(30)), Is.True, "the host exits");
+        Assert.That(host.ExitCode, Is.EqualTo(0), errors.Result);
+    }
+
+    private static Process StartHost(params string[] arguments)
     {
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
@@ -123,7 +184,12 @@ public class UniverseHostTests
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
 
-        using var host = Process.Start(start)!;
+        return Process.Start(start)!;
+    }
+
+    private static HostRun RunHost(params string[] arguments)
+    {
+        using var host = StartHost(arguments);
         var output = host.StandardOutput.ReadToEndAsync();
         var errors = host.StandardError.ReadToEndAsync();
         if (!host.WaitForExit(TimeSpan.FromSeconds(60)))

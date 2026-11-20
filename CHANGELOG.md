@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- A universe shown in another process: `UniverseHostChannel` and `UniverseViewerChannel` (`Adamantium.Multiverse.Remote`)
+  are the two ends of a channel over a pipe. The host greets its viewer (`RemoteHello`: its process and GPU), hands it
+  the handles of the surfaces it draws into (`RemoteSurface`) and says when a frame is in them; the viewer sends the
+  view's size, pointer, keyboard focus and input, asks for frames and stops the universe. `Adamantium.UniverseHost`
+  takes `--viewer pipe --viewer-process id`: it draws into exported surfaces and gives the viewer copies of their
+  handles - on Windows, for now. `GraphicsAdapter.DeviceUuid` names the GPU the same in every process.
+
 - `ISharedSurfaceProducer`, made by `SharedSurfaceProducer`, sends an output's frames to an `ISharedSurfaceConsumer`
   through a ring of shared surfaces:
   each frame goes to the surface the consumer gave back, and a new size starts a new ring, handed over once it holds

@@ -46,6 +46,7 @@ public unsafe class GraphicsAdapter
         Luid = (bool)vulkan11Properties.DeviceLUIDValid && vulkan11Properties.DeviceLUID.Length == sizeof(long)
             ? BitConverter.ToInt64(vulkan11Properties.DeviceLUID.Span)
             : null;
+        DeviceUuid = vulkan11Properties.DeviceUUID.Length == 16 ? new Guid(vulkan11Properties.DeviceUUID.Span) : Guid.Empty;
 
         var meshShader = new PhysicalDeviceMeshShaderFeaturesEXT();
         var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR { PNext = meshShader };
@@ -143,6 +144,10 @@ public unsafe class GraphicsAdapter
     /// <summary>The adapter's LUID on Windows, as other APIs pick an adapter by: the low part in the low 32 bits, the
     /// high part in the high ones. Null where the driver gives none.</summary>
     public long? Luid { get; private set; }
+
+    /// <summary>The adapter's UUID, the same in every process and API that sees it: a surface shared between processes
+    /// is taken on the adapter of the same UUID.</summary>
+    public Guid DeviceUuid { get; private set; }
 
     public bool SupportsHostImageCopy { get; private set; }
 

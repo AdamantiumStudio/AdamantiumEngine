@@ -1,3 +1,4 @@
+using System.IO.Pipes;
 using System.Reflection;
 using System.Runtime.Loader;
 using Adamantium.Core.DependencyInjection;
@@ -6,17 +7,27 @@ using Adamantium.ECS.Components;
 using Adamantium.Engine.Scenes;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Imaging;
+using Adamantium.Mathematics;
 using Adamantium.Multiverse;
+using Adamantium.Multiverse.Input;
+using Adamantium.Multiverse.Remote;
 
 namespace Adamantium.UniverseHost;
 
 /// <summary>Plays a game with no window: its code loaded by path - the PDB beside it, for a debugger to see - its scene
-/// built from its content, its services started, drawn by the scene's camera into an offscreen output.</summary>
-public sealed class UniverseHost : IDisposable
+/// built from its content, its services started, drawn by the scene's camera into an offscreen output, or into surfaces
+/// a viewer in another process shows, taking its size and input from it.</summary>
+public sealed class UniverseHost : IUniverseHostReceiver, IDisposable
 {
+    private const int ViewerConnectionTimeoutMs = 10000;
+
     private readonly UniverseHostOptions _options;
     private readonly GameUniverse _universe;
-    private readonly OffscreenOutput _output;
+    private readonly UniverseOutput _output;
+    private readonly OffscreenOutput _offscreen;
+    private readonly RemoteUniverseOutput _remote;
+    private readonly UniverseHostChannel _channel;
+    private readonly HandleTransfer _handles;
     private readonly List<string> _codeFolders = [];
     private GameRun _run;
     private int _framesPlayed;
@@ -31,7 +42,22 @@ public sealed class UniverseHost : IDisposable
         registry.RegisterInstance<IOutputFactory>(platform);
         registry.RegisterInstance<IWindowingPlatform>(platform);
         _universe = new GameUniverse(container);
-        _output = new OffscreenOutput(options.Width, options.Height);
+        if (options.ViewerPipe != null)
+        {
+            var pipe = new NamedPipeClientStream(".", options.ViewerPipe, PipeDirection.InOut, PipeOptions.Asynchronous);
+            pipe.Connect(ViewerConnectionTimeoutMs);
+            _channel = new UniverseHostChannel(pipe, this);
+            _handles = new HandleTransfer(options.ViewerProcessId);
+            var universeEvents = _universe.Satellites.Get<IUniverseEventAggregator>();
+            _remote = new RemoteUniverseOutput(universeEvents, _channel, _handles, options.Width, options.Height);
+            _output = _remote;
+        }
+        else
+        {
+            _offscreen = new OffscreenOutput(options.Width, options.Height);
+            _output = _offscreen;
+        }
+
         List<IAssetResolver> folders = [];
         foreach (var folder in options.ContentFolders)
             folders.Add(new FileSystemAssetResolver(folder));
@@ -55,6 +81,7 @@ public sealed class UniverseHost : IDisposable
         AssemblyLoadContext.Default.Resolving += ResolveFromCodeFolders;
         try
         {
+            _channel?.Start();
             _universe.Run(_output);
             if (!_stopAsked)
                 Fail("the universe stopped by itself; the reason is above");
@@ -82,7 +109,27 @@ public sealed class UniverseHost : IDisposable
         _universe.ShuttingDown -= OnShuttingDown;
         _universe.FrameFinished -= OnFrameFinished;
         _output.Dispose();
+        _channel?.Dispose();
+        _handles?.Dispose();
     }
+
+    public void Resize(uint width, uint height, float pixelsPerPoint) => _remote?.ResizeTo(width, height, pixelsPerPoint);
+
+    public void AskFrame(ulong frame) => _remote?.TakeFrameRequest();
+
+    public void MovePointer(Vector2F position, bool isOver) => _remote?.MovePointer(position, isOver);
+
+    public void Focus(bool hasKeyboard) => _remote?.Focus(hasKeyboard);
+
+    public void TakeKeyboardInput(KeyboardInput input) => _remote?.TakeKeyboardInput(input);
+
+    public void TakeMouseInput(MouseInput input) => _remote?.TakeMouseInput(input);
+
+    public void TakeGestureInput(GestureInput input) => _remote?.TakeGestureInput(input);
+
+    public void TakeText(string text) => _remote?.TakeText(text);
+
+    public void LoseViewer() => Stop();
 
     private void OnStarted(object sender, EventArgs e)
     {
@@ -90,6 +137,12 @@ public sealed class UniverseHost : IDisposable
         {
             _universe.ShutDown();
             return;
+        }
+
+        if (_channel != null)
+        {
+            var adapter = _universe.GraphicsDeviceService.MainGraphicsDevice.GraphicsAdapter;
+            _channel.SendHello(new RemoteHello(Environment.ProcessId, adapter.DeviceUuid));
         }
 
         _ = PrepareAsync();
@@ -193,7 +246,7 @@ public sealed class UniverseHost : IDisposable
 
             if (_options.ImagePath != null)
             {
-                using var frame = _output.ReadFrame() ?? throw new InvalidOperationException("No frame was drawn.");
+                using var frame = _offscreen.ReadFrame() ?? throw new InvalidOperationException("No frame was drawn.");
                 frame.Save(_options.ImagePath, ImageFileType.Png);
             }
         }
@@ -210,6 +263,7 @@ public sealed class UniverseHost : IDisposable
     {
         _run?.Stop();
         _run = null;
+        _channel?.SendStopped();
     }
 
     private void Fail(string reason)

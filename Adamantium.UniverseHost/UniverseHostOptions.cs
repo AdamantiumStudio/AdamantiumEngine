@@ -32,8 +32,15 @@ public sealed class UniverseHostOptions
     /// <summary>Where the last frame is written, as a PNG, after <see cref="Frames"/> frames; null for nowhere.</summary>
     public string ImagePath { get; private set; }
 
+    /// <summary>The pipe the viewer listens on, which shows the frames in its process; null to draw offscreen.</summary>
+    public string ViewerPipe { get; private set; }
+
+    /// <summary>The viewer's process, which the surfaces' handles are given to.</summary>
+    public int ViewerProcessId { get; private set; }
+
     /// <summary>The options of <paramref name="arguments"/>:
-    /// <c>--scene file --content folder... --code assembly... --size 1280x720 --frames n --capture file --image file</c>.
+    /// <c>--scene file --content folder... --code assembly... --size 1280x720 --frames n --capture file --image file
+    /// --viewer pipe --viewer-process id</c>.
     /// </summary>
     public static UniverseHostOptions Parse(IReadOnlyList<string> arguments)
     {
@@ -65,6 +72,12 @@ public sealed class UniverseHostOptions
                 case "--image":
                     options.ImagePath = Path.GetFullPath(value);
                     break;
+                case "--viewer":
+                    options.ViewerPipe = value;
+                    break;
+                case "--viewer-process":
+                    options.ReadViewerProcess(value);
+                    break;
                 default:
                     throw new ArgumentException("Unknown option " + name);
             }
@@ -73,7 +86,21 @@ public sealed class UniverseHostOptions
         if (options.ScenePath == null)
             throw new ArgumentException("--scene is needed");
 
+        if ((options.ViewerPipe == null) != (options.ViewerProcessId == 0))
+            throw new ArgumentException("--viewer and --viewer-process go together");
+
+        if (options.ViewerPipe != null && options.ImagePath != null)
+            throw new ArgumentException("--image is for a host with no viewer: with one, the frames go to it");
+
         return options;
+    }
+
+    private void ReadViewerProcess(string value)
+    {
+        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id == 0)
+            throw new ArgumentException("--viewer-process is the viewer's process id");
+
+        ViewerProcessId = id;
     }
 
     private void ReadSize(string value)
