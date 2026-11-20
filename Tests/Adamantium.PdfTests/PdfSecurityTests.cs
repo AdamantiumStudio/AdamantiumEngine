@@ -250,7 +250,7 @@ public class PdfSecurityTests
         var security = document.Security;
         var user = security.IsOwnerPassword("user");
         var typo = security.IsOwnerPassword("typo");
-        // The owner's last: told, it would leave the handler the owner's.
+        // The owner's last, so a handler it opened would be left the owner's for the check below.
         var owner = security.IsOwnerPassword("owner");
 
         Assert.Multiple(() =>
