@@ -4,7 +4,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>Turns passing time into fixed steps, and the rest into <see cref="Blend"/> for drawing between states.
 /// Falling behind, it gives at most <see cref="MaxStepsPerAdvance"/> and drops the rest, so the world slows down.</summary>
-public sealed class StepClock
+internal sealed class StepClock
 {
     private double _accumulated;
 

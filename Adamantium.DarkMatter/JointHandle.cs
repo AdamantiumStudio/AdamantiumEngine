@@ -4,7 +4,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>A handle to a joint in an <see cref="IPhysicsWorld"/>, given when the joint is added. A removed joint's
 /// handle never equals a later one.</summary>
-public readonly struct JointHandle : IEquatable<JointHandle>
+internal readonly struct JointHandle : IEquatable<JointHandle>
 {
     /// <summary>The handle of the joint a world keeps in <paramref name="index"/>, added as the
     /// <paramref name="generation"/>-th joint there; for worlds to make.</summary>

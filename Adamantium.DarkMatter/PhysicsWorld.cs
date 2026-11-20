@@ -9,7 +9,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>The simulation: the same bodies and calls always step to the same result. One thread owns a world.
 /// </summary>
-public sealed partial class PhysicsWorld : IPhysicsWorld
+internal sealed partial class PhysicsWorld : IPhysicsWorld
 {
     private const int NoBody = -1;
     private const int NoPart = -1;

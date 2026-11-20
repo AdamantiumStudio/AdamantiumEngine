@@ -7,7 +7,7 @@ namespace Adamantium.DarkMatter;
 
 // Queries are worked out in float in the frame of where they start, as collisions are in a pair's: the bodies they meet
 // stand near that point wherever it is in the world.
-public sealed partial class PhysicsWorld
+internal sealed partial class PhysicsWorld
 {
     private readonly List<(int Item, double Entry)> _rayCandidates = [];
     private readonly List<int> _overlapped = [];

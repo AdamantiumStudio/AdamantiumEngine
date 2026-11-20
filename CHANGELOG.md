@@ -686,6 +686,9 @@ All packages share one version.
 
 ### Changed
 
+- DarkMatter's core is internal: `PhysicsWorld`, `IPhysicsWorld`, `BodyHandle`, `JointHandle`, `BodyDescription`,
+  `JointDescription`, `StepClock`, `ContactPoint`, `WorldRayHit` and `WorldShapeHit`. Physics is worked with through
+  `PhysicsSimulation`; the engine no longer uses the core.
 - `PhysicsService` lays the scene's rigid bodies and joints out as bodies and joints of a `PhysicsSimulation` and
   stands the entities where it draws them: its own thread, commands, results and drawing between steps went to the
   simulation. A body changes in place instead of being made anew, a joint asked of it on its bodies' axes. A change

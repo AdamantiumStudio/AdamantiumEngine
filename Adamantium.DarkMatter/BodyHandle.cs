@@ -4,7 +4,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>A handle to a body in an <see cref="IPhysicsWorld"/>, given when the body is added. It knows its world,
 /// and a removed body's handle never equals a later one.</summary>
-public readonly struct BodyHandle : IEquatable<BodyHandle>
+internal readonly struct BodyHandle : IEquatable<BodyHandle>
 {
     /// <summary>The handle of the body a world keeps in <paramref name="index"/>, added as the
     /// <paramref name="generation"/>-th body there; for worlds to make.</summary>

@@ -1,7 +1,7 @@
 namespace Adamantium.DarkMatter;
 
 /// <summary>Where a ray first met a body of an <see cref="IPhysicsWorld"/>.</summary>
-public readonly struct WorldRayHit
+internal readonly struct WorldRayHit
 {
     public WorldRayHit(BodyHandle body, int part, WorldPosition position, Vector3F normal, float distance)
     {

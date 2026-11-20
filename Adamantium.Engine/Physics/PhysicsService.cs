@@ -319,9 +319,9 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private void Refresh(PhysicsBodyLink link, RigidBody body)
     {
         var parts = new BodyParts { SeenInLook = _lookNumber };
-        var description = Describe(body, parts, out var parentWorld);
+        var layout = LayOut(body, parts, out var parentWorld);
         var entity = link.Entity;
-        if (description == null)
+        if (layout == null)
         {
             _carriedShapes.GiveBack(parts.CarriedShapes);
             Forget(link);
@@ -329,9 +329,9 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             return;
         }
 
-        KeepUsableSettings(description, link.Made);
+        KeepUsableSettings(layout, link.Made);
         // Made dynamic with nothing to weigh it by, it cannot be: left until it is given a weight.
-        if (description.Kind == BodyKind.Dynamic && !IsWeight(description.Mass, description.Density))
+        if (layout.Kind == BodyKind.Dynamic && !IsWeight(layout.Mass, layout.Density))
         {
             Log.Logger.Warning("The dynamic body of {Entity} has no mass and no density; the physics leaves it until it "
                                + "has one", entity.Name);
@@ -347,15 +347,15 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             var transform = entity.Transform;
             var keepsPose = link.Kind != BodyKind.Static && body.Kind != BodyKind.Static
                             && transform.Position == link.WrittenPosition && transform.Rotation == link.WrittenRotation;
-            Rehang(link, body, parts, description, parentWorld, keepsPose);
+            Rehang(link, body, parts, layout, parentWorld, keepsPose);
             return;
         }
 
         var changesShape = !ShapeLikeness.AreAlike(link.Parts.ShapeParts, parts.ShapeParts);
-        var changesSettings = !HasSameSettings(link.Made, description);
-        var changesKind = link.Kind != description.Kind;
+        var changesSettings = !HasSameSettings(link.Made, layout);
+        var changesKind = link.Kind != layout.Kind;
         // A kind changed starts from rest where the entity is drawn, not where the physics' last step left it.
-        var moves = WasMovedByHand(link, description) || changesKind;
+        var moves = WasMovedByHand(link, layout) || changesKind;
         if (changesShape)
         {
             // After the new parts took their hull and mesh shapes, so the ones both use are not made again.
@@ -363,35 +363,35 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         }
         else
         {
-            KeepShapes(link, parts, description);
+            KeepShapes(link, parts, layout);
         }
 
         var before = link.Made;
         link.Parts = parts;
         link.Body = body;
         if (changesKind)
-            ChangeKind(link, description.Kind);
+            ChangeKind(link, layout.Kind);
 
         // A moving body's is what it was last stood under, for MoveEntities to see its parent move.
         if (link.Kind == BodyKind.Static)
             link.ParentWorld = parentWorld;
 
         if (changesShape || changesSettings || moves)
-            ChangeBody(link, before, description, changesShape, changesSettings, moves);
+            ChangeBody(link, before, layout, changesShape, changesSettings, moves);
     }
 
     // Its body hung under another, or under none: followed anew from its new place, the same body of the simulation.
-    private void Rehang(PhysicsBodyLink previous, RigidBody body, BodyParts parts, BodyDescription description,
+    private void Rehang(PhysicsBodyLink previous, RigidBody body, BodyParts parts, BodyLayout layout,
         Matrix4x4<double> parentWorld, bool keepsPose)
     {
         var changesShape = !ShapeLikeness.AreAlike(previous.Parts.ShapeParts, parts.ShapeParts);
-        var changesSettings = !HasSameSettings(previous.Made, description);
+        var changesSettings = !HasSameSettings(previous.Made, layout);
         if (!changesShape)
-            KeepShapes(previous, parts, description);
+            KeepShapes(previous, parts, layout);
 
         Retire(previous);
         // Its entity left where its own transform puts it under the new parent: stood back where the body stands.
-        var link = new PhysicsBodyLink(body, parts, description, previous.Key, CountDepth(body.Owner))
+        var link = new PhysicsBodyLink(body, parts, layout, previous.Key, CountDepth(body.Owner))
         {
             Id = previous.Id, ParentWorld = parentWorld, PlacedPose = previous.PlacedPose, MustPlace = keepsPose
         };
@@ -400,20 +400,20 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             _movers.Add(link);
 
         // A kind changed starts from rest where the body was last drawn, as in Refresh; its entity is stood back there.
-        var changesKind = previous.Made.Kind != description.Kind;
-        ChangeBody(link, previous.Made, description, changesShape, changesSettings, !keepsPose || changesKind,
+        var changesKind = previous.Made.Kind != layout.Kind;
+        ChangeBody(link, previous.Made, layout, changesShape, changesSettings, !keepsPose || changesKind,
             keepsPose ? previous.PlacedPose : null);
     }
 
     // The body keeps the shapes it has, its link's parts handed to parts: compared with them later, so changes too
     // small to count each time add up, and holding the hull and mesh shapes it uses - the link lets go of none.
-    private void KeepShapes(PhysicsBodyLink link, BodyParts parts, BodyDescription description)
+    private void KeepShapes(PhysicsBodyLink link, BodyParts parts, BodyLayout layout)
     {
         _carriedShapes.GiveBack(parts.CarriedShapes);
         parts.CarriedShapes.AddRange(link.Parts.CarriedShapes);
         link.Parts.CarriedShapes.Clear();
         parts.ShapeParts = link.Parts.ShapeParts;
-        description.Shape = link.Made.Shape;
+        layout.Shape = link.Made.Shape;
     }
 
     // Only a body that moves is stood where the simulation draws it.
@@ -439,28 +439,28 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     // A setting the body cannot have - typed halfway: cleared, a lone minus - is not sent to be refused: the body keeps
     // the one it has until one it can have is given. A dynamic body staying dynamic needs a mass or a density: it keeps
     // the weight it has.
-    private static void KeepUsableSettings(BodyDescription description, BodyDescription made)
+    private static void KeepUsableSettings(BodyLayout layout, BodyLayout made)
     {
-        if (!IsAmount(description.Friction))
-            description.Friction = made.Friction;
+        if (!IsAmount(layout.Friction))
+            layout.Friction = made.Friction;
 
-        if (!IsAmount(description.Restitution))
-            description.Restitution = made.Restitution;
+        if (!IsAmount(layout.Restitution))
+            layout.Restitution = made.Restitution;
 
-        if (!IsAmount(description.LinearDamping))
-            description.LinearDamping = made.LinearDamping;
+        if (!IsAmount(layout.LinearDamping))
+            layout.LinearDamping = made.LinearDamping;
 
-        if (!IsAmount(description.AngularDamping))
-            description.AngularDamping = made.AngularDamping;
+        if (!IsAmount(layout.AngularDamping))
+            layout.AngularDamping = made.AngularDamping;
 
-        if (!float.IsFinite(description.GravityScale))
-            description.GravityScale = made.GravityScale;
+        if (!float.IsFinite(layout.GravityScale))
+            layout.GravityScale = made.GravityScale;
 
-        if (description.Kind == BodyKind.Dynamic && made.Kind == BodyKind.Dynamic
-            && !IsWeight(description.Mass, description.Density))
+        if (layout.Kind == BodyKind.Dynamic && made.Kind == BodyKind.Dynamic
+            && !IsWeight(layout.Mass, layout.Density))
         {
-            description.Mass = made.Mass;
-            description.Density = made.Density;
+            layout.Mass = made.Mass;
+            layout.Density = made.Density;
         }
     }
 
@@ -471,58 +471,57 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         IsAmount(mass) && IsAmount(density) && (mass > 0 || density > 0);
 
     // A weight counts only for a dynamic body: one that is not moves nothing by it.
-    private static bool HasSameSettings(BodyDescription made, BodyDescription description) =>
-        made.Kind == description.Kind
-        && (description.Kind != BodyKind.Dynamic
-            || BodyDescription.AreWeighedAlike(made.Mass, made.Density, description.Mass, description.Density))
-        && made.Friction == description.Friction && made.Restitution == description.Restitution
-        && made.LinearDamping == description.LinearDamping && made.AngularDamping == description.AngularDamping
-        && made.GravityScale == description.GravityScale && made.CanSleep == description.CanSleep;
+    private static bool HasSameSettings(BodyLayout made, BodyLayout layout) =>
+        made.Kind == layout.Kind
+        && (layout.Kind != BodyKind.Dynamic || made.IsWeighedAs(layout))
+        && made.Friction == layout.Friction && made.Restitution == layout.Restitution
+        && made.LinearDamping == layout.LinearDamping && made.AngularDamping == layout.AngularDamping
+        && made.GravityScale == layout.GravityScale && made.CanSleep == layout.CanSleep;
 
     // A static body stands where its entity does, its parent moved or itself; a moving one is moved by hand when its
     // entity no longer stands where the physics put it.
-    private static bool WasMovedByHand(PhysicsBodyLink link, BodyDescription description)
+    private static bool WasMovedByHand(PhysicsBodyLink link, BodyLayout layout)
     {
         if (link.Kind == BodyKind.Static)
-            return description.Position != link.Made.Position || description.Rotation != link.Made.Rotation;
+            return layout.Position != link.Made.Position || layout.Rotation != link.Made.Rotation;
 
         var transform = link.Entity.Transform;
         return transform.Position != link.WrittenPosition || transform.Rotation != link.WrittenRotation;
     }
 
-    // The body given description's kind, settings and - when it changed - shape, asked of the simulation in an order
+    // The body given layout's kind, settings and - when it changed - shape, asked of the simulation in an order
     // it can take: a kind that holds no mesh before the mesh; a kind that weighs after the shape and the weight it is
     // weighed by - only a dynamic body is sent a weight, which may be half typed while the body is not. Moved, it is
     // put where its entity stands, or at putAt.
-    private void ChangeBody(PhysicsBodyLink link, BodyDescription before, BodyDescription description, bool changesShape,
+    private void ChangeBody(PhysicsBodyLink link, BodyLayout before, BodyLayout layout, bool changesShape,
         bool changesSettings, bool moves, Pose? putAt = null)
     {
-        link.Made = description;
+        link.Made = layout;
         var id = link.Id;
         // A kind changed changes the settings compared too.
-        var changesKind = before.Kind != description.Kind;
-        if (changesKind && description.Kind != BodyKind.Dynamic)
-            _simulation.SetKind(id, description.Kind);
+        var changesKind = before.Kind != layout.Kind;
+        if (changesKind && layout.Kind != BodyKind.Dynamic)
+            _simulation.SetKind(id, layout.Kind);
 
         if (changesShape)
-            _simulation.SetShape(id, description.Shape);
+            _simulation.SetShape(id, layout.Shape);
 
         if (changesSettings)
         {
             _simulation.SetMaterial(id, new PhysicsMaterial
             {
-                Friction = description.Friction, Restitution = description.Restitution
+                Friction = layout.Friction, Restitution = layout.Restitution
             });
-            if (description.Kind == BodyKind.Dynamic)
-                _simulation.SetMass(id, description.Mass, description.Density);
+            if (layout.Kind == BodyKind.Dynamic)
+                _simulation.SetMass(id, layout.Mass, layout.Density);
 
-            _simulation.SetDamping(id, description.LinearDamping, description.AngularDamping);
-            _simulation.SetGravityScale(id, description.GravityScale);
-            _simulation.SetCanSleep(id, description.CanSleep);
+            _simulation.SetDamping(id, layout.LinearDamping, layout.AngularDamping);
+            _simulation.SetGravityScale(id, layout.GravityScale);
+            _simulation.SetCanSleep(id, layout.CanSleep);
         }
 
-        if (changesKind && description.Kind == BodyKind.Dynamic)
-            _simulation.SetKind(id, description.Kind);
+        if (changesKind && layout.Kind == BodyKind.Dynamic)
+            _simulation.SetKind(id, layout.Kind);
 
         if (!moves)
             return;
@@ -530,7 +529,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         var transform = link.Entity.Transform;
         link.WrittenPosition = transform.Position;
         link.WrittenRotation = transform.Rotation;
-        _simulation.SetPose(id, putAt ?? new Pose(description.Position, description.Rotation));
+        _simulation.SetPose(id, putAt ?? new Pose(layout.Position, layout.Rotation));
         // As the simulation draws it, so the next frame finds it standing there.
         link.PlacedPose = _simulation.InterpolatedPoseOf(id);
     }
@@ -539,9 +538,9 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private void MakeBody(RigidBody body)
     {
         var parts = new BodyParts { SeenInLook = _lookNumber };
-        var description = Describe(body, parts, out var parentWorld);
+        var layout = LayOut(body, parts, out var parentWorld);
         var entity = body.Owner;
-        if (description == null)
+        if (layout == null)
         {
             _carriedShapes.GiveBack(parts.CarriedShapes);
             _refused[entity] = parts;
@@ -549,20 +548,20 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         }
 
         var key = TakeKey();
-        var link = new PhysicsBodyLink(body, parts, description, key, CountDepth(entity)) { ParentWorld = parentWorld };
+        var link = new PhysicsBodyLink(body, parts, layout, key, CountDepth(entity)) { ParentWorld = parentWorld };
         link.Id = _simulation.AddBody(new BodySettings
         {
-            Kind = description.Kind,
-            Shape = description.Shape,
-            Position = description.Position,
-            Rotation = description.Rotation,
-            Mass = description.Mass,
-            Density = description.Density,
-            Material = new PhysicsMaterial { Friction = description.Friction, Restitution = description.Restitution },
-            LinearDamping = description.LinearDamping,
-            AngularDamping = description.AngularDamping,
-            GravityScale = description.GravityScale,
-            CanSleep = description.CanSleep,
+            Kind = layout.Kind,
+            Shape = layout.Shape,
+            Position = layout.Position,
+            Rotation = layout.Rotation,
+            Mass = layout.Mass,
+            Density = layout.Density,
+            Material = new PhysicsMaterial { Friction = layout.Friction, Restitution = layout.Restitution },
+            LinearDamping = layout.LinearDamping,
+            AngularDamping = layout.AngularDamping,
+            GravityScale = layout.GravityScale,
+            CanSleep = layout.CanSleep,
             Data = entity
         });
         // As the simulation draws it, its turn of length one; a static body is not stood.
@@ -609,8 +608,9 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         return _links.Count - 1;
     }
 
-    // The body body makes, its entities put in parts; null - logged - for one the physics cannot make.
-    private BodyDescription Describe(RigidBody body, BodyParts parts, out Matrix4x4<double> parentWorld)
+    // The body that body and its colliders ask for, its entities put in parts; null - logged - for one the physics
+    // cannot make.
+    private BodyLayout LayOut(RigidBody body, BodyParts parts, out Matrix4x4<double> parentWorld)
     {
         var entity = body.Owner;
         parts.Add(entity);
@@ -642,7 +642,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             return null;
         }
 
-        return new BodyDescription
+        return new BodyLayout
         {
             Kind = body.Kind,
             Shape = shape,
