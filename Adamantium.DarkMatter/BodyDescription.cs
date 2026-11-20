@@ -33,12 +33,12 @@ internal sealed class BodyDescription
     /// <summary>The mass in kilograms, in place of the one <see cref="Density"/> gives; zero to use the density.</summary>
     public float Mass { get; set; }
 
-    /// <summary>The friction against other bodies; a pair uses the square root of the two bodies' product.</summary>
-    public float Friction { get; set; } = 0.6f;
+    /// <summary>How the body rubs and bounces, and its parts with none of their own.</summary>
+    public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Default;
 
-    /// <summary>How much of its speed the body keeps bouncing off: 0 not at all, 1 all of it; a pair uses the greater.
-    /// </summary>
-    public float Restitution { get; set; }
+    /// <summary>Each part's own material, in the order of the compound's parts, none for the body's; null when no part
+    /// has one.</summary>
+    public PhysicsMaterial?[] PartMaterials { get; set; }
 
     /// <summary>How fast the body's velocity fades by itself, per second.</summary>
     public float LinearDamping { get; set; }

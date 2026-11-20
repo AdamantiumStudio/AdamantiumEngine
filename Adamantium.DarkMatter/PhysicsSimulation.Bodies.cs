@@ -292,17 +292,19 @@ public sealed partial class PhysicsSimulation
     public void SetParts(BodyId body, ReadOnlySpan<BodyPart> parts)
     {
         Find(body);
-        var shape = Compose(parts, out var partData, nameof(parts));
+        var shape = Compose(parts, out var partData, out var partMaterials, nameof(parts));
         _commands.Add(new SimulationCommand
         {
-            Kind = SimulationCommandKind.SetShape, Slot = body.Index, Shape = shape, PartData = partData
+            Kind = SimulationCommandKind.SetShape, Slot = body.Index, Shape = shape, PartData = partData,
+            PartMaterials = partMaterials
         });
     }
 
-    /// <summary>Sets how <paramref name="body"/> rubs and bounces.</summary>
+    /// <summary>Sets how <paramref name="body"/> rubs and bounces, and its parts with no material of their own.
+    /// </summary>
     public void SetMaterial(BodyId body, in PhysicsMaterial material)
     {
-        RequireMaterial(material, nameof(material));
+        PhysicsMaterial.RequireUsable(material, nameof(material));
         Find(body);
         _commands.Add(new SimulationCommand
         {
@@ -532,11 +534,12 @@ public sealed partial class PhysicsSimulation
         RequireTurn(settings.Rotation, nameof(settings));
         RequireFinite(settings.LinearVelocity, nameof(settings));
         RequireFinite(settings.AngularVelocity, nameof(settings));
-        RequireMaterial(settings.Material, nameof(settings));
+        PhysicsMaterial.RequireUsable(settings.Material, nameof(settings));
         var shape = settings.Shape;
         partData = OnePart;
+        PhysicsMaterial?[] partMaterials = null;
         if (shape == null)
-            shape = Compose(settings.Parts, out partData, nameof(settings));
+            shape = Compose(settings.Parts, out partData, out partMaterials, nameof(settings));
 
         return new BodyDescription
         {
@@ -548,8 +551,8 @@ public sealed partial class PhysicsSimulation
             AngularVelocity = settings.AngularVelocity,
             Mass = settings.Mass,
             Density = settings.Density,
-            Friction = settings.Material.Friction,
-            Restitution = settings.Material.Restitution,
+            Material = settings.Material,
+            PartMaterials = partMaterials,
             LinearDamping = settings.LinearDamping,
             AngularDamping = settings.AngularDamping,
             GravityScale = settings.GravityScale,
@@ -557,31 +560,33 @@ public sealed partial class PhysicsSimulation
         };
     }
 
-    // The parts as one compound, and each part's own in a copy.
-    private static CollisionShape Compose(ReadOnlySpan<BodyPart> parts, out object[] partData, string parameterName)
+    // The parts as one compound, and each part's own and its material in copies; no materials when no part has one.
+    private static CollisionShape Compose(ReadOnlySpan<BodyPart> parts, out object[] partData,
+        out PhysicsMaterial?[] partMaterials, string parameterName)
     {
         if (parts.IsEmpty)
             throw new ArgumentException("A body needs at least one part.", parameterName);
 
         var compoundParts = new CompoundPart[parts.Length];
         partData = new object[parts.Length];
+        partMaterials = null;
         for (var index = 0; index < parts.Length; index++)
         {
-            if (parts[index].Shape == null)
+            ref readonly var part = ref parts[index];
+            if (part.Shape == null)
                 throw new ArgumentException("A part needs a shape.", parameterName);
 
-            compoundParts[index] = new CompoundPart(parts[index].Shape, parts[index].Pose);
-            partData[index] = parts[index].Data;
+            compoundParts[index] = new CompoundPart(part.Shape, part.Pose);
+            partData[index] = part.Data;
+            if (part.Material is not { } material)
+                continue;
+
+            PhysicsMaterial.RequireUsable(material, parameterName);
+            partMaterials ??= new PhysicsMaterial?[parts.Length];
+            partMaterials[index] = material;
         }
 
         return new CompoundCollisionShape(compoundParts);
-    }
-
-    private static void RequireMaterial(in PhysicsMaterial material, string parameterName)
-    {
-        if (!float.IsFinite(material.Friction) || material.Friction < 0 || !float.IsFinite(material.Restitution)
-            || material.Restitution < 0)
-            throw new ArgumentOutOfRangeException(parameterName, "Friction and restitution must be finite, not below zero.");
     }
 
     private static void RequireAmount(float value, string parameterName)

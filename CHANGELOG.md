@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- Physics materials meet by rules: `PhysicsMaterial.FrictionCombine` and `RestitutionCombine` (`CombineRule`: `Average`,
+  `Minimum`, `Multiply`, `Maximum`); two different rules meet by the later of them. `PhysicsMaterial.Default` rubs at
+  0.5 and does not bounce, both averaged - before, a pair rubbed by the root of both frictions' product and bounced as
+  the bouncier. A body's part has a material of its own with `BodyPart.Material`, or the body's; `SetMaterial` changes
+  the body's and those of its parts with none of their own, their contacts at once.
 - `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
   `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
   thrown at the next `Update`. The two threads talk through unbounded channels, each side giving back what it read

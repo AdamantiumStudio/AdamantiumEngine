@@ -24,7 +24,7 @@ internal sealed class SceneBuilder
             Shape = new BoxCollisionShape(50, 1, 50),
             Position = new WorldPosition(center),
             Rotation = turn,
-            Friction = friction
+            Material = new PhysicsMaterial { Friction = friction }
         });
     }
 
@@ -36,19 +36,22 @@ internal sealed class SceneBuilder
             Shape = new BoxCollisionShape(halfExtents),
             Position = new WorldPosition(position),
             Rotation = rotation ?? QuaternionF.Identity,
-            Friction = friction,
-            Restitution = restitution,
+            Material = new PhysicsMaterial { Friction = friction, Restitution = restitution },
             LinearVelocity = velocity
         });
     }
 
-    public BodyHandle AddSphere(Vector3F position, float radius, float restitution = 0)
+    public BodyHandle AddSphere(Vector3F position, float radius, float restitution = 0,
+        CombineRule restitutionCombine = CombineRule.Average)
     {
         return World.Add(new BodyDescription
         {
             Shape = new SphereCollisionShape(radius),
             Position = new WorldPosition(position),
-            Restitution = restitution
+            Material = new PhysicsMaterial
+            {
+                Friction = 0.6f, Restitution = restitution, RestitutionCombine = restitutionCombine
+            }
         });
     }
 
