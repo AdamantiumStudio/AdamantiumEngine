@@ -1,5 +1,7 @@
+using System;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Fonts;
 using NUnit.Framework;
@@ -67,6 +69,15 @@ public class PdfDocumentFontsTests
             Assert.That(document.Pages[1].CollectFonts(), Has.Count.EqualTo(3));
             Assert.That(document.FileSize, Is.EqualTo(bytes.Length));
         });
+    }
+
+    // Asked to stop, the collecting stops before the next page.
+    [Test]
+    public void Collecting_Stops_WhenAskedTo()
+    {
+        var document = PdfDocument.Open(FontsEverywhere());
+
+        Assert.Throws<OperationCanceledException>(() => document.CollectFonts(new CancellationToken(true)));
     }
 
     [Test]

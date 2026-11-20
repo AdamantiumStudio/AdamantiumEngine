@@ -92,6 +92,35 @@ public class PdfSecurityTests
         });
     }
 
+    // A password typed, carried or given when opening is told; the empty one a restricted file opens with, or a wrong
+    // one, is not.
+    [TestCase(3)]
+    [TestCase(6)]
+    public void APasswordThatOpenedTheFile_IsTold(int revision)
+    {
+        var bytes = EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904));
+        var restricted = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, string.Empty, "owner", -3904)));
+        var emptyTyped = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, string.Empty, "owner", -3904)));
+        emptyTyped.Authenticate(string.Empty);
+        var typed = PdfDocument.Open(bytes);
+        typed.Authenticate("user");
+        var wrong = PdfDocument.Open(bytes);
+        wrong.Authenticate("typo");
+        var carried = PdfDocument.Open([.. bytes, .. "\n% saved again\n"u8]);
+        carried.TakePasswordFrom(typed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(restricted.IsAuthenticated, Is.True);
+            Assert.That(restricted.IsOpenedWithPassword, Is.False, "the empty password is told as one typed");
+            Assert.That(emptyTyped.IsOpenedWithPassword, Is.False, "the empty password, given, is told as one typed");
+            Assert.That(typed.IsOpenedWithPassword, Is.True);
+            Assert.That(wrong.IsOpenedWithPassword, Is.False, "a wrong password is told as opening the file");
+            Assert.That(carried.IsOpenedWithPassword, Is.True, "the password carried to the file saved again");
+            Assert.That(PdfDocument.Open(bytes, new PdfReadOptions { Password = "user" }).IsOpenedWithPassword, Is.True);
+        });
+    }
+
     [TestCase(3)]
     [TestCase(4)]
     [TestCase(6)]

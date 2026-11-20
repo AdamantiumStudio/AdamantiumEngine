@@ -67,7 +67,7 @@ public sealed class PdfStandardSecurityHandler
 
     public int Revision { get; }
 
-    /// <summary>How long the file's key is, in bits: 40 or 128 for RC4, 128 or 256 for AES.</summary>
+    /// <summary>How long the file's key is, in bits: 40 to 128 for RC4, 128 or 256 for AES.</summary>
     public int KeyBits => _keyLength * 8;
 
     public bool EncryptsMetadata { get; }
