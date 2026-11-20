@@ -91,6 +91,10 @@ public sealed class PdfStandardSecurityHandler
     /// <summary>Whether a password has opened the file.</summary>
     public bool IsAuthenticated => _fileKey != null;
 
+    /// <summary>The key the file is decrypted with, once a password opened it - the same whichever of its passwords did.
+    /// </summary>
+    internal byte[] FileKey => _fileKey;
+
     /// <summary>Whether the owner password opened it.</summary>
     public bool IsOwner { get; private set; }
 
@@ -113,14 +117,6 @@ public sealed class PdfStandardSecurityHandler
         _fileKey = fileKey;
         IsOwner = isOwner;
         return false;
-    }
-
-    /// <summary>Whether <paramref name="password"/> is the owner password - tried on the side, from the same encryption
-    /// dictionary: this handler's access stays as it is, so it may be asked on any thread.</summary>
-    public bool IsOwnerPassword(string password)
-    {
-        var trial = new PdfStandardSecurityHandler(_encrypt, _firstId);
-        return trial.Authenticate(password) && trial.IsOwner;
     }
 
     /// <summary>The crypt method of the named crypt filter, as a stream's <c>/Crypt</c> filter asks for it.</summary>

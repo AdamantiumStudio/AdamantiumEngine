@@ -239,27 +239,25 @@ public class PdfSecurityTests
         });
     }
 
-    // The owner password is told apart on the side: neither a wrong one nor the user's, nor the owner's, changes the
-    // handler's access.
+    // The owner's password after the user's opens with the same key: what was read stands, only the rights change.
     [TestCase(3)]
+    [TestCase(4)]
     [TestCase(6)]
-    public void TheOwnerPassword_IsToldOnTheSide(int revision)
+    public void TheOwnersPasswordAfterTheUsers_KeepsWhatWasRead(int revision)
     {
         var document = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904)));
         document.Authenticate("user");
-        var security = document.Security;
-        var user = security.IsOwnerPassword("user");
-        var typo = security.IsOwnerPassword("typo");
-        // The owner's last, so a handler it opened would be left the owner's for the check below.
-        var owner = security.IsOwnerPassword("owner");
+        var page = document.Pages[0];
+
+        var lifted = document.Authenticate("owner");
 
         Assert.Multiple(() =>
         {
-            Assert.That(user, Is.False, "the user's password is told as the owner's");
-            Assert.That(typo, Is.False);
-            Assert.That(owner, Is.True);
-            Assert.That(security.IsOwner, Is.False, "the owner's password, told, opened the handler as the owner's");
-            Assert.That(document.Permissions, Is.EqualTo((PdfPermissions)(-3904) & PdfPermissions.All));
+            Assert.That(lifted, Is.True);
+            Assert.That(document.Security.IsOwner, Is.True);
+            Assert.That(document.Permissions, Is.EqualTo(PdfPermissions.All));
+            Assert.That(document.Pages[0], Is.SameAs(page), "what was read was let go though the key stayed");
+            Assert.That(Encoding.ASCII.GetString(document.Pages[0].GetContents().Span), Is.EqualTo("BT (secret) Tj ET"));
         });
     }
 

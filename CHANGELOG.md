@@ -11,8 +11,7 @@ All packages share one version.
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
   only restricts its rights opens with, nor one only its attachments asked for.
-  `PdfStandardSecurityHandler.IsOwnerPassword` tells the owner password on the side, the handler's access left as it
-  is, so any thread may ask. `PdfDocument.CollectFonts(CancellationToken)` hears its token between pages.
+  `PdfDocument.CollectFonts(CancellationToken)` hears its token between pages.
 - `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
   `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
   thrown at the next `Update`. The two threads talk through unbounded channels, each side giving back what it read
@@ -692,6 +691,8 @@ All packages share one version.
 
 ### Changed
 
+- `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
+  opens with the user's key: only the rights change, nothing is read anew.
 - `PhysicsService` lays the scene's rigid bodies and joints out as bodies and joints of a `PhysicsSimulation` and
   stands the entities where it draws them: its own thread, commands, results and drawing between steps went to the
   simulation. A body changes in place instead of being made anew, a joint asked of it on its bodies' axes. A change
