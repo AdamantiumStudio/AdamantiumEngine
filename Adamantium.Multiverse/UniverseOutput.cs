@@ -149,9 +149,19 @@ namespace Adamantium.Multiverse
                 return;
             }
 
-            graphicsDevice.BlitImage(GraphicsDevice.CurrentCommandBuffer,
-                GraphicsDevice.CurrentRenderTarget,
-                Presenter.GetCurrentImage());
+            var frame = GraphicsDevice.CurrentRenderTarget.ResolveTexture;
+            var target = Presenter.GetCurrentImage();
+            if (ReferenceEquals(frame, target))
+            {
+                return;
+            }
+
+            var commandBuffer = GraphicsDevice.CurrentCommandBuffer;
+            graphicsDevice.BlitImage(commandBuffer, frame, target);
+            graphicsDevice.InsertImageMemoryBarrier(commandBuffer, frame,
+                AccessFlagBits2.TransferReadBit, AccessFlagBits2.ColorAttachmentWriteBit,
+                ImageLayout.TransferSrcOptimal, ImageLayout.ColorAttachmentOptimal,
+                PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.ColorAttachmentOutputBit);
         }
 
         /// <summary>
