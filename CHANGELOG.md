@@ -774,6 +774,11 @@ All packages share one version.
 
 ### Fixed
 
+- The physics' step allocates nothing without the JIT's optimizations too, as in Debug: GJK's and EPA's tables of
+  constants were spans made by reflection on every call there (940 KB per 240 steps on a height field), and the solved
+  contacts were walked through an interface, boxing the enumerator each step. Tests hold the warmed step of nine scenes
+  - all but a sleeping one kept awake, so collision and the solvers run - the queries where they meet something and a
+  body's changes at no bytes, in CI also with the JIT's optimizations off.
 - A universe of its own (`UniverseMode.Standalone`) creates its graphics device again: it named its Vulkan
   application with an empty text, which failed to marshal. It takes its `Title`, else "Universe".
 - A Standalone universe's `Run` returns only once its loop stopped and freed its resources - it returned while the

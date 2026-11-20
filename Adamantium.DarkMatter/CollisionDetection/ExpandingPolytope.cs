@@ -91,10 +91,9 @@ internal sealed class ExpandingPolytope
     {
         if (_vertices.Count == 1)
         {
-            ReadOnlySpan<int> signs = [1, -1];
             for (var axis = 0; axis < 3 && _vertices.Count == 1; axis++)
             {
-                foreach (var sign in signs)
+                foreach (var sign in AxisMath.Signs)
                 {
                     var direction = AxisMath.GetUnitAxis(axis).As<double>() * sign;
                     var vertex = PlacedCore.SupportOfDifference(first, second, direction);

@@ -105,6 +105,13 @@ jobs:
             pids+=($!)
             logs+=("$log")
           done
+          # The physics' allocation tests again with the JIT's optimizations off, where allocations it removes show.
+          log="$RUNNER_TEMP/DarkMatterAllocationsMinOpts.log"
+          DOTNET_JITMinOpts=1 dotnet test Tests/Adamantium.DarkMatter.Tests/Adamantium.DarkMatter.Tests.csproj -c Release \
+            --no-build --filter "FullyQualifiedName~AllocationTests" \
+            --results-directory "$RUNNER_TEMP/DarkMatterAllocationsMinOpts" > "$log" 2>&1 &
+          pids+=($!)
+          logs+=("$log")
           status=0
           for i in "${!pids[@]}"; do
             wait "${pids[$i]}" || status=1

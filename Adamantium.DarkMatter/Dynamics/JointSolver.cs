@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Adamantium.DarkMatter.Dynamics;
 
@@ -13,8 +14,9 @@ internal sealed class JointSolver
     private readonly List<Joint> _active = [];
     private BodyState _world = new() { Rotation = QuaternionF.Identity, Kind = BodyKind.Static };
 
-    /// <summary>The joints solved this step.</summary>
-    public List<Joint> Active => _active;
+    /// <summary>The joints solved this step, until the next <see cref="Prepare"/>: a span, read only, no enumerator.
+    /// </summary>
+    public ReadOnlySpan<Joint> Active => CollectionsMarshal.AsSpan(_active);
 
     /// <summary>Takes the joints with a moving body.</summary>
     public void Prepare(BodyState[] bodies, List<Joint> joints)

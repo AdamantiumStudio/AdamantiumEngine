@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Adamantium.DarkMatter.CollisionDetection;
 
 namespace Adamantium.DarkMatter.Dynamics;
@@ -10,8 +11,9 @@ internal sealed class ContactSolver
 {
     private readonly List<Contact> _active = [];
 
-    /// <summary>The contacts solved this step.</summary>
-    public IReadOnlyList<Contact> Active => _active;
+    /// <summary>The contacts solved this step, until the next <see cref="Prepare"/>: a span, read only, no enumerator.
+    /// </summary>
+    public ReadOnlySpan<Contact> Active => CollectionsMarshal.AsSpan(_active);
 
     /// <summary>Takes the touching contacts with a moving body, of convex parts and with surfaces' triangles, and works
     /// out, from where the bodies stand at the start of the step, what each point needs.</summary>
