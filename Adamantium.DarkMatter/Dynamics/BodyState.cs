@@ -15,9 +15,9 @@ internal struct BodyState
     public BodyMarks Marks;
     public Contact Contacts;
 
-    public Vector3<double> Position;
+    public WorldPosition Position;
     public QuaternionF Rotation;
-    public Vector3<double> StartPosition;
+    public WorldPosition StartPosition;
     public QuaternionF StartRotation;
     public Vector3F LinearVelocity;
     public Vector3F AngularVelocity;
@@ -68,11 +68,10 @@ internal struct BodyState
     public readonly bool IsMoving => IsAwake && Kind != BodyKind.Static;
 
     /// <summary>Where the body's origin stands and how the body is turned.</summary>
-    public readonly Pose OriginPose =>
-        new(Position - Vector3F.Transform(CenterOfMass, Rotation).As<double>(), Rotation);
+    public readonly Pose OriginPose => new(Position - Vector3F.Transform(CenterOfMass, Rotation), Rotation);
 
-    /// <summary>How far the center of mass moved since the step started, in float.</summary>
-    public readonly Vector3F MovedThisStep => (Position - StartPosition).As<float>();
+    /// <summary>How far the center of mass moved since the step started.</summary>
+    public readonly Vector3F MovedThisStep => Position.OffsetFrom(StartPosition);
 
     /// <summary>The inverse inertia around the world's axes, as the body is turned now.</summary>
     public readonly Matrix3x3F MeasureWorldInverseInertia() => InertiaMath.ToWorld(Rotation * InertiaRotation, InverseInertia);

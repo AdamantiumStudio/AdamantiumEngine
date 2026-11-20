@@ -5,8 +5,8 @@ using NUnit.Framework;
 
 namespace Adamantium.DarkMatter.Tests;
 
-/// <summary>A scene far from the world's origin behaves as the same scene at it: positions are double, and contacts,
-/// joints and queries are worked out in float near the bodies they are about.</summary>
+/// <summary>A scene far from the world's origin behaves as the same scene at it: positions are world positions, and
+/// contacts, joints and queries are worked out in float near the bodies they are about.</summary>
 [TestFixture]
 public class LargeWorldTests
 {
@@ -19,7 +19,7 @@ public class LargeWorldTests
     [TestCaseSource(nameof(Offsets))]
     public void AStack_StandsAsAtTheOrigin(double offset)
     {
-        var near = BuildStack(Vector3<double>.Zero, out var nearBoxes);
+        var near = BuildStack(WorldPosition.Zero, out var nearBoxes);
         var far = BuildStack(Far(offset), out var farBoxes);
 
         Run(near, 4);
@@ -29,7 +29,7 @@ public class LargeWorldTests
         {
             for (var index = 0; index < nearBoxes.Count; index++)
             {
-                var nearAt = near.GetPose(nearBoxes[index]).Position;
+                var nearAt = near.GetPose(nearBoxes[index]).Position - WorldPosition.Zero;
                 var farAt = far.GetPose(farBoxes[index]).Position - Far(offset);
                 Assert.That((farAt - nearAt).Length(), Is.LessThan(Millimeter), $"box {index} at {offset} m");
                 Assert.That(far.IsAwake(farBoxes[index]), Is.EqualTo(near.IsAwake(nearBoxes[index])),
@@ -40,11 +40,11 @@ public class LargeWorldTests
         });
     }
 
-    // A ball on a rod held to the world: the world's end of the rod is kept in double too.
+    // A ball on a rod held to the world: the world's end of the rod is a world position too.
     [TestCaseSource(nameof(Offsets))]
     public void APendulumHeldToTheWorld_SwingsAsAtTheOrigin(double offset)
     {
-        var near = BuildPendulum(Vector3<double>.Zero, out var nearBall);
+        var near = BuildPendulum(WorldPosition.Zero, out var nearBall);
         var far = BuildPendulum(Far(offset), out var farBall);
         var pivot = Far(offset) + new Vector3<double>(0, 5, 0);
         var longest = 0.0;
@@ -58,7 +58,7 @@ public class LargeWorldTests
             shortest = Math.Min(shortest, length);
         }
 
-        var nearAt = near.GetPose(nearBall).Position;
+        var nearAt = near.GetPose(nearBall).Position - WorldPosition.Zero;
         var farAt = far.GetPose(farBall).Position - Far(offset);
         Assert.Multiple(() =>
         {
@@ -101,19 +101,20 @@ public class LargeWorldTests
         });
     }
 
-    // A ground two hundred kilometers wide, added first, and a crate ninety out from its middle: the pair is worked
-    // out near the crate, not near the ground's far center.
+    // A ground two hundred kilometers wide, added first, and a crate ninety out from its middle: it rests there as it
+    // does near the middle.
     [Test]
     public void ACrateFarOutOnAHugeGround_RestsAsNearItsMiddle()
     {
-        var middle = BuildCrateOnHugeGround(Vector3<double>.Zero, out var middleCrate);
-        var farOut = BuildCrateOnHugeGround(new Vector3<double>(90_000, 0, -90_000), out var farCrate);
+        var farOutAt = new Vector3<double>(90_000, 0, -90_000);
+        var middle = BuildCrateOnHugeGround(WorldPosition.Zero, out var middleCrate);
+        var farOut = BuildCrateOnHugeGround(WorldPosition.Zero + farOutAt, out var farCrate);
 
         Run(middle, 3);
         Run(farOut, 3);
 
-        var middleAt = middle.GetPose(middleCrate).Position;
-        var farAt = farOut.GetPose(farCrate).Position - new Vector3<double>(90_000, 0, -90_000);
+        var middleAt = middle.GetPose(middleCrate).Position - WorldPosition.Zero;
+        var farAt = farOut.GetPose(farCrate).Position - WorldPosition.Zero - farOutAt;
         Assert.Multiple(() =>
         {
             Assert.That((farAt - middleAt).Length(), Is.LessThan(Millimeter));
@@ -121,13 +122,13 @@ public class LargeWorldTests
         });
     }
 
-    private static PhysicsWorld BuildCrateOnHugeGround(Vector3<double> crateAt, out BodyHandle crate)
+    private static PhysicsWorld BuildCrateOnHugeGround(WorldPosition crateAt, out BodyHandle crate)
     {
         var world = new PhysicsWorld();
         world.Add(new BodyDescription
         {
             Kind = BodyKind.Static, Shape = new BoxCollisionShape(100_000, 1, 100_000),
-            Position = new Vector3<double>(0, -1, 0)
+            Position = new WorldPosition(0, -1, 0)
         });
         crate = world.Add(new BodyDescription
         {
@@ -138,9 +139,9 @@ public class LargeWorldTests
     }
 
     // Diagonal, so every axis is far.
-    private static Vector3<double> Far(double offset) => new(offset, offset * 0.5, -offset);
+    private static WorldPosition Far(double offset) => new(offset, offset * 0.5, -offset);
 
-    private static PhysicsWorld BuildStack(Vector3<double> at, out List<BodyHandle> boxes)
+    private static PhysicsWorld BuildStack(WorldPosition at, out List<BodyHandle> boxes)
     {
         var world = new PhysicsWorld();
         world.Add(new BodyDescription
@@ -159,7 +160,7 @@ public class LargeWorldTests
         return world;
     }
 
-    private static PhysicsWorld BuildPendulum(Vector3<double> at, out BodyHandle ball)
+    private static PhysicsWorld BuildPendulum(WorldPosition at, out BodyHandle ball)
     {
         var world = new PhysicsWorld();
         ball = world.Add(new BodyDescription

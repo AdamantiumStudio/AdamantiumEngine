@@ -16,7 +16,7 @@ public sealed partial class PhysicsWorld
     private readonly List<CastTriangle> _castTriangles = [];
 
     /// <inheritdoc/>
-    public bool RayCast(Vector3<double> origin, Vector3F direction, float maxDistance, out RayHit hit)
+    public bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out RayHit hit)
     {
         RequireFinite(origin, nameof(origin));
         hit = default;
@@ -26,7 +26,7 @@ public sealed partial class PhysicsWorld
 
         var way = direction / length;
         _rayCandidates.Clear();
-        _tree.RayCast(new Ray<double>(origin, way.As<double>()), _rayCandidates, maxDistance);
+        _tree.RayCast(new Ray<double>(origin.ToVector(), way.As<double>()), _rayCandidates, maxDistance);
         _rayCandidates.Sort(CompareEntries);
 
         var nearest = maxDistance;
@@ -44,7 +44,7 @@ public sealed partial class PhysicsWorld
 
             nearest = distance;
             found = true;
-            hit = new RayHit(GetHandle(part.Body), origin + (way * distance).As<double>(),
+            hit = new RayHit(GetHandle(part.Body), origin + way * distance,
                 pose.TransformDirection(normal), distance);
         }
 
@@ -70,7 +70,7 @@ public sealed partial class PhysicsWorld
             var parts = compound.Parts;
             for (var index = 0; index < parts.Count; index++)
             {
-                OverlapPart(parts[index].Shape, placedPose.Transform(parts[index].LocalPose), origin);
+                OverlapPart(parts[index].Shape, placedPose.Transform(parts[index].Pose), origin);
             }
         }
         else
@@ -84,7 +84,7 @@ public sealed partial class PhysicsWorld
         }
     }
 
-    private void OverlapPart(CollisionShape shape, in LocalPose pose, Vector3<double> origin)
+    private void OverlapPart(CollisionShape shape, in LocalPose pose, WorldPosition origin)
     {
         _found.Clear();
         _tree.Query(Place(shape.ComputeBounds(pose), origin), _found);
@@ -145,7 +145,7 @@ public sealed partial class PhysicsWorld
             var parts = compound.Parts;
             for (var index = 0; index < parts.Count; index++)
             {
-                CastPart(parts[index].Shape, placedPose.Transform(parts[index].LocalPose), ref cast);
+                CastPart(parts[index].Shape, placedPose.Transform(parts[index].Pose), ref cast);
             }
         }
         else
@@ -305,7 +305,7 @@ public sealed partial class PhysicsWorld
         cast.Found = true;
         cast.Nearest = meeting.Meet;
         cast.Body = body;
-        cast.Hit = new ShapeHit(GetHandle(body), cast.Origin + meeting.Point.As<double>(), meeting.Normal,
+        cast.Hit = new ShapeHit(GetHandle(body), cast.Origin + meeting.Point, meeting.Normal,
             meeting.Stop * cast.Translation.Length());
     }
 

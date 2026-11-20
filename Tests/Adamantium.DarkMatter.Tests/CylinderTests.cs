@@ -40,7 +40,7 @@ public class CylinderTests
     public void TurnedCylinder_StaysWithinItsBounds()
     {
         var cylinder = new CylinderCollisionShape(0.7f, 0.3f);
-        var pose = new Pose(new Vector3<double>(1, 2, 3),
+        var pose = new Pose(new WorldPosition(1, 2, 3),
             Quaternion.CreateFromAxisAngle(Vector3F.Normalize(new Vector3F(1, 0.4f, -0.3f)), 0.8f));
         var bounds = cylinder.ComputeBounds(pose);
         var random = new Random(5);
@@ -49,7 +49,7 @@ public class CylinderTests
             var direction = Vector3F.Normalize(new Vector3F((float)random.NextDouble() - 0.5f,
                 (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f));
             var point = pose.TransformPoint(cylinder.GetSupport(pose.InverseTransformDirection(direction)));
-            Assert.That(bounds.Contains(point), Is.Not.EqualTo(ContainmentType.Disjoint), $"{point}");
+            Assert.That(bounds.Contains(point.ToVector()), Is.Not.EqualTo(ContainmentType.Disjoint), $"{point}");
         }
 
         Assert.That(bounds.Maximum.X - bounds.Minimum.X, Is.LessThan(2 * cylinder.BoundingRadius));
@@ -168,7 +168,7 @@ public class CylinderTests
             cylinders.Add(scene.World.Add(new BodyDescription
             {
                 Shape = new CylinderCollisionShape(0.3f, 0.4f),
-                Position = new Vector3<double>(0, 0.3f + level * 0.601f, 0)
+                Position = new WorldPosition(0, 0.3f + level * 0.601f, 0)
             }));
         }
 
@@ -193,7 +193,7 @@ public class CylinderTests
         var wheel = scene.World.Add(new BodyDescription
         {
             Shape = new CylinderCollisionShape(0.15f, 0.4f),
-            Position = (up * 0.401f).As<double>(),
+            Position = new WorldPosition(up * 0.401f),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2),
             Friction = 1
         });

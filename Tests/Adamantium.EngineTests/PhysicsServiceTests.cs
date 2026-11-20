@@ -1024,6 +1024,19 @@ public class PhysicsServiceTests
         Assert.Throws<ArgumentOutOfRangeException>(() => _physics.SetForce(box, new Vector3F(float.NaN, 0, 0)));
     }
 
+    // Refused at once, on the game's side: not dropped later on the physics thread with only a line in the log.
+    [Test]
+    public void AnImpulseStrikingNowhere_IsRefused()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        Play();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _physics.ApplyImpulse(box, Vector3F.UnitX, new Vector3<double>(double.NaN, 0, 0)));
+    }
+
     [Test]
     public void BodyTurnedUnderAStretchedParent_IsLeftOut()
     {

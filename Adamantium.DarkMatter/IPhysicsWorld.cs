@@ -67,7 +67,7 @@ public interface IPhysicsWorld
 
     /// <summary>Where <paramref name="body"/>'s center of mass stands; the origin for a body that is not dynamic.
     /// </summary>
-    Vector3<double> GetCenterOfMass(BodyHandle body);
+    WorldPosition GetCenterOfMass(BodyHandle body);
 
     /// <summary>Where <paramref name="body"/>'s center of mass is from its origin, in the body's own axes; zero for a
     /// body that is not dynamic.</summary>
@@ -132,7 +132,7 @@ public interface IPhysicsWorld
 
     /// <summary>Strikes a dynamic body at <paramref name="point"/> of the world with <paramref name="impulse"/>, in
     /// newton seconds, changing its velocity at once - cut to the speed limits - and wakes it.</summary>
-    void ApplyImpulse(BodyHandle body, Vector3F impulse, Vector3<double> point);
+    void ApplyImpulse(BodyHandle body, Vector3F impulse, WorldPosition point);
 
     /// <summary>Whether <paramref name="body"/> is awake; static bodies never are.</summary>
     bool IsAwake(BodyHandle body);
@@ -154,7 +154,7 @@ public interface IPhysicsWorld
 
     /// <summary>Where a ray from <paramref name="origin"/> along <paramref name="direction"/> first meets a body within
     /// <paramref name="maxDistance"/> meters; a ray starting inside a body meets it at once.</summary>
-    bool RayCast(Vector3<double> origin, Vector3F direction, float maxDistance, out RayHit hit);
+    bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out RayHit hit);
 
     /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
     /// at <paramref name="pose"/>.</summary>

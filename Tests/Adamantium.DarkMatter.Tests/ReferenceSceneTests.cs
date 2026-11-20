@@ -68,7 +68,7 @@ public class ReferenceSceneTests
         var scene = new SceneBuilder();
         scene.AddGround();
         var boxes = BuildPyramid(scene, 10);
-        var starts = new List<Vector3<double>>();
+        var starts = new List<WorldPosition>();
         foreach (var box in boxes)
         {
             starts.Add(scene.World.GetPose(box).Position);
@@ -97,7 +97,7 @@ public class ReferenceSceneTests
 
         scene.Run(3f);
 
-        var moved = (scene.World.GetPose(box).Position - start.As<double>()).Length();
+        var moved = (scene.World.GetPose(box).Position - new WorldPosition(start)).Length();
         if (slides)
             Assert.That(moved, Is.GreaterThan(1f));
         else
@@ -142,7 +142,7 @@ public class ReferenceSceneTests
             dominoes.Add(scene.AddBox(new Vector3F(index * 0.6f, 0.5f, 0), new Vector3F(0.05f, 0.5f, 0.25f)));
         }
 
-        scene.World.ApplyImpulse(dominoes[0], new Vector3F(15f, 0, 0), new Vector3<double>(0, 0.95f, 0));
+        scene.World.ApplyImpulse(dominoes[0], new Vector3F(15f, 0, 0), new WorldPosition(0, 0.95f, 0));
         scene.Run(6f);
 
         var up = Vector3F.Transform(Vector3F.UnitY, scene.World.GetPose(dominoes[^1]).Rotation);
@@ -195,7 +195,7 @@ public class ReferenceSceneTests
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxCollisionShape(5, 0.025f, 5),
-            Position = new Vector3<double>(0, -0.025f, 0)
+            Position = new WorldPosition(0, -0.025f, 0)
         });
         var box = scene.AddBox(new Vector3F(0, 3f, 0), new Vector3F(0.25f), velocity: new Vector3F(0, -40f, 0));
 
@@ -240,14 +240,14 @@ public class ReferenceSceneTests
         Assert.That(second, Is.EqualTo(first));
     }
 
-    private static List<Vector3<double>> RunPyramid()
+    private static List<WorldPosition> RunPyramid()
     {
         var scene = new SceneBuilder();
         scene.AddGround();
         var boxes = BuildPyramid(scene, 6);
         scene.AddSphere(new Vector3F(0.3f, 9f, 0.1f), 0.4f);
         scene.Run(3f);
-        var positions = new List<Vector3<double>>();
+        var positions = new List<WorldPosition>();
         foreach (var box in boxes)
         {
             positions.Add(scene.World.GetPose(box).Position);

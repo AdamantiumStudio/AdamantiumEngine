@@ -119,9 +119,9 @@ public sealed partial class PhysicsWorld
         var axis = Vector3F.Normalize(description.Axis);
         var reference = AxisMath.GetPerpendicular(axis);
         var pointOnFirst = joint.Kind == JointKind.Distance ? description.SecondPoint : description.Point;
-        // The world holds the joint from where its point stands, so the point is kept in double, not as an offset in
-        // float from the world's origin.
-        joint.WorldAnchor = joint.First == NoBody ? pointOnFirst : Vector3<double>.Zero;
+        // The world holds the joint from where its point stands, so the point is kept as a world position, not as an
+        // offset in float from the world's origin.
+        joint.WorldAnchor = joint.First == NoBody ? pointOnFirst : WorldPosition.Zero;
         var firstPose = joint.First != NoBody ? _bodies[joint.First].OriginPose : new Pose(joint.WorldAnchor);
         var secondPose = _bodies[joint.Second].OriginPose;
         joint.PointOnFirst = firstPose.InverseTransformPoint(pointOnFirst);

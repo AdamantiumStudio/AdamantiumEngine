@@ -29,8 +29,8 @@ public class CompoundTests
     {
         var half = new BoxCollisionShape(0.5f, 0.5f, 0.5f);
         var compound = new CompoundCollisionShape([
-            new CompoundPart(half, new Pose(new Vector3<double>(-0.5f, 0, 0))),
-            new CompoundPart(half, new Pose(new Vector3<double>(0.5f, 0, 0)))
+            new CompoundPart(half, new LocalPose(new Vector3F(-0.5f, 0, 0))),
+            new CompoundPart(half, new LocalPose(new Vector3F(0.5f, 0, 0)))
         ]);
         var whole = new BoxCollisionShape(1f, 0.5f, 0.5f).ComputeMass(1000);
 
@@ -49,8 +49,8 @@ public class CompoundTests
         var heavy = new BoxCollisionShape(new Vector3F(0.5f));
         var light = new SphereCollisionShape(0.1f);
         var compound = new CompoundCollisionShape([
-            new CompoundPart(heavy, new Pose(new Vector3<double>(2, 0, 0))),
-            new CompoundPart(light, new Pose(new Vector3<double>(-2, 0, 0)))
+            new CompoundPart(heavy, new LocalPose(new Vector3F(2, 0, 0))),
+            new CompoundPart(light, new LocalPose(new Vector3F(-2, 0, 0)))
         ]);
         var heavyMass = heavy.ComputeMass(1000).Mass;
         var lightMass = light.ComputeMass(1000).Mass;
@@ -64,13 +64,13 @@ public class CompoundTests
     public void Compound_IsRefusedEmptyNestedOrWithoutAShape()
     {
         var box = new BoxCollisionShape(new Vector3F(0.5f));
-        var inner = new CompoundCollisionShape([new CompoundPart(box, Pose.Identity)]);
+        var inner = new CompoundCollisionShape([new CompoundPart(box, LocalPose.Identity)]);
 
         Assert.Throws<ArgumentException>(() => _ = new CompoundCollisionShape([]));
-        Assert.Throws<ArgumentException>(() => _ = new CompoundCollisionShape([new CompoundPart(inner, Pose.Identity)]));
-        Assert.Throws<ArgumentException>(() => _ = new CompoundCollisionShape([new CompoundPart(null, Pose.Identity)]));
+        Assert.Throws<ArgumentException>(() => _ = new CompoundCollisionShape([new CompoundPart(inner, LocalPose.Identity)]));
+        Assert.Throws<ArgumentException>(() => _ = new CompoundCollisionShape([new CompoundPart(null, LocalPose.Identity)]));
         Assert.Throws<ArgumentException>(() =>
-            _ = new CompoundCollisionShape([new CompoundPart(box, new Pose(Vector3<double>.Zero, default))]));
+            _ = new CompoundCollisionShape([new CompoundPart(box, new LocalPose(Vector3F.Zero, default))]));
     }
 
     [Test]
@@ -80,8 +80,8 @@ public class CompoundTests
         scene.AddGround();
         var body = scene.World.Add(new BodyDescription
         {
-            Shape = new CompoundCollisionShape([new CompoundPart(new BoxCollisionShape(new Vector3F(0.5f)), new Pose(new Vector3<double>(3, 0, 0)))]),
-            Position = new Vector3<double>(0, 1, 0)
+            Shape = new CompoundCollisionShape([new CompoundPart(new BoxCollisionShape(new Vector3F(0.5f)), new LocalPose(new Vector3F(3, 0, 0)))]),
+            Position = new WorldPosition(0, 1, 0)
         });
 
         scene.Run(2f);
@@ -100,17 +100,17 @@ public class CompoundTests
         var scene = new SceneBuilder();
         scene.AddGround();
         var leg = new BoxCollisionShape(0.05f, 0.4f, 0.05f);
-        var parts = new List<CompoundPart> { new(new BoxCollisionShape(1f, 0.05f, 0.6f), new Pose(new Vector3<double>(0, 0.85f, 0))) };
+        var parts = new List<CompoundPart> { new(new BoxCollisionShape(1f, 0.05f, 0.6f), new LocalPose(new Vector3F(0, 0.85f, 0))) };
         foreach (var corner in new[] { new Vector3F(0.9f, 0.4f, 0.5f), new Vector3F(-0.9f, 0.4f, 0.5f),
                      new Vector3F(0.9f, 0.4f, -0.5f), new Vector3F(-0.9f, 0.4f, -0.5f) })
         {
-            parts.Add(new CompoundPart(leg, new Pose(corner.As<double>())));
+            parts.Add(new CompoundPart(leg, new LocalPose(corner)));
         }
 
         var table = scene.World.Add(new BodyDescription
         {
             Shape = new CompoundCollisionShape(parts),
-            Position = new Vector3<double>(0, 0.1f, 0)
+            Position = new WorldPosition(0, 0.1f, 0)
         });
 
         scene.Run(2f);
@@ -129,10 +129,10 @@ public class CompoundTests
         var hammer = scene.World.Add(new BodyDescription
         {
             Shape = new CompoundCollisionShape([
-                new CompoundPart(new CapsuleCollisionShape(0.5f, 0.03f), new Pose(new Vector3<double>(0, 0.5f, 0))),
-                new CompoundPart(new BoxCollisionShape(0.15f, 0.06f, 0.06f), new Pose(new Vector3<double>(0, 1.06f, 0)))
+                new CompoundPart(new CapsuleCollisionShape(0.5f, 0.03f), new LocalPose(new Vector3F(0, 0.5f, 0))),
+                new CompoundPart(new BoxCollisionShape(0.15f, 0.06f, 0.06f), new LocalPose(new Vector3F(0, 1.06f, 0)))
             ]),
-            Position = new Vector3<double>(0, 0.01f, 0),
+            Position = new WorldPosition(0, 0.01f, 0),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, 0.2f)
         });
 
@@ -150,8 +150,8 @@ public class CompoundTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = new CompoundCollisionShape([
-                new CompoundPart(box, Pose.Identity),
-                new CompoundPart(box, new Pose(new Vector3<double>(0.3f, 0, 0)))
+                new CompoundPart(box, LocalPose.Identity),
+                new CompoundPart(box, new LocalPose(new Vector3F(0.3f, 0, 0)))
             ])
         });
 
@@ -172,13 +172,13 @@ public class CompoundTests
         {
             Kind = BodyKind.Static,
             Shape = new CompoundCollisionShape([
-                new CompoundPart(sphere, new Pose(new Vector3<double>(-2, 0, 0))),
-                new CompoundPart(sphere, new Pose(new Vector3<double>(2, 0, 0)))
+                new CompoundPart(sphere, new LocalPose(new Vector3F(-2, 0, 0))),
+                new CompoundPart(sphere, new LocalPose(new Vector3F(2, 0, 0)))
             ])
         });
 
-        var hitGap = world.RayCast(new Vector3<double>(0, 5, 0), -Vector3F.UnitY, 10, out _);
-        var hitPart = world.RayCast(new Vector3<double>(2, 5, 0), -Vector3F.UnitY, 10, out var hit);
+        var hitGap = world.RayCast(new WorldPosition(0, 5, 0), -Vector3F.UnitY, 10, out _);
+        var hitPart = world.RayCast(new WorldPosition(2, 5, 0), -Vector3F.UnitY, 10, out var hit);
         var found = new List<BodyHandle>();
         world.Overlap(new BoxCollisionShape(3, 1, 1), Pose.Identity, found);
 
@@ -196,20 +196,20 @@ public class CompoundTests
         scene.AddGround();
         var box = new BoxCollisionShape(new Vector3F(0.5f));
         var compound = new CompoundCollisionShape([
-            new CompoundPart(box, new Pose(new Vector3<double>(-1, 0, 0))),
-            new CompoundPart(box, new Pose(new Vector3<double>(1, 0, 0)))
+            new CompoundPart(box, new LocalPose(new Vector3F(-1, 0, 0))),
+            new CompoundPart(box, new LocalPose(new Vector3F(1, 0, 0)))
         ]);
-        var first = scene.World.Add(new BodyDescription { Shape = compound, Position = new Vector3<double>(0, 0.5f, 0) });
+        var first = scene.World.Add(new BodyDescription { Shape = compound, Position = new WorldPosition(0, 0.5f, 0) });
         scene.Run(0.5f);
 
         scene.World.Remove(first);
-        var second = scene.World.Add(new BodyDescription { Shape = compound, Position = new Vector3<double>(0, 3f, 0) });
+        var second = scene.World.Add(new BodyDescription { Shape = compound, Position = new WorldPosition(0, 3f, 0) });
         scene.Run(0.1f);
 
         var found = new List<BodyHandle>();
-        scene.World.Overlap(new BoxCollisionShape(3, 0.6f, 1), new Pose(new Vector3<double>(0, 0.5f, 0)), found);
+        scene.World.Overlap(new BoxCollisionShape(3, 0.6f, 1), new Pose(new WorldPosition(0, 0.5f, 0)), found);
         Assert.That(found, Has.None.EqualTo(first));
-        Assert.That(scene.World.RayCast(new Vector3<double>(1, 10, 0), -Vector3F.UnitY, 20, out var hit), Is.True);
+        Assert.That(scene.World.RayCast(new WorldPosition(1, 10, 0), -Vector3F.UnitY, 20, out var hit), Is.True);
         Assert.That(hit.Body, Is.EqualTo(second));
     }
 
@@ -219,15 +219,15 @@ public class CompoundTests
         var world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
         var body = world.Add(new BodyDescription
         {
-            Shape = new CompoundCollisionShape([new CompoundPart(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(1, 0, 0)))])
+            Shape = new CompoundCollisionShape([new CompoundPart(new SphereCollisionShape(0.5f), new LocalPose(new Vector3F(1, 0, 0)))])
         });
         var turn = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, MathF.PI / 2);
 
-        world.SetPose(body, new Pose(new Vector3<double>(5, 0, 0), turn));
+        world.SetPose(body, new Pose(new WorldPosition(5, 0, 0), turn));
 
         var pose = world.GetPose(body);
-        Assert.That((pose.Position - new Vector3<double>(5, 0, 0)).Length(), Is.LessThan(1e-5f));
-        var center = new Vector3<double>(5, 0, 0) + Vector3F.Transform(Vector3F.UnitX, turn).As<double>();
+        Assert.That((pose.Position - new WorldPosition(5, 0, 0)).Length(), Is.LessThan(1e-5f));
+        var center = new WorldPosition(5, 0, 0) + Vector3F.Transform(Vector3F.UnitX, turn);
         Assert.That((world.GetCenterOfMass(body) - center).Length(), Is.LessThan(1e-5f));
     }
 
@@ -237,7 +237,7 @@ public class CompoundTests
         var world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
         var body = world.Add(new BodyDescription
         {
-            Shape = new CompoundCollisionShape([new CompoundPart(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(1, 0, 0)))]),
+            Shape = new CompoundCollisionShape([new CompoundPart(new SphereCollisionShape(0.5f), new LocalPose(new Vector3F(1, 0, 0)))]),
             AngularVelocity = new Vector3F(0, 1, 0),
             CanSleep = false
         });

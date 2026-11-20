@@ -253,7 +253,7 @@ public sealed partial class PhysicsService
                     Point = pose.TransformPoint(request.Anchor),
                     SecondPoint = connected.IsValid
                         ? _world.GetPose(connected).TransformPoint(request.ConnectedAnchor.As<float>())
-                        : request.ConnectedAnchor,
+                        : new WorldPosition(request.ConnectedAnchor),
                     Axis = pose.TransformDirection(request.Axis),
                     CollideConnected = request.CollideConnected,
                     HasLimits = request.HasLimits,

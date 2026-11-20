@@ -15,7 +15,7 @@ public class QueryTests
         var far = scene.AddBox(new Vector3F(10, 0, 0), new Vector3F(0.5f));
         var near = scene.AddBox(new Vector3F(5, 0, 0), new Vector3F(0.5f));
 
-        var met = scene.World.RayCast(Vector3<double>.Zero, new Vector3F(2, 0, 0), 100, out var hit);
+        var met = scene.World.RayCast(WorldPosition.Zero, new Vector3F(2, 0, 0), 100, out var hit);
 
         Assert.That(met, Is.True);
         Assert.That(hit.Body, Is.EqualTo(near));
@@ -30,7 +30,7 @@ public class QueryTests
         var scene = new SceneBuilder();
         scene.AddBox(new Vector3F(5, 0, 0), new Vector3F(0.5f));
 
-        Assert.That(scene.World.RayCast(Vector3<double>.Zero, Vector3F.UnitX, 4, out _), Is.False);
+        Assert.That(scene.World.RayCast(WorldPosition.Zero, Vector3F.UnitX, 4, out _), Is.False);
     }
 
     [Test]
@@ -41,17 +41,17 @@ public class QueryTests
         var capsule = scene.AddCapsule(new Vector3F(0, 0, 5), 1, 0.5f, lying);
         var ball = scene.AddSphere(new Vector3F(0, 0, -5), 0.5f);
 
-        Assert.That(scene.World.RayCast(new Vector3<double>(0.9f, 3, 5), -Vector3F.UnitY, 10, out var onCapsule),
+        Assert.That(scene.World.RayCast(new WorldPosition(0.9f, 3, 5), -Vector3F.UnitY, 10, out var onCapsule),
             Is.True);
         Assert.That(onCapsule.Body, Is.EqualTo(capsule));
         Assert.That(onCapsule.Distance, Is.EqualTo(2.5f).Within(1e-4f));
 
-        Assert.That(scene.World.RayCast(new Vector3<double>(3, 0, 5), -Vector3F.UnitX, 10, out var onEnd),
+        Assert.That(scene.World.RayCast(new WorldPosition(3, 0, 5), -Vector3F.UnitX, 10, out var onEnd),
             Is.True);
         Assert.That(onEnd.Distance, Is.EqualTo(1.5f).Within(1e-4f));
         Assert.That(onEnd.Normal.X, Is.EqualTo(1).Within(1e-4f));
 
-        Assert.That(scene.World.RayCast(new Vector3<double>(0, 0, -10), Vector3F.UnitZ, 10, out var onBall),
+        Assert.That(scene.World.RayCast(new WorldPosition(0, 0, -10), Vector3F.UnitZ, 10, out var onBall),
             Is.True);
         Assert.That(onBall.Body, Is.EqualTo(ball));
         Assert.That(onBall.Distance, Is.EqualTo(4.5f).Within(1e-4f));
@@ -63,7 +63,7 @@ public class QueryTests
         var scene = new SceneBuilder();
         scene.AddCapsule(Vector3F.Zero, 1, 0.5f);
 
-        var met = scene.World.RayCast(new Vector3<double>(0.45f, 1.45f, -5), Vector3F.UnitZ, float.PositiveInfinity,
+        var met = scene.World.RayCast(new WorldPosition(0.45f, 1.45f, -5), Vector3F.UnitZ, float.PositiveInfinity,
             out _);
 
         Assert.That(met, Is.False);
@@ -87,7 +87,7 @@ public class QueryTests
     public void AQueryStartingNowhere_IsRefused()
     {
         var scene = new SceneBuilder();
-        var nowhere = new Vector3<double>(double.NaN, 0, 0);
+        var nowhere = new WorldPosition(double.NaN, 0, 0);
         var ball = new SphereCollisionShape(0.5f);
 
         Assert.Multiple(() =>

@@ -3,7 +3,7 @@ namespace Adamantium.DarkMatter;
 /// <summary>Where a moving shape first met a body.</summary>
 public readonly struct ShapeHit
 {
-    public ShapeHit(BodyHandle body, Vector3<double> position, Vector3F normal, float distance)
+    public ShapeHit(BodyHandle body, WorldPosition position, Vector3F normal, float distance)
     {
         Body = body;
         Position = position;
@@ -15,7 +15,7 @@ public readonly struct ShapeHit
     public BodyHandle Body { get; }
 
     /// <summary>The point of the body met.</summary>
-    public Vector3<double> Position { get; }
+    public WorldPosition Position { get; }
 
     /// <summary>The body's outward normal there, toward the moving shape.</summary>
     public Vector3F Normal { get; }
