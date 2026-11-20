@@ -136,6 +136,8 @@ public sealed class GameRun
         {
             if (!service.IsActive)
                 _failed.Add(service);
+            else
+                TellPaused(service, true);
 
             service.IsActive = false;
         }
@@ -145,8 +147,30 @@ public sealed class GameRun
     {
         foreach (var service in _services)
         {
+            if (_failed.Contains(service))
+                continue;
+
+            TellPaused(service, false);
             if (!_failed.Contains(service))
                 service.IsActive = true;
+        }
+    }
+
+    // One that throws sleeps for the rest of the game, as when an edit fails.
+    private void TellPaused(IGameService service, bool paused)
+    {
+        try
+        {
+            if (paused)
+                service.Pause();
+            else
+                service.Resume();
+        }
+        catch (Exception exception)
+        {
+            Log.Logger.Error(exception, "The game service {Service} failed to {Change} and sleeps for the game",
+                service.GetType().FullName, paused ? "pause" : "go on");
+            _failed.Add(service);
         }
     }
 }

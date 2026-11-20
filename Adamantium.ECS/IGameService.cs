@@ -22,4 +22,14 @@ public interface IGameService : IEntityService
     void ComponentEdited(GameComponent component)
     {
     }
+
+    /// <summary>The game is paused: the service, put to sleep after, holds what runs of it on its own.</summary>
+    void Pause()
+    {
+    }
+
+    /// <summary>The game goes on: the service, woken after, lets what it held run again.</summary>
+    void Resume()
+    {
+    }
 }

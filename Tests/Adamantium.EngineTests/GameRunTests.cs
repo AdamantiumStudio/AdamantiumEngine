@@ -148,6 +148,32 @@ public class GameRunTests
         });
     }
 
+    // Paused, a service is told before it is put to sleep, and going on before it is woken; one asleep for throwing is
+    // not told.
+    [Test]
+    public void APausedGame_TellsItsServices_BeforeTheySleepAndWake()
+    {
+        Placed(_world.MainScene, 1);
+        var run = GameRun.Start(_world.MainScene);
+        var pushing = _world.GetService<PushingService>();
+        var throwing = _world.GetService<ThrowingService>();
+        Frame(1);
+
+        run.IsPaused = true;
+        run.IsPaused = true;
+        run.IsPaused = false;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pushing.Pauses, Is.EqualTo(1));
+            Assert.That(pushing.Resumes, Is.EqualTo(1));
+            Assert.That(pushing.WasAwakeWhenPaused, Is.True);
+            Assert.That(pushing.WasAsleepWhenResumed, Is.True);
+            Assert.That(pushing.IsActive, Is.True);
+            Assert.That(throwing.IsActive, Is.False, "asleep for throwing, and left so");
+        });
+    }
+
     [Test]
     public void AStoppedGame_TellsItsServices_PutsThemToSleep_AndTakesItsScene()
     {

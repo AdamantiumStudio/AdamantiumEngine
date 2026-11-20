@@ -442,6 +442,115 @@ public class PhysicsServiceTests
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
     }
 
+    // Moved by hand while the physics steps on its own thread, the entity stands where it was put from that frame on,
+    // not where the steps under way would put it back.
+    [Test]
+    public void BodyMovedOnTheOwnThread_StandsWhereItWasPut_AtOnce()
+    {
+        _physics = new PhysicsService(_world);
+        _world.AddService(_physics);
+        Settle();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
+        Play();
+        var timer = Stopwatch.StartNew();
+        while (timer.Elapsed < TimeSpan.FromSeconds(5) && box.Transform.Position.Y < -3.9)
+        {
+            Thread.Sleep(5);
+            Frame(0.005);
+        }
+
+        var fell = box.Transform.Position.Y >= -3.9;
+        box.Transform.Position = new WorldPosition(5, -6, 0);
+        var lowest = double.MaxValue;
+        var farthestOff = 0.0;
+        for (var frame = 0; frame < 6; frame++)
+        {
+            Frame(0.005);
+            farthestOff = Math.Max(farthestOff, Math.Abs(box.Transform.Position.X - 5));
+            lowest = Math.Min(lowest, box.Transform.Position.Y);
+            Thread.Sleep(5);
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fell, Is.True, "it was falling, its steps under way, when it was put");
+            Assert.That(farthestOff, Is.LessThan(1e-3), "never drawn back where it fell");
+            Assert.That(lowest, Is.EqualTo(-6).Within(0.1));
+        });
+    }
+
+    // A static body weighed while static and made dynamic falls by the weight it was given then.
+    [Test]
+    public void StaticBodyWeighedThenMadeDynamic_Falls()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
+        var body = box.GetComponent<RigidBody>();
+        body.Kind = BodyKind.Static;
+        body.Density = 0;
+        Play();
+        Frames(0.2);
+
+        body.Density = 1000;
+        Frames(0.1);
+        body.Kind = BodyKind.Dynamic;
+        Frames(3);
+
+        Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // Hung under another entity, its own transform left as it was, a resting body stays where it lay: its entity is
+    // stood back there under the new parent.
+    [Test]
+    public void RestingBodyHungUnderAnother_IsStoodWhereItLies()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -0.5, 0), 0.5);
+        var holder = new Entity(null, "Holder");
+        holder.Transform.Position = new WorldPosition(10, 0, 0);
+        _world.EntityManager.AddEntity(holder, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+
+        _world.EntityManager.SetOwner(box, holder);
+        Settle();
+        Frames(0.5);
+
+        Assert.That(box.Transform.WorldPosition.X, Is.EqualTo(0).Within(0.02));
+    }
+
+    // Hung under another and made kinematic in one frame as it falls, its own transform left as it was, the body stops
+    // where it was drawn: its entity is stood back there, and stays.
+    [Test]
+    public void FallingBodyHungUnderAnotherAndMadeKinematic_StopsWhereItWasDrawn()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -6, 0), 0.5);
+        var holder = new Entity(null, "Holder");
+        holder.Transform.Position = new WorldPosition(10, 0, 0);
+        _world.EntityManager.AddEntity(holder, _world.MainScene);
+        Settle();
+        Play();
+        Frames(0.3);
+        var drawn = box.Transform.WorldPosition;
+
+        _world.EntityManager.SetOwner(box, holder);
+        box.GetComponent<RigidBody>().Kind = BodyKind.Kinematic;
+        Settle();
+        Frames(0.5);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(drawn.Y, Is.GreaterThan(-5.9), "it was falling");
+            Assert.That((box.Transform.WorldPosition - drawn).Length(), Is.LessThan(0.02));
+        });
+    }
+
     // Moved by hand while it falls, the body goes on from where it was put, still falling.
     [Test]
     public void BodyMovedDuringTheGame_GoesOnFromWhereItWasPut()
@@ -936,6 +1045,37 @@ public class PhysicsServiceTests
 
         Assert.That(held.Y, Is.EqualTo(-3).Within(1e-6));
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
+    }
+
+    // Paused as it falls, the physics' own thread steps no more: going on, the body falls from where it was held, not
+    // from where the time paused would have taken it.
+    [Test]
+    public void PausedMidFall_GoesOnFromWhereItWasHeld()
+    {
+        _physics = new PhysicsService(_world);
+        _world.AddService(_physics);
+        Settle();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -5, 0), 0.5);
+        Play();
+        var timer = Stopwatch.StartNew();
+        while (timer.Elapsed < TimeSpan.FromSeconds(5) && box.Transform.Position.Y < -4.9)
+        {
+            Thread.Sleep(5);
+            Frame(0.005);
+        }
+
+        _run.IsPaused = true;
+        var held = box.Transform.Position.Y;
+        Thread.Sleep(400);
+        _run.IsPaused = false;
+        Frame(0.005);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(held, Is.GreaterThan(-4.95), "it began to fall");
+            Assert.That(box.Transform.Position.Y - held, Is.LessThan(0.1), "no fall while paused");
+        });
     }
 
     [Test]

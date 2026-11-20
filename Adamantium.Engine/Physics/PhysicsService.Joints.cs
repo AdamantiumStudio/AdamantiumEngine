@@ -8,24 +8,14 @@ using Serilog;
 
 namespace Adamantium.Engine.Physics;
 
-// Joints: the game's joint components asked of the physics once their bodies are there, and asked anew when they
-// change; the physics thread adds a joint again whenever one of its bodies is made anew.
+// Joints: the game's joint components asked of the simulation once their bodies are there, and asked anew when they
+// change - a body of theirs made anew among the changes.
 public sealed partial class PhysicsService
 {
-    // The game's side.
     private readonly Dictionary<Joint, JointLink> _jointLinks = new();
     private readonly List<Joint> _jointsGone = [];
-    private readonly List<int> _freeJointKeys = [];
     // The entities whose joints wait for a body that is not one of its own, by id, said once in the log.
     private readonly HashSet<UInt128> _toldOfJointWaiting = [];
-    private int _jointKeyCount;
-
-    // The physics thread's own: the request under each joint key and the joint it holds, the requests the world
-    // refused, not tried again until asked anew, and which body add each body key holds.
-    private readonly List<JointRequest?> _jointRequests = [];
-    private readonly List<JointHandle> _jointHandles = [];
-    private readonly HashSet<int> _refusedJoints = [];
-    private readonly List<int> _addedAs = [];
 
     // Asks for each joint component whose bodies are there what it describes, when that differs from what was asked;
     // one gone, or waiting for a body, is taken out.
@@ -39,18 +29,22 @@ public sealed partial class PhysicsService
                 if (request == null)
                     continue;
 
-                link = new JointLink(TakeJointKey());
+                link = new JointLink();
                 _jointLinks[joint] = link;
             }
 
             link.SeenInLook = _lookNumber;
             if (request == link.Sent)
+            {
+                TellRefused(joint, link);
                 continue;
+            }
 
+            TakeOut(link);
             link.Sent = request;
-            _commands.Writer.TryWrite(request is { } asked
-                ? new PhysicsCommand(PhysicsCommandKind.AddJoint, link.Key, default, default, joint: asked)
-                : new PhysicsCommand(PhysicsCommandKind.RemoveJoint, link.Key, default, default));
+            link.ToldOfRefusal = false;
+            if (request is { } asked)
+                Add(joint, link, asked);
         }
 
         foreach (var pair in _jointLinks)
@@ -61,16 +55,64 @@ public sealed partial class PhysicsService
 
         foreach (var joint in _jointsGone)
         {
-            var link = _jointLinks[joint];
-            if (link.Sent != null)
-                _commands.Writer.TryWrite(new PhysicsCommand(PhysicsCommandKind.RemoveJoint, link.Key, default, default));
-
-            _freeJointKeys.Add(link.Key);
+            TakeOut(_jointLinks[joint]);
             _jointLinks.Remove(joint);
         }
 
         _jointsGone.Clear();
     }
+
+    private void Add(Joint joint, JointLink link, in JointRequest request)
+    {
+        try
+        {
+            link.Id = _simulation.AddJoint(SettingsOf(request));
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            Log.Logger.Warning(exception, "The joint of {Entity} cannot be added; the physics leaves it until it changes",
+                joint.Owner.Name);
+            link.ToldOfRefusal = true;
+        }
+    }
+
+    // A joint the simulation would not take is said once, and left until it changes.
+    private void TellRefused(Joint joint, JointLink link)
+    {
+        if (link.ToldOfRefusal || link.Id.IsNone || _simulation.StatusOf(link.Id) != PhysicsStatus.Refused)
+            return;
+
+        link.ToldOfRefusal = true;
+        Log.Logger.Warning("The joint of {Entity} cannot be added; the physics leaves it until it changes: {Reason}",
+            joint.Owner.Name, _simulation.RefusalOf(link.Id));
+    }
+
+    // Its joint taken out, if the simulation still has it: a body of it taken out took it.
+    private void TakeOut(JointLink link)
+    {
+        if (!link.Id.IsNone && _simulation.StatusOf(link.Id) is not PhysicsStatus.Removed)
+            _simulation.RemoveJoint(link.Id);
+
+        link.Id = default;
+    }
+
+    private static JointSettings SettingsOf(in JointRequest request) => new()
+    {
+        Kind = request.Kind,
+        First = request.Owner,
+        Second = request.Connected,
+        Space = JointSpace.Bodies,
+        FirstAnchor = request.Anchor,
+        SecondAnchor = request.ConnectedAnchor.As<float>(),
+        SecondPoint = new WorldPosition(request.ConnectedAnchor),
+        Axis = request.Axis,
+        CollideConnected = request.CollideConnected,
+        Limits = request.HasLimits ? new JointLimits(request.LowerLimit, request.UpperLimit) : null,
+        Motor = request.MotorSpeed != 0 || request.MaxMotorForce != 0
+            ? new JointMotor(request.MotorSpeed, request.MaxMotorForce)
+            : null,
+        Spring = request.SpringHertz != 0 ? new JointSpring(request.SpringHertz, request.SpringDampingRatio) : null
+    };
 
     // What the joint asks of the physics, its points and axis carried onto its bodies - each its entity's or the one
     // above it - and scaled as each body was made; null while a body is not there, or it holds a body to itself.
@@ -87,10 +129,10 @@ public sealed partial class PhysicsService
             return null;
         }
 
-        var connectedKey = -1;
-        var connectedGeneration = 0;
-        var intoConnected = Matrix4x4F.Identity;
         var connected = joint.ConnectedBody;
+        var connectedId = default(BodyId);
+        var connectedKey = -1;
+        var intoConnected = Matrix4x4F.Identity;
         if (connected != null)
         {
             var connectedFound = FindBodyOf(connected, out connectedKey, out intoConnected);
@@ -104,7 +146,7 @@ public sealed partial class PhysicsService
                 return null;
             }
 
-            connectedGeneration = _links[connectedKey].AddedAs;
+            connectedId = _links[connectedKey].Id;
         }
 
         var ownerLink = _links[ownerKey];
@@ -112,10 +154,8 @@ public sealed partial class PhysicsService
         var request = new JointRequest
         {
             Kind = joint.Kind,
-            OwnerKey = ownerKey,
-            OwnerGeneration = ownerLink.AddedAs,
-            ConnectedKey = connectedKey,
-            ConnectedGeneration = connectedGeneration,
+            Owner = ownerLink.Id,
+            Connected = connectedId,
             Anchor = Vector3F.TransformCoordinate(joint.Anchor, intoOwner) * ownerScale,
             Axis = Vector3F.UnitY,
             CollideConnected = joint.CollideConnected,
@@ -187,109 +227,10 @@ public sealed partial class PhysicsService
     private static Vector3F Normalized(Vector3F axis) =>
         axis.LengthSquared() > 1e-12f ? Vector3F.Normalize(axis) : Vector3F.Zero;
 
-    private int TakeJointKey()
-    {
-        if (_freeJointKeys.Count == 0)
-            return _jointKeyCount++;
-
-        var key = _freeJointKeys[^1];
-        _freeJointKeys.RemoveAt(_freeJointKeys.Count - 1);
-        return key;
-    }
-
-    // The physics thread: which add of the game's the body under the key is, so a joint asked for an earlier body under
-    // the same key is not held to a later one.
-    private void SetAddedAs(int key, int addedAs)
-    {
-        while (_addedAs.Count <= key)
-        {
-            _addedAs.Add(0);
-        }
-
-        _addedAs[key] = addedAs;
-    }
-
-    // The physics thread: the joint under the key asked for anew, or taken out for none.
-    private void PutJoint(int key, JointRequest? request)
-    {
-        while (_jointRequests.Count <= key)
-        {
-            _jointRequests.Add(null);
-            _jointHandles.Add(default);
-        }
-
-        if (_jointHandles[key].IsValid && _world.Contains(_jointHandles[key]))
-            _world.Remove(_jointHandles[key]);
-
-        _jointHandles[key] = default;
-        _jointRequests[key] = request;
-        _refusedJoints.Remove(key);
-    }
-
-    // The physics thread, before it steps: each joint asked for whose bodies are there and that the world does not hold
-    // - new, or taken out with a body made anew - is added where its first body's anchor stands now.
-    private void KeepJoints()
-    {
-        for (var key = 0; key < _jointRequests.Count; key++)
-        {
-            if (_jointRequests[key] is not { } request || _refusedJoints.Contains(key)
-                                                       || (_jointHandles[key].IsValid && _world.Contains(_jointHandles[key])))
-                continue;
-
-            if (!HoldsBody(request.OwnerKey, request.OwnerGeneration)
-                || (request.ConnectedKey >= 0 && !HoldsBody(request.ConnectedKey, request.ConnectedGeneration)))
-                continue;
-
-            var owner = _handles[request.OwnerKey];
-            var pose = _world.GetPose(owner);
-            var connected = request.ConnectedKey >= 0 ? _handles[request.ConnectedKey] : default;
-            try
-            {
-                _jointHandles[key] = _world.Add(new JointDescription
-                {
-                    Kind = request.Kind,
-                    First = owner,
-                    Second = connected,
-                    Point = pose.TransformPoint(request.Anchor),
-                    SecondPoint = connected.IsValid
-                        ? _world.GetPose(connected).TransformPoint(request.ConnectedAnchor.As<float>())
-                        : new WorldPosition(request.ConnectedAnchor),
-                    Axis = pose.TransformDirection(request.Axis),
-                    CollideConnected = request.CollideConnected,
-                    HasLimits = request.HasLimits,
-                    LowerLimit = request.LowerLimit,
-                    UpperLimit = request.UpperLimit,
-                    MotorSpeed = request.MotorSpeed,
-                    MaxMotorForce = request.MaxMotorForce,
-                    SpringHertz = request.SpringHertz,
-                    SpringDampingRatio = request.SpringDampingRatio
-                });
-            }
-            catch (ArgumentException exception)
-            {
-                Log.Logger.Warning(exception, "The joint of {Entity} cannot be added; the physics leaves it until it changes",
-                    _names[request.OwnerKey]);
-                _refusedJoints.Add(key);
-            }
-        }
-    }
-
-    // Whether the body under the key is the one the game added as that add: one taken out and another put under the
-    // same key since is not.
-    private bool HoldsBody(int key, int addedAs) =>
-        key < _handles.Count && _handles[key].IsValid && _world.Contains(_handles[key]) && key < _addedAs.Count
-        && _addedAs[key] == addedAs;
-
     private void ForgetJoints()
     {
         _jointLinks.Clear();
         _jointsGone.Clear();
-        _freeJointKeys.Clear();
         _toldOfJointWaiting.Clear();
-        _jointKeyCount = 0;
-        _jointRequests.Clear();
-        _jointHandles.Clear();
-        _refusedJoints.Clear();
-        _addedAs.Clear();
     }
 }

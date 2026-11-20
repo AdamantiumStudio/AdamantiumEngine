@@ -9,17 +9,19 @@ public sealed partial class PhysicsSimulation
 {
     private readonly List<SimulatedJoint> _jointSlots = [];
     private readonly Stack<int> _freeJointSlots = new();
-    private readonly List<int> _removedJointSlots = [];
     private readonly List<JointId> _liveJoints = [];
     private readonly List<JointId> _refusedJoints = [];
 
-    /// <summary>Adds a joint as <paramref name="settings"/> say and gives its id; the next step takes it, where its bodies
+    /// <summary>Adds a joint as <paramref name="settings"/> say and gives its id; a step takes it, where its bodies
     /// stand then.</summary>
     public JointId AddJoint(in JointSettings settings)
     {
         ThrowIfDisposed();
         if (!Enum.IsDefined(settings.Kind))
             throw new ArgumentOutOfRangeException(nameof(settings), settings.Kind, "Unknown kind of joint.");
+
+        if (!Enum.IsDefined(settings.Space))
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.Space, "Unknown space of a joint.");
 
         Find(settings.First);
         if (!settings.Second.IsNone)
@@ -30,20 +32,24 @@ public sealed partial class PhysicsSimulation
 
         RequireFinite(settings.Point, nameof(settings));
         RequireFinite(settings.SecondPoint, nameof(settings));
+        RequireFinite(settings.FirstAnchor, nameof(settings));
+        RequireFinite(settings.SecondAnchor, nameof(settings));
         RequireFinite(settings.Axis, nameof(settings));
         var slot = _freeJointSlots.Count > 0 ? _freeJointSlots.Pop() : NewJointSlot();
         var joint = _jointSlots[slot];
         joint.Generation++;
         joint.Status = PhysicsStatus.Adding;
         joint.Refusal = null;
-        joint.Handle = default;
         joint.FirstBody = settings.First.Index;
         joint.SecondBody = settings.Second.IsNone ? NoSlot : settings.Second.Index;
         joint.Position = 0;
         var id = new JointId(slot, joint.Generation);
         joint.ListIndex = _liveJoints.Count;
         _liveJoints.Add(id);
-        _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.AddJoint, Slot = slot, Joint = settings });
+        _commands.Add(new SimulationCommand
+        {
+            Kind = SimulationCommandKind.AddJoint, Slot = slot, Generation = joint.Generation, Joint = settings
+        });
         return id;
     }
 
@@ -55,9 +61,7 @@ public sealed partial class PhysicsSimulation
         if (record.Status == PhysicsStatus.Removed)
             throw new InvalidOperationException($"{joint} is removed.");
 
-        record.Status = PhysicsStatus.Removed;
-        LetGoOfJoint(joint.Index, record);
-        _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.RemoveJoint, Slot = joint.Index });
+        TakeOut(joint, record);
     }
 
     /// <summary>Whether <paramref name="joint"/> is being added or is in the simulation.</summary>
@@ -68,11 +72,11 @@ public sealed partial class PhysicsSimulation
     public PhysicsStatus StatusOf(JointId joint) =>
         TryFindJoint(joint, out var record) ? record.Status : PhysicsStatus.Removed;
 
-    /// <summary>Why the simulation would not take <paramref name="joint"/>, or a change asked of it at the last step;
-    /// null when it did them all.</summary>
+    /// <summary>Why the simulation would not take <paramref name="joint"/>, or a change asked of it, as the last read
+    /// told; null when it did them all.</summary>
     public string RefusalOf(JointId joint) => FindAnyJoint(joint).Refusal;
 
-    /// <summary>Where <paramref name="joint"/> stood after the last step: a hinge's angle in radians or a slider's
+    /// <summary>Where <paramref name="joint"/> stood after the last step read: a hinge's angle in radians or a slider's
     /// offset in meters from where it was added, a distance joint's length; zero for a weld or a ball.</summary>
     public float PositionOf(JointId joint) => FindAnyJoint(joint).Position;
 
@@ -102,90 +106,36 @@ public sealed partial class PhysicsSimulation
         _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.SetMotor, Slot = joint.Index, Motor = motor });
     }
 
-    private void DoJointCommand(in SimulationCommand command)
+    private void TakeOut(JointId joint, SimulatedJoint record)
     {
-        var joint = _jointSlots[command.Slot];
-        if (command.Kind == SimulationCommandKind.AddJoint)
-        {
-            PutJoint(joint, command.Joint);
-            return;
-        }
-
-        if (!joint.Handle.IsValid)
-            return;
-
-        try
-        {
-            switch (command.Kind)
-            {
-                case SimulationCommandKind.RemoveJoint:
-                    // Taken with a body that went before it, or by hand.
-                    if (_world.Contains(joint.Handle))
-                        _world.Remove(joint.Handle);
-
-                    joint.Handle = default;
-                    break;
-                case SimulationCommandKind.SetLimits:
-                    var limits = command.Limits;
-                    _world.SetLimits(joint.Handle, limits.HasValue, limits?.Lower ?? 0, limits?.Upper ?? 0);
-                    break;
-                case SimulationCommandKind.SetMotor:
-                    _world.SetMotor(joint.Handle, command.Motor?.Speed ?? 0, command.Motor?.MaxForce ?? 0);
-                    break;
-            }
-        }
-        // The first refusal of a step is told, as for a body.
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            if (joint.Refusal != null)
-                return;
-
-            joint.Refusal = exception.Message;
-            _refusedJoints.Add(new JointId(command.Slot, joint.Generation));
-        }
+        record.Status = PhysicsStatus.Removed;
+        var last = _liveJoints[^1];
+        _liveJoints[record.ListIndex] = last;
+        _jointSlots[last.Index].ListIndex = record.ListIndex;
+        _liveJoints.RemoveAt(_liveJoints.Count - 1);
+        _takenOutSlots.Add(new TakenOutSlot(joint.Index, true, _handedBatches + 1));
+        _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.RemoveJoint, Slot = joint.Index });
     }
 
-    // Its bodies are the core's by now, unless one was refused or taken out: then neither is the joint.
-    private void PutJoint(SimulatedJoint joint, in JointSettings settings)
+    private void ReadJointNews(in SimulationNews news)
     {
-        if (joint.Status == PhysicsStatus.Removed)
+        var joint = _jointSlots[news.Slot];
+        if (joint.Generation != news.Generation)
             return;
 
-        var first = _bodySlots[joint.FirstBody].Handle;
-        var second = joint.SecondBody == NoSlot ? default : _bodySlots[joint.SecondBody].Handle;
-        if (!first.IsValid || (joint.SecondBody != NoSlot && !second.IsValid))
+        switch (news.Kind)
         {
-            joint.Status = PhysicsStatus.Refused;
-            joint.Refusal = "A body of the joint is not in the simulation.";
-            return;
-        }
-
-        try
-        {
-            joint.Handle = _world.Add(new JointDescription
-            {
-                Kind = settings.Kind,
-                First = first,
-                Second = second,
-                Point = settings.Point,
-                SecondPoint = settings.SecondPoint,
-                Axis = settings.Axis,
-                CollideConnected = settings.CollideConnected,
-                HasLimits = settings.Limits.HasValue,
-                LowerLimit = settings.Limits?.Lower ?? 0,
-                UpperLimit = settings.Limits?.Upper ?? 0,
-                MotorSpeed = settings.Motor?.Speed ?? 0,
-                MaxMotorForce = settings.Motor?.MaxForce ?? 0,
-                SpringHertz = settings.Spring?.Hertz ?? 0,
-                SpringDampingRatio = settings.Spring?.DampingRatio ?? 1
-            });
-            joint.Status = PhysicsStatus.Active;
-            joint.Position = _world.GetJointPosition(joint.Handle);
-        }
-        catch (ArgumentException exception)
-        {
-            joint.Status = PhysicsStatus.Refused;
-            joint.Refusal = exception.Message;
+            case NewsKind.Taken when joint.Status == PhysicsStatus.Adding:
+                joint.Status = PhysicsStatus.Active;
+                break;
+            case NewsKind.Refused when joint.Status == PhysicsStatus.Adding:
+                joint.Status = PhysicsStatus.Refused;
+                joint.Refusal = news.Refusal;
+                break;
+            case NewsKind.ChangeRefused when joint.Refusal == null:
+                joint.Refusal = news.Refusal;
+                _refusedJoints.Add(new JointId(news.Slot, news.Generation));
+                break;
         }
     }
 
@@ -193,15 +143,6 @@ public sealed partial class PhysicsSimulation
     {
         _jointSlots.Add(new SimulatedJoint());
         return _jointSlots.Count - 1;
-    }
-
-    private void LetGoOfJoint(int slot, SimulatedJoint joint)
-    {
-        var last = _liveJoints[^1];
-        _liveJoints[joint.ListIndex] = last;
-        _jointSlots[last.Index].ListIndex = joint.ListIndex;
-        _liveJoints.RemoveAt(_liveJoints.Count - 1);
-        _removedJointSlots.Add(slot);
     }
 
     private bool TryFindJoint(JointId joint, out SimulatedJoint record)

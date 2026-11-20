@@ -7,6 +7,20 @@ All packages share one version.
 
 ### Added
 
+- `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
+  `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
+  thrown at the next `Update`. The thread waits for its next step instead of spinning, and while too many steps lie
+  unread. `InterpolatedPoseOf` draws a body between its last two steps read, turned about its center of mass; a body
+  put by hand (`SetPose`) is drawn there at once, not as a motion; while the thread runs, queries meet a snapshot of
+  the bodies as last read.
+  `Advance(seconds)` takes the steps a span of time makes due on the caller's own thread. A body's mass, damping,
+  gravity scale and whether it may sleep are set after it is added (`SetMass`, `SetDamping`, `SetGravityScale`,
+  `SetCanSleep`); a joint's points and axis are given on its bodies with `JointSpace.Bodies`, put in the world where the
+  bodies stand when it is taken. The caller's side of a running simulation allocates nothing a frame.
+
+- `IGameService.Pause` and `Resume`, `GameService.OnPause` and `OnResume`: a service is told the game paused before
+  it is put to sleep, and that it goes on before it is woken.
+
 - `PhysicsSimulation`: the physics as a game uses it, with no ECS. Bodies and joints are named by `BodyId` and
   `JointId`, added from `BodySettings` (one shape or `BodyPart`s, a `PhysicsMaterial`, the caller's own data per body
   and part) and `JointSettings` (`JointLimits`, `JointMotor`, `JointSpring`). Every action - impulses, velocities,
@@ -667,6 +681,12 @@ All packages share one version.
   such a projection as `TiffGeoReference.ProjectionMethod` (`TiffProjectionMethod`, annex C).
 
 ### Changed
+
+- `PhysicsService` lays the scene's rigid bodies and joints out as bodies and joints of a `PhysicsSimulation` and
+  stands the entities where it draws them: its own thread, commands, results and drawing between steps went to the
+  simulation. A body changes in place instead of being made anew, a joint asked of it on its bodies' axes. A change
+  the simulation refuses is said once and leaves the body as it was; a body made dynamic with nothing to weigh it by is
+  left, as before, until it has a weight. Paused, its simulation steps no more.
 
 - An entity's place is a `WorldPosition`, for every entity: `Transform.Position`, `InitialPosition`, `Pivot`,
   `WorldPosition` and `TransformState.Position`, a camera's `WorldPosition` and `FindSubjectCenter`, and the points of
