@@ -6,10 +6,10 @@ using Adamantium.Vulkan.Core;
 
 namespace Adamantium.Graphics;
 
-/// <summary>Sends an output's frames to an <see cref="ISharedSurfaceConsumer"/> through a ring of
-/// <see cref="SharedSurface"/>s: each frame is copied into the surface the consumer gave back last; a new size gets a new
-/// ring, handed to the consumer once it holds its first frame. Driven from the thread that draws the output.</summary>
-public sealed class SharedSurfaceProducer : IDisposable
+/// <summary>An <see cref="ISharedSurfaceProducer"/> through a ring of <see cref="SharedSurface"/>s: each frame is copied
+/// into the surface the consumer gave back last; a new size or way of sharing gets a new ring, handed to the consumer
+/// once it holds its first frame - the old one retired after it, as its submits may still use its semaphores.</summary>
+public sealed class SharedSurfaceProducer : ISharedSurfaceProducer
 {
     private readonly ISharedSurfaceConsumer _consumer;
     private readonly SurfaceFormat _format;
@@ -35,10 +35,6 @@ public sealed class SharedSurfaceProducer : IDisposable
 
     internal SharedSurface Surface => _surface;
 
-    /// <summary>Copies <paramref name="frame"/>, <paramref name="width"/> × <paramref name="height"/>, into the ring, on
-    /// <paramref name="device"/>'s queue after what drew it. <paramref name="inDevice"/>: the consumer draws with this
-    /// device's own logical device, so the surfaces need no OS handles. A new size or way of sharing starts a new ring and
-    /// asks for another frame. Followed by <see cref="NoteSubmitted"/> once the device's frame is submitted.</summary>
     public void Produce(IGraphicsDevice device, ITexture frame, uint width, uint height, bool inDevice)
     {
         HandOverPendingSurface();
@@ -69,7 +65,6 @@ public sealed class SharedSurfaceProducer : IDisposable
         _unannouncedFrame = _lastProduced;
     }
 
-    /// <summary>Tells the consumer of the frame <see cref="Produce"/> copied, once the device's frame is submitted.</summary>
     public void NoteSubmitted()
     {
         if (_unannouncedDescriptor == null)
@@ -82,9 +77,6 @@ public sealed class SharedSurfaceProducer : IDisposable
         _consumer.NoteFrameSubmitted();
     }
 
-    /// <summary>Waits until the consumer asks for a frame, so one is drawn per frame it shows, then until the oldest
-    /// surface is given back for it, up to <paramref name="timeout"/>. Gives whether it was; if not, asks for a frame
-    /// again on the consumer's next ask.</summary>
     public bool WaitUntilShown(TimeSpan timeout)
     {
         if (_surface == null || _pendingSurface != null)
@@ -105,9 +97,6 @@ public sealed class SharedSurfaceProducer : IDisposable
         return shown;
     }
 
-    /// <summary>Lets the consumer go of the ring and frees it: <paramref name="retire"/> once the device's frames still
-    /// in flight are done with it - their submits use its semaphores - else at once, for a device that is going away.
-    /// A ring replaced by a new size is retired the same way, after the consumer is bound to the new one.</summary>
     public void Release(bool retire)
     {
         if (_surface != null)
