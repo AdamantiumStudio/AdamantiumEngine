@@ -15,9 +15,24 @@ internal sealed class HullFaces
     private readonly int[] _facesAtStarts;
     private readonly int[] _facesAt;
 
+    // The corners' coordinates each in an array of its own, so the search for the farthest reads them in a row.
+    private readonly float[] _xs;
+    private readonly float[] _ys;
+    private readonly float[] _zs;
+
     private HullFaces(Vector3F[] vertices, List<HullFace> faces)
     {
         Vertices = vertices;
+        _xs = new float[vertices.Length];
+        _ys = new float[vertices.Length];
+        _zs = new float[vertices.Length];
+        for (var index = 0; index < vertices.Length; index++)
+        {
+            _xs[index] = vertices[index].X;
+            _ys[index] = vertices[index].Y;
+            _zs[index] = vertices[index].Z;
+        }
+
         Normals = new Vector3F[faces.Count];
         Offsets = new float[faces.Count];
         Starts = new int[faces.Count + 1];
@@ -150,11 +165,18 @@ internal sealed class HullFaces
 
     private int FindFarthest(Vector3F direction)
     {
+        // The three coordinates as spans of one length, read in a row.
+        ReadOnlySpan<float> cornerXs = _xs;
+        var cornerYs = _ys.AsSpan(0, cornerXs.Length);
+        var cornerZs = _zs.AsSpan(0, cornerXs.Length);
+        var wayX = direction.X;
+        var wayY = direction.Y;
+        var wayZ = direction.Z;
         var farthest = 0;
-        var reach = Vector3F.Dot(Vertices[0], direction);
-        for (var index = 1; index < Vertices.Length; index++)
+        var reach = cornerXs[0] * wayX + cornerYs[0] * wayY + cornerZs[0] * wayZ;
+        for (var index = 1; index < cornerXs.Length; index++)
         {
-            var along = Vector3F.Dot(Vertices[index], direction);
+            var along = cornerXs[index] * wayX + cornerYs[index] * wayY + cornerZs[index] * wayZ;
             if (along > reach)
             {
                 reach = along;

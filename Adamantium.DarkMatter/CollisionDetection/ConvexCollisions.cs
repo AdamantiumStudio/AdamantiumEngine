@@ -53,7 +53,7 @@ internal static class ConvexCollisions
                 // Cores touching edge to edge stand behind several planes, and EPA's may change from step to step;
                 // parted a hair, their nearest points tell the one normal.
                 if (touching)
-                    TryPartToFindNormal(first, firstCore, second, secondPose, nearTolerance, manifold, ref normal,
+                    TryPartToFindNormal(first, firstCore, second, secondCore, nearTolerance, manifold, ref normal,
                         ref onFirst, ref onSecond);
             }
             else
@@ -89,14 +89,14 @@ internal static class ConvexCollisions
     // normal, and takes the way between the nearest points as the normal; left as it is when that parts them not, as
     // far out where the hair is lost. Corner to corner, no way is truer than another, and EPA's stands.
     private static void TryPartToFindNormal(CollisionShape first, in PlacedCore firstCore, CollisionShape second,
-        in Pose secondPose, float nearTolerance, ManifoldBuffer manifold, ref Vector3F normal, ref Vector3F onFirst,
-        ref Vector3F onSecond)
+        in PlacedCore secondCore, float nearTolerance, ManifoldBuffer manifold, ref Vector3F normal,
+        ref Vector3F onFirst, ref Vector3F onSecond)
     {
         var firstSize = Vector3F.Max(first.ComputeBounds(Pose.Identity).Size);
         var secondSize = Vector3F.Max(second.ComputeBounds(Pose.Identity).Size);
         var nudge = MathF.Max(PartingNudge * MathF.Min(firstSize, secondSize), 4 * nearTolerance);
         var offset = normal * nudge;
-        var parted = new PlacedCore(second, new Pose(secondPose.Position + offset, secondPose.Rotation));
+        var parted = secondCore.MovedTo(secondCore.Center + offset);
         if (!GjkClosestPoints.TryFind(firstCore, parted, float.MaxValue, manifold.Simplex, out var distance,
                 out var towardSecond, out var nearestOfFirst, out var nearestOfSecond) || !(distance > 0))
             return;

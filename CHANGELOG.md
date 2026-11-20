@@ -625,6 +625,11 @@ All packages share one version.
 
 ### Changed
 
+- The physics' GJK is quicker: a shape's turn is made a matrix once per query, not worked out of the quaternion for
+  every support point; a hull reads its corners' coordinates from arrays of their own; a tetrahedron weighs its faces
+  by their points alone, the face it grew from passed by. A shape cast starts each step's GJK from the last step's
+  way. Release: a wheel cast onto a rough height field 24.5 → 20-21 µs, onto a flat one 9.8 → 8.4-8.6 µs; GJK on a
+  cylinder and a triangle 1.0 → 0.85-0.93 µs, a capsule and a box 0.30 → 0.24-0.27 µs.
 - `TriangleTree` moved to `Adamantium.Mathematics`, so the physics shares it with picking; it is built from points
   and the corners of triangles, not from a mesh's topology.
 - `CollisionShapeKind` has `Triangle`, `TriangleMesh` and `HeightField` before `Compound`.
