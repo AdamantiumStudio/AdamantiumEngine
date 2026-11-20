@@ -824,6 +824,9 @@ All packages share one version.
 
 ### Fixed
 
+- `IGraphicsDevice.CreateTextureArray` keeps the uses its description asks for: they were dropped for sampling alone,
+  so an array asked to be read back (`TransferSrc`) could not be, and reading it was a Vulkan validation error.
+
 - Far from the origin an entity is drawn where it stands against the camera again: its world was composed in float and
   the camera taken from that, so it moved by float's rounding - 3 cm a million meters out, 2 m a billion out. The
   world is composed in double through every parent (`TransformMetaData.AbsoluteWorld`, `Transform.GetWorldMatrix`,

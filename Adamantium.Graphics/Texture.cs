@@ -768,7 +768,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         ArgumentNullException.ThrowIfNull(layers);
         if (layers.Count == 0) throw new ArgumentException("An array texture needs at least one layer.", nameof(layers));
 
-        return new Texture(graphicsDevice, description, layers, usage, desiredLayout);
+        return new Texture(graphicsDevice, description, layers, usage | description.Usage, desiredLayout);
     }
 
     public static Texture CreateFrom(
