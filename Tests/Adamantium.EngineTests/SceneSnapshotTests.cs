@@ -49,7 +49,7 @@ public class SceneSnapshotTests
     public void WhatChanged_GoesBack()
     {
         var snapshot = SceneSnapshot.Take(_scene);
-        _group.Transform.Position = new Vector3<double>(9, 9, 9);
+        _group.Transform.Position = new WorldPosition(9, 9, 9);
         _body.GetComponent<Pushed>().Speed = 7;
         _lamp.GetComponent<Light>().Intensity = 0.5f;
         _body.IsEnabled = false;
@@ -61,12 +61,12 @@ public class SceneSnapshotTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(_group.Transform.Position, Is.EqualTo(new Vector3<double>(1, 0, 0)));
+            Assert.That(_group.Transform.Position, Is.EqualTo(new WorldPosition(1, 0, 0)));
             Assert.That(_body.GetComponent<Pushed>().Speed, Is.EqualTo(2));
             Assert.That(_lamp.GetComponent<Light>().Intensity, Is.EqualTo(3));
             Assert.That(_body.IsEnabled, Is.True);
             Assert.That(_body.Owner, Is.SameAs(_group));
-            Assert.That(_body.Transform.Position, Is.EqualTo(new Vector3<double>(0, 2, 0)));
+            Assert.That(_body.Transform.Position, Is.EqualTo(new WorldPosition(0, 2, 0)));
         });
     }
 
@@ -126,7 +126,7 @@ public class SceneSnapshotTests
     public void ChangesKept_PutBeforeAndAfter()
     {
         var snapshot = SceneSnapshot.Take(_scene);
-        _group.Transform.Position = new Vector3<double>(9, 9, 9);
+        _group.Transform.Position = new WorldPosition(9, 9, 9);
         _body.GetComponent<Pushed>().Speed = 7;
         _lamp.GetComponent<Light>().Intensity = 0.5f;
         var made = new Entity(null, "Made");
@@ -136,7 +136,7 @@ public class SceneSnapshotTests
 
         var kept = snapshot.KeepChanges();
         _world.ForceUpdate();
-        var keptAsLeft = InScene(made) && !InScene(_lamp) && _group.Transform.Position == new Vector3<double>(9, 9, 9);
+        var keptAsLeft = InScene(made) && !InScene(_lamp) && _group.Transform.Position == new WorldPosition(9, 9, 9);
 
         kept.PutBefore();
         _world.ForceUpdate();
@@ -152,12 +152,12 @@ public class SceneSnapshotTests
         Assert.Multiple(() =>
         {
             Assert.That(keptAsLeft, Is.True, "kept as the game left it");
-            Assert.That(groupBefore, Is.EqualTo(new Vector3<double>(1, 0, 0)));
+            Assert.That(groupBefore, Is.EqualTo(new WorldPosition(1, 0, 0)));
             Assert.That(speedBefore, Is.EqualTo(2));
             Assert.That(madeBefore, Is.False, "what joined, gone");
             Assert.That(lampBefore, Is.True, "what was taken out, back");
             Assert.That(intensityBefore, Is.EqualTo(3));
-            Assert.That(_group.Transform.Position, Is.EqualTo(new Vector3<double>(9, 9, 9)), "after: as the game left it");
+            Assert.That(_group.Transform.Position, Is.EqualTo(new WorldPosition(9, 9, 9)), "after: as the game left it");
             Assert.That(_body.GetComponent<Pushed>().Speed, Is.EqualTo(7));
             Assert.That(InScene(made), Is.True, "what joined, back");
             Assert.That(InScene(_lamp), Is.False, "what was taken out, out again");
@@ -344,7 +344,7 @@ public class SceneSnapshotTests
     {
         SceneSnapshot.Take(_scene);
 
-        _group.Transform.Position = new Vector3<double>(5, 0, 0);
+        _group.Transform.Position = new WorldPosition(5, 0, 0);
 
         Assert.Multiple(() =>
         {
@@ -402,7 +402,7 @@ public class SceneSnapshotTests
         _world.EntityManager.RemoveEntity(_lamp);
         _world.ForceUpdate();
         _lamp.Visible = false;
-        _lamp.Transform.Position = new Vector3<double>(7, 7, 7);
+        _lamp.Transform.Position = new WorldPosition(7, 7, 7);
 
         snapshot.Restore();
         _world.ForceUpdate();
@@ -410,7 +410,7 @@ public class SceneSnapshotTests
         Assert.Multiple(() =>
         {
             Assert.That(_lamp.Visible, Is.True);
-            Assert.That(_lamp.Transform.Position, Is.EqualTo(new Vector3<double>(0, 0, 0)));
+            Assert.That(_lamp.Transform.Position, Is.EqualTo(new WorldPosition(0, 0, 0)));
         });
     }
 
@@ -435,10 +435,10 @@ public class SceneSnapshotTests
     public void AfterRestoring_NothingIsRecorded()
     {
         var snapshot = SceneSnapshot.Take(_scene);
-        _group.Transform.Position = new Vector3<double>(5, 0, 0);
+        _group.Transform.Position = new WorldPosition(5, 0, 0);
 
         snapshot.Restore();
-        _group.Transform.Position = new Vector3<double>(6, 0, 0);
+        _group.Transform.Position = new WorldPosition(6, 0, 0);
 
         Assert.Multiple(() =>
         {

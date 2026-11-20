@@ -133,11 +133,11 @@ namespace Adamantium.ECS.Components.Extensions
             maximum = Vector3F.Max(maximum, center + reach);
         }
 
-        public static Vector3<double> GetCenterAbsolute(this Entity owner)
+        public static WorldPosition GetCenterAbsolute(this Entity owner)
         {
             var transform = owner.Transform;
             return owner.TryMeasureBounds(out var bounds)
-                ? Vector3<double>.TransformCoordinate(bounds.Center, transform.GetWorldMatrix())
+                ? new WorldPosition(Vector3<double>.TransformCoordinate(bounds.Center, transform.GetWorldMatrix()))
                 : transform.WorldPosition;
         }
 
@@ -194,7 +194,7 @@ namespace Adamantium.ECS.Components.Extensions
             return owner.Transform.GetRelativePosition(camera.GetOwnerPosition());
         }
 
-        public static Vector3<double> GetOwnerPosition(this IEntityOwner component)
+        public static WorldPosition GetOwnerPosition(this IEntityOwner component)
         {
             return component.Owner.Transform.WorldPosition;
         }
@@ -204,14 +204,14 @@ namespace Adamantium.ECS.Components.Extensions
             return component.Owner.Transform.Rotation;
         }
 
-        public static Vector3<double> GetPositionForNewObject(this Entity owner, CameraBase camera)
+        public static WorldPosition GetPositionForNewObject(this Entity owner, CameraBase camera)
         {
-            return camera.GetOwnerPosition() + (owner.GetDiameter() * (Vector3<double>)camera.Forward * camera.Fov);
+            return camera.GetOwnerPosition() + owner.GetDiameter() * (Vector3<double>)camera.Forward * camera.Fov;
         }
 
-        public static Vector3<double> GetPositionForNewObject(this Entity owner, CameraBase camera, double diameter)
+        public static WorldPosition GetPositionForNewObject(this Entity owner, CameraBase camera, double diameter)
         {
-            return camera.GetOwnerPosition() + (diameter * (Vector3<double>)camera.Forward * (camera.Fov/4));
+            return camera.GetOwnerPosition() + diameter * (Vector3<double>)camera.Forward * (camera.Fov / 4);
         }
     }
 }

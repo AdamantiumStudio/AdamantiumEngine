@@ -12,7 +12,7 @@ public class BoxColliderMergeTests
     public void Merge_PlacesAPartWhereItStands()
     {
         var model = new Entity(null, "Model");
-        var part = PickScene.Box(model, "Part", new Vector3<double>(10, 0, 0), 1);
+        var part = PickScene.Box(model, "Part", new WorldPosition(10, 0, 0), 1);
 
         var bounds = MergeParts(model, part);
 
@@ -23,8 +23,8 @@ public class BoxColliderMergeTests
     public void Merge_SpansEveryPart()
     {
         var model = new Entity(null, "Model");
-        var left = PickScene.Box(model, "Left", new Vector3<double>(-4, 0, 0), 1);
-        var right = PickScene.Box(model, "Right", new Vector3<double>(4, 0, 0), 1);
+        var left = PickScene.Box(model, "Left", new WorldPosition(-4, 0, 0), 1);
+        var right = PickScene.Box(model, "Right", new WorldPosition(4, 0, 0), 1);
 
         var bounds = MergeParts(model, left, right);
 
@@ -35,7 +35,7 @@ public class BoxColliderMergeTests
     public void Merge_TurnsAndScalesAPartAsItIsPlaced()
     {
         var model = new Entity(null, "Model");
-        var part = PickScene.Box(model, "Part", new Vector3<double>(0, 0, 5), 1);
+        var part = PickScene.Box(model, "Part", new WorldPosition(0, 0, 5), 1);
         part.Transform.BaseScale = new Vector3F(2, 1, 1);
         part.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90));
 
@@ -49,8 +49,8 @@ public class BoxColliderMergeTests
     {
         var model = new Entity(null, "Model");
         var node = new Entity(model, "Node");
-        node.Transform.Position = new Vector3<double>(10, 0, 0);
-        var part = PickScene.Box(node, "Part", new Vector3<double>(1, 0, 0), 1);
+        node.Transform.Position = new WorldPosition(10, 0, 0);
+        var part = PickScene.Box(node, "Part", new WorldPosition(1, 0, 0), 1);
 
         MergeParts(node, part);
         var bounds = MergeParts(model, node);

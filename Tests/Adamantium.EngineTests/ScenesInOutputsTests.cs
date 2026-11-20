@@ -42,8 +42,8 @@ public class ScenesInOutputsTests
         mainCamera = OwnCamera(mainOutput, "Main view");
         arenaCamera = OwnCamera(arenaOutput, "Arena view");
 
-        ship = Cube("Ship", new Vector3<double>(0, 0, 10));
-        rock = Cube("Rock", new Vector3<double>(0, 0, 10));
+        ship = Cube("Ship", new WorldPosition(0, 0, 10));
+        rock = Cube("Rock", new WorldPosition(0, 0, 10));
         world.EntityManager.AddEntity(ship);
         world.EntityManager.AddEntity(rock, arena);
 
@@ -81,7 +81,7 @@ public class ScenesInOutputsTests
     public void ASceneNoOutputShows_IsNotRun()
     {
         var hangar = world.CreateScene("Hangar");
-        var crate = Cube("Crate", new Vector3<double>(0, 0, 10));
+        var crate = Cube("Crate", new WorldPosition(0, 0, 10));
         world.EntityManager.AddEntity(crate, hangar);
 
         Frame();
@@ -165,7 +165,7 @@ public class ScenesInOutputsTests
 
     private Camera OwnCamera(TestOutput output, string name)
     {
-        var entity = new CameraTemplate().BuildEntity(null, name, Vector3<double>.Zero, Vector3<double>.ForwardLH,
+        var entity = new CameraTemplate().BuildEntity(null, name, WorldPosition.Zero, Vector3<double>.ForwardLH,
             -Vector3<double>.Up, 800, 600, 0.1f, 1000f);
         var camera = entity.GetComponent<Camera>();
         world.EntityManager.AddEntity(entity, output.Scene);
@@ -174,7 +174,7 @@ public class ScenesInOutputsTests
         return camera;
     }
 
-    private static Entity Cube(string name, Vector3<double> at)
+    private static Entity Cube(string name, WorldPosition at)
     {
         var cube = new Entity(null, name);
         cube.Transform.Position = at;

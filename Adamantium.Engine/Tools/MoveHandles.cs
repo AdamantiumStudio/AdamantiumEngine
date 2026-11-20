@@ -21,8 +21,8 @@ public class MoveHandles : Handles
     private readonly Entity rightForward;
     private readonly Entity upForward;
     private readonly Entity[] parts;
-    private Vector3<double> anchor;
-    private Vector3<double> startPosition;
+    private WorldPosition anchor;
+    private WorldPosition startPosition;
     private Vector3F direction;
     private bool alongAxis;
     private float startAlong;

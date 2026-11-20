@@ -18,7 +18,7 @@ public class EntityChangeCountTests
         Assert.Multiple(() =>
         {
             Assert.That(Grows(entity, () => entity.IsEnabled = false), Is.True, "its own value");
-            Assert.That(Grows(entity, () => entity.Transform.Position = new Vector3<double>(1, 2, 3)), Is.True,
+            Assert.That(Grows(entity, () => entity.Transform.Position = new WorldPosition(1, 2, 3)), Is.True,
                 "a component's value");
             Assert.That(Grows(entity, () => entity.AddComponent(new RigidBody())), Is.True, "a component added");
             var collider = new BoxCollider();

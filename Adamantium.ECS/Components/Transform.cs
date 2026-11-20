@@ -10,8 +10,8 @@ namespace Adamantium.ECS.Components
     {
         public Transform()
         {
-            InitialPosition = Vector3<double>.Zero;
-            Position = Vector3<double>.Zero;
+            InitialPosition = WorldPosition.Zero;
+            Position = WorldPosition.Zero;
             Rotation = QuaternionF.Identity;
             PivotRotation = QuaternionF.Identity;
             baseScale = Vector3F.One;
@@ -19,8 +19,8 @@ namespace Adamantium.ECS.Components
             TransformData = new Dictionary<CameraBase, TransformMetaData>();
         }
 
-        [Bindable] private Vector3<double> initialPosition;
-        [Bindable] private Vector3<double> position;
+        [Bindable] private WorldPosition initialPosition;
+        [Bindable] private WorldPosition position;
         [Bindable, Affects(nameof(Angles))] private QuaternionF rotation;
         [Bindable, Affects(nameof(Scale))] private Vector3F baseScale;
         [Bindable, Affects(nameof(Scale))] private Vector3F scaleFactor;
@@ -29,16 +29,13 @@ namespace Adamantium.ECS.Components
 
         private readonly Dictionary<CameraBase, TransformMetaData> TransformData;
 
-        public Vector3F GetRelativePosition(Vector3<double> offset)
-        {
-            return (WorldPosition - offset).As<float>();
-        }
+        public Vector3F GetRelativePosition(WorldPosition origin) => WorldPosition.OffsetFrom(origin);
 
         /// <summary>Where this entity is IN THE WORLD: its own position composed through its parents. <see cref="Position"/>
         /// is relative to the parent, so for anything below a root the two differ. Camera-independent, unlike
         /// <see cref="TransformMetaData.AbsoluteWorld"/>, which the render pass records per camera. In double through every
         /// parent, so far from the origin it keeps what float would round away.</summary>
-        public Vector3<double> WorldPosition => GetWorldMatrix().TranslationVector;
+        public WorldPosition WorldPosition => new(GetWorldMatrix().TranslationVector);
 
         public void RemoveMetadata(CameraBase camera)
         {
@@ -91,9 +88,9 @@ namespace Adamantium.ECS.Components
         }
 
         /// <summary>The point this entity turns and scales about, in its parent's space. Moving it leaves the entity in place.</summary>
-        public Vector3<double> Pivot
+        public WorldPosition Pivot
         {
-            get => pivot + Position;
+            get => Position + pivot;
             set
             {
                 var shift = (value - Pivot).As<float>();
@@ -136,7 +133,7 @@ namespace Adamantium.ECS.Components
         // Every input of the world matrix marks it to be computed again.
         partial void OnPivotRotationChanged(QuaternionF value) => Turn(Owner);
 
-        partial void OnPositionChanged(Vector3<double> value) => IsWorldDirty = true;
+        partial void OnPositionChanged(WorldPosition value) => IsWorldDirty = true;
 
         partial void OnRotationChanged(QuaternionF value) => Turn(Owner?.Owner);
 
@@ -191,7 +188,7 @@ namespace Adamantium.ECS.Components
                 var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
-                    Position = distanceVector;
+                    Position = new WorldPosition(distanceVector);
                 }
             }
         }
@@ -203,7 +200,7 @@ namespace Adamantium.ECS.Components
                 var distanceVector = Vector3<double>.Multiply(direction, distance);
                 if (IsEnabled)
                 {
-                    Position = distanceVector;
+                    Position = new WorldPosition(distanceVector);
                 }
             }
         }
@@ -509,7 +506,7 @@ namespace Adamantium.ECS.Components
         /// <summary>Stands the entity in its parent as a model's node is posed - an animation's key, say: scaled by
         /// <paramref name="baseScale"/> (the user's <see cref="ScaleFactor"/> on top) and turned about its own origin, then
         /// moved to <paramref name="position"/>. Its pivot stays where it is on it, and only moves the position kept.</summary>
-        public void SetPose(Vector3<double> position, QuaternionF rotation, Vector3F baseScale)
+        public void SetPose(WorldPosition position, QuaternionF rotation, Vector3F baseScale)
         {
             Rotation = rotation;
             BaseScale = baseScale;
@@ -531,7 +528,7 @@ namespace Adamantium.ECS.Components
         {
             var center = pivot.As<T>();
             return Matrix4x4.CreateTransformation(center, pivotRotation.As<T>(), Scale.As<T>(), center, rotation.As<T>(),
-                Position.As<T>());
+                Position.ToVector().As<T>());
         }
 
         /// <summary>
@@ -560,17 +557,17 @@ namespace Adamantium.ECS.Components
             var target = (GetLocalMatrix() * between).TranslationVector;
             Rotation = QuaternionF.Multiply(turn.As<float>(), Rotation);
             ScaleFactor *= (float)((scale.X + scale.Y + scale.Z) / 3);
-            Position = Vector3<double>.Zero;
-            Position = target - GetLocalMatrix().TranslationVector;
+            Position = WorldPosition.Zero;
+            Position = new WorldPosition(target - GetLocalMatrix().TranslationVector);
             return true;
         }
 
         /// <summary>Where this entity stands in the world against <paramref name="origin"/>, made float once the way
         /// from it is taken in double: the frame a test between things near each other wants.</summary>
-        public Matrix4x4F GetWorldMatrixF(Vector3<double> origin)
+        public Matrix4x4F GetWorldMatrixF(WorldPosition origin)
         {
             var world = GetWorldMatrix();
-            world.TranslationVector -= origin;
+            world.TranslationVector -= origin.ToVector();
             return world.As<float>();
         }
 
@@ -604,7 +601,7 @@ namespace Adamantium.ECS.Components
         /// <summary>As <see cref="CalculateFinalTransform(CameraBase, in Matrix4x4{double})"/>, with the camera's world
         /// position worked out once for the frame's walk.</summary>
         public Matrix4x4F CalculateFinalTransform(CameraBase camera, in Matrix4x4<double> parentWorld,
-            Vector3<double> cameraWorld)
+            WorldPosition cameraWorld)
         {
             // Through the parent (row vectors: local * parent), whose world this frame's top-down walk worked out
             // already; identity for a root. In double: far from the origin float would move the entity by its rounding.
@@ -613,7 +610,7 @@ namespace Adamantium.ECS.Components
             // Drawn against the camera, the view turning only: the camera's world position is taken away in double, and
             // only the small way left goes to float - so the entity stands as exactly far out as near the origin.
             var renderWorld = absoluteWorld;
-            renderWorld.TranslationVector = absoluteWorld.TranslationVector - cameraWorld;
+            renderWorld.TranslationVector = absoluteWorld.TranslationVector - cameraWorld.ToVector();
 
             var metadata = GetMetadata(camera);
             metadata.AbsoluteWorld = absoluteWorld;

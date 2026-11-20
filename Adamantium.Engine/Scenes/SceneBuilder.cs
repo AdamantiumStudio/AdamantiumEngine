@@ -223,7 +223,7 @@ public sealed class SceneBuilder
         {
             try
             {
-                new EntityImportTemplate(data, assets, Vector3<double>.Zero).Build(entity);
+                new EntityImportTemplate(data, assets, WorldPosition.Zero).Build(entity);
             }
             catch (Exception exception)
             {
@@ -378,7 +378,7 @@ public sealed class SceneBuilder
 
     private static void ApplyCamera(Entity entity, Camera camera, SceneCamera entry)
     {
-        entity.Transform.Position = entry.Position;
+        entity.Transform.Position = new WorldPosition(entry.Position);
         entity.IsEnabled = entry.IsEnabled;
         camera.Fov = entry.FieldOfView;
         camera.ZNear = entry.Near;
@@ -473,7 +473,7 @@ public sealed class SceneBuilder
 
     private static void Place(Entity entity, ScenePlacement entry)
     {
-        entity.Transform.Position = entry.Position;
+        entity.Transform.Position = new WorldPosition(entry.Position);
         entity.Transform.Rotation = Rotation(entry);
         entity.IsEnabled = entry.IsEnabled;
         if (entry is not SceneLight && entity.GetComponent<UnloadedShape>() == null)

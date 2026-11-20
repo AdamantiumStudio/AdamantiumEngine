@@ -142,7 +142,7 @@ public class ScreenshotRenderingServiceTests
         });
     }
 
-    private static Camera View(Vector3<double> from, Vector3<double> at)
+    private static Camera View(WorldPosition from, WorldPosition at)
     {
         var entity = new CameraTemplate().BuildEntity(null, "View", from, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             Size, Size, 0.1f, 1000f);
@@ -187,7 +187,7 @@ public class ScreenshotRenderingServiceTests
     {
         var options = new AssetLoadOptions { AllowDuplication = true, IgnoreRootDirectory = true };
         var scene = _universe.Assets.Load<SceneData>(Figure, options);
-        return new EntityImportTemplate(scene, _universe.Assets, Vector3<double>.Zero).Build(new Entity());
+        return new EntityImportTemplate(scene, _universe.Assets, WorldPosition.Zero).Build(new Entity());
     }
 
     private Image Take(Entity entity)

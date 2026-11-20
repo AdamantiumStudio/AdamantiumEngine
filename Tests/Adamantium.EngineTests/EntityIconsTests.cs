@@ -370,5 +370,5 @@ public class EntityIconsTests
     }
 
     private static Entity CameraEntity(string name) =>
-        new CameraTemplate().BuildEntity(null, name, Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up, 800, 600, 0.1f, 1000f);
+        new CameraTemplate().BuildEntity(null, name, WorldPosition.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up, 800, 600, 0.1f, 1000f);
 }

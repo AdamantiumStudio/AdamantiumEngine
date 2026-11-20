@@ -66,8 +66,8 @@ public class ForwardPlusWireframeTests
     {
         _processor.Display = display;
         var eye = _output.Camera;
-        eye.Owner.Transform.Position = new Vector3<double>(0, 0, -10);
-        eye.SetFreeLookAt(Vector3<double>.Zero);
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -10);
+        eye.SetFreeLookAt(WorldPosition.Zero);
         AddCarriedTriangle();
         for (var frame = 0; frame < Frames; frame++)
         {
@@ -76,8 +76,8 @@ public class ForwardPlusWireframeTests
 
         var pixels = Pixels(_output.ReadFrame(), $"skinned-wire-{display}.png");
         var camera = _output.Camera;
-        var whereCarried = WirePixels(pixels, camera, new Vector3<double>(Carried, 0, 0));
-        var whereBound = WirePixels(pixels, camera, Vector3<double>.Zero);
+        var whereCarried = WirePixels(pixels, camera, new WorldPosition(Carried, 0, 0));
+        var whereBound = WirePixels(pixels, camera, WorldPosition.Zero);
 
         Assert.Multiple(() =>
         {
@@ -93,8 +93,8 @@ public class ForwardPlusWireframeTests
         // Shaded: a wire in the shading needs barycentrics, which not every GPU has.
         _processor.Display = ViewDisplay.Shaded;
         var eye = _output.Camera;
-        eye.Owner.Transform.Position = new Vector3<double>(0, 0, -10);
-        eye.SetFreeLookAt(Vector3<double>.Zero);
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -10);
+        eye.SetFreeLookAt(WorldPosition.Zero);
         var plain = new Entity(null, "Plain");
         var mesh = new Mesh(PrimitiveType.TriangleList);
         mesh.SetPoints([new Vector3<double>(-1, 1, 0), new Vector3<double>(1, 1, 0), new Vector3<double>(0, -1, 0)])
@@ -129,8 +129,8 @@ public class ForwardPlusWireframeTests
         _processor.Display = ViewDisplay.Shaded;
         _processor.ShowsSelectedColliders = true;
         var eye = _output.Camera;
-        eye.Owner.Transform.Position = new Vector3<double>(0, 0, -10);
-        eye.SetFreeLookAt(Vector3<double>.Zero);
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -10);
+        eye.SetFreeLookAt(WorldPosition.Zero);
         var group = new Entity(null, "Group");
         var part = new Entity(group, "Part");
         var mesh = new Mesh(PrimitiveType.TriangleList);
@@ -197,11 +197,11 @@ public class ForwardPlusWireframeTests
         skin.InverseBindMatrices.Add(Matrix4x4F.Identity);
         skinned.AddComponent(skin);
         _universe.EntityWorld.EntityManager.AddEntity(skinned, _universe.EntityWorld.MainScene);
-        joint.Transform.Position = new Vector3<double>(Carried, 0, 0);
+        joint.Transform.Position = new WorldPosition(Carried, 0, 0);
     }
 
     // The wire's pixels in the square the triangle stands in, centered on center.
-    private static int WirePixels(byte[] pixels, Camera camera, Vector3<double> center)
+    private static int WirePixels(byte[] pixels, Camera camera, WorldPosition center)
     {
         var low = PixelOf(camera, center + new Vector3<double>(-1.2, -1.2, 0));
         var high = PixelOf(camera, center + new Vector3<double>(1.2, 1.2, 0));
@@ -220,9 +220,9 @@ public class ForwardPlusWireframeTests
     }
 
     // The pixel a point of the world is drawn on.
-    private static Vector2<int> PixelOf(Camera camera, Vector3<double> point)
+    private static Vector2<int> PixelOf(Camera camera, WorldPosition point)
     {
-        var relative = (point - camera.WorldPosition).As<float>();
+        var relative = point.OffsetFrom(camera.WorldPosition);
         var clip = Vector3F.TransformCoordinate(relative, camera.ViewProjectionMatrix);
         var x = Math.Clamp((int)((clip.X * 0.5f + 0.5f) * Size), 0, (int)Size - 1);
         var y = Math.Clamp((int)((clip.Y * 0.5f + 0.5f) * Size), 0, (int)Size - 1);

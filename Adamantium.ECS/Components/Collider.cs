@@ -258,7 +258,7 @@ namespace Adamantium.ECS.Components
         /// The collider where its entity stands in the world, against <paramref name="origin"/> - a point near it - as a
         /// shape <see cref="Gjk"/> can test; null while it holds nothing.
         /// </summary>
-        public abstract IConvexShape<float> GetWorldShape(Vector3<double> origin);
+        public abstract IConvexShape<float> GetWorldShape(WorldPosition origin);
 
         /// <summary>The space the collider holds, in cubic meters, its entity scaled by <paramref name="scale"/>, as the
         /// physics measures its shape; none for a mesh.</summary>

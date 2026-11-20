@@ -445,10 +445,10 @@ public class SceneBuilderTests
         scene.Models.Add(new SceneModel { Uid = 1, Name = "Robot", Asset = RobotAsset });
         var entities = await Build(scene);
         var body = entities[0].Dependencies.Single(part => part.Name == "Body");
-        body.Transform.Position = new Vector3<double>(0, 2, 0);
+        body.Transform.Position = new WorldPosition(0, 2, 0);
         var lamp = new Entity(null, "Lamp");
         new Adamantium.Engine.Templates.Lights.LightTemplate().Build(lamp, LightType.Point);
-        lamp.Transform.Position = new Vector3<double>(0, 1, 0);
+        lamp.Transform.Position = new WorldPosition(0, 1, 0);
         universe.EntityWorld.EntityManager.SetOwner(lamp, body);
         universe.EntityWorld.ForceUpdate();
 

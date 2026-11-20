@@ -45,7 +45,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
 
         Play();
         Frames(3);
@@ -61,9 +61,9 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         AddGround();
         var parent = new Entity(null, "Parent");
-        parent.Transform.Position = new Vector3<double>(5, 0, 0);
+        parent.Transform.Position = new WorldPosition(5, 0, 0);
         _world.EntityManager.AddEntity(parent, _world.MainScene);
-        var box = MakeBox("Child", new Vector3<double>(0, -3, 0), 0.5, parent);
+        var box = MakeBox("Child", new WorldPosition(0, -3, 0), 0.5, parent);
         Settle();
 
         Play();
@@ -79,7 +79,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -0.5, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -0.5, 0), 0.5);
         Play();
         Frames(0.5);
 
@@ -95,7 +95,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = MakeBox("Turned", new Vector3<double>(0, -0.5, 0), 0.5);
+        var box = MakeBox("Turned", new WorldPosition(0, -0.5, 0), 0.5);
         var turn = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, 0.6f);
         box.Transform.Rotation = turn;
         _world.EntityManager.AddEntity(box, _world.MainScene);
@@ -125,7 +125,7 @@ public class PhysicsServiceTests
 
         Assert.That(_physics.Moves(bare), Is.False);
         Assert.That(_physics.Moves(hull), Is.False, "a hull collider with no mesh holds no hull");
-        Assert.That(bare.Transform.Position, Is.EqualTo(Vector3<double>.Zero));
+        Assert.That(bare.Transform.Position, Is.EqualTo(WorldPosition.Zero));
     }
 
     [Test]
@@ -138,7 +138,7 @@ public class PhysicsServiceTests
         [
             new Vector3<double>(-0.5, 0, -0.5), new Vector3<double>(0.5, 0, -0.5), new Vector3<double>(0.5, 0, 0.5),
             new Vector3<double>(-0.5, 0, 0.5), new Vector3<double>(-0.5, -0.5, 0), new Vector3<double>(0.5, -0.5, 0)
-        ]), new Vector3<double>(0, -2, 0), 2);
+        ]), new WorldPosition(0, -2, 0), 2);
         Settle();
 
         Play();
@@ -166,9 +166,9 @@ public class PhysicsServiceTests
         }
 
         var mesh = new Mesh(PrimitiveType.TriangleList).SetPoints(corners.ToArray());
-        var small = AddHull("Small", mesh, new Vector3<double>(-3, -2, 0), 1);
-        var large = AddHull("Large", mesh, new Vector3<double>(3, -3, 0), 2);
-        var twin = AddHull("Twin", mesh, new Vector3<double>(0, -3, 3), 2);
+        var small = AddHull("Small", mesh, new WorldPosition(-3, -2, 0), 1);
+        var large = AddHull("Large", mesh, new WorldPosition(3, -3, 0), 2);
+        var twin = AddHull("Twin", mesh, new WorldPosition(0, -3, 3), 2);
         Settle();
 
         Play();
@@ -195,7 +195,7 @@ public class PhysicsServiceTests
         }
 
         var log = new Entity(null, "Log");
-        log.Transform.Position = new Vector3<double>(0, -2, 0);
+        log.Transform.Position = new WorldPosition(0, -2, 0);
         log.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, 0.4f);
         log.AddComponent(new MeshData { Mesh = new Mesh(PrimitiveType.TriangleList).SetPoints(corners.ToArray()) });
         log.AddComponent(new CylinderCollider());
@@ -212,7 +212,7 @@ public class PhysicsServiceTests
         Assert.That(MathF.Abs(axis.Y), Is.LessThan(0.01f), "its axis level");
     }
 
-    private Entity AddHull(string name, Mesh mesh, Vector3<double> position, float scale)
+    private Entity AddHull(string name, Mesh mesh, WorldPosition position, float scale)
     {
         var entity = new Entity(null, name);
         entity.Transform.Position = position;
@@ -230,13 +230,13 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         AddGround();
         var table = new Entity(null, "Table");
-        table.Transform.Position = new Vector3<double>(0, -0.2, 0);
+        table.Transform.Position = new WorldPosition(0, -0.2, 0);
         table.AddComponent(new RigidBody());
-        AddPart(table, "Top", new Vector3<double>(0, -0.85, 0), new Vector3<double>(1, 0.05, 0.6));
+        AddPart(table, "Top", new WorldPosition(0, -0.85, 0), new Vector3<double>(1, 0.05, 0.6));
         foreach (var corner in new[] { new Vector3<double>(0.9, -0.4, 0.5), new Vector3<double>(-0.9, -0.4, 0.5),
                      new Vector3<double>(0.9, -0.4, -0.5), new Vector3<double>(-0.9, -0.4, -0.5) })
         {
-            AddPart(table, "Leg", corner, new Vector3<double>(0.05, 0.4, 0.05));
+            AddPart(table, "Leg", new WorldPosition(corner), new Vector3<double>(0.05, 0.4, 0.05));
         }
 
         _world.EntityManager.AddEntity(table, _world.MainScene);
@@ -257,22 +257,22 @@ public class PhysicsServiceTests
     public void FarFromTheOrigin_ATableStands_AndABoxUnderAGroupLands()
     {
         UseSteppedPhysics();
-        var far = new Vector3<double>(1e9, 0, -1e9);
+        var far = new WorldPosition(1e9, 0, -1e9);
         var ground = AddGround();
-        ground.Transform.Position += far;
+        ground.Transform.Position = far + (ground.Transform.Position - WorldPosition.Zero);
         var table = new Entity(null, "Table");
         table.Transform.Position = far + new Vector3<double>(0, -0.2, 0);
         table.AddComponent(new RigidBody());
-        AddPart(table, "Top", new Vector3<double>(0, -0.85, 0), new Vector3<double>(1, 0.05, 0.6));
+        AddPart(table, "Top", new WorldPosition(0, -0.85, 0), new Vector3<double>(1, 0.05, 0.6));
         foreach (var corner in new[] { new Vector3<double>(0.9, -0.4, 0.5), new Vector3<double>(-0.9, -0.4, 0.5),
                      new Vector3<double>(0.9, -0.4, -0.5), new Vector3<double>(-0.9, -0.4, -0.5) })
         {
-            AddPart(table, "Leg", corner, new Vector3<double>(0.05, 0.4, 0.05));
+            AddPart(table, "Leg", new WorldPosition(corner), new Vector3<double>(0.05, 0.4, 0.05));
         }
 
         var group = new Entity(null, "Group");
         group.Transform.Position = far + new Vector3<double>(5, -3, 0);
-        var box = MakeBox("Box", new Vector3<double>(0.01, 0, 0.02), 0.5, group);
+        var box = MakeBox("Box", new WorldPosition(0.01, 0, 0.02), 0.5, group);
         _world.EntityManager.AddEntity(table, _world.MainScene);
         _world.EntityManager.AddEntity(group, _world.MainScene);
         Settle();
@@ -300,7 +300,7 @@ public class PhysicsServiceTests
         _physics.Gravity = Vector3<float>.Zero;
         var spinner = new Entity(null, "Spinner");
         spinner.AddComponent(new RigidBody { CanSleep = false });
-        AddPart(spinner, "Weight", new Vector3<double>(2, 0, 0), new Vector3<double>(0.5));
+        AddPart(spinner, "Weight", new WorldPosition(2, 0, 0), new Vector3<double>(0.5));
         _world.EntityManager.AddEntity(spinner, _world.MainScene);
         Settle();
         Play();
@@ -313,7 +313,7 @@ public class PhysicsServiceTests
             Frame(1.0 / 240);
             var weight = spinner.Transform.Position
                          + Vector3<float>.Transform(new Vector3<float>(2, 0, 0), spinner.Transform.Rotation).As<double>();
-            farthest = Math.Max(farthest, (weight - new Vector3<double>(2, 0, 0)).Length());
+            farthest = Math.Max(farthest, (weight - new WorldPosition(2, 0, 0)).Length());
         }
 
         Assert.That(spinner.Transform.Rotation, Is.Not.EqualTo(Quaternion<float>.Identity), "it spins");
@@ -327,7 +327,7 @@ public class PhysicsServiceTests
         AddGround();
         var parent = new Entity(null, "Cart");
         parent.AddComponent(new RigidBody());
-        var child = MakeBox("Crate", new Vector3<double>(0, -3, 0), 0.5, parent);
+        var child = MakeBox("Crate", new WorldPosition(0, -3, 0), 0.5, parent);
         _world.EntityManager.AddEntity(parent, _world.MainScene);
         Settle();
 
@@ -345,12 +345,12 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         AddGround();
         var body = new Entity(null, "Body");
-        body.Transform.Position = new Vector3<double>(0, -3, 0);
+        body.Transform.Position = new WorldPosition(0, -3, 0);
         body.AddComponent(new RigidBody());
-        AddPart(body, "Hull", Vector3<double>.Zero, new Vector3<double>(0.5));
-        var hiddenEntity = AddPart(body, "Hidden", new Vector3<double>(0, 3, 0), new Vector3<double>(0.5));
+        AddPart(body, "Hull", WorldPosition.Zero, new Vector3<double>(0.5));
+        var hiddenEntity = AddPart(body, "Hidden", new WorldPosition(0, 3, 0), new Vector3<double>(0.5));
         hiddenEntity.IsEnabled = false;
-        var hiddenCollider = AddPart(body, "Switched off", new Vector3<double>(0, 4, 0), new Vector3<double>(0.5));
+        var hiddenCollider = AddPart(body, "Switched off", new WorldPosition(0, 4, 0), new Vector3<double>(0.5));
         hiddenCollider.GetComponent<Collider>().IsEnabled = false;
         _world.EntityManager.AddEntity(body, _world.MainScene);
         Settle();
@@ -366,7 +366,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         Play();
         Frames(0.2);
 
@@ -410,7 +410,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var start = new Vector3<double>(0, -3, 0);
+        var start = new WorldPosition(0, -3, 0);
         var box = AddBox("Box", start, 0.5);
         var snapshot = SceneSnapshot.Take(_world.MainScene);
         Play();
@@ -430,7 +430,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.RemoveComponent<RigidBody>();
         Play();
         Frames(0.2);
@@ -448,12 +448,12 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         Play();
         Frames(0.3);
         var falling = _physics.GetLinearVelocity(box);
 
-        box.Transform.Position = new Vector3<double>(5, -6, 0);
+        box.Transform.Position = new WorldPosition(5, -6, 0);
         Frame(FrameSeconds);
         var after = box.Transform.Position;
         var speed = _physics.GetLinearVelocity(box);
@@ -473,7 +473,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         Play();
         Frames(0.3);
         var before = box.Transform.Position.Y;
@@ -496,7 +496,7 @@ public class PhysicsServiceTests
         var boxes = new Entity[5];
         for (var index = 0; index < boxes.Length; index++)
         {
-            boxes[index] = AddBox("Box" + index, new Vector3<double>(0, -0.5 - index, 0), 0.5);
+            boxes[index] = AddBox("Box" + index, new WorldPosition(0, -0.5 - index, 0), 0.5);
         }
 
         Play();
@@ -526,7 +526,7 @@ public class PhysicsServiceTests
         var boxes = new Entity[3];
         for (var index = 0; index < boxes.Length; index++)
         {
-            boxes[index] = AddBox("Box" + index, new Vector3<double>(0, -0.5 - index, 0), 0.5);
+            boxes[index] = AddBox("Box" + index, new WorldPosition(0, -0.5 - index, 0), 0.5);
         }
 
         Play();
@@ -553,7 +553,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         var body = box.GetComponent<RigidBody>();
         body.Kind = BodyKind.Static;
         body.Density = 0;
@@ -577,7 +577,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         Play();
         Frames(0.3);
         var before = box.Transform.Position.Y;
@@ -596,8 +596,8 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var taken = AddBox("Taken", new Vector3<double>(-3, -4, 0), 0.5);
-        var disabled = AddBox("Disabled", new Vector3<double>(3, -4, 0), 0.5);
+        var taken = AddBox("Taken", new WorldPosition(-3, -4, 0), 0.5);
+        var disabled = AddBox("Disabled", new WorldPosition(3, -4, 0), 0.5);
         Play();
         Frames(0.3);
 
@@ -626,7 +626,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.GetComponent<RigidBody>().Kind = BodyKind.Static;
         Play();
         Frames(0.3);
@@ -645,7 +645,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         var level = AddGround();
-        var box = MakeBox("Box", new Vector3<double>(0, -3, 0), 0.5, level);
+        var box = MakeBox("Box", new WorldPosition(0, -3, 0), 0.5, level);
         Settle();
         Play();
         Frames(4);
@@ -660,12 +660,12 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -0.6, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -0.6, 0), 0.5);
         Play();
         Frames(3);
         Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
 
-        box.Transform.Position = new Vector3<double>(0, -4, 0);
+        box.Transform.Position = new WorldPosition(0, -4, 0);
         Frames(3);
 
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
@@ -677,7 +677,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -6, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -6, 0), 0.5);
         Play();
         Frames(0.3);
 
@@ -697,14 +697,14 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         var stage = new Entity(null, "Stage");
         _world.EntityManager.AddEntity(stage, _world.MainScene);
-        var floor = AddPart(stage, "Floor", new Vector3<double>(0, 1, 0), new Vector3<double>(20, 1, 20));
+        var floor = AddPart(stage, "Floor", new WorldPosition(0, 1, 0), new Vector3<double>(20, 1, 20));
         floor.AddComponent(new RigidBody { Kind = BodyKind.Static });
         Settle();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         Play();
         Frames(0.1);
 
-        stage.Transform.Position = new Vector3<double>(0, 2, 0);
+        stage.Transform.Position = new WorldPosition(0, 2, 0);
         Frames(3);
 
         Assert.That(box.Transform.Position.Y, Is.EqualTo(1.5).Within(0.02));
@@ -716,7 +716,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.GetComponent<RigidBody>().Mass = -1;
         Play();
         Frames(0.2);
@@ -731,8 +731,8 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        AddBox("Bottom", new Vector3<double>(0, -0.5, 0), 0.5);
-        var top = AddBox("Top", new Vector3<double>(0, -1.5, 0), 0.5);
+        AddBox("Bottom", new WorldPosition(0, -0.5, 0), 0.5);
+        var top = AddBox("Top", new WorldPosition(0, -1.5, 0), 0.5);
         Play();
         Frames(3);
         Assert.That(_physics.LastStep.AwakeBodies, Is.Zero);
@@ -750,9 +750,9 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = MakeBox("Box", new Vector3<double>(0, -2, 0), 0.5);
+        var box = MakeBox("Box", new WorldPosition(0, -2, 0), 0.5);
         box.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.Normalize(new Vector3F(1, 0.3f, 0.7f)), 0.8f);
-        AddPart(box, "Side", new Vector3<double>(0.8, 0.2, 0.1), new Vector3<double>(0.3));
+        AddPart(box, "Side", new WorldPosition(0.8, 0.2, 0.1), new Vector3<double>(0.3));
         _world.EntityManager.AddEntity(box, _world.MainScene);
         Settle();
         Play();
@@ -771,8 +771,8 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var cart = AddBox("Cart", new Vector3<double>(0, -0.5, 0), 0.5);
-        var wheel = AddPart(cart, "Wheel", new Vector3<double>(1, 0, 0), new Vector3<double>(0.5));
+        var cart = AddBox("Cart", new WorldPosition(0, -0.5, 0), 0.5);
+        var wheel = AddPart(cart, "Wheel", new WorldPosition(1, 0, 0), new Vector3<double>(0.5));
         Settle();
         Play();
         Frames(1);
@@ -791,8 +791,8 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var pushed = AddBox("Pushed", new Vector3<double>(-3, -0.5, 0), 0.5);
-        var falling = AddBox("Falling", new Vector3<double>(3, -4, 0), 0.5);
+        var pushed = AddBox("Pushed", new WorldPosition(-3, -0.5, 0), 0.5);
+        var falling = AddBox("Falling", new WorldPosition(3, -4, 0), 0.5);
         Play();
         _physics.SetForce(pushed, new Vector3F(10, 0, 0));
         Frames(0.2);
@@ -809,14 +809,14 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var held = AddBox("Held", new Vector3<double>(0, -6, 0), 0.5);
+        var held = AddBox("Held", new WorldPosition(0, -6, 0), 0.5);
         Play();
         Frames(0.3);
 
         held.GetComponent<RigidBody>().Kind = BodyKind.Static;
         Frame(FrameSeconds);
         var at = held.Transform.Position.Y;
-        var dropped = AddBox("Dropped", new Vector3<double>(0, at - 3, 0), 0.5);
+        var dropped = AddBox("Dropped", new WorldPosition(0, at - 3, 0), 0.5);
         Frames(3);
 
         Assert.That(held.Transform.Position.Y, Is.EqualTo(at));
@@ -828,7 +828,7 @@ public class PhysicsServiceTests
     public void BodyGivenDuringTheGame_CanBePushedAtOnce()
     {
         UseSteppedPhysics();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.RemoveComponent<RigidBody>();
         Play();
         Frames(0.1);
@@ -846,7 +846,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -0.5, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -0.5, 0), 0.5);
         Play();
         Frames(1);
 
@@ -862,7 +862,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         Play();
         Frames(0.3);
 
@@ -879,13 +879,13 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.RemoveComponent<BoxCollider>();
         Play();
         Frames(0.3);
         Assert.That(_physics.Moves(box), Is.False);
 
-        AddPart(box, "Part", Vector3<double>.Zero, new Vector3<double>(0.5));
+        AddPart(box, "Part", WorldPosition.Zero, new Vector3<double>(0.5));
         Settle();
         Frames(3);
 
@@ -898,7 +898,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -4, 0), 0.5);
         var lastTold = double.NaN;
         box.Transform.PropertyChanged += (_, args) =>
         {
@@ -919,7 +919,7 @@ public class PhysicsServiceTests
         _world.AddService(_physics);
         Settle();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         Play();
         _run.IsPaused = true;
 
@@ -952,7 +952,7 @@ public class PhysicsServiceTests
     public void ForceHoldingABodyUp_HoldsItThroughSlowFrames()
     {
         UseSteppedPhysics();
-        var box = AddBox("Held", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Held", new WorldPosition(0, -3, 0), 0.5);
         Play();
         _physics.SetForce(box, new Vector3F(0, -1000 * 9.81f, 0));
         for (var frame = 0; frame < 8; frame++)
@@ -968,7 +968,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         _physics.Gravity = Vector3F.Zero;
-        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        var box = AddBox("Pushed", WorldPosition.Zero, 0.5);
         Play();
 
         _physics.SetForce(box, new Vector3F(1000, 0, 0));
@@ -987,7 +987,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         _physics.Gravity = Vector3F.Zero;
-        var box = AddBox("Crawling", Vector3<double>.Zero, 0.5);
+        var box = AddBox("Crawling", WorldPosition.Zero, 0.5);
         Play();
 
         _physics.SetForce(box, new Vector3F(10, 0, 0));
@@ -1001,7 +1001,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         _physics.Gravity = Vector3F.Zero;
-        var box = MakeBox("Light", Vector3<double>.Zero, 0.5);
+        var box = MakeBox("Light", WorldPosition.Zero, 0.5);
         box.GetComponent<RigidBody>().Mass = 0.001f;
         _world.EntityManager.AddEntity(box, _world.MainScene);
         Settle();
@@ -1025,7 +1025,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         _physics.Gravity = Vector3F.Zero;
-        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        var box = AddBox("Pushed", WorldPosition.Zero, 0.5);
         Play();
 
         _physics.SetForce(box, new Vector3F(1000, 0, 0));
@@ -1041,7 +1041,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         _physics.Gravity = Vector3F.Zero;
-        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        var box = AddBox("Pushed", WorldPosition.Zero, 0.5);
         Play();
         _physics.SetForce(box, new Vector3F(1000, 0, 0));
         Frames(0.2);
@@ -1058,7 +1058,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         var ground = AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         Play();
 
         Assert.Throws<InvalidOperationException>(() => _physics.SetForce(ground, Vector3F.UnitX));
@@ -1071,11 +1071,11 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         Play();
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            _physics.ApplyImpulse(box, Vector3F.UnitX, new Vector3<double>(double.NaN, 0, 0)));
+            _physics.ApplyImpulse(box, Vector3F.UnitX, new WorldPosition(double.NaN, 0, 0)));
     }
 
     [Test]
@@ -1085,7 +1085,7 @@ public class PhysicsServiceTests
         var parent = new Entity(null, "Stretched");
         parent.Transform.ScaleFactor = new Vector3F(4, 1, 1);
         _world.EntityManager.AddEntity(parent, _world.MainScene);
-        var box = MakeBox("Skewed", Vector3<double>.Zero, 0.5, parent);
+        var box = MakeBox("Skewed", WorldPosition.Zero, 0.5, parent);
         box.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
         Settle();
 
@@ -1103,11 +1103,11 @@ public class PhysicsServiceTests
         level.Transform.ScaleFactor = new Vector3F(-1, 1, 1);
         _world.EntityManager.AddEntity(level, _world.MainScene);
         var ground = new Entity(level, "Ground");
-        ground.Transform.Position = new Vector3<double>(0, 1, 0);
+        ground.Transform.Position = new WorldPosition(0, 1, 0);
         ground.AddComponent(new BoxCollider { Size = new Vector3F(40, 2, 40) });
         ground.AddComponent(new RigidBody { Kind = BodyKind.Static });
         Settle();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
 
         Play();
         Frames(3);
@@ -1123,7 +1123,7 @@ public class PhysicsServiceTests
         var parent = new Entity(null, "Stretched");
         parent.Transform.ScaleFactor = new Vector3F(4, 1, 1);
         _world.EntityManager.AddEntity(parent, _world.MainScene);
-        var box = MakeBox("Upright", Vector3<double>.Zero, 0.5, parent);
+        var box = MakeBox("Upright", WorldPosition.Zero, 0.5, parent);
         Settle();
 
         Play();
@@ -1138,7 +1138,7 @@ public class PhysicsServiceTests
         AddGround();
         var parent = new Entity(null, "Parent");
         _world.EntityManager.AddEntity(parent, _world.MainScene);
-        var box = MakeBox("Child", new Vector3<double>(0, -0.5, 0), 0.5, parent);
+        var box = MakeBox("Child", new WorldPosition(0, -0.5, 0), 0.5, parent);
         Settle();
         Play();
         Frames(1);
@@ -1156,7 +1156,7 @@ public class PhysicsServiceTests
     public void ForceAsHeavyAsTheBody_HoversItWithoutDrift(double frameSeconds)
     {
         UseSteppedPhysics();
-        var box = AddBox("Hovering", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Hovering", new WorldPosition(0, -3, 0), 0.5);
         Play();
         _physics.SetForce(box, new Vector3F(0, -1000 * 9.81f, 0));
         var frames = (int)Math.Round(3 / frameSeconds);
@@ -1172,7 +1172,7 @@ public class PhysicsServiceTests
     public void MirroredEntity_IsLeftOut()
     {
         UseSteppedPhysics();
-        var mirrored = MakeBox("Mirrored", new Vector3<double>(0, -3, 0), 0.5);
+        var mirrored = MakeBox("Mirrored", new WorldPosition(0, -3, 0), 0.5);
         mirrored.Transform.BaseScale = new Vector3F(1, -1, 1);
         _world.EntityManager.AddEntity(mirrored, _world.MainScene);
         Settle();
@@ -1190,7 +1190,7 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         _physics.Settings = new PhysicsSettings { StepRate = 60 };
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
 
         Play();
         Frames(3);
@@ -1205,12 +1205,12 @@ public class PhysicsServiceTests
         AddGround();
         var parent = new Entity(null, "Parent");
         _world.EntityManager.AddEntity(parent, _world.MainScene);
-        var box = MakeBox("Child", new Vector3<double>(0, -0.5, 0), 0.5, parent);
+        var box = MakeBox("Child", new WorldPosition(0, -0.5, 0), 0.5, parent);
         Settle();
         Play();
         Frames(2);
 
-        parent.Transform.Position = new Vector3<double>(3, 0, 0);
+        parent.Transform.Position = new WorldPosition(3, 0, 0);
         Frames(0.1);
 
         Assert.That(box.Transform.WorldPosition.X, Is.EqualTo(0).Within(0.02));
@@ -1224,7 +1224,7 @@ public class PhysicsServiceTests
         _world.AddService(_physics);
         Settle();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
 
         Play();
         var timer = Stopwatch.StartNew();
@@ -1245,7 +1245,7 @@ public class PhysicsServiceTests
         _world.AddService(_physics);
         _physics.Gravity = Vector3F.Zero;
         Settle();
-        var box = AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        var box = AddBox("Pushed", WorldPosition.Zero, 0.5);
 
         Play();
         _physics.SetForce(box, new Vector3F(1000, 0, 0));
@@ -1266,7 +1266,7 @@ public class PhysicsServiceTests
         tests.MakeWorld();
         tests.UseSteppedPhysics();
         tests._physics.Gravity = Vector3F.Zero;
-        var box = tests.AddBox("Pushed", Vector3<double>.Zero, 0.5);
+        var box = tests.AddBox("Pushed", WorldPosition.Zero, 0.5);
         tests.Play();
         tests._physics.SetForce(box, new Vector3F(1000, 0, 0));
         var frames = (int)Math.Round(1 / frameSeconds);
@@ -1295,7 +1295,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         box.GetComponent<BoxCollider>().Position = new Vector3F(0, -1, 0);
         Play();
         Frames(3);
@@ -1309,7 +1309,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = AddBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
         Play();
         Frames(1);
 
@@ -1328,9 +1328,9 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = MakeBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = MakeBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.Transform.BaseScale = new Vector3F(2, 1, 1);
-        var part = AddPart(box, "Leg", new Vector3<double>(0, 1, 0), new Vector3<double>(0.5));
+        var part = AddPart(box, "Leg", new WorldPosition(0, 1, 0), new Vector3<double>(0.5));
         part.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, float.DegreesToRadians(45));
         _world.EntityManager.AddEntity(box, _world.MainScene);
         Settle();
@@ -1346,9 +1346,9 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = MakeBox("Box", new Vector3<double>(0, -4, 0), 0.5);
+        var box = MakeBox("Box", new WorldPosition(0, -4, 0), 0.5);
         box.Transform.BaseScale = new Vector3F(2, 1, 1);
-        var part = AddPart(box, "Leg", new Vector3<double>(0, 1, 0), new Vector3<double>(0.5));
+        var part = AddPart(box, "Leg", new WorldPosition(0, 1, 0), new Vector3<double>(0.5));
         part.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, float.DegreesToRadians(30));
         part.Transform.BaseScale = new Vector3F(-1, 1, 1);
         _world.EntityManager.AddEntity(box, _world.MainScene);
@@ -1357,7 +1357,7 @@ public class PhysicsServiceTests
         Frames(3);
         var rested = box.Transform.Position.Y;
 
-        box.Transform.Position = new Vector3<double>(5, -3, 0);
+        box.Transform.Position = new WorldPosition(5, -3, 0);
         Frames(3);
 
         Assert.Multiple(() =>
@@ -1374,7 +1374,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         AddGround();
-        var box = MakeBox("Box", new Vector3<double>(0, -3, 0), 0.5);
+        var box = MakeBox("Box", new WorldPosition(0, -3, 0), 0.5);
         box.Transform.BaseScale = new Vector3F(2, 1, 1);
         box.GetComponent<BoxCollider>().Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, float.DegreesToRadians(45));
         _world.EntityManager.AddEntity(box, _world.MainScene);
@@ -1395,7 +1395,7 @@ public class PhysicsServiceTests
         floor.AddComponent(new RigidBody { Kind = BodyKind.Static });
         _world.EntityManager.AddEntity(floor, _world.MainScene);
         Settle();
-        var box = AddBox("Box", new Vector3<double>(0.3, -3, 0.2), 0.5);
+        var box = AddBox("Box", new WorldPosition(0.3, -3, 0.2), 0.5);
         Play();
         Frames(3);
 
@@ -1408,7 +1408,7 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         AddGround();
         var rock = new Entity(null, "Rock");
-        rock.Transform.Position = new Vector3<double>(0, -3, 0);
+        rock.Transform.Position = new WorldPosition(0, -3, 0);
         rock.AddComponent(new MeshData { Mesh = FloorMesh(1) });
         rock.AddComponent(new MeshCollider());
         rock.AddComponent(new RigidBody());
@@ -1425,7 +1425,7 @@ public class PhysicsServiceTests
     public void ABoxOnAHinge_HangsInTheAir_AndSwingsAboutIt()
     {
         UseSteppedPhysics();
-        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        var door = MakeBox("Door", new WorldPosition(0.5, -3, 0), 0.5);
         door.AddComponent(new HingeJoint { Anchor = new Vector3F(-0.5f, 0, 0), Axis = Vector3F.UnitY });
         _world.EntityManager.AddEntity(door, _world.MainScene);
         Settle();
@@ -1450,9 +1450,9 @@ public class PhysicsServiceTests
     public void AHingeUnderItsBody_HoldsThatBody_AboutItsOwnPlaceAndAxis()
     {
         UseSteppedPhysics();
-        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        var door = MakeBox("Door", new WorldPosition(0.5, -3, 0), 0.5);
         var hinges = new Entity(door, "Hinges");
-        hinges.Transform.Position = new Vector3<double>(-0.5, 0, 0);
+        hinges.Transform.Position = new WorldPosition(-0.5, 0, 0);
         hinges.Transform.Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
         hinges.AddComponent(new HingeJoint { Axis = Vector3F.UnitX });
         _world.EntityManager.AddEntity(door, _world.MainScene);
@@ -1478,13 +1478,13 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         var beam = new Entity(null, "Beam");
-        beam.Transform.Position = new Vector3<double>(0, -6, 0);
+        beam.Transform.Position = new WorldPosition(0, -6, 0);
         beam.AddComponent(new BoxCollider { Size = new Vector3F(2, 0.2f, 0.2f) });
         beam.AddComponent(new RigidBody { Kind = BodyKind.Static });
         var hook = new Entity(beam, "Hook");
-        hook.Transform.Position = new Vector3<double>(0.5, 0, 0);
+        hook.Transform.Position = new WorldPosition(0.5, 0, 0);
         _world.EntityManager.AddEntity(beam, _world.MainScene);
-        var box = MakeBox("Box", new Vector3<double>(0.5, -5, 0), 0.25);
+        var box = MakeBox("Box", new WorldPosition(0.5, -5, 0), 0.25);
         box.AddComponent(new BallJoint { ConnectedBody = hook, Anchor = new Vector3F(0, -1, 0) });
         _world.EntityManager.AddEntity(box, _world.MainScene);
         Settle();
@@ -1500,7 +1500,7 @@ public class PhysicsServiceTests
     public void AHingesLimit_HoldsWhileItsBodyTurns()
     {
         UseSteppedPhysics();
-        var door = MakeBox("Door", new Vector3<double>(0.5, -3, 0), 0.5);
+        var door = MakeBox("Door", new WorldPosition(0.5, -3, 0), 0.5);
         door.AddComponent(new HingeJoint
         {
             Anchor = new Vector3F(-0.5f, 0, 0), Axis = Vector3F.UnitY, UsesLimits = true, LowerAngle = -30, UpperAngle = 30
@@ -1527,11 +1527,11 @@ public class PhysicsServiceTests
         UseSteppedPhysics();
         AddGround();
         var beam = new Entity(null, "Beam");
-        beam.Transform.Position = new Vector3<double>(0, -6, 0);
+        beam.Transform.Position = new WorldPosition(0, -6, 0);
         beam.AddComponent(new BoxCollider { Size = new Vector3F(2, 0.2f, 0.2f) });
         beam.AddComponent(new RigidBody { Kind = BodyKind.Static });
         _world.EntityManager.AddEntity(beam, _world.MainScene);
-        var box = MakeBox("Box", new Vector3<double>(0, -5, 0), 0.25);
+        var box = MakeBox("Box", new WorldPosition(0, -5, 0), 0.25);
         box.AddComponent(new BallJoint { ConnectedBody = beam, Anchor = new Vector3F(0, -1, 0) });
         _world.EntityManager.AddEntity(box, _world.MainScene);
         Settle();
@@ -1555,7 +1555,7 @@ public class PhysicsServiceTests
     {
         UseSteppedPhysics();
         var ball = new Entity(null, "Ball");
-        ball.Transform.Position = new Vector3<double>(0, -6, 0);
+        ball.Transform.Position = new WorldPosition(0, -6, 0);
         ball.AddComponent(new SphereCollider { Radius = 0.1f });
         ball.AddComponent(new RigidBody());
         ball.AddComponent(new DistanceJoint
@@ -1583,7 +1583,7 @@ public class PhysicsServiceTests
     private Entity AddGround()
     {
         var ground = new Entity(null, "Ground");
-        ground.Transform.Position = new Vector3<double>(0, 1, 0);
+        ground.Transform.Position = new WorldPosition(0, 1, 0);
         ground.AddComponent(new BoxCollider { Size = new Vector3F(40, 2, 40) });
         ground.AddComponent(new RigidBody { Kind = BodyKind.Static });
         _world.EntityManager.AddEntity(ground, _world.MainScene);
@@ -1591,7 +1591,7 @@ public class PhysicsServiceTests
         return ground;
     }
 
-    private Entity AddBox(string name, Vector3<double> position, double half)
+    private Entity AddBox(string name, WorldPosition position, double half)
     {
         var box = MakeBox(name, position, half);
         _world.EntityManager.AddEntity(box, _world.MainScene);
@@ -1599,7 +1599,7 @@ public class PhysicsServiceTests
         return box;
     }
 
-    private static Entity MakeBox(string name, Vector3<double> position, double half, Entity owner = null)
+    private static Entity MakeBox(string name, WorldPosition position, double half, Entity owner = null)
     {
         var box = new Entity(owner, name);
         box.Transform.Position = position;
@@ -1608,7 +1608,7 @@ public class PhysicsServiceTests
         return box;
     }
 
-    private static Entity AddPart(Entity owner, string name, Vector3<double> position, Vector3<double> half)
+    private static Entity AddPart(Entity owner, string name, WorldPosition position, Vector3<double> half)
     {
         var part = new Entity(owner, name);
         part.Transform.Position = position;

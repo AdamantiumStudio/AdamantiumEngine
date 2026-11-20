@@ -16,7 +16,7 @@ public class CameraModeTests
     public void LeavingAnOrbit_KeepsWhereTheCameraStandsAndLooks(CameraType orbit)
     {
         var subject = new Entity(null, "Subject");
-        subject.Transform.Position = new Vector3<double>(30, -5, 12);
+        subject.Transform.Position = new WorldPosition(30, -5, 12);
         subject.Transform.Rotation = Quaternion.CreateFromYawPitchRoll<float>(0.7f, 0.2f, 0.1f);
         subject.Transform.ScaleFactor = new Vector3F(0.01f);
         var camera = new Camera(60, 800, 600, 0.1f, 10000f);
@@ -42,11 +42,11 @@ public class CameraModeTests
     public void AnOrbit_GoesRoundTheMiddleOfTheSubjectsParts(CameraType orbit)
     {
         var subject = new Entity(null, "Model");
-        subject.Transform.Position = new Vector3<double>(10, 0, 0);
+        subject.Transform.Position = new WorldPosition(10, 0, 0);
         foreach (var x in new[] { 4.0, 6.0 })
         {
             var part = new Entity(subject, "Part");
-            part.Transform.Position = new Vector3<double>(x, 0, 0);
+            part.Transform.Position = new WorldPosition(x, 0, 0);
             part.AddComponent(new BoxCollider { Size = new Vector3F(1) });
         }
 
@@ -57,7 +57,7 @@ public class CameraModeTests
         camera.RotateRelativeXY(0.3f, 0.5f);
         camera.Update(new AppTime());
 
-        var toMiddle = new Vector3<double>(15, 0, 0) - camera.WorldPosition;
+        var toMiddle = new WorldPosition(15, 0, 0) - camera.WorldPosition;
         Assert.That(toMiddle.Length(), Is.EqualTo(20).Within(1e-3), "it stands its distance from the middle");
         Assert.That(Vector3<double>.Dot(Vector3<double>.Normalize(toMiddle), camera.Forward), Is.GreaterThan(0.9999),
             "and looks at it");
@@ -77,8 +77,8 @@ public class CameraModeTests
         camera.SetThirdPersonCamera(subject, Vector3F.Zero, CameraType.ThirdPersonFree, distanceToObject: 20);
         camera.Update(new AppTime());
 
-        Assert.That((camera.FindSubjectCenter() - Vector3<double>.Zero).Length(), Is.LessThan(1e-6));
-        Assert.That(camera.WorldPosition.Length(), Is.EqualTo(20).Within(1e-3));
+        Assert.That((camera.FindSubjectCenter() - WorldPosition.Zero).Length(), Is.LessThan(1e-6));
+        Assert.That((camera.WorldPosition - WorldPosition.Zero).Length(), Is.EqualTo(20).Within(1e-3));
         Assert.That(FramedDistance(withIcon: true), Is.EqualTo(FramedDistance(withIcon: false)).Within(1e-6),
             "framed by the crate's size alone");
     }
@@ -115,12 +115,12 @@ public class CameraModeTests
         camera.SetThirdPersonCamera(subject, Vector3F.Zero, CameraType.ThirdPersonFree, distanceToObject: 20);
         camera.Update(new AppTime());
 
-        part.Transform.Position = new Vector3<double>(8, 0, 0);
+        part.Transform.Position = new WorldPosition(8, 0, 0);
         var keptWhileOrbiting = camera.FindSubjectCenter();
         camera.SetThirdPersonCamera(subject, Vector3F.Zero, CameraType.ThirdPersonFree, distanceToObject: 20);
 
-        Assert.That(keptWhileOrbiting.Length(), Is.LessThan(1e-6), "the pivot holds while the orbit lasts");
-        Assert.That((camera.FindSubjectCenter() - new Vector3<double>(8, 0, 0)).Length(), Is.LessThan(1e-6));
+        Assert.That((keptWhileOrbiting - WorldPosition.Zero).Length(), Is.LessThan(1e-6), "the pivot holds while the orbit lasts");
+        Assert.That((camera.FindSubjectCenter() - new WorldPosition(8, 0, 0)).Length(), Is.LessThan(1e-6));
     }
 
     private static void AddBox(Entity entity, Vector3<double> center)

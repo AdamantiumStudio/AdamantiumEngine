@@ -60,13 +60,13 @@ public abstract class Handles
         handle?.TraverseInDepth(part => part.IsSelected = true);
     }
 
-    internal static Vector3<double> PivotOf(Entity target) => PivotInWorld(target);
+    internal static WorldPosition PivotOf(Entity target) => PivotInWorld(target);
 
     internal static Vector3F ParentVector(Entity target, Vector3F worldVector) => ToParent(target, worldVector);
 
     internal static QuaternionF WorldRotationOf(Entity target, QuaternionF local) => RotationInWorld(target, local);
 
-    protected static Vector3<double> PivotInWorld(Entity target)
+    protected static WorldPosition PivotInWorld(Entity target)
     {
         var pivot = target.Transform.Pivot;
         if (target.Owner == null)
@@ -74,7 +74,7 @@ public abstract class Handles
             return pivot;
         }
 
-        return Vector3<double>.TransformCoordinate(pivot, target.Owner.Transform.GetWorldMatrix());
+        return new WorldPosition(Vector3<double>.TransformCoordinate(pivot.ToVector(), target.Owner.Transform.GetWorldMatrix()));
     }
 
     protected static QuaternionF RotationInWorld(Entity target, QuaternionF local)
@@ -103,17 +103,17 @@ public abstract class Handles
         return Vector3<double>.TransformNormal(worldVector.As<double>(), inverse).As<float>();
     }
 
-    protected static float UnitsPerPixel(CameraBase camera, Vector3<double> worldPoint)
+    protected static float UnitsPerPixel(CameraBase camera, WorldPosition worldPoint)
     {
         return ScreenSpace.UnitsPerPixel(camera, worldPoint);
     }
 
-    protected static float UnitsPerPoint(CameraBase camera, Vector3<double> worldPoint)
+    protected static float UnitsPerPoint(CameraBase camera, WorldPosition worldPoint)
     {
         return ScreenSpace.UnitsPerPoint(camera, worldPoint);
     }
 
-    protected static Vector3F InRender(Vector3<double> worldPoint, CameraBase camera)
+    protected static Vector3F InRender(WorldPosition worldPoint, CameraBase camera)
     {
         return ScreenSpace.InRender(worldPoint, camera);
     }
@@ -145,7 +145,7 @@ public abstract class Handles
         return Quaternion.CreateFromAxisAngle<float>(Vector3F.Normalize(axis), (float)Math.Acos(Math.Clamp(cosine, -1f, 1f)));
     }
 
-    protected static void PlaceAt(Entity part, Vector3<double> worldPoint, float points, CameraBase camera)
+    protected static void PlaceAt(Entity part, WorldPosition worldPoint, float points, CameraBase camera)
     {
         var metadata = part.Transform.GetMetadata(camera);
         metadata.WorldMatrixF = Matrix4x4.CreateScale<float>(points * UnitsPerPoint(camera, worldPoint))
@@ -153,7 +153,7 @@ public abstract class Handles
         metadata.Enabled = true;
     }
 
-    protected void PlaceShape(Camera camera, Vector3<double> worldPoint, QuaternionF axes, float scale)
+    protected void PlaceShape(Camera camera, WorldPosition worldPoint, QuaternionF axes, float scale)
     {
         var placement = Matrix4x4.CreateScale<float>(scale)
                         * Matrix4x4.CreateFromQuaternion<float>(axes)
@@ -168,7 +168,7 @@ public abstract class Handles
         metadata.Enabled = true;
     }
 
-    protected static void HideArmsFacingEye(Entity right, Entity up, Entity forward, QuaternionF axes, Vector3<double> at, CameraBase camera)
+    protected static void HideArmsFacingEye(Entity right, Entity up, Entity forward, QuaternionF axes, WorldPosition at, CameraBase camera)
     {
         var sight = Vector3F.Normalize(InRender(at, camera));
         HideIf(right, Math.Abs(Vector3F.Dot(Axis(axes, Vector3F.UnitX), sight)) >= FacingEye, camera);
@@ -301,7 +301,7 @@ public abstract class Handles
             }
 
             var radial = grab.Point - origin;
-            var unitsPerPixel = UnitsPerPixel(ray.Camera, origin.As<double>() + ray.Camera.WorldPosition);
+            var unitsPerPixel = UnitsPerPixel(ray.Camera, ray.Camera.WorldPosition + origin);
             radiusInPixels = radial.Length() / unitsPerPixel;
             var tangent = Vector3F.Normalize(Vector3F.Cross(axis, radial)) * unitsPerPixel;
             var onScreen = ScreenSpace.ToPixel(grab.Point + tangent, ray.Camera) - ScreenSpace.ToPixel(grab.Point, ray.Camera);
@@ -398,7 +398,7 @@ public abstract class Handles
         }
     }
 
-    protected static void HideSquaresEdgeOn(Entity rightUp, Entity rightForward, Entity upForward, QuaternionF axes, Vector3<double> at, CameraBase camera)
+    protected static void HideSquaresEdgeOn(Entity rightUp, Entity rightForward, Entity upForward, QuaternionF axes, WorldPosition at, CameraBase camera)
     {
         var sight = Vector3F.Normalize(InRender(at, camera));
         HideIf(rightUp, Math.Abs(Vector3F.Dot(Axis(axes, Vector3F.UnitZ), sight)) < SquareEdgeOn, camera);

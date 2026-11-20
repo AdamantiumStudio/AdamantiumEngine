@@ -93,7 +93,7 @@ public class EntityIcons : ToolsProcessor
 
     /// <summary>Puts an icon at <paramref name="at"/> in the world, facing the camera, <paramref name="pixels"/> points
     /// big on its screen.</summary>
-    public static void PlaceIcon(Entity icon, Vector3<double> at, float pixels, CameraBase camera)
+    public static void PlaceIcon(Entity icon, WorldPosition at, float pixels, CameraBase camera)
     {
         var size = pixels * ScreenSpace.UnitsPerPoint(camera, at);
         var metadata = icon.Transform.GetMetadata(camera);

@@ -668,6 +668,15 @@ All packages share one version.
 
 ### Changed
 
+- An entity's place is a `WorldPosition`, for every entity: `Transform.Position`, `InitialPosition`, `Pivot`,
+  `WorldPosition` and `TransformState.Position`, a camera's `WorldPosition` and `FindSubjectCenter`, and the points of
+  the world the engine takes or gives - the camera's `MoveTo`, `Orbit`, `SetFreePosition`, `SetFreeLookAt` and
+  first-person calls, `CameraTemplate.BuildEntity`, `EntityImportTemplate`, `LightManager.CreateLight`,
+  `Collider.GetWorldShape(origin)`, `GetWorldMatrixF(origin)`, `GetCenterAbsolute`, `GetOwnerPosition`,
+  `IPhysicsService.ApplyImpulse`'s point, the placement tool's points. A point moves by a vector and two points differ
+  by one; nothing turns a vector into a point unasked. A camera's `LookAt` and a distance joint's `ConnectedAnchor`,
+  each a point or a direction by case, stay vectors for now. Still double inside: the step before 128-bit fixed point.
+
 - The core's query results are `WorldRayHit` and `WorldShapeHit` - with `Part` - for `RayHit` and `ShapeHit` now
   name those of `PhysicsSimulation`, by `BodyId`.
 

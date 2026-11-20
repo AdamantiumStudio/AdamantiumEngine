@@ -14,7 +14,7 @@ namespace Adamantium.EngineTests;
 [TestFixture]
 public class HandlesTests
 {
-    private static readonly Vector3<double> At = new(0, 0, 10);
+    private static readonly WorldPosition At = new(0, 0, 10);
 
     [Test]
     public void Move_AlongAnAxis_FollowsThePointer()
@@ -61,7 +61,7 @@ public class HandlesTests
     public void Move_Squares_SitBetweenTheirArrows_FromEverySide()
     {
         var scene = new ToolScene();
-        var at = new Vector3<double>(4, 4, 10);
+        var at = new WorldPosition(4, 4, 10);
         var handles = new MoveHandles();
 
         handles.Place(ToolScene.Target(at), scene.Camera);
@@ -77,10 +77,10 @@ public class HandlesTests
         var scene = new ToolScene();
         var handles = new MoveHandles();
 
-        handles.Place(ToolScene.Target(new Vector3<double>(0, 1.5, 10)), scene.Camera);
+        handles.Place(ToolScene.Target(new WorldPosition(0, 1.5, 10)), scene.Camera);
         Assert.That(IsShown(handles, "RightForwardManipulator", scene), Is.False, "8.5 degrees off edge-on");
 
-        handles.Place(ToolScene.Target(new Vector3<double>(0, 3.64, 10)), scene.Camera);
+        handles.Place(ToolScene.Target(new WorldPosition(0, 3.64, 10)), scene.Camera);
         Assert.That(IsShown(handles, "RightForwardManipulator", scene), Is.True, "20 degrees off edge-on");
     }
 
@@ -324,7 +324,7 @@ public class HandlesTests
         scene.Camera.ProjectionTransitionTime = 0;
         scene.Camera.ProjectionType = Adamantium.ECS.Components.CameraProjectionType.Ortho;
         scene.Camera.Update(new AppTime());
-        var at = new Vector3<double>(6, 0, 10);
+        var at = new WorldPosition(6, 0, 10);
         var target = ToolScene.Target(at);
         var handles = new RotationHandles();
         handles.Place(target, scene.Camera);
@@ -526,7 +526,7 @@ public class HandlesTests
         Assert.That(new SpotLightHandles().AppliesTo(ToolScene.Target(At)), Is.False);
     }
 
-    private static void Drag(ToolScene scene, Handles handles, Entity target, string part, Vector3<double> from, Vector3<double> to)
+    private static void Drag(ToolScene scene, Handles handles, Entity target, string part, WorldPosition from, WorldPosition to)
     {
         handles.Place(target, scene.Camera);
         handles.BeginDrag(target, handles.Shape.Get(part), scene.RayAt(from));
@@ -579,7 +579,7 @@ public class HandlesTests
         return handles.Shape.Get(part).Transform.GetMetadata(scene.Camera).Enabled;
     }
 
-    private static Vector3<double> CenterOf(Handles handles, string part, ToolScene scene)
+    private static WorldPosition CenterOf(Handles handles, string part, ToolScene scene)
     {
         var entity = handles.Shape.Get(part);
         var world = entity.Transform.GetMetadata(scene.Camera).WorldMatrixF;
@@ -590,7 +590,7 @@ public class HandlesTests
             sum += Vector3F.TransformCoordinate(point.As<float>(), world).As<double>();
         }
 
-        return sum / points.Length + scene.Camera.WorldPosition;
+        return scene.Camera.WorldPosition + sum / points.Length;
     }
 
     private static int[] SideOf(Vector3<double> offset)
@@ -613,6 +613,11 @@ public class HandlesTests
             Assert.That(Math.Abs(across(point)), Is.LessThan(1e-4), $"{part}: {point}");
             Assert.That(point.Length(), Is.EqualTo(mesh.Points[0].Length()).Within(1e-3), $"{part}: {point}");
         }
+    }
+
+    private static void AssertNear(WorldPosition actual, WorldPosition expected)
+    {
+        Assert.That((actual - expected).Length(), Is.LessThan(1e-2), $"{actual} instead of {expected}");
     }
 
     private static void AssertNear(Vector3<double> actual, Vector3<double> expected)

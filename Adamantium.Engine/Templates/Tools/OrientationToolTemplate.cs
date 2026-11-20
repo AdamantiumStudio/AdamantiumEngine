@@ -52,7 +52,7 @@ public class OrientationToolTemplate: BaseToolTemplate
          }
 
          var entity = BuildSubEntity(root, TileName(index++), sphere, color, BoundingVolume.Sphere);
-         entity.Transform.Position = direction * reach;
+         entity.Transform.Position = new WorldPosition(direction * reach);
          directions.Add(direction);
       }
 
@@ -111,7 +111,7 @@ public class OrientationToolTemplate: BaseToolTemplate
       {
          var entity = BuildSubEntity(root, name, shape, Colors.LightSlateGray, BoundingVolume.OrientedBox);
          entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitZ, float.DegreesToRadians((float)spin));
-         entity.Transform.Position = new Vector3<double>(x, y, 0);
+         entity.Transform.Position = new WorldPosition(x, y, 0);
       }
 
       Step("StepRightManipulator", reach, 0, -90);

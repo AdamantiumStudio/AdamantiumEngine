@@ -141,12 +141,12 @@ namespace Adamantium.ECS.Components
         /// <summary>Where the middle of the <see cref="Subject"/> stands in the world, the camera's own entity left out;
         /// where the camera stands when it has no subject. A subject with parts is measured once the camera starts
         /// orbiting it, as an orbit's pivot is; a single entity is measured afresh.</summary>
-        public Vector3<double> FindSubjectCenter()
+        public WorldPosition FindSubjectCenter()
         {
             var center = FindLocalSubjectCenter();
             return Subject == null
                 ? WorldPosition
-                : Vector3<double>.TransformCoordinate(center.As<double>(), Subject.Transform.GetWorldMatrix());
+                : new WorldPosition(Vector3<double>.TransformCoordinate(center.As<double>(), Subject.Transform.GetWorldMatrix()));
         }
 
         /// <summary>The middle of the <see cref="Subject"/> in its own axes, as <see cref="FindSubjectCenter"/> measures
@@ -211,7 +211,7 @@ namespace Adamantium.ECS.Components
         /// <summary>Where the camera is IN THE WORLD. Its own <c>Transform.Position</c> is relative to its parent, and
         /// a third-person camera hangs off the object it follows - the scene is shifted by THIS one. Hung on another
         /// entity, it is still on its way there for <see cref="HostChangeTime"/>.</summary>
-        public Vector3<double> WorldPosition => (Owner?.Transform.WorldPosition ?? Vector3<double>.Zero) + TravelOffset;
+        public WorldPosition WorldPosition => (Owner?.Transform.WorldPosition ?? WorldPosition.Zero) + TravelOffset;
 
         /// <summary>How long, in milliseconds, a camera hung on another entity or taken off one takes to get from where it
         /// stood and looked to its new place and view; 0 jumps there.</summary>
@@ -360,7 +360,7 @@ namespace Adamantium.ECS.Components
         ///<summary>
         ///Sets camera as Free with specific parameters.
         ///</summary>
-        public abstract void SetFreeCamera(Vector3<double> position, Vector3<double> lookAt, Vector3<double> up);
+        public abstract void SetFreeCamera(WorldPosition position, Vector3<double> lookAt, Vector3<double> up);
 
         ///<summary>
         ///Sets camera as Free where it stands, looking where it looks.
@@ -370,12 +370,12 @@ namespace Adamantium.ECS.Components
         ///<summary>
         ///Changes the Position (Offset) of Free camera.
         ///</summary>
-        public abstract void SetFreePosition(Vector3<double> position);
+        public abstract void SetFreePosition(WorldPosition position);
 
         ///<summary>
         ///Changes the LookAt of Free camera.
         ///</summary>
-        public abstract void SetFreeLookAt(Vector3<double> lookAt);
+        public abstract void SetFreeLookAt(WorldPosition lookAt);
 
         ///<summary>
         ///Sets camera as First Person with specific parameters.
@@ -383,12 +383,12 @@ namespace Adamantium.ECS.Components
         ///<remarks>
         ///objectRotation - rotation of the camera host (e.g. position of human body (and face) in space).
         ///</remarks>
-        public abstract void SetFirstPersonCamera(Vector3<double> position, QuaternionF objectRotation, Double faceDistance);
+        public abstract void SetFirstPersonCamera(WorldPosition position, QuaternionF objectRotation, Double faceDistance);
 
         ///<summary>
         ///Changes the Position (Offset) and Rotation of First Person camera.
         ///</summary>
-        public abstract void SetFirstPersonPositionRotation(Vector3<double> position, QuaternionF objectRotation);
+        public abstract void SetFirstPersonPositionRotation(WorldPosition position, QuaternionF objectRotation);
 
         ///<summary>
         ///Sets camera as Third Person with specific parameters.
@@ -443,7 +443,7 @@ namespace Adamantium.ECS.Components
         /// <summary>Travels to a point over <paramref name="time"/> milliseconds. The same machinery
         /// <see cref="JumpToObject"/> rides - offered because a place can be worth flying to without an object there
         /// to aim at.</summary>
-        public abstract void MoveTo(Vector3<double> position, int time);
+        public abstract void MoveTo(WorldPosition position, int time);
 
         ///<summary>
         ///Returns quaternion, which has the same angle as the forward vector of the hosted object in left handed coordinate system

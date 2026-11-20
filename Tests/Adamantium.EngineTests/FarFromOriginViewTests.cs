@@ -16,7 +16,7 @@ namespace Adamantium.EngineTests;
 /// entity hung on the camera's own all keep their places.</summary>
 public class FarFromOriginViewTests
 {
-    private static readonly Vector3<double> Far = new(1e9, 5e8, -1e9);
+    private static readonly WorldPosition Far = new(1e9, 5e8, -1e9);
 
     private TestUniverse universe;
     private TestOutput output;
@@ -65,7 +65,7 @@ public class FarFromOriginViewTests
     [Test]
     public void AnEntityOnTheCamerasOwn_IsDrawnWhereItHangs()
     {
-        var lamp = Cube("Lamp", new Vector3<double>(0.3, -0.2, 2), 0.1, camera.Owner);
+        var lamp = Cube("Lamp", new WorldPosition(0.3, -0.2, 2), 0.1, camera.Owner);
         Frame();
 
         var drawnAt = lamp.Transform.GetMetadata(camera).WorldMatrixF.TranslationVector;
@@ -74,7 +74,7 @@ public class FarFromOriginViewTests
         Assert.That((drawnAt - hangsAt).Length(), Is.LessThan(1e-4f), $"drawn at {drawnAt}, hangs at {hangsAt}");
     }
 
-    private static Entity Cube(string name, Vector3<double> at, double size, Entity owner = null)
+    private static Entity Cube(string name, WorldPosition at, double size, Entity owner = null)
     {
         var cube = new Entity(owner, name);
         cube.Transform.Position = at;
@@ -91,9 +91,9 @@ public class FarFromOriginViewTests
         transforms.Update(new AppTime());
     }
 
-    private Vector2F PixelOf(Vector3<double> world)
+    private Vector2F PixelOf(WorldPosition world)
     {
-        var inRender = (world - camera.WorldPosition).As<float>();
+        var inRender = world.OffsetFrom(camera.WorldPosition);
         var pixel = Vector3F.Project(inRender, 0, 0, camera.Width, camera.Height, 0, 1, camera.ViewMatrix * camera.ProjectionMatrix);
         return new Vector2F(pixel.X, pixel.Y);
     }

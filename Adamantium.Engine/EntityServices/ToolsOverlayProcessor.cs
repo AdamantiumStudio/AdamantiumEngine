@@ -197,7 +197,7 @@ public class ToolsOverlayProcessor : RenderingProcessor
         var pixels = LinePixels;
         var center = ScreenSpace.OnPixelGrid(
             Vector3F.TransformCoordinate(mesh.Bounds.Center.As<float>(), world), ActiveCamera, pixels % 2 == 0 ? 0 : 0.5f);
-        var unitsPerPixel = ScreenSpace.UnitsPerPixel(ActiveCamera, center.As<double>() + ActiveCamera.WorldPosition);
+        var unitsPerPixel = ScreenSpace.UnitsPerPixel(ActiveCamera, ActiveCamera.WorldPosition + center);
         var normal = Vector3F.Normalize(Vector3F.TransformNormal(axis, world));
         var radius = Math.Max(extent.X, Math.Max(extent.Y, extent.Z)) * Vector3F.TransformNormal(inPlane, world).Length();
         radius = MathF.Round(radius / unitsPerPixel) * unitsPerPixel;

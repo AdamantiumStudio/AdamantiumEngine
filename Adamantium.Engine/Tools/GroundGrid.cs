@@ -141,7 +141,7 @@ public class GroundGrid : ToolsProcessor
     /// that the grid shows whole down to that edge and fades only far off, as toward a horizon; looking straight down,
     /// under the point the camera looks at.
     /// </summary>
-    public Vector3<double> CenterFor(CameraBase camera)
+    public WorldPosition CenterFor(CameraBase camera)
     {
         var eye = camera.WorldPosition;
         if (camera.ProjectionMatrix.M44 < 0.5f)
@@ -150,7 +150,7 @@ public class GroundGrid : ToolsProcessor
         }
 
         var forward = camera.Forward;
-        var focused = new Vector3<double>(eye.X + forward.X * camera.FocusDistance, eye.Y, eye.Z + forward.Z * camera.FocusDistance);
+        var focused = eye + new Vector3<double>(forward.X * camera.FocusDistance, 0, forward.Z * camera.FocusDistance);
         var heading = new Vector3F((float)forward.X, 0, (float)forward.Z);
         if (heading.Length() < 1e-3f)
         {
@@ -188,7 +188,7 @@ public class GroundGrid : ToolsProcessor
         }
 
         var center = near + heading * (WholeShare * FlatReach(camera));
-        return new Vector3<double>(eye.X + center.X, eye.Y, eye.Z + center.Z);
+        return eye + new Vector3<double>(center.X, 0, center.Z);
     }
 
     private float FlatReach(CameraBase camera)

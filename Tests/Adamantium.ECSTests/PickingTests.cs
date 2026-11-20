@@ -25,8 +25,8 @@ public class PickingTests
     {
         var scene = new PickScene();
         var model = new Entity(null, "Model");
-        var part = PickScene.Box(model, "Part", new Vector3<double>(0, 0, 10), 1);
-        PickScene.Box(model, "Other", new Vector3<double>(-4, 0, 10), 1);
+        var part = PickScene.Box(model, "Part", new WorldPosition(0, 0, 10), 1);
+        PickScene.Box(model, "Other", new WorldPosition(-4, 0, 10), 1);
         PickScene.Bounds(model, new Vector3F(-5, -1, 8), new Vector3F(1, 1, 12));
         scene.Place(model);
         var ray = scene.RayThroughCenter();
@@ -40,8 +40,8 @@ public class PickingTests
     {
         var scene = new PickScene();
         var model = new Entity(null, "Model");
-        PickScene.Box(model, "Left", new Vector3<double>(-2, 0, 10), 1);
-        PickScene.Box(model, "Right", new Vector3<double>(2, 0, 10), 1);
+        PickScene.Box(model, "Left", new WorldPosition(-2, 0, 10), 1);
+        PickScene.Box(model, "Right", new WorldPosition(2, 0, 10), 1);
         PickScene.Bounds(model, new Vector3F(-3, -1, 9), new Vector3F(3, 1, 11));
         scene.Place(model);
         var ray = scene.RayThroughCenter();
@@ -164,8 +164,8 @@ public class PickingTests
     public void Disabled_IsSkippedWithWhatIsUnderIt()
     {
         var scene = new PickScene();
-        var parent = PickScene.Box(null, "Parent", new Vector3<double>(0, 0, 10), 1);
-        PickScene.Box(parent, "Child", new Vector3<double>(0, 0, 10), 1);
+        var parent = PickScene.Box(null, "Parent", new WorldPosition(0, 0, 10), 1);
+        PickScene.Box(parent, "Child", new WorldPosition(0, 0, 10), 1);
         parent.IsEnabled = false;
         scene.Place(parent);
 
@@ -176,8 +176,8 @@ public class PickingTests
     public void Disabled_IsPickedWithWhatIsUnderIt_WhenAskedFor_ButHiddenNever()
     {
         var scene = new PickScene();
-        var parent = PickScene.Box(null, "Parent", new Vector3<double>(0, 0, 10), 1);
-        var child = PickScene.Box(parent, "Child", new Vector3<double>(0, 0, -5), 1);
+        var parent = PickScene.Box(null, "Parent", new WorldPosition(0, 0, 10), 1);
+        var child = PickScene.Box(parent, "Child", new WorldPosition(0, 0, -5), 1);
         parent.IsEnabled = false;
         scene.Place(parent);
         var ray = scene.RayThroughCenter();
@@ -193,9 +193,9 @@ public class PickingTests
     public void Hidden_IsSkippedWithWhatIsUnderIt_AndLetsTheRayThrough()
     {
         var scene = new PickScene();
-        var hidden = PickScene.Box(null, "Hidden", new Vector3<double>(0, 0, 10), 1);
-        PickScene.Box(hidden, "Child", new Vector3<double>(0, 0, -5), 1);
-        var behind = PickScene.Box(null, "Behind", new Vector3<double>(0, 0, 20), 1);
+        var hidden = PickScene.Box(null, "Hidden", new WorldPosition(0, 0, 10), 1);
+        PickScene.Box(hidden, "Child", new WorldPosition(0, 0, -5), 1);
+        var behind = PickScene.Box(null, "Behind", new WorldPosition(0, 0, 20), 1);
         hidden.Visible = false;
         scene.Place(hidden);
         scene.Place(behind);
@@ -212,8 +212,8 @@ public class PickingTests
     public void Ignored_LeavesWhatIsUnderItPickable()
     {
         var scene = new PickScene();
-        var parent = PickScene.Box(null, "Parent", new Vector3<double>(0, 0, 10), 1);
-        var child = PickScene.Box(parent, "Child", new Vector3<double>(0, 0, 10), 1);
+        var parent = PickScene.Box(null, "Parent", new WorldPosition(0, 0, 10), 1);
+        var child = PickScene.Box(parent, "Child", new WorldPosition(0, 0, 10), 1);
         parent.IgnoreInCollisionDetection = true;
         scene.Place(parent);
 
@@ -224,8 +224,8 @@ public class PickingTests
     public void Roots_NearestWinsWhateverTheOrder()
     {
         var scene = new PickScene();
-        var far = PickScene.Box(null, "Far", new Vector3<double>(0, 0, 20), 1);
-        var near = PickScene.Box(null, "Near", new Vector3<double>(0, 0, 10), 1);
+        var far = PickScene.Box(null, "Far", new WorldPosition(0, 0, 20), 1);
+        var near = PickScene.Box(null, "Near", new WorldPosition(0, 0, 10), 1);
         scene.Place(far);
         scene.Place(near);
 
@@ -236,7 +236,7 @@ public class PickingTests
     public void Scaled_HitsItsScaledSurface()
     {
         var scene = new PickScene();
-        var ball = PickScene.Ball(null, "Ball", new Vector3<double>(0, 0, 20), 1);
+        var ball = PickScene.Ball(null, "Ball", new WorldPosition(0, 0, 20), 1);
         ball.Transform.SetScaleFactor(3);
         scene.Place(ball);
 
@@ -250,7 +250,7 @@ public class PickingTests
     public void CollidersWithMeshColliders_Throws()
     {
         var scene = new PickScene();
-        var box = PickScene.Box(null, "Box", new Vector3<double>(0, 0, 10), 1);
+        var box = PickScene.Box(null, "Box", new WorldPosition(0, 0, 10), 1);
         scene.Place(box);
 
         Assert.Throws<ArgumentException>(() => box.Pick(scene.RayThroughCenter(), PickMode.Colliders | PickMode.MeshColliders));

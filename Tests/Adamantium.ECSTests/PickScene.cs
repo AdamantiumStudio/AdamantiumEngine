@@ -48,12 +48,12 @@ internal sealed class PickScene
         });
     }
 
-    public static Entity Box(Entity owner, string name, Vector3<double> center, double half)
+    public static Entity Box(Entity owner, string name, WorldPosition center, double half)
     {
         return Solid(owner, name, center, half, new BoxCollider());
     }
 
-    public static Entity Ball(Entity owner, string name, Vector3<double> center, double radius)
+    public static Entity Ball(Entity owner, string name, WorldPosition center, double radius)
     {
         return Solid(owner, name, center, radius, new SphereCollider());
     }
@@ -71,7 +71,7 @@ internal sealed class PickScene
         return WithMesh(owner, name, mesh);
     }
 
-    private static Entity Solid(Entity owner, string name, Vector3<double> center, double half, Collider collider)
+    private static Entity Solid(Entity owner, string name, WorldPosition center, double half, Collider collider)
     {
         var mesh = new Mesh(PrimitiveType.TriangleList).SetPoints(
         [
