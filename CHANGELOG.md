@@ -675,7 +675,9 @@ All packages share one version.
   `Collider.GetWorldShape(origin)`, `GetWorldMatrixF(origin)`, `GetCenterAbsolute`, `GetOwnerPosition`,
   `IPhysicsService.ApplyImpulse`'s point, the placement tool's points. A point moves by a vector and two points differ
   by one; nothing turns a vector into a point unasked. A camera's `LookAt` and a distance joint's `ConnectedAnchor`,
-  each a point or a direction by case, stay vectors for now. Still double inside: the step before 128-bit fixed point.
+  each a point or a direction by case, stay vectors for now. A `WorldPosition`'s `X`, `Y` and `Z` are set one by one,
+  as an inspector's fields type them, and `WorldPosition.Parse` reads one; a game component's `WorldPosition`
+  property is kept in the scene as a vector's is. Still double inside: the step before 128-bit fixed point.
 
 - The core's query results are `WorldRayHit` and `WorldShapeHit` - with `Part` - for `RayHit` and `ShapeHit` now
   name those of `PhysicsSimulation`, by `BodyId`.
