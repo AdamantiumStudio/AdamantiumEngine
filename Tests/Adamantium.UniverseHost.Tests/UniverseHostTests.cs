@@ -156,17 +156,27 @@ public class UniverseHostTests
     // A viewer that left the view which imported its surfaces asks for new ones: they come at the same size, in another
     // ring, and its frames keep coming.
     [Test]
-    public async Task AViewerAskingForANewSurface_IsGivenOneOfTheSameSize()
+    public async Task ThroughSharedMemory_AViewerAskingForANewSurface_IsGivenOneOfTheSameSize_WhoseFramesKeepComing()
     {
         await Launch("Drift.ascene", 160, 90, FrameSharing.HostMemory);
         Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
+        using (var firstReader = new Adamantium.Graphics.HostFrameReader(first.ToDescriptor()))
+        {
+            firstReader.GiveBack(TakeFrame(firstReader, out _));
+        }
 
         _connection.Host.AskNewSurface();
         _connection.Host.AskFrame(_viewer.LastFrame + 1);
+        var asked = Stopwatch.StartNew();
         Assert.That(_viewer.Surfaces.TryTake(out var second, Patience), Is.True, "given a new surface");
         using var reader = new Adamantium.Graphics.HostFrameReader(second.ToDescriptor());
-        var frame = TakeFrame(reader, out _);
-        reader.GiveBack(frame);
+        var frame = 0ul;
+        while (frame < 3 && asked.Elapsed < Patience)
+        {
+            frame = TakeFrame(reader, out _);
+            reader.GiveBack(frame);
+        }
+
         await _connection.Host.StopAsync(CancellationToken.None);
 
         Assert.Multiple(() =>
@@ -174,7 +184,29 @@ public class UniverseHostTests
             Assert.That(second.Width, Is.EqualTo(first.Width));
             Assert.That(second.Height, Is.EqualTo(first.Height));
             Assert.That(second.MemoryPath, Is.Not.EqualTo(first.MemoryPath), "another ring");
-            Assert.That(frame, Is.GreaterThan(0ul), "its frames come");
+            Assert.That(frame, Is.GreaterThanOrEqualTo(3ul), "its frames keep coming as they are given back");
+        });
+    }
+
+    [Test]
+    public async Task ThroughGpuHandles_AViewerAskingForANewSurface_IsGivenOneOfTheSameSize()
+    {
+        Assume.That(OperatingSystem.IsWindows(), "GPU handles go to another process on Windows only, for now");
+        await Launch("Drift.ascene", 160, 90, FrameSharing.GpuHandles);
+        Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
+        first.CloseHandles();
+
+        _connection.Host.AskNewSurface();
+        _connection.Host.AskFrame(_viewer.LastFrame + 1);
+        Assert.That(_viewer.Surfaces.TryTake(out var second, Patience), Is.True, "given a new surface");
+        second.CloseHandles();
+        await _connection.Host.StopAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(second.Width, Is.EqualTo(first.Width));
+            Assert.That(second.Height, Is.EqualTo(first.Height));
+            Assert.That(second.Buffers.All(buffer => buffer.MemoryHandle != 0), Is.True, "handles of this process");
         });
     }
 
