@@ -7,7 +7,8 @@ All packages share one version.
 
 ### Added
 
-- `SharedSurfaceProducer` sends an output's frames to an `ISharedSurfaceConsumer` through a ring of shared surfaces:
+- `ISharedSurfaceProducer`, made by `SharedSurfaceProducer`, sends an output's frames to an `ISharedSurfaceConsumer`
+  through a ring of shared surfaces:
   each frame goes to the surface the consumer gave back, and a new size starts a new ring, handed over once it holds
   its first frame. The UI's render target panel takes its frames this way; a process of its own will too.
 
