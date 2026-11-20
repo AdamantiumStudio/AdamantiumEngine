@@ -1,11 +1,12 @@
+using Adamantium.Mathematics;
+
 namespace Adamantium.Engine.Physics;
 
-/// <summary>Where a body's center of mass stood and how the body moved after a step, in the physics' own coordinates.
-/// </summary>
+/// <summary>Where a body's center of mass stood in the world and how the body moved after a step.</summary>
 internal readonly struct BodyMotion
 {
-    public BodyMotion(int key, int generation, Vector3F centerOfMass, Vector3F localCenterOfMass, QuaternionF rotation,
-        Vector3F linearVelocity, Vector3F angularVelocity)
+    public BodyMotion(int key, int generation, Vector3<double> centerOfMass, Vector3F localCenterOfMass,
+        QuaternionF rotation, Vector3F linearVelocity, Vector3F angularVelocity)
     {
         Key = key;
         Generation = generation;
@@ -21,7 +22,7 @@ internal readonly struct BodyMotion
     /// <summary>Which body under the key moved: one put in its place later has another.</summary>
     public int Generation { get; }
 
-    public Vector3F CenterOfMass { get; }
+    public Vector3<double> CenterOfMass { get; }
 
     /// <summary>The center of mass in the body's own axes.</summary>
     public Vector3F LocalCenterOfMass { get; }

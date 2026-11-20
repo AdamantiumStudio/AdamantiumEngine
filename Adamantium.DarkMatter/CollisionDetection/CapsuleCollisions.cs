@@ -12,8 +12,8 @@ internal static class CapsuleCollisions
     private const int SearchSteps = 40;
     private const float GoldenRatio = 0.618034f;
 
-    public static bool CollideCapsules(CapsuleCollisionShape first, in Pose firstPose, CapsuleCollisionShape second,
-        in Pose secondPose, float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideCapsules(CapsuleCollisionShape first, in LocalPose firstPose, CapsuleCollisionShape second,
+        in LocalPose secondPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         var firstBottom = firstPose.TransformPoint(new Vector3F(0, -first.HalfLength, 0));
         var firstTop = firstPose.TransformPoint(new Vector3F(0, first.HalfLength, 0));
@@ -54,8 +54,8 @@ internal static class CapsuleCollisions
         return true;
     }
 
-    public static bool CollideCapsuleBox(CapsuleCollisionShape capsule, in Pose capsulePose, BoxCollisionShape box,
-        in Pose boxPose, float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideCapsuleBox(CapsuleCollisionShape capsule, in LocalPose capsulePose, BoxCollisionShape box,
+        in LocalPose boxPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         var size = box.HalfExtents;
         var radius = capsule.Radius;
@@ -146,7 +146,7 @@ internal static class CapsuleCollisions
         (point - Vector3F.Clamp(point, -size, size)).LengthSquared();
 
     private static bool CollideCoreInsideBox(Vector3F start, Vector3F along, Vector3F size, float radius,
-        float speculativeDistance, in Pose boxPose, ManifoldBuffer manifold)
+        float speculativeDistance, in LocalPose boxPose, ManifoldBuffer manifold)
     {
         var bestFaceAxis = 0;
         var bestFaceSeparation = float.MinValue;
@@ -239,7 +239,7 @@ internal static class CapsuleCollisions
     }
 
     private static bool ClipAgainstFace(Vector3F start, Vector3F along, Vector3F size, int faceAxis, float faceSign,
-        float radius, float speculativeDistance, in Pose boxPose, ManifoldBuffer manifold)
+        float radius, float speculativeDistance, in LocalPose boxPose, ManifoldBuffer manifold)
     {
         var low = 0f;
         var high = 1f;
@@ -283,7 +283,7 @@ internal static class CapsuleCollisions
     }
 
     private static void AddFacePoint(Vector3F point, Vector3F faceNormal, float faceDistance, float radius,
-        float speculativeDistance, in Pose boxPose, ManifoldBuffer manifold)
+        float speculativeDistance, in LocalPose boxPose, ManifoldBuffer manifold)
     {
         var height = Vector3F.Dot(point, faceNormal) - faceDistance;
         var separation = height - radius;

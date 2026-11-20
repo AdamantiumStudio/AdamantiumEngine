@@ -34,7 +34,7 @@ public sealed class BoxCollisionShape : CollisionShape
         return new MassProperties(mass, inertia);
     }
 
-    public override BoundingBox<float> ComputeBounds(in Pose pose)
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose)
     {
         var axisX = Vector3F.Abs(pose.TransformDirection(Vector3F.UnitX));
         var axisY = Vector3F.Abs(pose.TransformDirection(Vector3F.UnitY));

@@ -8,6 +8,7 @@ public readonly struct CompoundPart
     {
         Shape = shape;
         Pose = pose;
+        LocalPose = pose.ToLocal();
     }
 
     /// <summary>The shape; it cannot be a compound itself.</summary>
@@ -15,4 +16,7 @@ public readonly struct CompoundPart
 
     /// <summary>Where the shape's center stands and how it is turned, in the compound's own axes.</summary>
     public Pose Pose { get; }
+
+    /// <summary>The pose in float, as collisions take it.</summary>
+    internal LocalPose LocalPose { get; }
 }

@@ -4,7 +4,8 @@ namespace Adamantium.DarkMatter.Dynamics;
 /// </summary>
 internal struct ContactPointState
 {
-    public Vector3F Position;
+    /// <summary>Where the point stands in the world, as reported.</summary>
+    public Vector3<double> Position;
     public Vector3F LocalAnchorFirst;
     public Vector3F LocalAnchorSecond;
     public float Separation;

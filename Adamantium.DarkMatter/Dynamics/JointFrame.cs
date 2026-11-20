@@ -10,7 +10,10 @@ internal readonly struct JointFrame
     {
         ArmOfFirst = Vector3F.Transform(joint.PointOnFirst - first.CenterOfMass, first.Rotation);
         ArmOfSecond = Vector3F.Transform(joint.PointOnSecond - second.CenterOfMass, second.Rotation);
-        Apart = second.Position + ArmOfSecond - first.Position - ArmOfFirst;
+        // The centers' gap in double, made float once small: the bodies stand side by side wherever they are. The world
+        // holds a joint from its anchor.
+        var firstPosition = joint.First >= 0 ? first.Position : joint.WorldAnchor;
+        Apart = (second.Position - firstPosition).As<float>() + ArmOfSecond - ArmOfFirst;
         AxisOfFirst = Vector3F.Transform(joint.AxisOnFirst, first.Rotation);
         AxisOfSecond = Vector3F.Transform(joint.AxisOnSecond, second.Rotation);
         ReferenceOfFirst = Vector3F.Transform(joint.ReferenceOnFirst, first.Rotation);

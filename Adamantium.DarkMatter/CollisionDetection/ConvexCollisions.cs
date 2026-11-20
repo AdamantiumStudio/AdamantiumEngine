@@ -20,7 +20,7 @@ internal static class ConvexCollisions
     /// 25 degrees.</summary>
     private const float NearTheNormal = 0.9f;
 
-    public static bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose,
+    public static bool Collide(CollisionShape first, in LocalPose firstPose, CollisionShape second, in LocalPose secondPose,
         float speculativeDistance, ManifoldBuffer manifold)
     {
         var firstCore = new PlacedCore(first, firstPose);
@@ -92,8 +92,8 @@ internal static class ConvexCollisions
         in PlacedCore secondCore, float nearTolerance, ManifoldBuffer manifold, ref Vector3F normal,
         ref Vector3F onFirst, ref Vector3F onSecond)
     {
-        var firstSize = Vector3F.Max(first.ComputeBounds(Pose.Identity).Size);
-        var secondSize = Vector3F.Max(second.ComputeBounds(Pose.Identity).Size);
+        var firstSize = Vector3F.Max(first.ComputeBounds(LocalPose.Identity).Size);
+        var secondSize = Vector3F.Max(second.ComputeBounds(LocalPose.Identity).Size);
         var nudge = MathF.Max(PartingNudge * MathF.Min(firstSize, secondSize), 4 * nearTolerance);
         var offset = normal * nudge;
         var parted = secondCore.MovedTo(secondCore.Center + offset);
@@ -110,8 +110,8 @@ internal static class ConvexCollisions
     // the shapes part more is the contact's plane when they part along it about as well as along the true axis. It
     // then clips the other shape's face turned toward it, and its normal is the contact's. Otherwise - edge on edge -
     // one point does. A normal not known - cores EPA could not measure - leaves every face to tell.
-    private static bool AddFaceContacts(CollisionShape first, in Pose firstPose, CollisionShape second,
-        in Pose secondPose, Vector3F normal, bool normalIsKnown, float enough, float speculativeDistance,
+    private static bool AddFaceContacts(CollisionShape first, in LocalPose firstPose, CollisionShape second,
+        in LocalPose secondPose, Vector3F normal, bool normalIsKnown, float enough, float speculativeDistance,
         ManifoldBuffer manifold)
     {
         int firstFace;
@@ -198,8 +198,8 @@ internal static class ConvexCollisions
     // A side lying along another - logs, a log and a capsule - or along an edge of a box or a hull touches along a
     // line: the ends of where the two overlap, each a point; false unless one gives a segment and the other a segment
     // or an edge running with it.
-    private static bool AddLineContacts(CollisionShape first, in Pose firstPose, CollisionShape second,
-        in Pose secondPose, Vector3F normal, float speculativeDistance, ManifoldBuffer manifold)
+    private static bool AddLineContacts(CollisionShape first, in LocalPose firstPose, CollisionShape second,
+        in LocalPose secondPose, Vector3F normal, float speculativeDistance, ManifoldBuffer manifold)
     {
         // The side that can be a segment is asked first, and only when the other can meet it: a segment or an edge.
         if (CanLieAlong(first) && (CanLieAlong(second) || HasEdges(second))
@@ -242,7 +242,7 @@ internal static class ConvexCollisions
     // Of the faces of shape whose normal turns toward toward by at least the cosine nearness, the one whose outward
     // normal parts it most from other, that normal in the world and how far they part along it; -1 when it has none
     // such.
-    private static int FindPartingFace(CollisionShape shape, in Pose pose, CollisionShape other, in Pose otherPose,
+    private static int FindPartingFace(CollisionShape shape, in LocalPose pose, CollisionShape other, in LocalPose otherPose,
         Vector3F toward, float nearness, out Vector3F faceNormal, out float parting)
     {
         faceNormal = default;
@@ -270,8 +270,8 @@ internal static class ConvexCollisions
 
     // How far the other shape stands beyond the face, along its outward normal axis - the core's plane out by the
     // shape's radius; less than zero while it reaches behind it.
-    private static float MeasureParting(CollisionShape shape, in Pose pose, int face, CollisionShape other,
-        in Pose otherPose, Vector3F axis)
+    private static float MeasureParting(CollisionShape shape, in LocalPose pose, int face, CollisionShape other,
+        in LocalPose otherPose, Vector3F axis)
     {
         var nearestOfOther = otherPose.TransformPoint(other.GetSupport(otherPose.InverseTransformDirection(-axis)));
         return Vector3F.Dot(nearestOfOther - pose.Position, axis) - shape.GetFlatFaceOffset(face) - shape.CoreRadius;
@@ -279,7 +279,7 @@ internal static class ConvexCollisions
 
     // The face of shape turned most toward the other along toward, its outward normal in the world and how far the
     // shapes part along it; -1 for a shape without faces.
-    private static int MeasureFace(CollisionShape shape, in Pose pose, CollisionShape other, in Pose otherPose,
+    private static int MeasureFace(CollisionShape shape, in LocalPose pose, CollisionShape other, in LocalPose otherPose,
         Vector3F toward, out Vector3F faceNormal, out float parting)
     {
         faceNormal = default;

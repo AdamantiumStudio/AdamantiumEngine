@@ -7,14 +7,15 @@ using Adamantium.Mathematics;
 namespace Adamantium.ECS;
 
 /// <summary>
-/// Where the meshes of a world stand, so a ray asks a <see cref="DynamicAabbTree{T}"/> instead of visiting every entity:
-/// each mesh entity's box in the world, camera-independent. Kept frame by frame by whoever walks the world's transforms:
+/// Where the meshes of a world stand, so a ray asks a <see cref="DynamicAabbTree{TItem, TNumber}"/> instead of visiting
+/// every entity: each mesh entity's box in the world, camera-independent. Kept frame by frame by whoever walks the
+/// world's transforms:
 /// <see cref="BeginFrame"/>, then <see cref="Place"/> for each entity whose box may have changed and <see cref="Keep"/>
 /// for the rest, then <see cref="EndFrame"/>, which lets go of the ones the frame did not meet.
 /// </summary>
 public sealed class SceneIndex
 {
-    private readonly DynamicAabbTree<Entity> tree = new();
+    private readonly DynamicAabbTree<Entity, float> tree = new();
     private readonly Dictionary<Entity, Entry> entries = new();
     private readonly List<Entity> unseen = [];
     private readonly List<(Entity Entity, float Entry)> found = [];

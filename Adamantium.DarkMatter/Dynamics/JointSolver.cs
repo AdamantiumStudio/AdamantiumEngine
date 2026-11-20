@@ -24,8 +24,8 @@ internal sealed class JointSolver
         _active.Clear();
         foreach (var joint in joints)
         {
-            ref var first = ref BodyOf(bodies, joint.First);
-            ref var second = ref BodyOf(bodies, joint.Second);
+            ref var first = ref FirstOf(bodies, joint);
+            ref var second = ref bodies[joint.Second];
             if ((first.IsDynamic && first.IsAwake) || (second.IsDynamic && second.IsAwake))
                 _active.Add(joint);
         }
@@ -43,8 +43,8 @@ internal sealed class JointSolver
     /// added, a distance joint's length; nothing for the rest.</summary>
     public float Measure(BodyState[] bodies, Joint joint)
     {
-        ref var first = ref BodyOf(bodies, joint.First);
-        ref var second = ref BodyOf(bodies, joint.Second);
+        ref var first = ref FirstOf(bodies, joint);
+        ref var second = ref bodies[joint.Second];
         var frame = new JointFrame(joint, first, second);
         return joint.Kind switch
         {
@@ -61,8 +61,8 @@ internal sealed class JointSolver
         for (var index = 0; index < _active.Count; index++)
         {
             var joint = _active[index];
-            ref var first = ref BodyOf(bodies, joint.First);
-            ref var second = ref BodyOf(bodies, joint.Second);
+            ref var first = ref FirstOf(bodies, joint);
+            ref var second = ref bodies[joint.Second];
             var constraints = new JointConstraints(joint, pass, inverseSubstep, substep, softness);
             var frame = new JointFrame(joint, first, second);
             switch (joint.Kind)
@@ -91,11 +91,12 @@ internal sealed class JointSolver
         }
     }
 
-    // A body of the world's, or the world itself for no body: still, never moved, weighing nothing it can give.
-    private ref BodyState BodyOf(BodyState[] bodies, int body)
+    // The joint's first body, or the world for none: still, never moved, weighing nothing it can give. The second is
+    // always a body.
+    private ref BodyState FirstOf(BodyState[] bodies, Joint joint)
     {
-        if (body >= 0)
-            return ref bodies[body];
+        if (joint.First >= 0)
+            return ref bodies[joint.First];
 
         return ref _world;
     }

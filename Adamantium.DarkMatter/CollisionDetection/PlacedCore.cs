@@ -10,7 +10,7 @@ internal readonly struct PlacedCore
     private readonly Vector3F _position;
     private readonly Matrix3x3F _rotation;
 
-    public PlacedCore(CollisionShape shape, in Pose pose)
+    public PlacedCore(CollisionShape shape, in LocalPose pose)
     {
         _shape = shape;
         _position = pose.Position;

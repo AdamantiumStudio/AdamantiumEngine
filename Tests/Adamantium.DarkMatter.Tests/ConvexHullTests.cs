@@ -65,8 +65,8 @@ public class ConvexHullTests
     [TestCase(-0.1f)]
     public void HullResting_OnAGroundBox_TouchesWithFourCorners(float gap)
     {
-        var found = Collide(Cube(new Vector3F(0.5f)), new Pose(new Vector3F(0.2f, 0.5f + gap, -0.1f)),
-            new BoxCollisionShape(5, 0.5f, 5), new Pose(new Vector3F(0, -0.5f, 0)));
+        var found = Collide(Cube(new Vector3F(0.5f)), new LocalPose(new Vector3F(0.2f, 0.5f + gap, -0.1f)),
+            new BoxCollisionShape(5, 0.5f, 5), new LocalPose(new Vector3F(0, -0.5f, 0)));
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY);
@@ -81,8 +81,8 @@ public class ConvexHullTests
     [Test]
     public void HullFartherThanSpeculative_DoesNotTouch()
     {
-        var found = Collide(Cube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 1.1f, 0)), Cube(new Vector3F(0.5f)),
-            Pose.Identity);
+        var found = Collide(Cube(new Vector3F(0.5f)), new LocalPose(new Vector3F(0, 1.1f, 0)), Cube(new Vector3F(0.5f)),
+            LocalPose.Identity);
 
         Assert.That(found, Is.False);
     }
@@ -93,8 +93,8 @@ public class ConvexHullTests
     {
         var random = new Random(seed);
         var half = new Vector3F(0.5f, 0.3f, 0.4f);
-        var firstPose = new Pose(Vector3F.Zero, RandomTurn(random));
-        var secondPose = new Pose(RandomPoint(random, 0.9f), RandomTurn(random));
+        var firstPose = new LocalPose(Vector3F.Zero, RandomTurn(random));
+        var secondPose = new LocalPose(RandomPoint(random, 0.9f), RandomTurn(random));
         var box = new BoxCollisionShape(half);
 
         var asBoxes = Collide(box, firstPose, box, secondPose);
@@ -112,8 +112,8 @@ public class ConvexHullTests
             Is.GreaterThanOrEqualTo(SeparationAlong(box, firstPose, box, secondPose, boxNormal) - 0.01f));
     }
 
-    private static float SeparationAlong(CollisionShape first, in Pose firstPose, CollisionShape second,
-        in Pose secondPose, Vector3F normal)
+    private static float SeparationAlong(CollisionShape first, in LocalPose firstPose, CollisionShape second,
+        in LocalPose secondPose, Vector3F normal)
     {
         var farthestOfFirst = Vector3F.Dot(firstPose.TransformPoint(first.GetSupport(firstPose.InverseTransformDirection(normal))), normal);
         var nearestOfSecond = Vector3F.Dot(secondPose.TransformPoint(second.GetSupport(secondPose.InverseTransformDirection(-normal))), normal);
@@ -123,8 +123,8 @@ public class ConvexHullTests
     [Test]
     public void SphereOverAHullFace_TouchesItOnce()
     {
-        var found = Collide(new SphereCollisionShape(0.5f), new Pose(new Vector3F(0.1f, 1.45f, 0)),
-            Cube(new Vector3F(1)), Pose.Identity);
+        var found = Collide(new SphereCollisionShape(0.5f), new LocalPose(new Vector3F(0.1f, 1.45f, 0)),
+            Cube(new Vector3F(1)), LocalPose.Identity);
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY);
@@ -135,8 +135,8 @@ public class ConvexHullTests
     [Test]
     public void SphereSunkIntoAHull_LeavesThroughTheNearestFace()
     {
-        var found = Collide(Cube(new Vector3F(1)), Pose.Identity, new SphereCollisionShape(0.25f),
-            new Pose(new Vector3F(0, 0, 0.9f)));
+        var found = Collide(Cube(new Vector3F(1)), LocalPose.Identity, new SphereCollisionShape(0.25f),
+            new LocalPose(new Vector3F(0, 0, 0.9f)));
 
         Assert.That(found, Is.True);
         AssertNormal(Vector3F.UnitZ);
@@ -147,8 +147,8 @@ public class ConvexHullTests
     public void CapsuleLyingOnAHull_TouchesAtBothEnds()
     {
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
-        var found = Collide(new CapsuleCollisionShape(0.5f, 0.2f), new Pose(new Vector3F(0, 1.19f, 0), lying),
-            Cube(new Vector3F(1)), Pose.Identity);
+        var found = Collide(new CapsuleCollisionShape(0.5f, 0.2f), new LocalPose(new Vector3F(0, 1.19f, 0), lying),
+            Cube(new Vector3F(1)), LocalPose.Identity);
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY);
@@ -163,8 +163,8 @@ public class ConvexHullTests
         var edgeDown = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 4);
         var edgeAcross = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
         var reach = MathF.Sqrt(2) * 0.5f;
-        var found = Collide(SharpCube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 2 * reach - 0.01f, 0), edgeAcross),
-            SharpCube(new Vector3F(0.5f)), new Pose(Vector3F.Zero, edgeDown));
+        var found = Collide(SharpCube(new Vector3F(0.5f)), new LocalPose(new Vector3F(0, 2 * reach - 0.01f, 0), edgeAcross),
+            SharpCube(new Vector3F(0.5f)), new LocalPose(Vector3F.Zero, edgeDown));
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -181,8 +181,8 @@ public class ConvexHullTests
         var edgeDown = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 4);
         var edgeAcross = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
         var reach = MathF.Sqrt(2) * 0.5f;
-        var found = Collide(SharpCube(new Vector3F(0.5f)), new Pose(new Vector3F(0, 2 * reach + gap, 0), edgeAcross),
-            SharpCube(new Vector3F(0.5f)), new Pose(Vector3F.Zero, edgeDown));
+        var found = Collide(SharpCube(new Vector3F(0.5f)), new LocalPose(new Vector3F(0, 2 * reach + gap, 0), edgeAcross),
+            SharpCube(new Vector3F(0.5f)), new LocalPose(Vector3F.Zero, edgeDown));
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -201,8 +201,8 @@ public class ConvexHullTests
         var edgeAcross = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
         var cube = Cube(new Vector3F(0.5f));
         var reach = MathF.Sqrt(2) * 0.5f - cube.ConvexRadius * (MathF.Sqrt(2) - 1);
-        var found = Collide(cube, new Pose(new Vector3F(0, 2 * reach + 0.005f, 0), edgeAcross), cube,
-            new Pose(Vector3F.Zero, edgeDown));
+        var found = Collide(cube, new LocalPose(new Vector3F(0, 2 * reach + 0.005f, 0), edgeAcross), cube,
+            new LocalPose(Vector3F.Zero, edgeDown));
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -300,7 +300,7 @@ public class ConvexHullTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = rock,
-            Position = new Vector3F(0, 1, 0),
+            Position = new Vector3<double>(0, 1, 0),
             Rotation = QuaternionF.Normalize(new QuaternionF((float)random.NextDouble() - 0.5f,
                 (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f))
         });
@@ -348,7 +348,7 @@ public class ConvexHullTests
         var ball = new ConvexHullCollisionShape(points);
         var offset = Vector3F.Normalize(RandomPoint(random, 1)) * 0.05f;
 
-        var found = Collide(ball, Pose.Identity, ball, new Pose(offset, RandomTurn(random)));
+        var found = Collide(ball, LocalPose.Identity, ball, new LocalPose(offset, RandomTurn(random)));
 
         Assert.That(found, Is.True);
         Assert.That(Deepest(), Is.EqualTo(-0.95f).Within(0.05f), "about a ball's width, less the 5 cm between them");
@@ -362,7 +362,7 @@ public class ConvexHullTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = Cube(new Vector3F(0.5f)),
-            Position = new Vector3F(0, 2, 0),
+            Position = new Vector3<double>(0, 2, 0),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, 0.3f)
         });
 
@@ -384,7 +384,7 @@ public class ConvexHullTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = new ConvexHullCollisionShape(corners),
-            Position = new Vector3F(0, 1.5f, 0),
+            Position = new Vector3<double>(0, 1.5f, 0),
             // Turned about a slanting axis, so it does not balance on an edge as a mirror-even fall would.
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.Normalize(new Vector3F(1, 0.2f, 0.3f)), MathF.PI * 0.9f)
         });
@@ -409,7 +409,7 @@ public class ConvexHullTests
             bodies.Add(scene.World.Add(new BodyDescription
             {
                 Shape = Cube(new Vector3F(0.5f)),
-                Position = new Vector3F(0, 0.5f + level * 1.001f, 0)
+                Position = new Vector3<double>(0, 0.5f + level * 1.001f, 0)
             }));
         }
 
@@ -417,7 +417,7 @@ public class ConvexHullTests
 
         var top = scene.World.GetPose(bodies[^1]).Position;
         Assert.That(top.Y, Is.EqualTo(4.5f).Within(0.05f));
-        Assert.That(MathF.Abs(top.X) + MathF.Abs(top.Z), Is.LessThan(0.05f));
+        Assert.That(Math.Abs(top.X) + Math.Abs(top.Z), Is.LessThan(0.05f));
     }
 
     [Test]
@@ -426,10 +426,10 @@ public class ConvexHullTests
         var world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
         var body = world.Add(new BodyDescription { Kind = BodyKind.Static, Shape = Cube(new Vector3F(1)) });
 
-        var hit = world.RayCast(new Ray<float>(new Vector3F(0.3f, 5, 0.2f), -Vector3F.UnitY), 10, out var rayHit);
+        var hit = world.RayCast(new Vector3<double>(0.3f, 5, 0.2f), -Vector3F.UnitY, 10, out var rayHit);
         var found = new List<BodyHandle>();
-        world.Overlap(new SphereCollisionShape(0.5f), new Pose(new Vector3F(1.4f, 0, 0)), found);
-        var missed = world.RayCast(new Ray<float>(new Vector3F(1.5f, 5, 0), -Vector3F.UnitY), 10, out _);
+        world.Overlap(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(1.4f, 0, 0)), found);
+        var missed = world.RayCast(new Vector3<double>(1.5f, 5, 0), -Vector3F.UnitY, 10, out _);
 
         Assert.Multiple(() =>
         {
@@ -489,8 +489,8 @@ public class ConvexHullTests
             corners.Add(new Vector3F(MathF.Cos(angle), 0.25f, MathF.Sin(angle)));
         }
 
-        var found = Collide(new ConvexHullCollisionShape(corners), new Pose(new Vector3F(0, 0.24f, 0)),
-            new BoxCollisionShape(5, 0.5f, 5), new Pose(new Vector3F(0, -0.5f, 0)));
+        var found = Collide(new ConvexHullCollisionShape(corners), new LocalPose(new Vector3F(0, 0.24f, 0)),
+            new BoxCollisionShape(5, 0.5f, 5), new LocalPose(new Vector3F(0, -0.5f, 0)));
         _manifold.ReduceTo(4);
 
         Assert.That(found, Is.True);
@@ -511,15 +511,15 @@ public class ConvexHullTests
     public void HullFarFromTheOrigin_StillRestsOnItsFace()
     {
         var far = new Vector3F(1000, 0, -1000);
-        var found = Collide(Cube(new Vector3F(0.5f)), new Pose(far + new Vector3F(0, 0.49f, 0)),
-            new BoxCollisionShape(5, 0.5f, 5), new Pose(far + new Vector3F(0, -0.5f, 0)));
+        var found = Collide(Cube(new Vector3F(0.5f)), new LocalPose(far + new Vector3F(0, 0.49f, 0)),
+            new BoxCollisionShape(5, 0.5f, 5), new LocalPose(far + new Vector3F(0, -0.5f, 0)));
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(4), "a face on a face, not one point");
         AssertNormal(-Vector3F.UnitY, 1e-3f);
     }
 
-    private bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose) =>
+    private bool Collide(CollisionShape first, in LocalPose firstPose, CollisionShape second, in LocalPose secondPose) =>
         NarrowPhase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
 
     private float Deepest()

@@ -146,9 +146,9 @@ public sealed partial class PhysicsService
             DistanceJoint distance => request with
             {
                 ConnectedAnchor = connected != null
-                    ? Vector3F.TransformCoordinate(distance.ConnectedAnchor.As<float>(), intoConnected)
-                      * _links[connectedKey].Parts.Scale
-                    : ToPhysics(distance.ConnectedAnchor),
+                    ? (Vector3F.TransformCoordinate(distance.ConnectedAnchor.As<float>(), intoConnected)
+                       * _links[connectedKey].Parts.Scale).As<double>()
+                    : distance.ConnectedAnchor,
                 HasLimits = distance.UsesLimits,
                 LowerLimit = distance.UsesLimits ? distance.MinDistance : 0,
                 UpperLimit = distance.UsesLimits ? distance.MaxDistance : 0,
@@ -252,7 +252,7 @@ public sealed partial class PhysicsService
                     Second = connected,
                     Point = pose.TransformPoint(request.Anchor),
                     SecondPoint = connected.IsValid
-                        ? _world.GetPose(connected).TransformPoint(request.ConnectedAnchor)
+                        ? _world.GetPose(connected).TransformPoint(request.ConnectedAnchor.As<float>())
                         : request.ConnectedAnchor,
                     Axis = pose.TransformDirection(request.Axis),
                     CollideConnected = request.CollideConnected,

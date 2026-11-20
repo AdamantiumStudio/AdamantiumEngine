@@ -35,7 +35,7 @@ public class SurfaceTests
         var box = scene.World.Add(new BodyDescription
         {
             Shape = new BoxCollisionShape(new Vector3F(0.25f)),
-            Position = new Vector3F(-3, 0.25f, 0.1f),
+            Position = new Vector3<double>(-3, 0.25f, 0.1f),
             LinearVelocity = new Vector3F(4, 0, 0),
             Friction = 0
         });
@@ -45,7 +45,7 @@ public class SurfaceTests
         for (var step = 0; step < 60; step++)
         {
             scene.World.Step();
-            var height = scene.World.GetPose(box).Position.Y;
+            var height = (float)scene.World.GetPose(box).Position.Y;
             highest = MathF.Max(highest, height);
             lowest = MathF.Min(lowest, height);
         }
@@ -66,7 +66,7 @@ public class SurfaceTests
         var sphere = scene.World.Add(new BodyDescription
         {
             Shape = new SphereCollisionShape(0.3f),
-            Position = new Vector3F(-4, 0.3f, 0.05f),
+            Position = new Vector3<double>(-4, 0.3f, 0.05f),
             LinearVelocity = new Vector3F(3, 0, 0),
             Friction = 0
         });
@@ -180,7 +180,7 @@ public class SurfaceTests
         var body = AddStatic(world, floor);
         Assert.Throws<ArgumentException>(() => world.SetKind(body, BodyKind.Dynamic));
         Assert.That(world.GetKind(body), Is.EqualTo(BodyKind.Static));
-        var box = world.Add(new BodyDescription { Shape = new BoxCollisionShape(new Vector3F(0.5f)), Position = Vector3F.UnitY * 5 });
+        var box = world.Add(new BodyDescription { Shape = new BoxCollisionShape(new Vector3F(0.5f)), Position = new Vector3<double>(0, 5, 0) });
         Assert.Throws<ArgumentException>(() => world.SetShape(box, floor));
     }
 
@@ -200,10 +200,10 @@ public class SurfaceTests
 
         AddStatic(world, new HeightFieldCollisionShape(5, 5, slope, 1, 1), new Vector3F(10, 0, 0));
 
-        var meetsMesh = world.RayCast(new Ray<float>(new Vector3F(-10.3f, 5, 0.2f), -Vector3F.UnitY), 10, out var meshHit);
-        var meetsField = world.RayCast(new Ray<float>(new Vector3F(10.5f, 5, 0.3f), -Vector3F.UnitY), 10, out var fieldHit);
-        var slanted = world.RayCast(new Ray<float>(new Vector3F(7, 5, 0.2f), Vector3F.Normalize(new Vector3F(1, -1, 0.1f))),
-            20, out var slantedHit);
+        var meetsMesh = world.RayCast(new Vector3<double>(-10.3f, 5, 0.2f), -Vector3F.UnitY, 10, out var meshHit);
+        var meetsField = world.RayCast(new Vector3<double>(10.5f, 5, 0.3f), -Vector3F.UnitY, 10, out var fieldHit);
+        var slanted = world.RayCast(new Vector3<double>(7, 5, 0.2f), Vector3F.Normalize(new Vector3F(1, -1, 0.1f)), 20,
+            out var slantedHit);
 
         Assert.Multiple(() =>
         {
@@ -282,10 +282,10 @@ public class SurfaceTests
         var floor = AddStatic(world, Floor(4, 1, weld: true));
         var found = new List<BodyHandle>();
 
-        world.Overlap(new BoxCollisionShape(new Vector3F(0.2f)), new Pose(new Vector3F(0.5f, 0.1f, 0.5f)), found);
+        world.Overlap(new BoxCollisionShape(new Vector3F(0.2f)), new Pose(new Vector3<double>(0.5f, 0.1f, 0.5f)), found);
         var touching = found.Count;
         found.Clear();
-        world.Overlap(new BoxCollisionShape(new Vector3F(0.2f)), new Pose(new Vector3F(0.5f, 0.5f, 0.5f)), found);
+        world.Overlap(new BoxCollisionShape(new Vector3F(0.2f)), new Pose(new Vector3<double>(0.5f, 0.5f, 0.5f)), found);
 
         Assert.Multiple(() =>
         {
@@ -334,7 +334,10 @@ public class SurfaceTests
 
     private static BodyHandle AddStatic(IPhysicsWorld world, CollisionShape shape, Vector3F position = default,
         float friction = 0.6f) =>
-        world.Add(new BodyDescription { Kind = BodyKind.Static, Shape = shape, Position = position, Friction = friction });
+        world.Add(new BodyDescription
+        {
+            Kind = BodyKind.Static, Shape = shape, Position = position.As<double>(), Friction = friction
+        });
 
     // A square floor at Y = 0 of count by count quads of side size, centered; welded or each triangle with corners
     // of its own, as a mesh with its normals split stores them.
