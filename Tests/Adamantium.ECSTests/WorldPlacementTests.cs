@@ -24,7 +24,7 @@ public class WorldPlacementTests
 
         var rendered = child.Transform.GetMetadata(scene.Camera).AbsoluteWorld.TranslationVector;
 
-        Assert.That((child.Transform.WorldPosition.As<float>() - rendered).Length(), Is.LessThan(1e-4f));
+        Assert.That((child.Transform.WorldPosition - rendered).Length(), Is.LessThan(1e-4));
     }
 
     [Test]
@@ -38,7 +38,7 @@ public class WorldPlacementTests
         model.Transform.Pivot = model.Transform.Position + new Vector3<double>(0, 5, 0);
         scene.Place(model);
 
-        var world = model.Transform.GetMetadata(scene.Camera).AbsoluteWorld;
+        var world = model.Transform.GetMetadata(scene.Camera).AbsoluteWorld.As<float>();
         var rendered = Vector3F.TransformCoordinate(model.GetComponent<Collider>().Position, world);
 
         Assert.That((model.GetCenterAbsolute().As<float>() - rendered).Length(), Is.LessThan(1e-4f));

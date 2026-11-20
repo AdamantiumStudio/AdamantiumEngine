@@ -272,7 +272,7 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
     private static void Place(Entity root, Camera camera)
     {
         var cameraWorld = camera.WorldPosition;
-        var rootParent = root.Owner?.Transform?.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+        var rootParent = root.Owner?.Transform?.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
         root.TraverseInDepth(current =>
         {
             var parentWorld = current == root || current.Owner?.Transform == null

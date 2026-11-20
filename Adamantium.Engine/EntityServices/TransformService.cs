@@ -125,7 +125,7 @@ public class TransformService : EntityService
                 // The owner's world for THIS camera, computed already (the walk is top-down); identity for a root.
                 var parentWorld = current.Owner?.Transform != null
                     ? current.Owner.Transform.GetMetadata(camera).AbsoluteWorld
-                    : Matrix4x4F.Identity;
+                    : Matrix4x4<double>.Identity;
                 transform.CalculateFinalTransform(camera, parentWorld, viewpoint.Position);
                 if (!dirty)
                 {
@@ -193,7 +193,8 @@ public class TransformService : EntityService
             return;
         }
 
-        var world = entity.Transform.GetMetadata(camera).AbsoluteWorld;
+        // The scene index holds its boxes in float.
+        var world = entity.Transform.GetMetadata(camera).AbsoluteWorldF;
         mesh.Bounds.ToBoundingBox().As<float>().GetCorners(corners);
         var placed = Vector3F.TransformCoordinate(corners[0], world);
         var box = new BoundingBox<float>(placed, placed);
