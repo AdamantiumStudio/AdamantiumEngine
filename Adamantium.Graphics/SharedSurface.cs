@@ -45,6 +45,7 @@ public sealed unsafe class SharedSurface : Texture
     private Buffer _writeStaging;
     private ulong _lastWritten;
     private SharedSurface[] _others = [];
+    private HostFrameImport _hostFrames;
 
     public SharedSurfaceDescriptor Descriptor { get; private set; }
 
@@ -119,7 +120,7 @@ public sealed unsafe class SharedSurface : Texture
 
     /// <summary>The consumer's copy of the last frame latched by <see cref="LatchCopy"/>, sampled in place of the surface
     /// so the producer may write its next frame meanwhile; <c>null</c> before the first latch.</summary>
-    public ITexture LatchedCopy => _copy;
+    public ITexture LatchedCopy => _hostFrames == null ? _copy : _latched > 0 ? this : null;
 
     /// <summary>
     /// For the consumer, outside a render pass: when the producer has finished a frame newer than <see cref="LatchedCopy"/>
@@ -133,6 +134,12 @@ public sealed unsafe class SharedSurface : Texture
     public void LatchCopy(IGraphicsDevice device)
     {
         Descriptor?.Demand.Raise();
+        if (_hostFrames != null)
+        {
+            _latched = Math.Max(_latched, _hostFrames.LatchInto(device, this));
+            return;
+        }
+
         var frame = LatchNewest(out var source);
         if (frame == 0)
         {
@@ -604,7 +611,7 @@ public sealed unsafe class SharedSurface : Texture
     /// <summary>Whether the device imports the timeline semaphores of a surface shared through handles of this type -
     /// the platform's opaque type when none is given. The memory is checked as it is imported.</summary>
     public static bool CanImport(IGraphicsDevice device, SharedHandleType? handleType = null) =>
-        HasSemaphoreFeature(device, handleType ?? DefaultHandleType, ExternalSemaphoreFeatureFlagBits.ImportableBit);
+        handleType == SharedHandleType.HostMemory || HasSemaphoreFeature(device, handleType ?? DefaultHandleType, ExternalSemaphoreFeatureFlagBits.ImportableBit);
 
     private static bool HasSemaphoreFeature(IGraphicsDevice device, SharedHandleType handleType,
         ExternalSemaphoreFeatureFlagBits feature) =>
@@ -671,7 +678,8 @@ public sealed unsafe class SharedSurface : Texture
     /// Imports an externally produced surface zero-copy: allocates a local image bound to the producer's shared
     /// memory and imports its produce/consume semaphores. The image samples the producer's frames directly. A surface of
     /// <paramref name="device"/>'s own logical device (<see cref="CreateInDevice"/>) is taken as it is - its image and
-    /// timelines, still the producer's; one of another device cannot be.
+    /// timelines, still the producer's; one of another device cannot be. A ring in memory of the process
+    /// (<see cref="SharedHandleType.HostMemory"/>) has each newest frame copied into this surface by <see cref="LatchCopy"/>.
     /// </summary>
     public static SharedSurface Import(IGraphicsDevice device, SharedSurfaceDescriptor descriptor,
         string name = "SharedSurface(import)")
@@ -679,6 +687,11 @@ public sealed unsafe class SharedSurface : Texture
         if (descriptor.DeviceSurface != null)
         {
             return TakeFromDevice(device, descriptor);
+        }
+
+        if (descriptor.HandleType == SharedHandleType.HostMemory)
+        {
+            return ImportHostMemory(device, descriptor, name);
         }
 
         var surface = ImportSingle(device, descriptor, name);
@@ -729,6 +742,26 @@ public sealed unsafe class SharedSurface : Texture
             }
         }
 
+        return surface;
+    }
+
+    // Frames in memory of the process are copied into the surface itself, which is sampled as its latched copy.
+    private static SharedSurface ImportHostMemory(IGraphicsDevice device, SharedSurfaceDescriptor descriptor, string name)
+    {
+        var description = BuildDescription(descriptor.Width, descriptor.Height, descriptor.Format);
+        var surface = new SharedSurface(device, description, null, null, name);
+        try
+        {
+            surface.TransitionImageLayout(description.DesiredImageLayout);
+            surface._hostFrames = new HostFrameImport(device, descriptor);
+        }
+        catch
+        {
+            surface.Dispose();
+            throw;
+        }
+
+        surface.Descriptor = descriptor;
         return surface;
     }
 
@@ -991,6 +1024,8 @@ public sealed unsafe class SharedSurface : Texture
         _others = [];
         _copy?.Dispose();
         _copy = null;
+        _hostFrames?.Dispose();
+        _hostFrames = null;
         WaitForLastWrite();
         _writeStaging?.Dispose();
         _writeStaging = null;

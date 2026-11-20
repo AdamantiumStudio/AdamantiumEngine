@@ -32,6 +32,12 @@ public sealed unsafe class HostFrameReader : IDisposable
 
     public uint Height { get; }
 
+    internal int SlotCount => _slots.Length;
+
+    internal ulong SlotSize => _slots[0].AllocationSize;
+
+    internal nuint SlotAddress(int slot) => (nuint)_memory.At(_slots[slot].MemoryOffset);
+
     /// <summary>The newest frame finished since the last one taken, in <paramref name="slot"/>; false when none is new.
     /// Its pixels stay the producer's to overwrite only once <see cref="GiveBack"/> says it was read.</summary>
     public bool TryTakeNewest(out int slot, out ulong frame)
