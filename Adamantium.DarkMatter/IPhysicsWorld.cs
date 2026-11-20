@@ -159,4 +159,9 @@ public interface IPhysicsWorld
     /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
     /// at <paramref name="pose"/>.</summary>
     void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into);
+
+    /// <summary>The first body <paramref name="shape"/> meets moved by <paramref name="translation"/> without turning -
+    /// within half a millimeter - and where it stopped, first within a millimeter of it; meshes and fields cannot be cast.
+    /// </summary>
+    bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out ShapeHit hit);
 }

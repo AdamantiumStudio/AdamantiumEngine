@@ -616,13 +616,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         if (Vector3F.Dot(_manifold.Normal, faceNormal) > 0.9999f || _manifold.Count == 0)
             return;
 
-        var deepest = 0;
-        for (var index = 1; index < _manifold.Count; index++)
-        {
-            if (_manifold.Separations[index] < _manifold.Separations[deepest])
-                deepest = index;
-        }
-
+        var deepest = _manifold.FindDeepest();
         var point = surfacePose.InverseTransformPoint(_manifold.Positions[deepest]).As<double>();
         var first = _triangle.First.As<double>();
         var second = _triangle.Second.As<double>();

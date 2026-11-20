@@ -79,9 +79,10 @@ public abstract class SurfaceCollisionShape : CollisionShape
         if (shape is not CompoundCollisionShape compound)
             return false;
 
-        foreach (var part in compound.Parts)
+        var parts = compound.Parts;
+        for (var index = 0; index < parts.Count; index++)
         {
-            if (part.Shape is SurfaceCollisionShape)
+            if (parts[index].Shape is SurfaceCollisionShape)
                 return true;
         }
 
