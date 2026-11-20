@@ -44,6 +44,21 @@ public abstract class GameService : EntityService, IGameService
 
     public void ComponentEdited(GameComponent component) => OnComponentEdited(component);
 
+    public void Pause() => OnPause();
+
+    public void Resume() => OnResume();
+
+    /// <summary>Called when the game is paused, before the service is put to sleep: the place to hold what runs of it
+    /// on its own - a thread of its own, say.</summary>
+    protected virtual void OnPause()
+    {
+    }
+
+    /// <summary>Called when the game goes on, before the service is woken.</summary>
+    protected virtual void OnResume()
+    {
+    }
+
     /// <summary>Called when a component of the scene played was changed by the editor, awake or paused: the place to
     /// bring up to date what the service makes of it.</summary>
     protected virtual void OnComponentEdited(GameComponent component)

@@ -3,23 +3,18 @@ using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Physics;
 
-/// <summary>A joint as the game asks the physics for it: its bodies by key and generation, and its points and axis on
-/// each body from the body's origin, scaled as the body was made - so the physics can add it again wherever the bodies
-/// stand once one of them is made anew. Alike requests ask for the same joint; a value, so asking costs nothing.
-/// </summary>
+/// <summary>A joint as the game asks the physics for it: its bodies, and its points and axis on each body from the
+/// body's origin, scaled as the body was made - so it is right wherever the bodies stand once the simulation takes it.
+/// Alike requests ask for the same joint; a value, so asking costs nothing.</summary>
 internal readonly record struct JointRequest
 {
     public JointKind Kind { get; init; }
 
-    /// <summary>The body the joint's component is on, and which body under that key.</summary>
-    public int OwnerKey { get; init; }
+    /// <summary>The body the joint's component is on.</summary>
+    public BodyId Owner { get; init; }
 
-    public int OwnerGeneration { get; init; }
-
-    /// <summary>The body it is held to, and which; -1 for the world.</summary>
-    public int ConnectedKey { get; init; }
-
-    public int ConnectedGeneration { get; init; }
+    /// <summary>The body it is held to; none for the world.</summary>
+    public BodyId Connected { get; init; }
 
     /// <summary>The anchor on the owner's body, from its origin in its own axes.</summary>
     public Vector3F Anchor { get; init; }

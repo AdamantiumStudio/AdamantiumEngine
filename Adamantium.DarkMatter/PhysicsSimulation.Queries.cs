@@ -4,7 +4,8 @@ using Adamantium.DarkMatter.Shapes;
 
 namespace Adamantium.DarkMatter;
 
-// Queries: answered at once, of the bodies where the last step left them.
+// Queries: answered at once, of the bodies where the last step read left them - the snapshot's copies while its own
+// thread steps, the world itself while nothing else does.
 public sealed partial class PhysicsSimulation
 {
     private readonly List<BodyHandle> _overlapped = [];
@@ -17,7 +18,7 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         hit = default;
-        if (!_world.RayCast(origin, direction, maxDistance, out var met, ExceptOf(filter)))
+        if (!QueryWorld.RayCast(origin, direction, maxDistance, out var met, ExceptOf(filter)))
             return false;
 
         hit = new RayHit(IdOf(met.Body), met.Part, met.Position, met.Normal, met.Distance);
@@ -34,7 +35,7 @@ public sealed partial class PhysicsSimulation
             _rayHits = new WorldRayHit[hits.Length];
 
         var met = _rayHits.AsSpan(0, hits.Length);
-        var count = _world.RayCast(origin, direction, maxDistance, met, ExceptOf(filter));
+        var count = QueryWorld.RayCast(origin, direction, maxDistance, met, ExceptOf(filter));
         for (var index = 0; index < count; index++)
         {
             ref var hit = ref met[index];
@@ -51,7 +52,7 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         hit = default;
-        if (!_world.CastShape(shape, pose, translation, out var met, ExceptOf(filter)))
+        if (!QueryWorld.CastShape(shape, pose, translation, out var met, ExceptOf(filter)))
             return false;
 
         hit = new ShapeHit(IdOf(met.Body), met.Part, met.Position, met.Normal, met.Distance);
@@ -64,7 +65,7 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         _overlapped.Clear();
-        _world.Overlap(shape, pose, _overlapped, ExceptOf(filter));
+        QueryWorld.Overlap(shape, pose, _overlapped, ExceptOf(filter));
         var count = Math.Min(bodies.Length, _overlapped.Count);
         for (var index = 0; index < count; index++)
         {
@@ -74,13 +75,16 @@ public sealed partial class PhysicsSimulation
         return count;
     }
 
-    // The core's handle of the body passed by; none for one not in the core.
-    private BodyHandle ExceptOf(in QueryFilter filter) =>
-        !filter.Except.IsNone && TryFind(filter.Except, out var body) ? body.Handle : default;
+    private PhysicsWorld QueryWorld => _snapshot?.World ?? _stepper.World;
 
-    private BodyId IdOf(BodyHandle handle)
+    // The query world's handle of the body passed by; none for one not in it.
+    private BodyHandle ExceptOf(in QueryFilter filter)
     {
-        var slot = _slotOfCoreBody[handle.Index];
-        return new BodyId(slot, _bodySlots[slot].Generation);
+        if (filter.Except.IsNone || !TryFind(filter.Except, out _))
+            return default;
+
+        return _snapshot != null ? _snapshot.HandleOf(filter.Except.Index) : _stepper.HandleOf(filter.Except.Index);
     }
+
+    private BodyId IdOf(BodyHandle handle) => _snapshot != null ? _snapshot.IdOf(handle) : _stepper.IdOf(handle);
 }

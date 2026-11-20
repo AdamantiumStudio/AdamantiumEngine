@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Adamantium.DarkMatter.Simulation;
 
 namespace Adamantium.DarkMatter;
@@ -8,40 +8,55 @@ namespace Adamantium.DarkMatter;
 /// <summary>
 /// The physics as a caller uses it: bodies and joints by id, every action a method of the simulation. An action is
 /// checked when asked and done at the start of the next step, in the order asked; what the caller reads is what the
-/// last step left, the same for everyone until the next. Called from one thread.
+/// last step read left, the same for everyone until the next. Stepped by hand - <see cref="Step"/>,
+/// <see cref="Advance"/> - or on a thread of its own once <see cref="Start"/>ed, read then at each
+/// <see cref="Update"/>. Called from one thread.
 /// </summary>
 public sealed partial class PhysicsSimulation : IDisposable
 {
     private const int NoSlot = -1;
+    private const int MaxStepsPerAdvance = 8;
+    private const int MaxUnreadResults = 32;
+    // The batches of commands going round to its thread, made at once: however far the thread lags, no more are made.
+    private const int MaxBatchesHanded = 4;
+    // The simulation's own thread's stack: the core takes what it needs of it, the caller's stack is not its.
+    private const int ThreadStackSize = 1024 * 1024;
 
-    private readonly PhysicsWorld _world;
+    private readonly SimulationStepper _stepper;
+    private readonly StepClock _clock;
     private readonly List<SimulationCommand> _commands = [];
-    // Woken, a body's time at rest starts again and grows by a step a step: it sleeps again within the step only if
-    // TimeToSleep is no longer than one, and only then must a sleeper be read again.
-    private readonly bool _skipsSleepers;
+    // Run on the caller's thread when it steps by hand.
+    private readonly SimulationResult _handResult = new();
     private Vector3F _gravity;
+    // Advanced by time, it draws between its last two steps by the time left over; stepped one by one, at the last.
+    private bool _blendsByClock;
     private bool _isDisposed;
 
     /// <summary>A simulation stepped as <paramref name="settings"/> say, or with the defaults.</summary>
     public PhysicsSimulation(PhysicsSettings settings = null)
     {
-        _world = new PhysicsWorld(settings);
-        Settings = _world.Settings;
-        _gravity = _world.Gravity;
-        _skipsSleepers = Settings.TimeToSleep > StepSeconds;
+        _stepper = new SimulationStepper(settings);
+        Settings = _stepper.World.Settings;
+        _gravity = _stepper.World.Gravity;
+        _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
+        for (var batch = 0; batch < MaxBatchesHanded; batch++)
+            _spareBatches.Writer.TryWrite(new CommandBatch());
     }
 
     /// <summary>How the simulation steps and solves, read once when it is made.</summary>
     public PhysicsSettings Settings { get; }
 
     /// <summary>The length of one step, in seconds.</summary>
-    public float StepSeconds => _world.StepSeconds;
+    public float StepSeconds => _stepper.World.StepSeconds;
 
-    /// <summary>How many steps it has taken.</summary>
+    /// <summary>Whether it steps on a thread of its own.</summary>
+    public SimulationState State { get; private set; }
+
+    /// <summary>How many steps it has taken, as the last run read says.</summary>
     public long StepNumber { get; private set; }
 
-    /// <summary>What the last step did.</summary>
-    public StepStatistics LastStep => _world.LastStep;
+    /// <summary>What the last step read did.</summary>
+    public StepStatistics LastStep { get; private set; }
 
     /// <summary>The pull every dynamic body feels, in meters per second squared; a change takes with the next step.
     /// </summary>
@@ -58,62 +73,68 @@ public sealed partial class PhysicsSimulation : IDisposable
     }
 
     /// <summary>Does what was asked since the last step, then moves the bodies by one step of
-    /// <see cref="StepSeconds"/>; what the callers read is then this step's.</summary>
+    /// <see cref="StepSeconds"/>; what the callers read is then this step's. Only while it does not step on its own
+    /// thread.</summary>
     public void Step()
     {
-        ThrowIfDisposed();
-        DoCommands();
-        PushBodies();
-        _world.Step();
-        StepNumber++;
-        ReadBack();
-        StopKinematicMoves();
+        RequireStopped();
+        _blendsByClock = false;
+        RunHere(1);
     }
 
-    /// <summary>Lets go of every body and joint; the simulation takes no more calls.</summary>
+    /// <summary>Takes as many steps as <paramref name="elapsedSeconds"/> more of time make due - at most
+    /// <see cref="MaxStepsPerAdvance"/>, the rest dropped - and gives how many it took; what is drawn between them
+    /// follows the time left over. Only while it does not step on its own thread.</summary>
+    public int Advance(double elapsedSeconds)
+    {
+        RequireStopped();
+        _blendsByClock = true;
+        var steps = _clock.Advance(elapsedSeconds);
+        if (steps > 0)
+            RunHere(steps);
+
+        return steps;
+    }
+
+    /// <summary>Lets go of every body and joint, its thread stopped; the simulation takes no more calls.</summary>
     public void Dispose()
     {
         if (_isDisposed)
             return;
 
+        StopThread();
+        _wake.Dispose();
+        _parked.Dispose();
         _isDisposed = true;
         _commands.Clear();
         _bodySlots.Clear();
         _liveBodies.Clear();
-        _pushedBodies.Clear();
-        _readBodies.Clear();
         _movedBodies.Clear();
         _refusedBodies.Clear();
         _jointSlots.Clear();
         _liveJoints.Clear();
         _refusedJoints.Clear();
+        _snapshotMoves.Clear();
+        _jumpingBodies.Clear();
+        _snapshot = null;
     }
 
-    private void DoCommands()
+    // Stepped by hand: the stepper runs here, and its result is read at once.
+    private void RunHere(int steps)
     {
-        ForgetRefusals();
-        // Each runs once, in order; one the core will not take is told on its body or joint, not thrown.
-        foreach (ref var command in CollectionsMarshal.AsSpan(_commands))
-        {
-            switch (command.Kind)
-            {
-                case SimulationCommandKind.SetGravity:
-                    _world.Gravity = command.Vector;
-                    break;
-                case SimulationCommandKind.AddJoint:
-                case SimulationCommandKind.RemoveJoint:
-                case SimulationCommandKind.SetLimits:
-                case SimulationCommandKind.SetMotor:
-                    DoJointCommand(command);
-                    break;
-                default:
-                    DoBodyCommand(command);
-                    break;
-            }
-        }
-
+        _handedBatches++;
+        _stepper.Run(_commands, steps, _handedBatches, _handResult);
         _commands.Clear();
-        FreeRemovedSlots();
+        ForgetRefusals();
+        Read(_handResult);
+        _lastResultSteps = steps;
+    }
+
+    private void RequireStopped()
+    {
+        ThrowIfDisposed();
+        if (State != SimulationState.Stopped)
+            throw new InvalidOperationException("The simulation steps on its own thread; Stop it to step it by hand.");
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_isDisposed, this);
