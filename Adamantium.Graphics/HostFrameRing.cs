@@ -3,7 +3,6 @@ using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Imaging;
 using Adamantium.Vulkan.Core;
-using VulkanBuffer = Adamantium.Vulkan.Core.Buffer;
 
 namespace Adamantium.Graphics;
 
@@ -12,8 +11,7 @@ namespace Adamantium.Graphics;
 internal sealed unsafe class HostFrameRing : IDisposable
 {
     private readonly IGraphicsDevice _device;
-    private readonly VulkanBuffer[] _buffers;
-    private readonly DeviceMemory[] _memories;
+    private readonly HostSlotBuffer[] _slots;
 
     public HostFrameRing(IGraphicsDevice device, uint width, uint height, SurfaceFormat format, uint slotCount)
     {
@@ -22,8 +20,7 @@ internal sealed unsafe class HostFrameRing : IDisposable
         Height = height;
         Memory = SharedFrameMemory.Create((ulong)width * height * (ulong)format.SizeInBytes, slotCount,
             Math.Max(device.Adapter.HostPointerAlignment, 4096));
-        _buffers = new VulkanBuffer[slotCount];
-        _memories = new DeviceMemory[slotCount];
+        _slots = new HostSlotBuffer[slotCount];
         Descriptors = new SharedSurfaceDescriptor[slotCount];
         try
         {
@@ -33,7 +30,8 @@ internal sealed unsafe class HostFrameRing : IDisposable
             });
             for (uint slot = 0; slot < slotCount; slot++)
             {
-                Import(slot);
+                _slots[slot] = HostSlotBuffer.Import(device, (nuint)Memory.At(Memory.SlotOffset(slot)), Memory.SlotSize,
+                    BufferUsageFlagBits.TransferDstBit);
                 Descriptors[slot] = new SharedSurfaceDescriptor
                 {
                     HandleType = SharedHandleType.HostMemory,
@@ -109,7 +107,7 @@ internal sealed unsafe class HostFrameRing : IDisposable
                 Depth = 1
             }
         };
-        commandBuffer.CopyImageToBuffer(frame.GetImage(), ImageLayout.TransferSrcOptimal, _buffers[slot], 1, region);
+        commandBuffer.CopyImageToBuffer(frame.GetImage(), ImageLayout.TransferSrcOptimal, _slots[slot].Buffer, 1, region);
         commandBuffer.PipelineBarrier2(new DependencyInfo
         {
             PMemoryBarriers = new[]
@@ -132,17 +130,9 @@ internal sealed unsafe class HostFrameRing : IDisposable
 
     public void Dispose()
     {
-        for (var slot = 0; slot < _buffers.Length; slot++)
+        foreach (var slot in _slots)
         {
-            if (_buffers[slot] != null)
-            {
-                _device.Destroy(_buffers[slot]);
-            }
-
-            if (_memories[slot] != null)
-            {
-                _device.Destroy(_memories[slot]);
-            }
+            slot?.Dispose();
         }
 
         if (Timeline != null)
@@ -151,56 +141,5 @@ internal sealed unsafe class HostFrameRing : IDisposable
         }
 
         Memory.Dispose();
-    }
-
-    private void Import(uint slot)
-    {
-        var pointer = (nuint)Memory.At(Memory.SlotOffset(slot));
-        var buffer = _device.LogicalDevice.CreateBuffer(new BufferCreateInfo
-        {
-            Size = Memory.SlotSize,
-            Usage = BufferUsageFlagBits.TransferDstBit,
-            SharingMode = SharingMode.Exclusive,
-            PNext = new ExternalMemoryBufferCreateInfo { HandleTypes = ExternalMemoryHandleTypeFlagBits.HostAllocationBitExt }
-        });
-        _buffers[slot] = buffer;
-        var result = _device.LogicalDevice.GetMemoryHostPointerPropertiesEXT(
-            ExternalMemoryHandleTypeFlagBits.HostAllocationBitExt, pointer, out var hostProperties);
-        if (result != Result.Success)
-        {
-            throw new NotSupportedException($"The device takes no memory of the process: {result}.");
-        }
-
-        var requirements = _device.LogicalDevice.GetBufferMemoryRequirements(buffer);
-        var typeBits = requirements.MemoryTypeBits & hostProperties.MemoryTypeBits;
-        if (!_device.Adapter.TryFindMemoryIndex(typeBits, MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent,
-                out var typeIndex)
-            && !_device.Adapter.TryFindMemoryIndex(typeBits, MemoryPropertyFlags.HostVisible, out typeIndex)
-            && !_device.Adapter.TryFindMemoryIndex(typeBits, 0, out typeIndex))
-        {
-            throw new NotSupportedException($"No memory type takes the process's memory (0x{typeBits:X}).");
-        }
-
-        result = _device.MainDevice.AllocateMemory(new MemoryAllocateInfo
-        {
-            AllocationSize = Memory.SlotSize,
-            MemoryTypeIndex = typeIndex,
-            PNext = new ImportMemoryHostPointerInfoEXT
-            {
-                HandleType = ExternalMemoryHandleTypeFlagBits.HostAllocationBitExt,
-                PHostPointer = pointer
-            }
-        }, out var memory);
-        if (result != Result.Success)
-        {
-            throw new NotSupportedException($"The process's memory could not be imported: {result}.");
-        }
-
-        _memories[slot] = memory;
-        result = _device.LogicalDevice.BindBufferMemory(buffer, memory, 0);
-        if (result != Result.Success)
-        {
-            throw new NotSupportedException($"The imported memory could not be bound: {result}.");
-        }
     }
 }

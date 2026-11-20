@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- `SharedSurface.Import` takes a `SharedHandleType.HostMemory` ring: each `LatchCopy` copies the newest frame into the
+  surface on the GPU - from the slots imported as buffers where the device takes memory of the process, else through a
+  staging buffer - and gives the slot back once the copy is done. A `RenderTargetPanel` shows such a ring as it shows
+  one shared through handles.
+
 - Frames shared through memory of the process, for processes on different GPUs or on a driver that shares no GPU memory
   between them - KosmicKrisp on macOS, llvmpipe: `HostMemorySurfaceProducer` has the producer's GPU copy each frame
   into memory shared through a file (`SharedFrameMemory`, `SharedHandleType.HostMemory`), imported as its own
