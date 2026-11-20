@@ -71,12 +71,20 @@ internal sealed class HostFrameImport : IDisposable
         {
             _staging.SetData(_reader.Pixels(slot));
             source = _staging;
+            _reader.GiveBack(frame);
+            _givenBack = frame;
         }
 
-        _copyValue++;
+        var copy = _copyValue + 1;
+        var result = device.SubmitAside(commandBuffer => RecordCopy(device, commandBuffer, source, target),
+            null, PipelineStageFlagBits2.None, 0, [(_copies, copy)]);
+        if (device.MainDevice.Observe(result) != Result.Success)
+        {
+            return 0;
+        }
+
+        _copyValue = copy;
         _copiedFrame = frame;
-        device.MainDevice.Observe(device.SubmitAside(commandBuffer => RecordCopy(device, commandBuffer, source, target),
-            null, PipelineStageFlagBits2.None, 0, [(_copies, _copyValue)]));
         return frame;
     }
 
@@ -102,7 +110,7 @@ internal sealed class HostFrameImport : IDisposable
 
     private HostSlotBuffer[] TryImportSlots()
     {
-        if (!HostFrameRing.CanImport(_device))
+        if (!HostFrameRing.CanImport(_device) || !IsAligned())
         {
             return null;
         }
@@ -116,17 +124,41 @@ internal sealed class HostFrameImport : IDisposable
                     BufferUsageFlagBits.TransferSrcBit);
             }
         }
-        catch (NotSupportedException)
+        catch (Exception exception)
         {
             foreach (var slot in slots)
             {
                 slot?.Dispose();
             }
 
-            return null;
+            if (exception is NotSupportedException)
+            {
+                return null;
+            }
+
+            throw;
         }
 
         return slots;
+    }
+
+    private bool IsAligned()
+    {
+        var alignment = _device.Adapter.HostPointerAlignment;
+        if (_reader.SlotSize % alignment != 0)
+        {
+            return false;
+        }
+
+        for (var slot = 0; slot < _reader.SlotCount; slot++)
+        {
+            if (_reader.SlotAddress(slot) % alignment != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void RecordCopy(IGraphicsDevice device, CommandBuffer commandBuffer, VulkanBuffer source, ITexture target)

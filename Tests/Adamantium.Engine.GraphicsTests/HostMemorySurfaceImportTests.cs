@@ -34,6 +34,11 @@ public class HostMemorySurfaceImportTests
         Assert.That(consumer.Bound, Has.Count.EqualTo(1), "the ring is handed over with its first frame");
 
         var viewer = GpuFixture.CreateRenderDevice();
+        using (var probe = new HostFrameImport(viewer, consumer.Bound[0]))
+        {
+            Assert.That(probe.ImportsSlots, Is.True, "the device that made the slots takes them as well");
+        }
+
         using var viewerPresenter = CreatePresenter(viewer);
         using var taken = SharedSurface.Import(viewer, consumer.Bound[0]);
         Assert.That(taken.LatchedCopy, Is.Null, "nothing before the first latch");
