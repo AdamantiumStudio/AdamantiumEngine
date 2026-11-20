@@ -106,7 +106,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             RequireFinite(value, nameof(value));
             _gravity = value;
             if (_world != null)
-                Send(PhysicsCommandKind.SetGravity, 0, value, Vector3<double>.Zero);
+                Send(PhysicsCommandKind.SetGravity, 0, value, WorldPosition.Zero);
         }
     }
 
@@ -126,35 +126,39 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     public void SetLinearVelocity(Entity entity, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
-        Send(PhysicsCommandKind.SetLinearVelocity, FindMovingKey(entity), velocity, Vector3<double>.Zero);
+        Send(PhysicsCommandKind.SetLinearVelocity, FindMovingKey(entity), velocity, WorldPosition.Zero);
     }
 
     /// <inheritdoc/>
     public void SetAngularVelocity(Entity entity, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
-        Send(PhysicsCommandKind.SetAngularVelocity, FindMovingKey(entity), velocity, Vector3<double>.Zero);
+        Send(PhysicsCommandKind.SetAngularVelocity, FindMovingKey(entity), velocity, WorldPosition.Zero);
     }
 
     /// <inheritdoc/>
     public void SetForce(Entity entity, Vector3F force)
     {
         RequireFinite(force, nameof(force));
-        Send(PhysicsCommandKind.SetForce, FindDynamicKey(entity), force, Vector3<double>.Zero);
+        Send(PhysicsCommandKind.SetForce, FindDynamicKey(entity), force, WorldPosition.Zero);
     }
 
     /// <inheritdoc/>
     public void ApplyImpulse(Entity entity, Vector3F impulse)
     {
         RequireFinite(impulse, nameof(impulse));
-        Send(PhysicsCommandKind.ApplyCentralImpulse, FindDynamicKey(entity), impulse, Vector3<double>.Zero);
+        Send(PhysicsCommandKind.ApplyCentralImpulse, FindDynamicKey(entity), impulse, WorldPosition.Zero);
     }
 
     /// <inheritdoc/>
     public void ApplyImpulse(Entity entity, Vector3F impulse, Vector3<double> point)
     {
         RequireFinite(impulse, nameof(impulse));
-        Send(PhysicsCommandKind.ApplyImpulse, FindDynamicKey(entity), impulse, point);
+        var strikesAt = new WorldPosition(point);
+        if (!strikesAt.IsFinite)
+            throw new ArgumentOutOfRangeException(nameof(point), point, "The point must be finite.");
+
+        Send(PhysicsCommandKind.ApplyImpulse, FindDynamicKey(entity), impulse, strikesAt);
     }
 
     /// <inheritdoc/>
@@ -488,8 +492,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             var transform = link.Entity.Transform;
             link.WrittenPosition = transform.Position;
             link.WrittenRotation = transform.Rotation;
-            var center = description.Position
-                         + Vector3F.Transform(link.CenterOfMass, description.Rotation).As<double>();
+            var center = description.Position + Vector3F.Transform(link.CenterOfMass, description.Rotation);
             link.PreviousPosition = center;
             link.CurrentPosition = center;
             link.PreviousRotation = description.Rotation;
@@ -497,7 +500,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         }
 
         _commands.Writer.TryWrite(new PhysicsCommand(PhysicsCommandKind.ChangeBody, link.Key, Vector3F.Zero,
-            Vector3<double>.Zero, new BodyRequest(Copy(description), link.Generation, link.AddedAs,
+            WorldPosition.Zero, new BodyRequest(Copy(description), link.Generation, link.AddedAs,
                 changesSettings || changesShape ? ++link.RequestsSent : link.RequestsSent, link.Name)
             {
                 ChangesSettings = changesSettings,
@@ -553,7 +556,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             _parented.Add(link);
 
         var kind = previous == null ? PhysicsCommandKind.AddBody : PhysicsCommandKind.ReplaceBody;
-        _commands.Writer.TryWrite(new PhysicsCommand(kind, key, Vector3F.Zero, Vector3<double>.Zero,
+        _commands.Writer.TryWrite(new PhysicsCommand(kind, key, Vector3F.Zero, WorldPosition.Zero,
             new BodyRequest(Copy(description), generation, generation, ++link.RequestsSent, entity.Name)
             {
                 KeepsPose = keepsPose
@@ -595,7 +598,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     // The body under the link's key taken out, and the key free for another.
     private void FreeKey(PhysicsBodyLink link)
     {
-        Send(PhysicsCommandKind.RemoveBody, link.Key, Vector3F.Zero, Vector3<double>.Zero);
+        Send(PhysicsCommandKind.RemoveBody, link.Key, Vector3F.Zero, WorldPosition.Zero);
         _links[link.Key] = null;
         _keys.Remove(link.Entity);
         _freeKeys.Add(link.Key);
@@ -651,7 +654,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         {
             Kind = body.Kind,
             Shape = shape,
-            Position = translation.As<double>(),
+            Position = new WorldPosition(translation.As<double>()),
             Rotation = rotation,
             Mass = body.Mass,
             Density = body.Density,
@@ -705,8 +708,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
         parts.ShapeParts = [.. _shapeParts];
         var only = _shapeParts[0];
-        if (_shapeParts.Count == 1 && only.Pose.Position == Vector3<double>.Zero
-                                   && only.Pose.Rotation == QuaternionF.Identity)
+        if (_shapeParts.Count == 1 && only.Pose.Position == Vector3F.Zero && only.Pose.Rotation == QuaternionF.Identity)
             return only.Shape;
 
         return new CompoundCollisionShape(_shapeParts);
@@ -783,13 +785,13 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
             if (entity == body)
             {
-                _shapeParts.Add(new CompoundPart(shape.Shape, new Pose(shape.Offset.As<double>(), shape.Turn)));
+                _shapeParts.Add(new CompoundPart(shape.Shape, new LocalPose(shape.Offset, shape.Turn)));
                 continue;
             }
 
             var center = translation + Vector3F.Transform(shape.Offset, turn);
             _shapeParts.Add(new CompoundPart(shape.Shape,
-                new Pose(Vector3F.Transform(center - origin, unturn).As<double>(), unturn * turn * shape.Turn)));
+                new LocalPose(Vector3F.Transform(center - origin, unturn), unturn * turn * shape.Turn)));
         }
     }
 
@@ -809,7 +811,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 return;
             }
 
-            _shapeParts.Add(new CompoundPart(shape, new Pose(position.As<double>())));
+            _shapeParts.Add(new CompoundPart(shape, new LocalPose(position)));
         }
         catch (ArgumentException exception)
         {
@@ -1224,7 +1226,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
             link.WarnedOfParent = false;
             PlaceEntity(link, parent != null, parentWorld,
-                Vector3<double>.Lerp(link.PreviousPosition, link.CurrentPosition, blend),
+                WorldPosition.Lerp(link.PreviousPosition, link.CurrentPosition, blend),
                 QuaternionF.Slerp(link.PreviousRotation, link.CurrentRotation, blend));
         }
     }
@@ -1258,9 +1260,10 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     }
 
     private void PlaceEntity(PhysicsBodyLink link, bool hasParent, in Matrix4x4F parentWorld,
-        Vector3<double> centerOfMass, QuaternionF entityRotation)
+        WorldPosition centerOfMass, QuaternionF entityRotation)
     {
-        var entityPosition = centerOfMass - Vector3F.Transform(link.CenterOfMass, entityRotation).As<double>();
+        // The entities' transforms are in double for now.
+        var entityPosition = (centerOfMass - Vector3F.Transform(link.CenterOfMass, entityRotation)).ToVector();
         var transform = link.Entity.Transform;
         // Changed by another since the last look: left for the next one to see, not taken as the physics' own.
         var isAsRead = link.Parts.IsBodyAsRead();
@@ -1285,7 +1288,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             link.Parts.RereadBody();
     }
 
-    private void Send(PhysicsCommandKind kind, int key, Vector3F value, Vector3<double> point) =>
+    private void Send(PhysicsCommandKind kind, int key, Vector3F value, WorldPosition point) =>
         _commands.Writer.TryWrite(new PhysicsCommand(kind, key, value, point));
 
     private int FindKey(Entity entity)

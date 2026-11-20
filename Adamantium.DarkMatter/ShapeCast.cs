@@ -5,7 +5,7 @@ namespace Adamantium.DarkMatter;
 internal struct ShapeCast
 {
     /// <summary>Where the cast starts: its parts and meetings are worked out in float from here.</summary>
-    public Vector3<double> Origin;
+    public WorldPosition Origin;
     public Vector3F Translation;
     public float Nearest;
     public bool Found;

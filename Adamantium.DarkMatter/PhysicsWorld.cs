@@ -121,7 +121,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         state.FirstPart = NoPart;
         state.CenterOfMass = mass.Center;
         state.InertiaRotation = description.Kind == BodyKind.Dynamic ? mass.InertiaRotation : QuaternionF.Identity;
-        state.Position = description.Position + Vector3F.Transform(mass.Center, rotation).As<double>();
+        state.Position = description.Position + Vector3F.Transform(mass.Center, rotation);
         state.Rotation = rotation;
         state.StartPosition = state.Position;
         state.StartRotation = state.Rotation;
@@ -194,7 +194,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public Pose GetPose(BodyHandle body) => _bodies[Resolve(body)].OriginPose;
 
     /// <inheritdoc/>
-    public Vector3<double> GetCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].Position;
+    public WorldPosition GetCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].Position;
 
     /// <inheritdoc/>
     public Vector3F GetLocalCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].CenterOfMass;
@@ -207,7 +207,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var rotation = NormalizeRotation(pose.Rotation, nameof(pose));
         WakeNewSleepersNear(index);
         ref var state = ref _bodies[index];
-        state.Position = pose.Position + Vector3F.Transform(state.CenterOfMass, rotation).As<double>();
+        state.Position = pose.Position + Vector3F.Transform(state.CenterOfMass, rotation);
         state.Rotation = rotation;
         if (state.IsDynamic)
             state.WorldInverseInertia = state.MeasureWorldInverseInertia();
@@ -269,14 +269,14 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void ApplyImpulse(BodyHandle body, Vector3F impulse, Vector3<double> point)
+    public void ApplyImpulse(BodyHandle body, Vector3F impulse, WorldPosition point)
     {
         RequireFinite(impulse, nameof(impulse));
         RequireFinite(point, nameof(point));
         var index = ResolveDynamic(body);
         ref var state = ref _bodies[index];
         var linear = state.LinearVelocity + impulse * state.InverseMass;
-        var arm = (point - state.Position).As<float>();
+        var arm = point.OffsetFrom(state.Position);
         var angular = state.AngularVelocity
                       + InertiaMath.Apply(state.WorldInverseInertia, Vector3F.Cross(arm, impulse));
         RequireFinite(linear, nameof(impulse));
@@ -309,8 +309,8 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     // A box measured against origin, in the world.
-    private static BoundingBox<double> Place(in BoundingBox<float> bounds, Vector3<double> origin) =>
-        new(origin + bounds.Minimum.As<double>(), origin + bounds.Maximum.As<double>());
+    private static BoundingBox<double> Place(in BoundingBox<float> bounds, WorldPosition origin) =>
+        new((origin + bounds.Minimum).ToVector(), (origin + bounds.Maximum).ToVector());
 
     /// <inheritdoc/>
     public void GetContactPoints(ICollection<ContactPoint> into)
@@ -417,9 +417,9 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     // Where the part stands against origin, which lies near it: its body's center, or the other body's of a pair.
-    private static LocalPose PlacePart(in BodyState body, in PartState part, Vector3<double> origin)
+    private static LocalPose PlacePart(in BodyState body, in PartState part, WorldPosition origin)
     {
-        var bodyPose = new LocalPose((body.Position - origin).As<float>(), body.Rotation);
+        var bodyPose = new LocalPose(body.Position.OffsetFrom(origin), body.Rotation);
         return part.HasBodyPose ? bodyPose : bodyPose.Transform(part.Pose);
     }
 
@@ -743,12 +743,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     // The manifold's points stand in the frame the pair was collided in, from origin.
-    private void RefreshPoints(Contact contact, ManifoldBuffer manifold, Vector3<double> origin)
+    private void RefreshPoints(Contact contact, ManifoldBuffer manifold, WorldPosition origin)
     {
         ref var first = ref _bodies[contact.First];
         ref var second = ref _bodies[contact.Second];
-        var firstPose = new LocalPose((first.Position - origin).As<float>(), first.Rotation);
-        var secondPose = new LocalPose((second.Position - origin).As<float>(), second.Rotation);
+        var firstPose = new LocalPose(first.Position.OffsetFrom(origin), first.Rotation);
+        var secondPose = new LocalPose(second.Position.OffsetFrom(origin), second.Rotation);
         var previousCount = contact.PointCount;
         for (var index = 0; index < previousCount; index++)
         {
@@ -763,7 +763,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             ref var point = ref contact.Points[index];
             point = default;
             var position = manifold.Positions[index];
-            point.Position = origin + position.As<double>();
+            point.Position = origin + position;
             point.Separation = manifold.Separations[index];
             point.LocalAnchorFirst = firstPose.InverseTransformPoint(position);
             point.LocalAnchorSecond = secondPose.InverseTransformPoint(position);
@@ -821,7 +821,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 continue;
 
             LimitSpeeds(ref body);
-            body.Position += (body.LinearVelocity * substep).As<double>();
+            body.Position += body.LinearVelocity * substep;
             var spin = new QuaternionF(body.AngularVelocity.X, body.AngularVelocity.Y, body.AngularVelocity.Z, 0);
             body.Rotation = QuaternionF.Normalize(body.Rotation + spin * body.Rotation * (0.5f * substep));
             if (body.IsDynamic)
@@ -1218,7 +1218,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var parts = compound.Parts;
         for (var index = parts.Count - 1; index >= 0; index--)
         {
-            var pose = parts[index].LocalPose;
+            var pose = parts[index].Pose;
             AddPart(body, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation));
         }
     }
@@ -1358,10 +1358,10 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     private static bool IsFinite(Vector3F vector) =>
         float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
-    private static void RequireFinite(Vector3<double> vector, string parameterName)
+    private static void RequireFinite(WorldPosition position, string parameterName)
     {
-        if (!double.IsFinite(vector.X) || !double.IsFinite(vector.Y) || !double.IsFinite(vector.Z))
-            throw new ArgumentOutOfRangeException(parameterName, vector, "The vector must be finite.");
+        if (!position.IsFinite)
+            throw new ArgumentOutOfRangeException(parameterName, position, "The position must be finite.");
     }
 
     private static MassProperties ComputeMass(CollisionShape shape, float mass, float density)

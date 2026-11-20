@@ -30,9 +30,9 @@ internal sealed class Joint
     public Vector3F PointOnFirst;
     public Vector3F PointOnSecond;
 
-    /// <summary>Where a joint to the world holds it: the world's point stands here, in double, so it is kept as
-    /// closely far from the origin as near it.</summary>
-    public Vector3<double> WorldAnchor;
+    /// <summary>Where a joint to the world holds it: the world's point stands here, kept as closely far from the
+    /// origin as near it.</summary>
+    public WorldPosition WorldAnchor;
 
     /// <summary>The axis on each body, in its own axes, of length one.</summary>
     public Vector3F AxisOnFirst;

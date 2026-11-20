@@ -22,7 +22,7 @@ internal sealed class SceneBuilder
         {
             Kind = BodyKind.Static,
             Shape = new BoxCollisionShape(50, 1, 50),
-            Position = center.As<double>(),
+            Position = new WorldPosition(center),
             Rotation = turn,
             Friction = friction
         });
@@ -34,7 +34,7 @@ internal sealed class SceneBuilder
         return World.Add(new BodyDescription
         {
             Shape = new BoxCollisionShape(halfExtents),
-            Position = position.As<double>(),
+            Position = new WorldPosition(position),
             Rotation = rotation ?? QuaternionF.Identity,
             Friction = friction,
             Restitution = restitution,
@@ -47,7 +47,7 @@ internal sealed class SceneBuilder
         return World.Add(new BodyDescription
         {
             Shape = new SphereCollisionShape(radius),
-            Position = position.As<double>(),
+            Position = new WorldPosition(position),
             Restitution = restitution
         });
     }
@@ -57,7 +57,7 @@ internal sealed class SceneBuilder
         return World.Add(new BodyDescription
         {
             Shape = new CapsuleCollisionShape(halfLength, radius),
-            Position = position.As<double>(),
+            Position = new WorldPosition(position),
             Rotation = rotation ?? QuaternionF.Identity
         });
     }

@@ -15,11 +15,11 @@ public class JointTests
     public void Pendulum_KeepsItsLength_AndSwingsBackUp()
     {
         IPhysicsWorld world = new PhysicsWorld();
-        var pivot = new Vector3<double>(0, 5, 0);
+        var pivot = new WorldPosition(0, 5, 0);
         var ball = AddSphere(world, new Vector3F(2, 5, 0), 0.1f);
         world.Add(new JointDescription
         {
-            Kind = JointKind.Distance, First = ball, Point = new Vector3<double>(2, 5, 0), SecondPoint = pivot
+            Kind = JointKind.Distance, First = ball, Point = new WorldPosition(2, 5, 0), SecondPoint = pivot
         });
 
         var longest = 0f;
@@ -52,11 +52,11 @@ public class JointTests
         IPhysicsWorld world = new PhysicsWorld();
         var door = world.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(new Vector3F(0.5f, 1, 0.05f)), Position = new Vector3<double>(0.5f, 2, 0)
+            Shape = new BoxCollisionShape(new Vector3F(0.5f, 1, 0.05f)), Position = new WorldPosition(0.5f, 2, 0)
         });
         var hinge = world.Add(new JointDescription
         {
-            Kind = JointKind.Hinge, First = door, Point = new Vector3<double>(0, 2, 0), Axis = Vector3F.UnitY,
+            Kind = JointKind.Hinge, First = door, Point = new WorldPosition(0, 2, 0), Axis = Vector3F.UnitY,
             HasLimits = true, LowerLimit = -MathF.PI / 2, UpperLimit = MathF.PI / 2
         });
         // Swung about the hinge: its middle, half a meter out, moves with the turn.
@@ -89,7 +89,7 @@ public class JointTests
         var wheel = AddSphere(world, Vector3F.Zero, 0.5f);
         world.Add(new JointDescription
         {
-            Kind = JointKind.Hinge, First = wheel, Point = Vector3<double>.Zero, Axis = Vector3F.UnitX, MotorSpeed = 3,
+            Kind = JointKind.Hinge, First = wheel, Point = WorldPosition.Zero, Axis = Vector3F.UnitX, MotorSpeed = 3,
             MaxMotorForce = 100
         });
 
@@ -113,12 +113,12 @@ public class JointTests
         IPhysicsWorld world = new PhysicsWorld();
         var box = world.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(new Vector3F(0.2f)), Position = new Vector3<double>(0, 3, 0),
+            Shape = new BoxCollisionShape(new Vector3F(0.2f)), Position = new WorldPosition(0, 3, 0),
             LinearVelocity = new Vector3F(2, 0, 0)
         });
         var rail = world.Add(new JointDescription
         {
-            Kind = JointKind.Slider, First = box, Point = new Vector3<double>(0, 3, 0), Axis = Vector3F.UnitX,
+            Kind = JointKind.Slider, First = box, Point = new WorldPosition(0, 3, 0), Axis = Vector3F.UnitX,
             HasLimits = true, LowerLimit = -1, UpperLimit = 1
         });
 
@@ -144,9 +144,9 @@ public class JointTests
         IPhysicsWorld world = new PhysicsWorld();
         var box = world.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(new Vector3F(1, 0.1f, 0.1f)), Position = new Vector3<double>(1, 3, 0)
+            Shape = new BoxCollisionShape(new Vector3F(1, 0.1f, 0.1f)), Position = new WorldPosition(1, 3, 0)
         });
-        world.Add(new JointDescription { Kind = JointKind.Fixed, First = box, Point = new Vector3<double>(0, 3, 0) });
+        world.Add(new JointDescription { Kind = JointKind.Fixed, First = box, Point = new WorldPosition(0, 3, 0) });
 
         for (var step = 0; step < 120; step++)
         {
@@ -156,7 +156,7 @@ public class JointTests
         var pose = world.GetPose(box);
         Assert.Multiple(() =>
         {
-            Assert.That((pose.Position - new Vector3<double>(1, 3, 0)).Length(), Is.LessThan(0.01f),
+            Assert.That((pose.Position - new WorldPosition(1, 3, 0)).Length(), Is.LessThan(0.01f),
                 "a beam held at one end");
             Assert.That(MathF.Abs(QuaternionF.Dot(pose.Rotation, QuaternionF.Identity)), Is.GreaterThan(0.9999f));
         });
@@ -170,7 +170,7 @@ public class JointTests
         var ball = AddSphere(world, new Vector3F(0, 4.5f, 0), 0.1f);
         world.Add(new JointDescription
         {
-            Kind = JointKind.Distance, First = ball, Point = new Vector3<double>(0, 4.5f, 0), SecondPoint = new Vector3<double>(0, 5, 0),
+            Kind = JointKind.Distance, First = ball, Point = new WorldPosition(0, 4.5f, 0), SecondPoint = new WorldPosition(0, 5, 0),
             HasLimits = true, LowerLimit = 0, UpperLimit = 2
         });
 
@@ -189,11 +189,11 @@ public class JointTests
         IPhysicsWorld world = new PhysicsWorld();
         var ball = world.Add(new BodyDescription
         {
-            Shape = new SphereCollisionShape(0.1f), Mass = 1, Position = new Vector3<double>(0, 4, 0)
+            Shape = new SphereCollisionShape(0.1f), Mass = 1, Position = new WorldPosition(0, 4, 0)
         });
         world.Add(new JointDescription
         {
-            Kind = JointKind.Distance, First = ball, Point = new Vector3<double>(0, 4, 0), SecondPoint = new Vector3<double>(0, 5, 0),
+            Kind = JointKind.Distance, First = ball, Point = new WorldPosition(0, 4, 0), SecondPoint = new WorldPosition(0, 5, 0),
             SpringHertz = 2, SpringDampingRatio = 1
         });
 
@@ -219,12 +219,12 @@ public class JointTests
         {
             var link = world.Add(new BodyDescription
             {
-                Shape = new CapsuleCollisionShape(0.4f, 0.05f), Position = new Vector3<double>(0, 9.5f - index, 0),
+                Shape = new CapsuleCollisionShape(0.4f, 0.05f), Position = new WorldPosition(0, 9.5f - index, 0),
                 AngularDamping = 0.5f, LinearDamping = 0.2f
             });
             world.Add(new JointDescription
             {
-                Kind = JointKind.Ball, First = link, Second = previous, Point = new Vector3<double>(0, 10 - index, 0)
+                Kind = JointKind.Ball, First = link, Second = previous, Point = new WorldPosition(0, 10 - index, 0)
             });
             previous = link;
             last = link;
@@ -251,10 +251,10 @@ public class JointTests
         var first = world.Add(new BodyDescription { Shape = new BoxCollisionShape(new Vector3F(0.5f)) });
         var second = world.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(new Vector3F(0.5f)), Position = new Vector3<double>(0.6f, 0, 0)
+            Shape = new BoxCollisionShape(new Vector3F(0.5f)), Position = new WorldPosition(0.6f, 0, 0)
         });
         var joint = world.Add(new JointDescription { Kind = JointKind.Distance, First = first, Second = second,
-            SecondPoint = new Vector3<double>(0.6f, 0, 0), HasLimits = true, LowerLimit = 0, UpperLimit = 10 });
+            SecondPoint = new WorldPosition(0.6f, 0, 0), HasLimits = true, LowerLimit = 0, UpperLimit = 10 });
 
         for (var step = 0; step < 30; step++)
         {
@@ -284,13 +284,13 @@ public class JointTests
         var platform = world.Add(new BodyDescription
         {
             Kind = BodyKind.Kinematic, Shape = new BoxCollisionShape(new Vector3F(1, 0.1f, 1)),
-            Position = new Vector3<double>(0, 5, 0)
+            Position = new WorldPosition(0, 5, 0)
         });
         var box = world.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(new Vector3F(0.2f)), Position = new Vector3<double>(0, 4, 0)
+            Shape = new BoxCollisionShape(new Vector3F(0.2f)), Position = new WorldPosition(0, 4, 0)
         });
-        world.Add(new JointDescription { Kind = JointKind.Ball, First = box, Second = platform, Point = new Vector3<double>(0, 4.9f, 0) });
+        world.Add(new JointDescription { Kind = JointKind.Ball, First = box, Second = platform, Point = new WorldPosition(0, 4.9f, 0) });
         for (var step = 0; step < 3 * world.Settings.StepRate; step++)
         {
             world.Step();
@@ -317,13 +317,13 @@ public class JointTests
         IPhysicsWorld world = new PhysicsWorld();
         var hook = world.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = new SphereCollisionShape(0.05f), Position = new Vector3<double>(0, 5, 0)
+            Kind = BodyKind.Static, Shape = new SphereCollisionShape(0.05f), Position = new WorldPosition(0, 5, 0)
         });
         var lamp = AddSphere(world, new Vector3F(0, 4, 0), 0.2f);
         world.Add(new JointDescription
         {
-            Kind = JointKind.Distance, First = lamp, Second = hook, Point = new Vector3<double>(0, 4, 0),
-            SecondPoint = new Vector3<double>(0, 5, 0)
+            Kind = JointKind.Distance, First = lamp, Second = hook, Point = new WorldPosition(0, 4, 0),
+            SecondPoint = new WorldPosition(0, 5, 0)
         });
         for (var step = 0; step < 3 * world.Settings.StepRate; step++)
         {
@@ -331,7 +331,7 @@ public class JointTests
         }
 
         var asleep = !world.IsAwake(lamp);
-        world.SetPose(hook, new Pose(new Vector3<double>(3, 5, 0)));
+        world.SetPose(hook, new Pose(new WorldPosition(3, 5, 0)));
         for (var step = 0; step < 3 * world.Settings.StepRate; step++)
         {
             world.Step();
@@ -341,7 +341,7 @@ public class JointTests
         Assert.Multiple(() =>
         {
             Assert.That(asleep, Is.True);
-            Assert.That((position - new Vector3<double>(3, 5, 0)).Length(), Is.EqualTo(1).Within(0.02f),
+            Assert.That((position - new WorldPosition(3, 5, 0)).Length(), Is.EqualTo(1).Within(0.02f),
                 "on its rod again");
         });
     }
@@ -379,7 +379,7 @@ public class JointTests
         }));
         Assert.Throws<ArgumentException>(() => world.Add(new JointDescription
         {
-            Kind = JointKind.Distance, First = ball, Point = Vector3<double>.Zero, SecondPoint = Vector3<double>.Zero
+            Kind = JointKind.Distance, First = ball, Point = WorldPosition.Zero, SecondPoint = WorldPosition.Zero
         }));
 
         world.Remove(other);
@@ -392,5 +392,5 @@ public class JointTests
     }
 
     private static BodyHandle AddSphere(IPhysicsWorld world, Vector3F position, float radius) =>
-        world.Add(new BodyDescription { Shape = new SphereCollisionShape(radius), Position = position.As<double>() });
+        world.Add(new BodyDescription { Shape = new SphereCollisionShape(radius), Position = new WorldPosition(position) });
 }

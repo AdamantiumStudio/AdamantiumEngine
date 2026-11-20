@@ -227,7 +227,7 @@ public sealed partial class PhysicsWorld
         state.InverseInertia = isDynamic
             ? new Vector3F(1f / mass.Inertia.X, 1f / mass.Inertia.Y, 1f / mass.Inertia.Z)
             : Vector3F.Zero;
-        state.Position = origin.Position + Vector3F.Transform(state.CenterOfMass, origin.Rotation).As<double>();
+        state.Position = origin.Position + Vector3F.Transform(state.CenterOfMass, origin.Rotation);
         state.WorldInverseInertia = isDynamic ? state.MeasureWorldInverseInertia() : default;
         if (shift != Vector3F.Zero)
         {

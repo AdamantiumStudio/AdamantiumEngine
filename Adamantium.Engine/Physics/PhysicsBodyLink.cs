@@ -74,11 +74,11 @@ internal sealed class PhysicsBodyLink
     /// <summary>The body's center of mass in the entity's own axes, unscaled: what a turn is drawn about.</summary>
     public Vector3F CenterOfMass { get; set; }
 
-    public Vector3<double> PreviousPosition { get; set; }
+    public WorldPosition PreviousPosition { get; set; }
 
     public QuaternionF PreviousRotation { get; set; }
 
-    public Vector3<double> CurrentPosition { get; set; }
+    public WorldPosition CurrentPosition { get; set; }
 
     public QuaternionF CurrentRotation { get; set; }
 

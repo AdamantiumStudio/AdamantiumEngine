@@ -300,7 +300,7 @@ public class ConvexHullTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = rock,
-            Position = new Vector3<double>(0, 1, 0),
+            Position = new WorldPosition(0, 1, 0),
             Rotation = QuaternionF.Normalize(new QuaternionF((float)random.NextDouble() - 0.5f,
                 (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f))
         });
@@ -362,7 +362,7 @@ public class ConvexHullTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = Cube(new Vector3F(0.5f)),
-            Position = new Vector3<double>(0, 2, 0),
+            Position = new WorldPosition(0, 2, 0),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, 0.3f)
         });
 
@@ -384,7 +384,7 @@ public class ConvexHullTests
         var body = scene.World.Add(new BodyDescription
         {
             Shape = new ConvexHullCollisionShape(corners),
-            Position = new Vector3<double>(0, 1.5f, 0),
+            Position = new WorldPosition(0, 1.5f, 0),
             // Turned about a slanting axis, so it does not balance on an edge as a mirror-even fall would.
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.Normalize(new Vector3F(1, 0.2f, 0.3f)), MathF.PI * 0.9f)
         });
@@ -409,7 +409,7 @@ public class ConvexHullTests
             bodies.Add(scene.World.Add(new BodyDescription
             {
                 Shape = Cube(new Vector3F(0.5f)),
-                Position = new Vector3<double>(0, 0.5f + level * 1.001f, 0)
+                Position = new WorldPosition(0, 0.5f + level * 1.001f, 0)
             }));
         }
 
@@ -426,10 +426,10 @@ public class ConvexHullTests
         var world = new PhysicsWorld(new PhysicsSettings { Gravity = Vector3F.Zero });
         var body = world.Add(new BodyDescription { Kind = BodyKind.Static, Shape = Cube(new Vector3F(1)) });
 
-        var hit = world.RayCast(new Vector3<double>(0.3f, 5, 0.2f), -Vector3F.UnitY, 10, out var rayHit);
+        var hit = world.RayCast(new WorldPosition(0.3f, 5, 0.2f), -Vector3F.UnitY, 10, out var rayHit);
         var found = new List<BodyHandle>();
-        world.Overlap(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(1.4f, 0, 0)), found);
-        var missed = world.RayCast(new Vector3<double>(1.5f, 5, 0), -Vector3F.UnitY, 10, out _);
+        world.Overlap(new SphereCollisionShape(0.5f), new Pose(new WorldPosition(1.4f, 0, 0)), found);
+        var missed = world.RayCast(new WorldPosition(1.5f, 5, 0), -Vector3F.UnitY, 10, out _);
 
         Assert.Multiple(() =>
         {
