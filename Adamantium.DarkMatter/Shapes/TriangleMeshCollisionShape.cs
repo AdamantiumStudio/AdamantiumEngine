@@ -91,7 +91,7 @@ public sealed class TriangleMeshCollisionShape : SurfaceCollisionShape
 
     internal override int TriangleCount => _normals.Length;
 
-    public override BoundingBox<float> ComputeBounds(in Pose pose) =>
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose) =>
         PlaceBox(_tree.Bounds.Minimum, _tree.Bounds.Maximum, pose);
 
     /// <summary>The corner farthest along <paramref name="direction"/>.</summary>

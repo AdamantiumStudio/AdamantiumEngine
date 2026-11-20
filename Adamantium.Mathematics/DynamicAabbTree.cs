@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace Adamantium.Mathematics;
 
@@ -8,9 +9,13 @@ namespace Adamantium.Mathematics;
 /// a small move leaves the tree as it is and a larger one takes the leaf out and puts it back where it adds the least
 /// surface; rotations keep the tree balanced. A ray visits only the boxes it passes through. Not thread-safe.
 /// </summary>
-public sealed class DynamicAabbTree<T>
+/// <typeparam name="TItem">What each leaf holds.</typeparam>
+/// <typeparam name="TNumber">The boxes' numbers: float for a scene, double for a world far from its origin.</typeparam>
+public sealed class DynamicAabbTree<TItem, TNumber> where TNumber : unmanaged, IFloatingPointIeee754<TNumber>
 {
     private const int None = -1;
+    private static readonly TNumber Two = TNumber.CreateChecked(2);
+    private static readonly TNumber Four = TNumber.CreateChecked(4);
 
     private Node[] nodes = new Node[16];
     private int allocated;
@@ -20,17 +25,22 @@ public sealed class DynamicAabbTree<T>
 
     /// <param name="margin">How far a leaf's box reaches past its item's, as a share of the item's size on each axis.</param>
     /// <param name="minimumMargin">The least it reaches past, so a flat or tiny item still has room to move.</param>
-    public DynamicAabbTree(float margin = 0.1f, float minimumMargin = 0.01f)
+    public DynamicAabbTree(TNumber margin, TNumber minimumMargin)
     {
         Margin = margin;
         MinimumMargin = minimumMargin;
     }
 
+    /// <summary>A tree whose leaves reach a tenth of their item's size past it, and at least a centimeter.</summary>
+    public DynamicAabbTree() : this(TNumber.CreateChecked(0.1), TNumber.CreateChecked(0.01))
+    {
+    }
+
     /// <summary>How far a leaf's box reaches past its item's, as a share of the item's size on each axis.</summary>
-    public float Margin { get; }
+    public TNumber Margin { get; }
 
     /// <summary>The least a leaf's box reaches past its item's.</summary>
-    public float MinimumMargin { get; }
+    public TNumber MinimumMargin { get; }
 
     /// <summary>How many items the tree holds.</summary>
     public int Count { get; private set; }
@@ -40,7 +50,7 @@ public sealed class DynamicAabbTree<T>
 
     /// <summary>Puts <paramref name="item"/> in the tree with <paramref name="box"/>; gives the handle that moves and
     /// removes it.</summary>
-    public int Add(in BoundingBox<float>box, T item)
+    public int Add(in BoundingBox<TNumber> box, TItem item)
     {
         var leaf = Allocate();
         nodes[leaf].Box = Grown(box);
@@ -61,14 +71,14 @@ public sealed class DynamicAabbTree<T>
 
     /// <summary>Gives the item of <paramref name="handle"/> its new box; gives whether its leaf had to move: once the box
     /// leaves the leaf's, or the leaf's grows far larger than the box needs.</summary>
-    public bool Move(int handle, in BoundingBox<float>box)
+    public bool Move(int handle, in BoundingBox<TNumber> box)
     {
         var grown = Grown(box);
         var leaf = nodes[handle].Box;
         if (leaf.Contains(box) == ContainmentType.Contains)
         {
-            var reach = (grown.Maximum - box.Maximum) * 4f;
-            var largest = new BoundingBox<float>(grown.Minimum - reach, grown.Maximum + reach);
+            var reach = (grown.Maximum - box.Maximum) * Four;
+            var largest = new BoundingBox<TNumber>(grown.Minimum - reach, grown.Maximum + reach);
             if (largest.Contains(leaf) == ContainmentType.Contains)
             {
                 return false;
@@ -82,14 +92,14 @@ public sealed class DynamicAabbTree<T>
     }
 
     /// <summary>The item of <paramref name="handle"/>.</summary>
-    public T ItemOf(int handle) => nodes[handle].Item;
+    public TItem ItemOf(int handle) => nodes[handle].Item;
 
     /// <summary>The box the leaf of <paramref name="handle"/> has: its item's grown by the margin.</summary>
-    public BoundingBox<float>BoxOf(int handle) => nodes[handle].Box;
+    public BoundingBox<TNumber> BoxOf(int handle) => nodes[handle].Box;
 
     /// <summary>Adds to <paramref name="into"/> every item whose leaf <paramref name="ray"/> enters within
     /// <paramref name="maxEntry"/> lengths of its direction, with where it enters; 0 when it starts inside.</summary>
-    public void RayCast(in Ray<float> ray, List<(T Item, float Entry)> into, float maxEntry = float.PositiveInfinity)
+    public void RayCast(in Ray<TNumber> ray, List<(TItem Item, TNumber Entry)> into, TNumber maxEntry)
     {
         if (root == None)
         {
@@ -101,7 +111,7 @@ public sealed class DynamicAabbTree<T>
         while (count > 0)
         {
             var index = stack[--count];
-            if (!Collision.RayIntersectsBox(ray, nodes[index].Box, out float entry) || entry > maxEntry)
+            if (!Collision.RayIntersectsBox(ray, nodes[index].Box, out TNumber entry) || entry > maxEntry)
             {
                 continue;
             }
@@ -122,9 +132,14 @@ public sealed class DynamicAabbTree<T>
         }
     }
 
+    /// <summary>Adds to <paramref name="into"/> every item whose leaf <paramref name="ray"/> enters, however far.
+    /// </summary>
+    public void RayCast(in Ray<TNumber> ray, List<(TItem Item, TNumber Entry)> into) =>
+        RayCast(ray, into, TNumber.PositiveInfinity);
+
     /// <summary>Adds to <paramref name="into"/> every item whose leaf box overlaps <paramref name="box"/>, faces
     /// touching included.</summary>
-    public void Query(in BoundingBox<float> box, List<T> into)
+    public void Query(in BoundingBox<TNumber> box, List<TItem> into)
     {
         if (root == None)
         {
@@ -157,11 +172,11 @@ public sealed class DynamicAabbTree<T>
         }
     }
 
-    private BoundingBox<float>Grown(in BoundingBox<float>box)
+    private BoundingBox<TNumber> Grown(in BoundingBox<TNumber> box)
     {
         var size = box.Maximum - box.Minimum;
-        var reach = Vector3F.Max(size * Margin, new Vector3F(MinimumMargin));
-        return new BoundingBox<float>(box.Minimum - reach, box.Maximum + reach);
+        var reach = Vector3<TNumber>.Max(size * Margin, new Vector3<TNumber>(MinimumMargin));
+        return new BoundingBox<TNumber>(box.Minimum - reach, box.Maximum + reach);
     }
 
     private int Allocate()
@@ -226,7 +241,7 @@ public sealed class DynamicAabbTree<T>
     }
 
     // Down from the root, each step to the child whose box grows the least by the leaf, until stopping here is cheaper.
-    private int BestSibling(in BoundingBox<float>box)
+    private int BestSibling(in BoundingBox<TNumber> box)
     {
         var index = root;
         while (!nodes[index].IsLeaf)
@@ -235,8 +250,8 @@ public sealed class DynamicAabbTree<T>
             var child2 = nodes[index].Child2;
             var area = Area(nodes[index].Box);
             var combinedArea = Area(BoundingBox.CreateMerged(nodes[index].Box, box));
-            var cost = 2 * combinedArea;
-            var inheritance = 2 * (combinedArea - area);
+            var cost = Two * combinedArea;
+            var inheritance = Two * (combinedArea - area);
             var cost1 = DescentCost(child1, box) + inheritance;
             var cost2 = DescentCost(child2, box) + inheritance;
             if (cost < cost1 && cost < cost2)
@@ -250,7 +265,7 @@ public sealed class DynamicAabbTree<T>
         return index;
     }
 
-    private float DescentCost(int child, in BoundingBox<float>box)
+    private TNumber DescentCost(int child, in BoundingBox<TNumber> box)
     {
         var merged = Area(BoundingBox.CreateMerged(nodes[child].Box, box));
         return nodes[child].IsLeaf ? merged : merged - Area(nodes[child].Box);
@@ -372,16 +387,16 @@ public sealed class DynamicAabbTree<T>
         return up;
     }
 
-    private static float Area(in BoundingBox<float>box)
+    private static TNumber Area(in BoundingBox<TNumber> box)
     {
         var size = box.Maximum - box.Minimum;
-        return 2 * (size.X * size.Y + size.Y * size.Z + size.Z * size.X);
+        return Two * (size.X * size.Y + size.Y * size.Z + size.Z * size.X);
     }
 
     private struct Node
     {
-        public BoundingBox<float>Box;
-        public T Item;
+        public BoundingBox<TNumber> Box;
+        public TItem Item;
         public int Parent;
         public int Child1;
         public int Child2;

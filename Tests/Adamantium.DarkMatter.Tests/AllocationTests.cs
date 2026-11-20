@@ -72,29 +72,29 @@ public class AllocationTests
             world.Step();
             field.Step();
         }
-        var ray = new Ray<float>(new Vector3F(0, 10, 0), -Vector3F.UnitY);
+        var rayFrom = new Vector3<double>(0, 10, 0);
         var ball = new SphereCollisionShape(0.5f);
         var pair = new CompoundCollisionShape([
-            new CompoundPart(ball, Pose.Identity), new CompoundPart(ball, new Pose(new Vector3F(1, 0, 0)))
+            new CompoundPart(ball, Pose.Identity), new CompoundPart(ball, new Pose(new Vector3<double>(1, 0, 0)))
         ]);
         var found = new List<BodyHandle>(64);
         var points = new List<ContactPoint>(4096);
-        var above = new Pose(new Vector3F(0, 10, 0));
+        var above = new Pose(new Vector3<double>(0, 10, 0));
         var down = new Vector3F(0, -15, 0);
-        var onGround = new Pose(new Vector3F(0, 0.3f, 0));
-        var onField = new Pose(new Vector3F(3, 0.2f, 3));
+        var onGround = new Pose(new Vector3<double>(0, 0.3f, 0));
+        var onField = new Pose(new Vector3<double>(3, 0.2f, 3));
         // Each query is measured where it meets something, so its whole way runs, not the broad phase's early out.
         var met = false;
 
         Assert.Multiple(() =>
         {
-            Assert.That(Allocated(() => met = world.RayCast(ray, 20, out _)), Is.Zero, "ray");
+            Assert.That(Allocated(() => met = world.RayCast(rayFrom, -Vector3F.UnitY, 20, out _)), Is.Zero, "ray");
             Assert.That(met, Is.True, "the ray met");
             Assert.That(Allocated(() => met = world.CastShape(ball, above, down, out _)), Is.Zero, "shape cast");
             Assert.That(met, Is.True, "the shape cast met");
             Assert.That(Allocated(() => met = world.CastShape(pair, above, down, out _)), Is.Zero, "compound cast");
             Assert.That(met, Is.True, "the compound cast met");
-            Assert.That(Allocated(() => met = field.CastShape(ball, new Pose(new Vector3F(3, 3, 3)),
+            Assert.That(Allocated(() => met = field.CastShape(ball, new Pose(new Vector3<double>(3, 3, 3)),
                 new Vector3F(0, -5, 0), out _)), Is.Zero, "cast onto a height field");
             Assert.That(met, Is.True, "the cast onto the field met");
             Assert.That(Allocated(() =>
@@ -130,19 +130,19 @@ public class AllocationTests
         var world = Build(AllocationScene.Boxes);
         var body = world.Add(new BodyDescription
         {
-            Shape = new BoxCollisionShape(0.2f, 0.2f, 0.2f), Position = new Vector3F(9, 9, 9)
+            Shape = new BoxCollisionShape(0.2f, 0.2f, 0.2f), Position = new Vector3<double>(9, 9, 9)
         });
         var another = new BodyDescription
         {
-            Shape = new BoxCollisionShape(0.2f, 0.2f, 0.2f), Position = new Vector3F(-9, 9, 9)
+            Shape = new BoxCollisionShape(0.2f, 0.2f, 0.2f), Position = new Vector3<double>(-9, 9, 9)
         };
 
         Assert.Multiple(() =>
         {
             Assert.That(Allocated(() => world.SetLinearVelocity(body, Vector3F.UnitX)), Is.Zero, "velocity");
-            Assert.That(Allocated(() => world.ApplyImpulse(body, Vector3F.UnitX, new Vector3F(9, 9, 9))), Is.Zero,
+            Assert.That(Allocated(() => world.ApplyImpulse(body, Vector3F.UnitX, new Vector3<double>(9, 9, 9))), Is.Zero,
                 "impulse");
-            Assert.That(Allocated(() => world.SetPose(body, new Pose(new Vector3F(9, 9, 9)))), Is.Zero, "pose");
+            Assert.That(Allocated(() => world.SetPose(body, new Pose(new Vector3<double>(9, 9, 9)))), Is.Zero, "pose");
             Assert.That(Allocated(() => world.Remove(world.Add(another))), Is.Zero, "added and taken out");
         });
     }
@@ -188,7 +188,7 @@ public class AllocationTests
                     world.Add(new BodyDescription
                     {
                         Shape = new ConvexHullCollisionShape(Rock(index), 0.05f),
-                        Position = new Vector3F(index % 6 * 0.9f - 3, 0.6f + index / 6 * 0.9f, index % 5 * 0.3f - 0.6f)
+                        Position = new Vector3<double>(index % 6 * 0.9f - 3, 0.6f + index / 6 * 0.9f, index % 5 * 0.3f - 0.6f)
                     });
                 }
 
@@ -209,7 +209,7 @@ public class AllocationTests
                     world.Add(new BodyDescription
                     {
                         Shape = new CylinderCollisionShape(0.3f, 0.4f),
-                        Position = new Vector3F(index % 5 - 2, 0.5f + index / 5, 0)
+                        Position = new Vector3<double>(index % 5 - 2, 0.5f + index / 5, 0)
                     });
                 }
 
@@ -251,7 +251,7 @@ public class AllocationTests
                     world.Add(new JointDescription
                     {
                         Kind = JointKind.Ball, First = link, Second = previous,
-                        Point = new Vector3F(0, 10.25f - index * 0.5f, 0)
+                        Point = new Vector3<double>(0, 10.25f - index * 0.5f, 0)
                     });
                     previous = link;
                 }
@@ -266,9 +266,9 @@ public class AllocationTests
                     {
                         Shape = new CompoundCollisionShape([
                             new CompoundPart(new BoxCollisionShape(0.4f, 0.1f, 0.4f), Pose.Identity),
-                            new CompoundPart(new SphereCollisionShape(0.2f), new Pose(new Vector3F(0, 0.3f, 0)))
+                            new CompoundPart(new SphereCollisionShape(0.2f), new Pose(new Vector3<double>(0, 0.3f, 0)))
                         ]),
-                        Position = new Vector3F(index % 5 - 2, 0.5f + index / 5, 0)
+                        Position = new Vector3<double>(index % 5 - 2, 0.5f + index / 5, 0)
                     });
                 }
 

@@ -14,7 +14,7 @@ public class DynamicAabbTreeTests
     public void ARay_FindsWhatALookAtEveryLeafFinds()
     {
         var random = new Random(7);
-        var tree = new DynamicAabbTree<int>();
+        var tree = new DynamicAabbTree<int, float>();
         var handles = new Dictionary<int, int>();
         for (int i = 0; i < 500; i++)
         {
@@ -67,7 +67,7 @@ public class DynamicAabbTreeTests
     public void ABox_FindsWhatALookAtEveryLeafFinds()
     {
         var random = new Random(13);
-        var tree = new DynamicAabbTree<int>();
+        var tree = new DynamicAabbTree<int, float>();
         var handles = new Dictionary<int, int>();
         for (var item = 0; item < 300; item++)
         {
@@ -108,7 +108,7 @@ public class DynamicAabbTreeTests
     [Test]
     public void ItemsAddedInARow_KeepTheTreeShallow()
     {
-        var tree = new DynamicAabbTree<int>();
+        var tree = new DynamicAabbTree<int, float>();
         for (int i = 0; i < 1024; i++)
         {
             tree.Add(new BoundingBox<float>(new Vector3F(i, 0, 0), new Vector3F(i + 0.5f, 0.5f, 0.5f)), i);
@@ -122,7 +122,7 @@ public class DynamicAabbTreeTests
     [Test]
     public void ALeaf_MovesOnlyOnceItsItemLeavesItsBox()
     {
-        var tree = new DynamicAabbTree<string>();
+        var tree = new DynamicAabbTree<string, float>();
         var handle = tree.Add(new BoundingBox<float>(Vector3F.Zero, Vector3F.One), "a");
 
         Assert.That(tree.Move(handle, new BoundingBox<float>(new Vector3F(0.05f), new Vector3F(1.05f))), Is.False);
@@ -137,7 +137,7 @@ public class DynamicAabbTreeTests
     [Test]
     public void ALeaf_ShrinksOnceItsItemNeedsFarLess()
     {
-        var tree = new DynamicAabbTree<string>();
+        var tree = new DynamicAabbTree<string, float>();
         var handle = tree.Add(new BoundingBox<float>(Vector3F.Zero, new Vector3F(10, 1, 1)), "a");
 
         var small = new BoundingBox<float>(Vector3F.Zero, Vector3F.One);

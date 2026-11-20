@@ -25,13 +25,13 @@ internal static class SphereCollisions
         return true;
     }
 
-    public static bool CollideSpheres(SphereCollisionShape first, in Pose firstPose, SphereCollisionShape second,
-        in Pose secondPose, float speculativeDistance, ManifoldBuffer manifold) =>
+    public static bool CollideSpheres(SphereCollisionShape first, in LocalPose firstPose, SphereCollisionShape second,
+        in LocalPose secondPose, float speculativeDistance, ManifoldBuffer manifold) =>
         CollideBalls(firstPose.Position, first.Radius, secondPose.Position, second.Radius, Vector3F.UnitY,
             speculativeDistance, manifold);
 
-    public static bool CollideSphereCapsule(SphereCollisionShape sphere, in Pose spherePose,
-        CapsuleCollisionShape capsule, in Pose capsulePose, float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideSphereCapsule(SphereCollisionShape sphere, in LocalPose spherePose,
+        CapsuleCollisionShape capsule, in LocalPose capsulePose, float speculativeDistance, ManifoldBuffer manifold)
     {
         var top = capsulePose.TransformPoint(new Vector3F(0, capsule.HalfLength, 0));
         var bottom = capsulePose.TransformPoint(new Vector3F(0, -capsule.HalfLength, 0));
@@ -41,8 +41,8 @@ internal static class SphereCollisions
             manifold);
     }
 
-    public static bool CollideSphereBox(SphereCollisionShape sphere, in Pose spherePose, BoxCollisionShape box,
-        in Pose boxPose, float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideSphereBox(SphereCollisionShape sphere, in LocalPose spherePose, BoxCollisionShape box,
+        in LocalPose boxPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         var size = box.HalfExtents;
         var center = boxPose.InverseTransformPoint(spherePose.Position);

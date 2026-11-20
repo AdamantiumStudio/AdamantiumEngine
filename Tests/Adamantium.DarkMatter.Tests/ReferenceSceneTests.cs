@@ -34,7 +34,7 @@ public class ReferenceSceneTests
 
         var pose = scene.World.GetPose(box);
         Assert.That(pose.Position.Y, Is.EqualTo(0.5f).Within(0.01f));
-        Assert.That(MathF.Abs(pose.Position.X) + MathF.Abs(pose.Position.Z), Is.LessThan(0.001f));
+        Assert.That(Math.Abs(pose.Position.X) + Math.Abs(pose.Position.Z), Is.LessThan(0.001f));
         Assert.That(TiltOf(pose), Is.LessThan(0.01f));
         Assert.That(scene.World.IsAwake(box), Is.False);
     }
@@ -54,7 +54,7 @@ public class ReferenceSceneTests
 
         var top = scene.World.GetPose(boxes[^1]).Position;
         Assert.That(top.Y, Is.EqualTo(9.5f).Within(0.05f));
-        Assert.That(MathF.Abs(top.X) + MathF.Abs(top.Z), Is.LessThan(0.05f));
+        Assert.That(Math.Abs(top.X) + Math.Abs(top.Z), Is.LessThan(0.05f));
         AssertNoDeepOverlap(scene.World);
         foreach (var box in boxes)
         {
@@ -68,7 +68,7 @@ public class ReferenceSceneTests
         var scene = new SceneBuilder();
         scene.AddGround();
         var boxes = BuildPyramid(scene, 10);
-        var starts = new List<Vector3F>();
+        var starts = new List<Vector3<double>>();
         foreach (var box in boxes)
         {
             starts.Add(scene.World.GetPose(box).Position);
@@ -97,7 +97,7 @@ public class ReferenceSceneTests
 
         scene.Run(3f);
 
-        var moved = (scene.World.GetPose(box).Position - start).Length();
+        var moved = (scene.World.GetPose(box).Position - start.As<double>()).Length();
         if (slides)
             Assert.That(moved, Is.GreaterThan(1f));
         else
@@ -121,7 +121,7 @@ public class ReferenceSceneTests
                 bounced = true;
 
             if (bounced)
-                highest = MathF.Max(highest, scene.World.GetPose(ball).Position.Y);
+                highest = MathF.Max(highest, (float)scene.World.GetPose(ball).Position.Y);
 
             if (bounced && velocity < 0)
                 break;
@@ -142,7 +142,7 @@ public class ReferenceSceneTests
             dominoes.Add(scene.AddBox(new Vector3F(index * 0.6f, 0.5f, 0), new Vector3F(0.05f, 0.5f, 0.25f)));
         }
 
-        scene.World.ApplyImpulse(dominoes[0], new Vector3F(15f, 0, 0), new Vector3F(0, 0.95f, 0));
+        scene.World.ApplyImpulse(dominoes[0], new Vector3F(15f, 0, 0), new Vector3<double>(0, 0.95f, 0));
         scene.Run(6f);
 
         var up = Vector3F.Transform(Vector3F.UnitY, scene.World.GetPose(dominoes[^1]).Rotation);
@@ -195,7 +195,7 @@ public class ReferenceSceneTests
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxCollisionShape(5, 0.025f, 5),
-            Position = new Vector3F(0, -0.025f, 0)
+            Position = new Vector3<double>(0, -0.025f, 0)
         });
         var box = scene.AddBox(new Vector3F(0, 3f, 0), new Vector3F(0.25f), velocity: new Vector3F(0, -40f, 0));
 
@@ -240,14 +240,14 @@ public class ReferenceSceneTests
         Assert.That(second, Is.EqualTo(first));
     }
 
-    private static List<Vector3F> RunPyramid()
+    private static List<Vector3<double>> RunPyramid()
     {
         var scene = new SceneBuilder();
         scene.AddGround();
         var boxes = BuildPyramid(scene, 6);
         scene.AddSphere(new Vector3F(0.3f, 9f, 0.1f), 0.4f);
         scene.Run(3f);
-        var positions = new List<Vector3F>();
+        var positions = new List<Vector3<double>>();
         foreach (var box in boxes)
         {
             positions.Add(scene.World.GetPose(box).Position);

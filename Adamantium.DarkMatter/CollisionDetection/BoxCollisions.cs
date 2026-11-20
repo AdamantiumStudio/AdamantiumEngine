@@ -10,8 +10,8 @@ internal static class BoxCollisions
 {
     private const float ParallelEdgeLength = 1e-5f;
 
-    public static bool CollideBoxes(BoxCollisionShape first, in Pose firstPose, BoxCollisionShape second,
-        in Pose secondPose, float speculativeDistance, ManifoldBuffer manifold)
+    public static bool CollideBoxes(BoxCollisionShape first, in LocalPose firstPose, BoxCollisionShape second,
+        in LocalPose secondPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         Span<Vector3F> firstAxes = stackalloc Vector3F[3];
         Span<Vector3F> secondAxes = stackalloc Vector3F[3];

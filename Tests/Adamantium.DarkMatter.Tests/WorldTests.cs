@@ -103,7 +103,7 @@ public class WorldTests
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0.8f, 0.5f, 0)
+            Position = new Vector3<double>(0.8f, 0.5f, 0)
         });
         scene.World.Step();
 
@@ -121,13 +121,13 @@ public class WorldTests
             boxes.Add(scene.World.Add(new BodyDescription
             {
                 Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-                Position = new Vector3F(0, 0.5f + level, 0),
+                Position = new Vector3<double>(0, 0.5f + level, 0),
                 IsAwake = false
             }));
         }
 
         scene.World.Step();
-        scene.World.ApplyImpulse(boxes[0], new Vector3F(300, 0, 0), new Vector3F(0, 0.5f, 0));
+        scene.World.ApplyImpulse(boxes[0], new Vector3F(300, 0, 0), new Vector3<double>(0, 0.5f, 0));
         for (var step = 0; step < 240; step++)
         {
             scene.World.Step();
@@ -185,7 +185,7 @@ public class WorldTests
         var box = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0, 0.5f, 0),
+            Position = new Vector3<double>(0, 0.5f, 0),
             Density = 0,
             Mass = 5
         });
@@ -206,11 +206,12 @@ public class WorldTests
         Assert.Throws<ArgumentException>(() => world.Add(new BodyDescription { Shape = cube, Rotation = default }));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new BodyDescription { Shape = cube, Friction = -1 }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            world.Add(new BodyDescription { Shape = cube, Position = new Vector3F(float.NaN, 0, 0) }));
+            world.Add(new BodyDescription { Shape = cube, Position = new Vector3<double>(float.NaN, 0, 0) }));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PhysicsWorld(new PhysicsSettings { ContactHertz = float.NaN }));
         var body = world.Add(new BodyDescription { Shape = cube });
-        Assert.Throws<ArgumentException>(() => world.SetPose(body, new Pose { Position = Vector3F.One }));
-        Assert.That(world.GetPose(body).Position, Is.EqualTo(Vector3F.Zero), "a refused pose leaves the body where it was");
+        Assert.Throws<ArgumentException>(() => world.SetPose(body, new Pose { Position = new Vector3<double>(1, 1, 1) }));
+        Assert.That(world.GetPose(body).Position, Is.EqualTo(Vector3<double>.Zero),
+            "a refused pose leaves the body where it was");
         Assert.That(world.BodyCount, Is.EqualTo(1));
     }
 
@@ -222,7 +223,7 @@ public class WorldTests
         var box = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0, 0.5f, 0),
+            Position = new Vector3<double>(0, 0.5f, 0),
             IsAwake = false
         });
 
@@ -243,7 +244,7 @@ public class WorldTests
         var top = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0, 1.5f, 0),
+            Position = new Vector3<double>(0, 1.5f, 0),
             LinearVelocity = new Vector3F(0, 50, 0),
             IsAwake = false
         });
@@ -264,7 +265,7 @@ public class WorldTests
         var top = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0, 1.5f, 0),
+            Position = new Vector3<double>(0, 1.5f, 0),
             IsAwake = false
         });
         scene.World.Step();
@@ -310,7 +311,7 @@ public class WorldTests
             boxes.Add(scene.World.Add(new BodyDescription
             {
                 Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-                Position = new Vector3F(0, 0.75f + level, 0),
+                Position = new Vector3<double>(0, 0.75f + level, 0),
                 IsAwake = false
             }));
         }
@@ -354,7 +355,7 @@ public class WorldTests
         var top = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0, 1.5f, 0),
+            Position = new Vector3<double>(0, 1.5f, 0),
             IsAwake = false
         });
 
@@ -386,19 +387,19 @@ public class WorldTests
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxCollisionShape(50, 1, 50),
-            Position = new Vector3F(0, -1, 0)
+            Position = new Vector3<double>(0, -1, 0)
         });
-        var spinner = world.Add(new BodyDescription { Shape = new Shapes.BoxCollisionShape(1, 0.1f, 0.1f), Position = Vector3F.UnitY });
+        var spinner = world.Add(new BodyDescription { Shape = new Shapes.BoxCollisionShape(1, 0.1f, 0.1f), Position = new Vector3<double>(0, 1, 0) });
         var heavy = world.Add(new BodyDescription
         {
             Shape = new Shapes.SphereCollisionShape(0.5f),
-            Position = new Vector3F(3, 1.5f, 0),
+            Position = new Vector3<double>(3, 1.5f, 0),
             GravityScale = 1e38f
         });
         var underHeavy = world.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(3, 0.5f, 0)
+            Position = new Vector3<double>(3, 0.5f, 0)
         });
         world.SetAngularVelocity(spinner, new Vector3F(1e20f, 0, 0));
         Assert.That(world.GetAngularVelocity(spinner).Length(), Is.EqualTo(world.MaxAngularSpeed).Within(0.01f));
@@ -419,7 +420,7 @@ public class WorldTests
         foreach (var body in bodies)
         {
             var pose = world.GetPose(body);
-            Assert.That(float.IsFinite(pose.Position.X + pose.Position.Y + pose.Position.Z), Is.True);
+            Assert.That(double.IsFinite(pose.Position.X + pose.Position.Y + pose.Position.Z), Is.True);
             Assert.That(world.GetLinearVelocity(body).Length(), Is.LessThanOrEqualTo(500.01f));
         }
     }
@@ -432,7 +433,7 @@ public class WorldTests
         IPhysicsWorld world = new PhysicsWorld();
         var body = world.Add(new BodyDescription { Shape = new Shapes.SphereCollisionShape(radius), Mass = mass });
 
-        world.ApplyImpulse(body, new Vector3F(mass, 0, 0), Vector3F.Zero);
+        world.ApplyImpulse(body, new Vector3F(mass, 0, 0), Vector3<double>.Zero);
 
         Assert.That(world.GetLinearVelocity(body).X, Is.EqualTo(1f).Within(1e-3f));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PhysicsWorld(new PhysicsSettings { MaxLinearSpeed = float.MaxValue }));
@@ -449,7 +450,7 @@ public class WorldTests
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxCollisionShape(5e10f, 1, 5e10f),
-            Position = new Vector3F(0, -1, 0)
+            Position = new Vector3<double>(0, -1, 0)
         });
 
         Assert.That(world.BodyCount, Is.EqualTo(1));
@@ -469,7 +470,7 @@ public class WorldTests
         var replacement = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0.5f, 0.5f, 0),
+            Position = new Vector3<double>(0.5f, 0.5f, 0),
             IsAwake = false
         });
         scene.World.Step();
@@ -503,12 +504,12 @@ public class WorldTests
         var balanced = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.SphereCollisionShape(0.5f),
-            Position = new Vector3F(0, 0, 10)
+            Position = new Vector3<double>(0, 0, 10)
         });
         var turned = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.SphereCollisionShape(0.5f),
-            Position = new Vector3F(0, 0, -10)
+            Position = new Vector3<double>(0, 0, -10)
         });
         var steps = 2 * scene.World.Settings.StepRate;
         for (var step = 0; step < steps; step++)
@@ -549,7 +550,7 @@ public class WorldTests
         Assert.Throws<ArgumentOutOfRangeException>(() => world.SetAngularVelocity(body, bad));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.ApplyForce(body, bad));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.ApplyTorque(body, bad));
-        Assert.Throws<ArgumentOutOfRangeException>(() => world.ApplyImpulse(body, bad, Vector3F.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(() => world.ApplyImpulse(body, bad, Vector3<double>.Zero));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Shapes.BoxCollisionShape(float.NaN, 1, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Shapes.BoxCollisionShape(3e38f, 3e38f, 3e38f));
         Assert.Throws<ArgumentException>(() =>
@@ -571,13 +572,13 @@ public class WorldTests
         var box = scene.World.Add(new BodyDescription
         {
             Shape = new Shapes.BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Position = new Vector3F(0, 0.6f, 0),
+            Position = new Vector3<double>(0, 0.6f, 0),
             IsAwake = false
         });
         scene.Run(0.1f);
         Assert.That(scene.World.IsAwake(box), Is.False);
 
-        scene.World.SetPose(ground, new Pose(new Vector3F(0, -0.7f, 0)));
+        scene.World.SetPose(ground, new Pose(new Vector3<double>(0, -0.7f, 0)));
         scene.World.Step();
 
         Assert.That(scene.World.IsAwake(box), Is.True);
@@ -606,7 +607,7 @@ public class WorldTests
         {
             Kind = BodyKind.Static,
             Shape = new Shapes.BoxCollisionShape(0.025f, 3, 3),
-            Position = new Vector3F(1.5f, 0, 0)
+            Position = new Vector3<double>(1.5f, 0, 0)
         });
         var bar = scene.World.Add(new BodyDescription
         {

@@ -48,7 +48,7 @@ public class EdgeLineTests
         var aslope = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2 - 0.006f);
         CollisionShape block = onABox ? new BoxCollisionShape(0.5f, 0.5f, 1) : SharpBlock();
         var found = NarrowPhase.Collide(new CapsuleCollisionShape(1.5f, 0.3f),
-            new Pose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), aslope), block, new Pose(Vector3F.Zero, Turn()),
+            new LocalPose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), aslope), block, new LocalPose(Vector3F.Zero, Turn()),
             Speculative, _manifold);
 
         Assert.That(found, Is.True);
@@ -65,7 +65,7 @@ public class EdgeLineTests
                      * Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
         CollisionShape block = onABox ? new BoxCollisionShape(0.5f, 0.5f, 1) : SharpBlock();
         var found = NarrowPhase.Collide(new CapsuleCollisionShape(1.5f, 0.3f),
-            new Pose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), aslant), block, new Pose(Vector3F.Zero, Turn()),
+            new LocalPose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), aslant), block, new LocalPose(Vector3F.Zero, Turn()),
             Speculative, _manifold);
 
         Assert.That(found, Is.True);
@@ -80,8 +80,8 @@ public class EdgeLineTests
     {
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
         var turned = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, MathF.PI / 180) * lying;
-        var found = NarrowPhase.Collide(new CapsuleCollisionShape(1, 0.3f), new Pose(new Vector3F(0, 0.59f, 0), turned),
-            new CapsuleCollisionShape(1, 0.3f), new Pose(Vector3F.Zero, lying), Speculative, _manifold);
+        var found = NarrowPhase.Collide(new CapsuleCollisionShape(1, 0.3f), new LocalPose(new Vector3F(0, 0.59f, 0), turned),
+            new CapsuleCollisionShape(1, 0.3f), new LocalPose(Vector3F.Zero, lying), Speculative, _manifold);
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(2));
@@ -92,8 +92,8 @@ public class EdgeLineTests
     public void BoxFirstAndLogSecond_TouchAlongTheEdgeAlike()
     {
         var alongZ = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
-        var found = NarrowPhase.Collide(new BoxCollisionShape(0.5f, 0.5f, 1), new Pose(Vector3F.Zero, Turn()), Log(),
-            new Pose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), alongZ), Speculative, _manifold);
+        var found = NarrowPhase.Collide(new BoxCollisionShape(0.5f, 0.5f, 1), new LocalPose(Vector3F.Zero, Turn()), Log(),
+            new LocalPose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), alongZ), Speculative, _manifold);
 
         Assert.That(found, Is.True);
         Assert.That((_manifold.Normal - Vector3F.UnitY).Length(), Is.LessThan(1e-3f), $"normal {_manifold.Normal}");
@@ -107,8 +107,8 @@ public class EdgeLineTests
     public void CapsuleJustPastAFacesBorder_TouchesAlongTheEdge()
     {
         var alongZ = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
-        var found = NarrowPhase.Collide(new CapsuleCollisionShape(0.8f, 0.3f), new Pose(new Vector3F(0.55f, 0.79f, 0),
-            alongZ), new BoxCollisionShape(0.5f, 0.5f, 1), Pose.Identity, Speculative, _manifold);
+        var found = NarrowPhase.Collide(new CapsuleCollisionShape(0.8f, 0.3f), new LocalPose(new Vector3F(0.55f, 0.79f, 0),
+            alongZ), new BoxCollisionShape(0.5f, 0.5f, 1), LocalPose.Identity, Speculative, _manifold);
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(2));
@@ -131,8 +131,8 @@ public class EdgeLineTests
         var capsule = new CapsuleCollisionShape(0.4f, 0.3f);
 
         var found = NarrowPhase.Collide(capsule,
-            new Pose(rim + outward * (CollisionShape.DefaultConvexRadius + 0.3f - 0.005f), turn), cylinder,
-            Pose.Identity, Speculative, _manifold);
+            new LocalPose(rim + outward * (CollisionShape.DefaultConvexRadius + 0.3f - 0.005f), turn), cylinder,
+            LocalPose.Identity, Speculative, _manifold);
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -144,8 +144,8 @@ public class EdgeLineTests
     public void LogAcrossABoxsEdge_TouchesAtOnePoint()
     {
         var across = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
-        var found = NarrowPhase.Collide(Log(), new Pose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), across),
-            new BoxCollisionShape(0.5f, 0.5f, 1), new Pose(Vector3F.Zero, Turn()), Speculative, _manifold);
+        var found = NarrowPhase.Collide(Log(), new LocalPose(new Vector3F(0, Ridge + 0.3f - 0.01f, 0), across),
+            new BoxCollisionShape(0.5f, 0.5f, 1), new LocalPose(Vector3F.Zero, Turn()), Speculative, _manifold);
 
         Assert.That(found, Is.True);
         Assert.That(_manifold.Count, Is.EqualTo(1));
@@ -157,8 +157,8 @@ public class EdgeLineTests
     private void AssertLine(CollisionShape lying, CollisionShape block, float radius, float overlap)
     {
         var alongZ = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
-        var found = NarrowPhase.Collide(lying, new Pose(new Vector3F(0, Ridge + radius - 0.01f, 0), alongZ), block,
-            new Pose(Vector3F.Zero, Turn()), Speculative, _manifold);
+        var found = NarrowPhase.Collide(lying, new LocalPose(new Vector3F(0, Ridge + radius - 0.01f, 0), alongZ), block,
+            new LocalPose(Vector3F.Zero, Turn()), Speculative, _manifold);
 
         Assert.That(found, Is.True);
         Assert.That((_manifold.Normal + Vector3F.UnitY).Length(), Is.LessThan(1e-3f), $"normal {_manifold.Normal}");

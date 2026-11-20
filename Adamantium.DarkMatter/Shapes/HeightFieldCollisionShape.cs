@@ -96,7 +96,7 @@ public sealed class HeightFieldCollisionShape : SurfaceCollisionShape
 
     internal override int TriangleCount => 2 * (ColumnCount - 1) * (RowCount - 1);
 
-    public override BoundingBox<float> ComputeBounds(in Pose pose) => PlaceBox(BoxCorner(0), BoxCorner(7), pose);
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose) => PlaceBox(BoxCorner(0), BoxCorner(7), pose);
 
     /// <summary>The corner of the box round the heights farthest along <paramref name="direction"/>.</summary>
     public override Vector3F GetSupport(Vector3F direction) =>

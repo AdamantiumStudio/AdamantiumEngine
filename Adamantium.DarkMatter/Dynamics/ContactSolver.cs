@@ -43,8 +43,8 @@ internal sealed class ContactSolver
             for (var index = 0; index < contact.PointCount; index++)
             {
                 ref var point = ref contact.Points[index];
-                var anchorFirst = point.Position - first.Position;
-                var anchorSecond = point.Position - second.Position;
+                var anchorFirst = (point.Position - first.Position).As<float>();
+                var anchorSecond = (point.Position - second.Position).As<float>();
                 point.AnchorFirst = anchorFirst;
                 point.AnchorSecond = anchorSecond;
                 point.AdjustedSeparation = point.Separation - Vector3F.Dot(anchorSecond - anchorFirst, normal);
@@ -84,8 +84,8 @@ internal sealed class ContactSolver
             ref var first = ref bodies[contact.First];
             ref var second = ref bodies[contact.Second];
             var softness = first.InverseMass == 0 || second.InverseMass == 0 ? staticSoftness : contactSoftness;
-            var firstMoved = first.Position - first.StartPosition;
-            var secondMoved = second.Position - second.StartPosition;
+            var firstMoved = first.MovedThisStep;
+            var secondMoved = second.MovedThisStep;
             var firstTurn = first.Rotation * QuaternionF.Conjugate(first.StartRotation);
             var secondTurn = second.Rotation * QuaternionF.Conjugate(second.StartRotation);
             var normal = contact.Normal;

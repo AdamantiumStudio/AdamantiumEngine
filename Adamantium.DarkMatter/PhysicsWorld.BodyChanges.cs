@@ -227,7 +227,7 @@ public sealed partial class PhysicsWorld
         state.InverseInertia = isDynamic
             ? new Vector3F(1f / mass.Inertia.X, 1f / mass.Inertia.Y, 1f / mass.Inertia.Z)
             : Vector3F.Zero;
-        state.Position = origin.Position + Vector3F.Transform(state.CenterOfMass, origin.Rotation);
+        state.Position = origin.Position + Vector3F.Transform(state.CenterOfMass, origin.Rotation).As<double>();
         state.WorldInverseInertia = isDynamic ? state.MeasureWorldInverseInertia() : default;
         if (shift != Vector3F.Zero)
         {
@@ -237,7 +237,7 @@ public sealed partial class PhysicsWorld
             for (var part = state.FirstPart; part != NoPart; part = _parts[part].Next)
             {
                 ref var slot = ref _parts[part];
-                slot.Pose = new Pose(slot.Pose.Position + shift, slot.Pose.Rotation);
+                slot.Pose = new LocalPose(slot.Pose.Position + shift, slot.Pose.Rotation);
                 slot.IsCentered = slot.Pose.Position == Vector3F.Zero;
                 slot.HasBodyPose = slot.IsCentered && slot.Pose.Rotation == QuaternionF.Identity;
                 state.Reach = MathF.Max(state.Reach, slot.Pose.Position.Length() + slot.Shape.BoundingRadius);

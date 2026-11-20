@@ -28,14 +28,15 @@ public sealed class CompoundCollisionShape : CollisionShape
             if (part.Shape is CompoundCollisionShape)
                 throw new ArgumentException("A part cannot be a compound itself.", nameof(parts));
 
-            var position = part.Pose.Position;
+            // In float, as collisions take it: a part stands near its compound's center.
+            var position = part.Pose.Position.As<float>();
             var lengthSquared = part.Pose.Rotation.LengthSquared();
             if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z)
                 || !(lengthSquared > 1e-12f) || !float.IsFinite(lengthSquared))
                 throw new ArgumentException("A part needs a finite position and rotation.", nameof(parts));
 
             _parts[index] = new CompoundPart(part.Shape,
-                new Pose(position, QuaternionF.Normalize(part.Pose.Rotation)));
+                new Pose(part.Pose.Position, QuaternionF.Normalize(part.Pose.Rotation)));
             _boundingRadius = MathF.Max(_boundingRadius, position.Length() + part.Shape.BoundingRadius);
         }
 
@@ -79,13 +80,12 @@ public sealed class CompoundCollisionShape : CollisionShape
         return new MassProperties((float)total, moments, center.As<float>(), axes);
     }
 
-    /// <inheritdoc/>
-    public override BoundingBox<float> ComputeBounds(in Pose pose)
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose)
     {
-        var bounds = _parts[0].Shape.ComputeBounds(pose.Transform(_parts[0].Pose));
+        var bounds = _parts[0].Shape.ComputeBounds(pose.Transform(_parts[0].LocalPose));
         for (var index = 1; index < _parts.Length; index++)
         {
-            var part = _parts[index].Shape.ComputeBounds(pose.Transform(_parts[index].Pose));
+            var part = _parts[index].Shape.ComputeBounds(pose.Transform(_parts[index].LocalPose));
             bounds = new BoundingBox<float>(Vector3F.Min(bounds.Minimum, part.Minimum),
                 Vector3F.Max(bounds.Maximum, part.Maximum));
         }
@@ -100,7 +100,8 @@ public sealed class CompoundCollisionShape : CollisionShape
         var bestDistance = float.NegativeInfinity;
         foreach (var part in _parts)
         {
-            var point = part.Pose.TransformPoint(part.Shape.GetSupport(part.Pose.InverseTransformDirection(direction)));
+            var point = part.LocalPose.TransformPoint(
+                part.Shape.GetSupport(part.LocalPose.InverseTransformDirection(direction)));
             var distance = Vector3F.Dot(point, direction);
             if (distance > bestDistance)
             {
@@ -120,13 +121,13 @@ public sealed class CompoundCollisionShape : CollisionShape
         var found = false;
         foreach (var part in _parts)
         {
-            var localRay = new Ray<float>(part.Pose.InverseTransformPoint(ray.Position),
-                part.Pose.InverseTransformDirection(ray.Direction));
+            var localRay = new Ray<float>(part.LocalPose.InverseTransformPoint(ray.Position),
+                part.LocalPose.InverseTransformDirection(ray.Direction));
             if (!part.Shape.CastRay(localRay, distance, out var partDistance, out var partNormal))
                 continue;
 
             distance = partDistance;
-            normal = part.Pose.TransformDirection(partNormal);
+            normal = part.LocalPose.TransformDirection(partNormal);
             found = true;
         }
 
@@ -134,5 +135,5 @@ public sealed class CompoundCollisionShape : CollisionShape
     }
 
     private Vector3<double> CenterOf(int index, in MassProperties mass) =>
-        _parts[index].Pose.TransformPoint(mass.Center).As<double>();
+        _parts[index].LocalPose.TransformPoint(mass.Center).As<double>();
 }
