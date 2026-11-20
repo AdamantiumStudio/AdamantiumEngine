@@ -28,7 +28,7 @@ internal sealed class GjkSimplex
                 nearest = NearestOnSegment(0, 1);
                 return true;
             case 3:
-                nearest = NearestOnTriangle(0, 1, 2);
+                nearest = NearestOnTriangle();
                 return true;
             default:
                 return TryNearestOnTetrahedron(out nearest);
@@ -68,14 +68,76 @@ internal sealed class GjkSimplex
     }
 
     // The triangle's point nearest the origin, the simplex cut to the corners that weigh in it.
-    private Vector3<double> NearestOnTriangle(int first, int second, int third)
+    private Vector3<double> NearestOnTriangle()
     {
-        var firstPoint = Vertices[first].Point;
-        var secondPoint = Vertices[second].Point;
-        var thirdPoint = Vertices[third].Point;
+        var firstPoint = Vertices[0].Point;
+        var secondPoint = Vertices[1].Point;
+        var thirdPoint = Vertices[2].Point;
         TriangleMath.FindNearestWeights(firstPoint, secondPoint, thirdPoint, Vector3<double>.Zero, out var firstWeight,
             out var secondWeight, out var thirdWeight);
         var nearest = firstPoint * firstWeight + secondPoint * secondWeight + thirdPoint * thirdWeight;
+        KeepWeighed(0, 1, 2, firstWeight, secondWeight, thirdWeight);
+        return nearest;
+    }
+
+    // The faces the origin may lie beyond are weighed by their points alone; the simplex is cut once, to the best.
+    private bool TryNearestOnTetrahedron(out Vector3<double> nearest)
+    {
+        // Each face's three corners, then the corner across from it.
+        ReadOnlySpan<int> faces = [0, 1, 2, 3, 0, 2, 3, 1, 0, 3, 1, 2, 1, 3, 2, 0];
+        var nearestFace = new NearestFace { Face = -1, Distance = double.MaxValue };
+        // The triangle the newest corner was found from had the nearest point inside it, and the origin is on that
+        // corner's side of it: it is weighed when flat there, and by its side only when - rounding having had its way -
+        // no other face is.
+        for (var face = 1; face < 4; face++)
+        {
+            WeighFace(faces, face, true, ref nearestFace);
+        }
+
+        WeighFace(faces, 0, nearestFace.Face < 0, ref nearestFace);
+        nearest = nearestFace.Nearest;
+        if (nearestFace.Face < 0)
+            return false;
+
+        var corners = faces.Slice(nearestFace.Face * 4, 3);
+        KeepWeighed(corners[0], corners[1], corners[2], nearestFace.FirstWeight, nearestFace.SecondWeight,
+            nearestFace.ThirdWeight);
+        return true;
+    }
+
+    // The face's nearest point, kept when nearer than the nearest yet: a flat face, or - when told by its side - one the
+    // origin is beyond.
+    private void WeighFace(ReadOnlySpan<int> faces, int face, bool byItsSide, ref NearestFace nearestFace)
+    {
+        var first = Vertices[faces[face * 4]].Point;
+        var second = Vertices[faces[face * 4 + 1]].Point;
+        var third = Vertices[faces[face * 4 + 2]].Point;
+        var across = Vertices[faces[face * 4 + 3]].Point;
+        var normal = Vector3<double>.Cross(second - first, third - first);
+        var originSide = -Vector3<double>.Dot(first, normal);
+        var acrossSide = Vector3<double>.Dot(across - first, normal);
+        var isFlat = acrossSide * acrossSide <= 1e-24 * normal.LengthSquared();
+        if (!isFlat && !(byItsSide && originSide * acrossSide <= 0))
+            return;
+
+        TriangleMath.FindNearestWeights(first, second, third, Vector3<double>.Zero, out var firstWeight,
+            out var secondWeight, out var thirdWeight);
+        var candidate = first * firstWeight + second * secondWeight + third * thirdWeight;
+        var distance = candidate.LengthSquared();
+        if (distance >= nearestFace.Distance)
+            return;
+
+        nearestFace = new NearestFace
+        {
+            Face = face, Distance = distance, Nearest = candidate, FirstWeight = firstWeight,
+            SecondWeight = secondWeight, ThirdWeight = thirdWeight
+        };
+    }
+
+    // The corners of the three given that weigh in the nearest point, as a triangle cuts them.
+    private void KeepWeighed(int first, int second, int third, double firstWeight, double secondWeight,
+        double thirdWeight)
+    {
         if (firstWeight > 0 && secondWeight > 0 && thirdWeight > 0)
             Keep(first, second, third, firstWeight, secondWeight, thirdWeight);
         else if (thirdWeight == 0 && firstWeight > 0 && secondWeight > 0)
@@ -86,70 +148,6 @@ internal sealed class GjkSimplex
             Keep(first, third, firstWeight, thirdWeight);
         else
             Keep(firstWeight > 0 ? first : secondWeight > 0 ? second : third);
-
-        return nearest;
-    }
-
-    private bool TryNearestOnTetrahedron(out Vector3<double> nearest)
-    {
-        // Each face's three corners, then the corner across from it.
-        ReadOnlySpan<int> faces = [0, 1, 2, 3, 0, 2, 3, 1, 0, 3, 1, 2, 1, 3, 2, 0];
-        var found = false;
-        var best = double.MaxValue;
-        nearest = Vector3<double>.Zero;
-        Span<SupportVertex> kept = stackalloc SupportVertex[3];
-        Span<double> keptWeights = stackalloc double[3];
-        var keptCount = 0;
-        Span<SupportVertex> all = stackalloc SupportVertex[4];
-        Vertices.AsSpan(0, 4).CopyTo(all);
-        for (var face = 0; face < 4; face++)
-        {
-            var a = all[faces[face * 4]].Point;
-            var b = all[faces[face * 4 + 1]].Point;
-            var c = all[faces[face * 4 + 2]].Point;
-            var d = all[faces[face * 4 + 3]].Point;
-            var normal = Vector3<double>.Cross(b - a, c - a);
-            var originSide = -Vector3<double>.Dot(a, normal);
-            var oppositeSide = Vector3<double>.Dot(d - a, normal);
-            // Outside the face, or the tetrahedron is flat there: the nearest point may be on it.
-            if (originSide * oppositeSide > 0 && oppositeSide * oppositeSide > 1e-24 * normal.LengthSquared())
-                continue;
-
-            Vertices[0] = all[faces[face * 4]];
-            Vertices[1] = all[faces[face * 4 + 1]];
-            Vertices[2] = all[faces[face * 4 + 2]];
-            Count = 3;
-            var candidate = NearestOnTriangle(0, 1, 2);
-            var distance = candidate.LengthSquared();
-            if (found && distance >= best)
-                continue;
-
-            found = true;
-            best = distance;
-            nearest = candidate;
-            keptCount = Count;
-            for (var index = 0; index < Count; index++)
-            {
-                kept[index] = Vertices[index];
-                keptWeights[index] = Weights[index];
-            }
-        }
-
-        if (!found)
-        {
-            all.CopyTo(Vertices);
-            Count = 4;
-            return false;
-        }
-
-        Count = keptCount;
-        for (var index = 0; index < keptCount; index++)
-        {
-            Vertices[index] = kept[index];
-            Weights[index] = keptWeights[index];
-        }
-
-        return true;
     }
 
     private Vector3<double> Keep(int only)

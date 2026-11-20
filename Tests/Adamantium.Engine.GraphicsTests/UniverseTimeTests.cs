@@ -18,7 +18,7 @@ public class UniverseTimeTests
     {
         var container = new AdamantiumDependencyContainer();
         var registry = (IContainerRegistry)container;
-        var host = new NoSurfaceHost();
+        var host = new HeadlessPlatform();
         registry.RegisterInstance<IOutputFactory>(host);
         registry.RegisterInstance<IWindowingPlatform>(host);
         _universe = new Universe(UniverseMode.Slave, false, container, new SharedDeviceService());

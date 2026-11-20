@@ -15,10 +15,17 @@ internal static class GjkClosestPoints
     /// from, the direction then the way the walk last went, zero if it went nowhere. Cores farther apart than
     /// <paramref name="maxDistance"/> are told apart early, the distance then only known to be beyond it.</summary>
     public static bool TryFind(in PlacedCore first, in PlacedCore second, float maxDistance, GjkSimplex simplex,
-        out float distance, out Vector3F towardSecond, out Vector3F onFirst, out Vector3F onSecond)
-    {
-        var found = TryFindNearest(first, second, maxDistance, simplex, out var nearest, out var walked, out onFirst,
+        out float distance, out Vector3F towardSecond, out Vector3F onFirst, out Vector3F onSecond) =>
+        TryFind(first, second, Vector3F.Zero, maxDistance, simplex, out distance, out towardSecond, out onFirst,
             out onSecond);
+
+    /// <summary>As the other, the walk started along <paramref name="guess"/>, the way from the first to the second a
+    /// little before - a cast's last step; none for the way between their centers.</summary>
+    public static bool TryFind(in PlacedCore first, in PlacedCore second, Vector3F guess, float maxDistance,
+        GjkSimplex simplex, out float distance, out Vector3F towardSecond, out Vector3F onFirst, out Vector3F onSecond)
+    {
+        var found = TryFindNearest(first, second, guess, maxDistance, simplex, out var nearest, out var walked,
+            out onFirst, out onSecond);
         distance = found ? (float)nearest.Length() : 0;
         var direction = found ? nearest : walked;
         var length = direction.Length();
@@ -28,11 +35,15 @@ internal static class GjkClosestPoints
 
     // The nearest point found and the last one well clear of the origin, whose direction still means something when
     // the walk ends on cores that touch.
-    private static bool TryFindNearest(in PlacedCore first, in PlacedCore second, float maxDistance, GjkSimplex simplex,
-        out Vector3<double> nearestPoint, out Vector3<double> walked, out Vector3F onFirst, out Vector3F onSecond)
+    private static bool TryFindNearest(in PlacedCore first, in PlacedCore second, Vector3F guess, float maxDistance,
+        GjkSimplex simplex, out Vector3<double> nearestPoint, out Vector3<double> walked, out Vector3F onFirst,
+        out Vector3F onSecond)
     {
         simplex.Clear();
-        var start = (second.Center - first.Center).As<double>();
+        var between = (second.Center - first.Center).As<double>();
+        // Centers that meet give no way: a unit one, as long as the scale's floor below.
+        var betweenLength = between.LengthSquared() < 1e-12 ? 1 : between.Length();
+        var start = guess.LengthSquared() > 0 ? guess.As<double>() : between;
         if (start.LengthSquared() < 1e-12)
             start = Vector3<double>.UnitX;
 
@@ -41,7 +52,7 @@ internal static class GjkClosestPoints
         simplex.Weights[0] = 1;
         var nearest = simplex.Vertices[0].Point;
         // Touching is told by the size of the pair, not by how near the first point happened to be.
-        var scale = Math.Max(Math.Max(nearest.Length(), start.Length()), 1e-3);
+        var scale = Math.Max(Math.Max(nearest.Length(), betweenLength), 1e-3);
         var touching = 1e-14 * scale * scale;
         var reachSquared = (double)maxDistance * maxDistance;
         var clear = 1e6 * touching;

@@ -41,13 +41,16 @@ internal static class ShapeSweep
         var secondRadius = second.CoreRadius;
         var radii = first.CoreRadius + secondRadius;
         var secondCore = new PlacedCore(second, secondPose);
+        var firstCore = new PlacedCore(first, firstPose);
+        // Each step's walk starts from the last step's way: the shape barely moved against the other.
+        var guess = Vector3F.Zero;
         var at = 0f;
         var steps = 0;
         while (true)
         {
-            var pose = new Pose(firstPose.Position + translation * at, firstPose.Rotation);
+            var position = firstPose.Position + translation * at;
             var reach = (limit - at) * length + radii + StoppingGap;
-            if (!GjkClosestPoints.TryFind(new PlacedCore(first, pose), secondCore, reach, buffer.Simplex,
+            if (!GjkClosestPoints.TryFind(firstCore.MovedTo(position), secondCore, guess, reach, buffer.Simplex,
                     out var distance, out var towardSecond, out _, out var onSecond)
                 || distance - radii < 0)
             {
@@ -56,8 +59,8 @@ internal static class ShapeSweep
                     return true;
 
                 meeting.Stop = at;
-                return Overlap(first, pose, second, secondPose, translation, -towardSecond, onSecond, buffer,
-                    ref meeting);
+                return Overlap(first, new Pose(position, firstPose.Rotation), second, secondPose, translation,
+                    -towardSecond, onSecond, buffer, ref meeting);
             }
 
             if (distance > reach)
@@ -107,6 +110,7 @@ internal static class ShapeSweep
 
             at = next;
             steps++;
+            guess = towardSecond;
         }
     }
 
