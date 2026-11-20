@@ -44,7 +44,7 @@ public sealed unsafe class SharedFrameMemory : IDisposable
 
     /// <summary>Makes memory for <paramref name="slotCount"/> slots of <paramref name="frameSize"/> bytes, in a new file
     /// kept in memory where the system has a place for it - /dev/shm on Linux, a temporary file on Windows the cache keeps
-    /// - gone once every process let go of it.</summary>
+    /// - gone once every process let go of it; on Unix only its user reads it.</summary>
     public static SharedFrameMemory Create(ulong frameSize, uint slotCount, ulong alignment)
     {
         if (alignment == 0 || (alignment & (alignment - 1)) != 0)
@@ -58,8 +58,19 @@ public sealed unsafe class SharedFrameMemory : IDisposable
             ? SharedMemoryFolder
             : System.IO.Path.GetTempPath();
         var path = System.IO.Path.Combine(folder, "adamantium-frames-" + Guid.NewGuid().ToString("N"));
-        var file = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite,
-            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.ReadWrite,
+            Share = FileShare.ReadWrite | FileShare.Delete,
+            Options = FileOptions.DeleteOnClose
+        };
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        var file = new FileStream(path, options);
         try
         {
             if (OperatingSystem.IsWindows())
