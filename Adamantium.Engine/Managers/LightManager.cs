@@ -29,7 +29,8 @@ public class LightManager
     private readonly MeshData _spotLightRenderer;
     private readonly MeshData _pointLightRenderer;
 
-    /// <summary>The lights of <paramref name="scene"/>, put among its satellites.</summary>
+    /// <summary>The lights of <paramref name="scene"/>, read each frame of <paramref name="universe"/>; the rendering finds
+    /// them once the caller puts them among the scene's satellites.</summary>
     public LightManager(IUniverse universe, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(universe);
@@ -39,7 +40,6 @@ public class LightManager
         _entities = scene.World.EntityManager;
         _spotLightRenderer = new SpotLightMeshTemplate().BuildEntity().GetComponent<MeshData>();
         _pointLightRenderer = new PointLightMeshTemplate().BuildEntity().GetComponent<MeshData>();
-        scene.Satellites.Add(this);
         if (scene.IsRemoved)
             return;
 

@@ -670,6 +670,8 @@ All packages share one version.
 
 ### Changed
 
+- **Breaking:** a `LightManager` no longer puts itself among its scene's satellites: the caller does,
+  `scene.Satellites.Add(new LightManager(universe, scene))`, as with any satellite - the rendering finds the lights there.
 - The core's query results are `WorldRayHit` and `WorldShapeHit` - with `Part` - for `RayHit` and `ShapeHit` now
   name those of `PhysicsSimulation`, by `BodyId`.
 

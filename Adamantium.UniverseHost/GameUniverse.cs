@@ -39,7 +39,7 @@ internal sealed class GameUniverse : Universe
         Satellites.Add(new Observatory(this, EntityWorld));
         Satellites.Add<IWorldCode>(new WorldCode());
         // The scene's lights, which the rendering takes from it: without them only the ambient light shows anything.
-        _ = new LightManager(this, EntityWorld.MainScene);
+        EntityWorld.MainScene.Satellites.Add(new LightManager(this, EntityWorld.MainScene));
         EntityWorld.CreateService<InputService>(EntityWorld);
         EntityWorld.CreateService<PhysicsService>(EntityWorld);
         EntityWorld.CreateService<TransformService>(EntityWorld);
