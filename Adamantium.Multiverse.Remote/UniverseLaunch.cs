@@ -13,4 +13,10 @@ public sealed class UniverseLaunch
     public uint Width { get; set; } = 1280;
 
     public uint Height { get; set; } = 720;
+
+    public FrameSharing FrameSharing { get; set; } = FrameSharing.Auto;
+
+    /// <summary>The GPU the viewer draws on (<c>GraphicsAdapter.DeviceUuid</c>); the host shares GPU memory only with
+    /// the same.</summary>
+    public Guid ViewerDeviceUuid { get; set; }
 }

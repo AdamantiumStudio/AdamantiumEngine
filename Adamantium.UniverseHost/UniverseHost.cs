@@ -25,7 +25,6 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly List<string> _codeFolders = [];
     private UniverseViewerConnection _connection;
-    private HandleTransfer _handles;
     private GameUniverse _universe;
     private RemoteUniverseOutput _output;
     private UniverseLaunch _launch;
@@ -100,7 +99,6 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
 
         _output?.Dispose();
         _connection?.Dispose();
-        _handles?.Dispose();
         _stopping.Dispose();
     }
 
@@ -160,9 +158,8 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         registry.RegisterInstance<IOutputFactory>(platform);
         registry.RegisterInstance<IWindowingPlatform>(platform);
         _universe = new GameUniverse(container);
-        _handles = new HandleTransfer(_connection.ViewerProcessId);
         _output = new RemoteUniverseOutput(_universe.Satellites.Get<IUniverseEventAggregator>(), _connection.Viewer,
-            _handles, _launch.Width, _launch.Height);
+            _connection.ViewerProcessId, _launch);
         List<IAssetResolver> folders = [];
         foreach (var folder in _launch.ContentFolders)
             folders.Add(new FileSystemAssetResolver(folder));
@@ -258,6 +255,9 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         builder.Build(file, models);
         foreach (var problem in builder.Problems)
             Console.Error.WriteLine("Scene: " + problem);
+
+        if (_output.SharingFailure is { } failure)
+            throw new NotSupportedException(failure);
 
         world.ForceUpdate();
         if (FindSceneCamera(world.MainScene, _output.OwnCamera) is { } camera)

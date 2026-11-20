@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Frames shared through memory of the process, for processes on different GPUs or on a driver that shares no GPU memory
+  between them - KosmicKrisp on macOS, llvmpipe: `HostMemorySurfaceProducer` has the producer's GPU copy each frame
+  into memory shared through a file (`SharedFrameMemory`, `SharedHandleType.HostMemory`), imported as its own
+  (VK_EXT_external_memory_host, `GraphicsAdapter.HostPointerAlignment`); `HostFrameReader` gives the consumer the
+  newest frame and the slots back. A universe host takes `UniverseLaunch.FrameSharing`: `Auto` shares GPU memory with a
+  viewer on the same GPU where the device exports it, else this memory.
+
 - A universe shown in another process (`Adamantium.Multiverse.Remote`, over StreamJsonRpc): the universe host serves
   `IUniverseHostService` on a pipe and its viewer connects (`UniverseHostConnection`, `UniverseViewerConnection`).
   The viewer launches the game (`LaunchAsync` with a `UniverseLaunch`: scene, content, code, size - failing with the
@@ -803,6 +810,9 @@ All packages share one version.
   texture coordinates, 20 bytes), made by `Mesh.ToUITexturedVertices`.
 
 ### Fixed
+
+- A standalone universe disposes its main graphics device when it shuts down: `GraphicsDeviceService` is
+  `IDisposable` now, so the device and the resources it retires are released.
 
 - The physics' step allocates nothing without the JIT's optimizations too, as in Debug: GJK's and EPA's tables of
   constants were spans made by reflection on every call there (940 KB per 240 steps on a height field), and the solved
