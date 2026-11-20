@@ -774,6 +774,8 @@ All packages share one version.
 
 ### Fixed
 
+- Adamantium.Vulkan 1.3.1, Slang 1.1.2 and Spirv 2.0.2: an empty string in a structure's field (an empty application
+  name, say) no longer runs past the marshalling buffer.
 - A universe of its own (`UniverseMode.Standalone`) creates its graphics device again: it named its Vulkan
   application with an empty text, which failed to marshal. It takes its `Title`, else "Universe".
 - A Standalone universe's `Run` returns only once its loop stopped and freed its resources - it returned while the
