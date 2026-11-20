@@ -22,7 +22,10 @@ public unsafe class GraphicsAdapter
     public void UpdateData()
     {
         var vulkan11Properties = new PhysicalDeviceVulkan11Properties();
-        var vulkan12Properties = new PhysicalDeviceVulkan12Properties { PNext = vulkan11Properties };
+        var hostMemoryProperties = HasExtension(Constants.VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)
+            ? new PhysicalDeviceExternalMemoryHostPropertiesEXT { PNext = vulkan11Properties }
+            : null;
+        var vulkan12Properties = new PhysicalDeviceVulkan12Properties { PNext = (object)hostMemoryProperties ?? vulkan11Properties };
         var vulkan14Properties = new PhysicalDeviceVulkan14Properties { PNext = vulkan12Properties };
         var heapProperties = new PhysicalDeviceDescriptorHeapPropertiesEXT { PNext = vulkan14Properties };
         var hasMeshShaderExtension = HasExtension(Constants.VK_EXT_MESH_SHADER_EXTENSION_NAME);
@@ -47,6 +50,7 @@ public unsafe class GraphicsAdapter
             ? BitConverter.ToInt64(vulkan11Properties.DeviceLUID.Span)
             : null;
         DeviceUuid = vulkan11Properties.DeviceUUID.Length == 16 ? new Guid(vulkan11Properties.DeviceUUID.Span) : Guid.Empty;
+        HostPointerAlignment = hostMemoryProperties != null ? hostMemoryProperties.MinImportedHostPointerAlignment : 0UL;
 
         var meshShader = new PhysicalDeviceMeshShaderFeaturesEXT();
         var maintenance7 = new PhysicalDeviceMaintenance7FeaturesKHR { PNext = meshShader };
@@ -148,6 +152,10 @@ public unsafe class GraphicsAdapter
     /// <summary>The adapter's UUID, the same in every process and API that sees it: a surface shared between processes
     /// is taken on the adapter of the same UUID.</summary>
     public Guid DeviceUuid { get; private set; }
+
+    /// <summary>What the start and size of memory of the process imported as the adapter's must be a multiple of
+    /// (VK_EXT_external_memory_host); 0 where it imports none.</summary>
+    public ulong HostPointerAlignment { get; private set; }
 
     public bool SupportsHostImageCopy { get; private set; }
 

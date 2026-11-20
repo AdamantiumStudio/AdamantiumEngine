@@ -7,7 +7,7 @@ using Adamantium.MVVM;
 namespace Adamantium.Multiverse;
 
 [ViewModel]
-public sealed partial class GraphicsDeviceService : IGraphicsDeviceService
+public sealed partial class GraphicsDeviceService : IGraphicsDeviceService, IDisposable
 {
     public IGraphicsDeviceFactory GraphicsDeviceFactory { get; }
 
@@ -56,6 +56,20 @@ public sealed partial class GraphicsDeviceService : IGraphicsDeviceService
     }
 
     public bool IsReady => MainGraphicsDevice != null;
+
+    /// <summary>Disposes the main device, and with it the devices and resources it owns.</summary>
+    public void Dispose()
+    {
+        if (MainGraphicsDevice == null)
+        {
+            return;
+        }
+
+        MainGraphicsDevice.Lost -= MainDeviceLost;
+        MainGraphicsDevice.Dispose();
+        MainGraphicsDevice.Disposing -= GraphicsDeviceDisposing;
+        MainGraphicsDevice = null;
+    }
 
     public void ChangeOrCreateMainDevice(string name, bool forceUpdate)
     {

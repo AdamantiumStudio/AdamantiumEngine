@@ -21,6 +21,9 @@ public sealed class RemoteSurface
 
     public RemoteSurfaceBuffer[] Buffers { get; init; } = [];
 
+    /// <summary>For <see cref="SharedHandleType.HostMemory"/>: the file the frames are in.</summary>
+    public string MemoryPath { get; init; }
+
     /// <summary>The ring as a <see cref="SharedSurfaceDescriptor"/> to import; its handles stay this ring's.</summary>
     public SharedSurfaceDescriptor ToDescriptor()
     {
@@ -44,6 +47,11 @@ public sealed class RemoteSurface
     /// <summary>Closes the handles of the viewer's process, once what imported them has: the import keeps its own.</summary>
     public void CloseHandles()
     {
+        if (HandleType == SharedHandleType.HostMemory)
+        {
+            return;
+        }
+
         foreach (var buffer in Buffers)
         {
             Close(buffer.MemoryHandle);
@@ -61,7 +69,10 @@ public sealed class RemoteSurface
         Height = Height,
         Format = Format,
         ProduceSemaphoreHandle = (IntPtr)buffer.ProduceSemaphoreHandle,
-        ConsumeSemaphoreHandle = (IntPtr)buffer.ConsumeSemaphoreHandle
+        ConsumeSemaphoreHandle = (IntPtr)buffer.ConsumeSemaphoreHandle,
+        MemoryPath = MemoryPath,
+        MemoryOffset = buffer.MemoryOffset,
+        CounterOffset = buffer.CounterOffset
     };
 
     private void Close(long handle)
