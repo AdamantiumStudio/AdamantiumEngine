@@ -7,6 +7,18 @@ All packages share one version.
 
 ### Added
 
+- `PhysicsSimulation`: the physics as a game uses it, with no ECS. Bodies and joints are named by `BodyId` and
+  `JointId`, added from `BodySettings` (one shape or `BodyPart`s, a `PhysicsMaterial`, the caller's own data per body
+  and part) and `JointSettings` (`JointLimits`, `JointMotor`, `JointSpring`). Every action - impulses, velocities,
+  forces kept until set again, poses, `MoveKinematic`, kind, shape, parts, material, limits, motors - is checked when
+  asked and done at the start of the next `Step`, in order; what is read (`PoseOf`, velocities, `MassOf`, `StatusOf`,
+  `RefusalOf`) is what the last step left. A body the core will not take is `PhysicsStatus.Refused`, with the reason.
+  Queries - `RayCast` (nearest, or every body into a span), `CastShape`, `Overlap` into a span - give the body and
+  its part met and pass by `QueryFilter.Except`. A warmed simulation steps, acts and queries without allocating.
+
+- `PhysicsWorld.RayCast` writes every body a ray meets into a span, nearest first; the queries take a body to pass by
+  and tell the part of a compound met. `ApplyAngularImpulse`, `GetMass` and `SetLimits` for a joint.
+
 - `SharedSurface.Import` takes a `SharedHandleType.HostMemory` ring: each `LatchCopy` copies the newest frame into the
   surface on the GPU - from the slots imported as buffers where the device takes memory of the process, else through a
   staging buffer - and gives the slot back once the copy is done. A `RenderTargetPanel` shows such a ring as it shows
@@ -655,6 +667,9 @@ All packages share one version.
   such a projection as `TiffGeoReference.ProjectionMethod` (`TiffProjectionMethod`, annex C).
 
 ### Changed
+
+- The core's query results are `WorldRayHit` and `WorldShapeHit` - with `Part` - for `RayHit` and `ShapeHit` now
+  name those of `PhysicsSimulation`, by `BodyId`.
 
 - The world of an entity is in double wherever a place is read from it: `TransformMetaData.AbsoluteWorld` is a
   `Matrix4x4<double>`, `Transform.CalculateFinalTransform` takes the parent's world as `in Matrix4x4<double>`,

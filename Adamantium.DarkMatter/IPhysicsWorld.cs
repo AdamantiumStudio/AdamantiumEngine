@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Adamantium.DarkMatter.Shapes;
 
@@ -53,6 +54,11 @@ public interface IPhysicsWorld
     /// <summary>Drives a hinge's or a slider's motor at <paramref name="speed"/> with no more than
     /// <paramref name="maxForce"/> - zero stops it - and wakes its bodies; another kind of joint has none.</summary>
     void SetMotor(JointHandle joint, float speed, float maxForce);
+
+    /// <summary>Holds a hinge's angle, a slider's offset or a distance joint's length between
+    /// <paramref name="lowerLimit"/> and <paramref name="upperLimit"/> when <paramref name="hasLimits"/>, freely when
+    /// not; wakes its bodies.</summary>
+    void SetLimits(JointHandle joint, bool hasLimits, float lowerLimit, float upperLimit);
 
     /// <summary>Where <paramref name="joint"/> stands: a hinge's angle in radians or a slider's offset in meters from
     /// where it was added, a distance joint's length; zero for a weld or a ball.</summary>
@@ -134,6 +140,14 @@ public interface IPhysicsWorld
     /// newton seconds, changing its velocity at once - cut to the speed limits - and wakes it.</summary>
     void ApplyImpulse(BodyHandle body, Vector3F impulse, WorldPosition point);
 
+    /// <summary>Turns a dynamic body by <paramref name="impulse"/>, in newton meter seconds around each world axis, at
+    /// once - cut to the spin limit - and wakes it.</summary>
+    void ApplyAngularImpulse(BodyHandle body, Vector3F impulse);
+
+    /// <summary>What <paramref name="body"/> weighs, in kilograms, as its mass or density gives it; zero for a body that
+    /// is not dynamic.</summary>
+    float GetMass(BodyHandle body);
+
     /// <summary>Whether <paramref name="body"/> is awake; static bodies never are.</summary>
     bool IsAwake(BodyHandle body);
 
@@ -153,15 +167,23 @@ public interface IPhysicsWorld
     void Step();
 
     /// <summary>Where a ray from <paramref name="origin"/> along <paramref name="direction"/> first meets a body within
-    /// <paramref name="maxDistance"/> meters; a ray starting inside a body meets it at once.</summary>
-    bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out RayHit hit);
+    /// <paramref name="maxDistance"/> meters, <paramref name="except"/> passed by; a ray starting inside a body meets it
+    /// at once.</summary>
+    bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out WorldRayHit hit,
+        BodyHandle except = default);
 
-    /// <summary>Adds to <paramref name="into"/> every body that shares a point with <paramref name="shape"/> standing
-    /// at <paramref name="pose"/>.</summary>
-    void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into);
+    /// <summary>Writes into <paramref name="hits"/> every body the ray meets within <paramref name="maxDistance"/>,
+    /// nearest first, each where it first meets it - the nearest as many as fit - and gives how many it wrote.</summary>
+    int RayCast(WorldPosition origin, Vector3F direction, float maxDistance, Span<WorldRayHit> hits,
+        BodyHandle except = default);
 
-    /// <summary>The first body <paramref name="shape"/> meets moved by <paramref name="translation"/> without turning -
-    /// within half a millimeter - and where it stopped, first within a millimeter of it; meshes and fields cannot be cast.
-    /// </summary>
-    bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out ShapeHit hit);
+    /// <summary>Adds to <paramref name="into"/> every body but <paramref name="except"/> that shares a point with
+    /// <paramref name="shape"/> standing at <paramref name="pose"/>.</summary>
+    void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default);
+
+    /// <summary>The first body but <paramref name="except"/> <paramref name="shape"/> meets moved by
+    /// <paramref name="translation"/> without turning - within half a millimeter - and where it stopped, first within a
+    /// millimeter of it; meshes and fields cannot be cast.</summary>
+    bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out WorldShapeHit hit,
+        BodyHandle except = default);
 }

@@ -90,6 +90,28 @@ public sealed partial class PhysicsWorld
         WakeJointBodies(state);
     }
 
+    /// <inheritdoc/>
+    public void SetLimits(JointHandle joint, bool hasLimits, float lowerLimit, float upperLimit)
+    {
+        var state = _jointSlots[ResolveJoint(joint)];
+        if (hasLimits && (!float.IsFinite(lowerLimit) || !float.IsFinite(upperLimit) || lowerLimit > upperLimit))
+            throw new ArgumentException("A joint's limits must be finite, the lower not above the upper.");
+
+        if (hasLimits && state.Kind == JointKind.Hinge && (lowerLimit < -MathF.PI || upperLimit > MathF.PI))
+            throw new ArgumentException("A hinge's limits lie within half a turn either way.");
+
+        if (hasLimits && state.Kind is not (JointKind.Hinge or JointKind.Slider or JointKind.Distance))
+            throw new InvalidOperationException("Only a hinge, a slider or a distance joint has limits.");
+
+        state.HasLimits = hasLimits;
+        state.LowerLimit = hasLimits ? lowerLimit : 0;
+        state.UpperLimit = hasLimits ? upperLimit : 0;
+        // A limit set anew starts from nothing: the impulse it held at another place would kick.
+        state.Impulses[Joint.LowerLimitConstraint] = 0;
+        state.Impulses[Joint.UpperLimitConstraint] = 0;
+        WakeJointBodies(state);
+    }
+
     // A body moving, or put somewhere by hand, wakes a sleeping one a joint holds to it: a platform driven off takes
     // what hangs from it along, a lamp's hook moved takes the lamp.
     private void WakeJointPartners()
