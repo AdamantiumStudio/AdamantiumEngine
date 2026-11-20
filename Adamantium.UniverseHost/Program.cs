@@ -1,16 +1,16 @@
 using Serilog;
 using Serilog.Events;
 
-namespace Adamantium.GameHost;
+namespace Adamantium.UniverseHost;
 
 public static class Program
 {
     public static int Main(string[] args)
     {
-        GameHostOptions options;
+        UniverseHostOptions options;
         try
         {
-            options = GameHostOptions.Parse(args);
+            options = UniverseHostOptions.Parse(args);
         }
         catch (ArgumentException exception)
         {
@@ -24,7 +24,7 @@ public static class Program
             .CreateLogger();
         try
         {
-            using var host = new GameHost(options);
+            using var host = new UniverseHost(options);
             var stopAsked = false;
             Console.CancelKeyPress += (_, cancel) =>
             {

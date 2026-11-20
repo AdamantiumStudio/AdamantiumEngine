@@ -3,12 +3,12 @@ using Adamantium.Engine.Scenes;
 using Adamantium.Imaging;
 using NUnit.Framework;
 
-namespace Adamantium.GameHost.Tests;
+namespace Adamantium.UniverseHost.Tests;
 
-/// <summary>The game host as the editor starts it: a process of its own, with no window, playing a scene with the game's
+/// <summary>The universe host as the editor starts it: a process of its own, with no window, playing a scene with the game's
 /// code loaded by path.</summary>
 [TestFixture]
-public class GameHostTests
+public class UniverseHostTests
 {
     private const string Scene = """
         <?xml version="1.0" encoding="utf-8"?>
@@ -30,7 +30,7 @@ public class GameHostTests
     [SetUp]
     public void MakeFolder()
     {
-        _folder = Path.Combine(Path.GetTempPath(), "adamantium-game-host-" + Guid.NewGuid().ToString("N"));
+        _folder = Path.Combine(Path.GetTempPath(), "adamantium-universe-host-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_folder);
         File.WriteAllText(Path.Combine(_folder, "Drift.ascene"), Scene.Replace("        ", ""));
     }
@@ -41,7 +41,7 @@ public class GameHostTests
     [Test]
     public void TheOptions_AreReadAsWritten()
     {
-        var options = GameHostOptions.Parse(["--scene", "a.ascene", "--content", "c1", "--content", "c2", "--code", "g.dll",
+        var options = UniverseHostOptions.Parse(["--scene", "a.ascene", "--content", "c1", "--content", "c2", "--code", "g.dll",
             "--size", "640x360", "--frames", "5", "--capture", "out.ascene", "--image", "out.png"]);
 
         Assert.Multiple(() =>
@@ -62,11 +62,11 @@ public class GameHostTests
     {
         Assert.Multiple(() =>
         {
-            Assert.That(() => GameHostOptions.Parse(["--frames", "5"]), Throws.ArgumentException);
-            Assert.That(() => GameHostOptions.Parse(["--scene", "a.ascene", "--size", "640"]), Throws.ArgumentException);
-            Assert.That(() => GameHostOptions.Parse(["--scene", "a.ascene", "--frames", "-1"]), Throws.ArgumentException);
-            Assert.That(() => GameHostOptions.Parse(["--scene", "a.ascene", "--frames", "99999999999"]), Throws.ArgumentException);
-            Assert.That(() => GameHostOptions.Parse(["--scene", "a.ascene", "--what", "x"]), Throws.ArgumentException);
+            Assert.That(() => UniverseHostOptions.Parse(["--frames", "5"]), Throws.ArgumentException);
+            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--size", "640"]), Throws.ArgumentException);
+            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--frames", "-1"]), Throws.ArgumentException);
+            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--frames", "99999999999"]), Throws.ArgumentException);
+            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--what", "x"]), Throws.ArgumentException);
         });
     }
 
@@ -79,7 +79,7 @@ public class GameHostTests
         var image = Path.Combine(_folder, "frame.png");
 
         var run = RunHost("--scene", Path.Combine(_folder, "Drift.ascene"),
-            "--code", Path.Combine(AppContext.BaseDirectory, "Adamantium.GameHost.TestGame.dll"),
+            "--code", Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.TestGame.dll"),
             "--size", "160x90", "--frames", "60", "--capture", capture, "--image", image);
 
         Assert.That(run.ExitCode, Is.EqualTo(0), run.Errors);
@@ -119,7 +119,7 @@ public class GameHostTests
             RedirectStandardOutput = true,
             UseShellExecute = false
         };
-        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Adamantium.GameHost.dll"));
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.dll"));
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
 

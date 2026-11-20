@@ -85,7 +85,7 @@ jobs:
         if: steps.changes.outputs.code == 'true'
         run: dotnet build AdamantiumEngine.sln -c Release -warnaserror
 
-      # The runners have no GPU. Adamantium.Engine.GraphicsTests and Adamantium.GameHost.Tests create a Vulkan device, so
+      # The runners have no GPU. Adamantium.Engine.GraphicsTests and Adamantium.UniverseHost.Tests create a Vulkan device, so
       # they are left out; every other test runs without one.
       #
       # The suites run at once, each in a process of its own: they share nothing, and one after another the run took
@@ -99,7 +99,7 @@ jobs:
           pids=()
           logs=()
           for p in Tests/*/*.csproj; do
-            case "$p" in *GraphicsTests*|*GameHost.Tests*) continue ;; esac
+            case "$p" in *GraphicsTests*|*UniverseHost.Tests*) continue ;; esac
             log="$RUNNER_TEMP/$(basename "$p" .csproj).log"
             dotnet test "$p" -c Release --no-build > "$log" 2>&1 &
             pids+=($!)

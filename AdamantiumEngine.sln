@@ -71,7 +71,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.Core.Shared", "A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.DarkMatter", "Adamantium.DarkMatter\Adamantium.DarkMatter.csproj", "{405EF764-64EA-4AD5-AB85-2DD9C8ED054C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameHost", "Adamantium.GameHost\Adamantium.GameHost.csproj", "{78656D2A-9E73-45D2-94F9-FDC2C907727F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.UniverseHost", "Adamantium.UniverseHost\Adamantium.UniverseHost.csproj", "{78656D2A-9E73-45D2-94F9-FDC2C907727F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

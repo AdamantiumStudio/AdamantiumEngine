@@ -1,11 +1,11 @@
 using System.Globalization;
 
-namespace Adamantium.GameHost;
+namespace Adamantium.UniverseHost;
 
-/// <summary>What the game host runs: a scene, the folders of its content, the assemblies of its code, the size it draws
+/// <summary>What the universe host runs: a scene, the folders of its content, the assemblies of its code, the size it draws
 /// at; and, for a run with no one watching, how many frames it plays and where the scene is written as the game left it.
 /// </summary>
-public sealed class GameHostOptions
+public sealed class UniverseHostOptions
 {
     private const uint DefaultWidth = 1280;
     private const uint DefaultHeight = 720;
@@ -35,9 +35,9 @@ public sealed class GameHostOptions
     /// <summary>The options of <paramref name="arguments"/>:
     /// <c>--scene file --content folder... --code assembly... --size 1280x720 --frames n --capture file --image file</c>.
     /// </summary>
-    public static GameHostOptions Parse(IReadOnlyList<string> arguments)
+    public static UniverseHostOptions Parse(IReadOnlyList<string> arguments)
     {
-        var options = new GameHostOptions();
+        var options = new UniverseHostOptions();
         for (var index = 0; index < arguments.Count; index++)
         {
             var name = arguments[index];

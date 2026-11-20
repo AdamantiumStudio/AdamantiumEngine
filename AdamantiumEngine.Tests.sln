@@ -79,11 +79,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.DarkMatter", "Ad
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.DarkMatter.Tests", "Tests\Adamantium.DarkMatter.Tests\Adamantium.DarkMatter.Tests.csproj", "{9EBC8B21-5D25-4961-98DB-01526D4B9134}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameHost", "Adamantium.GameHost\Adamantium.GameHost.csproj", "{CB55EB34-FD5D-4614-B2B6-62ABF92209DC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.UniverseHost", "Adamantium.UniverseHost\Adamantium.UniverseHost.csproj", "{CB55EB34-FD5D-4614-B2B6-62ABF92209DC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameHost.TestGame", "Tests\Adamantium.GameHost.TestGame\Adamantium.GameHost.TestGame.csproj", "{E6BDBC39-7B8A-4A43-B815-84F194058512}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.UniverseHost.TestGame", "Tests\Adamantium.UniverseHost.TestGame\Adamantium.UniverseHost.TestGame.csproj", "{E6BDBC39-7B8A-4A43-B815-84F194058512}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.GameHost.Tests", "Tests\Adamantium.GameHost.Tests\Adamantium.GameHost.Tests.csproj", "{9A4C2E71-3D58-4B6F-8E12-7C0F5A9B3D64}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adamantium.UniverseHost.Tests", "Tests\Adamantium.UniverseHost.Tests\Adamantium.UniverseHost.Tests.csproj", "{9A4C2E71-3D58-4B6F-8E12-7C0F5A9B3D64}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

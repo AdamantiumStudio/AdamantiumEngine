@@ -15,9 +15,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Adamantium.GameHost\Adamantium.GameHost.csproj" />
+        <ProjectReference Include="..\..\Adamantium.UniverseHost\Adamantium.UniverseHost.csproj" />
         <!-- Built beside the tests, played by the host from there. -->
-        <ProjectReference Include="..\Adamantium.GameHost.TestGame\Adamantium.GameHost.TestGame.csproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Adamantium.UniverseHost.TestGame\Adamantium.UniverseHost.TestGame.csproj" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
 </Project>

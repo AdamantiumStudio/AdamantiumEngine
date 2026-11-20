@@ -1,7 +1,7 @@
 using Adamantium.Core;
 using Adamantium.ECS;
 
-namespace Adamantium.GameHost.TestGame;
+namespace Adamantium.UniverseHost.TestGame;
 
 /// <summary>The game's logic: every entity named Mover drifts along X, one unit a second.</summary>
 public sealed class DriftService : GameService

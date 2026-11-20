@@ -7,7 +7,7 @@ using Adamantium.Engine.Scenes;
 using Adamantium.Multiverse;
 using Adamantium.Multiverse.Events;
 
-namespace Adamantium.GameHost;
+namespace Adamantium.UniverseHost;
 
 /// <summary>The universe a game plays in outside the editor, with the services the editor gives a game: input, physics,
 /// transforms and the game's code - none of the editor's own tools - and each output drawn as the game shows it.</summary>

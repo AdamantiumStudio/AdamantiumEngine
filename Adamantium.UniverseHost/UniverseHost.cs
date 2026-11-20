@@ -8,13 +8,13 @@ using Adamantium.Graphics.Core.Assets;
 using Adamantium.Imaging;
 using Adamantium.Multiverse;
 
-namespace Adamantium.GameHost;
+namespace Adamantium.UniverseHost;
 
 /// <summary>Plays a game with no window: its code loaded by path - the PDB beside it, for a debugger to see - its scene
 /// built from its content, its services started, drawn by the scene's camera into an offscreen output.</summary>
-public sealed class GameHost : IDisposable
+public sealed class UniverseHost : IDisposable
 {
-    private readonly GameHostOptions _options;
+    private readonly UniverseHostOptions _options;
     private readonly GameUniverse _universe;
     private readonly OffscreenOutput _output;
     private readonly List<string> _codeFolders = [];
@@ -22,7 +22,7 @@ public sealed class GameHost : IDisposable
     private int _framesPlayed;
     private volatile bool _stopAsked;
 
-    public GameHost(GameHostOptions options)
+    public UniverseHost(UniverseHostOptions options)
     {
         _options = options;
         var container = new AdamantiumDependencyContainer();
@@ -48,7 +48,7 @@ public sealed class GameHost : IDisposable
     /// <summary>The exit code: 0 once the game played as asked, else 1 - the reason written to the error output.</summary>
     public int ExitCode { get; private set; }
 
-    /// <summary>Plays the game until it is stopped, or for <see cref="GameHostOptions.Frames"/> frames; returns once the
+    /// <summary>Plays the game until it is stopped, or for <see cref="UniverseHostOptions.Frames"/> frames; returns once the
     /// universe stopped.</summary>
     public void Run()
     {
