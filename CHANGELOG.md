@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.UniverseHost`: runs a universe with no window and no editor - its scene built from its content folders,
+  the game's code loaded by path with the PDB beside it (for a debugger to see), its services started - drawn by the
+  scene's camera into an offscreen output. The editor will start it to debug the game. `--frames`, `--capture` and
+  `--image` play a set number of frames, then write the scene as the game left it and the last frame.
+
+- `HeadlessPlatform` in `Adamantium.Multiverse`: a platform with no surfaces and no windows, for a universe drawing
+  only into outputs added to it directly, such as an `OffscreenOutput`.
+
 - Shape casts in the physics: `IPhysicsWorld.CastShape(shape, pose, translation, out ShapeHit)` moves a shape without
   turning - a wheel down its suspension, a character along its step - and gives the first body it meets, coming within
   half a millimeter of it: where it stops, first within a millimeter of that body, and the body's outward normal
@@ -15,6 +23,7 @@ All packages share one version.
   bodies of any shape, meshes and height fields included, by conservative advancement on the GJK distance, as Box2D
   v3 and Jolt cast; a surface's triangles are swept nearest first by a separating-axis bound, those it cannot meet
   sooner passed by.
+
 - Joints in the physics: `IPhysicsWorld.Add(JointDescription)` gives a `JointHandle`. `JointKind.Fixed` welds two
   bodies, `Ball` shares a point, `Hinge` turns them about an axis, `Slider` slides them along one, `Distance` keeps
   two points apart - as a rod, a rope between limits, or a spring. A joint holds the description's first body to its
@@ -760,6 +769,12 @@ All packages share one version.
 
 ### Fixed
 
+- A universe of its own (`UniverseMode.Standalone`) creates its graphics device again: it named its Vulkan
+  application with an empty text, which failed to marshal. It takes its `Title`, else "Universe".
+- A Standalone universe's `Run` returns only once its loop stopped and freed its resources - it returned while the
+  last frame still ran. Its loop failing stops the universe instead of leaving `Run` waiting forever, and an error
+  while it stops is logged, not a crash; a hosted loop that fails stops its universe too. With `IsFixedTimeStep` the
+  loop sleeps until the next step, with millisecond timers on Windows; it spun a core.
 - PDF: a file that encrypts only its embedded files (`/EFF`, strings and streams left plain) has its attachments
   decrypted by the embedded files' own filter, even when their stream leaves `/Type` out - they gave garbage before.
   When the filter asks at an attachment's opening (`/AuthEvent /EFOpen`) the document reads without a password, and

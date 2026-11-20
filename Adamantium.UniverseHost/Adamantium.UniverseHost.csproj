@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Runs a game built by the editor with no window and no editor: its scene, its content and its code, drawn into a
+       surface of its own. The editor starts it to debug the game, the debugger attached. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>AnyCPU</Platforms>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Adamantium.Engine\Adamantium.Engine.csproj" />
+  </ItemGroup>
+
+</Project>
