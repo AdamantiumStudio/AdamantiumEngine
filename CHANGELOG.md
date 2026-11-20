@@ -7,6 +7,13 @@ All packages share one version.
 
 ### Added
 
+- Frames shared through memory of the process, for processes on different GPUs or on a driver that shares no GPU memory
+  between them - KosmicKrisp on macOS, llvmpipe: `HostMemorySurfaceProducer` has the producer's GPU copy each frame
+  into memory shared through a file (`SharedFrameMemory`, `SharedHandleType.HostMemory`), imported as its own
+  (VK_EXT_external_memory_host, `GraphicsAdapter.HostPointerAlignment`); `HostFrameReader` gives the consumer the
+  newest frame and the slots back. A universe host takes `UniverseLaunch.FrameSharing`: `Auto` shares GPU memory with a
+  viewer on the same GPU where the device exports it, else this memory.
+
 - A universe shown in another process (`Adamantium.Multiverse.Remote`, over StreamJsonRpc): the universe host serves
   `IUniverseHostService` on a pipe and its viewer connects (`UniverseHostConnection`, `UniverseViewerConnection`).
   The viewer launches the game (`LaunchAsync` with a `UniverseLaunch`: scene, content, code, size - failing with the

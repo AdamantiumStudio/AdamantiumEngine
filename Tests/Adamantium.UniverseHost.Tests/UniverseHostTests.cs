@@ -109,7 +109,8 @@ public class UniverseHostTests
     [Test]
     public async Task TheViewer_IsGivenSurfacesOfItsSize_AndNewOnesWhenItResizes()
     {
-        await Launch("Drift.ascene", 160, 90);
+        Assume.That(OperatingSystem.IsWindows(), "GPU handles go to another process on Windows only, for now");
+        await Launch("Drift.ascene", 160, 90, FrameSharing.GpuHandles);
         Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
         Assert.Multiple(() =>
         {
@@ -129,6 +130,29 @@ public class UniverseHostTests
         await _connection.Host.StopAsync(CancellationToken.None);
     }
 
+    // Through memory shared with the viewer, as on a driver that shares no GPU memory between processes: the viewer reads
+    // the lit cube in the middle of the newest frame, gives the slots back, and newer frames keep coming.
+    [Test]
+    public async Task ThroughSharedMemory_TheViewerReadsTheFrames_AndNewerOnesComeOnceItGivesThemBack()
+    {
+        await Launch("Drift.ascene", 160, 90, FrameSharing.HostMemory);
+        Assert.That(_viewer.Surfaces.TryTake(out var surface, Patience), Is.True, "given a surface");
+        Assert.That(surface.HandleType, Is.EqualTo(Adamantium.Graphics.Core.SharedHandleType.HostMemory));
+        using var reader = new Adamantium.Graphics.HostFrameReader(surface.ToDescriptor());
+
+        var first = TakeLitFrame(reader, out var brightness);
+        reader.GiveBack(first);
+        var later = TakeFrame(reader, out _);
+        reader.GiveBack(later);
+        await _connection.Host.StopAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(brightness, Is.GreaterThan(60), "the lit cube is drawn in the middle");
+            Assert.That(later, Is.GreaterThan(first), "a newer frame came once the slots were given back");
+        });
+    }
+
     // A scene or code the host cannot load fails the launch with the reason, and the host exits with 1.
     [Test]
     public void ALaunchThatCannotLoad_FailsWithTheReason()
@@ -144,14 +168,47 @@ public class UniverseHostTests
         });
     }
 
-    private Task Launch(string scene, uint width, uint height) =>
+    private Task Launch(string scene, uint width, uint height, FrameSharing sharing = FrameSharing.Auto) =>
         _connection.Host.LaunchAsync(new UniverseLaunch
         {
             ScenePath = Path.Combine(_folder, scene),
             CodeAssemblies = [Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.TestGame.dll")],
             Width = width,
-            Height = height
+            Height = height,
+            FrameSharing = sharing
         }, new CancellationTokenSource(Patience).Token);
+
+    private static ulong TakeFrame(Adamantium.Graphics.HostFrameReader reader, out int centerBrightness)
+    {
+        var waited = Stopwatch.StartNew();
+        int slot;
+        ulong frame;
+        while (!reader.TryTakeNewest(out slot, out frame))
+        {
+            Assert.That(waited.Elapsed, Is.LessThan(Patience), "a frame comes");
+            Thread.Sleep(5);
+        }
+
+        var pixels = reader.Pixels(slot);
+        var center = ((int)reader.Height / 2 * (int)reader.Width + (int)reader.Width / 2) * 4;
+        centerBrightness = pixels[center] + pixels[center + 1] + pixels[center + 2];
+        return frame;
+    }
+
+    private static ulong TakeLitFrame(Adamantium.Graphics.HostFrameReader reader, out int centerBrightness)
+    {
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            var frame = TakeFrame(reader, out centerBrightness);
+            if (centerBrightness > 60 || waited.Elapsed > Patience)
+            {
+                return frame;
+            }
+
+            reader.GiveBack(frame);
+        }
+    }
 
     private async Task<double> WaitUntilMoverMoved()
     {

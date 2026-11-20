@@ -12,25 +12,32 @@ using Image = Adamantium.Imaging.Image;
 
 namespace Adamantium.UniverseHost;
 
-/// <summary>An output shown in another process: its frames go to the viewer through shared surfaces, their handles and
-/// frame numbers told it; its size, pointer, keyboard and input come from the viewer.</summary>
+/// <summary>An output shown in another process: its frames go to the viewer through shared GPU memory, its handles given
+/// to the viewer's process, or through memory shared through a file - as the launch asks and the device allows - and
+/// each new frame is told it; its size, pointer, keyboard and input come from the viewer.</summary>
 internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsumer
 {
     private readonly IUniverseViewer _viewer;
-    private readonly HandleTransfer _handles;
-    private readonly ISharedSurfaceProducer _producer;
+    private readonly int _viewerProcessId;
+    private readonly FrameSharing _sharing;
+    private readonly Guid _viewerDeviceUuid;
+    private HandleTransfer _handles;
+    private ISharedSurfaceProducer _producer;
     private SharedSurfaceDescriptor _descriptor;
     private ulong _announced;
     private Vector2F _pointer;
     private volatile bool _pointerOver;
     private volatile bool _keyboardFocused;
 
-    public RemoteUniverseOutput(IEventAggregator universeEvents, IUniverseViewer viewer, HandleTransfer handles,
-        uint width, uint height) : base(universeEvents)
+    public RemoteUniverseOutput(IEventAggregator universeEvents, IUniverseViewer viewer, int viewerProcessId,
+        UniverseLaunch launch) : base(universeEvents)
     {
         _viewer = viewer;
-        _handles = handles;
-        _producer = new SharedSurfaceProducer(this, SurfaceFormat.B8G8R8A8.UNorm);
+        _viewerProcessId = viewerProcessId;
+        _sharing = launch.FrameSharing;
+        _viewerDeviceUuid = launch.ViewerDeviceUuid;
+        var width = launch.Width;
+        var height = launch.Height;
         Description = new UniverseOutputDescription(PresenterType.RenderTarget)
         {
             Width = width,
@@ -107,19 +114,34 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
 
     public override void CopyOutput(IGraphicsDevice graphicsDevice)
     {
-        if (Presenter is RenderTargetGraphicsPresenter { ResolveTexture: { } frame })
+        if (SharingFailure != null || Presenter is not RenderTargetGraphicsPresenter { ResolveTexture: { } frame })
         {
-            _producer.Produce(graphicsDevice, frame, Width, Height, inDevice: false);
+            return;
         }
+
+        try
+        {
+            _producer ??= CreateProducer(graphicsDevice);
+        }
+        catch (Exception exception) when (exception is NotSupportedException or PlatformNotSupportedException)
+        {
+            SharingFailure = exception.Message;
+            return;
+        }
+
+        _producer.Produce(graphicsDevice, frame, Width, Height, inDevice: false);
     }
+
+    /// <summary>Why the frames cannot be shared with the viewer; null while they can, or before the first frame.</summary>
+    public string SharingFailure { get; private set; }
 
     public override void DisplayContent()
     {
         base.DisplayContent();
-        _producer.NoteSubmitted();
+        _producer?.NoteSubmitted();
     }
 
-    public override bool WaitUntilShown(TimeSpan timeout) => _producer.WaitUntilShown(timeout);
+    public override bool WaitUntilShown(TimeSpan timeout) => _producer?.WaitUntilShown(timeout) ?? true;
 
     public override Vector2F PointToSurface(Vector2F absolute) => absolute;
 
@@ -132,10 +154,10 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
         _descriptor = descriptor;
         _announced = descriptor.Submitted;
         var buffers = new RemoteSurfaceBuffer[descriptor.BufferCount];
-        buffers[0] = Give(descriptor);
+        buffers[0] = Describe(descriptor);
         for (var i = 1; i < buffers.Length; i++)
         {
-            buffers[i] = Give(descriptor.Others[i - 1]);
+            buffers[i] = Describe(descriptor.Others[i - 1]);
         }
 
         _viewer.ShowSurface(new RemoteSurface
@@ -144,7 +166,8 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
             Height = descriptor.Height,
             Format = descriptor.Format,
             HandleType = descriptor.HandleType,
-            Buffers = buffers
+            Buffers = buffers,
+            MemoryPath = descriptor.MemoryPath
         });
     }
 
@@ -169,13 +192,14 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
 
     protected override void Dispose(bool disposeManagedResources)
     {
-        _producer.Release(retire: true);
+        _producer?.Release(retire: false);
+        _handles?.Dispose();
         base.Dispose(disposeManagedResources);
     }
 
     protected override void ReleaseDeviceResources()
     {
-        _producer.Release(retire: false);
+        _producer?.Release(retire: false);
         base.ReleaseDeviceResources();
     }
 
@@ -197,9 +221,33 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
     {
     }
 
-    private RemoteSurfaceBuffer Give(SharedSurfaceDescriptor surface) => new(
-        _handles.Give(surface.MemoryHandle),
-        surface.AllocationSize,
-        _handles.Give(surface.ProduceSemaphoreHandle),
-        _handles.Give(surface.ConsumeSemaphoreHandle));
+    private ISharedSurfaceProducer CreateProducer(IGraphicsDevice device)
+    {
+        var sameGpu = _viewerDeviceUuid != Guid.Empty && _viewerDeviceUuid == device.Adapter.DeviceUuid;
+        var gpuHandles = _sharing == FrameSharing.GpuHandles
+                         || _sharing == FrameSharing.Auto && OperatingSystem.IsWindows() && sameGpu
+                         && SharedSurface.CanExport(device);
+        if (gpuHandles)
+        {
+            _handles = new HandleTransfer(_viewerProcessId);
+            return new SharedSurfaceProducer(this, SurfaceFormat.B8G8R8A8.UNorm);
+        }
+
+        if (HostMemorySurfaceProducer.CanProduce(device))
+        {
+            return new HostMemorySurfaceProducer(this, SurfaceFormat.B8G8R8A8.UNorm);
+        }
+
+        throw new NotSupportedException(
+            $"{device.Adapter.AdapterProperties.DeviceName} shares no frames with another process: it exports no GPU memory to it and imports none of the process's.");
+    }
+
+    private RemoteSurfaceBuffer Describe(SharedSurfaceDescriptor surface) =>
+        surface.HandleType == SharedHandleType.HostMemory
+            ? new RemoteSurfaceBuffer(0, surface.AllocationSize, 0, 0, surface.MemoryOffset, surface.CounterOffset)
+            : new RemoteSurfaceBuffer(
+                _handles.Give(surface.MemoryHandle),
+                surface.AllocationSize,
+                _handles.Give(surface.ProduceSemaphoreHandle),
+                _handles.Give(surface.ConsumeSemaphoreHandle));
 }

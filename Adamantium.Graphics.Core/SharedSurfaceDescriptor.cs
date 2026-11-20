@@ -18,7 +18,11 @@ public enum SharedHandleType
     /// <summary>A D3D11 texture's shared NT handle, Windows (VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT).</summary>
     D3D11Texture,
     /// <summary>A D3D12 resource's shared NT handle, Windows (VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT).</summary>
-    D3D12Resource
+    D3D12Resource,
+    /// <summary>No handle: the frames are copied into memory shared through a file (<see cref="SharedSurfaceDescriptor.MemoryPath"/>),
+    /// where the producer's GPU writes them (VK_EXT_external_memory_host) and the consumer reads them - for processes on
+    /// different GPUs, or on a driver that shares no GPU memory between processes.</summary>
+    HostMemory
     // Native Metal (MTLTexture) interop would need VK_EXT_metal_objects, which the binding does not currently
     // generate; on macOS use OpaqueFd (MoltenVK) until that extension is added to the generator.
 }
@@ -53,6 +57,17 @@ public sealed class SharedSurfaceDescriptor
 
     /// <summary>Consumer→producer semaphore (signaled after sampling); lets the producer reuse the surface.</summary>
     public IntPtr ConsumeSemaphoreHandle { get; set; }
+
+    /// <summary>For <see cref="SharedHandleType.HostMemory"/>: the file the frames are in.</summary>
+    public string MemoryPath { get; set; }
+
+    /// <summary>For <see cref="SharedHandleType.HostMemory"/>: where in <see cref="MemoryPath"/> this surface's pixels
+    /// start, rows packed one after another.</summary>
+    public ulong MemoryOffset { get; set; }
+
+    /// <summary>For <see cref="SharedHandleType.HostMemory"/>: where in <see cref="MemoryPath"/> this surface's two
+    /// counters are - the frame the producer finished in it, then the frame the consumer read from it.</summary>
+    public ulong CounterOffset { get; set; }
 
     /// <summary>Number of surfaces the producer rotates through (1 = single-buffered).</summary>
     public uint BufferCount { get; set; } = 1;
