@@ -779,6 +779,11 @@ All packages share one version.
 
 ### Fixed
 
+- The physics' step allocates nothing without the JIT's optimizations too, as in Debug: GJK's and EPA's tables of
+  constants were spans made by reflection on every call there (940 KB per 240 steps on a height field), and the solved
+  contacts were walked through an interface, boxing the enumerator each step. Tests hold the warmed step of nine scenes
+  - all but a sleeping one kept awake, so collision and the solvers run - the queries where they meet something and a
+  body's changes at no bytes, in CI also with the JIT's optimizations off.
 - Adamantium.Vulkan 1.3.1, Slang 1.1.2 and Spirv 2.0.2: an empty string in a structure's field (an empty application
   name, say) no longer runs past the marshalling buffer.
 - A universe of its own (`UniverseMode.Standalone`) creates its graphics device again: it named its Vulkan

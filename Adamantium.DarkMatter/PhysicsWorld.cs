@@ -866,10 +866,8 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         }
 
         // A joint binds its bodies into one island, as a touch does; one held to a moving kinematic body stays awake.
-        var activeJoints = _jointSolver.Active;
-        for (var index = 0; index < activeJoints.Count; index++)
+        foreach (var joint in _jointSolver.Active)
         {
-            var joint = activeJoints[index];
             if (joint.First == NoBody || joint.Second == NoBody)
                 continue;
 

@@ -9,6 +9,12 @@ internal static class AxisMath
     private const float RelativeTolerance = 0.05f;
     private const float AbsoluteTolerance = 0.0025f;
 
+    // An array, not a span of a constant list, which is reflection on every call where the JIT does not make it data.
+    private static readonly int[] SignsArray = [1, -1];
+
+    /// <summary>Both ways along an axis.</summary>
+    public static ReadOnlySpan<int> Signs => SignsArray;
+
     /// <summary>Whether the separation along a candidate axis beats the one along the axis kept so far by more than a
     /// small tolerance, overlapping or apart, so a near tie keeps the kept axis and contacts do not flicker.</summary>
     public static bool IsClearlyGreater(float candidate, float kept) =>

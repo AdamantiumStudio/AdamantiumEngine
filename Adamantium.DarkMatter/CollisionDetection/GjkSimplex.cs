@@ -6,6 +6,10 @@ namespace Adamantium.DarkMatter.CollisionDetection;
 /// the point nearest the origin, with that point's weights on them.</summary>
 internal sealed class GjkSimplex
 {
+    // Each face's three corners, then the corner across from it. A static array: a span made of a constant list is
+    // reflection on every call where the JIT does not make it plain data - in Debug, say.
+    private static readonly int[] FaceCorners = [0, 1, 2, 3, 0, 2, 3, 1, 0, 3, 1, 2, 1, 3, 2, 0];
+
     public readonly SupportVertex[] Vertices = new SupportVertex[4];
     public readonly double[] Weights = new double[4];
     public int Count;
@@ -83,8 +87,7 @@ internal sealed class GjkSimplex
     // The faces the origin may lie beyond are weighed by their points alone; the simplex is cut once, to the best.
     private bool TryNearestOnTetrahedron(out Vector3<double> nearest)
     {
-        // Each face's three corners, then the corner across from it.
-        ReadOnlySpan<int> faces = [0, 1, 2, 3, 0, 2, 3, 1, 0, 3, 1, 2, 1, 3, 2, 0];
+        ReadOnlySpan<int> faces = FaceCorners;
         var nearestFace = new NearestFace { Face = -1, Distance = double.MaxValue };
         // The triangle the newest corner was found from had the nearest point inside it, and the origin is on that
         // corner's side of it: it is weighed when flat there, and by its side only when - rounding having had its way -

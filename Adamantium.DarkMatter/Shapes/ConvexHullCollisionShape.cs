@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.DarkMatter.CollisionDetection;
 using Adamantium.DarkMatter.Dynamics;
 
 namespace Adamantium.DarkMatter.Shapes;
@@ -373,10 +374,9 @@ public sealed class ConvexHullCollisionShape : CollisionShape
     {
         var kept = new List<Vector3F>(MaxCorners);
         var keptSet = new HashSet<Vector3F>();
-        ReadOnlySpan<int> signs = [1, -1];
         for (var axis = 0; axis < 3; axis++)
         {
-            foreach (var sign in signs)
+            foreach (var sign in AxisMath.Signs)
             {
                 var direction = axis switch { 0 => Vector3F.UnitX, 1 => Vector3F.UnitY, _ => Vector3F.UnitZ } * sign;
                 var corner = hull.Support(direction);
