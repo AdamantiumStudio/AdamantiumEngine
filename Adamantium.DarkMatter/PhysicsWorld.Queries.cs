@@ -16,18 +16,12 @@ public sealed partial class PhysicsWorld
     private readonly List<CastTriangle> _castTriangles = [];
 
     /// <inheritdoc/>
-    public bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out RayHit hit)
+    public bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out WorldRayHit hit,
+        BodyHandle except = default)
     {
-        RequireFinite(origin, nameof(origin));
         hit = default;
-        var length = direction.Length();
-        if (length <= 0 || maxDistance < 0)
+        if (!TryStartRay(origin, direction, maxDistance, except, out var way, out var skipped))
             return false;
-
-        var way = direction / length;
-        _rayCandidates.Clear();
-        _tree.RayCast(new Ray<double>(origin.ToVector(), way.As<double>()), _rayCandidates, maxDistance);
-        _rayCandidates.Sort(CompareEntries);
 
         var nearest = maxDistance;
         var found = false;
@@ -36,23 +30,139 @@ public sealed partial class PhysicsWorld
             if (candidate.Entry > nearest)
                 break;
 
-            ref var part = ref _parts[candidate.Item];
-            var pose = PlacePart(_bodies[part.Body], part, origin);
-            var localRay = new Ray<float>(pose.InverseTransformPoint(Vector3F.Zero), pose.InverseTransformDirection(way));
-            if (!part.Shape.CastRay(localRay, nearest, out var distance, out var normal))
+            if (!TryMeetPart(candidate.Item, skipped, origin, way, nearest, out var met))
                 continue;
 
-            nearest = distance;
+            nearest = met.Distance;
             found = true;
-            hit = new RayHit(GetHandle(part.Body), origin + way * distance,
-                pose.TransformDirection(normal), distance);
+            hit = met;
         }
+
+        if (found)
+            hit = WithPartIndex(hit);
 
         return found;
     }
 
     /// <inheritdoc/>
-    public void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into)
+    public int RayCast(WorldPosition origin, Vector3F direction, float maxDistance, Span<WorldRayHit> hits,
+        BodyHandle except = default)
+    {
+        if (hits.IsEmpty || !TryStartRay(origin, direction, maxDistance, except, out var way, out var skipped))
+            return 0;
+
+        var count = 0;
+        var farthest = maxDistance;
+        foreach (var candidate in _rayCandidates)
+        {
+            // Full, a box entered past the farthest hit kept holds no nearer one.
+            if (count == hits.Length && candidate.Entry > farthest)
+                break;
+
+            if (!TryMeetPart(candidate.Item, skipped, origin, way, maxDistance, out var met))
+                continue;
+
+            count = KeepNearestPerBody(hits, count, met);
+            if (count == hits.Length)
+                farthest = hits[count - 1].Distance;
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            hits[index] = WithPartIndex(hits[index]);
+        }
+
+        return count;
+    }
+
+    // The ray made of length one and its candidates found, nearest box first; false for no ray to cast.
+    private bool TryStartRay(WorldPosition origin, Vector3F direction, float maxDistance, BodyHandle except,
+        out Vector3F way, out int skipped)
+    {
+        RequireFinite(origin, nameof(origin));
+        skipped = IndexOfExcept(except);
+        way = default;
+        var length = direction.Length();
+        if (length <= 0 || maxDistance < 0)
+            return false;
+
+        way = direction / length;
+        _rayCandidates.Clear();
+        _tree.RayCast(new Ray<double>(origin.ToVector(), way.As<double>()), _rayCandidates, maxDistance);
+        _rayCandidates.Sort(CompareEntries);
+        return true;
+    }
+
+    // Where the ray meets the part within reach, unless its body is the one passed by; the hit tells the part by its
+    // slot, made its index once kept.
+    private bool TryMeetPart(int slot, int skipped, WorldPosition origin, Vector3F way, float reach, out WorldRayHit hit)
+    {
+        hit = default;
+        ref var part = ref _parts[slot];
+        if (part.Body == skipped)
+            return false;
+
+        var pose = PlacePart(_bodies[part.Body], part, origin);
+        var localRay = new Ray<float>(pose.InverseTransformPoint(Vector3F.Zero), pose.InverseTransformDirection(way));
+        if (!part.Shape.CastRay(localRay, reach, out var distance, out var normal))
+            return false;
+
+        hit = new WorldRayHit(GetHandle(part.Body), slot, origin + way * distance, pose.TransformDirection(normal),
+            distance);
+        return true;
+    }
+
+    private WorldRayHit WithPartIndex(in WorldRayHit hit) =>
+        new(hit.Body, PartIndexOf(hit.Part), hit.Position, hit.Normal, hit.Distance);
+
+    // The hits kept nearest first, one for each body - its nearest part - as many as fit; gives how many there are.
+    private static int KeepNearestPerBody(Span<WorldRayHit> hits, int count, in WorldRayHit hit)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            if (hits[index].Body != hit.Body)
+                continue;
+
+            if (hits[index].Distance <= hit.Distance)
+                return count;
+
+            hits.Slice(index + 1, count - index - 1).CopyTo(hits[index..]);
+            count--;
+            break;
+        }
+
+        var at = count;
+        while (at > 0 && hits[at - 1].Distance > hit.Distance)
+        {
+            at--;
+        }
+
+        if (at == hits.Length)
+            return count;
+
+        var kept = Math.Min(count, hits.Length - 1);
+        hits.Slice(at, kept - at).CopyTo(hits[(at + 1)..]);
+        hits[at] = hit;
+        return kept + 1;
+    }
+
+    // The world's own index of the body a query passes by; none for a default handle.
+    private int IndexOfExcept(BodyHandle except) => except.IsValid ? Resolve(except) : NoBody;
+
+    // Where a part stands among its body's parts: its place among a compound's, 0 for a body of one shape.
+    private int PartIndexOf(int slot)
+    {
+        var index = 0;
+        for (var part = _bodies[_parts[slot].Body].FirstPart; part != slot; part = _parts[part].Next)
+        {
+            index++;
+        }
+
+        return index;
+    }
+
+    /// <inheritdoc/>
+    public void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default)
     {
         ArgumentNullException.ThrowIfNull(shape);
         ArgumentNullException.ThrowIfNull(into);
@@ -65,6 +175,10 @@ public sealed partial class PhysicsWorld
         var placedPose = new LocalPose(Vector3F.Zero, NormalizeRotation(pose.Rotation, nameof(pose)));
         _overlapped.Clear();
         _overlappedBodies.Clear();
+        // Passed by as one already found.
+        var skipped = IndexOfExcept(except);
+        if (skipped != NoBody)
+            _overlappedBodies.Add(skipped);
         if (shape is CompoundCollisionShape compound)
         {
             var parts = compound.Parts;
@@ -128,7 +242,8 @@ public sealed partial class PhysicsWorld
     }
 
     /// <inheritdoc/>
-    public bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out ShapeHit hit)
+    public bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out WorldShapeHit hit,
+        BodyHandle except = default)
     {
         ArgumentNullException.ThrowIfNull(shape);
         if (SurfaceCollisionShape.HoldsSurface(shape))
@@ -139,7 +254,10 @@ public sealed partial class PhysicsWorld
 
         RequireFinite(pose.Position, nameof(pose));
         var placedPose = new LocalPose(Vector3F.Zero, NormalizeRotation(pose.Rotation, nameof(pose)));
-        var cast = new ShapeCast { Origin = pose.Position, Translation = translation, Nearest = 1 };
+        var cast = new ShapeCast
+        {
+            Origin = pose.Position, Translation = translation, Nearest = 1, Except = IndexOfExcept(except)
+        };
         if (shape is CompoundCollisionShape compound)
         {
             var parts = compound.Parts;
@@ -153,9 +271,12 @@ public sealed partial class PhysicsWorld
             CastPart(shape, placedPose, ref cast);
         }
 
-        hit = cast.Hit;
+        hit = cast.Found ? WithPartIndex(cast.Hit) : default;
         return cast.Found;
     }
+
+    private WorldShapeHit WithPartIndex(in WorldShapeHit hit) =>
+        new(hit.Body, PartIndexOf(hit.Part), hit.Position, hit.Normal, hit.Distance);
 
     // Each body part in the box the shape sweeps up to the nearest meeting yet.
     private void CastPart(CollisionShape shape, in LocalPose pose, ref ShapeCast cast)
@@ -166,24 +287,28 @@ public sealed partial class PhysicsWorld
         foreach (var index in _found)
         {
             ref var part = ref _parts[index];
+            if (part.Body == cast.Except)
+                continue;
+
             var partPose = PlacePart(_bodies[part.Body], part, cast.Origin);
             if (part.Shape is SurfaceCollisionShape surface)
             {
-                CastAtSurface(shape, pose, surface, partPose, part.Body, ref cast);
+                CastAtSurface(shape, pose, surface, partPose, index, ref cast);
                 continue;
             }
 
             if (ShapeSweep.TryCast(shape, pose, cast.Translation, part.Shape, partPose, cast.Nearest, _castBuffer,
                     out var meeting))
-                Keep(ref cast, part.Body, meeting);
+                Keep(ref cast, index, meeting);
         }
     }
 
     // The triangles up to where the shape's foremost point runs into the surface, swept nearest first by a lower bound
     // of where each could be met, until one could only be met past the nearest meeting yet.
     private void CastAtSurface(CollisionShape shape, in LocalPose pose, SurfaceCollisionShape surface,
-        in LocalPose surfacePose, int body, ref ShapeCast cast)
+        in LocalPose surfacePose, int slot, ref ShapeCast cast)
     {
+        var body = _parts[slot].Body;
         var start = surfacePose.InverseTransform(pose);
         var placed = new PlacedShape(shape, start);
         var translation = surfacePose.InverseTransformDirection(cast.Translation);
@@ -238,7 +363,7 @@ public sealed partial class PhysicsWorld
             _triangle.Set(candidate.First, candidate.Second, candidate.Third, candidate.Normal);
             if (ShapeSweep.TryCast(shape, pose, cast.Translation, _triangle, surfacePose,
                     MathF.Min(limit, cast.Nearest), _castBuffer, out var meeting))
-                Keep(ref cast, body, meeting);
+                Keep(ref cast, slot, meeting);
         }
     }
 
@@ -297,15 +422,16 @@ public sealed partial class PhysicsWorld
     }
 
     // The nearest meeting becomes the hit, at its stop; one met no sooner than the hit's leaves it.
-    private void Keep(ref ShapeCast cast, int body, in ShapeMeeting meeting)
+    private void Keep(ref ShapeCast cast, int slot, in ShapeMeeting meeting)
     {
         if (cast.Found && meeting.Meet >= cast.Nearest)
             return;
 
+        var body = _parts[slot].Body;
         cast.Found = true;
         cast.Nearest = meeting.Meet;
         cast.Body = body;
-        cast.Hit = new ShapeHit(GetHandle(body), cast.Origin + meeting.Point, meeting.Normal,
+        cast.Hit = new WorldShapeHit(GetHandle(body), slot, cast.Origin + meeting.Point, meeting.Normal,
             meeting.Stop * cast.Translation.Length());
     }
 

@@ -12,5 +12,10 @@ internal struct ShapeCast
 
     /// <summary>The world's own index of the body met nearest yet.</summary>
     public int Body;
-    public ShapeHit Hit;
+
+    /// <summary>The meeting nearest yet, its part told by the world's own slot of it until the cast is done.</summary>
+    public WorldShapeHit Hit;
+
+    /// <summary>The world's own index of the body the cast passes by; none for -1.</summary>
+    public int Except;
 }

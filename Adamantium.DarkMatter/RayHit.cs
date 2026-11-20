@@ -1,21 +1,25 @@
 namespace Adamantium.DarkMatter;
 
-/// <summary>Where a ray first met a body.</summary>
+/// <summary>Where a ray met a body of a <see cref="PhysicsSimulation"/>.</summary>
 public readonly struct RayHit
 {
-    public RayHit(BodyHandle body, WorldPosition position, Vector3F normal, float distance)
+    public RayHit(BodyId body, int part, WorldPosition point, Vector3F normal, float distance)
     {
         Body = body;
-        Position = position;
+        Part = part;
+        Point = point;
         Normal = normal;
         Distance = distance;
     }
 
     /// <summary>The body met.</summary>
-    public BodyHandle Body { get; }
+    public BodyId Body { get; }
+
+    /// <summary>Which of its parts: its place among the body's parts, 0 for a body of one shape.</summary>
+    public int Part { get; }
 
     /// <summary>The point met.</summary>
-    public WorldPosition Position { get; }
+    public WorldPosition Point { get; }
 
     /// <summary>The body's outward normal there; against the ray for a ray starting inside.</summary>
     public Vector3F Normal { get; }

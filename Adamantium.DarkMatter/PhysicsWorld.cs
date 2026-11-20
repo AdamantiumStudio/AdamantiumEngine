@@ -287,7 +287,25 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
+    public void ApplyAngularImpulse(BodyHandle body, Vector3F impulse)
+    {
+        RequireFinite(impulse, nameof(impulse));
+        var index = ResolveDynamic(body);
+        ref var state = ref _bodies[index];
+        var angular = state.AngularVelocity + InertiaMath.Apply(state.WorldInverseInertia, impulse);
+        RequireFinite(angular, nameof(impulse));
+        state.AngularVelocity = LimitSpeed(angular, MaxAngularSpeed);
+        WakeIsland(index);
+    }
+
+    /// <inheritdoc/>
+    public float GetMass(BodyHandle body) => _bodies[Resolve(body)].WeighedMass;
+
+    /// <inheritdoc/>
     public bool IsAwake(BodyHandle body) => _bodies[Resolve(body)].IsAwake;
+
+    // All of a body at one look, for a simulation reading many each step; good until the next change of the world.
+    internal ref readonly BodyState StateOf(BodyHandle body) => ref _bodies[Resolve(body)];
 
     /// <inheritdoc/>
     public void WakeUp(BodyHandle body) => WakeIsland(Resolve(body));
