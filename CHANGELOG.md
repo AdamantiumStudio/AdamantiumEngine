@@ -7,10 +7,19 @@ All packages share one version.
 
 ### Added
 
+- A universe shown in another process (`Adamantium.Multiverse.Remote`, over StreamJsonRpc): the universe host serves
+  `IUniverseHostService` on a pipe and its viewer connects (`UniverseHostConnection`, `UniverseViewerConnection`).
+  The viewer launches the game (`LaunchAsync` with a `UniverseLaunch`: scene, content, code, size - failing with the
+  reason), gives the view's size, pointer, focus and input, asks for frames, reads back the scene and the last frame
+  and stops it; the host tells it (`IUniverseViewer`) the surfaces it draws into (`RemoteSurface`, their handles copied
+  into the viewer's process - on Windows, for now), each new frame and the end. `Adamantium.UniverseHost` takes only
+  the pipe to serve on. `GraphicsAdapter.DeviceUuid` names the GPU the same in every process.
+
 - `WorldPosition`: a point of the world, the type every far-reaching position will take - double inside for now, so
   what it is kept in can change without the code around it. A position moves by a float or double vector, two differ
   by a double one, `OffsetFrom` gives the way from a near origin in float - a frame's own numbers - and `Lerp`
   blends two.
+
 - `ISharedSurfaceProducer`, made by `SharedSurfaceProducer`, sends an output's frames to an `ISharedSurfaceConsumer`
   through a ring of shared surfaces:
   each frame goes to the surface the consumer gave back, and a new size starts a new ring, handed over once it holds

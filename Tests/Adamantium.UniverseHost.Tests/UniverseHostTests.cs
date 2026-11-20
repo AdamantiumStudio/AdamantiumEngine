@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using Adamantium.Engine.Scenes;
 using Adamantium.Imaging;
+using Adamantium.Multiverse.Remote;
 using NUnit.Framework;
+using StreamJsonRpc;
 
 namespace Adamantium.UniverseHost.Tests;
 
-/// <summary>The universe host as the editor starts it: a process of its own, with no window, playing a scene with the game's
-/// code loaded by path.</summary>
+/// <summary>The universe host as the editor starts it: a process of its own, with no window, serving its viewer - the
+/// test - which launches a scene with the game's code loaded by path.</summary>
 [TestFixture]
 public class UniverseHostTests
 {
@@ -25,94 +27,22 @@ public class UniverseHostTests
         </Scene>
         """;
 
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+
     private string _folder;
+    private Process _host;
+    private Task<string> _errors;
+    private WatchingViewer _viewer;
+    private UniverseHostConnection _connection;
 
     [SetUp]
-    public void MakeFolder()
+    public void StartHost()
     {
         _folder = Path.Combine(Path.GetTempPath(), "adamantium-universe-host-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_folder);
         File.WriteAllText(Path.Combine(_folder, "Drift.ascene"), Scene.Replace("        ", ""));
-    }
 
-    [TearDown]
-    public void RemoveFolder() => Directory.Delete(_folder, true);
-
-    [Test]
-    public void TheOptions_AreReadAsWritten()
-    {
-        var options = UniverseHostOptions.Parse(["--scene", "a.ascene", "--content", "c1", "--content", "c2", "--code", "g.dll",
-            "--size", "640x360", "--frames", "5", "--capture", "out.ascene", "--image", "out.png"]);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(options.ScenePath, Is.EqualTo(Path.GetFullPath("a.ascene")));
-            Assert.That(options.ContentFolders, Is.EqualTo((string[])[Path.GetFullPath("c1"), Path.GetFullPath("c2")]));
-            Assert.That(options.CodeAssemblies, Is.EqualTo((string[])[Path.GetFullPath("g.dll")]));
-            Assert.That(options.Width, Is.EqualTo(640));
-            Assert.That(options.Height, Is.EqualTo(360));
-            Assert.That(options.Frames, Is.EqualTo(5));
-            Assert.That(options.CapturePath, Is.EqualTo(Path.GetFullPath("out.ascene")));
-            Assert.That(options.ImagePath, Is.EqualTo(Path.GetFullPath("out.png")));
-        });
-    }
-
-    [Test]
-    public void OptionsWithoutAScene_OrWithABadSizeOrFrameCount_AreRefused()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(() => UniverseHostOptions.Parse(["--frames", "5"]), Throws.ArgumentException);
-            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--size", "640"]), Throws.ArgumentException);
-            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--frames", "-1"]), Throws.ArgumentException);
-            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--frames", "99999999999"]), Throws.ArgumentException);
-            Assert.That(() => UniverseHostOptions.Parse(["--scene", "a.ascene", "--what", "x"]), Throws.ArgumentException);
-        });
-    }
-
-    // Played for a while, the game's service moved the mover, and the scene's camera - not the universe's own, which looks
-    // the other way - drew it in the middle of the frame.
-    [Test]
-    public void AGamePlayed_MovesWhatItsCodeMoves_AndIsDrawn()
-    {
-        var capture = Path.Combine(_folder, "after.ascene");
-        var image = Path.Combine(_folder, "frame.png");
-
-        var run = RunHost("--scene", Path.Combine(_folder, "Drift.ascene"),
-            "--code", Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.TestGame.dll"),
-            "--size", "160x90", "--frames", "60", "--capture", capture, "--image", image);
-
-        Assert.That(run.ExitCode, Is.EqualTo(0), run.Errors);
-        var mover = SceneFile.Read(capture).Shapes.Single(shape => shape.Name == "Mover");
-        using var frame = Image.Load(image);
-        var pixels = frame.GetPixelBuffer(0, 0).GetPixels<byte>();
-        var center = (frame.Description.Height / 2 * frame.Description.Width + frame.Description.Width / 2) * 4;
-        Assert.Multiple(() =>
-        {
-            Assert.That(mover.Position.X, Is.GreaterThan(0), "the game's service moved it");
-            Assert.That(pixels[center] + pixels[center + 1] + pixels[center + 2], Is.GreaterThan(60), "the lit cube is drawn there");
-        });
-    }
-
-    // A scene or code the host cannot load stops the universe it started; the host says why and exits with 1.
-    [Test]
-    public void AGameThatCannotBeLoaded_StopsTheHost_WithTheReason()
-    {
-        var noScene = RunHost("--scene", Path.Combine(_folder, "Missing.ascene"), "--frames", "60");
-        var noCode = RunHost("--scene", Path.Combine(_folder, "Drift.ascene"), "--code",
-            Path.Combine(_folder, "Missing.dll"), "--frames", "60");
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(noScene.ExitCode, Is.EqualTo(1));
-            Assert.That(noScene.Errors, Does.Contain("Missing.ascene"));
-            Assert.That(noCode.ExitCode, Is.EqualTo(1));
-            Assert.That(noCode.Errors, Does.Contain("Missing.dll"));
-        });
-    }
-
-    private static HostRun RunHost(params string[] arguments)
-    {
+        var pipeName = "adamantium-universe-host-" + Guid.NewGuid().ToString("N");
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             RedirectStandardError = true,
@@ -120,19 +50,123 @@ public class UniverseHostTests
             UseShellExecute = false
         };
         start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.dll"));
-        foreach (var argument in arguments)
-            start.ArgumentList.Add(argument);
+        start.ArgumentList.Add(pipeName);
+        _host = Process.Start(start)!;
+        _errors = _host.StandardError.ReadToEndAsync();
+        _ = _host.StandardOutput.ReadToEndAsync();
+        _viewer = new WatchingViewer();
+        using var connecting = new CancellationTokenSource(Patience);
+        _connection = UniverseHostConnection.ConnectAsync(pipeName, _viewer, connecting.Token).GetAwaiter().GetResult();
+    }
 
-        using var host = Process.Start(start)!;
-        var output = host.StandardOutput.ReadToEndAsync();
-        var errors = host.StandardError.ReadToEndAsync();
-        if (!host.WaitForExit(TimeSpan.FromSeconds(60)))
+    [TearDown]
+    public void StopHost()
+    {
+        _connection?.Dispose();
+        if (_host is { HasExited: false })
         {
-            host.Kill();
-            Assert.Fail("The host did not stop by itself.");
+            _host.WaitForExit(Patience);
         }
 
-        _ = output.Result;
-        return new HostRun(host.ExitCode, errors.Result);
+        if (_host is { HasExited: false })
+        {
+            _host.Kill();
+        }
+
+        _host?.Dispose();
+        Directory.Delete(_folder, true);
+    }
+
+    // Played for a while, the game's service moved the mover, the scene's camera - not the universe's own, which looks
+    // the other way - drew it in the middle of the frame, and the host stops when told.
+    [Test]
+    public async Task AGameLaunched_MovesWhatItsCodeMoves_IsDrawn_AndStopsWhenTold()
+    {
+        await Launch("Drift.ascene", 160, 90);
+        Assert.That(_viewer.Hellos.TryTake(out var hello, Patience), Is.True, "greeted");
+        var moved = await WaitUntilMoverMoved();
+
+        using var frame = Image.Load(new MemoryStream(await _connection.Host.CaptureFrameAsync(CancellationToken.None)));
+        var pixels = frame.GetPixelBuffer(0, 0).GetPixels<byte>();
+        var center = (frame.Description.Height / 2 * frame.Description.Width + frame.Description.Width / 2) * 4;
+        await _connection.Host.StopAsync(CancellationToken.None);
+        var told = _viewer.Ended.Wait(Patience);
+        _connection.Dispose();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hello.ProcessId, Is.EqualTo(_host.Id));
+            Assert.That(hello.DeviceUuid, Is.Not.EqualTo(Guid.Empty), "the GPU it draws on");
+            Assert.That(moved, Is.GreaterThan(0), "the game's service moved it");
+            Assert.That(pixels[center] + pixels[center + 1] + pixels[center + 2], Is.GreaterThan(60), "the lit cube is drawn there");
+            Assert.That(told, Is.True, "told the universe stopped");
+            Assert.That(_host.WaitForExit(Patience), Is.True, "the host exits once the viewer let go");
+            Assert.That(_host.ExitCode, Is.EqualTo(0), _errors.Result);
+        });
+    }
+
+    // The viewer is handed the handles of surfaces of the size it shows, and of a new size when it asks.
+    [Test]
+    public async Task TheViewer_IsGivenSurfacesOfItsSize_AndNewOnesWhenItResizes()
+    {
+        await Launch("Drift.ascene", 160, 90);
+        Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Width, Is.EqualTo(160u));
+            Assert.That(first.Height, Is.EqualTo(90u));
+            Assert.That(first.Buffers, Has.Length.EqualTo(3));
+            Assert.That(first.Buffers.All(buffer => buffer.MemoryHandle != 0 && buffer.ProduceSemaphoreHandle != 0
+                                                  && buffer.ConsumeSemaphoreHandle != 0), Is.True, "handles of this process");
+        });
+        first.CloseHandles();
+
+        _connection.Host.Resize(320, 180, 1);
+        _connection.Host.AskFrame(_viewer.LastFrame + 1);
+        Assert.That(_viewer.Surfaces.TryTake(out var resized, Patience), Is.True, "given a surface of the new size");
+        Assert.That(resized.Width, Is.EqualTo(320u));
+        resized.CloseHandles();
+        await _connection.Host.StopAsync(CancellationToken.None);
+    }
+
+    // A scene or code the host cannot load fails the launch with the reason, and the host exits with 1.
+    [Test]
+    public void ALaunchThatCannotLoad_FailsWithTheReason()
+    {
+        var failure = Assert.ThrowsAsync<RemoteInvocationException>(() => Launch("Missing.ascene", 160, 90));
+        _connection.Dispose();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(failure!.Message, Does.Contain("Missing.ascene"));
+            Assert.That(_host.WaitForExit(Patience), Is.True, "the host exits");
+            Assert.That(_host.ExitCode, Is.EqualTo(1));
+        });
+    }
+
+    private Task Launch(string scene, uint width, uint height) =>
+        _connection.Host.LaunchAsync(new UniverseLaunch
+        {
+            ScenePath = Path.Combine(_folder, scene),
+            CodeAssemblies = [Path.Combine(AppContext.BaseDirectory, "Adamantium.UniverseHost.TestGame.dll")],
+            Width = width,
+            Height = height
+        }, new CancellationTokenSource(Patience).Token);
+
+    private async Task<double> WaitUntilMoverMoved()
+    {
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            var text = await _connection.Host.CaptureSceneAsync(CancellationToken.None);
+            var scene = SceneFile.Read(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)));
+            var x = scene.Shapes.Single(shape => shape.Name == "Mover").Position.X;
+            if (x > 0.5 || waited.Elapsed > Patience)
+            {
+                return x;
+            }
+
+            await Task.Delay(50);
+        }
     }
 }

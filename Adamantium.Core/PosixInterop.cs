@@ -35,6 +35,24 @@ public static unsafe class PosixInterop
 
     public static readonly nint MapFailed = -1;
 
+    /// <summary>For <see cref="GetSocketOption"/> on Linux: the socket level.</summary>
+    public const int SocketLevel = 1;
+
+    /// <summary>For <see cref="GetSocketOption"/> on Linux: the peer's credentials of a Unix socket, a ucred (pid, uid,
+    /// gid).</summary>
+    public const int SocketPeerCredentials = 17;
+
+    /// <summary>For <see cref="GetSocketOption"/> on macOS: the level of local (Unix) sockets.</summary>
+    public const int LocalSocketLevel = 0;
+
+    /// <summary>For <see cref="GetSocketOption"/> on macOS: the peer's process id of a Unix socket.</summary>
+    public const int LocalPeerProcessId = 2;
+
+    /// <summary>POSIX <c>getsockopt(2)</c>: reads option <paramref name="option"/> of <paramref name="level"/> of the
+    /// socket <paramref name="socket"/> into <paramref name="value"/>.</summary>
+    [DllImport(LibC, EntryPoint = "getsockopt", SetLastError = true)]
+    public static extern int GetSocketOption(int socket, int level, int option, void* value, ref uint length);
+
     /// <summary>POSIX <c>close(2)</c>: closes a file descriptor (e.g. an exported Vulkan memory/semaphore fd).</summary>
     [DllImport(LibC, EntryPoint = "close", SetLastError = true)]
     public static extern int Close(int fd);

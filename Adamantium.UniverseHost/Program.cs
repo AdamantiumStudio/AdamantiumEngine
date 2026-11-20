@@ -3,18 +3,14 @@ using Serilog.Events;
 
 namespace Adamantium.UniverseHost;
 
+/// <summary>Started with the name of the pipe to serve its viewer on; everything else comes from the viewer.</summary>
 public static class Program
 {
     public static int Main(string[] args)
     {
-        UniverseHostOptions options;
-        try
+        if (args.Length != 1 || string.IsNullOrWhiteSpace(args[0]))
         {
-            options = UniverseHostOptions.Parse(args);
-        }
-        catch (ArgumentException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
+            Console.Error.WriteLine("Adamantium.UniverseHost <pipe to serve the viewer on>");
             return 2;
         }
 
@@ -24,7 +20,7 @@ public static class Program
             .CreateLogger();
         try
         {
-            using var host = new UniverseHost(options);
+            using var host = new UniverseHost();
             var stopAsked = false;
             Console.CancelKeyPress += (_, cancel) =>
             {
@@ -32,7 +28,7 @@ public static class Program
                 stopAsked = true;
                 host.Stop();
             };
-            host.Run();
+            host.Serve(args[0]);
             return host.ExitCode;
         }
         catch (Exception exception)
