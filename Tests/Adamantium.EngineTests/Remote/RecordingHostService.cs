@@ -29,6 +29,8 @@ public class RecordingHostService : IUniverseHostService
 
     public void AskFrame(ulong frame) => Calls.Add($"AskFrame {frame}");
 
+    public void AskNewSurface() => Calls.Add("AskNewSurface");
+
     public void MovePointer(float x, float y, bool isOver) =>
         Calls.Add(string.Create(CultureInfo.InvariantCulture, $"MovePointer {x},{y} {isOver}"));
 

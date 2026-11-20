@@ -2,6 +2,7 @@ using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS.Components;
 using Adamantium.Engine;
 using Adamantium.Engine.EntityServices;
+using Adamantium.Engine.Managers;
 using Adamantium.Engine.Physics;
 using Adamantium.Engine.Scenes;
 using Adamantium.Multiverse;
@@ -37,6 +38,8 @@ internal sealed class GameUniverse : Universe
         base.Initialize();
         Satellites.Add(new Observatory(this, EntityWorld));
         Satellites.Add<IWorldCode>(new WorldCode());
+        // The scene's lights, which the rendering takes from it: without them only the ambient light shows anything.
+        EntityWorld.MainScene.Satellites.Add(new LightManager(this, EntityWorld.MainScene));
         EntityWorld.CreateService<InputService>(EntityWorld);
         EntityWorld.CreateService<PhysicsService>(EntityWorld);
         EntityWorld.CreateService<TransformService>(EntityWorld);

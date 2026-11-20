@@ -117,6 +117,8 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
 
     public void AskFrame(ulong frame) => _output?.TakeFrameRequest();
 
+    public void AskNewSurface() => _output?.AskNewSurface();
+
     public void MovePointer(float x, float y, bool isOver) => _output?.MovePointer(new Vector2F(x, y), isOver);
 
     public void Focus(bool hasKeyboard) => _output?.Focus(hasKeyboard);

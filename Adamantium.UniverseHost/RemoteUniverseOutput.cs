@@ -28,6 +28,7 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
     private Vector2F _pointer;
     private volatile bool _pointerOver;
     private volatile bool _keyboardFocused;
+    private volatile bool _newSurfaceAsked;
 
     public RemoteUniverseOutput(IEventAggregator universeEvents, IUniverseViewer viewer, int viewerProcessId,
         UniverseLaunch launch) : base(universeEvents)
@@ -75,6 +76,14 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
     public void TakeFrameRequest()
     {
         _descriptor?.Demand.Raise();
+        Invalidate();
+    }
+
+    /// <summary>The viewer asks for surfaces it has not imported: the ones it has were imported by a view it left, and a
+    /// second import would read frames the first gave back. Made on the next frame, at the same size.</summary>
+    public void AskNewSurface()
+    {
+        _newSurfaceAsked = true;
         Invalidate();
     }
 
@@ -127,6 +136,13 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
         {
             SharingFailure = exception.Message;
             return;
+        }
+
+        // Let go of here, on the thread that draws: the next frame starts a ring the viewer has not seen.
+        if (_newSurfaceAsked)
+        {
+            _newSurfaceAsked = false;
+            _producer.Release(retire: true);
         }
 
         _producer.Produce(graphicsDevice, frame, Width, Height, inDevice: false);
