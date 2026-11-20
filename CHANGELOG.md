@@ -841,6 +841,8 @@ All packages share one version.
 
 ### Fixed
 
+- The universe host lights its scene: it gave the scene no `LightManager`, which the rendering takes the lights from, so
+  a game it played was lit by the ambient light alone - nearly black.
 - An output copies its frame from the resolved image, not the multisampled one: `UniverseOutput.CopyOutput` blitted
   the 4x render target, which a blit cannot read (a validation error in every frame with MSAA), onto the presenter's
   image - for a render-target presenter, onto the resolved frame itself. A presenter whose image is the resolved one

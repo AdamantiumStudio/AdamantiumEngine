@@ -29,6 +29,9 @@ public class UniverseHostTests
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
+    // The sum of a pixel's three channels on the cube the sun lights; the ambient light alone gives about 60.
+    private const int LitBrightness = 300;
+
     private string _folder;
     private Process _host;
     private Task<string> _errors;
@@ -98,7 +101,7 @@ public class UniverseHostTests
             Assert.That(hello.ProcessId, Is.EqualTo(_host.Id));
             Assert.That(hello.DeviceUuid, Is.Not.EqualTo(Guid.Empty), "the GPU it draws on");
             Assert.That(moved, Is.GreaterThan(0), "the game's service moved it");
-            Assert.That(pixels[center] + pixels[center + 1] + pixels[center + 2], Is.GreaterThan(60), "the lit cube is drawn there");
+            Assert.That(pixels[center] + pixels[center + 1] + pixels[center + 2], Is.GreaterThan(LitBrightness), "the lit cube is drawn there");
             Assert.That(told, Is.True, "told the universe stopped");
             Assert.That(_host.WaitForExit(Patience), Is.True, "the host exits once the viewer let go");
             Assert.That(_host.ExitCode, Is.EqualTo(0), _errors.Result);
@@ -148,7 +151,7 @@ public class UniverseHostTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(brightness, Is.GreaterThan(60), "the lit cube is drawn in the middle");
+            Assert.That(brightness, Is.GreaterThan(LitBrightness), "the lit cube is drawn in the middle");
             Assert.That(later, Is.GreaterThan(first), "a newer frame came once the slots were given back");
         });
     }
@@ -258,7 +261,7 @@ public class UniverseHostTests
         while (true)
         {
             var frame = TakeFrame(reader, out centerBrightness);
-            if (centerBrightness > 60 || waited.Elapsed > Patience)
+            if (centerBrightness > LitBrightness || waited.Elapsed > Patience)
             {
                 return frame;
             }
