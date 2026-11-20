@@ -824,6 +824,11 @@ All packages share one version.
 
 ### Fixed
 
+- An output copies its frame from the resolved image, not the multisampled one: `UniverseOutput.CopyOutput` blitted
+  the 4x render target, which a blit cannot read (a validation error in every frame with MSAA), onto the presenter's
+  image - for a render-target presenter, onto the resolved frame itself. A presenter whose image is the resolved one
+  is now left as it is.
+
 - Far from the origin an entity is drawn where it stands against the camera again: its world was composed in float and
   the camera taken from that, so it moved by float's rounding - 3 cm a million meters out, 2 m a billion out. The
   world is composed in double through every parent (`TransformMetaData.AbsoluteWorld`, `Transform.GetWorldMatrix`,
