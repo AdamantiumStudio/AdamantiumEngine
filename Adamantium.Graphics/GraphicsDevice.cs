@@ -103,6 +103,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private MSAALevel _cMsaa;
     private bool _cAlphaToCoverage;
     private PolygonMode _cPolygonMode;
+    private float _cLineWidth;
     private CullModeFlagBits _cCullMode;
     private FrontFace _cFrontFace;
     private bool _cDepthWrite;
@@ -1904,13 +1905,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
         if (!_stateInitialized || _cAlphaToCoverage != AlphaToCoverageEnable)
         { commandBuffer.SetAlphaToCoverageEnableEXT(AlphaToCoverageEnable); _cAlphaToCoverage = AlphaToCoverageEnable; }
-        if (!_stateInitialized || _cPolygonMode != PolygonMode)
-        { commandBuffer.SetPolygonModeEXT(PolygonMode); _cPolygonMode = PolygonMode; }
-
-        if (PolygonMode == PolygonMode.Line)
-        {
-            commandBuffer.SetLineWidth(LineWidth);
-        }
+        var polygonMode = MainDevice.IsFillModeNonSolidEnabled ? PolygonMode : PolygonMode.Fill;
+        if (!_stateInitialized || _cPolygonMode != polygonMode)
+        { commandBuffer.SetPolygonModeEXT(polygonMode); _cPolygonMode = polygonMode; }
+        if (!_stateInitialized || _cLineWidth != LineWidth)
+        { commandBuffer.SetLineWidth(LineWidth); _cLineWidth = LineWidth; }
 
         if (!_stateInitialized || _cCullMode != CullMode)
         { commandBuffer.SetCullMode(CullMode); _cCullMode = CullMode; }

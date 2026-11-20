@@ -68,6 +68,7 @@ public unsafe class GraphicsAdapter
         SupportsTessellationShaders = features2.Features != null && (bool)features2.Features.TessellationShader;
         SupportsDepthClamp = features2.Features != null && (bool)features2.Features.DepthClamp;
         SupportsDepthBiasClamp = features2.Features != null && (bool)features2.Features.DepthBiasClamp;
+        SupportsFillModeNonSolid = features2.Features != null && (bool)features2.Features.FillModeNonSolid;
         SupportsMultiDrawIndirect = features2.Features != null && (bool)features2.Features.MultiDrawIndirect &&
                                     (bool)features2.Features.DrawIndirectFirstInstance;
         SupportsMeshShaders = hasMeshShaderExtension && meshShader.MeshShader;
@@ -171,6 +172,9 @@ public unsafe class GraphicsAdapter
 
     /// <summary>Whether a depth bias may be capped: the depthBiasClamp feature.</summary>
     public bool SupportsDepthBiasClamp { get; private set; }
+
+    /// <summary>Whether polygons may be drawn as lines or points: the fillModeNonSolid feature.</summary>
+    public bool SupportsFillModeNonSolid { get; private set; }
 
     /// <summary>Whether one indirect draw may issue many draws, each naming its own first instance: the multiDrawIndirect
     /// and drawIndirectFirstInstance features together.</summary>
