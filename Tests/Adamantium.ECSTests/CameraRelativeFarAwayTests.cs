@@ -17,7 +17,7 @@ public class CameraRelativeFarAwayTests
     public void ARootNearTheCamera_IsDrawnWhereItStandsAgainstIt(double offset)
     {
         var scene = new PickScene();
-        var far = new Vector3<double>(offset, offset * 0.5, -offset);
+        var far = new WorldPosition(offset, offset * 0.5, -offset);
         scene.Camera.Owner.Transform.Position = far;
         var box = new Entity(null, "Box");
         box.Transform.Position = far + new Vector3<double>(0.03, 0.01, 5);
@@ -42,13 +42,13 @@ public class CameraRelativeFarAwayTests
     public void AChildOfAFarParent_IsDrawnWhereItStandsAgainstTheCamera(double offset)
     {
         var scene = new PickScene();
-        var far = new Vector3<double>(offset, offset * 0.5, -offset);
+        var far = new WorldPosition(offset, offset * 0.5, -offset);
         scene.Camera.Owner.Transform.Position = far;
         var parent = new Entity(null, "Parent");
         parent.Transform.Position = far + new Vector3<double>(0.02, 0, 3);
         parent.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90));
         var child = new Entity(parent, "Child");
-        child.Transform.Position = new Vector3<double>(1, 0.04, 0);
+        child.Transform.Position = new WorldPosition(1, 0.04, 0);
 
         scene.Place(parent);
 

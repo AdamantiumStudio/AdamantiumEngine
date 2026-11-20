@@ -56,7 +56,7 @@ public class InputService : EntityService
     private double panDepth;
     private bool orbiting;
     private Camera orbitCamera;
-    private Vector3<double> orbitPivot;
+    private WorldPosition orbitPivot;
     private const double SteeringQuietSeconds = 0.3;
     private Camera _steered;
     private EditedState _steeredBefore;
@@ -413,9 +413,9 @@ public class InputService : EntityService
             : camera.FocusDistance;
 
     // The point of the scene under the pixel, in the world; the middle of the view where nothing is.
-    private Vector3<double> PointUnder(Camera camera, Vector2F pixel) =>
+    private WorldPosition PointUnder(Camera camera, Vector2F pixel) =>
         HitUnder(camera, pixel, out var fromCamera)
-            ? camera.WorldPosition + fromCamera.As<double>()
+            ? camera.WorldPosition + fromCamera
             : camera.WorldPosition + camera.Forward * camera.FocusDistance;
 
     // Whether a mesh of the scene shown is under the pixel, ahead of the camera's near plane; where, from the camera.

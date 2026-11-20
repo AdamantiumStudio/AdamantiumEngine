@@ -36,14 +36,14 @@ public class ThirdPersonDragTests
 
         output = new TestOutput();
         universe.Add(output);
-        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", Vector3<double>.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Camera", WorldPosition.Zero, Vector3<double>.ForwardLH, -Vector3<double>.Up,
             800, 600, 0.1f, 1000f);
         camera = cameraEntity.GetComponent<Camera>();
         output.Camera = camera;
         universe.EntityWorld.EntityManager.AddEntity(cameraEntity);
 
         target = new Entity(null, "Target");
-        target.Transform.Position = new Vector3<double>(0, 0, 10);
+        target.Transform.Position = new WorldPosition(0, 0, 10);
         target.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
         var collider = new BoxCollider();
         target.AddComponent(collider);
@@ -127,9 +127,9 @@ public class ThirdPersonDragTests
         tools.Update(new AppTime());
     }
 
-    private Vector2F PixelOf(Vector3<double> world)
+    private Vector2F PixelOf(WorldPosition world)
     {
-        var inRender = (world - camera.WorldPosition).As<float>();
+        var inRender = world.OffsetFrom(camera.WorldPosition);
         var pixel = Vector3F.Project(inRender, 0, 0, camera.Width, camera.Height, 0, 1, camera.ViewMatrix * camera.ProjectionMatrix);
         return new Vector2F(pixel.X, pixel.Y);
     }

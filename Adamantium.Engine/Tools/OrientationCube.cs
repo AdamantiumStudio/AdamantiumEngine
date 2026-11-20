@@ -154,7 +154,7 @@ public class OrientationCube : ToolsProcessor
         var orientation = IsStepArrow(current) ? QuaternionF.Identity : QuaternionF.Conjugate(camera.Rotation);
 
         var world = Matrix4x4.CreateFromQuaternion<float>(current.Transform.Rotation) *
-                    Matrix4x4.CreateTranslation<float>(current.Transform.Position.As<float>()) *
+                    Matrix4x4.CreateTranslation<float>(current.Transform.Position.ToVector().As<float>()) *
                     Matrix4x4.CreateScale<float>(current.Transform.Scale) *
                     Matrix4x4.CreateFromQuaternion<float>(orientation) *
                     Matrix4x4.CreateScale<float>(scale);

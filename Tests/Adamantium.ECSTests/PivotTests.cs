@@ -25,14 +25,14 @@ public class PivotTests
     public void AnEntity_TurnsAboutItsPivot()
     {
         var entity = Turned();
-        var pivot = new Vector3<double>(5, -2, 1);
+        var pivot = new WorldPosition(5, -2, 1);
         entity.Transform.Pivot = pivot;
-        var atPivot = Vector3F.TransformCoordinate(pivot.As<float>(), Matrix4x4F.Invert(entity.Transform.GetLocalMatrixF()));
+        var atPivot = Vector3F.TransformCoordinate(pivot.OffsetFrom(WorldPosition.Zero), Matrix4x4F.Invert(entity.Transform.GetLocalMatrixF()));
 
         entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(40)) * entity.Transform.Rotation;
 
         var after = Vector3F.TransformCoordinate(atPivot, entity.Transform.GetLocalMatrixF());
-        Assert.That((after - pivot.As<float>()).Length(), Is.LessThan(1e-3f));
+        Assert.That((after - pivot.OffsetFrom(WorldPosition.Zero)).Length(), Is.LessThan(1e-3f));
     }
 
     [Test]
@@ -63,7 +63,7 @@ public class PivotTests
     private static Entity Turned()
     {
         var entity = new Entity(null, "Turned");
-        entity.Transform.Position = new Vector3<double>(10, 0, 0);
+        entity.Transform.Position = new WorldPosition(10, 0, 0);
         entity.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90));
         entity.Transform.BaseScale = new Vector3F(0.5f);
         return entity;

@@ -44,5 +44,5 @@ public interface IPhysicsService : IGameService
 
     /// <summary>Strikes <paramref name="entity"/>'s dynamic body at <paramref name="point"/> of the world at the next
     /// step, in newton seconds.</summary>
-    void ApplyImpulse(Entity entity, Vector3F impulse, Vector3<double> point);
+    void ApplyImpulse(Entity entity, Vector3F impulse, WorldPosition point);
 }

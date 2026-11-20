@@ -166,18 +166,18 @@ public class CameraZoomTests
     }
 
     // The point the ray through the pixel meets at that depth ahead.
-    private static Vector3<double> PointUnder(Camera camera, Vector2F pixel, double depth)
+    private static WorldPosition PointUnder(Camera camera, Vector2F pixel, double depth)
     {
         var ray = Adamantium.ECS.Components.Extensions.PickRay.FromCamera(camera, pixel).Ray;
         var direction = Vector3<double>.Normalize(ray.Direction.As<double>());
         var origin = ray.Position.As<double>();
         var along = (depth - Vector3<double>.Dot(origin, camera.Forward)) / Vector3<double>.Dot(direction, camera.Forward);
-        return camera.WorldPosition + origin + direction * along;
+        return camera.WorldPosition + (origin + direction * along);
     }
 
-    private static Vector2F PixelOf(Camera camera, Vector3<double> point)
+    private static Vector2F PixelOf(Camera camera, WorldPosition point)
     {
-        var inRender = (point - camera.WorldPosition).As<float>();
+        var inRender = point.OffsetFrom(camera.WorldPosition);
         var pixel = Vector3F.Project(inRender, 0, 0, camera.Width, camera.Height, 0, 1,
             camera.ViewMatrix * camera.ProjectionMatrix);
         return new Vector2F(pixel.X, pixel.Y);

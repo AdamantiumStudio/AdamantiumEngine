@@ -65,13 +65,13 @@ public class ForwardPlusLightingTests
     public void ACubeInTheSun_HasEvenlyLitFaces_TheTopLitAndTheFrontInShade()
     {
         var eye = _output.Camera;
-        eye.Owner.Transform.Position = new Vector3<double>(0, -12, -16);
-        eye.SetFreeLookAt(Vector3<double>.Zero);
+        eye.Owner.Transform.Position = new WorldPosition(0, -12, -16);
+        eye.SetFreeLookAt(WorldPosition.Zero);
         var scene = _universe.EntityWorld.MainScene;
         var lights = new LightManager(_universe, scene);
         scene.Satellites.Add(lights);
         var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
-        sun.Transform.Position = new Vector3<double>(0, -7, 8);
+        sun.Transform.Position = new WorldPosition(0, -7, 8);
         sun.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(150));
         lights.AddLight(sun);
         var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
@@ -84,9 +84,9 @@ public class ForwardPlusLightingTests
 
         var pixels = Pixels(_output.ReadFrame(), "forward-plus-cube.png");
         var camera = _output.Camera;
-        var top = FaceBrightness(pixels, camera, new Vector3<double>(0, -0.5, 0), Vector3<double>.UnitX,
+        var top = FaceBrightness(pixels, camera, new WorldPosition(0, -0.5, 0), Vector3<double>.UnitX,
             Vector3<double>.UnitZ);
-        var front = FaceBrightness(pixels, camera, new Vector3<double>(0, 0, -0.5), Vector3<double>.UnitX,
+        var front = FaceBrightness(pixels, camera, new WorldPosition(0, 0, -0.5), Vector3<double>.UnitX,
             Vector3<double>.UnitY);
 
         Assert.Multiple(() =>
@@ -100,7 +100,7 @@ public class ForwardPlusLightingTests
     }
 
     // The brightness of a 4 x 4 grid of points inside a face of the unit cube.
-    private static List<int> FaceBrightness(byte[] pixels, Camera camera, Vector3<double> center,
+    private static List<int> FaceBrightness(byte[] pixels, Camera camera, WorldPosition center,
         Vector3<double> across, Vector3<double> along)
     {
         var brightness = new List<int>();
@@ -118,9 +118,9 @@ public class ForwardPlusLightingTests
     }
 
     // Where the pixel a point of the world is drawn on starts in the picture's bytes.
-    private static int PixelStart(Camera camera, Vector3<double> point)
+    private static int PixelStart(Camera camera, WorldPosition point)
     {
-        var relative = (point - camera.WorldPosition).As<float>();
+        var relative = point.OffsetFrom(camera.WorldPosition);
         var clip = Vector3F.TransformCoordinate(relative, camera.ViewProjectionMatrix);
         var x = Math.Clamp((int)((clip.X * 0.5f + 0.5f) * Size), 0, (int)Size - 1);
         var y = Math.Clamp((int)((clip.Y * 0.5f + 0.5f) * Size), 0, (int)Size - 1);

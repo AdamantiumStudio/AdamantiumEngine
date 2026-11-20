@@ -56,7 +56,7 @@ namespace Adamantium.ECS.Components
             FitToBox(Bounds.FromBoundingBox(OrientedBoundingBox.CreateFromPoints<float>(points).As<double>()));
         }
 
-        public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
+        public override IConvexShape<float> GetWorldShape(WorldPosition origin)
         {
             return obb.Transform(Owner.Transform.GetWorldMatrixF(origin));
         }

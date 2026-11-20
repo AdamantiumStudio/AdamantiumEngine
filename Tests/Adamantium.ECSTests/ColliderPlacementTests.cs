@@ -328,7 +328,7 @@ public class ColliderPlacementTests
         var box = With(new BoxCollider(), root);
         box.Scale = new Vector3F(2);
         var part = Shape(new Vector3F(-1), new Vector3F(1), root);
-        part.Transform.Position = new Vector3<double>(5, 0, 0);
+        part.Transform.Position = new WorldPosition(5, 0, 0);
         var partBox = With(new BoxCollider(), part);
 
         box.Merge(partBox);

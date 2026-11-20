@@ -33,7 +33,7 @@ public class CameraSteeringTests
         universe.Satellites.Add(new InputActions());
         output = new TestOutput();
         universe.Add(output);
-        var cameraEntity = new CameraTemplate().BuildEntity(null, "Scene camera", Vector3<double>.Zero,
+        var cameraEntity = new CameraTemplate().BuildEntity(null, "Scene camera", WorldPosition.Zero,
             Vector3<double>.ForwardLH, -Vector3<double>.Up, 800, 600, 0.1f, 1000f);
         camera = cameraEntity.GetComponent<Camera>();
         output.Camera = camera;

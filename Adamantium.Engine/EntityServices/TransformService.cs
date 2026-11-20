@@ -320,7 +320,7 @@ public class TransformService : EntityService
     {
         public readonly List<UniverseOutput> Outputs = [];
         public Camera Camera;
-        public Vector3<double> Position;
+        public WorldPosition Position;
         public bool Moved;
     }
 }

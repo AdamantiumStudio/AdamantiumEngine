@@ -23,7 +23,7 @@ public class RotationHandles : Handles
     private readonly Entity viewCircle;
     private readonly Entity ball;
     private readonly RingDrag ringDrag = new();
-    private Vector3<double> anchor;
+    private WorldPosition anchor;
     private QuaternionF startRotation;
     private Vector3F axis;
     private Vector3F startVector;

@@ -114,13 +114,13 @@ public class EntityReturnTests
         var transform = entity.Transform;
         transform.Rotation = Quaternion.CreateFromAxisAngle<float>(new Vector3F(0, 1, 0), 0.5f);
         transform.ScaleFactor = new Vector3F(2, 1, 1);
-        transform.Pivot = new Vector3<double>(1, 2, 3);
+        transform.Pivot = new WorldPosition(1, 2, 3);
         var state = transform.State;
         var pivot = transform.Pivot;
         var position = transform.Position;
 
-        transform.Pivot = new Vector3<double>(-4, 0, 7);
-        transform.Position = new Vector3<double>(10, 10, 10);
+        transform.Pivot = new WorldPosition(-4, 0, 7);
+        transform.Position = new WorldPosition(10, 10, 10);
         transform.Rotation = QuaternionF.Identity;
         transform.State = state;
 

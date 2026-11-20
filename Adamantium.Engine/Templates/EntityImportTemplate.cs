@@ -23,7 +23,7 @@ public class EntityImportTemplate : IEntityTemplate
     private SceneData sceneData;
     private IAssetService assets;
 
-    private Vector3<double> initialPosition;
+    private WorldPosition initialPosition;
     //private EntityFramework.Components.Camera camera;
 
     public EntityImportTemplate(SceneData sceneData, IAssetService assetService, Camera camera)
@@ -36,7 +36,7 @@ public class EntityImportTemplate : IEntityTemplate
     /// <param name="initialPosition">Where the model's own origin is placed, as the file has it: the root's position is
     /// its position in the file plus this, the model is not moved to put its center there, and it scales and turns about
     /// that origin. Each part below it turns about its own center.</param>
-    public EntityImportTemplate(SceneData sceneData, IAssetService assetService, Vector3<double> initialPosition)
+    public EntityImportTemplate(SceneData sceneData, IAssetService assetService, WorldPosition initialPosition)
     {
         this.sceneData = sceneData;
         assets = assetService;
@@ -188,9 +188,9 @@ public class EntityImportTemplate : IEntityTemplate
 
                 var center = bounds.TryGetValue(entity, out var measured) ? measured.Center.As<float>() : Vector3F.Zero;
                 var transform = entity.Transform;
-                transform.Pivot = Vector3F.TransformCoordinate(center, transform.GetLocalMatrixF()).As<double>();
+                transform.Pivot = new WorldPosition(Vector3F.TransformCoordinate(center, transform.GetLocalMatrixF()));
             });
-            owner.Transform.Position += initialPosition;
+            owner.Transform.Position = initialPosition + (owner.Transform.Position - WorldPosition.Zero);
             return owner;
         }
         catch (Exception exception)
@@ -302,7 +302,7 @@ public class EntityImportTemplate : IEntityTemplate
 
     private static void SetTransformation(Entity entity, Vector3<double> pos, Vector3F scale, QuaternionF rot)
     {
-        entity.Transform.Position = pos;
+        entity.Transform.Position = new WorldPosition(pos);
         entity.Transform.Rotation = rot;
         entity.Transform.BaseScale = scale;
     }

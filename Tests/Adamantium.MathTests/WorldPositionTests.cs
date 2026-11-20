@@ -62,4 +62,15 @@ public class WorldPositionTests
             Assert.That(nowhere == nowhereAgain, Is.False, "as a NaN is to a NaN");
         });
     }
+
+    // As a field's meters are typed: one at a time, the others kept.
+    [Test]
+    public void AMeterSet_ChangesOnlyItsAxis()
+    {
+        var position = new WorldPosition(1e9, 2, 3);
+
+        position.Y = -7.5;
+
+        Assert.That(position, Is.EqualTo(new WorldPosition(1e9, -7.5, 3)));
+    }
 }

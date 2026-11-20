@@ -18,7 +18,7 @@ public class TransformMetaData
     // these (or the owner transform's IsWorldDirty) changed, so a static entity under a rotating camera is skipped
     // (the world matrix depends on camera POSITION, not its rotation - rotation lives in the per-frame view matrix).
     public bool Computed { get; set; }
-    public Vector3<double> LastCameraPosition { get; set; }
+    public WorldPosition LastCameraPosition { get; set; }
 
     public Vector3F RelativePosition { get; set; }
 

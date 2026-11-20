@@ -672,6 +672,16 @@ All packages share one version.
 
 - **Breaking:** a `LightManager` no longer puts itself among its scene's satellites: the caller does,
   `scene.Satellites.Add(new LightManager(universe, scene))`, as with any satellite - the rendering finds the lights there.
+- An entity's place is a `WorldPosition`, for every entity: `Transform.Position`, `InitialPosition`, `Pivot`,
+  `WorldPosition` and `TransformState.Position`, a camera's `WorldPosition` and `FindSubjectCenter`, and the points of
+  the world the engine takes or gives - the camera's `MoveTo`, `Orbit`, `SetFreePosition`, `SetFreeLookAt` and
+  first-person calls, `CameraTemplate.BuildEntity`, `EntityImportTemplate`, `LightManager.CreateLight`,
+  `Collider.GetWorldShape(origin)`, `GetWorldMatrixF(origin)`, `GetCenterAbsolute`, `GetOwnerPosition`,
+  `IPhysicsService.ApplyImpulse`'s point, the placement tool's points. A point moves by a vector and two points differ
+  by one; nothing turns a vector into a point unasked. A camera's `LookAt` and a distance joint's `ConnectedAnchor`,
+  each a point or a direction by case, stay vectors for now. A `WorldPosition`'s `X`, `Y` and `Z` are set one by one,
+  as an inspector's fields type them, and `WorldPosition.Parse` reads one; a game component's `WorldPosition`
+  property is kept in the scene as a vector's is. Still double inside: the step before 128-bit fixed point.
 - The core's query results are `WorldRayHit` and `WorldShapeHit` - with `Part` - for `RayHit` and `ShapeHit` now
   name those of `PhysicsSimulation`, by `BodyId`.
 

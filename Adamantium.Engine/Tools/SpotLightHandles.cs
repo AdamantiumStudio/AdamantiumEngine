@@ -21,7 +21,7 @@ public class SpotLightHandles : Handles
 
     private readonly Entity end;
     private readonly Entity[] rim;
-    private Vector3<double> apex;
+    private WorldPosition apex;
     private Vector3F axis;
     private Vector3F side;
     private bool range;

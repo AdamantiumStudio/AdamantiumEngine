@@ -120,7 +120,7 @@ public static class SceneCapture
 
             var placedCamera = new SceneCamera
             {
-                Uid = entity.Uid, Name = entity.Name ?? "", Position = entity.Transform.Position,
+                Uid = entity.Uid, Name = entity.Name ?? "", Position = entity.Transform.Position.ToVector(),
                 // A camera's own rotation is its view, the opposite turn of the way it faces.
                 Rotation = QuaternionF.Conjugate(camera.Rotation),
                 Type = camera.Type, Projection = camera.ProjectionType, FieldOfView = camera.Fov,
@@ -179,7 +179,7 @@ public static class SceneCapture
 
         entry.Uid = entity.Uid;
         entry.Name = entity.Name ?? "";
-        entry.Position = entity.Transform.Position;
+        entry.Position = entity.Transform.Position.ToVector();
         entry.Rotation = entity.Transform.Rotation;
         entry.IsEnabled = entity.IsEnabled;
         if (withPhysics && entry is not SceneLight && entity.GetComponent<UnloadedShape>() == null)
@@ -230,7 +230,7 @@ public static class SceneCapture
         {
             var transform = each.Transform;
             var scaled = position * transform.Scale.As<double>();
-            position = Vector3.Transform(scaled, transform.Rotation.As<double>()) + transform.Position;
+            position = (transform.Position + Vector3.Transform(scaled, transform.Rotation.As<double>())).ToVector();
             rotation = transform.Rotation * rotation;
         }
 

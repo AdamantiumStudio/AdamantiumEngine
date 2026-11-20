@@ -14,7 +14,7 @@ public class PlacementToolTests
     [Test]
     public void ARayLookingDown_MeetsTheGroundUnderIt_FarFromTheWorldsOrigin()
     {
-        var eye = new Vector3<double>(1e7, -10, 2e7);
+        var eye = new WorldPosition(1e7, -10, 2e7);
         var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(1, 1, 0)));
 
         Assert.That(PlacementTool.OnGround(ray, eye, 0, 1000, out var point), Is.True);
@@ -31,7 +31,7 @@ public class PlacementToolTests
     {
         var ray = new Ray<float>(Vector3F.Zero, Vector3F.UnitY);
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), -4, 1000, out var point), Is.True);
+        Assert.That(PlacementTool.OnGround(ray, new WorldPosition(0, -10, 0), -4, 1000, out var point), Is.True);
         Assert.That(point.Y, Is.EqualTo(-4).Within(1e-6));
     }
 
@@ -41,7 +41,7 @@ public class PlacementToolTests
     {
         var ray = new Ray<float>(Vector3F.Zero, new Vector3F(x, y, z));
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), 0, 1000, out _), Is.False);
+        Assert.That(PlacementTool.OnGround(ray, new WorldPosition(0, -10, 0), 0, 1000, out _), Is.False);
     }
 
     [Test]
@@ -49,7 +49,7 @@ public class PlacementToolTests
     {
         var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(100, 1, 0)));
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), 0, 500, out _), Is.False);
+        Assert.That(PlacementTool.OnGround(ray, new WorldPosition(0, -10, 0), 0, 500, out _), Is.False);
     }
 
     // A flat view casts its rays from far behind the camera: the reach counts across the ground, not along the ray.
@@ -59,7 +59,7 @@ public class PlacementToolTests
         var direction = Vector3F.Normalize(new Vector3F(0, 1, 1));
         var ray = new Ray<float>(direction * -10000, direction);
 
-        Assert.That(PlacementTool.OnGround(ray, new Vector3<double>(0, -10, 0), 0, 500, out var point), Is.True);
+        Assert.That(PlacementTool.OnGround(ray, new WorldPosition(0, -10, 0), 0, 500, out var point), Is.True);
         Assert.That(point.Z, Is.EqualTo(10).Within(1e-2));
     }
 
@@ -90,13 +90,13 @@ public class PlacementToolTests
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
-        camera.Owner.Transform.Position = new Vector3<double>(4, -3, 1);
+        camera.Owner.Transform.Position = new WorldPosition(4, -3, 1);
         camera.Update(new Adamantium.Core.AppTime());
         var ray = new Ray<float>(new Vector3F(0.5f, 0, -10000), Vector3F.UnitZ);
 
         var point = PlacementTool.Along(ray, camera, 12);
 
-        Assert.That(point, Is.EqualTo(new Vector3<double>(4.5, -3, 13)).Using<Vector3<double>>((a, b) => (a - b).Length() < 1e-2));
+        Assert.That(point, Is.EqualTo(new WorldPosition(4.5, -3, 13)).Using<WorldPosition>((a, b) => (a - b).Length() < 1e-2));
     }
 
     // A view along the ground - a flat side view, an eye on it - meets it ahead nowhere: the object goes onto the
@@ -127,7 +127,7 @@ public class PlacementToolTests
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f);
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
-        camera.Owner.Transform.Position = new Vector3<double>(0, -3, 0);
+        camera.Owner.Transform.Position = new WorldPosition(0, -3, 0);
         camera.Update(new Adamantium.Core.AppTime());
         var ray = new Ray<float>(Vector3F.Zero, Vector3F.Normalize(new Vector3F(0, 3, 20)));
 
@@ -172,7 +172,7 @@ public class PlacementToolTests
     {
         var camera = new Adamantium.ECS.Components.Camera(60, 800, 600, 0.1f, 1000f) { FocusDistance = 2 };
         new Adamantium.ECS.Entity(null, "Camera").AddComponent(camera);
-        camera.Owner.Transform.Position = new Vector3<double>(0, -3, 0);
+        camera.Owner.Transform.Position = new WorldPosition(0, -3, 0);
         camera.Update(new Adamantium.Core.AppTime());
         return camera;
     }
@@ -180,9 +180,9 @@ public class PlacementToolTests
     [Test]
     public void AnObject_RestsOnThePointByItsLowestPoint_UpBeingMinusY()
     {
-        var position = PlacementTool.RestOn(new Vector3<double>(3, 0, 4), 0.5f);
+        var position = PlacementTool.RestOn(new WorldPosition(3, 0, 4), 0.5f);
 
-        Assert.That(position, Is.EqualTo(new Vector3<double>(3, -0.5, 4)));
+        Assert.That(position, Is.EqualTo(new WorldPosition(3, -0.5, 4)));
     }
 
     // A drag carried over the scene leads the ghost, the pointer being the drag's; dropped, it goes down where it was
@@ -195,7 +195,7 @@ public class PlacementToolTests
         var outcome = new Outcome(placement);
         tools.Tool = placement;
 
-        placement.Guide(output, scene.PixelOf(new Vector3<double>(3, 0, 4)));
+        placement.Guide(output, scene.PixelOf(new WorldPosition(3, 0, 4)));
         tools.Update(new Adamantium.Core.AppTime());
         var led = placement.Position;
         placement.PlaceWhereGuided();
@@ -216,7 +216,7 @@ public class PlacementToolTests
     public void AGuidedGhostOverNothing_IsNotPutDown()
     {
         var (tools, output, scene) = GuidedScene();
-        scene.LookFrom(new Vector3<double>(0, -10, -20), new Vector3<double>(0, -10, 0));
+        scene.LookFrom(new WorldPosition(0, -10, -20), new WorldPosition(0, -10, 0));
         var placement = new PlacementTool(new Adamantium.ECS.Entity(null, "Dropped"));
         var outcome = new Outcome(placement);
         tools.Tool = placement;
@@ -256,7 +256,7 @@ public class PlacementToolTests
         universe.Add(output);
         universe.Satellites.Add(new Observatory(universe, universe.EntityWorld));
         var scene = new ToolScene();
-        scene.LookFrom(new Vector3<double>(0, -10, -20), Vector3<double>.Zero);
+        scene.LookFrom(new WorldPosition(0, -10, -20), WorldPosition.Zero);
         output.Camera = scene.Camera;
         var tools = new ToolsService(universe.EntityWorld);
         tools.Initialize();

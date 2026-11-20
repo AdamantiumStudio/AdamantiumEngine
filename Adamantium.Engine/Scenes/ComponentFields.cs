@@ -11,8 +11,9 @@ namespace Adamantium.Engine.Scenes;
 
 /// <summary>Moves a component's data between the component and its scene entry: its public properties with a public
 /// getter and setter declared above a given base type, of a type the scene writes as text - numbers,
-/// <see cref="bool"/>, strings, enumerations, vectors, quaternions. A property overridden or hidden counts once, as the
-/// most derived type has it. Read back through <see cref="TypeParser"/>, as markup reads its values.</summary>
+/// <see cref="bool"/>, strings, enumerations, vectors, quaternions, points of the world. A property overridden or hidden
+/// counts once, as the most derived type has it. Read back through <see cref="TypeParser"/>, as markup reads its values.
+/// </summary>
 internal static class ComponentFields
 {
     /// <summary>Adds the fields of <paramref name="component"/> declared above <paramref name="below"/> to
@@ -105,7 +106,7 @@ internal static class ComponentFields
     private static bool IsWritten(Type type) =>
         type == typeof(string) || type == typeof(bool) || type.IsEnum || IsNumber(type) ||
         type == typeof(Vector2<float>) || type == typeof(Vector2<double>) ||
-        type == typeof(Vector3<float>) || type == typeof(Vector3<double>) ||
+        type == typeof(Vector3<float>) || type == typeof(Vector3<double>) || type == typeof(WorldPosition) ||
         type == typeof(Vector4<float>) || type == typeof(Vector4<double>) ||
         type == typeof(Quaternion<float>) || type == typeof(Quaternion<double>);
 
@@ -123,6 +124,7 @@ internal static class ComponentFields
         Vector2<double> v => SceneText.Format(v),
         Vector3<float> v => SceneText.Format(v),
         Vector3<double> v => SceneText.Format(v),
+        WorldPosition point => SceneText.Format(point.ToVector()),
         Vector4<float> v => SceneText.Format(v),
         Vector4<double> v => SceneText.Format(v),
         Quaternion<float> q => SceneText.Format(q),

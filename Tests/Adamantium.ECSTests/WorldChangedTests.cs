@@ -85,7 +85,7 @@ public class WorldChangedTests
         stray.Name = "Still a stray";
         stray.AddComponent(new Light());
         model.Name = "Gone";
-        model.Transform.Position = new Vector3<double>(1, 2, 3);
+        model.Transform.Position = new WorldPosition(1, 2, 3);
 
         Assert.That(changes, Is.Empty);
     }
@@ -142,7 +142,7 @@ public class WorldChangedTests
         world.ForceUpdate();
         changes.Clear();
 
-        camera.MoveTo(new Vector3<double>(5, 0, 0), 500);
+        camera.MoveTo(new WorldPosition(5, 0, 0), 500);
 
         Assert.That(changes, Has.Some.Matches<UniverseChangedEventArgs>(change => change.Duration == TimeSpan.FromMilliseconds(500)));
     }
