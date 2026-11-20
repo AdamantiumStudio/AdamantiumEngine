@@ -839,8 +839,21 @@ All packages share one version.
 
 ### Fixed
 
+- An output copies its frame from the resolved image, not the multisampled one: `UniverseOutput.CopyOutput` blitted
+  the 4x render target, which a blit cannot read (a validation error in every frame with MSAA), onto the presenter's
+  image - for a render-target presenter, onto the resolved frame itself. A presenter whose image is the resolved one
+  is now left as it is.
+
 - The copy `SharedSurface.LatchCopy` makes of each frame can be read back (`ToImage`): it was made without
   transfer-source use, and reading it was a Vulkan validation error.
+
+- A wireframe draws its polygons as lines through a feature the device enables: the fillModeNonSolid feature was never
+  enabled, so every wireframe draw was a Vulkan validation error. Where the device lacks it, polygons are filled
+  (`MainGraphicsDevice.IsFillModeNonSolidEnabled`, `GraphicsAdapter.SupportsFillModeNonSolid`). The line width is set
+  with the rest of the draw state, not only for wireframes: a draw of lines found it unset.
+
+- `IGraphicsDevice.CreateTextureArray` keeps the uses its description asks for: they were dropped for sampling alone,
+  so an array asked to be read back (`TransferSrc`) could not be, and reading it was a Vulkan validation error.
 
 - Far from the origin an entity is drawn where it stands against the camera again: its world was composed in float and
   the camera taken from that, so it moved by float's rounding - 3 cm a million meters out, 2 m a billion out. The

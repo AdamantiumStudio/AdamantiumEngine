@@ -66,6 +66,10 @@ public class MainGraphicsDevice : DisposableBase
     /// otherwise the cap is ignored.</summary>
     public bool IsDepthBiasClampEnabled { get; private set; }
 
+    /// <summary>True when the fillModeNonSolid feature was enabled, so a wireframe draws its polygons as lines; otherwise
+    /// they are filled.</summary>
+    public bool IsFillModeNonSolidEnabled { get; private set; }
+
     /// <summary>True when multiDrawIndirect and drawIndirectFirstInstance were enabled: one indirect draw may issue up to
     /// <see cref="MaxDrawIndirectCount"/> draws, each naming its own first instance.</summary>
     public bool IsMultiDrawIndirectEnabled { get; private set; }
@@ -614,6 +618,8 @@ public class MainGraphicsDevice : DisposableBase
         deviceFeatures2.Features.DepthClamp = IsDepthClampEnabled;
         IsDepthBiasClampEnabled = GraphicsAdapter.SupportsDepthBiasClamp;
         deviceFeatures2.Features.DepthBiasClamp = IsDepthBiasClampEnabled;
+        IsFillModeNonSolidEnabled = GraphicsAdapter.SupportsFillModeNonSolid;
+        deviceFeatures2.Features.FillModeNonSolid = IsFillModeNonSolidEnabled;
         IsMultiDrawIndirectEnabled = GraphicsAdapter.SupportsMultiDrawIndirect;
         deviceFeatures2.Features.MultiDrawIndirect = IsMultiDrawIndirectEnabled;
         deviceFeatures2.Features.DrawIndirectFirstInstance = IsMultiDrawIndirectEnabled;
