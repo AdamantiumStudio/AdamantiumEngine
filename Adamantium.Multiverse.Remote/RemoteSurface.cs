@@ -1,6 +1,7 @@
 using Adamantium.Core;
 using Adamantium.Graphics.Core;
 using Adamantium.Imaging;
+using Adamantium.Vulkan.Core;
 using Adamantium.Win32;
 
 namespace Adamantium.Multiverse.Remote;
@@ -13,7 +14,8 @@ public sealed class RemoteSurface
 
     public uint Height { get; init; }
 
-    public SurfaceFormat Format { get; init; }
+    /// <summary>The surfaces' pixel format, as its value: <see cref="SurfaceFormat"/> is made from it.</summary>
+    public Format Format { get; init; }
 
     public SharedHandleType HandleType { get; init; }
 

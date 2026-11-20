@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Runs a game built by the editor with no window and no editor: its scene, its content and its code, drawn into a
-       surface of its own. The editor starts it to debug the game, the debugger attached. -->
+  <!-- Runs a game built by the editor with no window and no editor: its scene, its content and its code, drawn into
+       surfaces its viewer shows in another process. It serves IUniverseHostService on the pipe named when it starts. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net11.0</TargetFramework>
@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Adamantium.Engine\Adamantium.Engine.csproj" />
+    <ProjectReference Include="..\Adamantium.Multiverse.Remote\Adamantium.Multiverse.Remote.csproj" />
   </ItemGroup>
 
 </Project>

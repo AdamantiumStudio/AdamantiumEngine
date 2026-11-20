@@ -359,6 +359,11 @@ namespace Adamantium.Win32
         public static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr sourceHandle, IntPtr targetProcess,
             out IntPtr targetHandle, uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint options);
 
+        /// <summary>The process that connected to the server end <paramref name="pipe"/> of a named pipe.</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
+
         /// <summary>For <see cref="CreateDesktopW"/>: every right on the desktop.</summary>
         public const uint DesktopAllAccess = 0x10000000;
 

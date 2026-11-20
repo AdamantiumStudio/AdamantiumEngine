@@ -8,14 +8,15 @@ using Adamantium.Multiverse;
 using Adamantium.Multiverse.Input;
 using Adamantium.Multiverse.Remote;
 using Adamantium.Vulkan.Core;
+using Image = Adamantium.Imaging.Image;
 
 namespace Adamantium.UniverseHost;
 
-/// <summary>An output shown in another process: its frames go to the viewer through shared surfaces, their handles
-/// and frame numbers over the channel; its size, pointer, keyboard and input come from the viewer.</summary>
+/// <summary>An output shown in another process: its frames go to the viewer through shared surfaces, their handles and
+/// frame numbers told it; its size, pointer, keyboard and input come from the viewer.</summary>
 internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsumer
 {
-    private readonly UniverseHostChannel _channel;
+    private readonly IUniverseViewer _viewer;
     private readonly HandleTransfer _handles;
     private readonly ISharedSurfaceProducer _producer;
     private SharedSurfaceDescriptor _descriptor;
@@ -24,10 +25,10 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
     private volatile bool _pointerOver;
     private volatile bool _keyboardFocused;
 
-    public RemoteUniverseOutput(IEventAggregator universeEvents, UniverseHostChannel channel, HandleTransfer handles,
+    public RemoteUniverseOutput(IEventAggregator universeEvents, IUniverseViewer viewer, HandleTransfer handles,
         uint width, uint height) : base(universeEvents)
     {
-        _channel = channel;
+        _viewer = viewer;
         _handles = handles;
         _producer = new SharedSurfaceProducer(this, SurfaceFormat.B8G8R8A8.UNorm);
         Description = new UniverseOutputDescription(PresenterType.RenderTarget)
@@ -91,6 +92,19 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
 
     public void TakeText(string text) => OnTextInput(text);
 
+    /// <summary>The last frame drawn; null before the output has a device. On the thread that draws it, after the frame
+    /// was submitted.</summary>
+    public Image ReadFrame()
+    {
+        if (Presenter?.GetCurrentImage() is not { } frame)
+        {
+            return null;
+        }
+
+        GraphicsDevice.WaitForFramesInFlight(ulong.MaxValue);
+        return frame.ToImage();
+    }
+
     public override void CopyOutput(IGraphicsDevice graphicsDevice)
     {
         if (Presenter is RenderTargetGraphicsPresenter { ResolveTexture: { } frame })
@@ -124,7 +138,7 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
             buffers[i] = Give(descriptor.Others[i - 1]);
         }
 
-        _channel.SendSurface(new RemoteSurface
+        _viewer.ShowSurface(new RemoteSurface
         {
             Width = descriptor.Width,
             Height = descriptor.Height,
@@ -147,7 +161,7 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
         if (_descriptor is { } descriptor && descriptor.Submitted > _announced)
         {
             _announced = descriptor.Submitted;
-            _channel.SendFrameReady(_announced);
+            _viewer.ShowFrame(_announced);
         }
     }
 
