@@ -143,9 +143,9 @@ public partial class ConvexHullCollider : Collider
 
     public override double MeasureCarriedVolume(double stretch) => placedVolume * stretch;
 
-    public override IConvexShape<float> GetWorldShape()
+    public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
     {
-        return placedHull?.Transform(Owner.Transform.GetWorldMatrixF());
+        return placedHull?.Transform(Owner.Transform.GetWorldMatrixF(origin));
     }
 
     protected override void FitShape(Mesh mesh) => TakeUnplaced(mesh.HasPoints ? mesh.GetConvexHull() : null);

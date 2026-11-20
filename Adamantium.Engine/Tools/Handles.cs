@@ -74,7 +74,7 @@ public abstract class Handles
             return pivot;
         }
 
-        return Vector3F.TransformCoordinate(pivot.As<float>(), target.Owner.Transform.GetWorldMatrixF()).As<double>();
+        return Vector3<double>.TransformCoordinate(pivot, target.Owner.Transform.GetWorldMatrix());
     }
 
     protected static QuaternionF RotationInWorld(Entity target, QuaternionF local)
@@ -99,8 +99,8 @@ public abstract class Handles
             return worldVector;
         }
 
-        var inverse = Matrix4x4F.Invert(target.Owner.Transform.GetWorldMatrixF());
-        return Vector3F.TransformNormal(worldVector, inverse);
+        var inverse = Matrix4x4<double>.Invert(target.Owner.Transform.GetWorldMatrix());
+        return Vector3<double>.TransformNormal(worldVector.As<double>(), inverse).As<float>();
     }
 
     protected static float UnitsPerPixel(CameraBase camera, Vector3<double> worldPoint)

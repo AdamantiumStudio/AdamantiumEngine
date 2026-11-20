@@ -251,6 +251,47 @@ public class PhysicsServiceTests
         Assert.That(table.Dependencies[0].Transform.Position.Y, Is.EqualTo(-0.85).Within(1e-9), "its parts stay put on it");
     }
 
+    // A billion meters out a table of child legs stands as near the origin, and a box under a far group lands on the
+    // ground: the parts take their places from the body in double, and the physics' places come back in double.
+    [Test]
+    public void FarFromTheOrigin_ATableStands_AndABoxUnderAGroupLands()
+    {
+        UseSteppedPhysics();
+        var far = new Vector3<double>(1e9, 0, -1e9);
+        var ground = AddGround();
+        ground.Transform.Position += far;
+        var table = new Entity(null, "Table");
+        table.Transform.Position = far + new Vector3<double>(0, -0.2, 0);
+        table.AddComponent(new RigidBody());
+        AddPart(table, "Top", new Vector3<double>(0, -0.85, 0), new Vector3<double>(1, 0.05, 0.6));
+        foreach (var corner in new[] { new Vector3<double>(0.9, -0.4, 0.5), new Vector3<double>(-0.9, -0.4, 0.5),
+                     new Vector3<double>(0.9, -0.4, -0.5), new Vector3<double>(-0.9, -0.4, -0.5) })
+        {
+            AddPart(table, "Leg", corner, new Vector3<double>(0.05, 0.4, 0.05));
+        }
+
+        var group = new Entity(null, "Group");
+        group.Transform.Position = far + new Vector3<double>(5, -3, 0);
+        var box = MakeBox("Box", new Vector3<double>(0.01, 0, 0.02), 0.5, group);
+        _world.EntityManager.AddEntity(table, _world.MainScene);
+        _world.EntityManager.AddEntity(group, _world.MainScene);
+        Settle();
+
+        Play();
+        Frames(3);
+
+        var tableAt = table.Transform.Position - far;
+        var boxAt = box.Transform.WorldPosition - far;
+        Assert.Multiple(() =>
+        {
+            Assert.That(tableAt.Y, Is.EqualTo(0).Within(0.02), "the table stands on the feet of its legs");
+            Assert.That(Math.Abs(tableAt.X) + Math.Abs(tableAt.Z), Is.LessThan(0.01), "and stays where it stood");
+            Assert.That(boxAt.Y, Is.EqualTo(-0.5).Within(0.02), "the box rests on the ground");
+            Assert.That(boxAt.X, Is.EqualTo(5.01).Within(0.01), "under where it fell from");
+            Assert.That(boxAt.Z, Is.EqualTo(0.02).Within(0.01));
+        });
+    }
+
     // Drawn between two steps, a body turns about its center of mass: its origin, off it, swings round, not across.
     [Test]
     public void SpinningBodyDrawnBetweenSteps_TurnsAboutItsCenterOfMass()

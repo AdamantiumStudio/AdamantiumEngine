@@ -90,7 +90,7 @@ public partial class MeshCollider : Collider
     public override double MeasureVolume(Vector3F scale) => 0;
 
     /// <summary>The box round the carried mesh where its entity stands: a mesh is no convex shape to test.</summary>
-    public override IConvexShape<float> GetWorldShape()
+    public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
     {
         if (Source == null)
         {
@@ -99,7 +99,7 @@ public partial class MeshCollider : Collider
 
         var box = Source.Bounds;
         return new OrientedBoundingBox<float>(box.Center.As<float>(), box.HalfExtent.As<float>(), box.Orientation.As<float>())
-            .Transform(carry * Owner.Transform.GetWorldMatrixF());
+            .Transform(carry * Owner.Transform.GetWorldMatrixF(origin));
     }
 
     protected override void FitShape(Mesh mesh) => TakeUnplaced(HoldsTriangles(mesh) ? mesh : null);

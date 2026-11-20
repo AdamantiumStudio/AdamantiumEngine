@@ -68,7 +68,7 @@ public class Skin : Component
     /// joints without composing every joint's parents again.</summary>
     public int FillPalette(Span<Matrix4x4F> palette, CameraBase camera)
     {
-        var toMesh = Matrix4x4F.Invert(Owner.Transform.GetWorldMatrixF(camera));
+        var toMesh = Matrix4x4<double>.Invert(Owner.Transform.GetWorldMatrix(camera));
         var count = Math.Min(Joints.Count, palette.Length);
         for (int i = 0; i < count; i++)
         {
@@ -78,11 +78,15 @@ public class Skin : Component
         return count;
     }
 
-    private Matrix4x4F JointMatrix(int index, CameraBase camera, in Matrix4x4F toMesh)
+    // The joint into the mesh's space in double - both stand far out together, and what is between them is small - and
+    // only that made float.
+    private Matrix4x4F JointMatrix(int index, CameraBase camera, in Matrix4x4<double> toMesh)
     {
         var joint = Joints[index];
         var inverseBind = index < InverseBindMatrices.Count ? InverseBindMatrices[index] : Matrix4x4F.Identity;
-        return joint == null ? Matrix4x4F.Identity : inverseBind * joint.Transform.GetWorldMatrixF(camera) * toMesh;
+        return joint == null
+            ? Matrix4x4F.Identity
+            : inverseBind * (joint.Transform.GetWorldMatrix(camera) * toMesh).As<float>();
     }
 
     public override void CloneReferences(IComponent clone, IReadOnlyDictionary<Entity, Entity> copies)
@@ -115,7 +119,7 @@ public class Skin : Component
     {
         var bound = mesh.Bounds.ToBoundingBox().As<float>();
         var reach = bound;
-        var toMesh = Matrix4x4F.Invert(Owner.Transform.GetWorldMatrixF(camera));
+        var toMesh = Matrix4x4<double>.Invert(Owner.Transform.GetWorldMatrix(camera));
         bound.GetCorners(boxCorners);
         Analyze(mesh);
         foreach (var joint in usedJoints)
@@ -138,10 +142,10 @@ public class Skin : Component
     /// joint's scale, and one bent by none stays where the mesh puts it. Looser than <see cref="PosedBounds(Mesh,
     /// CameraBase)"/>, and cheaper: no matrix is composed and no corner carried.
     /// </summary>
-    public BoundingBox<float> WorldBounds(Mesh mesh, CameraBase camera)
+    public BoundingBox<double> WorldBounds(Mesh mesh, CameraBase camera)
     {
         Analyze(mesh);
-        var box = new BoundingBox<float>(new Vector3F(float.MaxValue), new Vector3F(float.MinValue));
+        var box = new BoundingBox<double>(new Vector3<double>(double.MaxValue), new Vector3<double>(double.MinValue));
         if (restPoints)
         {
             box = RestBounds(mesh, camera);
@@ -152,31 +156,31 @@ public class Skin : Component
             var joint = Joints[usedJoints[k]];
             if (joint == null)
             {
-                box = BoundingBox.CreateMerged<float>(box, RestBounds(mesh, camera));
+                box = BoundingBox.CreateMerged(box, RestBounds(mesh, camera));
                 continue;
             }
 
-            var world = joint.Transform.GetWorldMatrixF(camera);
+            var world = joint.Transform.GetWorldMatrix(camera);
             var at = world.TranslationVector;
-            var reach = new Vector3F(jointReach[k] * StretchBound(in world));
-            box.Minimum = Vector3F.Min(box.Minimum, at - reach);
-            box.Maximum = Vector3F.Max(box.Maximum, at + reach);
+            var reach = new Vector3<double>(jointReach[k] * StretchBound(world.As<float>()));
+            box.Minimum = Vector3<double>.Min(box.Minimum, at - reach);
+            box.Maximum = Vector3<double>.Max(box.Maximum, at + reach);
         }
 
         return box;
     }
 
-    private BoundingBox<float> RestBounds(Mesh mesh, CameraBase camera)
+    private BoundingBox<double> RestBounds(Mesh mesh, CameraBase camera)
     {
-        var world = Owner.Transform.GetWorldMatrixF(camera);
+        var world = Owner.Transform.GetWorldMatrix(camera);
         mesh.Bounds.ToBoundingBox().As<float>().GetCorners(boxCorners);
-        var first = Vector3F.TransformCoordinate(boxCorners[0], world);
-        var box = new BoundingBox<float>(first, first);
+        var first = Vector3<double>.TransformCoordinate(boxCorners[0].As<double>(), world);
+        var box = new BoundingBox<double>(first, first);
         for (int i = 1; i < boxCorners.Length; i++)
         {
-            var corner = Vector3F.TransformCoordinate(boxCorners[i], world);
-            box.Minimum = Vector3F.Min(box.Minimum, corner);
-            box.Maximum = Vector3F.Max(box.Maximum, corner);
+            var corner = Vector3<double>.TransformCoordinate(boxCorners[i].As<double>(), world);
+            box.Minimum = Vector3<double>.Min(box.Minimum, corner);
+            box.Maximum = Vector3<double>.Max(box.Maximum, corner);
         }
 
         return box;

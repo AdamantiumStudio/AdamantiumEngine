@@ -137,7 +137,7 @@ namespace Adamantium.ECS.Components.Extensions
         {
             var transform = owner.Transform;
             return owner.TryMeasureBounds(out var bounds)
-                ? Vector3F.TransformCoordinate(bounds.Center.As<float>(), transform.GetWorldMatrixF()).As<double>()
+                ? Vector3<double>.TransformCoordinate(bounds.Center, transform.GetWorldMatrix())
                 : transform.WorldPosition;
         }
 
@@ -182,16 +182,6 @@ namespace Adamantium.ECS.Components.Extensions
 
             bounds = entity.GetComponent<Collider>() is { IsEnabled: true } collider ? collider.Bounds : default;
             return bounds.HalfExtent != Vector3<double>.Zero || bounds.Center != Vector3<double>.Zero;
-        }
-
-        public static Matrix4x4F GetActualMatrixF(this Entity owner, CameraBase camera)
-        {
-            return owner.Transform.GetMetadata(camera).WorldMatrixF;
-        }
-        
-        public static Matrix4x4<double> GetActualMatrix(this Entity owner, CameraBase camera)
-        {
-            return owner.Transform.GetMetadata(camera).WorldMatrix;
         }
 
         public static Single GetDistanceToCamera(this Entity owner, CameraBase camera)

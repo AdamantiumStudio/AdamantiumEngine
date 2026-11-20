@@ -183,6 +183,30 @@ public class ColliderShapeTests
         Assert.That(cylinder.Intersects(other), Is.False, "beside the round side, where a box round it would reach");
     }
 
+    // A billion meters out two colliders a centimeter apart do not meet, and touching do: they are tested near each
+    // other, not in float far out.
+    [Test]
+    public void FarFromTheOrigin_CollidersMeetAsNearIt()
+    {
+        var far = new Vector3<double>(1e9, 5e8, -1e9);
+        var firstEntity = Box(null, new Vector3<double>(-0.5), new Vector3<double>(0.5));
+        var secondEntity = Box(null, new Vector3<double>(-0.5), new Vector3<double>(0.5));
+        var first = With(new BoxCollider(), firstEntity);
+        var second = With(new BoxCollider(), secondEntity);
+        firstEntity.Transform.Position = far;
+
+        secondEntity.Transform.Position = far + new Vector3<double>(1.01, 0, 0);
+        var apart = first.Intersects(second);
+        secondEntity.Transform.Position = far + new Vector3<double>(0.99, 0, 0);
+        var touching = first.Intersects(second);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(apart, Is.False, "a centimeter apart");
+            Assert.That(touching, Is.True, "a centimeter into each other");
+        });
+    }
+
     [Test]
     public void AShownCollider_IsBuiltOnce_AndFollowsItsShape()
     {

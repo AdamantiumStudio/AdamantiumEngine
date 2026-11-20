@@ -56,9 +56,9 @@ namespace Adamantium.ECS.Components
             FitToBox(Bounds.FromBoundingBox(OrientedBoundingBox.CreateFromPoints<float>(points).As<double>()));
         }
 
-        public override IConvexShape<float> GetWorldShape()
+        public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
         {
-            return obb.Transform(Owner.Transform.GetWorldMatrixF());
+            return obb.Transform(Owner.Transform.GetWorldMatrixF(origin));
         }
 
         public override bool Intersects(ref Ray<float> ray, out Vector3F point)

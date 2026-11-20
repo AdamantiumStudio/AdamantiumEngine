@@ -644,9 +644,14 @@ All packages share one version.
 
 ### Changed
 
-- `TransformMetaData.AbsoluteWorld` is a `Matrix4x4<double>`, beside it `AbsoluteWorldF` the same world in float;
-  `Transform.CalculateFinalTransform` takes the parent's world as `in Matrix4x4<double>`. `Transform.GetLocalMatrix`
-  and `GetWorldMatrix` give them in double, the float ones made from the same formula.
+- The world of an entity is in double wherever a place is read from it: `TransformMetaData.AbsoluteWorld` is a
+  `Matrix4x4<double>`, `Transform.CalculateFinalTransform` takes the parent's world as `in Matrix4x4<double>`,
+  `Transform.GetLocalMatrix`, `GetWorldMatrix` and `GetWorldMatrix(camera)` give them in double - the float local
+  matrix made from the same formula - and `GetWorldMatrixF(origin)` gives the world against a point near it in float.
+  `SceneIndex` holds its boxes in double (`Place`, `TryGetBox`, `RayCast` take and give double), `Skin.WorldBounds` is a
+  double box, and `Collider.GetWorldShape` takes the origin the shape is placed against. `GetWorldMatrixF(camera)` gave
+  way to `GetWorldMatrix(camera)`; `TransformMetaData.WorldMatrix` and `GetActualMatrix`/`GetActualMatrixF`, which
+  nothing used, are gone.
 - The physics' positions are `WorldPosition`s: a body's, `Pose.Position`, a description's, a joint's points, a ray's
   origin, every hit and contact point, `GetCenterOfMass` and `ApplyImpulse`'s point; `GetBounds` is double. A pose in a
   body's own axes is the float `LocalPose`, public now: a compound's parts take it. Collisions are worked out in float
@@ -811,9 +816,15 @@ All packages share one version.
   the camera taken from that, so it moved by float's rounding - 3 cm a million meters out, 2 m a billion out. The
   world is composed in double through every parent (`TransformMetaData.AbsoluteWorld`, `Transform.GetWorldMatrix`,
   `Transform.WorldPosition` and so the camera's), the camera's position is taken away in double, and only what is left
-  goes to float. `Matrix4x4.CreateTransformation` folds the moves between its scale and turn into one row, three
-  products where it multiplied eight, so working out every entity's matrices anew is quicker than before in double
-  too (11 100 entities, 7.6 → 6.9 ms).
+  goes to float. So is everything else that read a place from the float world: a skin's joints are carried into its
+  mesh in double, the scene index and the pick ray are in double (two cubes ten centimeters apart a billion out were
+  one place), colliders are tested against each other near them, an entity moved into a group stays where it stood
+  (it jumped 90 m a billion out), the camera frames and orbits its subject's true center, the handles stand on the
+  true pivot, a thumbnail aims at the true bounds, culling and the physics' bodies take their places in double.
+  An entity hung on a camera's own entity is drawn where it hangs for that camera, not at the world's origin.
+  `Matrix4x4.CreateTransformation` folds the moves between its scale and turn into one row, three products where it
+  multiplied eight, so working out every entity's matrices anew is quicker than before in double too (11 100
+  entities, 7.6 → 6.8 ms).
 - The physics' step allocates nothing without the JIT's optimizations too, as in Debug: GJK's and EPA's tables of
   constants were spans made by reflection on every call there (940 KB per 240 steps on a height field), and the solved
   contacts were walked through an interface, boxing the enumerator each step. Tests hold the warmed step of nine scenes

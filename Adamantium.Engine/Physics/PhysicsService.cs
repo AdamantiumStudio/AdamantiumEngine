@@ -414,7 +414,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private void FollowParents(PhysicsBodyLink link, RigidBody body)
     {
         link.Parts.RereadAncestors();
-        if (link.Entity.Owner?.Transform.GetWorldMatrixF() != link.ParentWorld)
+        if (link.Entity.Owner?.Transform.GetWorldMatrix() != link.ParentWorld)
             Refresh(link, body);
     }
 
@@ -520,7 +520,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     // Makes a body of description - null for one the physics cannot make - under a key of its own, or in place of the
     // one previous links.
     private void MakeBody(RigidBody body, PhysicsBodyLink previous, bool keepsPose, BodyParts parts,
-        BodyDescription description, Matrix4x4F parentWorld)
+        BodyDescription description, Matrix4x4<double> parentWorld)
     {
         var entity = body.Owner;
         // After the new body took its hull and mesh shapes, so the ones both use are not made again.
@@ -619,12 +619,12 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     }
 
     // The body body makes, its entities put in parts; null - logged - for one the physics cannot make.
-    private BodyDescription Describe(RigidBody body, BodyParts parts, out Matrix4x4F parentWorld)
+    private BodyDescription Describe(RigidBody body, BodyParts parts, out Matrix4x4<double> parentWorld)
     {
         var entity = body.Owner;
         parts.Add(entity);
         if (!CanStand(entity, body.Kind, out parentWorld, out var world)
-            || !world.Decompose(out var scale, out var rotation, out var translation))
+            || !TurnAndScaleOf(world).Decompose(out var scale, out var rotation, out _))
         {
             Log.Logger.Warning("{Entity} or its parent is flattened, mirrored, skewed or stretched unevenly; "
                                + "the physics leaves it", entity.Name);
@@ -642,6 +642,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             }
         }
 
+        var translation = world.TranslationVector;
         var shape = CreateShape(entity, body.Kind, translation, rotation, scale, parts);
         if (shape == null)
         {
@@ -654,7 +655,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         {
             Kind = body.Kind,
             Shape = shape,
-            Position = new WorldPosition(translation.As<double>()),
+            Position = new WorldPosition(translation),
             Rotation = rotation,
             Mass = body.Mass,
             Density = body.Density,
@@ -671,7 +672,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     /// body of their own, around the body's origin at <paramref name="origin"/> turned by <paramref name="rotation"/>,
     /// the entity scaled by <paramref name="scale"/>, for a body of <paramref name="kind"/>; null when there are none.
     /// The entities below it it looks at, and the hull and mesh shapes it takes, go in <paramref name="parts"/>.</summary>
-    private CollisionShape CreateShape(Entity entity, BodyKind kind, Vector3F origin, QuaternionF rotation,
+    private CollisionShape CreateShape(Entity entity, BodyKind kind, Vector3<double> origin, QuaternionF rotation,
         Vector3F scale, BodyParts parts)
     {
         _shapeParts.Clear();
@@ -714,14 +715,15 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         return new CompoundCollisionShape(_shapeParts);
     }
 
-    private void AddColliders(Entity body, BodyKind kind, Entity entity, Vector3F origin, QuaternionF unturn,
+    private void AddColliders(Entity body, BodyKind kind, Entity entity, Vector3<double> origin, QuaternionF unturn,
         Vector3F bodyScale, List<CarriedShapeKey> carriedShapesTaken)
     {
         // The body's own colliders stand on it exactly, as their offsets say.
         var placed = entity == body;
         var scale = bodyScale;
         var turn = QuaternionF.Identity;
-        var translation = Vector3F.Zero;
+        // Where the entity stands from the body's origin, taken in double: both may be far out together.
+        var fromBody = Vector3F.Zero;
         // An entity turned under an uneven scale is skewed: its colliders are carried into the body by its whole matrix.
         var isSkewed = false;
         var carry = Matrix4x4F.Identity;
@@ -742,9 +744,10 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
             if (!placed)
             {
-                var world = entity.Transform.GetWorldMatrixF();
+                var placedWorld = entity.Transform.GetWorldMatrix();
+                var world = TurnAndScaleOf(placedWorld);
                 isSkewed = world.Determinant() != 0 && IsSkewed(world);
-                if (!isSkewed && (world.Determinant() == 0 || !world.Decompose(out scale, out turn, out translation)))
+                if (!isSkewed && (world.Determinant() == 0 || !world.Decompose(out scale, out turn, out _)))
                 {
                     Log.Logger.Warning("{Entity} is flattened; the body of {Body} leaves its colliders", entity.Name,
                         body.Name);
@@ -752,17 +755,15 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 }
 
                 if (isSkewed)
-                {
                     carry = CarryIntoBody(body, entity, bodyScale);
-                    translation = world.TranslationVector;
-                }
 
+                fromBody = (placedWorld.TranslationVector - origin).As<float>();
                 placed = true;
             }
 
             if (isSkewed)
             {
-                var position = Vector3F.Transform(translation - origin, unturn);
+                var position = Vector3F.Transform(fromBody, unturn);
                 AddSkewedPartCollider(body, entity, collider, carry, position, carriedShapesTaken);
                 continue;
             }
@@ -789,9 +790,9 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 continue;
             }
 
-            var center = translation + Vector3F.Transform(shape.Offset, turn);
+            var center = fromBody + Vector3F.Transform(shape.Offset, turn);
             _shapeParts.Add(new CompoundPart(shape.Shape,
-                new LocalPose(Vector3F.Transform(center - origin, unturn), unturn * turn * shape.Turn)));
+                new LocalPose(Vector3F.Transform(center, unturn), unturn * turn * shape.Turn)));
         }
     }
 
@@ -1209,7 +1210,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         foreach (var link in _placing)
         {
             var parent = link.Entity.Owner;
-            var parentWorld = parent?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+            var parentWorld = parent?.Transform.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
             if (!link.MustPlace && parentWorld == link.ParentWorld)
                 continue;
 
@@ -1259,10 +1260,9 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         return (float)Math.Clamp((_lastResultSteps - 1 + sinceStep) / _lastResultSteps, 0, 1);
     }
 
-    private void PlaceEntity(PhysicsBodyLink link, bool hasParent, in Matrix4x4F parentWorld,
+    private void PlaceEntity(PhysicsBodyLink link, bool hasParent, in Matrix4x4<double> parentWorld,
         WorldPosition centerOfMass, QuaternionF entityRotation)
     {
-        // The entities' transforms are in double for now.
         var entityPosition = (centerOfMass - Vector3F.Transform(link.CenterOfMass, entityRotation)).ToVector();
         var transform = link.Entity.Transform;
         // Changed by another since the last look: left for the next one to see, not taken as the physics' own.
@@ -1273,12 +1273,12 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         }
         else
         {
-            if (!parentWorld.Decompose(out _, out var parentRotation, out _))
+            if (!TurnAndScaleOf(parentWorld).Decompose(out _, out var parentRotation, out _))
                 return;
 
-            var local = Vector3F.TransformCoordinate(entityPosition.As<float>(), Matrix4x4F.Invert(parentWorld));
-            transform.SetPose(local.As<double>(), QuaternionF.Conjugate(parentRotation) * entityRotation,
-                transform.BaseScale);
+            // Into the parent's axes in double: both may stand far out, the way between them small.
+            var local = Vector3<double>.TransformCoordinate(entityPosition, Matrix4x4<double>.Invert(parentWorld));
+            transform.SetPose(local, QuaternionF.Conjugate(parentRotation) * entityRotation, transform.BaseScale);
         }
 
         // The physics' own change, not one to make the body anew for.
@@ -1374,20 +1374,31 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
     // Whether the physics can stand entity: a body that moves needs a turn and an even scale above it and no mirror,
     // and none may be flattened or skewed.
-    private static bool CanStand(Entity entity, BodyKind kind, out Matrix4x4F parentWorld, out Matrix4x4F world)
+    private static bool CanStand(Entity entity, BodyKind kind, out Matrix4x4<double> parentWorld,
+        out Matrix4x4<double> world)
     {
-        parentWorld = entity.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
-        world = entity.Transform.GetWorldMatrixF();
-        if (kind != BodyKind.Static && (world.Determinant() <= 0 || !IsTurnAndEvenScale(parentWorld)))
+        parentWorld = entity.Owner?.Transform.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
+        world = entity.Transform.GetWorldMatrix();
+        var turnAndScale = TurnAndScaleOf(world);
+        if (kind != BodyKind.Static && (turnAndScale.Determinant() <= 0 || !IsTurnAndEvenScale(parentWorld)))
             return false;
 
-        return world.Determinant() != 0 && !IsSkewed(world);
+        return turnAndScale.Determinant() != 0 && !IsSkewed(turnAndScale);
+    }
+
+    // A world's turn and scale in float, its place left out: what the checks of its shape look at.
+    private static Matrix4x4F TurnAndScaleOf(in Matrix4x4<double> world)
+    {
+        var turnAndScale = world;
+        turnAndScale.TranslationVector = Vector3<double>.Zero;
+        return turnAndScale.As<float>();
     }
 
     private static bool IsSkewed(in Matrix4x4F world) => Matrix4x4.IsSkewed(world);
 
-    private static bool IsTurnAndEvenScale(in Matrix4x4F world)
+    private static bool IsTurnAndEvenScale(in Matrix4x4<double> placedWorld)
     {
+        var world = TurnAndScaleOf(placedWorld);
         if (world.Determinant() <= 0 || IsSkewed(world))
             return false;
 

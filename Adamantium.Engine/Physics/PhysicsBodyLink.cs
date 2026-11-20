@@ -99,5 +99,5 @@ internal sealed class PhysicsBodyLink
     public bool WarnedOfParent { get; set; }
 
     /// <summary>The parent's world matrix the entity was last stood under; it is stood again when that changes.</summary>
-    public Matrix4x4F ParentWorld { get; set; }
+    public Matrix4x4<double> ParentWorld { get; set; }
 }

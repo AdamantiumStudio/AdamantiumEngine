@@ -543,34 +543,44 @@ namespace Adamantium.ECS.Components
         /// </summary>
         public bool StayInWorldUnder(Entity newOwner)
         {
-            var oldParent = Owner?.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
-            var newParent = newOwner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+            // In double: between owners far from the origin a float inverse would lose the entity's own small place.
+            var oldParent = Owner?.Owner?.Transform.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
+            var newParent = newOwner?.Transform.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
             if (oldParent == newParent)
             {
                 return true;
             }
 
-            var between = oldParent * Matrix4x4F.Invert(newParent);
-            if (between.Determinant() <= 1e-12f || !between.Decompose(out var scale, out var turn, out _))
+            var between = oldParent * Matrix4x4<double>.Invert(newParent);
+            if (between.Determinant() <= 1e-12 || !between.Decompose(out var scale, out var turn, out _))
             {
                 return false;
             }
 
-            var target = (GetLocalMatrixF() * between).TranslationVector;
-            Rotation = QuaternionF.Multiply(turn, Rotation);
-            ScaleFactor *= (scale.X + scale.Y + scale.Z) / 3;
+            var target = (GetLocalMatrix() * between).TranslationVector;
+            Rotation = QuaternionF.Multiply(turn.As<float>(), Rotation);
+            ScaleFactor *= (float)((scale.X + scale.Y + scale.Z) / 3);
             Position = Vector3<double>.Zero;
-            Position = (target - GetLocalMatrixF().TranslationVector).As<double>();
+            Position = target - GetLocalMatrix().TranslationVector;
             return true;
         }
 
+        /// <summary>Where this entity stands in the world against <paramref name="origin"/>, made float once the way
+        /// from it is taken in double: the frame a test between things near each other wants.</summary>
+        public Matrix4x4F GetWorldMatrixF(Vector3<double> origin)
+        {
+            var world = GetWorldMatrix();
+            world.TranslationVector -= origin;
+            return world.As<float>();
+        }
+
         /// <summary>Where this entity stands in the world as the transforms were worked out for <paramref name="camera"/>
-        /// this frame - a lookup, where <see cref="GetWorldMatrixF()"/> composes every parent afresh; worked out afresh
-        /// while there is nothing for the camera yet.</summary>
-        public Matrix4x4F GetWorldMatrixF(CameraBase camera) =>
+        /// this frame - a lookup, where <see cref="GetWorldMatrix()"/> composes every parent afresh; worked out afresh
+        /// while there is nothing for the camera yet, or for the camera's own entity, which its walk passes by.</summary>
+        public Matrix4x4<double> GetWorldMatrix(CameraBase camera) =>
             camera != null && TransformData.TryGetValue(camera, out var metadata) && metadata.Computed
-                ? metadata.AbsoluteWorldF
-                : GetWorldMatrixF();
+                ? metadata.AbsoluteWorld
+                : GetWorldMatrix();
 
         /// <summary>Where this entity stands in the world, through its parents; the same matrix it is drawn with, made
         /// float once at the end.</summary>
@@ -607,11 +617,9 @@ namespace Adamantium.ECS.Components
 
             var metadata = GetMetadata(camera);
             metadata.AbsoluteWorld = absoluteWorld;
-            metadata.AbsoluteWorldF = absoluteWorld.As<float>();
             metadata.RelativePosition = renderWorld.TranslationVector.As<float>();
             metadata.Pivot = pivot.As<float>();
             metadata.WorldMatrixF = renderWorld.As<float>();
-            metadata.WorldMatrix = renderWorld;
             metadata.Rotation = Rotation;
             metadata.Scale = Scale;
             // Record the inputs so TransformService can skip this (camera, node) next frame if none of them changed.
