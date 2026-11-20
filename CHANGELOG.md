@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- Shape casts in the physics: `IPhysicsWorld.CastShape(shape, pose, translation, out ShapeHit)` moves a shape without
+  turning - a wheel down its suspension, a character along its step - and gives the first body it meets, coming within
+  half a millimeter of it: where it stops, first within a millimeter of that body, and the body's outward normal
+  there. A shape starting inside a body, or within half a millimeter of it and not moving or moving toward it, meets
+  it at once; one a cast stopped can be cast along or away. Convex shapes and compounds are cast at
+  bodies of any shape, meshes and height fields included, by conservative advancement on the GJK distance, as Box2D
+  v3 and Jolt cast; a surface's triangles are swept nearest first by a separating-axis bound, those it cannot meet
+  sooner passed by.
 - Joints in the physics: `IPhysicsWorld.Add(JointDescription)` gives a `JointHandle`. `JointKind.Fixed` welds two
   bodies, `Ball` shares a point, `Hinge` turns them about an axis, `Slider` slides them along one, `Distance` keeps
   two points apart - as a rod, a rope between limits, or a spring. A joint holds the description's first body to its
