@@ -158,6 +158,29 @@ public class PdfSecurityTests
         });
     }
 
+    // The document opens without a password, so it is the attachments' password that is carried to the same file saved
+    // again - and only to it.
+    [Test]
+    public void AFileEncryptingOnlyItsAttachments_SavedAgain_TakesTheirPassword()
+    {
+        var bytes = OnlyAttachmentsEncrypted(new PdfTestEncryption(4, "user", "owner"), true);
+        byte[] grown = [.. bytes, .. "\n% saved again\n"u8];
+        var given = PdfDocument.Open(bytes);
+        var unlocked = given.Authenticate("user");
+        var savedAgain = PdfDocument.Open(grown);
+        var notGiven = PdfDocument.Open(grown);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(unlocked, Is.True);
+            Assert.That(savedAgain.TakePasswordFrom(given), Is.True);
+            Assert.That(savedAgain.Attachments[0].NeedsPassword, Is.False, "the attachments' password was not carried");
+            Assert.That(Encoding.ASCII.GetString(savedAgain.Attachments[0].GetData().Span), Is.EqualTo("attached secret"));
+            Assert.That(notGiven.TakePasswordFrom(PdfDocument.Open(bytes)), Is.True, "the document itself is open");
+            Assert.That(notGiven.Attachments[0].NeedsPassword, Is.True, "a password was carried that was never given");
+        });
+    }
+
     // Without AuthEvent EFOpen the filter asks at the document's opening, as by default.
     [Test]
     public void AFileEncryptingOnlyItsAttachments_ButAskingAtOpening_NeedsThePasswordFirst()

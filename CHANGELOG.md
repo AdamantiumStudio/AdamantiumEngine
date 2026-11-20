@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `SharedSurfaceProducer` sends an output's frames to an `ISharedSurfaceConsumer` through a ring of shared surfaces:
+  each frame goes to the surface the consumer gave back, and a new size starts a new ring, handed over once it holds
+  its first frame. The UI's render target panel takes its frames this way; a process of its own will too.
+
 - `Adamantium.UniverseHost`: runs a universe with no window and no editor - its scene built from its content folders,
   the game's code loaded by path with the PDB beside it (for a debugger to see), its services started - drawn by the
   scene's camera into an offscreen output. The editor will start it to debug the game. `--frames`, `--capture` and
@@ -45,7 +49,8 @@ All packages share one version.
   `PhysicsParts.SetJoint` gives a joint (its kind's own component replaced, other kinds kept), `RemoveJointsNotIn`
   takes off the rest, `JointOf` reads one back.
 - PDF: `PdfDocument.TakePasswordFrom` tries the password an earlier document was given - opened with or authenticated
-  later - on its file saved again (`Continues`), so a viewer showing the saved file asks for it no more.
+  later - on its file saved again (`Continues`), so a viewer showing the saved file asks for it no more. A file that
+  encrypts only its embedded files takes their password too, though the document itself opens without one.
 - Windows: `IAttachmentExecute` with `Win32Interop.ClsidAttachmentServices`, and `Win32Interop.AssocIsDangerous` - to
   open or mark a file from outside as the system's policy says. macOS: `PosixInterop.SetMacExtendedAttribute`.
 - `RigidBody.ComputedMass`: the mass the physics gives the body once it is dynamic - its `Mass` when above zero, else
@@ -779,6 +784,8 @@ All packages share one version.
   contacts were walked through an interface, boxing the enumerator each step. Tests hold the warmed step of nine scenes
   - all but a sleeping one kept awake, so collision and the solvers run - the queries where they meet something and a
   body's changes at no bytes, in CI also with the JIT's optimizations off.
+- Adamantium.Vulkan 1.3.1, Slang 1.1.2 and Spirv 2.0.2: an empty string in a structure's field (an empty application
+  name, say) no longer runs past the marshalling buffer.
 - A universe of its own (`UniverseMode.Standalone`) creates its graphics device again: it named its Vulkan
   application with an empty text, which failed to marshal. It takes its `Title`, else "Universe".
 - A Standalone universe's `Run` returns only once its loop stopped and freed its resources - it returned while the
