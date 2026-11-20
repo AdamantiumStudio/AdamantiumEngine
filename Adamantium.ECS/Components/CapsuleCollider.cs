@@ -85,9 +85,9 @@ public partial class CapsuleCollider : Collider
         return colliderData.TryGetValue(camera, out var placed) && placed.Intersects(ray, out point);
     }
 
-    public override IConvexShape<float> GetWorldShape()
+    public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
     {
-        return capsule.Transform(Owner.Transform.GetWorldMatrixF());
+        return capsule.Transform(Owner.Transform.GetWorldMatrixF(origin));
     }
 
     protected override void FitBox(Bounds box)

@@ -67,8 +67,9 @@ public static class Picking
         var candidates = new Candidates();
         try
         {
-            var origin = ray.Ray.Position + (ray.Camera?.WorldPosition ?? Vector3<double>.Zero).As<float>();
-            foreach (var (entity, _) in index.RayCast(new Ray<float>(origin, ray.Ray.Direction)))
+            // The pick ray starts against the camera; the index is in the world, so it is placed there in double.
+            var origin = ray.Ray.Position.As<double>() + (ray.Camera?.WorldPosition ?? Vector3<double>.Zero);
+            foreach (var (entity, _) in index.RayCast(new Ray<double>(origin, ray.Ray.Direction.As<double>())))
             {
                 if (!Pickable(entity, withDisabled))
                 {

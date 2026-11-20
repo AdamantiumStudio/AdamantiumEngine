@@ -36,8 +36,9 @@ namespace Adamantium.ECS.Components
 
         /// <summary>Where this entity is IN THE WORLD: its own position composed through its parents. <see cref="Position"/>
         /// is relative to the parent, so for anything below a root the two differ. Camera-independent, unlike
-        /// <see cref="TransformMetaData.AbsoluteWorld"/>, which the render pass records per camera.</summary>
-        public Vector3<double> WorldPosition => GetWorldMatrixF().TranslationVector.As<double>();
+        /// <see cref="TransformMetaData.AbsoluteWorld"/>, which the render pass records per camera. In double through every
+        /// parent, so far from the origin it keeps what float would round away.</summary>
+        public Vector3<double> WorldPosition => GetWorldMatrix().TranslationVector;
 
         public void RemoveMetadata(CameraBase camera)
         {
@@ -520,13 +521,17 @@ namespace Adamantium.ECS.Components
         }
 
         /// <summary>Where this entity stands in its parent: scaled and turned about its pivot, then moved to its position.</summary>
-        public Matrix4x4F GetLocalMatrixF()
+        public Matrix4x4F GetLocalMatrixF() => ComposeLocalMatrix<float>();
+
+        /// <summary>As <see cref="GetLocalMatrixF"/>, in double: the position as it is kept, not rounded to float.</summary>
+        public Matrix4x4<double> GetLocalMatrix() => ComposeLocalMatrix<double>();
+
+        // Scaled and turned about the pivot, then moved to the position: one formula for either precision.
+        private Matrix4x4<T> ComposeLocalMatrix<T>() where T : unmanaged, System.Numerics.IFloatingPointIeee754<T>
         {
-            var scaling = Scale;
-            var localPosition = Position.As<float>();
-            var scalingCenter = pivot.As<float>();
-            var rotationCenter = scalingCenter;
-            return Matrix4x4.CreateTransformation(scalingCenter, pivotRotation, scaling, rotationCenter, rotation, localPosition);
+            var center = pivot.As<T>();
+            return Matrix4x4.CreateTransformation(center, pivotRotation.As<T>(), Scale.As<T>(), center, rotation.As<T>(),
+                Position.As<T>());
         }
 
         /// <summary>
@@ -538,78 +543,89 @@ namespace Adamantium.ECS.Components
         /// </summary>
         public bool StayInWorldUnder(Entity newOwner)
         {
-            var oldParent = Owner?.Owner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
-            var newParent = newOwner?.Transform.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+            // In double: between owners far from the origin a float inverse would lose the entity's own small place.
+            var oldParent = Owner?.Owner?.Transform.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
+            var newParent = newOwner?.Transform.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
             if (oldParent == newParent)
             {
                 return true;
             }
 
-            var between = oldParent * Matrix4x4F.Invert(newParent);
-            if (between.Determinant() <= 1e-12f || !between.Decompose(out var scale, out var turn, out _))
+            var between = oldParent * Matrix4x4<double>.Invert(newParent);
+            if (between.Determinant() <= 1e-12 || !between.Decompose(out var scale, out var turn, out _))
             {
                 return false;
             }
 
-            var target = (GetLocalMatrixF() * between).TranslationVector;
-            Rotation = QuaternionF.Multiply(turn, Rotation);
-            ScaleFactor *= (scale.X + scale.Y + scale.Z) / 3;
+            var target = (GetLocalMatrix() * between).TranslationVector;
+            Rotation = QuaternionF.Multiply(turn.As<float>(), Rotation);
+            ScaleFactor *= (float)((scale.X + scale.Y + scale.Z) / 3);
             Position = Vector3<double>.Zero;
-            Position = (target - GetLocalMatrixF().TranslationVector).As<double>();
+            Position = target - GetLocalMatrix().TranslationVector;
             return true;
         }
 
+        /// <summary>Where this entity stands in the world against <paramref name="origin"/>, made float once the way
+        /// from it is taken in double: the frame a test between things near each other wants.</summary>
+        public Matrix4x4F GetWorldMatrixF(Vector3<double> origin)
+        {
+            var world = GetWorldMatrix();
+            world.TranslationVector -= origin;
+            return world.As<float>();
+        }
+
         /// <summary>Where this entity stands in the world as the transforms were worked out for <paramref name="camera"/>
-        /// this frame - a lookup, where <see cref="GetWorldMatrixF()"/> composes every parent afresh; worked out afresh
-        /// while there is nothing for the camera yet.</summary>
-        public Matrix4x4F GetWorldMatrixF(CameraBase camera) =>
+        /// this frame - a lookup, where <see cref="GetWorldMatrix()"/> composes every parent afresh; worked out afresh
+        /// while there is nothing for the camera yet, or for the camera's own entity, which its walk passes by.</summary>
+        public Matrix4x4<double> GetWorldMatrix(CameraBase camera) =>
             camera != null && TransformData.TryGetValue(camera, out var metadata) && metadata.Computed
                 ? metadata.AbsoluteWorld
-                : GetWorldMatrixF();
+                : GetWorldMatrix();
 
-        /// <summary>Where this entity stands in the world, through its parents; the same matrix it is drawn with.</summary>
-        public Matrix4x4F GetWorldMatrixF()
+        /// <summary>Where this entity stands in the world, through its parents; the same matrix it is drawn with, made
+        /// float once at the end.</summary>
+        public Matrix4x4F GetWorldMatrixF() => GetWorldMatrix().As<float>();
+
+        /// <summary>As <see cref="GetWorldMatrixF()"/>, in double through every parent.</summary>
+        public Matrix4x4<double> GetWorldMatrix()
         {
-            var world = GetLocalMatrixF();
+            var world = GetLocalMatrix();
             for (var at = Owner?.Owner; at != null; at = at.Owner)
             {
-                world *= at.Transform.GetLocalMatrixF();
+                world *= at.Transform.GetLocalMatrix();
             }
 
             return world;
         }
 
-        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld) =>
+        public Matrix4x4F CalculateFinalTransform(CameraBase camera, in Matrix4x4<double> parentWorld) =>
             CalculateFinalTransform(camera, parentWorld, camera.WorldPosition);
 
-        /// <summary>As <see cref="CalculateFinalTransform(CameraBase, Matrix4x4F)"/>, with the camera's world position
-        /// worked out once for the frame's walk.</summary>
-        public Matrix4x4F CalculateFinalTransform(CameraBase camera, Matrix4x4F parentWorld, Vector3<double> cameraWorld)
+        /// <summary>As <see cref="CalculateFinalTransform(CameraBase, in Matrix4x4{double})"/>, with the camera's world
+        /// position worked out once for the frame's walk.</summary>
+        public Matrix4x4F CalculateFinalTransform(CameraBase camera, in Matrix4x4<double> parentWorld,
+            Vector3<double> cameraWorld)
         {
-            var localMatrix = GetLocalMatrixF();
+            // Through the parent (row vectors: local * parent), whose world this frame's top-down walk worked out
+            // already; identity for a root. In double: far from the origin float would move the entity by its rounding.
+            var absoluteWorld = GetLocalMatrix() * parentWorld;
 
-            // THE hierarchical fix: compose through the parent (row-vector convention -> local * parent). The parent's
-            // absolute world was computed earlier this frame (TransformService walks the tree top-down), so a parent
-            // transform now flows into its children. For a root, parentWorld is identity and this leaves the matrix as-is.
-            var absoluteWorld = localMatrix * parentWorld;
-
-            // Camera-relative render matrix: the view is rotation-only, so shift the world by the camera's WORLD
-            // position - Transform.Position is relative to a parent, which a third-person camera has.
-            var cameraPosition = cameraWorld.As<float>();
-            var renderWorld = absoluteWorld * Matrix4x4.CreateTranslation<float>(-cameraPosition);
+            // Drawn against the camera, the view turning only: the camera's world position is taken away in double, and
+            // only the small way left goes to float - so the entity stands as exactly far out as near the origin.
+            var renderWorld = absoluteWorld;
+            renderWorld.TranslationVector = absoluteWorld.TranslationVector - cameraWorld;
 
             var metadata = GetMetadata(camera);
             metadata.AbsoluteWorld = absoluteWorld;
-            metadata.RelativePosition = (absoluteWorld.TranslationVector.As<double>() - cameraWorld).As<float>();
+            metadata.RelativePosition = renderWorld.TranslationVector.As<float>();
             metadata.Pivot = pivot.As<float>();
-            metadata.WorldMatrixF = renderWorld;
-            metadata.WorldMatrix = renderWorld.As<double>();
+            metadata.WorldMatrixF = renderWorld.As<float>();
             metadata.Rotation = Rotation;
             metadata.Scale = Scale;
             // Record the inputs so TransformService can skip this (camera, node) next frame if none of them changed.
             metadata.LastCameraPosition = cameraWorld;
             metadata.Computed = true;
-            return renderWorld;
+            return metadata.WorldMatrixF;
         }
 
         public override void CloneValues(IComponent component)

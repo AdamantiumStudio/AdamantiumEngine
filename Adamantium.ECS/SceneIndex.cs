@@ -8,17 +8,17 @@ namespace Adamantium.ECS;
 
 /// <summary>
 /// Where the meshes of a world stand, so a ray asks a <see cref="DynamicAabbTree{TItem, TNumber}"/> instead of visiting
-/// every entity: each mesh entity's box in the world, camera-independent. Kept frame by frame by whoever walks the
-/// world's transforms:
+/// every entity: each mesh entity's box in the world, camera-independent, in double so a box far from the origin keeps
+/// its size. Kept frame by frame by whoever walks the world's transforms:
 /// <see cref="BeginFrame"/>, then <see cref="Place"/> for each entity whose box may have changed and <see cref="Keep"/>
 /// for the rest, then <see cref="EndFrame"/>, which lets go of the ones the frame did not meet.
 /// </summary>
 public sealed class SceneIndex
 {
-    private readonly DynamicAabbTree<Entity, float> tree = new();
+    private readonly DynamicAabbTree<Entity, double> tree = new();
     private readonly Dictionary<Entity, Entry> entries = new();
     private readonly List<Entity> unseen = [];
-    private readonly List<(Entity Entity, float Entry)> found = [];
+    private readonly List<(Entity Entity, double Entry)> found = [];
     private int frame;
 
     /// <summary>How many entities the index holds.</summary>
@@ -49,7 +49,7 @@ public sealed class SceneIndex
 
     /// <summary>Gives <paramref name="entity"/>, drawn with <paramref name="mesh"/>, <paramref name="box"/> in the world;
     /// <paramref name="bent"/> when the mesh is bent by joints, whose box is placed afresh every frame.</summary>
-    public void Place(Entity entity, Mesh mesh, in BoundingBox<float> box, bool bent = false)
+    public void Place(Entity entity, Mesh mesh, in BoundingBox<double> box, bool bent = false)
     {
         if (entries.TryGetValue(entity, out var entry))
         {
@@ -63,7 +63,7 @@ public sealed class SceneIndex
 
     /// <summary>The box <paramref name="entity"/> stands in, grown a little past its mesh's; false when the index does not
     /// hold it.</summary>
-    public bool TryGetBox(Entity entity, out BoundingBox<float> box)
+    public bool TryGetBox(Entity entity, out BoundingBox<double> box)
     {
         if (entries.TryGetValue(entity, out var entry))
         {
@@ -97,7 +97,7 @@ public sealed class SceneIndex
 
     /// <summary>Every entity whose box, grown a little, <paramref name="ray"/> passes through - the ray in the world - with
     /// how far along it, in lengths of its direction, it enters. Good until the next ray cast.</summary>
-    public ReadOnlySpan<(Entity Entity, float Entry)> RayCast(in Ray<float> ray)
+    public ReadOnlySpan<(Entity Entity, double Entry)> RayCast(in Ray<double> ray)
     {
         found.Clear();
         tree.RayCast(ray, found);

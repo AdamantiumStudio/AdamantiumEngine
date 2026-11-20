@@ -222,13 +222,13 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
     private Camera Aim(Entity entity, in Bounds bounds)
     {
         bounds.GetCorners(_corners);
-        var world = entity.Transform.GetWorldMatrixF();
+        var world = entity.Transform.GetWorldMatrix();
         for (var i = 0; i < _corners.Length; i++)
         {
-            _corners[i] = Vector3F.TransformCoordinate(_corners[i].As<float>(), world).As<double>();
+            _corners[i] = Vector3<double>.TransformCoordinate(_corners[i], world);
         }
 
-        var center = Vector3F.TransformCoordinate(bounds.Center.As<float>(), world).As<double>();
+        var center = Vector3<double>.TransformCoordinate(bounds.Center, world);
         var forward = -ViewDirection;
         var right = Vector3.Normalize(Vector3<double>.Cross(-Vector3<double>.Up, forward));
         var up = Vector3<double>.Cross(forward, right);
@@ -272,12 +272,12 @@ public sealed class ScreenshotRenderingProcessor : RenderingProcessor
     private static void Place(Entity root, Camera camera)
     {
         var cameraWorld = camera.WorldPosition;
-        var rootParent = root.Owner?.Transform?.GetWorldMatrixF() ?? Matrix4x4F.Identity;
+        var rootParent = root.Owner?.Transform?.GetWorldMatrix() ?? Matrix4x4<double>.Identity;
         root.TraverseInDepth(current =>
         {
             var parentWorld = current == root || current.Owner?.Transform == null
                 ? rootParent
-                : current.Owner.Transform.GetMetadata(camera).AbsoluteWorld;
+                : current.Owner.Transform.GetWorldMatrix(camera);
             current.Transform.CalculateFinalTransform(camera, parentWorld, cameraWorld);
             foreach (var collider in current.GetComponents<Collider>())
             {

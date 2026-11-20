@@ -114,9 +114,9 @@ public partial class CylinderCollider : Collider
         return colliderData.TryGetValue(camera, out var placed) && placed.Intersects(ray, out point);
     }
 
-    public override IConvexShape<float> GetWorldShape()
+    public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
     {
-        return cylinder.Transform(Owner.Transform.GetWorldMatrixF());
+        return cylinder.Transform(Owner.Transform.GetWorldMatrixF(origin));
     }
 
     protected override void FitBox(Bounds box)

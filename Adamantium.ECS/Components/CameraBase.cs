@@ -146,7 +146,7 @@ namespace Adamantium.ECS.Components
             var center = FindLocalSubjectCenter();
             return Subject == null
                 ? WorldPosition
-                : Vector3F.TransformCoordinate(center, Subject.Transform.GetWorldMatrixF()).As<double>();
+                : Vector3<double>.TransformCoordinate(center.As<double>(), Subject.Transform.GetWorldMatrix());
         }
 
         /// <summary>The middle of the <see cref="Subject"/> in its own axes, as <see cref="FindSubjectCenter"/> measures

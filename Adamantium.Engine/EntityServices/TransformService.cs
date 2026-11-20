@@ -122,10 +122,11 @@ public class TransformService : EntityService
                     continue;
                 }
 
-                // The owner's world for THIS camera, computed already (the walk is top-down); identity for a root.
+                // The owner's world for THIS camera, computed already (the walk is top-down) - composed afresh for the
+                // camera's own entity, which its camera's walk passes by; identity for a root.
                 var parentWorld = current.Owner?.Transform != null
-                    ? current.Owner.Transform.GetMetadata(camera).AbsoluteWorld
-                    : Matrix4x4F.Identity;
+                    ? current.Owner.Transform.GetWorldMatrix(camera)
+                    : Matrix4x4<double>.Identity;
                 transform.CalculateFinalTransform(camera, parentWorld, viewpoint.Position);
                 if (!dirty)
                 {
@@ -195,13 +196,13 @@ public class TransformService : EntityService
 
         var world = entity.Transform.GetMetadata(camera).AbsoluteWorld;
         mesh.Bounds.ToBoundingBox().As<float>().GetCorners(corners);
-        var placed = Vector3F.TransformCoordinate(corners[0], world);
-        var box = new BoundingBox<float>(placed, placed);
+        var placed = Vector3<double>.TransformCoordinate(corners[0].As<double>(), world);
+        var box = new BoundingBox<double>(placed, placed);
         for (int i = 1; i < corners.Length; i++)
         {
-            placed = Vector3F.TransformCoordinate(corners[i], world);
-            box.Minimum = Vector3F.Min(box.Minimum, placed);
-            box.Maximum = Vector3F.Max(box.Maximum, placed);
+            placed = Vector3<double>.TransformCoordinate(corners[i].As<double>(), world);
+            box.Minimum = Vector3<double>.Min(box.Minimum, placed);
+            box.Maximum = Vector3<double>.Max(box.Maximum, placed);
         }
 
         index.Place(entity, mesh, box);

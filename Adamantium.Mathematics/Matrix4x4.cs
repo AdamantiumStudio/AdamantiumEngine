@@ -149,10 +149,13 @@ public static class Matrix4x4
         Vector3<T> scaling, Vector3<T> rotationCenter, Quaternion<T> rotation, Vector3<T> translation)
         where T : unmanaged, IFloatingPointIeee754<T>
     {
+        // The moves between the scale and the turn fold into one row: v' = v * linear + shift, three products, not eight.
         var scalingAxes = CreateFromQuaternion(scalingRotation);
-        return CreateTranslation(-scalingCenter) * Matrix4x4<T>.Transpose(scalingAxes) * CreateScale(scaling) * scalingAxes *
-               CreateTranslation(scalingCenter) * CreateTranslation(-rotationCenter) * CreateFromQuaternion(rotation) *
-               CreateTranslation(rotationCenter) * CreateTranslation(translation);
+        var turn = CreateFromQuaternion(rotation);
+        var linear = Matrix4x4<T>.Transpose(scalingAxes) * CreateScale(scaling) * scalingAxes * turn;
+        linear.TranslationVector = Vector3<T>.TransformNormal(scalingCenter - rotationCenter, turn)
+                                   - Vector3<T>.TransformNormal(scalingCenter, linear) + rotationCenter + translation;
+        return linear;
     }
 
     /// <summary>In the XY plane: a scale by <paramref name="scaling"/> along axes turned by

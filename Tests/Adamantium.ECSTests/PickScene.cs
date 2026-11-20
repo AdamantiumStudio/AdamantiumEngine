@@ -43,7 +43,7 @@ internal sealed class PickScene
         {
             var parentWorld = current.Owner != null
                 ? current.Owner.Transform.GetMetadata(Camera).AbsoluteWorld
-                : Matrix4x4F.Identity;
+                : Matrix4x4<double>.Identity;
             current.Transform.CalculateFinalTransform(Camera, parentWorld);
         });
     }

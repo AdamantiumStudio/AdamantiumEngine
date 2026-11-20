@@ -449,8 +449,8 @@ namespace Adamantium.ECS.Components
                 var measured = LookAtObject.TryMeasureBounds(out var bounds, Owner);
                 var localCenter = measured ? bounds.Center : Vector3<double>.Zero;
                 var size = measured ? Vector3<double>.Max(bounds.Size) : 0;
-                var absoluteCenter = Vector3F.TransformCoordinate(localCenter.As<float>(),
-                    LookAtObject.Transform.GetWorldMatrixF()).As<double>();
+                var absoluteCenter = Vector3<double>.TransformCoordinate(localCenter,
+                    LookAtObject.Transform.GetWorldMatrix());
                 diameter = (Vector3<double>)Forward * size * Fov;
                 center = absoluteCenter + diameter + Owner.Transform.Position - localCenter;
             }
@@ -507,13 +507,13 @@ namespace Adamantium.ECS.Components
             moveTime = time;
             moveToDuration = 0;
             startingOffset = Owner.Transform.Position;
-            var world = lookAtObject.Transform.GetWorldMatrixF();
+            var world = lookAtObject.Transform.GetWorldMatrix();
             var measured = lookAtObject.TryMeasureBounds(out var bounds, Owner);
             var size = (measured ? Vector3<double>.Max(bounds.Size) : 0)
                        * Math.Max(world.Right.Length(), Math.Max(world.Up.Length(), world.Backward.Length()));
             var away = size > 0 ? FramingDistance(size) : UnframedDistance;
-            var localCenter = measured ? bounds.Center.As<float>() : Vector3F.Zero;
-            endingPosition = Vector3F.TransformCoordinate(localCenter, world).As<double>() - (Vector3<double>)Forward * away;
+            var localCenter = measured ? bounds.Center : Vector3<double>.Zero;
+            endingPosition = Vector3<double>.TransformCoordinate(localCenter, world) - (Vector3<double>)Forward * away;
             Type = CameraType.Free;
             FocusDistance = away;
             if (ProjectionType == CameraProjectionType.Ortho)
@@ -1284,9 +1284,9 @@ namespace Adamantium.ECS.Components
                         {
                             // Nothing measurable to frame - a subject whose bounds have not been built yet. Keep the
                             // distance we already stand at rather than collapsing the orbit onto its center.
-                            var localCenter = measured ? bounds.Center.As<float>() : Vector3F.Zero;
-                            Radius = (WorldPosition - Vector3F.TransformCoordinate(localCenter,
-                                hostObject.Transform.GetWorldMatrixF()).As<double>()).Length();
+                            var localCenter = measured ? bounds.Center : Vector3<double>.Zero;
+                            Radius = (WorldPosition - Vector3<double>.TransformCoordinate(localCenter,
+                                hostObject.Transform.GetWorldMatrix())).Length();
                         }
                     }
                 }

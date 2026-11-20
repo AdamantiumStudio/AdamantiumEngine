@@ -8,9 +8,8 @@ public class TransformMetaData
     {
         Enabled = true;
         Scale = Vector3F.One;
-        AbsoluteWorld = Matrix4x4F.Identity;
+        AbsoluteWorld = Matrix4x4<double>.Identity;
         WorldMatrixF = Matrix4x4F.Identity;
-        WorldMatrix = Matrix4x4<double>.Identity;
     }
 
     public CameraBase Camera { get; set; }
@@ -23,13 +22,11 @@ public class TransformMetaData
 
     public Vector3F RelativePosition { get; set; }
 
-    // The camera-INDEPENDENT world (local * parent), used to compose this node's children. WorldMatrixF below is this
-    // shifted by the camera position for rendering (a no-op while the camera sits at the origin).
-    public Matrix4x4F AbsoluteWorld { get; set; }
+    // The camera-INDEPENDENT world (local * parent), used to compose this node's children; in double, so far from the
+    // origin it keeps the place float would round. WorldMatrixF below is this less the camera's position, made float.
+    public Matrix4x4<double> AbsoluteWorld { get; set; }
 
     public Matrix4x4F WorldMatrixF { get; set; }
-        
-    public Matrix4x4<double> WorldMatrix { get; set; }
 
     public QuaternionF Rotation { get; set; }
 

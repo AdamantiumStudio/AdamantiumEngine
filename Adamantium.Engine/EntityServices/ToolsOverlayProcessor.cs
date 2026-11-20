@@ -35,7 +35,7 @@ public class ToolsOverlayProcessor : RenderingProcessor
     private readonly Vector4F[] gridPhases = new Vector4F[GroundGrid.Levels / 2];
     private Matrix4x4F[] palette = [];
     private Skeleton paletteSkeleton;
-    private Matrix4x4F paletteMesh;
+    private Matrix4x4<double> paletteMesh;
     private bool[] drawn = [];
     private uint outlineMark;
     private BasicEffect effect;
@@ -486,7 +486,8 @@ public class ToolsOverlayProcessor : RenderingProcessor
 
     private void FillPalette(Skin skin)
     {
-        var mesh = skin.Owner.Transform.GetWorldMatrixF(ActiveCamera);
+        // In double, so a mesh far out moved by less than float's step still fills the palette anew.
+        var mesh = skin.Owner.Transform.GetWorldMatrix(ActiveCamera);
         if (ReferenceEquals(skin.Skeleton, paletteSkeleton) && mesh == paletteMesh)
         {
             return;

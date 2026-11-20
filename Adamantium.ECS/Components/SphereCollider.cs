@@ -65,9 +65,9 @@ namespace Adamantium.ECS.Components
             return sphere.Intersects(ray, out point);
         }
 
-        public override IConvexShape<float> GetWorldShape()
+        public override IConvexShape<float> GetWorldShape(Vector3<double> origin)
         {
-            return sphere.Transform(Owner.Transform.GetWorldMatrixF());
+            return sphere.Transform(Owner.Transform.GetWorldMatrixF(origin));
         }
 
         public override bool IntersectsForCamera(Camera camera, ref Ray<float> ray, out Vector3F point)

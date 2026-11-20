@@ -99,7 +99,7 @@ public class MeshColliderTests
         {
             Assert.That(collider.Source, Is.Null);
             Assert.That(collider.Intersects(ref ray, out _), Is.False);
-            Assert.That(collider.GetWorldShape(), Is.Null);
+            Assert.That(collider.GetWorldShape(Vector3<double>.Zero), Is.Null);
         });
     }
 

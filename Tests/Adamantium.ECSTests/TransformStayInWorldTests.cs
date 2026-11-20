@@ -43,6 +43,29 @@ public class TransformStayInWorldTests
         });
     }
 
+    // A billion meters out the entity and its group are put through each other in double: it stays to the micrometer.
+    [Test]
+    public void MovedIntoAGroupFarFromTheOrigin_TheEntityStaysWhereItStands()
+    {
+        var far = new Vector3<double>(1e9, 5e8, -1e9);
+        var world = new EntityWorld(new AdamantiumDependencyContainer(), new Satellites());
+        var group = new Entity(null, "Group");
+        group.Transform.Position = far + new Vector3<double>(5, -1, 2);
+        group.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitY, float.DegreesToRadians(90f));
+        var entity = new Entity(null, "Entity");
+        entity.Transform.Position = far + new Vector3<double>(1.003, 2, 3);
+        world.EntityManager.AddEntity(group);
+        world.EntityManager.AddEntity(entity);
+        world.ForceUpdate();
+        var standing = entity.Transform.WorldPosition;
+
+        entity.Transform.StayInWorldUnder(group);
+        world.EntityManager.SetOwner(entity, group);
+        var inGroup = entity.Transform.WorldPosition;
+
+        Assert.That((inGroup - standing).Length(), Is.LessThan(1e-6), $"moved by {(inGroup - standing).Length()} m");
+    }
+
     // Its shape is its own: a pivot turned under an uneven scale, a mirror - kept as they are, only the group's turn and
     // even scale joining in.
     [TestCase(false)]

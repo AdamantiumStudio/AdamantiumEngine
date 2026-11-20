@@ -70,7 +70,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private long trianglesCounted;
     private long trianglesInScene;
     private SceneIndex sceneIndex;
-    private Vector3F cameraPosition;
+    private Vector3<double> cameraPosition;
 
     /// <summary>The most lights one frame takes, directional ones included; the rest are left out.</summary>
     public const int MaxLights = 1024;
@@ -220,7 +220,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         trianglesCounted = 0;
         trianglesInScene = 0;
         sceneIndex = Scene?.Index;
-        cameraPosition = ActiveCamera.WorldPosition.As<float>();
+        cameraPosition = ActiveCamera.WorldPosition;
         try
         {
             foreach (var entity in Entities)
@@ -430,8 +430,9 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         if (sceneIndex != null && sceneIndex.TryGetBox(entity, out var box))
         {
-            return frustum.Contains(new BoundingBox<float>(box.Minimum - cameraPosition, box.Maximum - cameraPosition))
-                   != ContainmentType.Disjoint;
+            // The box against the camera, taken away in double, as the frustum is.
+            return frustum.Contains(new BoundingBox<float>((box.Minimum - cameraPosition).As<float>(),
+                (box.Maximum - cameraPosition).As<float>())) != ContainmentType.Disjoint;
         }
 
         // A mesh the index leaves out - one on the view's own camera - has no place for this view; with no index, every

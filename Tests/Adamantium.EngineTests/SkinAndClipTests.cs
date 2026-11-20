@@ -455,6 +455,25 @@ public class SkinAndClipTests
         Assert.That(posed[1], Is.EqualTo(new Vector3F(4, 0, 0)).Using<Vector3F>(Near));
     }
 
+    // A billion meters out the joints carry the mesh as at the origin: each joint is taken into the mesh's space in
+    // double, both standing far out together.
+    [Test]
+    public void FarFromTheOrigin_TheJointsCarryTheMeshAsNearIt()
+    {
+        var model = Import(SkinnedScene(), out var leg, out var hip, out var knee);
+        hip.Transform.Position = new Vector3<double>(0.3, 0.01, 0);
+        knee.Transform.Rotation = Quaternion.CreateFromYawPitchRoll<float>(0.4f, 0.2f, 0);
+        var skin = leg.GetComponent<Skin>();
+        var near = new Matrix4x4F[skin.Joints.Count];
+        skin.FillPalette(near);
+
+        model.Transform.Position = new Vector3<double>(1e9, 5e8, -1e9);
+        var far = new Matrix4x4F[skin.Joints.Count];
+        skin.FillPalette(far);
+
+        Assert.That(far, Is.EqualTo(near).Using<Matrix4x4F>(Near));
+    }
+
     // glTF forbids a weight below zero; one is taken as none, as the draw takes it, so the box round the pose holds.
     [Test]
     public void AWeightBelowZero_IsNone_AndThePoseStaysInsideItsBox()
@@ -493,7 +512,7 @@ public class SkinAndClipTests
         var posed = skin.PosePoints(mesh).Select(p => Vector3F.TransformCoordinate(p, world)).ToList();
         var box = skin.WorldBounds(mesh, null);
 
-        Assert.That(posed, Has.All.Matches<Vector3F>(p => box.Contains(p) != ContainmentType.Disjoint));
+        Assert.That(posed, Has.All.Matches<Vector3F>(p => box.Contains(p.As<double>()) != ContainmentType.Disjoint));
     }
 
     // A pose that holds is looked through with a tree fitted to it; when the joints move again, the tree follows.
