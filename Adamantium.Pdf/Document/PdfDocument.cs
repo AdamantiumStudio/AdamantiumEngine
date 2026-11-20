@@ -347,12 +347,17 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
         }
 
         var keyBefore = _security.FileKey;
+        var ownerBefore = _security.IsOwner;
         if (!_security.Authenticate(password))
         {
             return false;
         }
 
-        _password = password;
+        // The owner's password stays the one carried to copies and the file saved again.
+        if (!ownerBefore)
+        {
+            _password = password;
+        }
 
         // The key the same - the owner's password after the user's opens with the user's key (ISO 32000-2, 7.6.4.4):
         // all read so far stands, only the rights change.

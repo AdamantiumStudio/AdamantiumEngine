@@ -261,6 +261,32 @@ public class PdfSecurityTests
         });
     }
 
+    // The owner's access, once given, stays: the user's password after it is only checked, and the owner's is what a copy
+    // and the file saved again take.
+    [TestCase(3)]
+    [TestCase(6)]
+    public void APasswordAfterTheOwners_LowersNothing(int revision)
+    {
+        var bytes = EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904));
+        var document = PdfDocument.Open(bytes);
+        document.Authenticate("owner");
+
+        var user = document.Authenticate("user");
+        var typo = document.Authenticate("typo");
+        var savedAgain = PdfDocument.Open([.. bytes, .. "\n% saved again\n"u8]);
+        savedAgain.TakePasswordFrom(document);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(user, Is.True, "the user's password is not told as opening the file");
+            Assert.That(typo, Is.False);
+            Assert.That(document.Security.IsOwner, Is.True, "the user's password lowered the owner's access");
+            Assert.That(document.Permissions, Is.EqualTo(PdfPermissions.All));
+            Assert.That(document.Reopen().Security.IsOwner, Is.True, "a copy took the user's password");
+            Assert.That(savedAgain.Security.IsOwner, Is.True, "the file saved again took the user's password");
+        });
+    }
+
     // Without AuthEvent EFOpen the filter asks at the document's opening, as by default.
     [Test]
     public void AFileEncryptingOnlyItsAttachments_ButAskingAtOpening_NeedsThePasswordFirst()

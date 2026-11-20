@@ -692,7 +692,8 @@ All packages share one version.
 ### Changed
 
 - `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
-  opens with the user's key: only the rights change, nothing is read anew.
+  opens with the user's key: only the rights change, nothing is read anew. After the owner's password another is only
+  checked: the owner's access stays, and the owner's password is the one a copy and the file saved again take.
 - `PhysicsService` lays the scene's rigid bodies and joints out as bodies and joints of a `PhysicsSimulation` and
   stands the entities where it draws them: its own thread, commands, results and drawing between steps went to the
   simulation. A body changes in place instead of being made anew, a joint asked of it on its bodies' axes. A change

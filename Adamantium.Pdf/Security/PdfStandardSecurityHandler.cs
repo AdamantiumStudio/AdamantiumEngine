@@ -102,11 +102,17 @@ public sealed class PdfStandardSecurityHandler
         IsOwner ? PdfPermissions.All : (PdfPermissions)_permissions & PdfPermissions.All;
 
     /// <summary>Tries <paramref name="password"/> as the owner password, then as the user password. The empty string
-    /// opens files that only restrict permissions. A password that fails leaves an earlier one's access as it was.
-    /// </summary>
+    /// opens files that only restrict permissions. A password that fails leaves an earlier one's access as it was, and
+    /// so does any after the owner's: it is only checked.</summary>
     public bool Authenticate(string password)
     {
         password ??= string.Empty;
+        if (IsOwner)
+        {
+            // Checked on the side, so the owner's access never lapses, not even for the moment of the check.
+            return new PdfStandardSecurityHandler(_encrypt, _firstId).Authenticate(password);
+        }
+
         var fileKey = _fileKey;
         var isOwner = IsOwner;
         if (Revision >= 5 ? AuthenticateAes256(password) : AuthenticateRc4(password))
