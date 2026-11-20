@@ -29,6 +29,9 @@ public class UniverseHostTests
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
+    // The sum of a pixel's three channels on the cube the sun lights; the ambient light alone gives about 60.
+    private const int LitBrightness = 300;
+
     private string _folder;
     private Process _host;
     private Task<string> _errors;
@@ -98,7 +101,7 @@ public class UniverseHostTests
             Assert.That(hello.ProcessId, Is.EqualTo(_host.Id));
             Assert.That(hello.DeviceUuid, Is.Not.EqualTo(Guid.Empty), "the GPU it draws on");
             Assert.That(moved, Is.GreaterThan(0), "the game's service moved it");
-            Assert.That(pixels[center] + pixels[center + 1] + pixels[center + 2], Is.GreaterThan(60), "the lit cube is drawn there");
+            Assert.That(pixels[center] + pixels[center + 1] + pixels[center + 2], Is.GreaterThan(LitBrightness), "the lit cube is drawn there");
             Assert.That(told, Is.True, "told the universe stopped");
             Assert.That(_host.WaitForExit(Patience), Is.True, "the host exits once the viewer let go");
             Assert.That(_host.ExitCode, Is.EqualTo(0), _errors.Result);
@@ -148,8 +151,65 @@ public class UniverseHostTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(brightness, Is.GreaterThan(60), "the lit cube is drawn in the middle");
+            Assert.That(brightness, Is.GreaterThan(LitBrightness), "the lit cube is drawn in the middle");
             Assert.That(later, Is.GreaterThan(first), "a newer frame came once the slots were given back");
+        });
+    }
+
+    // A viewer that left the view which imported its surfaces asks for new ones: they come at the same size, in another
+    // ring, and its frames keep coming.
+    [Test]
+    public async Task ThroughSharedMemory_AViewerAskingForANewSurface_IsGivenOneOfTheSameSize_WhoseFramesKeepComing()
+    {
+        await Launch("Drift.ascene", 160, 90, FrameSharing.HostMemory);
+        Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
+        using (var firstReader = new Adamantium.Graphics.HostFrameReader(first.ToDescriptor()))
+        {
+            firstReader.GiveBack(TakeFrame(firstReader, out _));
+        }
+
+        _connection.Host.AskNewSurface();
+        _connection.Host.AskFrame(_viewer.LastFrame + 1);
+        var asked = Stopwatch.StartNew();
+        Assert.That(_viewer.Surfaces.TryTake(out var second, Patience), Is.True, "given a new surface");
+        using var reader = new Adamantium.Graphics.HostFrameReader(second.ToDescriptor());
+        var frame = 0ul;
+        while (frame < 3 && asked.Elapsed < Patience)
+        {
+            frame = TakeFrame(reader, out _);
+            reader.GiveBack(frame);
+        }
+
+        await _connection.Host.StopAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(second.Width, Is.EqualTo(first.Width));
+            Assert.That(second.Height, Is.EqualTo(first.Height));
+            Assert.That(second.MemoryPath, Is.Not.EqualTo(first.MemoryPath), "another ring");
+            Assert.That(frame, Is.GreaterThanOrEqualTo(3ul), "its frames keep coming as they are given back");
+        });
+    }
+
+    [Test]
+    public async Task ThroughGpuHandles_AViewerAskingForANewSurface_IsGivenOneOfTheSameSize()
+    {
+        Assume.That(OperatingSystem.IsWindows(), "GPU handles go to another process on Windows only, for now");
+        await Launch("Drift.ascene", 160, 90, FrameSharing.GpuHandles);
+        Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
+        first.CloseHandles();
+
+        _connection.Host.AskNewSurface();
+        _connection.Host.AskFrame(_viewer.LastFrame + 1);
+        Assert.That(_viewer.Surfaces.TryTake(out var second, Patience), Is.True, "given a new surface");
+        second.CloseHandles();
+        await _connection.Host.StopAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(second.Width, Is.EqualTo(first.Width));
+            Assert.That(second.Height, Is.EqualTo(first.Height));
+            Assert.That(second.Buffers.All(buffer => buffer.MemoryHandle != 0), Is.True, "handles of this process");
         });
     }
 
@@ -201,7 +261,7 @@ public class UniverseHostTests
         while (true)
         {
             var frame = TakeFrame(reader, out centerBrightness);
-            if (centerBrightness > 60 || waited.Elapsed > Patience)
+            if (centerBrightness > LitBrightness || waited.Elapsed > Patience)
             {
                 return frame;
             }

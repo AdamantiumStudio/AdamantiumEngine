@@ -69,6 +69,7 @@ public class ForwardPlusLightingTests
         eye.SetFreeLookAt(WorldPosition.Zero);
         var scene = _universe.EntityWorld.MainScene;
         var lights = new LightManager(_universe, scene);
+        scene.Satellites.Add(lights);
         var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
         sun.Transform.Position = new WorldPosition(0, -7, 8);
         sun.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(150));

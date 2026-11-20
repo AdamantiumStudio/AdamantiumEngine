@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `IUniverseHostService.AskNewSurface`: a viewer that left the view which imported its surfaces asks the universe host
+  for new ones of the same size, since a second import of a surface would read frames the first gave back.
 - `PhysicsSimulation`: the physics as a game uses it, with no ECS. Bodies and joints are named by `BodyId` and
   `JointId`, added from `BodySettings` (one shape or `BodyPart`s, a `PhysicsMaterial`, the caller's own data per body
   and part) and `JointSettings` (`JointLimits`, `JointMotor`, `JointSpring`). Every action - impulses, velocities,
@@ -668,6 +670,8 @@ All packages share one version.
 
 ### Changed
 
+- **Breaking:** a `LightManager` no longer puts itself among its scene's satellites: the caller does,
+  `scene.Satellites.Add(new LightManager(universe, scene))`, as with any satellite - the rendering finds the lights there.
 - An entity's place is a `WorldPosition`, for every entity: `Transform.Position`, `InitialPosition`, `Pivot`,
   `WorldPosition` and `TransformState.Position`, a camera's `WorldPosition` and `FindSubjectCenter`, and the points of
   the world the engine takes or gives - the camera's `MoveTo`, `Orbit`, `SetFreePosition`, `SetFreeLookAt` and
@@ -678,7 +682,6 @@ All packages share one version.
   each a point or a direction by case, stay vectors for now. A `WorldPosition`'s `X`, `Y` and `Z` are set one by one,
   as an inspector's fields type them, and `WorldPosition.Parse` reads one; a game component's `WorldPosition`
   property is kept in the scene as a vector's is. Still double inside: the step before 128-bit fixed point.
-
 - The core's query results are `WorldRayHit` and `WorldShapeHit` - with `Part` - for `RayHit` and `ShapeHit` now
   name those of `PhysicsSimulation`, by `BodyId`.
 
@@ -850,6 +853,8 @@ All packages share one version.
 
 ### Fixed
 
+- The universe host lights its scene: it gave the scene no `LightManager`, which the rendering takes the lights from, so
+  a game it played was lit by the ambient light alone - nearly black.
 - An output copies its frame from the resolved image, not the multisampled one: `UniverseOutput.CopyOutput` blitted
   the 4x render target, which a blit cannot read (a validation error in every frame with MSAA), onto the presenter's
   image - for a render-target presenter, onto the resolved frame itself. A presenter whose image is the resolved one
