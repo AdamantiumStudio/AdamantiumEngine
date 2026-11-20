@@ -304,9 +304,10 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     /// </summary>
     public bool TakePasswordFrom(PdfDocument earlier)
     {
-        // Nothing to raise, or nothing to carry: an owner already, no password given, no security there.
+        // Nothing to raise, or nothing to carry: an owner already, no password given, no security there. A file open
+        // only because it encrypts nothing but its attachments still takes their password.
         if (_security == null || _security.IsOwner || earlier?._password == null || earlier._security == null ||
-            (IsAuthenticated && !earlier._security.IsOwner))
+            (_security.IsAuthenticated && !earlier._security.IsOwner))
         {
             return IsAuthenticated;
         }
