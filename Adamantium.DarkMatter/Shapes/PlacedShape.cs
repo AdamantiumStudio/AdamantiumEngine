@@ -4,9 +4,9 @@ namespace Adamantium.DarkMatter.Shapes;
 internal readonly struct PlacedShape : IConvexShape<float>
 {
     private readonly CollisionShape _shape;
-    private readonly Pose _pose;
+    private readonly LocalPose _pose;
 
-    public PlacedShape(CollisionShape shape, in Pose pose)
+    public PlacedShape(CollisionShape shape, in LocalPose pose)
     {
         _shape = shape;
         _pose = pose;

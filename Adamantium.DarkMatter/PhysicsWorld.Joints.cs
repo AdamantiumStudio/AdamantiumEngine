@@ -118,9 +118,12 @@ public sealed partial class PhysicsWorld
     {
         var axis = Vector3F.Normalize(description.Axis);
         var reference = AxisMath.GetPerpendicular(axis);
-        var firstPose = PoseOf(joint.First);
-        var secondPose = PoseOf(joint.Second);
         var pointOnFirst = joint.Kind == JointKind.Distance ? description.SecondPoint : description.Point;
+        // The world holds the joint from where its point stands, so the point is kept in double, not as an offset in
+        // float from the world's origin.
+        joint.WorldAnchor = joint.First == NoBody ? pointOnFirst : Vector3<double>.Zero;
+        var firstPose = joint.First != NoBody ? _bodies[joint.First].OriginPose : new Pose(joint.WorldAnchor);
+        var secondPose = _bodies[joint.Second].OriginPose;
         joint.PointOnFirst = firstPose.InverseTransformPoint(pointOnFirst);
         joint.PointOnSecond = secondPose.InverseTransformPoint(description.Point);
         joint.AxisOnFirst = firstPose.InverseTransformDirection(axis);
@@ -128,10 +131,10 @@ public sealed partial class PhysicsWorld
         joint.ReferenceOnFirst = firstPose.InverseTransformDirection(reference);
         joint.ReferenceOnSecond = secondPose.InverseTransformDirection(reference);
         joint.RestTurn = QuaternionF.Conjugate(firstPose.Rotation) * secondPose.Rotation;
-        joint.RestLength = joint.Kind == JointKind.Distance ? (description.SecondPoint - description.Point).Length() : 0;
+        joint.RestLength = joint.Kind == JointKind.Distance
+            ? (float)(description.SecondPoint - description.Point).Length()
+            : 0;
     }
-
-    private Pose PoseOf(int body) => body != NoBody ? _bodies[body].OriginPose : Pose.Identity;
 
     private void WakeJointBodies(Joint joint)
     {
@@ -242,7 +245,7 @@ public sealed partial class PhysicsWorld
 
         // A rigid rod of no length has no way to hold along: a ball joint is what holds a point.
         if (description.Kind == JointKind.Distance && !description.HasLimits && description.SpringHertz == 0
-            && !((description.SecondPoint - description.Point).LengthSquared() > 1e-12f))
+            && !((description.SecondPoint - description.Point).LengthSquared() > 1e-12))
             throw new ArgumentException("A rigid distance joint needs two points apart; a ball joint holds one point.",
                 nameof(description));
     }

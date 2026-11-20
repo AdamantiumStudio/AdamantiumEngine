@@ -23,7 +23,16 @@ public abstract class CollisionShape
     public abstract MassProperties ComputeMass(float density);
 
     /// <summary>The box, aligned with the world's axes, that holds the shape standing at <paramref name="pose"/>.</summary>
-    public abstract BoundingBox<float> ComputeBounds(in Pose pose);
+    public BoundingBox<double> ComputeBounds(in Pose pose)
+    {
+        var bounds = ComputeBounds(new LocalPose(Vector3F.Zero, pose.Rotation));
+        return new BoundingBox<double>(pose.Position + bounds.Minimum.As<double>(),
+            pose.Position + bounds.Maximum.As<double>());
+    }
+
+    /// <summary>The box, aligned with its frame's axes, that holds the shape standing at <paramref name="pose"/>.
+    /// </summary>
+    internal abstract BoundingBox<float> ComputeBounds(in LocalPose pose);
 
     /// <summary>The point of the shape farthest along <paramref name="direction"/>, both in the shape's own axes.</summary>
     public abstract Vector3F GetSupport(Vector3F direction);
@@ -46,7 +55,7 @@ public abstract class CollisionShape
 
     /// <summary>As <see cref="GetSupportingFace"/>, the shape standing at <paramref name="pose"/> and
     /// <paramref name="direction"/> and the corners in the world.</summary>
-    internal int PlaceSupportingFace(in Pose pose, Vector3F direction, Span<Vector3F> into)
+    internal int PlaceSupportingFace(in LocalPose pose, Vector3F direction, Span<Vector3F> into)
     {
         var count = GetSupportingFace(pose.InverseTransformDirection(direction), into);
         for (var index = 0; index < count; index++)

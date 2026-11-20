@@ -32,8 +32,8 @@ internal static class ShapeSweep
 
     /// <summary>Whether <paramref name="first"/>, moved by <paramref name="translation"/>, meets
     /// <paramref name="second"/> within <paramref name="limit"/> of it, and where it stops and meets.</summary>
-    public static bool TryCast(CollisionShape first, in Pose firstPose, Vector3F translation, CollisionShape second,
-        in Pose secondPose, float limit, ManifoldBuffer buffer, out ShapeMeeting meeting)
+    public static bool TryCast(CollisionShape first, in LocalPose firstPose, Vector3F translation, CollisionShape second,
+        in LocalPose secondPose, float limit, ManifoldBuffer buffer, out ShapeMeeting meeting)
     {
         meeting = default;
         var phase = SweepPhase.Approaching;
@@ -59,7 +59,7 @@ internal static class ShapeSweep
                     return true;
 
                 meeting.Stop = at;
-                return Overlap(first, new Pose(position, firstPose.Rotation), second, secondPose, translation,
+                return Overlap(first, new LocalPose(position, firstPose.Rotation), second, secondPose, translation,
                     -towardSecond, onSecond, buffer, ref meeting);
             }
 
@@ -115,7 +115,7 @@ internal static class ShapeSweep
     }
 
     // Already overlapping: the normal and the second's deepest point as a contact tells them, else GJK's last way.
-    private static bool Overlap(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose,
+    private static bool Overlap(CollisionShape first, in LocalPose firstPose, CollisionShape second, in LocalPose secondPose,
         Vector3F translation, Vector3F walkedNormal, Vector3F nearestOfSecond, ManifoldBuffer buffer,
         ref ShapeMeeting meeting)
     {

@@ -7,7 +7,7 @@ internal static class NarrowPhase
 {
     /// <summary>Fills <paramref name="manifold"/> with the contact of the two shapes, its normal from the first to the
     /// second; false when they stand farther apart than <paramref name="speculativeDistance"/>.</summary>
-    public static bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose,
+    public static bool Collide(CollisionShape first, in LocalPose firstPose, CollisionShape second, in LocalPose secondPose,
         float speculativeDistance, ManifoldBuffer manifold)
     {
         manifold.Clear();
@@ -28,8 +28,8 @@ internal static class NarrowPhase
     private static bool TakesTheGeneralPath(CollisionShapeKind kind) =>
         kind is CollisionShapeKind.ConvexHull or CollisionShapeKind.Cylinder;
 
-    private static bool CollideOrdered(CollisionShape first, in Pose firstPose, CollisionShape second,
-        in Pose secondPose, float speculativeDistance, ManifoldBuffer manifold)
+    private static bool CollideOrdered(CollisionShape first, in LocalPose firstPose, CollisionShape second,
+        in LocalPose secondPose, float speculativeDistance, ManifoldBuffer manifold)
     {
         switch (first)
         {

@@ -21,7 +21,7 @@ internal static class LineContacts
     /// <summary>A segment - a capsule's or a cylinder's side - lying along an edge of <paramref name="shape"/>'s face
     /// toward it: adds the line and gives true. <paramref name="normal"/> runs from the segment to the shape.</summary>
     public static bool TryAddAlongEdge(Vector3F start, Vector3F end, float segmentRadius, CollisionShape shape,
-        in Pose pose, Vector3F normal, float speculativeDistance, ManifoldBuffer manifold)
+        in LocalPose pose, Vector3F normal, float speculativeDistance, ManifoldBuffer manifold)
     {
         var count = shape.PlaceSupportingFace(pose, -normal, manifold.FaceSecond);
         return TryFindEdgeAlong(manifold.FaceSecond, count, -normal, end - start, out var edgeStart, out var edgeEnd)

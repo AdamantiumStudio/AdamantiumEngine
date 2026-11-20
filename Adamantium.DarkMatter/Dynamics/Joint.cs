@@ -25,9 +25,14 @@ internal sealed class Joint
     public int Second;
     public bool CollideConnected;
 
-    /// <summary>The joint's point on each body, in its own axes from its origin; the world's in the world.</summary>
+    /// <summary>The joint's point on each body, in its own axes from its origin; the world's from
+    /// <see cref="WorldAnchor"/>.</summary>
     public Vector3F PointOnFirst;
     public Vector3F PointOnSecond;
+
+    /// <summary>Where a joint to the world holds it: the world's point stands here, in double, so it is kept as
+    /// closely far from the origin as near it.</summary>
+    public Vector3<double> WorldAnchor;
 
     /// <summary>The axis on each body, in its own axes, of length one.</summary>
     public Vector3F AxisOnFirst;

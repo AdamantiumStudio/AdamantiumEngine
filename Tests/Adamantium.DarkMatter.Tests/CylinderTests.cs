@@ -40,7 +40,7 @@ public class CylinderTests
     public void TurnedCylinder_StaysWithinItsBounds()
     {
         var cylinder = new CylinderCollisionShape(0.7f, 0.3f);
-        var pose = new Pose(new Vector3F(1, 2, 3),
+        var pose = new Pose(new Vector3<double>(1, 2, 3),
             Quaternion.CreateFromAxisAngle(Vector3F.Normalize(new Vector3F(1, 0.4f, -0.3f)), 0.8f));
         var bounds = cylinder.ComputeBounds(pose);
         var random = new Random(5);
@@ -60,7 +60,7 @@ public class CylinderTests
     [TestCase(-0.05f)]
     public void CylinderStandingOnItsEnd_TouchesRoundTheRim(float gap)
     {
-        var found = Collide(new CylinderCollisionShape(0.5f, 0.4f), new Pose(new Vector3F(0.3f, 0.5f + gap, -0.2f)),
+        var found = Collide(new CylinderCollisionShape(0.5f, 0.4f), new LocalPose(new Vector3F(0.3f, 0.5f + gap, -0.2f)),
             Ground(), GroundPose());
 
         Assert.That(found, Is.True);
@@ -80,7 +80,7 @@ public class CylinderTests
     public void CylinderLyingOnItsSide_TouchesAlongALine(float gap)
     {
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
-        var found = Collide(new CylinderCollisionShape(0.5f, 0.4f), new Pose(new Vector3F(0, 0.4f + gap, 0), lying),
+        var found = Collide(new CylinderCollisionShape(0.5f, 0.4f), new LocalPose(new Vector3F(0, 0.4f + gap, 0), lying),
             Ground(), GroundPose());
 
         Assert.That(found, Is.True);
@@ -101,7 +101,7 @@ public class CylinderTests
         var lowestPoint = Vector3F.Transform(cylinder.GetSupport(Vector3F.Transform(-Vector3F.UnitY,
             QuaternionF.Conjugate(tilt))), tilt);
         var lowest = -lowestPoint.Y;
-        var found = Collide(cylinder, new Pose(new Vector3F(0, lowest + 0.005f, 0), tilt), Ground(), GroundPose());
+        var found = Collide(cylinder, new LocalPose(new Vector3F(0, lowest + 0.005f, 0), tilt), Ground(), GroundPose());
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY, 1e-3f);
@@ -124,7 +124,7 @@ public class CylinderTests
         var log = new CylinderCollisionShape(1, 0.3f);
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2);
 
-        var found = Collide(log, new Pose(new Vector3F(0, 0.59f, 0.5f), lying), log, new Pose(Vector3F.Zero, lying));
+        var found = Collide(log, new LocalPose(new Vector3F(0, 0.59f, 0.5f), lying), log, new LocalPose(Vector3F.Zero, lying));
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY, 1e-3f);
@@ -139,8 +139,8 @@ public class CylinderTests
     public void SphereOnAnEnd_AndCapsuleAcrossIt_TouchItsFace()
     {
         var cylinder = new CylinderCollisionShape(0.5f, 0.6f);
-        var found = Collide(new SphereCollisionShape(0.3f), new Pose(new Vector3F(0.1f, 0.79f, 0)), cylinder,
-            Pose.Identity);
+        var found = Collide(new SphereCollisionShape(0.3f), new LocalPose(new Vector3F(0.1f, 0.79f, 0)), cylinder,
+            LocalPose.Identity);
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY, 1e-3f);
@@ -148,8 +148,8 @@ public class CylinderTests
         Assert.That(_manifold.Separations[0], Is.EqualTo(-0.01f).Within(1e-3f));
 
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
-        found = Collide(new CapsuleCollisionShape(0.3f, 0.1f), new Pose(new Vector3F(0, 0.59f, 0), lying), cylinder,
-            Pose.Identity);
+        found = Collide(new CapsuleCollisionShape(0.3f, 0.1f), new LocalPose(new Vector3F(0, 0.59f, 0), lying), cylinder,
+            LocalPose.Identity);
 
         Assert.That(found, Is.True);
         AssertNormal(-Vector3F.UnitY, 1e-3f);
@@ -168,7 +168,7 @@ public class CylinderTests
             cylinders.Add(scene.World.Add(new BodyDescription
             {
                 Shape = new CylinderCollisionShape(0.3f, 0.4f),
-                Position = new Vector3F(0, 0.3f + level * 0.601f, 0)
+                Position = new Vector3<double>(0, 0.3f + level * 0.601f, 0)
             }));
         }
 
@@ -193,7 +193,7 @@ public class CylinderTests
         var wheel = scene.World.Add(new BodyDescription
         {
             Shape = new CylinderCollisionShape(0.15f, 0.4f),
-            Position = up * 0.401f,
+            Position = (up * 0.401f).As<double>(),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2),
             Friction = 1
         });
@@ -239,12 +239,13 @@ public class CylinderTests
             Is.False, "above the side");
     }
 
-    private bool Collide(CollisionShape first, in Pose firstPose, CollisionShape second, in Pose secondPose) =>
+    private bool Collide(CollisionShape first, in LocalPose firstPose, CollisionShape second,
+        in LocalPose secondPose) =>
         NarrowPhase.Collide(first, firstPose, second, secondPose, Speculative, _manifold);
 
     private static BoxCollisionShape Ground() => new(5, 0.5f, 5);
 
-    private static Pose GroundPose() => new(new Vector3F(0, -0.5f, 0));
+    private static LocalPose GroundPose() => new(new Vector3F(0, -0.5f, 0));
 
     private void AssertNormal(Vector3F expected, float tolerance = 1e-4f) =>
         Assert.That((_manifold.Normal - expected).Length(), Is.LessThan(tolerance), $"normal {_manifold.Normal}");

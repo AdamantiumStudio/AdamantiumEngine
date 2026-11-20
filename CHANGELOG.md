@@ -639,6 +639,15 @@ All packages share one version.
 
 ### Changed
 
+- The physics keeps positions in double: a body's, a `Pose`'s, a description's, a joint's points, a query's start and
+  every hit and contact point. Collisions are worked out in float in the frame of the pair's first body, queries in the
+  frame of where they start, joints from the gap between their bodies, so a world's scene ten kilometers, a thousand or
+  a million away stands, swings and is met as at the origin, to the millimeter; the broad phase holds its boxes in
+  double. `DynamicAabbTree` takes the type of its boxes' numbers (`DynamicAabbTree<TItem, TNumber>`).
+  `IPhysicsWorld.RayCast` takes an origin and a direction; `GetCenterOfMass`, `GetBounds` and `ApplyImpulse`'s point
+  are double; the queries refuse a start that is not finite. The game's physics drops its unused origin shift and
+  carries positions in double, though it still reads its entities' places from their float world matrices. A step
+  costs as before (A/B on the same scenes: -3 % to +1 %).
 - The physics' GJK is quicker: a shape's turn is made a matrix once per query, not worked out of the quaternion for
   every support point; a hull reads its corners' coordinates from arrays of their own; a tetrahedron weighs its faces
   by their points alone, the face it grew from passed by. A shape cast starts each step's GJK from the last step's

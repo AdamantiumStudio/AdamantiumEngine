@@ -39,7 +39,7 @@ internal sealed class TriangleCollisionShape : CollisionShape
     public override MassProperties ComputeMass(float density) =>
         throw new InvalidOperationException("A triangle has no volume to weigh.");
 
-    public override BoundingBox<float> ComputeBounds(in Pose pose)
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose)
     {
         var first = pose.TransformPoint(_first);
         var second = pose.TransformPoint(_second);

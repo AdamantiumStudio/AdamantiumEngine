@@ -34,7 +34,7 @@ public abstract class SurfaceCollisionShape : CollisionShape
 
     /// <summary>The box, along the world's axes, round the box from <paramref name="minimum"/> to
     /// <paramref name="maximum"/> in the surface's own axes standing at <paramref name="pose"/>.</summary>
-    protected static BoundingBox<float> PlaceBox(Vector3F minimum, Vector3F maximum, in Pose pose)
+    private protected static BoundingBox<float> PlaceBox(Vector3F minimum, Vector3F maximum, in LocalPose pose)
     {
         var center = pose.TransformPoint((minimum + maximum) * 0.5f);
         var half = (maximum - minimum) * 0.5f;

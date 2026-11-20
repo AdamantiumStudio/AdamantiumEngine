@@ -24,7 +24,7 @@ public sealed class SphereCollisionShape : CollisionShape
         return new MassProperties(mass, new Vector3F(0.4f * mass * Radius * Radius));
     }
 
-    public override BoundingBox<float> ComputeBounds(in Pose pose)
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose)
     {
         var reach = new Vector3F(Radius);
         return new BoundingBox<float>(pose.Position - reach, pose.Position + reach);

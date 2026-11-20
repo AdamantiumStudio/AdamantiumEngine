@@ -3,8 +3,8 @@ namespace Adamantium.DarkMatter;
 /// <summary>A point where two bodies touched in the last step, or were about to, as instruments show it.</summary>
 public readonly struct ContactPoint
 {
-    public ContactPoint(BodyHandle first, BodyHandle second, Vector3F position, Vector3F normal, float separation,
-        float normalImpulse)
+    public ContactPoint(BodyHandle first, BodyHandle second, Vector3<double> position, Vector3F normal,
+        float separation, float normalImpulse)
     {
         First = first;
         Second = second;
@@ -21,7 +21,7 @@ public readonly struct ContactPoint
     public BodyHandle Second { get; }
 
     /// <summary>Where the point is, midway between the two surfaces.</summary>
-    public Vector3F Position { get; }
+    public Vector3<double> Position { get; }
 
     /// <summary>The direction from the first body to the second.</summary>
     public Vector3F Normal { get; }

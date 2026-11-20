@@ -19,7 +19,8 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     // two degrees.
     private const float SameWay = 0.9995f;
 
-    private readonly DynamicAabbTree<int> _tree;
+    // In double, as the bodies stand: far from the origin a float box would grow by meters.
+    private readonly DynamicAabbTree<int, double> _tree;
     private readonly Dictionary<ulong, Contact> _contactsByKey = new(PairKeyComparer.Instance);
     private readonly List<Contact> _contacts = [];
     private readonly List<Contact> _pieces = [];
@@ -56,7 +57,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         ValidateSettings(Settings);
         MaxAngularSpeed = 0.25f * MathF.PI * Settings.StepRate * Settings.Substeps;
         _gravity = Settings.Gravity;
-        _tree = new DynamicAabbTree<int>(0.1f, Math.Max(0.05f, Settings.SpeculativeDistance));
+        _tree = new DynamicAabbTree<int, double>(0.1, Math.Max(0.05, Settings.SpeculativeDistance));
         _previousPoints = new ContactPointState[Settings.MaxContactPointsPerPair];
         _matched = new bool[Settings.MaxContactPointsPerPair];
     }
@@ -120,7 +121,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         state.FirstPart = NoPart;
         state.CenterOfMass = mass.Center;
         state.InertiaRotation = description.Kind == BodyKind.Dynamic ? mass.InertiaRotation : QuaternionF.Identity;
-        state.Position = description.Position + Vector3F.Transform(mass.Center, rotation);
+        state.Position = description.Position + Vector3F.Transform(mass.Center, rotation).As<double>();
         state.Rotation = rotation;
         state.StartPosition = state.Position;
         state.StartRotation = state.Rotation;
@@ -193,7 +194,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public Pose GetPose(BodyHandle body) => _bodies[Resolve(body)].OriginPose;
 
     /// <inheritdoc/>
-    public Vector3F GetCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].Position;
+    public Vector3<double> GetCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].Position;
 
     /// <inheritdoc/>
     public Vector3F GetLocalCenterOfMass(BodyHandle body) => _bodies[Resolve(body)].CenterOfMass;
@@ -206,7 +207,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var rotation = NormalizeRotation(pose.Rotation, nameof(pose));
         WakeNewSleepersNear(index);
         ref var state = ref _bodies[index];
-        state.Position = pose.Position + Vector3F.Transform(state.CenterOfMass, rotation);
+        state.Position = pose.Position + Vector3F.Transform(state.CenterOfMass, rotation).As<double>();
         state.Rotation = rotation;
         if (state.IsDynamic)
             state.WorldInverseInertia = state.MeasureWorldInverseInertia();
@@ -268,15 +269,16 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void ApplyImpulse(BodyHandle body, Vector3F impulse, Vector3F point)
+    public void ApplyImpulse(BodyHandle body, Vector3F impulse, Vector3<double> point)
     {
         RequireFinite(impulse, nameof(impulse));
         RequireFinite(point, nameof(point));
         var index = ResolveDynamic(body);
         ref var state = ref _bodies[index];
         var linear = state.LinearVelocity + impulse * state.InverseMass;
+        var arm = (point - state.Position).As<float>();
         var angular = state.AngularVelocity
-                      + InertiaMath.Apply(state.WorldInverseInertia, Vector3F.Cross(point - state.Position, impulse));
+                      + InertiaMath.Apply(state.WorldInverseInertia, Vector3F.Cross(arm, impulse));
         RequireFinite(linear, nameof(impulse));
         RequireFinite(angular, nameof(impulse));
         state.LinearVelocity = LimitSpeed(linear, Settings.MaxLinearSpeed);
@@ -291,20 +293,24 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
     public void WakeUp(BodyHandle body) => WakeIsland(Resolve(body));
 
     /// <inheritdoc/>
-    public BoundingBox<float> GetBounds(BodyHandle body)
+    public BoundingBox<double> GetBounds(BodyHandle body)
     {
         ref var state = ref _bodies[Resolve(body)];
         var part = state.FirstPart;
-        var bounds = _parts[part].Shape.ComputeBounds(PlacePart(state, _parts[part]));
+        var bounds = _parts[part].Shape.ComputeBounds(PlacePart(state, _parts[part], state.Position));
         for (part = _parts[part].Next; part != NoPart; part = _parts[part].Next)
         {
-            var partBounds = _parts[part].Shape.ComputeBounds(PlacePart(state, _parts[part]));
+            var partBounds = _parts[part].Shape.ComputeBounds(PlacePart(state, _parts[part], state.Position));
             bounds = new BoundingBox<float>(Vector3F.Min(bounds.Minimum, partBounds.Minimum),
                 Vector3F.Max(bounds.Maximum, partBounds.Maximum));
         }
 
-        return bounds;
+        return Place(bounds, state.Position);
     }
+
+    // A box measured against origin, in the world.
+    private static BoundingBox<double> Place(in BoundingBox<float> bounds, Vector3<double> origin) =>
+        new(origin + bounds.Minimum.As<double>(), origin + bounds.Maximum.As<double>());
 
     /// <inheritdoc/>
     public void GetContactPoints(ICollection<ContactPoint> into)
@@ -401,17 +407,21 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         return moved;
     }
 
-    private BoundingBox<float> ComputeProxyBounds(in BodyState body, in PartState part)
+    private BoundingBox<double> ComputeProxyBounds(in BodyState body, in PartState part)
     {
-        var bounds = part.Shape.ComputeBounds(PlacePart(body, part));
+        var bounds = part.Shape.ComputeBounds(PlacePart(body, part, body.Position));
         var travel = body.LinearVelocity * StepSeconds;
         var swing = new Vector3F(MeasureSweepSpeed(body, part) * StepSeconds);
-        return new BoundingBox<float>(bounds.Minimum + Vector3F.Min(travel, Vector3F.Zero) - swing,
-            bounds.Maximum + Vector3F.Max(travel, Vector3F.Zero) + swing);
+        return Place(new BoundingBox<float>(bounds.Minimum + Vector3F.Min(travel, Vector3F.Zero) - swing,
+            bounds.Maximum + Vector3F.Max(travel, Vector3F.Zero) + swing), body.Position);
     }
 
-    private static Pose PlacePart(in BodyState body, in PartState part) =>
-        part.HasBodyPose ? body.Pose : body.Pose.Transform(part.Pose);
+    // Where the part stands against origin, which lies near it: its body's center, or the other body's of a pair.
+    private static LocalPose PlacePart(in BodyState body, in PartState part, Vector3<double> origin)
+    {
+        var bodyPose = new LocalPose((body.Position - origin).As<float>(), body.Rotation);
+        return part.HasBodyPose ? bodyPose : bodyPose.Transform(part.Pose);
+    }
 
     /// <summary>How fast the space the part fills sweeps outward as its body spins: a part off the center of mass
     /// swings around it.</summary>
@@ -483,7 +493,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 ref var surfaceBody = ref surfaceIsFirst ? ref first : ref second;
                 ref var otherBody = ref surfaceIsFirst ? ref second : ref first;
                 ref var otherPart = ref surfaceIsFirst ? ref secondPart : ref firstPart;
-                var reach = (PlacePart(otherBody, otherPart).Position - surfaceBody.Position).Length()
+                var reach = PlacePart(otherBody, otherPart, surfaceBody.Position).Position.Length()
                             + otherPart.Shape.BoundingRadius;
                 var surfaceSpeed = relativeSpeed + surfaceBody.AngularVelocity.Length() * reach
                                    + MeasureSweepSpeed(otherBody, otherPart);
@@ -495,11 +505,13 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             var closingSpeed = relativeSpeed + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
             var speculativeDistance = Settings.SpeculativeDistance + closingSpeed * stepSeconds;
 
-            if (NarrowPhase.Collide(firstPart.Shape, PlacePart(first, firstPart), secondPart.Shape,
-                    PlacePart(second, secondPart), speculativeDistance, _manifold))
+            // In the first body's frame, in float: the pair stands side by side wherever it is in the world.
+            var origin = first.Position;
+            if (NarrowPhase.Collide(firstPart.Shape, PlacePart(first, firstPart, origin), secondPart.Shape,
+                    PlacePart(second, secondPart, origin), speculativeDistance, _manifold))
             {
                 _manifold.ReduceTo(Settings.MaxContactPointsPerPair);
-                RefreshPoints(contact, _manifold, first.Pose, second.Pose);
+                RefreshPoints(contact, _manifold, origin);
             }
             else
             {
@@ -539,8 +551,9 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var surfaceIsFirst = firstPart.Shape is SurfaceCollisionShape;
         var surface = (SurfaceCollisionShape)(surfaceIsFirst ? firstPart.Shape : secondPart.Shape);
         var other = surfaceIsFirst ? secondPart.Shape : firstPart.Shape;
-        var surfacePose = surfaceIsFirst ? PlacePart(first, firstPart) : PlacePart(second, secondPart);
-        var otherPose = surfaceIsFirst ? PlacePart(second, secondPart) : PlacePart(first, firstPart);
+        var origin = first.Position;
+        var surfacePose = surfaceIsFirst ? PlacePart(first, firstPart, origin) : PlacePart(second, secondPart, origin);
+        var otherPose = surfaceIsFirst ? PlacePart(second, secondPart, origin) : PlacePart(first, firstPart, origin);
         var near = other.ComputeBounds(surfacePose.InverseTransform(otherPose));
         var reach = new Vector3F(speculativeDistance);
         _triangles.Clear();
@@ -590,7 +603,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
             var contact = FindPiece(holder, surfaceNormal) ?? CreatePiece(holder);
             contact.IsSeen = true;
             contact.SurfaceNormal = surfaceNormal;
-            RefreshPoints(contact, group, first.Pose, second.Pose);
+            RefreshPoints(contact, group, origin);
             WakeOnTouch(contact);
         }
 
@@ -607,7 +620,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
 
     // Where the deepest point lies on the triangle - inside it, on an edge or at a corner - tells whether the normal
     // stands: one off an edge or a corner a body can catch on does; any other is turned to the triangle's own.
-    private void KeepOffInnerEdges(int activeEdges, in Pose surfacePose)
+    private void KeepOffInnerEdges(int activeEdges, in LocalPose surfacePose)
     {
         var faceNormal = surfacePose.TransformDirection(_triangle.Normal);
         if (Vector3F.Dot(_manifold.Normal, faceNormal) < 0)
@@ -729,8 +742,13 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         _woken.Clear();
     }
 
-    private void RefreshPoints(Contact contact, ManifoldBuffer manifold, in Pose firstPose, in Pose secondPose)
+    // The manifold's points stand in the frame the pair was collided in, from origin.
+    private void RefreshPoints(Contact contact, ManifoldBuffer manifold, Vector3<double> origin)
     {
+        ref var first = ref _bodies[contact.First];
+        ref var second = ref _bodies[contact.Second];
+        var firstPose = new LocalPose((first.Position - origin).As<float>(), first.Rotation);
+        var secondPose = new LocalPose((second.Position - origin).As<float>(), second.Rotation);
         var previousCount = contact.PointCount;
         for (var index = 0; index < previousCount; index++)
         {
@@ -744,10 +762,11 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         {
             ref var point = ref contact.Points[index];
             point = default;
-            point.Position = manifold.Positions[index];
+            var position = manifold.Positions[index];
+            point.Position = origin + position.As<double>();
             point.Separation = manifold.Separations[index];
-            point.LocalAnchorFirst = firstPose.InverseTransformPoint(point.Position);
-            point.LocalAnchorSecond = secondPose.InverseTransformPoint(point.Position);
+            point.LocalAnchorFirst = firstPose.InverseTransformPoint(position);
+            point.LocalAnchorSecond = secondPose.InverseTransformPoint(position);
 
             var match = NoBody;
             var matchDistance = MatchDistanceSquared;
@@ -802,7 +821,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
                 continue;
 
             LimitSpeeds(ref body);
-            body.Position += body.LinearVelocity * substep;
+            body.Position += (body.LinearVelocity * substep).As<double>();
             var spin = new QuaternionF(body.AngularVelocity.X, body.AngularVelocity.Y, body.AngularVelocity.Z, 0);
             body.Rotation = QuaternionF.Normalize(body.Rotation + spin * body.Rotation * (0.5f * substep));
             if (body.IsDynamic)
@@ -1191,7 +1210,7 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var center = _bodies[body].CenterOfMass;
         if (shape is not CompoundCollisionShape compound)
         {
-            AddPart(body, shape, new Pose(-center));
+            AddPart(body, shape, new LocalPose(-center));
             return;
         }
 
@@ -1199,11 +1218,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
         var parts = compound.Parts;
         for (var index = parts.Count - 1; index >= 0; index--)
         {
-            AddPart(body, parts[index].Shape, new Pose(parts[index].Pose.Position - center, parts[index].Pose.Rotation));
+            var pose = parts[index].LocalPose;
+            AddPart(body, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation));
         }
     }
 
-    private void AddPart(int body, CollisionShape shape, in Pose pose)
+    private void AddPart(int body, CollisionShape shape, in LocalPose pose)
     {
         var part = TakePartSlot();
         ref var state = ref _bodies[body];
@@ -1337,6 +1357,12 @@ public sealed partial class PhysicsWorld : IPhysicsWorld
 
     private static bool IsFinite(Vector3F vector) =>
         float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
+
+    private static void RequireFinite(Vector3<double> vector, string parameterName)
+    {
+        if (!double.IsFinite(vector.X) || !double.IsFinite(vector.Y) || !double.IsFinite(vector.Z))
+            throw new ArgumentOutOfRangeException(parameterName, vector, "The vector must be finite.");
+    }
 
     private static MassProperties ComputeMass(CollisionShape shape, float mass, float density)
     {

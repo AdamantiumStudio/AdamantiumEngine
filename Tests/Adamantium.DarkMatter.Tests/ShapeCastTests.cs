@@ -50,8 +50,8 @@ public class ShapeCastTests
         var ball = new SphereCollisionShape(0.5f);
 
         var away = scene.World.CastShape(ball, Pose.Identity, new Vector3F(-20, 0, 0), out _);
-        var beside = scene.World.CastShape(ball, new Pose(new Vector3F(0, 1.01f, 0)), new Vector3F(20, 0, 0), out _);
-        var grazing = scene.World.CastShape(ball, new Pose(new Vector3F(0, 0.99f, 0)), new Vector3F(20, 0, 0), out _);
+        var beside = scene.World.CastShape(ball, new Pose(new Vector3<double>(0, 1.01f, 0)), new Vector3F(20, 0, 0), out _);
+        var grazing = scene.World.CastShape(ball, new Pose(new Vector3<double>(0, 0.99f, 0)), new Vector3F(20, 0, 0), out _);
 
         Assert.Multiple(() =>
         {
@@ -68,7 +68,7 @@ public class ShapeCastTests
         var scene = new SceneBuilder();
         var box = scene.AddBox(Vector3F.Zero, new Vector3F(1));
 
-        var met = scene.World.CastShape(new SphereCollisionShape(0.5f), new Pose(new Vector3F(1.2f, 0, 0)),
+        var met = scene.World.CastShape(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(1.2f, 0, 0)),
             new Vector3F(5, 0, 0), out var hit);
 
         Assert.Multiple(() =>
@@ -88,9 +88,9 @@ public class ShapeCastTests
         scene.AddBox(new Vector3F(2, 0, 0), new Vector3F(0.5f));
         var ball = new SphereCollisionShape(0.5f);
 
-        var inside = scene.World.CastShape(ball, new Pose(new Vector3F(1.01f, 0, 0)), Vector3F.Zero, out var hit);
-        var touching = scene.World.CastShape(ball, new Pose(new Vector3F(1, 0, 0)), Vector3F.Zero, out _);
-        var twoMillimetersOff = scene.World.CastShape(ball, new Pose(new Vector3F(0.998f, 0, 0)), Vector3F.Zero, out _);
+        var inside = scene.World.CastShape(ball, new Pose(new Vector3<double>(1.01f, 0, 0)), Vector3F.Zero, out var hit);
+        var touching = scene.World.CastShape(ball, new Pose(new Vector3<double>(1, 0, 0)), Vector3F.Zero, out _);
+        var twoMillimetersOff = scene.World.CastShape(ball, new Pose(new Vector3<double>(0.998f, 0, 0)), Vector3F.Zero, out _);
         var apart = scene.World.CastShape(ball, Pose.Identity, Vector3F.Zero, out _);
 
         Assert.Multiple(() =>
@@ -114,14 +114,14 @@ public class ShapeCastTests
         scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static, Shape = new HeightFieldCollisionShape(11, 11, new float[11 * 11], 1, 1),
-            Position = new Vector3F(30, 0, 0)
+            Position = new Vector3<double>(30, 0, 0)
         });
         var box = new BoxCollisionShape(0.3f, 0.3f, 0.3f);
 
         foreach (var x in new[] { 0f, 30f })
         {
-            scene.World.CastShape(box, new Pose(new Vector3F(x, 2, 0)), new Vector3F(0, -5, 0), out var landed);
-            var resting = new Pose(new Vector3F(x, 2 - landed.Distance, 0));
+            scene.World.CastShape(box, new Pose(new Vector3<double>(x, 2, 0)), new Vector3F(0, -5, 0), out var landed);
+            var resting = new Pose(new Vector3<double>(x, 2 - landed.Distance, 0));
 
             var along = scene.World.CastShape(box, resting, new Vector3F(2, 0, 0), out _);
             var away = scene.World.CastShape(box, resting, new Vector3F(0, 2, 0), out _);
@@ -150,14 +150,14 @@ public class ShapeCastTests
         scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static, Shape = new HeightFieldCollisionShape(11, 11, new float[11 * 11], 1, 1),
-            Position = new Vector3F(30, 0, 0)
+            Position = new Vector3<double>(30, 0, 0)
         });
         var box = new BoxCollisionShape(0.3f, 0.3f, 0.3f);
 
         // Along the field the box comes as near the triangles ahead, and meets them: only on the one slab is along free.
         foreach (var x in new[] { 0f, 30f })
         {
-            var touching = new Pose(new Vector3F(x, 0.3003f, 0));
+            var touching = new Pose(new Vector3<double>(x, 0.3003f, 0));
             Assert.Multiple(() =>
             {
                 if (x == 0)
@@ -188,12 +188,12 @@ public class ShapeCastTests
         var scene = new SceneBuilder();
         scene.AddGround();
         var box = new BoxCollisionShape(0.3f, 0.3f, 0.3f);
-        var start = new Pose(new Vector3F(0, 0.302f, 0));
+        var start = new Pose(new Vector3<double>(0, 0.302f, 0));
 
         var within = scene.World.CastShape(box, start, new Vector3F(0, -0.00149f, 0), out var stopped);
-        var leftWithin = new Pose(start.Position - new Vector3F(0, stopped.Distance, 0));
+        var leftWithin = new Pose(start.Position - new Vector3<double>(0, stopped.Distance, 0));
         var clear = scene.World.CastShape(box, start, new Vector3F(0, -0.00147f, 0), out _);
-        var leftClear = new Pose(start.Position - new Vector3F(0, 0.00147f, 0));
+        var leftClear = new Pose(start.Position - new Vector3<double>(0, 0.00147f, 0));
 
         Assert.Multiple(() =>
         {
@@ -213,11 +213,11 @@ public class ShapeCastTests
         var scene = new SceneBuilder();
         scene.World.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3F(-5, -1, 0)
+            Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3<double>(-5, -1, 0)
         });
         scene.World.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3F(5, -1, 0)
+            Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3<double>(5, -1, 0)
         });
         CollisionShape[] shapes = [new BoxCollisionShape(0.3f, 0.3f, 0.3f), new SphereCollisionShape(0.3f)];
 
@@ -225,8 +225,8 @@ public class ShapeCastTests
         {
             foreach (var x in new[] { -0.5f, -0.31f, -0.3f, -0.29f, -0.01f })
             {
-                scene.World.CastShape(shape, new Pose(new Vector3F(x, 2, 0)), new Vector3F(0, -5, 0), out var landed);
-                var resting = new Pose(new Vector3F(x, 2 - landed.Distance, 0));
+                scene.World.CastShape(shape, new Pose(new Vector3<double>(x, 2, 0)), new Vector3F(0, -5, 0), out var landed);
+                var resting = new Pose(new Vector3<double>(x, 2 - landed.Distance, 0));
 
                 var across = scene.World.CastShape(shape, resting, new Vector3F(1, 0, 0), out var hit);
 
@@ -245,11 +245,11 @@ public class ShapeCastTests
             var slabs = new SceneBuilder();
             var lowSlab = new BodyDescription
             {
-                Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3F(-5, -1, 0)
+                Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3<double>(-5, -1, 0)
             };
             var highSlab = new BodyDescription
             {
-                Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3F(5, -1 + 0.00042f, 0)
+                Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3<double>(5, -1 + 0.00042f, 0)
             };
             var high = higherFirst ? slabs.World.Add(highSlab) : default;
             slabs.World.Add(lowSlab);
@@ -257,19 +257,19 @@ public class ShapeCastTests
                 high = slabs.World.Add(highSlab);
 
             var box = new BoxCollisionShape(0.3f, 0.3f, 0.3f);
-            slabs.World.CastShape(box, new Pose(new Vector3F(0, 2, 0)), new Vector3F(0, -5, 0), out var onSlabs);
-            var resting = new Pose(new Vector3F(0, 2 - onSlabs.Distance, 0));
+            slabs.World.CastShape(box, new Pose(new Vector3<double>(0, 2, 0)), new Vector3F(0, -5, 0), out var onSlabs);
+            var resting = new Pose(new Vector3<double>(0, 2 - onSlabs.Distance, 0));
             var slidOff = slabs.World.CastShape(box, resting, new Vector3F(0, 0, 1), out _);
 
             var fields = new SceneBuilder();
             var ground = new BodyDescription
             {
-                Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3F(0, -1, 0)
+                Kind = BodyKind.Static, Shape = new BoxCollisionShape(5, 1, 5), Position = new Vector3<double>(0, -1, 0)
             };
             var raised = new BodyDescription
             {
                 Kind = BodyKind.Static, Shape = new HeightFieldCollisionShape(11, 11, new float[11 * 11], 1, 1),
-                Position = new Vector3F(0, 0.0002f, 0)
+                Position = new Vector3<double>(0, 0.0002f, 0)
             };
             var field = higherFirst ? fields.World.Add(raised) : default;
             fields.World.Add(ground);
@@ -277,7 +277,7 @@ public class ShapeCastTests
                 field = fields.World.Add(raised);
 
             fields.World.CastShape(new CylinderCollisionShape(0.15f, 0.4f),
-                new Pose(new Vector3F(0.2f, 2, 0.3f), Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2)),
+                new Pose(new Vector3<double>(0.2f, 2, 0.3f), Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2)),
                 new Vector3F(0, -5, 0), out var onField);
 
             Assert.Multiple(() =>
@@ -301,11 +301,11 @@ public class ShapeCastTests
             var scene = new SceneBuilder();
             var floor = new BodyDescription
             {
-                Kind = BodyKind.Static, Shape = new BoxCollisionShape(10, 1, 10), Position = new Vector3F(0, -1, 0)
+                Kind = BodyKind.Static, Shape = new BoxCollisionShape(10, 1, 10), Position = new Vector3<double>(0, -1, 0)
             };
             var wallDescription = new BodyDescription
             {
-                Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 2, 2), Position = new Vector3F(wallAt, 1, 0)
+                Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 2, 2), Position = new Vector3<double>(wallAt, 1, 0)
             };
             var wall = wallFirst ? scene.World.Add(wallDescription) : default;
             scene.World.Add(floor);
@@ -313,7 +313,7 @@ public class ShapeCastTests
                 wall = scene.World.Add(wallDescription);
 
             var met = scene.World.CastShape(new BoxCollisionShape(0.3f, 0.3f, 0.3f),
-                new Pose(new Vector3F(0, 0.302f, 0)), new Vector3F(4, -0.0016f, 0), out var hit);
+                new Pose(new Vector3<double>(0, 0.302f, 0)), new Vector3F(4, -0.0016f, 0), out var hit);
 
             Assert.Multiple(() =>
             {
@@ -343,8 +343,8 @@ public class ShapeCastTests
         foreach (var offset in new[] { -3.1f, -2.27f, -1.5f, -0.6f, 0.13f, 1.71f })
         {
             var above = along * offset + down * 2 + new Vector3F(0, 0, offset * 0.37f);
-            scene.World.CastShape(ball, new Pose(above), -down * 5, out var landed);
-            var resting = new Pose(above - down * landed.Distance);
+            scene.World.CastShape(ball, new Pose(above.As<double>()), -down * 5, out var landed);
+            var resting = new Pose((above - down * landed.Distance).As<double>());
 
             var slid = scene.World.CastShape(ball, resting, along * 3, out var hit);
 
@@ -360,10 +360,10 @@ public class ShapeCastTests
         var wall = scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static, Shape = new HeightFieldCollisionShape(11, 11, new float[11 * 11], 1, 1),
-            Position = new Vector3F(-3, 0, 0), Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, -MathF.PI / 2)
+            Position = new Vector3<double>(-3, 0, 0), Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, -MathF.PI / 2)
         });
 
-        var met = scene.World.CastShape(new SphereCollisionShape(0.5f), new Pose(new Vector3F(2, 0.3f, 0.2f)),
+        var met = scene.World.CastShape(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(2, 0.3f, 0.2f)),
             new Vector3F(-10, 0, 0), out var hit);
 
         Assert.Multiple(() =>
@@ -387,7 +387,7 @@ public class ShapeCastTests
         var wheel = new CylinderCollisionShape(0.15f, 0.4f);
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
 
-        var met = scene.World.CastShape(wheel, new Pose(new Vector3F(0.3f, 2, 0.2f), lying), new Vector3F(0, -3, 0),
+        var met = scene.World.CastShape(wheel, new Pose(new Vector3<double>(0.3f, 2, 0.2f), lying), new Vector3F(0, -3, 0),
             out var hit);
 
         Assert.Multiple(() =>
@@ -414,7 +414,7 @@ public class ShapeCastTests
         });
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
 
-        var met = scene.World.CastShape(new CylinderCollisionShape(0.15f, 0.4f), new Pose(new Vector3F(0, 2, 0), lying),
+        var met = scene.World.CastShape(new CylinderCollisionShape(0.15f, 0.4f), new Pose(new Vector3<double>(0, 2, 0), lying),
             new Vector3F(0, -3, 0), out var hit);
 
         Assert.Multiple(() =>
@@ -439,7 +439,7 @@ public class ShapeCastTests
         var lying = Quaternion.CreateFromAxisAngle(Vector3F.UnitY, MathF.PI / 2)
                     * Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 2);
 
-        var met = scene.World.CastShape(wheel, new Pose(new Vector3F(1, 1, -1), lying), new Vector3F(0, -2, 0),
+        var met = scene.World.CastShape(wheel, new Pose(new Vector3<double>(1, 1, -1), lying), new Vector3F(0, -2, 0),
             out var hit);
 
         Assert.Multiple(() =>
@@ -459,7 +459,7 @@ public class ShapeCastTests
         scene.AddGround();
         var onEdge = Quaternion.CreateFromAxisAngle(Vector3F.UnitZ, MathF.PI / 4);
 
-        var met = scene.World.CastShape(new BoxCollisionShape(0.5f, 0.5f, 0.5f), new Pose(new Vector3F(0, 3, 0), onEdge),
+        var met = scene.World.CastShape(new BoxCollisionShape(0.5f, 0.5f, 0.5f), new Pose(new Vector3<double>(0, 3, 0), onEdge),
             new Vector3F(0, -5, 0), out var hit);
 
         Assert.Multiple(() =>
@@ -482,7 +482,7 @@ public class ShapeCastTests
             new(-0.5f, -0.5f, 0.5f), new(0.5f, -0.5f, 0.5f), new(0.5f, 0.5f, 0.5f), new(-0.5f, 0.5f, 0.5f)
         ];
 
-        var met = scene.World.CastShape(new ConvexHullCollisionShape(cube, 0.1f), new Pose(new Vector3F(0, 2, 0)),
+        var met = scene.World.CastShape(new ConvexHullCollisionShape(cube, 0.1f), new Pose(new Vector3<double>(0, 2, 0)),
             new Vector3F(0, -5, 0), out var hit);
 
         Assert.That(met, Is.True);
@@ -496,14 +496,14 @@ public class ShapeCastTests
         var scene = new SceneBuilder();
         scene.AddGround();
         var dumbbell = new CompoundCollisionShape([
-            new CompoundPart(new SphereCollisionShape(0.25f), new Pose(new Vector3F(0, 1, 0))),
-            new CompoundPart(new SphereCollisionShape(0.5f), new Pose(new Vector3F(0, -1, 0)))
+            new CompoundPart(new SphereCollisionShape(0.25f), new Pose(new Vector3<double>(0, 1, 0))),
+            new CompoundPart(new SphereCollisionShape(0.5f), new Pose(new Vector3<double>(0, -1, 0)))
         ]);
 
-        var met = scene.World.CastShape(dumbbell, new Pose(new Vector3F(0, 4, 0)), new Vector3F(0, -10, 0),
+        var met = scene.World.CastShape(dumbbell, new Pose(new Vector3<double>(0, 4, 0)), new Vector3F(0, -10, 0),
             out var hit);
         var upsideDown = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI);
-        var turnedMet = scene.World.CastShape(dumbbell, new Pose(new Vector3F(0, 4, 0), upsideDown),
+        var turnedMet = scene.World.CastShape(dumbbell, new Pose(new Vector3<double>(0, 4, 0), upsideDown),
             new Vector3F(0, -10, 0), out var turnedHit);
 
         Assert.Multiple(() =>

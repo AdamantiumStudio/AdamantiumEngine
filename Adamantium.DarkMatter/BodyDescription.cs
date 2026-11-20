@@ -14,7 +14,7 @@ public sealed class BodyDescription
     public CollisionShape Shape { get; set; }
 
     /// <summary>Where the body's origin stands.</summary>
-    public Vector3F Position { get; set; }
+    public Vector3<double> Position { get; set; }
 
     /// <summary>How the body is turned.</summary>
     public QuaternionF Rotation { get; set; } = QuaternionF.Identity;

@@ -1,4 +1,5 @@
 using Adamantium.DarkMatter;
+using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Physics;
 
@@ -26,9 +27,9 @@ internal readonly record struct JointRequest
     /// <summary>The axis on the owner's body, in its own axes, of length one.</summary>
     public Vector3F Axis { get; init; }
 
-    /// <summary>A distance joint's other end: on the connected body from its origin, or in the physics' world for none.
+    /// <summary>A distance joint's other end: on the connected body from its origin, or in the world for none.
     /// </summary>
-    public Vector3F ConnectedAnchor { get; init; }
+    public Vector3<double> ConnectedAnchor { get; init; }
 
     public bool CollideConnected { get; init; }
 

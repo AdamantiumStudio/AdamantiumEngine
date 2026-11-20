@@ -38,7 +38,7 @@ public sealed class CapsuleCollisionShape : CollisionShape
         return new MassProperties(cylinder + ends, new Vector3F(across, along, across));
     }
 
-    public override BoundingBox<float> ComputeBounds(in Pose pose)
+    internal override BoundingBox<float> ComputeBounds(in LocalPose pose)
     {
         var top = pose.TransformPoint(new Vector3F(0, HalfLength, 0));
         var bottom = pose.TransformPoint(new Vector3F(0, -HalfLength, 0));

@@ -9,7 +9,7 @@ internal struct PartState
     public CollisionShape Shape;
 
     /// <summary>Where the shape stands against the body's center of mass, in the body's own axes.</summary>
-    public Pose Pose;
+    public LocalPose Pose;
 
     /// <summary>Whether the shape's center is the body's center of mass, so it spins in place.</summary>
     public bool IsCentered;
