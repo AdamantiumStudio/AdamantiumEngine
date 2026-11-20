@@ -824,6 +824,9 @@ All packages share one version.
 
 ### Fixed
 
+- The copy `SharedSurface.LatchCopy` makes of each frame can be read back (`ToImage`): it was made without
+  transfer-source use, and reading it was a Vulkan validation error.
+
 - Far from the origin an entity is drawn where it stands against the camera again: its world was composed in float and
   the camera taken from that, so it moved by float's rounding - 3 cm a million meters out, 2 m a billion out. The
   world is composed in double through every parent (`TransformMetaData.AbsoluteWorld`, `Transform.GetWorldMatrix`,
