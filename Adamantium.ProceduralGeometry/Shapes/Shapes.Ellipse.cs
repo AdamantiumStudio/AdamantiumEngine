@@ -20,10 +20,8 @@ namespace Adamantium.ProceduralGeometry.Shapes
                int tessellation = 36,
                Matrix4x4<double>? transform = null)
             {
-                if (sweepAngle is > 360 or < -360)
-                {
-                    sweepAngle %= 360;
-                }
+                // A turn or more either way is the whole ellipse - 720 is not nothing, nor 400 a sliver of 40.
+                sweepAngle = Math.Clamp(sweepAngle, -360, 360);
 
                 // A full ellipse, or a pie sector (whose outline returns through the center), is a closed loop; an
                 // edge-to-edge ARC is an open polyline. This flag drives MeshContour.IsGeometryClosed, which is what the

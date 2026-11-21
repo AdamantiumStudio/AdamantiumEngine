@@ -954,6 +954,8 @@ All packages share one version.
 
 ### Fixed
 
+- `Shapes.Ellipse` swept a turn or more either way is the whole ellipse: the sweep was taken round the turn, so 720
+  drew nothing and 400 a sliver of forty.
 - A kinematic body moved to a pose in a frame of several steps is read there: it arrived in the first step and fell
   asleep in the next, and a body asleep before and after a run was not read again, so the caller saw it where it was.
 - A touch ended by a body's new shape is told with the old part's own (`ContactEventArgs.FirstPartData`): it was told

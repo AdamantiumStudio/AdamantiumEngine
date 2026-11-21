@@ -135,6 +135,24 @@ public class PrimitiveTemplateTests
         });
     }
 
+    // A turn or more either way is the whole ellipse: its points reach all four sides. Taken round the turn, 720 was
+    // nothing at all and 400 a sliver of forty.
+    [TestCase(720)]
+    [TestCase(400)]
+    [TestCase(-400)]
+    public void AnEllipseSweptATurnOrMore_IsWhole(double sweep)
+    {
+        var mesh = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.Sector, new Vector2<double>(2), 30, sweep);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mesh.Points.Any(p => p.X > 0.99), "the right");
+            Assert.That(mesh.Points.Any(p => p.X < -0.99), "the left");
+            Assert.That(mesh.Points.Any(p => p.Y > 0.99), "the bottom");
+            Assert.That(mesh.Points.Any(p => p.Y < -0.99), "the top");
+        });
+    }
+
     // A camera looks along +Z: a flat shape faces it when its triangles are clockwise on its screen - the GPU's front,
     // up being -Y - and its normals point back at it, along -Z.
     [TestCase("Rectangle")]
