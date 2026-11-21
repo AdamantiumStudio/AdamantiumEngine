@@ -9,7 +9,7 @@ namespace Adamantium.Engine.Physics;
 /// from, and where the entity was last stood.</summary>
 internal sealed class PhysicsBodyLink
 {
-    public PhysicsBodyLink(RigidBody body, BodyParts parts, BodyDescription made, int key, int depth)
+    public PhysicsBodyLink(RigidBody body, BodyParts parts, BodyLayout made, int key, int depth)
     {
         Entity = body.Owner;
         Body = body;
@@ -35,8 +35,8 @@ internal sealed class PhysicsBodyLink
     /// <summary>What the body was made from, to see when it changes.</summary>
     public BodyParts Parts { get; set; }
 
-    /// <summary>The description the body was made from, to see when it changes.</summary>
-    public BodyDescription Made { get; set; }
+    /// <summary>The layout the body was made from, to see when it changes.</summary>
+    public BodyLayout Made { get; set; }
 
     /// <summary>Whether the entity hung under another when the body was made.</summary>
     public bool IsParented { get; }

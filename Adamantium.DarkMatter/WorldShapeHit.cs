@@ -1,7 +1,7 @@
 namespace Adamantium.DarkMatter;
 
 /// <summary>Where a moving shape first met a body of an <see cref="IPhysicsWorld"/>.</summary>
-public readonly struct WorldShapeHit
+internal readonly struct WorldShapeHit
 {
     public WorldShapeHit(BodyHandle body, int part, WorldPosition position, Vector3F normal, float distance)
     {

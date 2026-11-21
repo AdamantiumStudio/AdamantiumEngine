@@ -6,7 +6,7 @@ using Adamantium.DarkMatter.Dynamics;
 namespace Adamantium.DarkMatter;
 
 // Joints: bodies held together, solved with the contacts in each substep.
-public sealed partial class PhysicsWorld
+internal sealed partial class PhysicsWorld
 {
     private readonly List<Joint> _jointSlots = [];
     private readonly List<Joint> _joints = [];

@@ -6,7 +6,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>A world of rigid bodies stepped at a fixed rate: the simulation itself, a host's world on a client, a
 /// replay, or a stand-in in tests. One thread owns a world.</summary>
-public interface IPhysicsWorld
+internal interface IPhysicsWorld
 {
     /// <summary>How the world steps and solves.</summary>
     PhysicsSettings Settings { get; }

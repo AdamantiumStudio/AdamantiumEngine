@@ -5,7 +5,7 @@ using Adamantium.DarkMatter.Shapes;
 namespace Adamantium.DarkMatter;
 
 // A body changed where it stands: its kind, shape, weight and material, without taking it out and adding it again.
-public sealed partial class PhysicsWorld
+internal sealed partial class PhysicsWorld
 {
     /// <inheritdoc/>
     public void Change(BodyHandle body, BodyDescription description, bool changesShape)

@@ -2,7 +2,7 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>What a joint is when it is added: its kind, its bodies, and where it stands in the world then. The world
 /// remembers the point and the axis on each body, so the joint holds them as they stood.</summary>
-public sealed class JointDescription
+internal sealed class JointDescription
 {
     public JointKind Kind { get; set; } = JointKind.Ball;
 

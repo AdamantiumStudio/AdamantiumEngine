@@ -1,7 +1,7 @@
 namespace Adamantium.DarkMatter;
 
 /// <summary>A point where two bodies touched in the last step, or were about to, as instruments show it.</summary>
-public readonly struct ContactPoint
+internal readonly struct ContactPoint
 {
     public ContactPoint(BodyHandle first, BodyHandle second, WorldPosition position, Vector3F normal,
         float separation, float normalImpulse)
